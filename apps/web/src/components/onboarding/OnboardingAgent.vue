@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
-import { api } from '../../api/client'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useProviderStore } from '../../stores/provider.store'
-import { agentInternalName, agentMemoryFolderName, agentMemoryRelativePath } from '../../utils/agent-memory'
+import { agentInternalName } from '../../utils/agent-memory'
 import BaseCard from '../shared/BaseCard.vue'
 import IconUpload from '../shared/IconUpload.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
-import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import PromptSmartTagPicker from '../shared/PromptSmartTagPicker.vue'
 
 interface DraftState {
@@ -30,13 +28,10 @@ const providerId = ref('')
 const model = ref('')
 const systemPrompt = ref('')
 const systemPromptRef = ref<HTMLTextAreaElement | null>(null)
-const hasMemory = ref(true)
 const creating = ref(false)
 const error = ref('')
 
 const internalName = computed(() => agentInternalName(name.value) || 'agent')
-const memoryPath = computed(() => agentMemoryRelativePath(internalName.value, name.value))
-const memoryPathPreview = computed(() => name.value.trim() ? memoryPath.value : '.agents/<agent-name>')
 const hasDraft = computed(() => Boolean(
   name.value.trim()
   || iconUrl.value
@@ -81,19 +76,6 @@ async function createAgent(): Promise<boolean> {
   error.value = ''
 
   try {
-    const assignedMemorySpaces: string[] = []
-
-    if (hasMemory.value) {
-      const spaces = await api.memorySpaces.list()
-      const existing = spaces.find(space => space.relativePath === memoryPath.value)
-      const space = existing || await api.memorySpaces.create(
-        agentMemoryFolderName(internalName.value, name.value),
-        `Private memory folder for ${name.value.trim()}`,
-        '.agents',
-      )
-      assignedMemorySpaces.push(space.id)
-    }
-
     await agentDefs.create({
       name: name.value.trim(),
       internalName: internalName.value,
@@ -109,9 +91,9 @@ async function createAgent(): Promise<boolean> {
       tools: [],
       autoApproveTools: false,
       autoToolRouting: false,
-      autoMemory: hasMemory.value,
+      autoMemory: false,
       generateTitle: true,
-      memorySpaces: assignedMemorySpaces,
+      memorySpaces: [],
     })
 
     return true
@@ -224,38 +206,6 @@ defineExpose({ createAgent })
         </p>
       </div>
 
-      <div class="flex items-start justify-between gap-4 pt-5">
-        <div class="min-w-0">
-          <div class="mb-1 flex items-center gap-2">
-            <Icon
-              icon="lucide:brain-circuit"
-              class="h-4 w-4 text-accent-400"
-            />
-            <h3 class="text-sm font-semibold text-theme-200">
-              Has memory
-            </h3>
-          </div>
-          <p class="text-xs leading-relaxed text-theme-500">
-            Create and assign a private memory folder for this agent, with automatic retrieval enabled.
-          </p>
-          <div
-            v-if="hasMemory"
-            class="mt-2 flex items-center gap-1.5 text-[11px] text-theme-600"
-          >
-            <Icon
-              icon="lucide:folder"
-              class="h-3 w-3 shrink-0"
-            />
-            <span class="truncate font-mono">{{ memoryPathPreview }}</span>
-          </div>
-        </div>
-        <ToggleSwitch
-          :model-value="hasMemory"
-          size="md"
-          label="Give this agent memory"
-          @update:model-value="hasMemory = $event"
-        />
-      </div>
     </BaseCard>
 
     <div

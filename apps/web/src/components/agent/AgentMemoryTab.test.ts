@@ -5,7 +5,6 @@ import AgentMemoryTab from './AgentMemoryTab.vue'
 
 const mocks = vi.hoisted(() => ({
   listSpaces: vi.fn(),
-  createSpace: vi.fn(),
   push: vi.fn(),
 }))
 
@@ -13,7 +12,6 @@ vi.mock('../../api/client', () => ({
   api: {
     memorySpaces: {
       list: mocks.listSpaces,
-      create: mocks.createSpace,
     },
   },
 }))
@@ -58,18 +56,16 @@ const agent = {
 describe('AgentMemoryTab', () => {
   beforeEach(() => {
     mocks.listSpaces.mockReset().mockResolvedValue(spaces)
-    mocks.createSpace.mockReset()
     mocks.push.mockReset()
   })
 
-  test('shows the agent memory space as its own card after automatic retrieval', async () => {
+  test('shows retrieval settings and the ordinary memory folder selector', async () => {
     const wrapper = mount(AgentMemoryTab, { props: { agent } })
     await flushPromises()
 
     const cardTitles = wrapper.findAll('h3').map(title => title.text())
     expect(cardTitles).toEqual([
       'Automatic memory retrieval',
-      'Create Memory Space for Agent',
       'Memory Folders',
     ])
   })

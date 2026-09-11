@@ -6,7 +6,6 @@ import type { AgentDefinition, MemorySpace } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
-import { agentMemoryFolderName, agentMemoryRelativePath } from '../../utils/agent-memory'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -15,28 +14,12 @@ const router = useRouter()
 // --- Memory Folders ---
 const allSpaces = ref<MemorySpace[]>([])
 const spacesLoading = ref(false)
-const creatingAgentSpace = ref(false)
-const createAgentSpaceError = ref<string | null>(null)
 const collapsedFolders = ref<Set<string>>(new Set())
 
 const assignedIds = computed(() => new Set(props.agent.memorySpaces ?? []))
 
 const assignedSpaces = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
-)
-
-const agentSpacePath = computed(() => agentMemoryRelativePath(props.agent.internalName, props.agent.name))
-
-const agentSpaceExists = computed(() =>
-  allSpaces.value.some(s => s.relativePath === agentSpacePath.value)
-)
-
-const agentSpace = computed(() =>
-  allSpaces.value.find(s => s.relativePath === agentSpacePath.value)
-)
-
-const agentSpaceAssigned = computed(() =>
-  Boolean(agentSpace.value && assignedIds.value.has(agentSpace.value.id))
 )
 
 const visibleSpaces = computed(() =>
@@ -106,49 +89,6 @@ function deselectAll() {
   emit('update', 'memorySpaces', [])
 }
 
-async function createAgentMemorySpace() {
-  if (creatingAgentSpace.value) return
-  creatingAgentSpace.value = true
-  createAgentSpaceError.value = null
-
-  const folderName = agentMemoryFolderName(props.agent.internalName, props.agent.name)
-  const relativePath = agentMemoryRelativePath(props.agent.internalName, props.agent.name)
-
-  try {
-    let created = allSpaces.value.find((space) => space.relativePath === relativePath)
-    if (!created) {
-      created = await api.memorySpaces.create(
-        folderName,
-        `Private memory folder for ${props.agent.name}`,
-        '.agents',
-      )
-    }
-
-    await loadSpaces()
-    const space = allSpaces.value.find((candidate) => candidate.relativePath === relativePath) || created
-    const current = props.agent.memorySpaces ?? []
-    if (space && !current.includes(space.id)) {
-      emit('update', 'memorySpaces', [...current, space.id])
-    }
-  } catch (err) {
-    console.error('[memory] Failed to create agent memory folder:', err)
-    createAgentSpaceError.value = err instanceof Error ? err.message : 'Failed to create memory folder'
-  } finally {
-    creatingAgentSpace.value = false
-  }
-}
-
-async function toggleAgentMemorySpace(enabled: boolean) {
-  if (enabled) {
-    await createAgentMemorySpace()
-    return
-  }
-
-  const space = agentSpace.value
-  if (!space) return
-  emit('update', 'memorySpaces', (props.agent.memorySpaces ?? []).filter(id => id !== space.id))
-}
-
 function memorySpaceScopeIds(space: MemorySpace): string[] {
   if (space.isDefault) return [space.id]
   const prefix = space.relativePath ? `${space.relativePath}/` : ''
@@ -211,40 +151,6 @@ onMounted(() => loadSpaces())
           color="accent"
           class="mt-0.5"
           @update:model-value="emit('update', 'autoMemory', $event)"
-        />
-      </div>
-    </BaseCard>
-
-    <!-- Agent Memory Space -->
-    <BaseCard class="p-5">
-      <div class="flex items-start justify-between gap-4">
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2 mb-1">
-            <Icon
-              icon="lucide:folder-plus"
-              class="w-4 h-4 text-accent-400"
-            />
-            <h3 class="text-sm font-medium text-theme-200">
-              Create Memory Space for Agent
-            </h3>
-          </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
-            {{ agentSpaceExists ? 'Assigns' : 'Creates' }} <span class="font-mono text-theme-400">{{ agentSpacePath }}</span>{{ agentSpaceExists ? ' to this agent.' : ' and assigns it here.' }}
-          </p>
-          <p
-            v-if="createAgentSpaceError"
-            class="text-[11px] text-red-400 mt-1"
-          >
-            {{ createAgentSpaceError }}
-          </p>
-        </div>
-        <ToggleSwitch
-          :model-value="agentSpaceAssigned"
-          :disabled="creatingAgentSpace || spacesLoading"
-          label="Create and assign agent memory space"
-          color="accent"
-          class="mt-0.5"
-          @update:model-value="toggleAgentMemorySpace"
         />
       </div>
     </BaseCard>
