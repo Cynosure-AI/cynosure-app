@@ -557,7 +557,7 @@ async function toggleMic(): Promise<void> {
     <button
       v-if="showCancelButton"
       type="button"
-      class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-500/60 bg-red-600/15 px-2.5 text-red-300 transition-colors hover:bg-red-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70"
+      class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-red-500/60 bg-red-600/15 px-2.5 text-red-300 transition-colors hover:bg-red-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70"
       title="Stop the current response"
       aria-label="Stop current response"
       @click="onCancelClick"
@@ -572,7 +572,7 @@ async function toggleMic(): Promise<void> {
     <!-- While running, Queue is the safe default; Steer is the split-button alternative. -->
     <SplitButton
       v-if="isRunning && !editingQueue"
-      class="h-8"
+      class="h-7"
       :disabled="!canSend"
       title="Add this message to the queue"
       primary-label="Queue message for next turn"

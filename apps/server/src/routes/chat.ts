@@ -408,6 +408,29 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         },
       })
 
+      // Start naming the conversation as soon as the first user message is
+      // available. Title generation only uses that message, so it should not
+      // wait for planning or the assistant response to finish.
+      const conversationForTitle = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
+      if (conversationForTitle?.title === 'New Chat') {
+        if (generateTitlePref !== false) {
+          void generateTitle({
+            conversationId,
+            userMessage: normalizedContent,
+            assistantResponse: '',
+            broadcast,
+            providerId: titleProviderIdPref || providerOverride || initialAgent?.providerId,
+            model: titleModelPref || (titleProviderIdPref ? undefined : (model || initialAgent?.model)),
+          })
+        } else {
+          const fallback = buildFallbackTitle(normalizedContent)
+          if (fallback) {
+            db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
+            broadcast('chat:title-updated', { conversationId, title: fallback })
+          }
+        }
+      }
+
       const convRow = db.prepare('SELECT agent_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null } | undefined
       const mainAgentId: string | null = convRow?.agent_id || null
       const history = buildConversationHistory({
@@ -634,25 +657,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           })
           db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
 
-          const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
-          if (conv && conv.title === 'New Chat') {
-            if (generateTitlePref !== false) {
-              generateTitle({
-                conversationId,
-                userMessage: normalizedContent,
-                assistantResponse: assistantContent,
-                broadcast,
-                providerId: titleProviderIdPref || responseProvider,
-                model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
-              }).catch(() => { })
-            } else {
-              const fallback = buildFallbackTitle(normalizedContent)
-              if (fallback) {
-                db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
-                broadcast('chat:title-updated', { conversationId, title: fallback })
-              }
-            }
-          }
           return { streamId, completed: true }
         }
 
@@ -728,25 +732,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           })
           db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
 
-          const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
-          if (conv && conv.title === 'New Chat') {
-            if (generateTitlePref !== false) {
-              generateTitle({
-                conversationId,
-                userMessage: normalizedContent,
-                assistantResponse: assistantContent,
-                broadcast,
-                providerId: titleProviderIdPref || responseProvider,
-                model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
-              }).catch(() => { })
-            } else {
-              const fallback = buildFallbackTitle(normalizedContent)
-              if (fallback) {
-                db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
-                broadcast('chat:title-updated', { conversationId, title: fallback })
-              }
-            }
-          }
           return { streamId, completed: true }
         }
 
@@ -887,27 +872,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           conversationId, streamId,
           message: { id: assistantMsgId, conversationId, role: 'assistant', content: result.content, createdAt: assistantNow, agentId },
         })
-
-        // Auto-generate conversation title on first exchange (fire-and-forget)
-        const conv = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
-        if (conv && conv.title === 'New Chat') {
-          if (generateTitlePref !== false) {
-            generateTitle({
-              conversationId,
-              userMessage: normalizedContent,
-              assistantResponse: result.content,
-              broadcast,
-              providerId: titleProviderIdPref || responseProvider,
-              model: titleModelPref || (titleProviderIdPref ? undefined : responseModel)
-            }).catch(() => { })
-          } else {
-            const fallback = buildFallbackTitle(normalizedContent)
-            if (fallback) {
-              db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
-              broadcast('chat:title-updated', { conversationId, title: fallback })
-            }
-          }
-        }
 
       } catch (err) {
         if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
