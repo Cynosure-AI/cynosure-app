@@ -48,6 +48,7 @@ import {
     waitForMemoryIndexJob,
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION } from '../core/memory/memory-knowledge.js'
+import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -89,6 +90,7 @@ export interface MemoryFileStatus {
     /** 'indexed' = hash matches DB, 'needs_reindex' = hash mismatch, 'not_indexed' = not in DB, 'unsupported' = file type not supported */
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
+    estimatedChunkCount?: number
     lastIndexedAt?: number
     knowledgeExtracted: boolean
     knowledgeExtractedAt?: number
@@ -371,6 +373,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         const mem = getAgentMemory()
         const fileIndex = mem.getFileIndex(row.id)
         const filesOnDisk = listFilesInFolder(row.folder_path)
+        const chunkingConfig = getMemoryParser().getConfig()
         const currentKnowledgeFiles = new Set((getDb().prepare(`
             SELECT file_name FROM memory_knowledge_index_runs
             WHERE space_id = ? AND pipeline_version = ? AND status = 'active'
@@ -400,6 +403,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     supported: true,
                     textDirect: f.textDirect,
                     status: 'not_indexed' as const,
+                    estimatedChunkCount: estimateChunkCountFromFileSize(f.size, chunkingConfig),
                     knowledgeExtracted: false,
                     tags: [],
                 }
@@ -415,6 +419,9 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 textDirect: f.textDirect,
                 status,
                 chunkCount: indexed.chunkCount,
+                estimatedChunkCount: status === 'needs_reindex'
+                    ? estimateChunkCountFromFileSize(f.size, chunkingConfig)
+                    : undefined,
                 lastIndexedAt: indexed.lastIndexedAt,
                 knowledgeExtracted: status === 'indexed' && indexed.knowledgeExtractedAt > 0 && currentKnowledgeFiles.has(f.fileName),
                 knowledgeExtractedAt: indexed.knowledgeExtractedAt || undefined,
