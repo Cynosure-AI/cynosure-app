@@ -262,7 +262,7 @@ export function buildFallbackTitle(userMessage: string): string {
         : sentence
 
     const words = phrase
-        .replace(/[^a-zA-Z0-9+#.\s-]/g, ' ')
+        .replace(/[^\p{L}\p{M}\p{N}+#.\s-]/gu, ' ')
         .replace(/\s+/g, ' ')
         .trim()
         .split(/\s+/)
@@ -274,8 +274,8 @@ export function buildFallbackTitle(userMessage: string): string {
 }
 
 function toTitleCase(value: string): string {
-    return value.replace(/\b[a-z][a-z0-9+#.-]*/gi, (word) => {
-        if (/[A-Z0-9+#.]/.test(word.slice(1))) return word
+    return value.replace(/\p{L}[\p{L}\p{M}\p{N}+#.-]*/gu, (word) => {
+        if (/[\p{Lu}\p{N}+#.]/u.test(word.slice(1))) return word
         return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     })
 }
