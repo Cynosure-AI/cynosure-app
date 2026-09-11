@@ -1,7 +1,7 @@
 import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces, getAssignedOrDefaultSpaces } from './memory-space-scope.js'
-import type { RetrievedChunk } from './parser.js'
+import type { MemoryRetrievalStatusDetails, RetrievedChunk } from './parser.js'
 import type { KnowledgeGraphProjection } from './knowledge-types.js'
 import { getMemoryKnowledgeStore } from './memory-knowledge.js'
 
@@ -37,7 +37,7 @@ export class MemoryAggregator {
       /** Query enriched only for graph entity/relation resolution. */
       graphQuery?: string
       /** Optional live progress for automatic pre-turn memory retrieval. */
-      onStatus?: (stage: 'rag' | 'reranking') => void
+      onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void
     }
   ): Promise<AggregatedMemory> {
     const permanentMem = getAgentMemory()

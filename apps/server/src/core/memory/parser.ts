@@ -36,6 +36,11 @@ export interface RetrievedChunk {
   revision?: string
 }
 
+export interface MemoryRetrievalStatusDetails {
+  candidateCount?: number
+  resultCount?: number
+}
+
 export interface PreparedMemoryChunk {
   text: string
   searchText: string
@@ -243,7 +248,7 @@ export class MemoryParser {
     query: string,
     topK: number = 5,
     filter?: string,
-    onStatus?: (stage: 'rag' | 'reranking') => void,
+    onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void,
   ): Promise<RetrievedChunk[]> {
     const embedder = getEmbeddingProvider()
     const ragStore = getRAGStore()
@@ -258,11 +263,14 @@ export class MemoryParser {
     ])
     const results = fuseRetrievalChannels([denseCandidates, lexicalCandidates], candidateCount)
       .filter((result) => isRetrievableChunk(result.text))
-    if (reranker.getConfig().enabled && results.length > 1) onStatus?.('reranking')
+    onStatus?.('rag', { candidateCount: results.length })
+    const reranking = reranker.getConfig().enabled && results.length > 1
+    if (reranking) onStatus?.('reranking', { candidateCount: results.length })
     const ranked = await reranker.rerank(query, results, topK).catch((err) => {
       console.warn('[memory-reranker] Rerank failed, using hybrid ranking:', err)
       return results.slice(0, topK)
     })
+    if (reranking) onStatus?.('reranking', { candidateCount: results.length, resultCount: ranked.length })
     return ranked.map((r) => ({
       id: r.id,
       text: r.text,

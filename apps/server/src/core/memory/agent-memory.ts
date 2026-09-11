@@ -1,4 +1,4 @@
-import { getMemoryParser, type RetrievedChunk } from './parser.js'
+import { getMemoryParser, type MemoryRetrievalStatusDetails, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
 import { getDb } from '../../db/database.js'
 import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space-scope.js'
@@ -242,7 +242,7 @@ export class AgentMemory {
         query: string,
         topK: number = 3,
         filter?: string,
-        onStatus?: (stage: 'rag' | 'reranking') => void,
+        onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void,
     ): Promise<RetrievedChunk[]> {
         return this.parser.retrieve(getActivePermanentMemoryTableName(), query, topK, filter || undefined, onStatus)
     }

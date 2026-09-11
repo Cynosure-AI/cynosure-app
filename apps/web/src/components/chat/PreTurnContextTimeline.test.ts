@@ -37,8 +37,8 @@ describe('PreTurnContextTimeline', () => {
           {
             iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 140,
             toolCalls: [
-              { name: 'lower', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'lower.md', matchScore: .62, content: 'A lower-scoring excerpt.' }) },
-              { name: 'best', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'best.md', matchScore: .94, content: 'The strongest matching memory excerpt.' }) },
+              { name: 'lower', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'lower.md', matchScore: .62, content: 'A lower-scoring excerpt.', pipelineStats: { queryCount: 2, searchCandidateCount: 40, rerankerInputCount: 40, rerankerOutputCount: 16, returnedCount: 16, uniqueCount: 12, filteredCount: 7, duplicateCount: 4, weakCount: 5, relativeScoreThreshold: .65 } }) },
+              { name: 'best', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'best.md', matchScore: .94, content: 'The strongest matching memory excerpt.', pipelineStats: { queryCount: 2, searchCandidateCount: 40, rerankerInputCount: 40, rerankerOutputCount: 16, returnedCount: 16, uniqueCount: 12, filteredCount: 7, duplicateCount: 4, weakCount: 5, relativeScoreThreshold: .65 } }) },
             ],
           },
         ],
@@ -53,9 +53,10 @@ describe('PreTurnContextTimeline', () => {
     expect(collapsedResults.text()).toContain('lower.md62%')
     await wrapper.get('.pre-turn-card > button').trigger('click')
     const text = wrapper.text()
-    expect(text).toContain('Searching memory with RAG')
-    expect(text).toContain('Reranking memory matches')
-    expect(text).toContain('Filtering memory matches')
+    expect(text).toContain('Hybrid search found 40 candidates')
+    expect(text).toContain('Reranked 40 candidates down to 16 matches')
+    expect(text).toContain('Kept 7 of 12 unique matches')
+    expect(text).toContain('Removed 4 cross-query duplicates and 5 weak matches; weak means below 65% of the strongest displayed relevance score')
     expect(text).toContain('Selecting reranked memories')
     const cards = wrapper.findAll('.memory-card')
     expect(cards).toHaveLength(2)
@@ -199,7 +200,7 @@ describe('PreTurnContextTimeline', () => {
 
     const cards = wrapper.findAll('.pre-turn-card')
     await cards[0].get(':scope > button').trigger('click')
-    expect(cards[0].text()).toContain('Searching memory with RAG')
+    expect(cards[0].text()).toContain('Searching memory')
     expect(cards[0].text()).not.toContain('project deadline notes')
     await cards[0].findAll('ol button')[0].trigger('click')
     expect(cards[0].text()).toContain('project deadline notes')
