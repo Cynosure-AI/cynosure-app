@@ -13,11 +13,6 @@ contextBridge.exposeInMainWorld('electron', {
     getGlobalHotkey: () => ipcRenderer.invoke('global-hotkey:get'),
     setGlobalHotkey: (accelerator: string) => ipcRenderer.invoke('global-hotkey:set', accelerator),
     quitApp: () => ipcRenderer.invoke('app:quit'),
-    onNewQuickChat: (listener: (activeAgentId: string | null) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, activeAgentId: string | null) => listener(activeAgentId)
-        ipcRenderer.on('quick-chat:new', handler)
-        return () => ipcRenderer.removeListener('quick-chat:new', handler)
-    },
     getUpdateState: () => ipcRenderer.invoke('updater:get-state'),
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),
     downloadUpdate: () => ipcRenderer.invoke('updater:download'),

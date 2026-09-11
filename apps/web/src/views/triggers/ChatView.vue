@@ -3,7 +3,7 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
@@ -19,26 +19,6 @@ const taskListOpen = ref(false)
 const chatSearchOpen = ref(false)
 let dragCounter = 0
 let syncingFromRoute = false
-let removeQuickChatListener: (() => void) | null = null
-
-type QuickChatElectronApi = {
-  onNewQuickChat?: (listener: (activeAgentId: string | null) => void) => () => void
-}
-
-async function resetQuickChat(activeAgentId: string | null = chatStore.activeAgentId): Promise<void> {
-  if (activeAgentId !== chatStore.activeAgentId) await chatStore.setActiveAgent(activeAgentId)
-  await chatStore.startNewChat()
-  await router.replace({ name: 'triggers-chat', query: { compact: '1' } })
-  await nextTick()
-  inputBarRef.value?.focus()
-}
-
-onMounted(() => {
-  if (route.query.compact !== '1') return
-  const electron = (window as unknown as { electron?: QuickChatElectronApi }).electron
-  removeQuickChatListener = electron?.onNewQuickChat?.((activeAgentId) => { void resetQuickChat(activeAgentId) }) || null
-  void resetQuickChat()
-})
 
 const showCenteredComposer = computed(() => {
   const routeConversationId = Array.isArray(route.params.conversationId)
@@ -106,7 +86,6 @@ async function openRecentChat(conversation: Conversation): Promise<void> {
 }
 
 onUnmounted(() => {
-  removeQuickChatListener?.()
   const conversationId = chatStore.activeConversationId
   if (conversationId) chatStore.markConversationRead(conversationId)
 })
