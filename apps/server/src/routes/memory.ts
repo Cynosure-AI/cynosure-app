@@ -5,7 +5,6 @@ import { getHistoryStore } from '../core/memory/history.js'
 import { EmbeddingProvider, getEmbeddingProvider } from '../core/memory/embedding.js'
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
-import { getMemoryRetrievalConfig, saveMemoryRetrievalConfig, type MemoryRetrievalConfig } from '../core/memory/retrieval-config.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
 import type { KnowledgeEntityType, ImportanceLevel } from '../core/memory/knowledge-types.js'
@@ -129,17 +128,6 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const chunk = getMemoryKnowledgeStore().getSourceChunk(req.params.id)
     if (!chunk) return reply.status(404).send({ error: 'Knowledge source chunk not found' })
     return chunk
-  })
-
-  // GET /api/memory/retrieval/config — get automatic memory retrieval limits
-  app.get('/retrieval/config', async () => {
-    return getMemoryRetrievalConfig()
-  })
-
-  // POST /api/memory/retrieval/configure — configure automatic memory retrieval limits
-  app.post<{ Body: Partial<MemoryRetrievalConfig> }>('/retrieval/configure', async (req) => {
-    const config = saveMemoryRetrievalConfig(req.body)
-    return { success: true, ...config }
   })
 
   // GET /api/memory/knowledge/graph — inspect the authoritative knowledge graph projection.

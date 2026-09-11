@@ -4,7 +4,6 @@ import { getMemoryAggregator, type AggregatedMemory } from '../../memory/memory-
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { RetrievedChunk } from '../../memory/parser.js'
-import { getMemoryRetrievalConfig } from '../../memory/retrieval-config.js'
 import { getMemoryReranker } from '../../memory/reranker.js'
 import { getUserSettings } from '../../user-settings.js'
 import { completeWithDebugCapture } from '../../chat/debug-context.js'
@@ -13,6 +12,7 @@ import type { ContextEvidence } from '@shared/types'
 import { recordAuxiliaryModelUsage } from '../../usage-metering.js'
 
 const MAX_SELECTED_MEMORIES = 5
+const AUTO_MEMORY_RETRIEVAL_RESULT_COUNT = 10
 const MAX_SELECTED_GRAPH_EDGES = 3
 const TURN_CHAR_LIMIT = 200
 const CANDIDATE_CHAR_LIMIT = 1_200
@@ -92,7 +92,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             ...(plannedQueries || []),
             contextualQuery,
         ].map((query) => query?.trim() || '').filter(Boolean)))
-        const retrievalCount = getMemoryRetrievalConfig().resultCount
+        const retrievalCount = AUTO_MEMORY_RETRIEVAL_RESULT_COUNT
         const rerankerEnabled = getMemoryReranker().getConfig().enabled
         let pipelineStage = 0
         const reportRetrievalStage = (stage: 'rag' | 'reranking') => {

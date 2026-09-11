@@ -29,7 +29,6 @@ vi.mock('../../api/client', () => ({
       getEmbeddingConfig: mocks.getEmbeddingConfig,
       getEntityExtractionConfig: vi.fn().mockResolvedValue({ providerId: '', model: '' }),
       getChunkingConfig: vi.fn().mockResolvedValue({ chunkSize: 512, chunkOverlap: 64 }),
-      getRetrievalConfig: vi.fn().mockResolvedValue({ resultCount: 10 }),
       getRerankerConfig: vi.fn().mockResolvedValue({
         enabled: false,
         providerId: '',

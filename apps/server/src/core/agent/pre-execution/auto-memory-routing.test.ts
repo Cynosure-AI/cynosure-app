@@ -6,14 +6,10 @@ const memoryMocks = vi.hoisted(() => ({
     aggregate: vi.fn(),
     format: vi.fn(),
 }))
-const retrievalConfigMock = vi.hoisted(() => ({ resultCount: 10 }))
 const rerankerConfigMock = vi.hoisted(() => ({ enabled: false }))
 
 vi.mock('../../memory/memory-aggregator.js', () => ({
     getMemoryAggregator: () => memoryMocks,
-}))
-vi.mock('../../memory/retrieval-config.js', () => ({
-    getMemoryRetrievalConfig: () => ({ resultCount: retrievalConfigMock.resultCount }),
 }))
 vi.mock('../../memory/reranker.js', () => ({
     getMemoryReranker: () => ({ getConfig: () => ({ enabled: rerankerConfigMock.enabled }) }),
@@ -25,7 +21,6 @@ describe('automatic memory routing visibility', () => {
     afterEach(() => {
         getEventBus().removeAllListeners()
         vi.clearAllMocks()
-        retrievalConfigMock.resultCount = 10
         rerankerConfigMock.enabled = false
     })
 
@@ -61,8 +56,7 @@ describe('automatic memory routing visibility', () => {
         }])
     })
 
-    test('uses the configured result count for each retrieval query', async () => {
-        retrievalConfigMock.resultCount = 18
+    test('uses the default result count for each retrieval query', async () => {
         memoryMocks.aggregate.mockResolvedValue({ permanent: [], graph: undefined })
 
         await applyAutoMemoryRouting({
@@ -74,7 +68,7 @@ describe('automatic memory routing visibility', () => {
 
         expect(memoryMocks.aggregate).toHaveBeenCalledWith(
             expect.any(String),
-            expect.objectContaining({ permanentTopK: 18 }),
+            expect.objectContaining({ permanentTopK: 10 }),
         )
     })
 

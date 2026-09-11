@@ -328,10 +328,6 @@ export const api = {
       get<{ chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/config'),
     configureChunking: (opts: { chunkSize: number; chunkOverlap: number }) =>
       post<{ success: boolean; chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/configure', opts),
-    getRetrievalConfig: () =>
-      get<{ resultCount: number }>('/api/memory/retrieval/config'),
-    configureRetrieval: (opts: { resultCount: number }) =>
-      post<{ success: boolean; resultCount: number }>('/api/memory/retrieval/configure', opts),
     getRerankerConfig: () =>
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
