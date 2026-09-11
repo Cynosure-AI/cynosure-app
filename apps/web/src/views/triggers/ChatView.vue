@@ -214,7 +214,7 @@ watch(
         </div>
 
         <div
-          class="composer-spacer"
+          class="composer-spacer hidden md:block"
           aria-hidden="true"
         />
 
