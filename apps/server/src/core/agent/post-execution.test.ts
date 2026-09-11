@@ -22,7 +22,7 @@ vi.mock('../gateway/gateway.js', () => ({
   getGateway: () => gateway,
 }))
 
-import { generateTitle } from './post-execution.js'
+import { buildFallbackTitle, generateTitle } from './post-execution.js'
 
 describe('title generation', () => {
   beforeEach(() => {
@@ -79,5 +79,11 @@ describe('title generation', () => {
       conversationId: 'conversation-2',
       title: 'Explain How Database Indexes Work',
     })
+  })
+
+  test('preserves Unicode letters in fallback titles', () => {
+    expect(buildFallbackTitle('Wär öfters übermäßig')).toBe('Wär Öfters Übermäßig')
+    expect(buildFallbackTitle('Über München und Köln')).toBe('Über München Und Köln')
+    expect(buildFallbackTitle('日本語のタイトル')).toBe('日本語のタイトル')
   })
 })
