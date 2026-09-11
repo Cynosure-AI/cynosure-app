@@ -55,6 +55,12 @@ interface MemoryPipelineStats {
     duplicateCount: number
     weakCount: number
     relativeScoreThreshold: number
+    searchMatches: Array<{
+        name: string
+        content: string
+        matchScore: number
+        scoreType?: string
+    }>
 }
 
 export interface RoutedMemoryContext {
@@ -126,6 +132,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                     reportRetrievalStage(stage)
                     if (details?.candidateCount !== undefined) retrievalStats[queryIndex].candidateCount = details.candidateCount
                     if (details?.resultCount !== undefined) retrievalStats[queryIndex].resultCount = details.resultCount
+                    if (details?.candidates) retrievalStats[queryIndex].candidates = details.candidates
                 },
             })),
         )
@@ -180,6 +187,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                     reportRetrievalStage(stage)
                     if (details?.candidateCount !== undefined) correctedStats.candidateCount = details.candidateCount
                     if (details?.resultCount !== undefined) correctedStats.resultCount = details.resultCount
+                    if (details?.candidates) correctedStats.candidates = details.candidates
                 },
             })
             retrievalResults = [...retrievalResults, corrected]
@@ -296,6 +304,9 @@ function buildMemoryPipelineStats(
     ), 0)
     const uniqueCount = fused.permanent.length
     const filteredCount = filtered.permanent.length
+    const preRerankerMatches = fuseAutoMemoryResults(retrievalStats.map((stats) => ({
+        permanent: stats.candidates || [],
+    }))).permanent.slice(0, AUTO_MEMORY_RETRIEVAL_RESULT_COUNT)
 
     return {
         queryCount: results.length,
@@ -308,6 +319,15 @@ function buildMemoryPipelineStats(
         duplicateCount: Math.max(0, returnedCount - uniqueCount),
         weakCount: Math.max(0, uniqueCount - filteredCount),
         relativeScoreThreshold: MIN_RELATIVE_MEMORY_SCORE,
+        searchMatches: preRerankerMatches.map((memory) => {
+            const visibleMatch = memoryMatch(memory)
+            return {
+                name: memoryLabel(memory),
+                content: memory.text,
+                matchScore: visibleMatch.score,
+                scoreType: visibleMatch.scoreType,
+            }
+        }),
     }
 }
 

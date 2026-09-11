@@ -117,6 +117,47 @@ describe('PreTurnContextTimeline', () => {
     expect(wrapper.get('.count-chip').text()).toBe('1 memory + graph')
   })
 
+  test('expands pre-reranker search matches but keeps the final selection row collapsed', async () => {
+    const pipelineStats = {
+      queryCount: 1, searchCandidateCount: 3, rerankerInputCount: 3, rerankerOutputCount: 2,
+      returnedCount: 2, uniqueCount: 2, filteredCount: 2, duplicateCount: 0, weakCount: 0,
+      relativeScoreThreshold: .65,
+      searchMatches: [
+        { name: 'second.md', content: 'Second candidate', matchScore: .61 },
+        { name: 'best.md', content: 'Best candidate', matchScore: .93 },
+        { name: 'third.md', content: 'Third candidate', matchScore: .42 },
+      ],
+    }
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [
+          { iteration: 0, taskId: 'memory', status: 'searching-memory', timestamp: 100 },
+          {
+            iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 120,
+            toolCalls: [{ name: 'best.md', arguments: JSON.stringify({
+              type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker',
+              sourceFile: 'best.md', matchScore: .93, pipelineStats,
+            }) }],
+          },
+        ],
+        isActive: false,
+      },
+      global,
+    })
+
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    const searchStep = wrapper.findAll('ol button').find((button) => button.text().includes('Hybrid search found'))!
+    const finalStep = wrapper.findAll('ol button').find((button) => button.text().includes('Selected top'))!
+    expect(searchStep.attributes('aria-expanded')).toBe('false')
+    expect(finalStep.attributes('aria-expanded')).toBeUndefined()
+    await searchStep.trigger('click')
+    const expanded = wrapper.get('[aria-label="Auto memory pipeline"]').text()
+    expect(expanded.indexOf('best.md')).toBeLessThan(expanded.indexOf('second.md'))
+    expect(expanded).toContain('best.md93%')
+    expect(expanded).toContain('Best candidate')
+    expect(expanded).toContain('third.md42%')
+  })
+
   test('shows only MCPs when collapsed and tools inside the expanded completion step', async () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: {

@@ -39,6 +39,7 @@ export interface RetrievedChunk {
 export interface MemoryRetrievalStatusDetails {
   candidateCount?: number
   resultCount?: number
+  candidates?: RetrievedChunk[]
 }
 
 export interface PreparedMemoryChunk {
@@ -263,7 +264,7 @@ export class MemoryParser {
     ])
     const results = fuseRetrievalChannels([denseCandidates, lexicalCandidates], candidateCount)
       .filter((result) => isRetrievableChunk(result.text))
-    onStatus?.('rag', { candidateCount: results.length })
+    onStatus?.('rag', { candidateCount: results.length, candidates: results })
     const reranking = reranker.getConfig().enabled && results.length > 1
     if (reranking) onStatus?.('reranking', { candidateCount: results.length })
     const ranked = await reranker.rerank(query, results, topK).catch((err) => {
