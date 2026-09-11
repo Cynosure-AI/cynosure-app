@@ -169,8 +169,8 @@ const sections: SettingsSection[] = [
     id: 'generated-titles',
     categoryId: 'chat',
     label: 'Generate Chat Titles',
-    description: 'Use AI to generate descriptive titles for chat conversations.',
-    terms: ['generate chat titles', 'titles', 'chat titles', 'conversation titles', 'title model']
+    description: 'Generate a descriptive title as a pre-response action on the first turn.',
+    terms: ['generate chat titles', 'titles', 'chat titles', 'conversation titles', 'title model', 'pre-response action']
   },
   {
     id: 'knowledge-extraction',

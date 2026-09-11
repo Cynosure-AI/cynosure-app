@@ -991,7 +991,7 @@ watch(searchQuery, () => {
   >
     <p class="text-sm leading-6 text-theme-300">
       This cancels all work currently running on the server, including chats, cron runs, channel agents,
-      search indexing and knowledge extraction, vector re-embedding, and post-actions.
+      search indexing and knowledge extraction, vector re-embedding, and auxiliary chat actions.
     </p>
     <p class="mt-3 text-xs leading-5 text-theme-500">
       {{ knownActiveWorkCount > 0 ? `${knownActiveWorkCount} active operation${knownActiveWorkCount === 1 ? '' : 's'} currently visible.` : 'The server will also check for background work not currently visible in this view.' }}

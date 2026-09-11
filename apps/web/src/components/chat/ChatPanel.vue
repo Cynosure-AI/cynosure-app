@@ -7,6 +7,7 @@ import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
 import PreTurnContextTimeline from '../chat/PreTurnContextTimeline.vue'
+import PreResponseActionsCard from '../chat/PreResponseActionsCard.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
@@ -190,25 +191,8 @@ function scrollMainToBottomIfNear(): void {
   scrollMainToBottom()
 }
 
-// ─── Post-action labels ─────────────────────────────────────
-
-const postActionLabels: Record<string, string> = {
-  'generating-title': 'Generating title…',
-}
-function postActionLabel(action: string): string {
-  return postActionLabels[action] || `${action}…`
-}
-
-const POST_ACTION_ORDER = ['generating-title']
-const activePostActionItems = computed(() =>
-  Array.from(chatStore.activePostActions).filter(action => action in postActionLabels).sort((a, b) => {
-    const ai = POST_ACTION_ORDER.indexOf(a)
-    const bi = POST_ACTION_ORDER.indexOf(b)
-    if (ai === -1 && bi === -1) return a.localeCompare(b)
-    if (ai === -1) return 1
-    if (bi === -1) return -1
-    return ai - bi
-  }),
+const activePreResponseActions = computed(() =>
+  Array.from(chatStore.activePostActions).filter((action) => action === 'generating-title'),
 )
 
 // ─── Unified timeline ───────────────────────────────────────
@@ -563,6 +547,10 @@ const unifiedTimeline = computed(() => {
 
   return groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(orderedEntries))
 })
+
+const preResponseActionAnchorKey = computed(() => [...unifiedTimeline.value].reverse().find((entry) => (
+  entry.type === 'message' && entry.msg.role === 'user' && !entry.isSubAgent
+))?.key ?? null)
 
 /** Key of the last tool-group entry — only this one can show as "active" */
 const lastToolGroupKey = computed(() => {
@@ -1106,6 +1094,11 @@ onMounted(() => {
             @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
             @fork="forkMessage(entry.msg.id)"
           />
+          <PreResponseActionsCard
+            v-if="entry.key === preResponseActionAnchorKey && activePreResponseActions.length"
+            :actions="activePreResponseActions"
+            @cancel="chatStore.cancelPostActions()"
+          />
         </div>
 
         <!-- Tool execution group (from live execution steps) -->
@@ -1184,47 +1177,6 @@ onMounted(() => {
             class="w-3.5 h-3.5 text-accent-400"
           />
           <span>Working…</span>
-        </div>
-      </div>
-
-      <!-- Post-action indicators -->
-      <div
-        v-if="activePostActionItems.length > 0"
-        class="px-4 py-1.5"
-      >
-        <div class="max-w-[80%] ml-10 rounded-lg border border-theme-800/70 bg-theme-950/70 px-3 py-2">
-          <div class="flex items-center gap-2 text-xs text-theme-500">
-            <Icon
-              icon="svg-spinners:ring-resize"
-              class="w-3.5 h-3.5 text-accent-400"
-            />
-            <span class="font-medium text-theme-400">Post-turn actions</span>
-            <span class="text-theme-700">·</span>
-            <span>{{ activePostActionItems.length }} running</span>
-            <button
-              class="ml-auto text-theme-600 hover:text-red-400 transition-colors"
-              title="Cancel post-turn actions"
-              @click="chatStore.cancelPostActions()"
-            >
-              <Icon
-                icon="mdi:close-circle-outline"
-                class="w-3.5 h-3.5"
-              />
-            </button>
-          </div>
-          <div class="mt-1.5 flex flex-wrap gap-1.5">
-            <span
-              v-for="action in activePostActionItems"
-              :key="action"
-              class="inline-flex items-center gap-1.5 rounded-md border border-theme-800 bg-theme-900/70 px-2 py-1 text-xs text-theme-400"
-            >
-              <Icon
-                icon="lucide:loader-2"
-                class="w-3 h-3 animate-spin text-theme-500"
-              />
-              {{ postActionLabel(action) }}
-            </span>
-          </div>
         </div>
       </div>
 
