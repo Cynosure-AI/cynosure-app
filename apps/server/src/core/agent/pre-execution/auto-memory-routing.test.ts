@@ -179,9 +179,14 @@ describe('automatic memory routing visibility', () => {
             rerankerScore: score,
             scoreType: 'reranker' as const,
         })
-        memoryMocks.aggregate.mockResolvedValue({
-            permanent: [candidate('first', .95), candidate('second', .82)],
-            graph: undefined,
+        memoryMocks.aggregate.mockImplementation(async (_query: string, opts: { onStatus?: (stage: string, details?: { candidateCount?: number; resultCount?: number }) => void }) => {
+            opts.onStatus?.('rag', { candidateCount: 12 })
+            opts.onStatus?.('reranking', { candidateCount: 12 })
+            opts.onStatus?.('reranking', { candidateCount: 12, resultCount: 2 })
+            return {
+                permanent: [candidate('first', .95), candidate('second', .82)],
+                graph: undefined,
+            }
         })
         memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => memory.permanent.map(({ id }) => id).join(','))
         const gateway = { complete: vi.fn() } as unknown as LLMGateway
@@ -196,6 +201,19 @@ describe('automatic memory routing visibility', () => {
         })).resolves.toBe('first,second')
 
         expect(gateway.complete).not.toHaveBeenCalled()
+        const candidateCalls = events[0].toolCalls as Array<{ arguments: string }>
+        expect(JSON.parse(candidateCalls[0].arguments).pipelineStats).toMatchObject({
+            queryCount: 1,
+            searchCandidateCount: 12,
+            rerankerInputCount: 12,
+            rerankerOutputCount: 2,
+            returnedCount: 2,
+            uniqueCount: 2,
+            filteredCount: 2,
+            duplicateCount: 0,
+            weakCount: 0,
+            relativeScoreThreshold: 0.65,
+        })
         const finalCalls = events.at(-1)!.toolCalls as Array<{ arguments: string }>
         expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).selectionMethod)).toEqual(['reranker', 'reranker'])
     })

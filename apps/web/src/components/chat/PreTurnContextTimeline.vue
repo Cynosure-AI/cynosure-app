@@ -26,6 +26,18 @@ type PipelineItem = {
   final: boolean
   pending: boolean
 }
+type MemoryPipelineStats = {
+  queryCount: number
+  searchCandidateCount: number
+  rerankerInputCount: number
+  rerankerOutputCount: number
+  returnedCount: number
+  uniqueCount: number
+  filteredCount: number
+  duplicateCount: number
+  weakCount: number
+  relativeScoreThreshold: number
+}
 type ContextCard = {
   channel: Channel
   title: string
@@ -43,9 +55,9 @@ const expandedSteps = reactive(new Set<string>())
 
 const STATUS: Record<string, { channel: Channel; label: string; summary: string; icon: string }> = {
   'routing-memory': { channel: 'memory', label: 'Preparing memory retrieval', summary: 'Building the memory search', icon: 'lucide:brain-circuit' },
-  'searching-memory': { channel: 'memory', label: 'Searching memory with RAG', summary: 'Hybrid semantic and lexical retrieval', icon: 'lucide:search' },
+  'searching-memory': { channel: 'memory', label: 'Searching memory', summary: 'Hybrid semantic and keyword retrieval', icon: 'lucide:search' },
   'reranking-memory': { channel: 'memory', label: 'Reranking memory matches', summary: 'Reranker relevance scoring', icon: 'lucide:arrow-down-wide-narrow' },
-  'filtering-memory': { channel: 'memory', label: 'Filtering memory matches', summary: 'Removing weak and duplicate evidence', icon: 'lucide:list-filter' },
+  'filtering-memory': { channel: 'memory', label: 'Filtering memory matches', summary: 'Deduplicates repeated chunks and removes matches scoring below 65% of the strongest match', icon: 'lucide:list-filter' },
   'selecting-memory': { channel: 'memory', label: 'Selecting reranked memories', summary: 'Using the highest-ranked evidence', icon: 'lucide:badge-check' },
   'curating-memory': { channel: 'memory', label: 'AI curating memory evidence', summary: 'Final relevance verification', icon: 'lucide:list-checks' },
   'routing-tools': { channel: 'tools', label: 'Selecting MCPs and toolsets', summary: 'Choosing capability groups', icon: 'lucide:boxes' },
@@ -74,6 +86,41 @@ function stringValues(value: unknown): string[] {
 function normalizedScore(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
   return Math.max(0, Math.min(1, value > 1 ? value / 100 : value))
+}
+
+function memoryStats(value: unknown): MemoryPipelineStats | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const candidate = value as Partial<MemoryPipelineStats>
+  const keys: Array<keyof MemoryPipelineStats> = [
+    'queryCount', 'searchCandidateCount', 'rerankerInputCount', 'rerankerOutputCount',
+    'returnedCount', 'uniqueCount', 'filteredCount', 'duplicateCount', 'weakCount',
+    'relativeScoreThreshold',
+  ]
+  return keys.every((key) => typeof candidate[key] === 'number') ? candidate as MemoryPipelineStats : undefined
+}
+
+function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label: string; summary: string } | undefined {
+  if (!stats) return undefined
+  if (status === 'searching-memory') {
+    return {
+      label: `Hybrid search found ${plural(stats.searchCandidateCount, 'candidate')}`,
+      summary: `Semantic and keyword search across ${plural(stats.queryCount, 'query', 'queries')}`,
+    }
+  }
+  if (status === 'reranking-memory' && stats.rerankerInputCount > 0) {
+    return {
+      label: `Reranked ${stats.rerankerInputCount} candidates down to ${plural(stats.rerankerOutputCount, 'match', 'matches')}`,
+      summary: 'A reranker rescored candidates by relevance before filtering',
+    }
+  }
+  if (status === 'filtering-memory') {
+    const threshold = Math.round(stats.relativeScoreThreshold * 100)
+    return {
+      label: `Kept ${stats.filteredCount} of ${plural(stats.uniqueCount, 'unique match', 'unique matches')}`,
+      summary: `Removed ${plural(stats.duplicateCount, 'cross-query duplicate')} and ${plural(stats.weakCount, 'weak match', 'weak matches')}; weak means below ${threshold}% of the strongest displayed relevance score`,
+    }
+  }
+  return undefined
 }
 
 function details(calls: ToolCall[]): Detail[] {
@@ -125,6 +172,10 @@ const cards = computed<ContextCard[]>(() => {
       ...(stringValue(taskContextArgs.memoryQuery) ? [stringValue(taskContextArgs.memoryQuery)!] : []),
     ])],
   }
+  const latestMemoryStats = [...props.steps].reverse()
+    .flatMap((step) => step.toolCalls || [])
+    .map((call) => memoryStats(args(call).pipelineStats))
+    .find((stats): stats is MemoryPipelineStats => Boolean(stats))
 
   props.steps.forEach((step, stepIndex) => {
     const calls = step.toolCalls || []
@@ -133,11 +184,12 @@ const cards = computed<ContextCard[]>(() => {
 
     const status = STATUS[step.status]
     if (status) {
+      const statusCopy = status.channel === 'memory' ? memoryStatusCopy(step.status, latestMemoryStats) : undefined
       const firstChannelStep = pipelines[status.channel].length === 0
       pipelines[status.channel].push({
         key: `${status.channel}-${stepIndex}-${step.status}`,
-        label: step.message || status.label,
-        summary: status.summary,
+        label: statusCopy?.label || step.message || status.label,
+        summary: statusCopy?.summary || status.summary,
         icon: status.icon,
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
