@@ -13,6 +13,7 @@ type Detail = {
   scoreValue?: number
   namespaceId?: string
   namespaceLabel?: string
+  memoryKind?: string
   empty?: boolean
 }
 type PipelineItem = {
@@ -134,6 +135,7 @@ function details(calls: ToolCall[]): Detail[] {
       scoreValue: value,
       namespaceId: stringValue(parsed.namespaceId),
       namespaceLabel: stringValue(parsed.namespaceLabel),
+      memoryKind: stringValue(parsed.memoryKind),
       empty: Boolean(stringValue(parsed.emptyReason)),
     }
   }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
@@ -145,9 +147,12 @@ function selectionLabel(channel: Channel, calls: ToolCall[], final: boolean): st
     if (!visible.length) return final ? 'No memories selected' : 'No memory matches found'
     if (!final) return `Found ${plural(visible.length, 'memory match', 'memory matches')}`
     const method = stringValue(args(visible[0]).selectionMethod)
-    return method === 'reranker'
-      ? `Selected ${plural(visible.length, 'reranked memory', 'reranked memories')}`
-      : `Selected ${plural(visible.length, 'memory item')}`
+    const memoryCount = visible.filter((call) => stringValue(args(call).memoryKind) !== 'knowledge').length
+    const hasKnowledge = visible.some((call) => stringValue(args(call).memoryKind) === 'knowledge')
+    const selected = method === 'reranker'
+      ? `Selected top ${plural(memoryCount, 'memory', 'memories')}`
+      : `Selected ${plural(memoryCount, 'memory item')}`
+    return hasKnowledge ? `${selected} + knowledge context` : selected
   }
   const toolsets = calls.every((call) => args(call).type === 'toolset-router')
   if (toolsets) return visible.length
@@ -158,6 +163,13 @@ function selectionLabel(channel: Channel, calls: ToolCall[], final: boolean): st
 
 function plural(count: number, singular: string, pluralValue = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralValue}`
+}
+
+function selectedCountLabel(card: ContextCard): string {
+  if (card.channel !== 'memory') return plural(card.selected.length, 'MCP/toolset', 'MCPs/toolsets')
+  const memoryCount = card.selected.filter((item) => item.memoryKind !== 'knowledge').length
+  const hasKnowledge = card.selected.some((item) => item.memoryKind === 'knowledge')
+  return `${plural(memoryCount, 'memory', 'memories')}${hasKnowledge ? ' + graph' : ''}`
 }
 
 const cards = computed<ContextCard[]>(() => {
@@ -198,7 +210,11 @@ const cards = computed<ContextCard[]>(() => {
         key: `${status.channel}-${stepIndex}-${step.status}`,
         label: finalMemoryOutcome
           ? selectionLabel('memory', memoryCalls, true)
-          : statusCopy?.label || (memoryOutcomeAttached ? selectionLabel('memory', memoryCalls, false) : step.message || status.label),
+          : statusCopy?.label || (memoryOutcomeAttached
+            ? step.status === 'filtering-memory'
+              ? `Kept ${plural(memoryCalls.filter((call) => !stringValue(args(call).emptyReason)).length, 'memory match', 'memory matches')} after filtering`
+              : selectionLabel('memory', memoryCalls, false)
+            : step.message || status.label),
         summary: finalMemoryOutcome
           ? method === 'reranker' ? 'Final memories chosen by reranker score' : method === 'llm' ? 'Final memories chosen by AI relevance review' : 'Final highest-ranked memories'
           : statusCopy?.summary || status.summary,
@@ -320,8 +336,7 @@ function formatTimestamp(timestamp: number): string {
           <span
             v-if="card.selected.length"
             class="count-chip"
-          >{{ plural(card.selected.length, card.channel === 'memory'
-            ? 'memory' : 'MCP/toolset', 'MCPs/toolsets') }}</span>
+          >{{ selectedCountLabel(card) }}</span>
           <Icon
             icon="lucide:chevron-down"
             class="h-3.5 w-3.5 text-theme-500 transition-transform"

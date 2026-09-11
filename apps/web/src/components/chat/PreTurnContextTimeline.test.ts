@@ -47,7 +47,8 @@ describe('PreTurnContextTimeline', () => {
       global,
     })
 
-    expect(wrapper.get('[role="status"]').text()).toBe('Selected 2 reranked memories')
+    expect(wrapper.get('[role="status"]').text()).toBe('Selected top 2 memories')
+    expect(wrapper.get('.count-chip').text()).toBe('2 memories')
     const collapsedResults = wrapper.get('[aria-label="Auto memory selected results"]')
     expect(collapsedResults.text()).toContain('best.md94%')
     expect(collapsedResults.text()).toContain('lower.md62%')
@@ -57,14 +58,14 @@ describe('PreTurnContextTimeline', () => {
     expect(text).toContain('Reranked 40 candidates down to 16 matches')
     expect(text).toContain('Kept 7 of 12 unique matches')
     expect(text).toContain('Removed 4 cross-query duplicates and 5 weak matches; weak means below 65% of the strongest displayed relevance score')
-    expect(text).toContain('Selected 2 reranked memories')
+    expect(text).toContain('Selected top 2 memories')
     expect(text).not.toContain('Found 2 memory matches')
     expect(text).not.toContain('Selecting the highest-ranked memories')
     expect(wrapper.findAll('ol > li').map((item) => item.text())).toEqual([
       expect.stringContaining('Hybrid search found 40 candidates'),
       expect.stringContaining('Reranked 40 candidates down to 16 matches'),
       expect.stringContaining('Kept 7 of 12 unique matches'),
-      expect.stringContaining('Selected 2 reranked memories'),
+      expect.stringContaining('Selected top 2 memories'),
     ])
     const cards = wrapper.findAll('.memory-card')
     expect(cards).toHaveLength(2)
@@ -95,6 +96,25 @@ describe('PreTurnContextTimeline', () => {
 
     const tooltip = document.body.querySelector('[aria-label="Full memory content for complete-memory.md"]')
     expect(tooltip?.textContent).toContain(fullContent)
+  })
+
+  test('distinguishes document memories from knowledge-graph context in the final outcome', () => {
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [{
+          iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 100,
+          toolCalls: [
+            { name: 'profile.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'profile.md' }) },
+            { name: 'Knowledge Context', arguments: JSON.stringify({ type: 'memory', memoryKind: 'knowledge', contextPhase: 'gathered-context', selectionMethod: 'reranker' }) },
+          ],
+        }],
+        isActive: false,
+      },
+      global,
+    })
+
+    expect(wrapper.get('[role="status"]').text()).toBe('Selected top 1 memory + knowledge context')
+    expect(wrapper.get('.count-chip').text()).toBe('1 memory + graph')
   })
 
   test('shows only MCPs when collapsed and tools inside the expanded completion step', async () => {
