@@ -57,7 +57,15 @@ describe('PreTurnContextTimeline', () => {
     expect(text).toContain('Reranked 40 candidates down to 16 matches')
     expect(text).toContain('Kept 7 of 12 unique matches')
     expect(text).toContain('Removed 4 cross-query duplicates and 5 weak matches; weak means below 65% of the strongest displayed relevance score')
-    expect(text).toContain('Selecting reranked memories')
+    expect(text).toContain('Selected 2 reranked memories')
+    expect(text).not.toContain('Found 2 memory matches')
+    expect(text).not.toContain('Selecting the highest-ranked memories')
+    expect(wrapper.findAll('ol > li').map((item) => item.text())).toEqual([
+      expect.stringContaining('Hybrid search found 40 candidates'),
+      expect.stringContaining('Reranked 40 candidates down to 16 matches'),
+      expect.stringContaining('Kept 7 of 12 unique matches'),
+      expect.stringContaining('Selected 2 reranked memories'),
+    ])
     const cards = wrapper.findAll('.memory-card')
     expect(cards).toHaveLength(2)
     expect(cards[0].text()).toContain('best.md')

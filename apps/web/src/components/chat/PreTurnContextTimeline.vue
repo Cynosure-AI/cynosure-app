@@ -183,24 +183,41 @@ const cards = computed<ContextCard[]>(() => {
     const toolCalls = calls.filter((call) => ['toolset-router', 'tool-router'].includes(String(args(call).type)))
 
     const status = STATUS[step.status]
-    if (status) {
+    const memoryPhase = memoryCalls.length ? stringValue(args(memoryCalls[0]).contextPhase) : undefined
+    const memoryOutcomeAttached = status?.channel === 'memory' && Boolean(memoryPhase)
+    const finalMemoryOutcome = memoryOutcomeAttached && memoryPhase === 'gathered-context'
+    const supersededByMemoryOutcome = status?.channel === 'memory' && !memoryCalls.length && props.steps
+      .slice(stepIndex + 1)
+      .some((later) => later.taskId === step.taskId && later.status === step.status && (later.toolCalls || [])
+        .some((call) => args(call).type === 'memory' && Boolean(stringValue(args(call).contextPhase))))
+    if (status && !supersededByMemoryOutcome) {
       const statusCopy = status.channel === 'memory' ? memoryStatusCopy(step.status, latestMemoryStats) : undefined
       const firstChannelStep = pipelines[status.channel].length === 0
+      const method = memoryOutcomeAttached ? stringValue(args(memoryCalls[0]).selectionMethod) : undefined
       pipelines[status.channel].push({
         key: `${status.channel}-${stepIndex}-${step.status}`,
-        label: statusCopy?.label || step.message || status.label,
-        summary: statusCopy?.summary || status.summary,
-        icon: status.icon,
+        label: finalMemoryOutcome
+          ? selectionLabel('memory', memoryCalls, true)
+          : statusCopy?.label || (memoryOutcomeAttached ? selectionLabel('memory', memoryCalls, false) : step.message || status.label),
+        summary: finalMemoryOutcome
+          ? method === 'reranker' ? 'Final memories chosen by reranker score' : method === 'llm' ? 'Final memories chosen by AI relevance review' : 'Final highest-ranked memories'
+          : statusCopy?.summary || status.summary,
+        icon: finalMemoryOutcome ? 'lucide:check' : status.icon,
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
-        details: firstChannelStep ? channelQueries[status.channel].map((query) => ({ name: query })) : [],
-        final: false,
+        details: memoryOutcomeAttached
+          ? details(memoryCalls)
+          : firstChannelStep ? channelQueries[status.channel].map((query) => ({ name: query })) : [],
+        final: finalMemoryOutcome,
         pending: props.isActive && !calls.length && !props.steps.slice(stepIndex + 1).some((later) => later.taskId === step.taskId),
       })
     }
 
     for (const [channel, channelCalls] of [['memory', memoryCalls], ['tools', toolCalls]] as const) {
       if (!channelCalls.length) continue
+      // Memory result calls are persisted onto the status step that produced
+      // them. Render that as one completed stage, not a second pseudo-step.
+      if (channel === 'memory' && memoryOutcomeAttached) continue
       const final = channel === 'memory'
         ? args(channelCalls[0]).contextPhase === 'gathered-context'
         : args(channelCalls[0]).type === 'tool-router' && args(channelCalls[0]).contextPhase === 'gathered-context'
