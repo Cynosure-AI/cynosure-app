@@ -153,10 +153,10 @@ onMounted(async () => {
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
-              Generate Chat Titles <span class="ml-1 text-xs text-theme-500">• Post-turn action</span>
+              Generate Chat Titles <span class="ml-1 text-xs text-theme-500">• Pre-response action</span>
             </h3>
             <p class="text-xs text-theme-500 mt-0.5">
-              Use AI to generate descriptive titles for chat conversations
+              Generate a descriptive title when the first message is sent, before the agent response
             </p>
           </div>
         </div>

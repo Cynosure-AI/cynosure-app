@@ -1,8 +1,9 @@
 /**
- * Centralised post-action registry & generators.
+ * Centralised auxiliary-action registry and generators.
  *
- * Post-actions are lightweight follow-up LLM calls that run after the main
- * chat / cron execution (e.g. title generation).  This module:
+ * Auxiliary actions are lightweight LLM calls that run around a chat or cron
+ * execution. Interactive-chat title generation starts before the main agent
+ * responds; other callers may schedule actions after their execution.
  *
  *  1. Tracks which post-actions are currently in-flight (server-side) so a
  *     frontend that hard-reloads can query the current state.
