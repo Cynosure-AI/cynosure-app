@@ -361,6 +361,8 @@ export interface MemoryFileStatus {
     /** 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported' */
     status: 'indexed' | 'needs_reindex' | 'not_indexed' | 'unsupported'
     chunkCount?: number
+    /** Approximate count based on file size and the active chunking settings. */
+    estimatedChunkCount?: number
     lastIndexedAt?: number
     knowledgeExtracted: boolean
     knowledgeExtractedAt?: number

@@ -57,6 +57,25 @@ function throwIfAborted(signal?: AbortSignal): void {
 const CHARS_PER_TOKEN = 4
 
 /**
+ * Estimate how many chunks a file will produce without reading or parsing it.
+ * File size is used as an approximate character count, so this is intentionally
+ * only suitable for displaying a rough pre-indexing value.
+ */
+export function estimateChunkCountFromFileSize(
+  fileSizeBytes: number,
+  config: { chunkSize: number; chunkOverlap: number },
+): number {
+  if (!Number.isFinite(fileSizeBytes) || fileSizeBytes <= 0) return 0
+
+  const chunkCapacity = config.chunkSize * CHARS_PER_TOKEN
+  const chunkStride = (config.chunkSize - config.chunkOverlap) * CHARS_PER_TOKEN
+  if (chunkCapacity <= 0 || chunkStride <= 0) return 0
+  if (fileSizeBytes <= chunkCapacity) return 1
+
+  return 1 + Math.ceil((fileSizeBytes - chunkCapacity) / chunkStride)
+}
+
+/**
  * Parser pipeline: chunk → embed → store in LanceDB.
  * Also handles retrieval: embed query → search → return ranked results.
  */

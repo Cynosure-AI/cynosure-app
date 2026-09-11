@@ -85,7 +85,7 @@ const selectedFileIds = computed({
 const columns: Column<DocumentRow>[] = [
   { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
-  { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.chunkCount || 0 },
+  { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.status === "indexed" ? (file.chunkCount || 0) : (file.estimatedChunkCount || 0) },
   { key: "knowledgeExtracted", label: "Analysed", minWidth: "190px", sortable: true, sortValue: (file) => file.knowledgeExtracted },
   { key: "status", label: "Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
 ];
@@ -731,6 +731,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           class="text-xs text-theme-400"
         >
           {{ file.chunkCount || 0 }}
+        </span>
+        <span
+          v-else-if="file.supported && file.estimatedChunkCount !== undefined"
+          class="text-xs text-theme-600"
+          title="Estimated from file size and current chunking settings"
+        >
+          ~{{ file.estimatedChunkCount }}
         </span>
         <span
           v-else
