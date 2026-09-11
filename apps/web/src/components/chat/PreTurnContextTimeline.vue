@@ -38,6 +38,12 @@ type MemoryPipelineStats = {
   duplicateCount: number
   weakCount: number
   relativeScoreThreshold: number
+  searchMatches?: Array<{
+    name: string
+    content: string
+    matchScore: number
+    scoreType?: string
+  }>
 }
 type ContextCard = {
   channel: Channel
@@ -141,6 +147,18 @@ function details(calls: ToolCall[]): Detail[] {
   }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
 }
 
+function searchMatchDetails(stats?: MemoryPipelineStats): Detail[] {
+  return (stats?.searchMatches || []).slice(0, 10).map((match) => {
+    const score = normalizedScore(match.matchScore)
+    return {
+      name: match.name,
+      content: match.content,
+      score: score === undefined ? undefined : `${Math.round(score * 100)}%`,
+      scoreValue: score,
+    }
+  }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
+}
+
 function selectionLabel(channel: Channel, calls: ToolCall[], final: boolean): string {
   const visible = calls.filter((call) => !stringValue(args(call).emptyReason))
   if (channel === 'memory') {
@@ -206,6 +224,7 @@ const cards = computed<ContextCard[]>(() => {
       const statusCopy = status.channel === 'memory' ? memoryStatusCopy(step.status, latestMemoryStats) : undefined
       const firstChannelStep = pipelines[status.channel].length === 0
       const method = memoryOutcomeAttached ? stringValue(args(memoryCalls[0]).selectionMethod) : undefined
+      const searchedMatches = step.status === 'searching-memory' ? searchMatchDetails(latestMemoryStats) : []
       pipelines[status.channel].push({
         key: `${status.channel}-${stepIndex}-${step.status}`,
         label: finalMemoryOutcome
@@ -221,9 +240,13 @@ const cards = computed<ContextCard[]>(() => {
         icon: finalMemoryOutcome ? 'lucide:check' : status.icon,
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
-        details: memoryOutcomeAttached
-          ? details(memoryCalls)
-          : firstChannelStep ? channelQueries[status.channel].map((query) => ({ name: query })) : [],
+        details: finalMemoryOutcome
+          ? []
+          : memoryOutcomeAttached
+            ? details(memoryCalls)
+            : searchedMatches.length
+              ? searchedMatches
+              : firstChannelStep ? channelQueries[status.channel].map((query) => ({ name: query })) : [],
         final: finalMemoryOutcome,
         pending: props.isActive && !calls.length && !props.steps.slice(stepIndex + 1).some((later) => later.taskId === step.taskId),
       })
@@ -264,10 +287,16 @@ const cards = computed<ContextCard[]>(() => {
     const toolsets = channel === 'tools'
       ? items.flatMap((item) => item.details.filter((detail) => item.key.includes('toolset-router') && !detail.empty))
       : []
-    const final = [...items].reverse().find((item) => item.final)
+    const finalMemoryCalls = channel === 'memory'
+      ? [...props.steps].reverse()
+        .map((step) => (step.toolCalls || []).filter((call) => (
+          args(call).type === 'memory' && args(call).contextPhase === 'gathered-context'
+        )))
+        .find((calls) => calls.length > 0) || []
+      : []
     const selected = channel === 'tools'
       ? toolsets
-      : (final?.details || []).filter((detail) => !detail.empty)
+      : details(finalMemoryCalls).filter((detail) => !detail.empty)
     const selectedTools = channel === 'tools'
       ? props.steps.flatMap((step) => details((step.toolCalls || []).filter((call) => (
         args(call).type === 'tool-router' && args(call).contextPhase === 'gathered-context'
@@ -410,6 +439,12 @@ function formatTimestamp(timestamp: number): string {
                     v-if="detail.score"
                     class="ml-2 text-cyan-300"
                   >{{ detail.score }}</span>
+                  <p
+                    v-if="detail.content && item.key.includes('searching-memory')"
+                    class="mt-0.5 line-clamp-2 leading-relaxed text-theme-500"
+                  >
+                    {{ detail.content }}
+                  </p>
                 </div>
               </div>
             </li>
