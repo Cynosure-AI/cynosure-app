@@ -21,7 +21,7 @@ export function useAppBranding() {
             case 'light': return cynosureLogoBlue
             case 'cyberpunk': return cynosureLogoYellow
             case 'galaxy': return cynosureLogoPurple
-            case 'matrix': return cynosureLogoGreen
+            case 'emerald': return cynosureLogoGreen
             case 'industrial': return cynosureLogoYellow
             case 'monochrome': return cynosureLogoRed
             case 'dark': return cynosureLogoBlue
@@ -35,7 +35,7 @@ export function useAppBranding() {
             case 'light': return cynosureLogoTextBlue
             case 'cyberpunk': return cynosureLogoTextYellow
             case 'galaxy': return cynosureLogoTextPurple
-            case 'matrix': return cynosureLogoTextGreen
+            case 'emerald': return cynosureLogoTextGreen
             case 'industrial': return cynosureLogoTextYellow
             case 'monochrome': return cynosureLogoTextRed
             case 'dark': return cynosureLogoTextBlue

@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
         v-if="show"
         role="dialog"
         aria-label="Workspace and configuration"
-        class="fixed z-50 max-h-[80vh] overflow-y-auto rounded-xl border border-theme-700 bg-theme-900 p-2 shadow-2xl"
+        class="workspace-popover fixed z-50 max-h-[80vh] overflow-y-auto rounded-xl border border-theme-700 bg-theme-900 p-2 shadow-2xl"
         :style="popoverStyle"
         @click.stop
       >
