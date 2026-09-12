@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { Icon } from '@iconify/vue'
 
+defineOptions({ inheritAttrs: false })
+
 const emit = defineEmits<{ primary: [] }>()
 const root = ref<HTMLElement | null>(null)
 const menu = ref<HTMLElement | null>(null)
@@ -55,6 +57,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
+    v-bind="$attrs"
     class="relative inline-flex shrink-0"
   >
     <button
