@@ -71,6 +71,7 @@ const newServer = reactive({
   bearerToken: '',
 })
 const pendingAddId = ref<string | null>(null)
+const addConnected = ref(false)
 const editServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
 const editEnvFields = reactive<Record<string, string>>({})
 
@@ -158,11 +159,10 @@ async function addServer(): Promise<void> {
       })
       if (result.error) {
         actionError.value['add'] = result.error
+        addConnected.value = false
       } else {
-        showAddForm.value = false
-        resetNewServer()
         actionError.value = {}
-        pendingAddId.value = null
+        addConnected.value = true
       }
     } else {
       const result = await api.mcp.addServer({
@@ -175,15 +175,15 @@ async function addServer(): Promise<void> {
       })
       if (result.error) {
         actionError.value['add'] = result.error
+        addConnected.value = false
         // If server was created but failed to connect, remember its id so next "Add" updates instead of duplicates
         if (result.id) {
           pendingAddId.value = result.id
         }
       } else {
-        showAddForm.value = false
-        resetNewServer()
         actionError.value = {}
-        pendingAddId.value = null
+        pendingAddId.value = result.id
+        addConnected.value = true
       }
     }
     await refreshAll()
@@ -192,11 +192,22 @@ async function addServer(): Promise<void> {
   }
 }
 
-function cancelForm(): void {
+function finishAdding(): void {
   showAddForm.value = false
   resetNewServer()
   delete actionError.value['add']
   pendingAddId.value = null
+  addConnected.value = false
+}
+
+async function cancelForm(): Promise<void> {
+  if (isLoading('add')) return
+  const failedServerId = !addConnected.value ? pendingAddId.value : null
+  finishAdding()
+  if (failedServerId) {
+    await api.mcp.removeServer(failedServerId)
+    await refreshAll()
+  }
 }
 
 function startEditing(server: McpServerInfo): void {
@@ -340,9 +351,9 @@ defineExpose({ loadServers })
     <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
       <button
         class="h-10 px-4 bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium rounded-lg transition-colors self-start"
-        @click="showAddForm ? cancelForm() : (showAddForm = true)"
+        @click="showAddForm = true"
       >
-        {{ showAddForm ? 'Cancel' : 'Add Manually' }}
+        Add Manually
       </button>
 
       <div class="flex items-center gap-2 w-full md:w-auto md:min-w-130">
@@ -361,113 +372,149 @@ defineExpose({ loadServers })
       </div>
     </div>
 
-    <div
-      v-if="showAddForm"
-      class="bg-theme-900/60 border border-theme-700 rounded-xl p-4 mb-6 space-y-4"
+    <ModalDialog
+      :show="showAddForm"
+      title="Manually Add MCP"
+      icon="lucide:plug"
+      max-width="max-w-2xl"
+      @close="cancelForm"
     >
-      <div class="grid grid-cols-2 gap-1 rounded-lg bg-theme-950/70 border border-theme-800 p-1">
-        <button
-          class="h-8 rounded-md text-sm transition-colors"
-          :class="newServer.mode === 'local' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
-          @click="newServer.mode = 'local'"
-        >
-          Local
-        </button>
-        <button
-          class="h-8 rounded-md text-sm transition-colors"
-          :class="newServer.mode === 'remote' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
-          @click="newServer.mode = 'remote'"
-        >
-          Remote
-        </button>
-      </div>
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-1 rounded-lg bg-theme-950/70 border border-theme-800 p-1">
+          <button
+            class="h-8 rounded-md text-sm transition-colors"
+            :class="newServer.mode === 'local' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+            @click="newServer.mode = 'local'"
+          >
+            Local
+          </button>
+          <button
+            class="h-8 rounded-md text-sm transition-colors"
+            :class="newServer.mode === 'remote' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+            @click="newServer.mode = 'remote'"
+          >
+            Remote
+          </button>
+        </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm text-theme-400 mb-1">Custom name</label>
+            <input
+              v-model="newServer.name"
+              type="text"
+              placeholder="Use original MCP name"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            >
+          </div>
+          <div v-if="newServer.mode === 'remote'">
+            <label class="block text-sm text-theme-400 mb-1">URL</label>
+            <input
+              v-model="newServer.remoteUrl"
+              type="url"
+              placeholder="https://mcp.example.com/mcp"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            >
+          </div>
+          <div v-else>
+            <label class="block text-sm text-theme-400 mb-1">Command</label>
+            <input
+              v-model="newServer.command"
+              type="text"
+              placeholder="npx"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            >
+          </div>
+        </div>
         <div>
-          <label class="block text-sm text-theme-400 mb-1">Custom name</label>
-          <input
-            v-model="newServer.name"
-            type="text"
-            placeholder="Use original MCP name"
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-          >
-        </div>
-        <div v-if="newServer.mode === 'remote'">
-          <label class="block text-sm text-theme-400 mb-1">URL</label>
-          <input
-            v-model="newServer.remoteUrl"
-            type="url"
-            placeholder="https://mcp.example.com/mcp"
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-          >
-        </div>
-        <div v-else>
-          <label class="block text-sm text-theme-400 mb-1">Command</label>
-          <input
-            v-model="newServer.command"
-            type="text"
-            placeholder="npx"
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-          >
-        </div>
-      </div>
-      <div>
-        <label class="block text-sm text-theme-400 mb-1">Description</label>
-        <textarea
-          v-model="newServer.description"
-          rows="2"
-          placeholder="What this MCP server is useful for"
-          class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-        />
-      </div>
-      <template v-if="newServer.mode === 'local'">
-        <div>
-          <label class="block text-sm text-theme-400 mb-1">Arguments (one per line)</label>
+          <label class="block text-sm text-theme-400 mb-1">Description</label>
           <textarea
-            v-model="newServer.args"
-            rows="3"
-            placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
+            v-model="newServer.description"
+            rows="2"
+            placeholder="What this MCP server is useful for"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+          />
+        </div>
+        <template v-if="newServer.mode === 'local'">
+          <div>
+            <label class="block text-sm text-theme-400 mb-1">Arguments (one per line)</label>
+            <textarea
+              v-model="newServer.args"
+              rows="3"
+              placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            />
+          </div>
+        </template>
+        <template v-else>
+          <div>
+            <label class="block text-sm text-theme-400 mb-1">Bearer token</label>
+            <input
+              v-model="newServer.bearerToken"
+              type="password"
+              placeholder="Leave blank for OAuth, paste a token, or use $MCP_BEARER_TOKEN"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            >
+            <p class="mt-1 text-xs text-theme-500">
+              Remote MCP servers normally authenticate with OAuth. Use this only for servers that accept an Authorization bearer token.
+            </p>
+          </div>
+        </template>
+        <div v-if="newServer.mode === 'local'">
+          <label class="block text-sm text-theme-400 mb-1">Environment Variables (KEY=VALUE, one per line)</label>
+          <textarea
+            v-model="newServer.env"
+            rows="2"
+            placeholder="API_KEY=sk-..."
             class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
           />
         </div>
-      </template>
-      <template v-else>
-        <div>
-          <label class="block text-sm text-theme-400 mb-1">Bearer token</label>
-          <input
-            v-model="newServer.bearerToken"
-            type="password"
-            placeholder="Leave blank for OAuth, paste a token, or use $MCP_BEARER_TOKEN"
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+        <div
+          v-if="actionError['add']"
+          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400"
+          role="alert"
+        >
+          {{ actionError['add'] }}
+        </div>
+        <div
+          v-if="addConnected"
+          class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
+        >
+          <Icon
+            icon="lucide:circle-check"
+            class="h-4 w-4 shrink-0"
+          />
+          MCP connected successfully.
+        </div>
+      </div>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <button
+            v-if="actionError['add']"
+            class="px-4 py-2 text-sm bg-theme-700 hover:bg-theme-600 text-theme-200 rounded-lg transition-colors"
+            @click="finishAdding"
           >
-          <p class="mt-1 text-xs text-theme-500">
-            Remote MCP servers normally authenticate with OAuth. Use this only for servers that accept an Authorization bearer token.
-          </p>
+            Add Anyway
+          </button>
+          <button
+            v-if="!addConnected && !actionError['add']"
+            :disabled="!canSubmitNewServer || isLoading('add')"
+            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+            @click="addServer"
+          >
+            {{ isLoading('add') ? 'Connecting...' : 'Save & Connect' }}
+          </button>
+          <button
+            v-if="addConnected || actionError['add']"
+            class="px-4 py-2 text-sm bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-lg transition-colors"
+            :disabled="isLoading('add')"
+            @click="cancelForm"
+          >
+            Close
+          </button>
         </div>
       </template>
-      <div v-if="newServer.mode === 'local'">
-        <label class="block text-sm text-theme-400 mb-1">Environment Variables (KEY=VALUE, one per line)</label>
-        <textarea
-          v-model="newServer.env"
-          rows="2"
-          placeholder="API_KEY=sk-..."
-          class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
-        />
-      </div>
-      <div
-        v-if="actionError['add']"
-        class="text-xs text-red-400"
-      >
-        {{ actionError['add'] }}
-      </div>
-      <button
-        :disabled="!canSubmitNewServer || isLoading('add')"
-        class="w-full px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
-        @click="addServer"
-      >
-        {{ isLoading('add') ? 'Connecting...' : pendingAddId ? 'Save & Reconnect' : 'Add Server' }}
-      </button>
-    </div>
+    </ModalDialog>
 
     <DataTable
       v-if="servers.length"
