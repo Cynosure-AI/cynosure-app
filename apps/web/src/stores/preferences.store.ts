@@ -13,7 +13,7 @@ import {
     SK_VOICE_TRANSCRIPTION_MODE, SK_REMOTE_TRANSCRIPTION_PROVIDER, SK_REMOTE_TRANSCRIPTION_MODEL,
 } from '@/utils/storage-keys'
 
-export type ThemeId = 'dark' | 'light' | 'arasaka' | 'obsidian' | 'galaxy' | 'cyberpunk' | 'matrix' | 'sakura' | 'industrial' | 'arctic' | 'monochrome'
+export type ThemeId = 'dark' | 'light' | 'arasaka' | 'noble' | 'galaxy' | 'cyberpunk' | 'matrix' | 'sakura' | 'industrial' | 'arctic' | 'monochrome'
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 export type VoiceTranscriptionMode = 'local' | 'remote'
@@ -25,6 +25,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const userSettingsLoaded = ref(false)
     const userSettingsSaving = ref(false)
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
+    // Obsidian was replaced by Noble. Keep existing users on the successor theme.
+    if ((theme.value as string) === 'obsidian') theme.value = 'noble'
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const autoExpandToolCalls = useLocalStorage(SK_AUTO_EXPAND_TOOLS, false)
     const debugMode = useLocalStorage(SK_DEBUG_MODE, false)
