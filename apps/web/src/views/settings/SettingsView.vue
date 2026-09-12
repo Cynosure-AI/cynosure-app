@@ -56,13 +56,6 @@ const categories: SettingsCategory[] = [
     icon: 'lucide:sliders-horizontal',
     component: GeneralSettings
   },
-  ...(isElectronBuild ? [{
-    id: 'desktop-application' as const,
-    label: 'Desktop Application',
-    description: 'Configure Electron desktop integration, shortcuts, and background behavior.',
-    icon: 'lucide:monitor-cog',
-    component: DesktopSettings
-  }] : []),
   {
     id: 'chat',
     label: 'Chat',
@@ -119,7 +112,14 @@ const categories: SettingsCategory[] = [
     description: 'View the installed Cynosure version and manage desktop app updates.',
     icon: 'lucide:info',
     component: AboutSettings
-  }
+  },
+  ...(isElectronBuild ? [{
+    id: 'desktop-application' as const,
+    label: 'Desktop Application',
+    description: 'Configure Electron desktop integration, shortcuts, and background behavior.',
+    icon: 'lucide:monitor-cog',
+    component: DesktopSettings
+  }] : [])
 ]
 
 const sections: SettingsSection[] = [
@@ -628,31 +628,39 @@ function scoreSection(section: SettingsSection, query: string): number {
               </div>
             </header>
             <nav class="space-y-1 p-4">
-              <button
+              <template
                 v-for="category in categories"
                 :key="category.id"
-                class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all"
-                :class="categoryButtonClass(category.id)"
-                @click="selectCategory(category.id)"
               >
-                <Icon
-                  :icon="category.icon"
-                  class="h-4.5 w-4.5 shrink-0"
+                <div
+                  v-if="category.id === 'desktop-application'"
+                  class="my-3 border-t border-theme-800"
+                  aria-hidden="true"
                 />
-                <span class="whitespace-nowrap">{{ category.label }}</span>
-                <span class="ml-auto flex items-center gap-2">
-                  <span
-                    v-if="isSearching && matchCountByCategory.get(category.id)"
-                    class="rounded-full bg-accent-600/20 px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-400"
-                  >
-                    {{ matchCountByCategory.get(category.id) }}
-                  </span>
+                <button
+                  class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all"
+                  :class="categoryButtonClass(category.id)"
+                  @click="selectCategory(category.id)"
+                >
                   <Icon
-                    icon="lucide:chevron-right"
-                    class="h-4 w-4 text-theme-600 lg:hidden"
+                    :icon="category.icon"
+                    class="h-4.5 w-4.5 shrink-0"
                   />
-                </span>
-              </button>
+                  <span class="whitespace-nowrap">{{ category.label }}</span>
+                  <span class="ml-auto flex items-center gap-2">
+                    <span
+                      v-if="isSearching && matchCountByCategory.get(category.id)"
+                      class="rounded-full bg-accent-600/20 px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-400"
+                    >
+                      {{ matchCountByCategory.get(category.id) }}
+                    </span>
+                    <Icon
+                      icon="lucide:chevron-right"
+                      class="h-4 w-4 text-theme-600 lg:hidden"
+                    />
+                  </span>
+                </button>
+              </template>
             </nav>
           </template>
 
