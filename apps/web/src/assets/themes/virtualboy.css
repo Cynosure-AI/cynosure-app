@@ -1,9 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Arasaka Theme — Crimson/Cyan corporate aesthetic
+   VirtualBoy Theme — Crimson/Cyan corporate aesthetic
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Variable overrides ── */
-[data-theme="arasaka"] {
+[data-theme="virtualboy"] {
   --accent-button-foreground: #0a1018;
   /* Base: near-black with warm red/crimson undertone */
   --color-theme-950: #13090e;
@@ -63,14 +63,14 @@
 }
 
 /* ── Focus glow ── */
-[data-theme="arasaka"] :is(button, a):focus-visible {
+[data-theme="virtualboy"] :is(button, a):focus-visible {
   box-shadow: var(--theme-glow-strong);
   outline: 1px solid var(--cb-cyan-dim);
 }
 
 /* ── Red border accent on structural panels ── */
-[data-theme="arasaka"] .rounded-xl,
-[data-theme="arasaka"] .rounded-lg {
+[data-theme="virtualboy"] .rounded-xl,
+[data-theme="virtualboy"] .rounded-lg {
   border-style: solid;
   border-color: var(--cb-red-dim);
 }
@@ -78,11 +78,11 @@
 /* ── Corner bracket decorations on structural panels ── */
 /* Dialog positioning belongs to the component; overriding it here breaks
    fixed and absolute overlays because theme CSS is unlayered. */
-[data-theme="arasaka"] main {
+[data-theme="virtualboy"] main {
   position: relative;
 }
-[data-theme="arasaka"] main::before,
-[data-theme="arasaka"] main::after {
+[data-theme="virtualboy"] main::before,
+[data-theme="virtualboy"] main::after {
   content: "";
   position: absolute;
   width: 18px;
@@ -95,40 +95,40 @@
 }
 
 /* ── Cyan text glow on headings ── */
-[data-theme="arasaka"] h1,
-[data-theme="arasaka"] h2 {
+[data-theme="virtualboy"] h1,
+[data-theme="virtualboy"] h2 {
   text-shadow: 0 0 10px var(--cb-cyan-glow);
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 /* ── Section header labels: warm red-tinted text ── */
-[data-theme="arasaka"] label,
-[data-theme="arasaka"] .text-theme-400 {
+[data-theme="virtualboy"] label,
+[data-theme="virtualboy"] .text-theme-400 {
   color: #c47080;
 }
 
 /* ── Section dividers: red accent lines ── */
-[data-theme="arasaka"] hr,
-[data-theme="arasaka"] .border-b {
+[data-theme="virtualboy"] hr,
+[data-theme="virtualboy"] .border-b {
   border-color: var(--cb-red-dim);
 }
 
 /* ── Toggle switches: cyan accent when active ── */
-[data-theme="arasaka"] input[type="checkbox"]:checked {
+[data-theme="virtualboy"] input[type="checkbox"]:checked {
   accent-color: var(--cb-cyan);
 }
 
 /* ── Cards & panels: subtle red left-border accent ── */
-[data-theme="arasaka"] .bg-theme-800,
-[data-theme="arasaka"] .bg-theme-900\/50 {
+[data-theme="virtualboy"] .bg-theme-800,
+[data-theme="virtualboy"] .bg-theme-900\/50 {
   border: 1px solid var(--cb-red-dim);
 }
 
 /* ── Input focus: neon border + inner glow ── */
-[data-theme="arasaka"] input:focus,
-[data-theme="arasaka"] textarea:focus,
-[data-theme="arasaka"] select:focus {
+[data-theme="virtualboy"] input:focus,
+[data-theme="virtualboy"] textarea:focus,
+[data-theme="virtualboy"] select:focus {
   box-shadow:
     0 0 8px var(--cb-cyan-glow),
     inset 0 0 4px rgba(0, 220, 232, 0.03);
@@ -137,13 +137,13 @@
 }
 
 /* ── Button hover glow ── */
-[data-theme="arasaka"] button:hover {
+[data-theme="virtualboy"] button:hover {
   text-shadow: 0 0 6px var(--cb-cyan-glow);
 }
 
 /* ── Primary buttons: stronger cyan glow border ── */
-[data-theme="arasaka"] button.bg-accent-600,
-[data-theme="arasaka"] button.bg-accent-500 {
+[data-theme="virtualboy"] button.bg-accent-600,
+[data-theme="virtualboy"] button.bg-accent-500 {
   box-shadow:
     0 0 8px var(--cb-cyan-glow),
     inset 0 0 6px rgba(0, 220, 232, 0.08);
@@ -151,27 +151,27 @@
 }
 
 /* ── Black text on cyan accent backgrounds ── */
-[data-theme="arasaka"] .bg-accent-600,
-[data-theme="arasaka"] .bg-accent-500,
-[data-theme="arasaka"] .bg-accent-400 {
+[data-theme="virtualboy"] .bg-accent-600,
+[data-theme="virtualboy"] .bg-accent-500,
+[data-theme="virtualboy"] .bg-accent-400 {
   color: #0a1018;
 }
-[data-theme="arasaka"] .bg-accent-600 .text-white,
-[data-theme="arasaka"] .bg-accent-500 .text-white,
-[data-theme="arasaka"] .bg-accent-400 .text-white,
-[data-theme="arasaka"] .text-white.bg-accent-600,
-[data-theme="arasaka"] .text-white.bg-accent-500,
-[data-theme="arasaka"] .text-white.bg-accent-400 {
+[data-theme="virtualboy"] .bg-accent-600 .text-white,
+[data-theme="virtualboy"] .bg-accent-500 .text-white,
+[data-theme="virtualboy"] .bg-accent-400 .text-white,
+[data-theme="virtualboy"] .text-white.bg-accent-600,
+[data-theme="virtualboy"] .text-white.bg-accent-500,
+[data-theme="virtualboy"] .text-white.bg-accent-400 {
   color: #0a1018;
 }
 /* Gradient accent backgrounds — force dark text */
-[data-theme="arasaka"] .from-accent-500 .text-white,
-[data-theme="arasaka"] .from-accent-400 .text-white {
+[data-theme="virtualboy"] .from-accent-500 .text-white,
+[data-theme="virtualboy"] .from-accent-400 .text-white {
   color: #0a1018;
 }
 
 /* ── Subtle scan-line overlay ── */
-[data-theme="arasaka"] body::after {
+[data-theme="virtualboy"] body::after {
   content: "";
   position: fixed;
   inset: 0;
@@ -187,29 +187,29 @@
 }
 
 /* ── Scrollbar styling ── */
-[data-theme="arasaka"] ::-webkit-scrollbar {
+[data-theme="virtualboy"] ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-[data-theme="arasaka"] ::-webkit-scrollbar-track {
+[data-theme="virtualboy"] ::-webkit-scrollbar-track {
   background: #0a1018;
 }
-[data-theme="arasaka"] ::-webkit-scrollbar-thumb {
+[data-theme="virtualboy"] ::-webkit-scrollbar-thumb {
   background: rgba(0, 220, 232, 0.2);
   border: 1px solid rgba(255, 0, 60, 0.15);
 }
-[data-theme="arasaka"] ::-webkit-scrollbar-thumb:hover {
+[data-theme="virtualboy"] ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 220, 232, 0.35);
 }
 
 /* ── Selection highlight ── */
-[data-theme="arasaka"] ::selection {
+[data-theme="virtualboy"] ::selection {
   background: rgba(0, 220, 232, 0.3);
   color: #f0dce2;
 }
 
 /* ── Active sidebar nav item: corner bracket decorations ── */
-[data-theme="arasaka"] .nav-item.active {
+[data-theme="virtualboy"] .nav-item.active {
   position: relative;
   background-color: rgba(0, 220, 232, 0.06) !important;
   box-shadow: none !important;
@@ -219,8 +219,8 @@
     color 150ms ease,
     background-color 150ms ease !important;
 }
-[data-theme="arasaka"] .nav-item.active::before,
-[data-theme="arasaka"] .nav-item.active::after {
+[data-theme="virtualboy"] .nav-item.active::before,
+[data-theme="virtualboy"] .nav-item.active::after {
   content: "";
   position: absolute;
   pointer-events: none;
@@ -230,19 +230,19 @@
   border-style: solid;
 }
 /* Top-left corner */
-[data-theme="arasaka"] .nav-item.active::before {
+[data-theme="virtualboy"] .nav-item.active::before {
   top: -1px;
   left: -1px;
   border-width: 2px 0 0 2px;
 }
 /* Bottom-right corner */
-[data-theme="arasaka"] .nav-item.active::after {
+[data-theme="virtualboy"] .nav-item.active::after {
   bottom: -1px;
   right: -1px;
   border-width: 0 2px 2px 0;
 }
 /* Top-right & bottom-left via background-image trick */
-[data-theme="arasaka"] .nav-item.active {
+[data-theme="virtualboy"] .nav-item.active {
   background-image:
     /* top-right corner */
     linear-gradient(var(--cb-cyan), var(--cb-cyan)),

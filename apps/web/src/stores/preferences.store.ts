@@ -13,7 +13,7 @@ import {
     SK_VOICE_TRANSCRIPTION_MODE, SK_REMOTE_TRANSCRIPTION_PROVIDER, SK_REMOTE_TRANSCRIPTION_MODEL,
 } from '@/utils/storage-keys'
 
-export type ThemeId = 'dark' | 'light' | 'arasaka' | 'galaxy' | 'cyberpunk' | 'emerald' | 'industrial' | 'monochrome'
+export type ThemeId = 'dark' | 'light' | 'virtualboy' | 'crimson' | 'cyberpunk' | 'emerald' | 'industrial' | 'monochrome'
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 export type VoiceTranscriptionMode = 'local' | 'remote'
@@ -27,7 +27,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
     // Migrate the former internal theme ID without resetting existing preferences.
     if ((theme.value as string) === 'matrix') theme.value = 'emerald'
-    const removedThemes = ['obsidian', 'noble', 'ancient', 'sakura', 'arctic']
+    if ((theme.value as string) === 'arasaka') theme.value = 'virtualboy'
+    const removedThemes = ['obsidian', 'noble', 'ancient', 'sakura', 'arctic', 'galaxy']
     if (removedThemes.includes(theme.value as string)) theme.value = 'dark'
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const autoExpandToolCalls = useLocalStorage(SK_AUTO_EXPAND_TOOLS, false)

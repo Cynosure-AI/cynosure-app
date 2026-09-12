@@ -1,0 +1,122 @@
+/* ==========================================================================
+   Crimson Theme - graphite depth washed in dark reds and restrained scarlet
+   ========================================================================== */
+
+[data-theme="crimson"] {
+  --color-theme-950: #10080a;
+  --color-theme-900: #180c0f;
+  --color-theme-800: #241116;
+  --color-theme-700: #3a1d24;
+  --color-theme-600: #59303a;
+  --color-theme-500: #7d4b56;
+  --color-theme-400: #aa7781;
+  --color-theme-300: #cda4ab;
+  --color-theme-200: #ead4d8;
+  --color-theme-100: #f8eef0;
+  --color-accent-50: #fff1f3;
+  --color-accent-100: #ffe0e5;
+  --color-accent-200: #ffc6cf;
+  --color-accent-300: #ff98a8;
+  --color-accent-400: #f85b73;
+  --color-accent-500: #dc2743;
+  --color-accent-600: #bc1732;
+  --color-accent-700: #981429;
+  --color-accent-800: #7e1627;
+  --color-accent-900: #6b1725;
+  --color-accent-950: #3c0811;
+  --accent-button-foreground: #fff7f8;
+  --crimson-line: rgba(248, 91, 115, 0.15);
+  --theme-glow: 0 0 20px rgba(220, 39, 67, 0.13);
+  --theme-glow-strong: 0 0 0 1px rgba(248, 91, 115, 0.3), 0 0 28px rgba(220, 39, 67, 0.18);
+  --theme-accent-rgb: 220, 39, 67;
+  color-scheme: dark;
+}
+
+[data-theme="crimson"] body,
+[data-theme="crimson"] .bg-theme-950 {
+  background:
+    radial-gradient(circle at 78% -8%, rgba(220, 39, 67, 0.13), transparent 30rem),
+    radial-gradient(circle at 5% 105%, rgba(126, 22, 39, 0.09), transparent 34rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.012), transparent 42%),
+    var(--color-theme-950);
+}
+
+[data-theme="crimson"] .bg-theme-900,
+[data-theme="crimson"] .bg-theme-900\/50,
+[data-theme="crimson"] .bg-theme-900\/60,
+[data-theme="crimson"] .bg-theme-900\/70,
+[data-theme="crimson"] .bg-theme-900\/80,
+[data-theme="crimson"] .bg-theme-900\/90 {
+  background-color: color-mix(in srgb, var(--color-theme-900) 96%, #dc2743 4%);
+}
+
+[data-theme="crimson"] .bg-theme-800,
+[data-theme="crimson"] .bg-theme-800\/50,
+[data-theme="crimson"] .bg-theme-800\/60,
+[data-theme="crimson"] .bg-theme-800\/70,
+[data-theme="crimson"] .bg-theme-800\/80 {
+  background-color: color-mix(in srgb, var(--color-theme-800) 97%, #f85b73 3%);
+}
+
+[data-theme="crimson"] .border-theme-700,
+[data-theme="crimson"] .border-theme-700\/60,
+[data-theme="crimson"] .border-theme-800,
+[data-theme="crimson"] .border-theme-800\/60 {
+  border-color: var(--crimson-line);
+}
+
+[data-theme="crimson"] :is(.shadow-xl, .shadow-2xl) {
+  box-shadow: 0 24px 70px rgba(8, 1, 3, 0.54), 0 1px 0 rgba(255, 220, 225, 0.025) inset;
+}
+
+[data-theme="crimson"] #primary-navigation aside {
+  background: radial-gradient(circle at 12% 2%, rgba(248, 91, 115, 0.08), transparent 17rem), linear-gradient(180deg, #160b0e, #0d0608 72%);
+  border-right: 1px solid rgba(248, 91, 115, 0.1);
+  box-shadow: 12px 0 40px rgba(8, 1, 3, 0.2);
+}
+
+[data-theme="crimson"] main.bg-theme-900 {
+  background: radial-gradient(circle at 62% -18%, rgba(248, 91, 115, 0.06), transparent 34rem), linear-gradient(180deg, #1b0d12, #150a0e);
+}
+
+[data-theme="crimson"] main > .shrink-0.border-b {
+  background: rgba(21, 10, 14, 0.76);
+  backdrop-filter: blur(14px);
+}
+
+[data-theme="crimson"] .chat-input-bar .bg-theme-800.border-theme-700.rounded-xl {
+  background: linear-gradient(180deg, #2a151b, #211016);
+  box-shadow: 0 12px 36px rgba(8, 1, 3, 0.28), 0 1px 0 rgba(255, 220, 225, 0.03) inset;
+}
+
+[data-theme="crimson"] :is(button, a):focus-visible { box-shadow: var(--theme-glow-strong); }
+
+[data-theme="crimson"] :is(input, textarea, select):focus {
+  border-color: rgba(248, 91, 115, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(220, 39, 67, 0.12), 0 0 24px rgba(220, 39, 67, 0.07);
+  outline: none;
+}
+
+[data-theme="crimson"] button.bg-accent-600,
+[data-theme="crimson"] button.bg-accent-500,
+[data-theme="crimson"] .bg-accent-600,
+[data-theme="crimson"] .bg-accent-500 {
+  background-image: linear-gradient(135deg, #f85b73, #dc2743 55%, #981429);
+  box-shadow: 0 4px 9px rgba(152, 20, 41, 0.3), 0 1px 0 rgba(255, 255, 255, 0.16) inset;
+}
+
+[data-theme="crimson"] .nav-item.active,
+[data-theme="crimson"] nav a.router-link-active,
+[data-theme="crimson"] nav [data-active="true"] {
+  background: linear-gradient(90deg, rgba(248, 91, 115, 0.16), rgba(220, 39, 67, 0.035)) !important;
+  border-left: 2px solid var(--color-accent-400);
+  box-shadow: inset 5px 0 18px rgba(220, 39, 67, 0.09);
+}
+
+[data-theme="crimson"] .msg-markdown a { color: #ff98a8; text-decoration-color: rgba(255, 152, 168, 0.38); }
+[data-theme="crimson"] .msg-markdown :not(pre) > code { background: rgba(248, 91, 115, 0.09); border: 1px solid rgba(248, 91, 115, 0.15); color: #ffc6cf; }
+[data-theme="crimson"] ::selection { background: rgba(220, 39, 67, 0.34); color: #fff; }
+[data-theme="crimson"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme="crimson"] ::-webkit-scrollbar-track { background: #10080a; }
+[data-theme="crimson"] ::-webkit-scrollbar-thumb { background: #59303a; border: 2px solid #10080a; border-radius: 999px; }
+[data-theme="crimson"] ::-webkit-scrollbar-thumb:hover { background: #7d4b56; }

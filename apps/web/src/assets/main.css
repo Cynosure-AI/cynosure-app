@@ -3,8 +3,8 @@
 /* ── Theme stylesheets ── */
 @import "./themes/light.css";
 @import "./themes/dark.css";
-@import "./themes/arasaka.css";
-@import "./themes/galaxy.css";
+@import "./themes/virtualboy.css";
+@import "./themes/crimson.css";
 @import "./themes/cyberpunk.css";
 @import "./themes/emerald.css";
 @import "./themes/industrial.css";
@@ -42,8 +42,7 @@
 }
 
 /* Custom dark variant based on data-theme attribute */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="arasaka"], [data-theme="arasaka"] *, [data-theme="galaxy"], [data-theme="galaxy"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="emerald"], [data-theme="emerald"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
-@custom-variant arasaka (&:where([data-theme="arasaka"], [data-theme="arasaka"] *));
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="virtualboy"], [data-theme="virtualboy"] *, [data-theme="crimson"], [data-theme="crimson"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="emerald"], [data-theme="emerald"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
 
 /* ── Global defaults ── */
 body {
