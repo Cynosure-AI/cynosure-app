@@ -22,13 +22,10 @@ export function useAppBranding() {
             case 'cyberpunk': return cynosureLogoYellow
             case 'galaxy': return cynosureLogoPurple
             case 'matrix': return cynosureLogoGreen
-            case 'ancient': return cynosureLogoGreen
             case 'industrial': return cynosureLogoYellow
-            case 'arctic': return cynosureLogoBlue
             case 'monochrome': return cynosureLogoRed
             case 'dark': return cynosureLogoBlue
-            case 'arasaka':
-            case 'noble': return cynosureLogoRed
+            case 'arasaka': return cynosureLogoRed
             default: return cynosureLogoRed
         }
     })
@@ -39,13 +36,10 @@ export function useAppBranding() {
             case 'cyberpunk': return cynosureLogoTextYellow
             case 'galaxy': return cynosureLogoTextPurple
             case 'matrix': return cynosureLogoTextGreen
-            case 'ancient': return cynosureLogoTextGreen
             case 'industrial': return cynosureLogoTextYellow
-            case 'arctic': return cynosureLogoTextBlue
             case 'monochrome': return cynosureLogoTextRed
             case 'dark': return cynosureLogoTextBlue
-            case 'arasaka':
-            case 'noble': return cynosureLogoTextRed
+            case 'arasaka': return cynosureLogoTextRed
             default: return cynosureLogoTextRed
         }
     })
