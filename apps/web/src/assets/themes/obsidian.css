@@ -1,0 +1,43 @@
+/* Obsidian — executive black, lacquer red, and surgical white */
+[data-theme="obsidian"] {
+  --accent-button-foreground: #fffafa;
+  --color-theme-950: #09090b; --color-theme-900: #111114; --color-theme-800: #1b1b20;
+  --color-theme-700: #303037; --color-theme-600: #484850; --color-theme-500: #6d6d76;
+  --color-theme-400: #9999a2; --color-theme-300: #c0c0c7; --color-theme-200: #dedee3; --color-theme-100: #f5f5f6;
+  --color-accent-50: #fff1f2; --color-accent-100: #ffe4e6; --color-accent-200: #fecdd3;
+  --color-accent-300: #fda4af; --color-accent-400: #fb7185; --color-accent-500: #ef233c;
+  --color-accent-600: #cf1730; --color-accent-700: #a90f25; --color-accent-800: #881326;
+  --color-accent-900: #731426; --color-accent-950: #400711;
+  --ob-red: #ef233c; --ob-line: rgba(255,255,255,.105); --ob-paper: #f5f5f6;
+  --theme-glow: 0 10px 35px rgba(0,0,0,.32);
+  --theme-glow-strong: 0 0 0 1px rgba(239,35,60,.42), 0 12px 40px rgba(0,0,0,.45);
+  --theme-accent-rgb: 239, 35, 60;
+  --radius-sm: 3px; --radius-md: 5px; --radius-lg: 7px; --radius-xl: 9px;
+  --radius-2xl: 12px; --radius-3xl: 14px; --radius-4xl: 16px;
+  font-family: Inter, "Segoe UI", sans-serif; letter-spacing: 0; color-scheme: dark;
+}
+[data-theme="obsidian"] body { background: linear-gradient(115deg, rgba(239,35,60,.055), transparent 24rem), linear-gradient(90deg, transparent 0 72%, rgba(255,255,255,.018) 72% 72.08%, transparent 72.08%), #09090b; }
+[data-theme="obsidian"] :is(button,a):focus-visible { outline: 2px solid var(--ob-red); outline-offset: 3px; box-shadow: none; }
+[data-theme="obsidian"] .bg-theme-950 { background: linear-gradient(135deg, rgba(239,35,60,.035), transparent 30%), #09090b; }
+[data-theme="obsidian"] :is(.bg-theme-900,.bg-theme-900\/50,.bg-theme-900\/60) { background-color: rgba(17,17,20,.94); }
+[data-theme="obsidian"] :is(.bg-theme-800,.bg-theme-800\/60,.bg-theme-800\/80) { background-color: rgba(27,27,32,.96); border-color: var(--ob-line); }
+[data-theme="obsidian"] :is(.border-theme-700,.border-theme-800,.border-theme-800\/60) { border-color: var(--ob-line); }
+[data-theme="obsidian"] :is(.shadow-xl,.shadow-2xl) { box-shadow: 0 24px 70px rgba(0,0,0,.48), 0 0 0 1px rgba(255,255,255,.035); }
+[data-theme="obsidian"] :is(h1,h2) { color: var(--ob-paper); font-weight: 650; letter-spacing: -.025em; text-shadow: none; }
+[data-theme="obsidian"] label, [data-theme="obsidian"] .text-theme-400 { color: #a7a7b0; }
+[data-theme="obsidian"] :is(input,textarea,select):focus { border-color: rgba(239,35,60,.72) !important; box-shadow: 0 0 0 3px rgba(239,35,60,.12); outline: none; }
+[data-theme="obsidian"] input[type="checkbox"]:checked { accent-color: var(--ob-red); }
+[data-theme="obsidian"] button.bg-accent-600, [data-theme="obsidian"] button.bg-accent-500,
+[data-theme="obsidian"] .bg-accent-600, [data-theme="obsidian"] .bg-accent-500 { background: linear-gradient(110deg,#ef233c,#c9112a 70%); color: var(--ob-paper); border-color: rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(155,10,31,.22); }
+[data-theme="obsidian"] button:is(.bg-accent-600,.bg-accent-500):hover { filter: brightness(1.08); box-shadow: 0 10px 30px rgba(196,15,40,.3); }
+[data-theme="obsidian"] .nav-item.active, [data-theme="obsidian"] nav a.router-link-active, [data-theme="obsidian"] nav [data-active="true"] { background: linear-gradient(90deg,rgba(239,35,60,.16),rgba(239,35,60,.025) 80%) !important; border-left: 3px solid var(--ob-red); box-shadow: inset 10px 0 28px rgba(239,35,60,.06); }
+[data-theme="obsidian"] .msg-markdown a { color: #ff6578; text-decoration-color: rgba(255,101,120,.38); }
+[data-theme="obsidian"] .msg-markdown strong { color: #fff; }
+[data-theme="obsidian"] .msg-markdown :not(pre)>code { color: #ff9aa6; background: rgba(239,35,60,.09); border: 1px solid rgba(239,35,60,.16); }
+[data-theme="obsidian"] .code-header { background: #101013; border-color: var(--ob-line); }
+[data-theme="obsidian"] ::selection { background: rgba(239,35,60,.38); color: #fff; }
+[data-theme="obsidian"] ::-webkit-scrollbar { width: 7px; height: 7px; }
+[data-theme="obsidian"] ::-webkit-scrollbar-track { background: #09090b; }
+[data-theme="obsidian"] ::-webkit-scrollbar-thumb { background: #45454d; border-left: 2px solid #09090b; }
+[data-theme="obsidian"] ::-webkit-scrollbar-thumb:hover { background: var(--ob-red); }
+[data-theme="obsidian"] body::before { content: ""; position: fixed; inset: 0 auto 0 0; width: 3px; background: linear-gradient(180deg,transparent,var(--ob-red) 18%,var(--ob-red) 82%,transparent); opacity: .7; pointer-events: none; z-index: 9999; }

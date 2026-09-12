@@ -13,7 +13,7 @@ import {
     SK_VOICE_TRANSCRIPTION_MODE, SK_REMOTE_TRANSCRIPTION_PROVIDER, SK_REMOTE_TRANSCRIPTION_MODEL,
 } from '@/utils/storage-keys'
 
-export type ThemeId = 'dark' | 'light' | 'arasaka' | 'galaxy' | 'cyberpunk' | 'matrix' | 'sakura' | 'industrial' | 'arctic' | 'monochrome'
+export type ThemeId = 'dark' | 'light' | 'arasaka' | 'obsidian' | 'galaxy' | 'cyberpunk' | 'matrix' | 'sakura' | 'industrial' | 'arctic' | 'monochrome'
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 export type VoiceTranscriptionMode = 'local' | 'remote'

@@ -4,6 +4,7 @@
 @import "./themes/light.css";
 @import "./themes/dark.css";
 @import "./themes/arasaka.css";
+@import "./themes/obsidian.css";
 @import "./themes/galaxy.css";
 @import "./themes/cyberpunk.css";
 @import "./themes/matrix.css";
@@ -44,7 +45,7 @@
 }
 
 /* Custom dark variant based on data-theme attribute */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="arasaka"], [data-theme="arasaka"] *, [data-theme="galaxy"], [data-theme="galaxy"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="matrix"], [data-theme="matrix"] *, [data-theme="sakura"], [data-theme="sakura"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="arctic"], [data-theme="arctic"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="arasaka"], [data-theme="arasaka"] *, [data-theme="obsidian"], [data-theme="obsidian"] *, [data-theme="galaxy"], [data-theme="galaxy"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="matrix"], [data-theme="matrix"] *, [data-theme="sakura"], [data-theme="sakura"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="arctic"], [data-theme="arctic"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
 @custom-variant arasaka (&:where([data-theme="arasaka"], [data-theme="arasaka"] *));
 
 /* ── Global defaults ── */
