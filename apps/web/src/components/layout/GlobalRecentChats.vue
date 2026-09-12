@@ -376,7 +376,12 @@ onBeforeUnmount(() => {
               class="truncate text-xs text-theme-300"
             >{{ conversation.title }}</span>
           </span>
-          <span class="mt-0.5  items-center gap-1 truncate text-[10px] text-theme-600 hidden group-hover:flex">
+          <span
+            class="flex max-h-0 items-center gap-1 overflow-hidden truncate
+         text-[10px] text-theme-600 opacity-0
+         transition-all duration-200 ease-out
+         group-hover:mt-0.5 group-hover:max-h-5 group-hover:opacity-100"
+          >
             <span class="truncate">{{ agentName(conversation) }}</span>
             <span>·</span>
             <span class="shrink-0">{{ formatDate(conversation.updatedAt) }}</span>
