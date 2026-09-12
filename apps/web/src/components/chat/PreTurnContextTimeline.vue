@@ -437,7 +437,7 @@ function formatTimestamp(timestamp: number): string {
                 >
                   <span class="font-medium">{{ detail.name }}</span><span
                     v-if="detail.score"
-                    class="ml-2 text-cyan-300"
+                    class="ml-2 context-score-text"
                   >{{ detail.score }}</span>
                   <p
                     v-if="detail.content && item.key.includes('searching-memory')"
@@ -466,7 +466,7 @@ function formatTimestamp(timestamp: number): string {
               <article class="memory-card w-full">
                 <div class="flex items-start gap-2">
                   <h4
-                    class="min-w-0 flex-1 truncate text-[11px] font-semibold text-violet-200"
+                    class="memory-title min-w-0 flex-1 truncate text-[11px] font-semibold"
                     :title="memory.name"
                   >
                     {{ memory.name }}
@@ -487,7 +487,7 @@ function formatTimestamp(timestamp: number): string {
                   class="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-theme-200"
                   :aria-label="`Full memory content for ${memory.name}`"
                 >
-                  <div class="mb-1.5 font-semibold text-violet-200">
+                  <div class="memory-title mb-1.5 font-semibold">
                     {{ memory.name }}
                   </div>
                   {{ memory.content }}
@@ -506,7 +506,7 @@ function formatTimestamp(timestamp: number): string {
               :key="group.id"
               class="toolset-card"
             >
-              <div class="flex items-center gap-2 text-[11px] font-semibold text-teal-200">
+              <div class="tool-title flex items-center gap-2 text-[11px] font-semibold">
                 <Icon
                   icon="lucide:boxes"
                   class="h-3.5 w-3.5"
@@ -541,21 +541,37 @@ function formatTimestamp(timestamp: number): string {
 
 <style scoped>
 .pre-turn-card {
+  --context-accent: color-mix(in srgb, var(--color-accent-500) 70%, var(--color-theme-100));
+  --context-accent-soft: color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+  --context-accent-line: color-mix(in srgb, var(--color-accent-500) 30%, var(--color-theme-700));
   overflow: hidden;
-  border: 1px solid rgb(71 85 105 / .38);
+  color: var(--color-theme-200);
+  border: 1px solid color-mix(in srgb, var(--color-theme-700) 78%, transparent);
   border-radius: 1rem;
-  background: linear-gradient(145deg, rgb(15 23 42 / .88), rgb(9 14 25 / .9));
-  box-shadow: 0 8px 24px rgb(0 0 0 / .12);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color-theme-900) 96%, var(--color-accent-500) 4%),
+    color-mix(in srgb, var(--color-theme-950) 96%, var(--color-accent-500) 4%)
+  );
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-theme-950) 18%, transparent);
+  backdrop-filter: blur(18px) saturate(90%);
 }
 
 .pre-turn-card--memory {
-  border-color: rgb(167 139 250 / .25);
-  background: radial-gradient(circle at 0 0, rgb(139 92 246 / .1), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(20 15 38 / .82));
+  border-color: var(--context-accent-line);
+  background:
+    radial-gradient(circle at 0 0, var(--context-accent-soft), transparent 42%),
+    color-mix(in srgb, var(--color-theme-900) 94%, transparent);
 }
 
 .pre-turn-card--tools {
-  border-color: rgb(45 212 191 / .24);
-  background: radial-gradient(circle at 0 0, rgb(20 184 166 / .09), transparent 40%), linear-gradient(145deg, rgb(15 23 42 / .9), rgb(8 34 36 / .72));
+  --context-accent: color-mix(in srgb, var(--color-accent-400) 45%, var(--color-theme-100));
+  --context-accent-soft: color-mix(in srgb, var(--color-accent-400) 10%, transparent);
+  --context-accent-line: color-mix(in srgb, var(--color-accent-400) 26%, var(--color-theme-700));
+  border-color: var(--context-accent-line);
+  background:
+    radial-gradient(circle at 0 0, var(--context-accent-soft), transparent 42%),
+    color-mix(in srgb, var(--color-theme-900) 94%, transparent);
 }
 
 .card-icon {
@@ -566,23 +582,23 @@ function formatTimestamp(timestamp: number): string {
   align-items: center;
   justify-content: center;
   border-radius: .5rem;
-  background: rgb(34 211 238 / .1);
-  color: rgb(103 232 249);
-  box-shadow: 0 0 0 1px rgb(103 232 249 / .12);
+  background: var(--context-accent-soft);
+  color: var(--context-accent);
+  box-shadow: 0 0 0 1px var(--context-accent-line);
 }
 
 .pre-turn-card--memory .card-icon {
-  background: rgb(139 92 246 / .12);
-  color: rgb(196 181 253);
-  box-shadow: 0 0 0 1px rgb(167 139 250 / .16);
+  background: var(--context-accent-soft);
+  color: var(--context-accent);
+  box-shadow: 0 0 0 1px var(--context-accent-line);
 }
 
 .count-chip,
 .score-chip {
   border-radius: .375rem;
   padding: .125rem .375rem;
-  background: rgb(6 182 212 / .1);
-  color: rgb(165 243 252);
+  background: var(--context-accent-soft);
+  color: var(--context-accent);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -591,7 +607,7 @@ function formatTimestamp(timestamp: number): string {
   display: flex;
   flex-wrap: wrap;
   gap: .35rem;
-  border-top: 1px solid rgb(71 85 105 / .24);
+  border-top: 1px solid color-mix(in srgb, var(--color-theme-700) 65%, transparent);
   padding: .5rem .7rem;
 }
 
@@ -602,19 +618,20 @@ function formatTimestamp(timestamp: number): string {
   align-items: center;
   gap: .35rem;
   border-radius: .4rem;
-  background: rgb(30 41 59 / .62);
+  border: 1px solid color-mix(in srgb, var(--color-theme-700) 70%, transparent);
+  background: color-mix(in srgb, var(--color-theme-800) 78%, transparent);
   padding: .2rem .4rem;
-  color: rgb(203 213 225);
+  color: var(--color-theme-300);
   font-size: 10px;
 }
 
 .collapsed-result-chip small {
   flex-shrink: 0;
-  color: rgb(103 232 249);
+  color: var(--context-accent);
 }
 
 .pre-turn-card--memory .collapsed-result-chip small {
-  color: rgb(196 181 253);
+  color: var(--context-accent);
 }
 
 .memory-grid {
@@ -625,30 +642,37 @@ function formatTimestamp(timestamp: number): string {
 
 .memory-card {
   min-width: 0;
-  border: 1px solid rgb(167 139 250 / .18);
+  border: 1px solid var(--context-accent-line);
   border-radius: .625rem;
-  background: rgb(76 29 149 / .08);
+  background: color-mix(in srgb, var(--color-theme-800) 72%, var(--context-accent-soft));
   padding: .625rem;
 }
 
 .toolset-card {
-  border: 1px solid rgb(45 212 191 / .16);
+  border: 1px solid var(--context-accent-line);
   border-radius: .625rem;
-  background: rgb(15 118 110 / .06);
+  background: color-mix(in srgb, var(--color-theme-800) 72%, var(--context-accent-soft));
   padding: .625rem;
 }
 
 .tool-chip {
   border-radius: .4rem;
-  background: rgb(20 184 166 / .1);
+  border: 1px solid var(--context-accent-line);
+  background: var(--context-accent-soft);
   padding: .25rem .45rem;
-  color: rgb(153 246 228);
+  color: var(--context-accent);
   font-size: 10px;
 }
 
 .tool-chip small {
   margin-left: .35rem;
-  color: rgb(94 234 212 / .7);
+  color: color-mix(in srgb, var(--context-accent) 76%, var(--color-theme-400));
+}
+
+.context-score-text,
+.memory-title,
+.tool-title {
+  color: var(--context-accent, var(--color-accent-600));
 }
 
 @media (max-width: 640px) {
