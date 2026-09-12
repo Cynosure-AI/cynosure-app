@@ -74,14 +74,10 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
   { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
   { id: 'arasaka', label: 'Arasaka', icon: 'lucide:scan-line', colors: { bg: '#09090b', surface: '#1c1218', accent: '#ef233c', text: '#f5f5f6' } },
-  { id: 'noble', label: 'Noble', icon: 'lucide:crown', colors: { bg: '#090806', surface: '#19140e', accent: '#a61e2d', text: '#f2e9d8' } },
-  { id: 'ancient', label: 'Ancient', icon: 'lucide:orbit', colors: { bg: '#0b0d0c', surface: '#252927', accent: '#9cae63', text: '#eceeeb' } },
   { id: 'galaxy', label: 'Galaxy', icon: 'lucide:sparkles', colors: { bg: '#070915', surface: '#171a32', accent: '#a855f7', text: '#f1edff' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
   { id: 'matrix', label: 'Matrix', icon: 'lucide:network', colors: { bg: '#06100d', surface: '#12251d', accent: '#34d399', text: '#edf8f2' } },
-  { id: 'sakura', label: 'Sakura', icon: 'lucide:flower-2', colors: { bg: '#170e1a', surface: '#241426', accent: '#f43f8f', text: '#ffe8f3' } },
   { id: 'industrial', label: 'Industrial', icon: 'lucide:factory', colors: { bg: '#100e0b', surface: '#211c16', accent: '#f59e0b', text: '#eee7d9' } },
-  { id: 'arctic', label: 'Arctic', icon: 'lucide:snowflake', colors: { bg: '#07131b', surface: '#102733', accent: '#67e8f9', text: '#eafcff' } },
   { id: 'monochrome', label: 'Monochrome', icon: 'lucide:circle-half', colors: { bg: '#080808', surface: '#181818', accent: '#f5f5f5', text: '#ededed' } },
 ]
 </script>
