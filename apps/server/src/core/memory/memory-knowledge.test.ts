@@ -605,6 +605,31 @@ describe('memory knowledge v3', () => {
         expect(absent.graph).toBeUndefined()
     })
 
+    test('does not leak another profile through a shared one-hop entity', () => {
+        addDocument('doc-shared-location', 'shared-location.md', 'revision-1')
+        const locationChunks = [
+            chunk('Patrick Klabacher uses Notion.', 0),
+            chunk('Patrick Klabacher is located in Salzburg.', 1),
+            chunk('Andreas Hagen is located in Salzburg.', 2),
+        ]
+        store.publishDocument({
+            documentId: 'doc-shared-location', contentHash: 'revision-1', spaceId: 'test-space',
+            fileName: 'shared-location.md', sourceId: 'memory:test-space:shared-location.md', chunks: locationChunks,
+            relations: [
+                { from: { name: 'Patrick Klabacher', type: 'person' }, relation: 'uses', to: { name: 'Notion', type: 'technology' }, sourceChunkIndex: 0 },
+                { from: { name: 'Patrick Klabacher', type: 'person' }, relation: 'located_in', to: { name: 'Salzburg', type: 'place' }, sourceChunkIndex: 1 },
+                { from: { name: 'Andreas Hagen', type: 'person' }, relation: 'located_in', to: { name: 'Salzburg', type: 'place' }, sourceChunkIndex: 2 },
+            ],
+        })
+
+        const andreas = store.suggestNodes('Andreas Hagen', 1, ['test-space'])[0]
+        const oneHop = store.browseGraph({ spaceIds: ['test-space'], nodeIds: [andreas.id], depth: 1 })
+
+        expect(oneHop.edges).toHaveLength(1)
+        expect(oneHop.edges[0]).toMatchObject({ fromName: 'Andreas Hagen', relation: 'located_in', toName: 'Salzburg' })
+        expect(oneHop.nodes.some((node) => node.name === 'Patrick Klabacher')).toBe(false)
+    })
+
     test('stores and retracts explicit relationship assertions in the same knowledge plane', () => {
         const edge = store.assertRelationship({
             spaceId: 'test-space',

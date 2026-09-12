@@ -159,7 +159,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       spaceIds,
       limit,
       minImportance,
-      depth: 2,
+      // The relationship table should list facts directly involving the selected
+      // entities. The visual graph keeps an extra hop to provide useful context.
+      depth: req.query.view === 'relationships' ? 1 : 2,
     })
     return {
       stats: knowledge.graphStats(spaceIds),

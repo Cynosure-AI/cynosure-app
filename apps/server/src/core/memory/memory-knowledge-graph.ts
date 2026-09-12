@@ -376,11 +376,16 @@ export class MemoryKnowledgeGraphStore {
 
     if (requestedNodeIds.length && seedNodes.length) {
       const included = new Set(seedNodes.map((node) => node.id))
+      let frontier = new Set(included)
       for (let hop = 0; hop < Math.max(1, Math.min(3, opts.depth || 2)); hop++) {
-        for (const edge of edges) if (included.has(edge.fromNodeId) || included.has(edge.toNodeId)) {
-          included.add(edge.fromNodeId)
-          included.add(edge.toNodeId)
+        const nextFrontier = new Set<string>()
+        for (const edge of edges) if (frontier.has(edge.fromNodeId) || frontier.has(edge.toNodeId)) {
+          if (!included.has(edge.fromNodeId)) nextFrontier.add(edge.fromNodeId)
+          if (!included.has(edge.toNodeId)) nextFrontier.add(edge.toNodeId)
         }
+        for (const nodeId of nextFrontier) included.add(nodeId)
+        frontier = nextFrontier
+        if (!frontier.size) break
       }
       edges = edges.filter((edge) => included.has(edge.fromNodeId) && included.has(edge.toNodeId))
     }
