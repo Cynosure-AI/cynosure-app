@@ -743,7 +743,6 @@ const hasDisplayableActivity = computed(() =>
             class="w-full flex items-center gap-2 px-3 py-2 rounded-2xl text-[13px] font-medium transition-all group shadow-sm"
             :class="[
               headerButtonClass(isExpanded),
-              { '!rounded-b-none': isExpanded && isRoutingStatus },
             ]"
             @click="toggle"
           >
@@ -1050,32 +1049,28 @@ const hasDisplayableActivity = computed(() =>
 <style scoped>
 .context-timeline {
   position: relative;
-  margin-top: 0;
+  margin-top: .375rem;
   margin-left: 0;
-  padding: 1rem 0.75rem 0.85rem 3rem;
-  border: 1px solid color-mix(in srgb, var(--color-theme-700) 45%, transparent);
-  border-top: 0;
-  border-radius: 0 0 0.9rem 0.9rem;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-theme-900) 42%, transparent),
-    color-mix(in srgb, var(--color-theme-950) 18%, transparent)
-  );
+  padding: .25rem .25rem .25rem 1.75rem;
+  border: 0;
+  background: transparent;
 }
 
 .context-timeline::before {
   content: '';
   position: absolute;
-  top: 1.25rem;
-  bottom: 1.35rem;
-  left: 1.55rem;
+  top: .9rem;
+  bottom: .9rem;
+  left: .7rem;
   width: 1px;
-  background: linear-gradient(180deg, rgb(34 211 238 / 0.8), rgb(52 211 153 / 0.65) 58%, rgb(167 139 250 / 0.75));
+  background: color-mix(in srgb, var(--color-theme-600) 55%, transparent);
 }
 
 .context-timeline-item {
   position: relative;
-  margin-bottom: 0.85rem;
+  margin-bottom: .5rem;
+  border-color: color-mix(in srgb, var(--color-theme-700) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--color-theme-800) 35%, transparent) !important;
 }
 
 .context-timeline-item:last-child {
@@ -1087,36 +1082,36 @@ const hasDisplayableActivity = computed(() =>
   position: absolute;
   z-index: 1;
   top: 0.7rem;
-  left: -1.85rem;
-  width: 0.72rem;
-  height: 0.72rem;
-  border: 3px solid var(--color-theme-900);
+  left: -1.35rem;
+  width: .5rem;
+  height: .5rem;
+  border: 2px solid var(--color-theme-900);
   border-radius: 9999px;
-  background: rgb(34 211 238);
-  box-shadow: 0 0 0 2px rgb(34 211 238 / 0.32), 0 0 12px rgb(34 211 238 / 0.32);
+  background: var(--color-theme-500);
+  box-shadow: none;
 }
 
 .context-timeline-item--green::before {
-  background: rgb(52 211 153);
-  box-shadow: 0 0 0 2px rgb(52 211 153 / 0.3), 0 0 12px rgb(52 211 153 / 0.28);
+  background: var(--color-theme-500);
+  box-shadow: none;
 }
 
 .context-timeline-item--violet::before {
-  background: rgb(167 139 250);
-  box-shadow: 0 0 0 2px rgb(167 139 250 / 0.32), 0 0 12px rgb(167 139 250 / 0.3);
+  background: var(--color-theme-500);
+  box-shadow: none;
 }
 
 @media (max-width: 640px) {
   .context-timeline {
-    padding-left: 2.4rem;
+    padding-left: 1.5rem;
   }
 
   .context-timeline::before {
-    left: 1.2rem;
+    left: .55rem;
   }
 
   .context-timeline-item::before {
-    left: -1.6rem;
+    left: -1.2rem;
   }
 }
 </style>
