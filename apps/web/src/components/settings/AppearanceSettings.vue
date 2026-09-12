@@ -73,10 +73,10 @@ watch(() => prefs.userSettingsLoaded, (loaded) => {
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
   { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
-  { id: 'arasaka', label: 'Arasaka', icon: 'lucide:zap', colors: { bg: '#13090e', surface: '#1c1218', accent: '#00dce8', text: '#f0dce2' } },
+  { id: 'arasaka', label: 'Arasaka', icon: 'lucide:shield', colors: { bg: '#09090b', surface: '#1b1b20', accent: '#ef233c', text: '#f5f5f6' } },
   { id: 'galaxy', label: 'Galaxy', icon: 'lucide:sparkles', colors: { bg: '#070915', surface: '#171a32', accent: '#a855f7', text: '#f1edff' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
-  { id: 'matrix', label: 'Matrix', icon: 'lucide:terminal', colors: { bg: '#050706', surface: '#171b18', accent: '#00ff41', text: '#f0f3f0' } },
+  { id: 'matrix', label: 'Matrix', icon: 'lucide:network', colors: { bg: '#06100d', surface: '#12251d', accent: '#34d399', text: '#edf8f2' } },
   { id: 'sakura', label: 'Sakura', icon: 'lucide:flower-2', colors: { bg: '#170e1a', surface: '#241426', accent: '#f43f8f', text: '#ffe8f3' } },
   { id: 'industrial', label: 'Industrial', icon: 'lucide:factory', colors: { bg: '#100e0b', surface: '#211c16', accent: '#f59e0b', text: '#eee7d9' } },
   { id: 'arctic', label: 'Arctic', icon: 'lucide:snowflake', colors: { bg: '#07131b', surface: '#102733', accent: '#67e8f9', text: '#eafcff' } },
@@ -193,6 +193,9 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         <button
           v-for="t in themes"
           :key="t.id"
+          type="button"
+          :aria-pressed="prefs.theme === t.id"
+          :aria-label="`${t.label} theme${prefs.theme === t.id ? ', selected' : ''}`"
           class="group relative rounded-lg border-2 p-3 transition-all duration-200 text-left"
           :class="prefs.theme === t.id
             ? 'border-accent-500 ring-1 ring-accent-500/30'

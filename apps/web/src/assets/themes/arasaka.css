@@ -1,262 +1,73 @@
-/* ═══════════════════════════════════════════════════════════════════════════
-   Arasaka Theme — Crimson/Cyan corporate aesthetic
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ── Variable overrides ── */
+/* Arasaka — executive black, lacquer red, and surgical white */
 [data-theme="arasaka"] {
-  --accent-button-foreground: #0a1018;
-  /* Base: near-black with warm red/crimson undertone */
-  --color-theme-950: #13090e;
-  --color-theme-900: #1c1218;
-  --color-theme-800: #251a1e;
-  --color-theme-700: #321e26;
-  --color-theme-600: #3e2832;
-  --color-theme-500: #5e3e4c;
-  --color-theme-400: #8a6070;
-  --color-theme-300: #b08898;
-  --color-theme-200: #d4b0ba;
-  --color-theme-100: #f0dce2;
-
-  /* Accent: neon cyan for buttons, links, active states */
-  --color-accent-50: #ecfeff;
-  --color-accent-100: #cffafe;
-  --color-accent-200: #a5f3fc;
-  --color-accent-300: #67e8f9;
-  --color-accent-400: #22d3ee;
-  --color-accent-500: #00dce8;
-  --color-accent-600: #00b4c5;
-  --color-accent-700: #008e9e;
-  --color-accent-800: #007580;
-  --color-accent-900: #005560;
-  --color-accent-950: #003040;
-
-  /* Red accent for borders & warnings */
-  --cb-red: #ff003c;
-  --cb-red-dim: rgba(255, 0, 60, 0.25);
-  --cb-red-glow: rgba(255, 0, 60, 0.12);
-  --cb-cyan: #00dce8;
-  --cb-cyan-dim: rgba(0, 220, 232, 0.15);
-  --cb-cyan-glow: rgba(0, 220, 232, 0.1);
-
-  /* Sharp edges — no rounding */
-  --radius-xs: 0px;
-  --radius-sm: 1px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-xl: 2px;
-  --radius-2xl: 3px;
-  --radius-3xl: 3px;
-  --radius-4xl: 4px;
-
-  /* Theme effects */
-  --theme-glow: 0 0 8px var(--cb-cyan-glow), 0 0 24px rgba(0, 220, 232, 0.04);
-  --theme-glow-strong:
-    0 0 12px rgba(0, 220, 232, 0.25), 0 0 36px rgba(0, 220, 232, 0.08);
-  --theme-accent-rgb: 0, 220, 232;
-
-  /* Monospace font stack */
-  font-family: "IBM Plex Mono", "Cascadia Code", "SF Mono", "Consolas", monospace;
-  letter-spacing: 0.01em;
-
+  --accent-button-foreground: #fffafa;
+  --color-theme-950: #09090b; --color-theme-900: #111114; --color-theme-800: #1b1b20;
+  --color-theme-700: #303037; --color-theme-600: #484850; --color-theme-500: #6d6d76;
+  --color-theme-400: #9999a2; --color-theme-300: #c0c0c7; --color-theme-200: #dedee3; --color-theme-100: #f5f5f6;
+  --color-accent-50: #fff1f2; --color-accent-100: #ffe4e6; --color-accent-200: #fecdd3;
+  --color-accent-300: #fda4af; --color-accent-400: #fb7185; --color-accent-500: #ef233c;
+  --color-accent-600: #cf1730; --color-accent-700: #a90f25; --color-accent-800: #881326;
+  --color-accent-900: #731426; --color-accent-950: #400711;
+  --as-red: #ef233c; --as-line: rgba(255, 255, 255, 0.105); --as-paper: #f5f5f6;
+  --theme-glow: 0 10px 35px rgba(0, 0, 0, 0.32);
+  --theme-glow-strong: 0 0 0 1px rgba(239, 35, 60, 0.42), 0 12px 40px rgba(0, 0, 0, 0.45);
+  --theme-accent-rgb: 239, 35, 60;
+  --radius-sm: 3px; --radius-md: 5px; --radius-lg: 7px; --radius-xl: 9px;
+  --radius-2xl: 12px; --radius-3xl: 14px; --radius-4xl: 16px;
+  font-family: Inter, "Segoe UI", sans-serif;
+  letter-spacing: 0;
   color-scheme: dark;
 }
 
-/* ── Focus glow ── */
-[data-theme="arasaka"] :is(button, a):focus-visible {
-  box-shadow: var(--theme-glow-strong);
-  outline: 1px solid var(--cb-cyan-dim);
+[data-theme="arasaka"] body {
+  background: linear-gradient(115deg, rgba(239, 35, 60, 0.055), transparent 24rem),
+    linear-gradient(90deg, transparent 0 72%, rgba(255,255,255,.018) 72% 72.08%, transparent 72.08%), #09090b;
 }
-
-/* ── Red border accent on structural panels ── */
-[data-theme="arasaka"] .rounded-xl,
-[data-theme="arasaka"] .rounded-lg {
-  border-style: solid;
-  border-color: var(--cb-red-dim);
-}
-
-/* ── Corner bracket decorations on structural panels ── */
-/* Dialog positioning belongs to the component; overriding it here breaks
-   fixed and absolute overlays because theme CSS is unlayered. */
-[data-theme="arasaka"] main {
-  position: relative;
-}
-[data-theme="arasaka"] main::before,
-[data-theme="arasaka"] main::after {
-  content: "";
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  border-color: var(--cb-red);
-  border-style: solid;
-  pointer-events: none;
-  z-index: 50;
-  opacity: 0.5;
-}
-
-/* ── Cyan text glow on headings ── */
-[data-theme="arasaka"] h1,
-[data-theme="arasaka"] h2 {
-  text-shadow: 0 0 10px var(--cb-cyan-glow);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-/* ── Section header labels: warm red-tinted text ── */
-[data-theme="arasaka"] label,
-[data-theme="arasaka"] .text-theme-400 {
-  color: #c47080;
-}
-
-/* ── Section dividers: red accent lines ── */
-[data-theme="arasaka"] hr,
-[data-theme="arasaka"] .border-b {
-  border-color: var(--cb-red-dim);
-}
-
-/* ── Toggle switches: cyan accent when active ── */
-[data-theme="arasaka"] input[type="checkbox"]:checked {
-  accent-color: var(--cb-cyan);
-}
-
-/* ── Cards & panels: subtle red left-border accent ── */
+[data-theme="arasaka"] :is(button, a):focus-visible { outline: 2px solid var(--as-red); outline-offset: 3px; box-shadow: none; }
+[data-theme="arasaka"] .bg-theme-950 { background: linear-gradient(135deg, rgba(239,35,60,.035), transparent 30%), #09090b; }
+[data-theme="arasaka"] .bg-theme-900,
+[data-theme="arasaka"] .bg-theme-900\/50,
+[data-theme="arasaka"] .bg-theme-900\/60 { background-color: rgba(17,17,20,.94); }
 [data-theme="arasaka"] .bg-theme-800,
-[data-theme="arasaka"] .bg-theme-900\/50 {
-  border: 1px solid var(--cb-red-dim);
+[data-theme="arasaka"] .bg-theme-800\/60,
+[data-theme="arasaka"] .bg-theme-800\/80 { background-color: rgba(27,27,32,.96); border-color: var(--as-line); }
+[data-theme="arasaka"] .border-theme-700,
+[data-theme="arasaka"] .border-theme-800,
+[data-theme="arasaka"] .border-theme-800\/60 { border-color: var(--as-line); }
+[data-theme="arasaka"] :is(.shadow-xl, .shadow-2xl) { box-shadow: 0 24px 70px rgba(0,0,0,.48), 0 0 0 1px rgba(255,255,255,.035); }
+[data-theme="arasaka"] :is(h1, h2) { color: var(--as-paper); font-weight: 650; letter-spacing: -.025em; text-shadow: none; }
+[data-theme="arasaka"] label,
+[data-theme="arasaka"] .text-theme-400 { color: #a7a7b0; }
+[data-theme="arasaka"] :is(input, textarea, select):focus {
+  border-color: rgba(239,35,60,.72) !important; box-shadow: 0 0 0 3px rgba(239,35,60,.12); outline: none;
 }
-
-/* ── Input focus: neon border + inner glow ── */
-[data-theme="arasaka"] input:focus,
-[data-theme="arasaka"] textarea:focus,
-[data-theme="arasaka"] select:focus {
-  box-shadow:
-    0 0 8px var(--cb-cyan-glow),
-    inset 0 0 4px rgba(0, 220, 232, 0.03);
-  border-color: rgba(0, 220, 232, 0.4) !important;
-  outline: none;
-}
-
-/* ── Button hover glow ── */
-[data-theme="arasaka"] button:hover {
-  text-shadow: 0 0 6px var(--cb-cyan-glow);
-}
-
-/* ── Primary buttons: stronger cyan glow border ── */
+[data-theme="arasaka"] input[type="checkbox"]:checked { accent-color: var(--as-red); }
 [data-theme="arasaka"] button.bg-accent-600,
-[data-theme="arasaka"] button.bg-accent-500 {
-  box-shadow:
-    0 0 8px var(--cb-cyan-glow),
-    inset 0 0 6px rgba(0, 220, 232, 0.08);
-  border: 1px solid rgba(0, 220, 232, 0.35);
-}
-
-/* ── Black text on cyan accent backgrounds ── */
+[data-theme="arasaka"] button.bg-accent-500,
 [data-theme="arasaka"] .bg-accent-600,
-[data-theme="arasaka"] .bg-accent-500,
-[data-theme="arasaka"] .bg-accent-400 {
-  color: #0a1018;
+[data-theme="arasaka"] .bg-accent-500 {
+  background: linear-gradient(110deg, #ef233c, #c9112a 70%); color: var(--as-paper);
+  border-color: rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(155,10,31,.22);
 }
-[data-theme="arasaka"] .bg-accent-600 .text-white,
-[data-theme="arasaka"] .bg-accent-500 .text-white,
-[data-theme="arasaka"] .bg-accent-400 .text-white,
-[data-theme="arasaka"] .text-white.bg-accent-600,
-[data-theme="arasaka"] .text-white.bg-accent-500,
-[data-theme="arasaka"] .text-white.bg-accent-400 {
-  color: #0a1018;
+[data-theme="arasaka"] button:is(.bg-accent-600, .bg-accent-500):hover { filter: brightness(1.08); box-shadow: 0 10px 30px rgba(196,15,40,.3); }
+[data-theme="arasaka"] .nav-item.active,
+[data-theme="arasaka"] nav a.router-link-active,
+[data-theme="arasaka"] nav [data-active="true"] {
+  background: linear-gradient(90deg, rgba(239,35,60,.16), rgba(239,35,60,.025) 80%) !important;
+  border-left: 3px solid var(--as-red); box-shadow: inset 10px 0 28px rgba(239,35,60,.06);
 }
-/* Gradient accent backgrounds — force dark text */
-[data-theme="arasaka"] .from-accent-500 .text-white,
-[data-theme="arasaka"] .from-accent-400 .text-white {
-  color: #0a1018;
-}
-
-/* ── Subtle scan-line overlay ── */
-[data-theme="arasaka"] body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 3px,
-    rgba(0, 0, 0, 0.04) 3px,
-    rgba(0, 0, 0, 0.04) 4px
-  );
-  pointer-events: none;
-  z-index: 10000;
-}
-
-/* ── Scrollbar styling ── */
-[data-theme="arasaka"] ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-[data-theme="arasaka"] ::-webkit-scrollbar-track {
-  background: #0a1018;
-}
-[data-theme="arasaka"] ::-webkit-scrollbar-thumb {
-  background: rgba(0, 220, 232, 0.2);
-  border: 1px solid rgba(255, 0, 60, 0.15);
-}
-[data-theme="arasaka"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 220, 232, 0.35);
-}
-
-/* ── Selection highlight ── */
-[data-theme="arasaka"] ::selection {
-  background: rgba(0, 220, 232, 0.3);
-  color: #f0dce2;
-}
-
-/* ── Active sidebar nav item: corner bracket decorations ── */
-[data-theme="arasaka"] .nav-item.active {
-  position: relative;
-  background-color: rgba(0, 220, 232, 0.06) !important;
-  box-shadow: none !important;
-  border: 1px solid rgba(0, 220, 232, 0.1);
-  border-radius: 0 !important;
-  transition:
-    color 150ms ease,
-    background-color 150ms ease !important;
-}
-[data-theme="arasaka"] .nav-item.active::before,
-[data-theme="arasaka"] .nav-item.active::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  width: 8px;
-  height: 8px;
-  border-color: var(--cb-cyan);
-  border-style: solid;
-}
-/* Top-left corner */
-[data-theme="arasaka"] .nav-item.active::before {
-  top: -1px;
-  left: -1px;
-  border-width: 2px 0 0 2px;
-}
-/* Bottom-right corner */
-[data-theme="arasaka"] .nav-item.active::after {
-  bottom: -1px;
-  right: -1px;
-  border-width: 0 2px 2px 0;
-}
-/* Top-right & bottom-left via background-image trick */
-[data-theme="arasaka"] .nav-item.active {
-  background-image:
-    /* top-right corner */
-    linear-gradient(var(--cb-cyan), var(--cb-cyan)),
-    linear-gradient(var(--cb-cyan), var(--cb-cyan)),
-    /* bottom-left corner */ linear-gradient(var(--cb-cyan), var(--cb-cyan)),
-    linear-gradient(var(--cb-cyan), var(--cb-cyan));
-  background-size:
-    8px 2px,
-    /* top-right horizontal */ 2px 8px,
-    /* top-right vertical */ 8px 2px,
-    /* bottom-left horizontal */ 2px 8px; /* bottom-left vertical */
-  background-position:
-    top right,
-    top right,
-    bottom left,
-    bottom left;
-  background-repeat: no-repeat;
+[data-theme="arasaka"] .msg-markdown a { color: #ff6578; text-decoration-color: rgba(255,101,120,.38); }
+[data-theme="arasaka"] .msg-markdown strong { color: #fff; }
+[data-theme="arasaka"] .msg-markdown :not(pre) > code { color: #ff9aa6; background: rgba(239,35,60,.09); border: 1px solid rgba(239,35,60,.16); }
+[data-theme="arasaka"] .code-header { background: #101013; border-color: var(--as-line); }
+[data-theme="arasaka"] ::selection { background: rgba(239,35,60,.38); color: #fff; }
+[data-theme="arasaka"] ::-webkit-scrollbar { width: 7px; height: 7px; }
+[data-theme="arasaka"] ::-webkit-scrollbar-track { background: #09090b; }
+[data-theme="arasaka"] ::-webkit-scrollbar-thumb { background: #45454d; border-left: 2px solid #09090b; }
+[data-theme="arasaka"] ::-webkit-scrollbar-thumb:hover { background: var(--as-red); }
+/* One architectural rail replaces the old full-screen scanlines. */
+[data-theme="arasaka"] body::before {
+  content: ""; position: fixed; inset: 0 auto 0 0; width: 3px;
+  background: linear-gradient(180deg, transparent, var(--as-red) 18%, var(--as-red) 82%, transparent);
+  opacity: .7; pointer-events: none; z-index: 9999;
 }
