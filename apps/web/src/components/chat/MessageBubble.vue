@@ -117,9 +117,6 @@ const isUser = computed(() => props.role === 'user')
 const formattedCreatedAt = computed(() => {
   if (props.createdAt === undefined) return ''
   return new Intl.DateTimeFormat(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   }).format(props.createdAt)
@@ -145,7 +142,7 @@ const imageGridClass = computed(() => {
 
 <template>
   <div
-    class="flex gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
+    class="flex items-end gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
     :class="isUser ? 'justify-end' : 'justify-start'"
   >
     <!-- Avatar -->
@@ -240,13 +237,6 @@ const imageGridClass = computed(() => {
           />
         </button>
       </div>
-      <time
-        v-if="isUser && formattedCreatedAt && !isEditing"
-        :datetime="createdAtIso"
-        class="absolute -bottom-2 right-2 rounded-md bg-theme-700/90 px-1.5 py-0.5 text-[10px] leading-none text-theme-300 opacity-0 shadow-sm transition-opacity group-hover/msg:opacity-100"
-      >
-        {{ formattedCreatedAt }}
-      </time>
       <!-- Thinking block (detailed mode only) -->
       <div
         v-if="!isUser && thinking"
@@ -537,6 +527,15 @@ const imageGridClass = computed(() => {
         {{ userInitial }}
       </template>
     </div>
+
+    <time
+      v-if="formattedCreatedAt"
+      data-testid="message-row-time"
+      :datetime="createdAtIso"
+      class="mb-1 shrink-0 text-[10px] leading-none tabular-nums text-theme-500 opacity-0 transition-opacity group-hover/msg:opacity-100"
+    >
+      {{ formattedCreatedAt }}
+    </time>
   </div>
 
   <ArtifactImageModal
