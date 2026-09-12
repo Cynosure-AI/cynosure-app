@@ -364,3 +364,29 @@
     );
   background-repeat: no-repeat;
 }
+
+/* Nebula glass gives dialogs and cards a distinct floating depth. */
+[data-theme="galaxy"] {
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+}
+
+[data-theme="galaxy"] .bg-theme-900,
+[data-theme="galaxy"] .bg-theme-900\/50,
+[data-theme="galaxy"] .bg-theme-900\/60,
+[data-theme="galaxy"] .bg-theme-800,
+[data-theme="galaxy"] .bg-theme-800\/60,
+[data-theme="galaxy"] .bg-theme-800\/80 {
+  backdrop-filter: blur(18px) saturate(125%);
+}
+
+[data-theme="galaxy"] button:is(.bg-accent-600, .bg-accent-500):hover {
+  filter: brightness(1.08) saturate(1.08);
+  box-shadow: 0 14px 38px rgba(91, 109, 255, 0.3);
+}
+
+[data-theme="galaxy"] :is(input, textarea, select) {
+  caret-color: var(--md-cyan);
+}
