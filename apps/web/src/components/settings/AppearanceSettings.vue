@@ -74,7 +74,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
   { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
   { id: 'virtualboy', label: 'VirtualBoy', icon: 'lucide:scan-line', colors: { bg: '#13090e', surface: '#251a1e', accent: '#00dce8', text: '#f0dce2' } },
-  { id: 'crimson', label: 'Crimson', icon: 'lucide:flame', colors: { bg: '#10080a', surface: '#241116', accent: '#dc2743', text: '#f8eef0' } },
+  { id: 'crimson', label: 'Crimson', icon: 'lucide:flame', colors: { bg: '#070708', surface: '#171315', accent: '#dc2743', text: '#f5f1f2' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
   { id: 'emerald', label: 'Emerald', icon: 'lucide:orbit', colors: { bg: '#03110c', surface: '#0b2419', accent: '#18b978', text: '#edf8f2' } },
   { id: 'industrial', label: 'Industrial', icon: 'lucide:factory', colors: { bg: '#100e0b', surface: '#211c16', accent: '#f59e0b', text: '#eee7d9' } },
@@ -187,7 +187,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         </div>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         <button
           v-for="t in themes"
           :key="t.id"
