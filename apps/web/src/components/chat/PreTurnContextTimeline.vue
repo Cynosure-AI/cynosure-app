@@ -541,37 +541,22 @@ function formatTimestamp(timestamp: number): string {
 
 <style scoped>
 .pre-turn-card {
-  --context-accent: color-mix(in srgb, var(--color-accent-500) 70%, var(--color-theme-100));
-  --context-accent-soft: color-mix(in srgb, var(--color-accent-500) 12%, transparent);
-  --context-accent-line: color-mix(in srgb, var(--color-accent-500) 30%, var(--color-theme-700));
+  --context-accent: var(--color-accent-400);
+  --context-accent-soft: color-mix(in srgb, var(--color-accent-500) 8%, transparent);
+  --context-accent-line: color-mix(in srgb, var(--color-theme-700) 65%, transparent);
   overflow: hidden;
   color: var(--color-theme-200);
-  border: 1px solid color-mix(in srgb, var(--color-theme-700) 78%, transparent);
-  border-radius: 1rem;
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--color-theme-900) 96%, var(--color-accent-500) 4%),
-    color-mix(in srgb, var(--color-theme-950) 96%, var(--color-accent-500) 4%)
-  );
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-theme-950) 18%, transparent);
-  backdrop-filter: blur(18px) saturate(90%);
+  border: 1px solid var(--context-accent-line);
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--color-theme-800) 42%, transparent);
 }
 
 .pre-turn-card--memory {
-  border-color: var(--context-accent-line);
-  background:
-    radial-gradient(circle at 0 0, var(--context-accent-soft), transparent 42%),
-    color-mix(in srgb, var(--color-theme-900) 94%, transparent);
+  --context-accent: var(--color-accent-400);
 }
 
 .pre-turn-card--tools {
-  --context-accent: color-mix(in srgb, var(--color-accent-400) 45%, var(--color-theme-100));
-  --context-accent-soft: color-mix(in srgb, var(--color-accent-400) 10%, transparent);
-  --context-accent-line: color-mix(in srgb, var(--color-accent-400) 26%, var(--color-theme-700));
-  border-color: var(--context-accent-line);
-  background:
-    radial-gradient(circle at 0 0, var(--context-accent-soft), transparent 42%),
-    color-mix(in srgb, var(--color-theme-900) 94%, transparent);
+  --context-accent: var(--color-theme-300);
 }
 
 .card-icon {
@@ -582,23 +567,16 @@ function formatTimestamp(timestamp: number): string {
   align-items: center;
   justify-content: center;
   border-radius: .5rem;
-  background: var(--context-accent-soft);
+  background: color-mix(in srgb, var(--color-theme-700) 48%, transparent);
   color: var(--context-accent);
-  box-shadow: 0 0 0 1px var(--context-accent-line);
-}
-
-.pre-turn-card--memory .card-icon {
-  background: var(--context-accent-soft);
-  color: var(--context-accent);
-  box-shadow: 0 0 0 1px var(--context-accent-line);
 }
 
 .count-chip,
 .score-chip {
   border-radius: .375rem;
   padding: .125rem .375rem;
-  background: var(--context-accent-soft);
-  color: var(--context-accent);
+  background: color-mix(in srgb, var(--color-theme-700) 42%, transparent);
+  color: var(--color-theme-300);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -619,7 +597,7 @@ function formatTimestamp(timestamp: number): string {
   gap: .35rem;
   border-radius: .4rem;
   border: 1px solid color-mix(in srgb, var(--color-theme-700) 70%, transparent);
-  background: color-mix(in srgb, var(--color-theme-800) 78%, transparent);
+  background: color-mix(in srgb, var(--color-theme-700) 32%, transparent);
   padding: .2rem .4rem;
   color: var(--color-theme-300);
   font-size: 10px;
@@ -627,10 +605,6 @@ function formatTimestamp(timestamp: number): string {
 
 .collapsed-result-chip small {
   flex-shrink: 0;
-  color: var(--context-accent);
-}
-
-.pre-turn-card--memory .collapsed-result-chip small {
   color: var(--context-accent);
 }
 
@@ -642,25 +616,25 @@ function formatTimestamp(timestamp: number): string {
 
 .memory-card {
   min-width: 0;
-  border: 1px solid var(--context-accent-line);
+  border: 1px solid color-mix(in srgb, var(--color-theme-700) 58%, transparent);
   border-radius: .625rem;
-  background: color-mix(in srgb, var(--color-theme-800) 72%, var(--context-accent-soft));
+  background: color-mix(in srgb, var(--color-theme-800) 52%, transparent);
   padding: .625rem;
 }
 
 .toolset-card {
-  border: 1px solid var(--context-accent-line);
+  border: 1px solid color-mix(in srgb, var(--color-theme-700) 58%, transparent);
   border-radius: .625rem;
-  background: color-mix(in srgb, var(--color-theme-800) 72%, var(--context-accent-soft));
+  background: color-mix(in srgb, var(--color-theme-800) 52%, transparent);
   padding: .625rem;
 }
 
 .tool-chip {
   border-radius: .4rem;
-  border: 1px solid var(--context-accent-line);
-  background: var(--context-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--color-theme-700) 58%, transparent);
+  background: color-mix(in srgb, var(--color-theme-700) 32%, transparent);
   padding: .25rem .45rem;
-  color: var(--context-accent);
+  color: var(--color-theme-300);
   font-size: 10px;
 }
 
@@ -670,9 +644,12 @@ function formatTimestamp(timestamp: number): string {
 }
 
 .context-score-text,
-.memory-title,
-.tool-title {
+.memory-title {
   color: var(--context-accent, var(--color-accent-600));
+}
+
+.tool-title {
+  color: var(--color-theme-300);
 }
 
 @media (max-width: 640px) {

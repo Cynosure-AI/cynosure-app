@@ -15,9 +15,9 @@ function label(action: string): string {
 
 <template>
   <div class="px-4 py-1.5">
-    <article class="ml-3 max-w-[50%] overflow-hidden rounded-2xl border border-sky-400/20 bg-[radial-gradient(circle_at_0_0,rgb(14_165_233_/_0.10),transparent_42%),linear-gradient(145deg,rgb(15_23_42_/_0.90),rgb(8_24_38_/_0.84))] shadow-[0_8px_24px_rgb(0_0_0_/_0.12)] md:ml-12">
+    <article class="ml-3 max-w-[50%] overflow-hidden rounded-xl border border-theme-700/60 bg-theme-800/40 md:ml-12">
       <div class="flex items-center gap-2.5 px-3.5 py-3">
-        <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 text-sky-300 ring-1 ring-sky-300/15">
+        <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-theme-700/40 text-accent-400">
           <Icon
             icon="svg-spinners:ring-resize"
             class="h-3.5 w-3.5"
@@ -27,7 +27,7 @@ function label(action: string): string {
           <span class="block text-[12px] font-semibold text-theme-200">Preparing response</span>
           <span class="block text-[10px] text-theme-500">Pre-response actions running alongside context preparation</span>
         </span>
-        <span class="rounded-md bg-sky-400/10 px-1.5 py-0.5 text-[10px] tabular-nums text-sky-200">
+        <span class="rounded-md bg-theme-700/40 px-1.5 py-0.5 text-[10px] tabular-nums text-theme-300">
           {{ actions.length }} running
         </span>
         <button
@@ -43,7 +43,7 @@ function label(action: string): string {
           />
         </button>
       </div>
-      <div class="border-t border-sky-300/10 px-3.5 py-2.5">
+      <div class="border-t border-theme-700/45 px-3.5 py-2.5">
         <div
           v-for="action in actions"
           :key="action"
@@ -51,10 +51,10 @@ function label(action: string): string {
         >
           <Icon
             icon="lucide:heading"
-            class="h-3.5 w-3.5 text-sky-300"
+            class="h-3.5 w-3.5 text-theme-500"
           />
           <span>{{ label(action) }}</span>
-          <span class="ml-auto text-[10px] text-sky-300/70">Running…</span>
+          <span class="ml-auto text-[10px] text-theme-500">Running…</span>
         </div>
       </div>
     </article>
