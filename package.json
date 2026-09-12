@@ -1,6 +1,6 @@
 {
   "name": "cynosure",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "packageManager": "pnpm@11.1.2",
   "private": true,
   "description": "Cynosure monorepo — server, web UI, and Electron desktop app",
