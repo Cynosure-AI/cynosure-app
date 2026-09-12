@@ -26,7 +26,8 @@ export function useAppBranding() {
             case 'arctic': return cynosureLogoBlue
             case 'monochrome': return cynosureLogoRed
             case 'dark': return cynosureLogoBlue
-            case 'arasaka': return cynosureLogoRed
+            case 'arasaka':
+            case 'obsidian': return cynosureLogoRed
             default: return cynosureLogoRed
         }
     })
@@ -41,7 +42,8 @@ export function useAppBranding() {
             case 'arctic': return cynosureLogoTextBlue
             case 'monochrome': return cynosureLogoTextRed
             case 'dark': return cynosureLogoTextBlue
-            case 'arasaka': return cynosureLogoTextRed
+            case 'arasaka':
+            case 'obsidian': return cynosureLogoTextRed
             default: return cynosureLogoTextRed
         }
     })

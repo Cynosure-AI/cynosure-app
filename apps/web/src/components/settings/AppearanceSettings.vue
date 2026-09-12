@@ -73,7 +73,8 @@ watch(() => prefs.userSettingsLoaded, (loaded) => {
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
   { id: 'dark', label: 'Dark', icon: 'lucide:moon', colors: { bg: '#141417', surface: '#202024', accent: '#3b82f6', text: '#f4f4f5' } },
   { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
-  { id: 'arasaka', label: 'Arasaka', icon: 'lucide:shield', colors: { bg: '#09090b', surface: '#1b1b20', accent: '#ef233c', text: '#f5f5f6' } },
+  { id: 'arasaka', label: 'Arasaka', icon: 'lucide:scan-line', colors: { bg: '#09090b', surface: '#1c1218', accent: '#ef233c', text: '#f5f5f6' } },
+  { id: 'obsidian', label: 'Obsidian', icon: 'lucide:shield', colors: { bg: '#09090b', surface: '#1b1b20', accent: '#ef233c', text: '#f5f5f6' } },
   { id: 'galaxy', label: 'Galaxy', icon: 'lucide:sparkles', colors: { bg: '#070915', surface: '#171a32', accent: '#a855f7', text: '#f1edff' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
   { id: 'matrix', label: 'Matrix', icon: 'lucide:network', colors: { bg: '#06100d', surface: '#12251d', accent: '#34d399', text: '#edf8f2' } },
