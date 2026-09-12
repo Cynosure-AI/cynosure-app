@@ -76,7 +76,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'arasaka', label: 'Arasaka', icon: 'lucide:scan-line', colors: { bg: '#09090b', surface: '#1c1218', accent: '#ef233c', text: '#f5f5f6' } },
   { id: 'galaxy', label: 'Galaxy', icon: 'lucide:sparkles', colors: { bg: '#070915', surface: '#171a32', accent: '#a855f7', text: '#f1edff' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
-  { id: 'matrix', label: 'Matrix', icon: 'lucide:network', colors: { bg: '#06100d', surface: '#12251d', accent: '#34d399', text: '#edf8f2' } },
+  { id: 'emerald', label: 'Emerald', icon: 'lucide:orbit', colors: { bg: '#03110c', surface: '#0b2419', accent: '#18b978', text: '#edf8f2' } },
   { id: 'industrial', label: 'Industrial', icon: 'lucide:factory', colors: { bg: '#100e0b', surface: '#211c16', accent: '#f59e0b', text: '#eee7d9' } },
   { id: 'monochrome', label: 'Monochrome', icon: 'lucide:circle-half', colors: { bg: '#080808', surface: '#181818', accent: '#f5f5f5', text: '#ededed' } },
 ]
