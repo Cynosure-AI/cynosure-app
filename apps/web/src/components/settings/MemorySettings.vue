@@ -32,6 +32,39 @@ function showAnySection(ids: string[]): boolean {
   return ids.some(showSection)
 }
 
+const dreamEnabled = ref(false)
+const dreamProviderId = ref('')
+const dreamModel = ref('')
+const dreamSaving = ref(false)
+const dreamLoaded = ref(false)
+const dreamError = ref('')
+
+async function loadDreamConfig() {
+  try {
+    const config = await api.memory.getDreamConfig()
+    dreamEnabled.value = config.enabled
+    dreamProviderId.value = config.providerId
+    dreamModel.value = config.model
+    dreamLoaded.value = true
+  } catch (error) {
+    dreamError.value = error instanceof Error ? error.message : 'Could not load Dream settings.'
+  }
+}
+async function saveDream() {
+  dreamSaving.value = true
+  dreamError.value = ''
+  try {
+    const config = await api.memory.configureDream({ enabled: dreamEnabled.value, providerId: dreamProviderId.value, model: dreamModel.value })
+    dreamEnabled.value = config.enabled
+    dreamProviderId.value = config.providerId
+    dreamModel.value = config.model
+  } catch (error) {
+    dreamError.value = error instanceof Error ? error.message : 'Could not save Dream settings.'
+  } finally {
+    dreamSaving.value = false
+  }
+}
+
 // Embedding state
 const embProviderId = ref('')
 const embModel = ref('')
@@ -116,6 +149,7 @@ onUnmounted(() => {
 
 onMounted(async () => {
   await providerStore.loadProviders()
+  await loadDreamConfig()
   await loadEmbeddingConfig()
   await loadEntityExtractionConfig()
   await loadChunkingConfig()
@@ -357,6 +391,34 @@ function cancelDrop() {
 
 <template>
   <div class="space-y-4">
+    <BaseCard v-if="showSection('dream-mode')" class="p-5 space-y-4">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-medium text-theme-200 flex items-center gap-2">
+            <Icon icon="lucide:moon-star" class="w-5 h-5" />
+            Dream Mode
+            <span class="text-[10px] rounded px-2 py-0.5 bg-amber-400/10 text-amber-400">Experimental</span>
+          </h3>
+          <p class="text-xs text-theme-500 mt-1">
+            Automatically reviews new chat and channel activity to learn useful facts and update memory.
+            Checks every 5 minutes after a conversation has been inactive for 15 minutes, while the server is running.
+            Uses model requests and may incur provider costs. Existing history is used only as context.
+          </p>
+        </div>
+        <ToggleSwitch v-model="dreamEnabled" label="Enable Dream Mode" :disabled="!dreamLoaded || dreamSaving || (!dreamEnabled && (!dreamProviderId || !dreamModel))" />
+      </div>
+      <ProviderModelSelect
+        :provider-id="dreamProviderId" :model-value="dreamModel" :providers="providerStore.providers"
+        placeholder="Select Dream provider and model" dropdown-width="min-w-full"
+        @change="(selection) => { dreamProviderId = selection.providerId; dreamModel = selection.model }"
+      />
+      <p v-if="dreamError" role="alert" class="text-xs text-red-400">{{ dreamError }}</p>
+      <button :disabled="!dreamLoaded || dreamSaving || (dreamEnabled && (!dreamProviderId || !dreamModel))"
+        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
+        @click="saveDream">
+        {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
+      </button>
+    </BaseCard>
     <SettingsSubheading
       v-if="showAnySection(['embedding-model', 'knowledge-extraction', 'reranker'])"
       label="Retrieval"

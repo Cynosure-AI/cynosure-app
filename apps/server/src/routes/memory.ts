@@ -1,3 +1,5 @@
+import { getDreamConfig, saveDreamConfig } from '../core/memory/dream-store.js'
+import { cancelAllDreamRuns, cancelDreamRun, settleDreamWork } from '../core/memory/dream-worker.js'
 import type { FastifyInstance } from 'fastify'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryAggregator } from '../core/memory/memory-aggregator.js'
@@ -448,6 +450,28 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     getMemoryKnowledgeStore().markSearchProjectionsPending()
     await dropConversationAttachmentIndex()
     markMemoryIndexesForRebuild()
+    return { success: true }
+  })
+
+  app.get('/dream/config', async () => getDreamConfig())
+  app.post<{ Body: { enabled: boolean; providerId: string; model: string } }>('/dream/configure', async (req, reply) => {
+    const body = req.body
+    if (!body || typeof body.enabled !== 'boolean' || typeof body.providerId !== 'string' || typeof body.model !== 'string') {
+      return reply.status(400).send({ error: 'Dream requires enabled, providerId, and model settings' })
+    }
+    const providerId = body.providerId.trim()
+    const model = body.model.trim()
+    if (body.enabled && (!providerId || !model || !getGateway().getProvider(providerId))) {
+      return reply.status(400).send({ error: 'Select an available provider and model before enabling Dream Mode' })
+    }
+    if (!body.enabled) cancelAllDreamRuns()
+    const config = saveDreamConfig({ enabled: body.enabled, providerId, model })
+    if (!body.enabled) await settleDreamWork()
+    return config
+  })
+  app.post<{ Params: { id: string } }>('/dream/runs/:id/cancel', async (req, reply) => {
+    if (!cancelDreamRun(req.params.id)) return reply.status(409).send({ error: 'Dream review is no longer cancellable' })
+    await settleDreamWork()
     return { success: true }
   })
 

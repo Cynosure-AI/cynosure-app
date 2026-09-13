@@ -559,6 +559,41 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_mkac_assertion ON memory_knowledge_assertion_corrections(assertion_id, created_at);
 
+    -- A monotonic ingestion sequence survives message deletion and SQLite rowid reuse.
+    -- Only messages arriving after this feature is installed need eligibility tracking.
+    CREATE TABLE IF NOT EXISTS dream_message_events (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE
+    );
+    CREATE TRIGGER IF NOT EXISTS dream_message_insert AFTER INSERT ON messages BEGIN
+      INSERT INTO dream_message_events(message_id) VALUES (NEW.id);
+    END;
+
+    CREATE TABLE IF NOT EXISTS dream_progress (
+      conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+      window_id TEXT NOT NULL,
+      last_sequence INTEGER NOT NULL DEFAULT 0,
+      message_offset INTEGER NOT NULL DEFAULT 0,
+      skipped_sequence INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS dream_runs (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+      window_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_json TEXT NOT NULL,
+      changes_json TEXT NOT NULL DEFAULT '[]',
+      reviewed_count INTEGER NOT NULL DEFAULT 0,
+      attempt INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_dream_runs_pending ON dream_runs(window_id, conversation_id, status);
+
     CREATE TABLE IF NOT EXISTS memory_index_jobs (
       id TEXT PRIMARY KEY,
       kind TEXT NOT NULL,

@@ -108,6 +108,9 @@ export interface MemoryToolOptions {
     spaceFilter?: string
     /** Selected memory folders for write tools and read disambiguation. */
     assignedSpaces?: MemorySpaceRef[]
+    /** Optional background-curator guards; the mutation guard runs under the document lock. */
+    onDocumentRead?: (documentId: string, revision: string) => void
+    beforeDocumentMutation?: (documentId: string, content: string) => void
 }
 
 const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'] as const
@@ -778,6 +781,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
             const resolvedSpaceId = distinctSpaces.length === 1 ? distinctSpaces[0] : resolvedScope.space?.id
             const documentRef = resolvedSpaceId ? mem.getDocumentReference(resolvedSpaceId, sourceFile) : undefined
+            if (documentRef) opts.onDocumentRead?.(documentRef.documentId, documentRef.revision)
             const formatted = chunks.map(c => {
                 const location = c.spaceId && !resolvedScope.space
                     ? `[${spaceMap.get(c.spaceId) || c.spaceId} · Part ${c.chunkIndex + 1}/${total}]`
@@ -1283,12 +1287,14 @@ async function runPreparedMemoryMutation(
     getKnownSpaces: () => MemorySpaceRef[],
     signal: AbortSignal | undefined,
     operation: (prepared: { resolved: ResolvedMemoryDocument; fileContent: string }) => Promise<ToolResult>,
+    beforeMutation?: (documentId: string, content: string) => void,
 ): Promise<ToolResult> {
     const resolved = resolveMemoryDocumentRef(params.documentRef, assignedSpaces, getKnownSpaces)
     if ('error' in resolved) return { success: false, output: resolved.error }
     return withMemoryDocumentLock(resolved.documentId, signal, async () => {
         const prepared = await prepareMemoryMutation(resolved)
         if ('error' in prepared) return { success: false, output: prepared.error }
+        beforeMutation?.(resolved.documentId, prepared.fileContent)
         return operation(prepared)
     })
 }
@@ -1313,7 +1319,7 @@ export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
                     signal,
                 )
                 return { success: true, output: `Content appended to "${resolved.fileName}" in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
-            })
+            }, opts.beforeDocumentMutation)
         },
     }
 }
@@ -1333,7 +1339,7 @@ export function makeMemoryReplaceAllTool(opts: MemoryToolOptions): ToolDefinitio
             return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
                 const indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal)
                 return { success: true, output: `Memory "${resolved.fileName}" fully replaced in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
-            })
+            }, opts.beforeDocumentMutation)
         },
     }
 }
@@ -1372,7 +1378,7 @@ export function makeMemoryReplaceRangeTool(opts: MemoryToolOptions): ToolDefinit
                 if ('error' in replaced) return { success: false, output: replaced.error }
                 const indexed = await commitMemoryMutation(resolved, fileContent, replaced.content, signal)
                 return { success: true, output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${resolved.fileName}" replaced and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
-            })
+            }, opts.beforeDocumentMutation)
         },
     }
 }

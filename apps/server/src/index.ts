@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { startDreamWorker } from './core/memory/dream-worker.js'
 
 import 'dotenv/config'
 import Fastify from 'fastify'
@@ -535,6 +536,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   await channelManager.loadAll()
 
   startCronScheduler(broadcast)
+  const stopDreamWorker = startDreamWorker(broadcast)
 
   await app.listen({ port: options.port, host: listenHost })
 
@@ -564,6 +566,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       for (const cleanup of stepPersistenceCleanups) {
         cleanup()
       }
+      await stopDreamWorker()
       await stopCronScheduler()
       await getChannelManager().stopAll()
       await stopAllMemorySpaceWatchers()

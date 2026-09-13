@@ -291,7 +291,7 @@ export interface AppNotification {
 
 // ── Activity ────────────────────────────────────────────────────────────────
 
-export type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels'
+export type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
 export interface ActivityArtifact {
     href: string
@@ -331,6 +331,7 @@ export interface ActivityItem {
     instanceType?: AgentInstance['type']
     model?: string | null
     artifacts?: ActivityArtifact[]
+    dreamChanges?: Array<{ tool: string; output: string }>
 }
 
 export type ActivityTotalsByKind = Record<ActivityKind, number>
@@ -556,6 +557,7 @@ export interface StopAllActivityResult {
         cronRuns: number
         channelRuns: number
         memoryJobs: number
+        dreamRuns: number
         memoryReembedding: number
         postActions: number
     }
@@ -654,4 +656,13 @@ export interface MetricsSummary {
         origin: string
         count: number
     }[]
+}
+
+export interface DreamConfig {
+    enabled: boolean
+    providerId: string
+    model: string
+    windowId: string
+    enabledAt: number
+    startSequence: number
 }
