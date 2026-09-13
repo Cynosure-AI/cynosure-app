@@ -27,6 +27,7 @@ const emit = defineEmits<{
   "edit-folder": [space: MemoryCategory];
   "delete-folder": [space: MemoryCategory];
   "refresh-spaces": [];
+  "category-navigation": [];
 }>();
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
@@ -131,6 +132,7 @@ watch([() => props.focusFile, () => props.selectedCategoryId], revealFocusedCate
 
 function selectSpace(categoryId: string) {
   emit("update:selectedCategoryId", categoryId);
+  emit("category-navigation");
 }
 
 function isDocumentDrag(e: DragEvent): boolean {

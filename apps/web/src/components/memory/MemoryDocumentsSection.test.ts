@@ -119,6 +119,13 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(archive.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
   })
 
+  test('marks direct folder clicks as navigation so a consumed file deep link can be cleared', async () => {
+    const wrapper = mountSection()
+    await wrapper.get('[data-space-id="archive"] button.min-w-0').trigger('click')
+    expect(wrapper.emitted('update:selectedCategoryId')).toContainEqual(['archive'])
+    expect(wrapper.emitted('category-navigation')).toHaveLength(1)
+  })
+
   test('shows the upload treatment only for file drags over the document pane', async () => {
     const wrapper = mountSection()
     const dropZone = wrapper.get('[data-testid="memory-document-drop-zone"]')

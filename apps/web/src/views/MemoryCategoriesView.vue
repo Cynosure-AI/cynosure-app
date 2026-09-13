@@ -570,6 +570,14 @@ function selectPanel(panel: MemoryPanel) {
   if (section && route.path !== section.path) void router.push(section.path);
 }
 
+function clearDocumentLink(): void {
+  if (!linkedCategoryId.value && !linkedFileName.value) return;
+  const query = { ...route.query };
+  delete query.category;
+  delete query.file;
+  void router.replace({ path: route.path, query });
+}
+
 watch(
   () => route.params.section,
   async (sectionParam) => {
@@ -703,6 +711,7 @@ onMounted(() => loadCategories());
           @edit-folder="openEditDialog"
           @delete-folder="confirmDeleteSpace"
           @refresh-spaces="loadCategories"
+          @category-navigation="clearDocumentLink"
         />
 
         <KnowledgeFactsSection

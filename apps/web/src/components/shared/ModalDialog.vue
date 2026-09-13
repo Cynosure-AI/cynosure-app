@@ -19,6 +19,8 @@ const props = defineProps<{
   overflowVisible?: boolean
   /** Allow body slot to overflow instead of clipping with vertical scrolling */
   bodyOverflowVisible?: boolean
+  /** Clip body overflow so a nested component can own scrolling */
+  bodyOverflowHidden?: boolean
   /** Raise dialogs opened from inside another modal above their parent overlay. */
   layer?: 'default' | 'nested'
 }>()
@@ -143,7 +145,7 @@ onBeforeUnmount(() => {
           <!-- Body slot -->
           <div
             class="min-h-0 flex-1"
-            :class="bodyOverflowVisible ? 'overflow-visible' : 'overflow-y-auto'"
+            :class="bodyOverflowHidden ? 'overflow-hidden' : bodyOverflowVisible ? 'overflow-visible' : 'overflow-y-auto'"
           >
             <slot />
           </div>
