@@ -14,7 +14,7 @@ vi.mock('../api/client', () => ({ api: {
   agent: { onHITLRequest: () => () => undefined, onExecutionUpdate: () => () => undefined },
   chat: { onExecutionState: () => () => undefined },
 } }))
-const running = { id: 'dream:run', kind: 'dream', title: 'Dream review', description: 'Reviewing conversation', status: 'running', sourceId: 'run', sourceLabel: 'Dream', conversationId: 'chat', createdAt: Date.now(), agentId: null, agentName: null, agentIconUrl: null }
+const running = { id: 'dream:run', kind: 'dream', title: 'Dream review', description: 'Reviewing conversation', status: 'running', sourceId: 'run', sourceLabel: 'Dream', conversationId: 'chat', conversationTitle: 'My preferences', createdAt: Date.now(), agentId: null, agentName: null, agentIconUrl: null }
 beforeEach(() => {
   sessionStorage.clear()
   mocks.list.mockReset().mockResolvedValue({ items: [], total: 0 })
@@ -34,6 +34,8 @@ test('a live Dream update immediately appears under Active Now and can be cancel
   expect(wrapper.text()).toContain('Active Now')
   expect(wrapper.findAll('h2').filter(title => title.text() === 'Dream review')).toHaveLength(1)
   expect(wrapper.text()).toContain('running')
+  expect(wrapper.text()).toContain('My preferences')
+  expect(wrapper.find('time').attributes('datetime')).toBe(new Date(running.createdAt).toISOString())
   await wrapper.findAll('button').find(button => button.text() === 'Cancel')!.trigger('click')
   await flushPromises()
   expect(mocks.cancel).toHaveBeenCalledWith('run')

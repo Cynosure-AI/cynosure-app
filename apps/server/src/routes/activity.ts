@@ -25,6 +25,7 @@ interface ActivityItem {
     agentName: string | null
     agentIconUrl: string | null
     conversationId: string | null
+    conversationTitle?: string | null
     status?: string
     severity?: string
     sourceId?: string
@@ -252,6 +253,7 @@ function activitySearchText(item: ActivityItem): string {
         item.severity,
         item.sourceLabel,
         item.sourceId,
+        item.conversationTitle,
         ...(item.artifacts?.flatMap((artifact) => [
             artifact.label,
             artifact.ext,
@@ -604,11 +606,12 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         for (const run of listDreamRuns(queryLimit)) {
             const changes = JSON.parse(run.changes_json) as DreamChange[]
             const changeSummary = changes.length ? `${changes.length} memory change${changes.length === 1 ? '' : 's'}` : 'No new memories'
+            const conversation = db.prepare('SELECT title FROM conversations WHERE id = ?').get(run.conversation_id) as { title: string | null } | undefined
             items.push({
                 id: `dream:${run.id}`, kind: 'dream', title: 'Dream review',
                 description: `${run.reviewed_count} message excerpts reviewed · ${changeSummary}${run.error ? ` · ${run.error}` : ''}`,
                 createdAt: run.updated_at, agentId: null, agentName: null, agentIconUrl: null,
-                conversationId: run.conversation_id, status: run.status, sourceId: run.id, sourceLabel: 'Dream', model: run.model, dreamChanges: changes.map(({ tool, output }) => ({ tool, output })),
+                conversationId: run.conversation_id, conversationTitle: conversation?.title || 'Untitled conversation', status: run.status, sourceId: run.id, sourceLabel: 'Dream', model: run.model, dreamChanges: changes.map(({ tool, output }) => ({ tool, output })),
             })
         }
 

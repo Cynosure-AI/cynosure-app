@@ -324,6 +324,7 @@ export interface ActivityItem {
     agentName: string | null
     agentIconUrl: string | null
     conversationId: string | null
+    conversationTitle?: string | null
     status?: string
     severity?: string
     sourceId?: string
