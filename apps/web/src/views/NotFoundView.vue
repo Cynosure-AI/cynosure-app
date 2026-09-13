@@ -7,7 +7,7 @@ import { Icon } from '@iconify/vue'
     <div class="max-w-md">
       <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-theme-700 bg-theme-800 text-theme-400">
         <Icon
-          icon="lucide:map-pinned"
+          icon="lucide:banana"
           class="h-7 w-7"
         />
       </div>
