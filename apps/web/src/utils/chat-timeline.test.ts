@@ -61,4 +61,15 @@ describe('chat timeline chronology', () => {
     expect(ids(buildChatTimeline(messages, steps))).toEqual(['a', 'b', 2, 3, 'answer'])
     expect(JSON.stringify({ messages, steps })).toBe(before)
   })
+
+  it('keeps continuation rounds as permanent standalone timeline markers', () => {
+    const timeline = buildChatTimeline(
+      [message('first-answer', 1), message('continued-answer', 4)],
+      [step(2, { taskId: 'task', status: 'continuing', message: 'Open tasks remain.' }), step(3, { taskId: 'task', status: 'executing' })],
+    )
+
+    expect(timeline.map(entry => entry.type)).toEqual(['message', 'continuation', 'tool-group', 'message'])
+    const marker = timeline[1]
+    expect(marker.type === 'continuation' && marker.step.message).toBe('Open tasks remain.')
+  })
 })
