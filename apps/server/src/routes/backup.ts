@@ -28,6 +28,7 @@ import { dropConversationAttachmentIndex, indexConversationAttachment } from '..
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import { DEFAULT_PERMANENT_MEMORY_TABLE, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { getMemoryKnowledgeStore } from '../core/memory/memory-knowledge.js'
+import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import {
     createMemoryKnowledgeBackup,
     memoryKnowledgeBackupCount,
@@ -89,6 +90,7 @@ interface MemoryFileIdentityBackup {
     document_ref: string
     space_id: string
     file_name: string
+    dreamed_at?: number
     created_at: number
 }
 
@@ -230,10 +232,13 @@ async function resetKnowledge(): Promise<void> {
 }
 
 async function resetConversations(db = getDb()): Promise<void> {
+    const conversationIds = db.prepare('SELECT id FROM conversations').all() as Array<{ id: string }>
+    for (const { id } of conversationIds) await invalidateDreamConversation(id)
     db.prepare('DELETE FROM pending_hitl').run()
     db.prepare('DELETE FROM session_tool_approvals').run()
     db.prepare('DELETE FROM tasks').run()
     db.prepare('DELETE FROM execution_steps').run()
+    db.prepare('DELETE FROM dream_runs').run()
     db.prepare('DELETE FROM messages').run()
     db.prepare('DELETE FROM conversations').run()
     await dropConversationAttachmentIndex()
@@ -527,7 +532,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     })
                 const assignments = db.prepare('SELECT * FROM agent_memory_spaces').all()
                 const fileIndex = db.prepare(`
-                    SELECT document_id, document_ref, space_id, file_name, created_at
+                    SELECT document_id, document_ref, space_id, file_name, dreamed_at, created_at
                     FROM memory_file_index ORDER BY created_at
                 `).all() as MemoryFileIdentityBackup[]
                 const files: MemoryFileBackup[] = []
@@ -1049,9 +1054,9 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         db.prepare(`
                             INSERT OR REPLACE INTO memory_file_index
                                 (document_id, document_ref, space_id, file_name, content_hash,
-                                 chunk_count, last_indexed_at, knowledge_extracted_at, tags_json, created_at)
-                            VALUES (?, ?, ?, ?, '', 0, 0, 0, '[]', ?)
-                        `).run(file.document_id, file.document_ref, mappedSpaceId, file.file_name, file.created_at || Date.now())
+                                 chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, tags_json, created_at)
+                            VALUES (?, ?, ?, ?, '', 0, 0, 0, ?, '[]', ?)
+                        `).run(file.document_id, file.document_ref, mappedSpaceId, file.file_name, file.dreamed_at || 0, file.created_at || Date.now())
                     }
                 } else {
                     ensureDefaultMemorySpace(db)

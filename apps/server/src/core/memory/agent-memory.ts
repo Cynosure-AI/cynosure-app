@@ -105,6 +105,7 @@ interface FileIndexMoveCandidate {
     chunkCount: number
     lastIndexedAt: number
     knowledgeExtractedAt: number
+    dreamedAt: number
     tags: string[]
     createdAt: number
 }
@@ -393,7 +394,7 @@ export class AgentMemory {
 
         const db = getDb()
         const candidates = db.prepare(`
-            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json, created_at
+            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, tags_json, created_at
             FROM memory_file_index
             WHERE content_hash = ?
               AND NOT (space_id = ? AND file_name = ?)
@@ -407,6 +408,7 @@ export class AgentMemory {
             chunk_count: number
             last_indexed_at: number
             knowledge_extracted_at: number
+            dreamed_at: number
             tags_json: string
             created_at: number
         }[]
@@ -421,6 +423,7 @@ export class AgentMemory {
                 chunkCount: row.chunk_count,
                 lastIndexedAt: row.last_indexed_at,
                 knowledgeExtractedAt: row.knowledge_extracted_at || 0,
+                dreamedAt: row.dreamed_at || 0,
                 tags: parseDocumentTags(row.tags_json),
                 createdAt: row.created_at,
             }))
@@ -453,8 +456,8 @@ export class AgentMemory {
                 .run(candidate.spaceId, candidate.fileName)
             db.prepare(`
                 INSERT OR REPLACE INTO memory_file_index
-                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, tags_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 candidate.documentId,
                 candidate.documentRef,
@@ -464,6 +467,7 @@ export class AgentMemory {
                 candidate.chunkCount,
                 candidate.lastIndexedAt,
                 candidate.knowledgeExtractedAt,
+                candidate.dreamedAt,
                 JSON.stringify(candidate.tags),
                 candidate.createdAt || Date.now(),
             )
@@ -555,15 +559,15 @@ export class AgentMemory {
     // File index read helpers
     // -----------------------------------------------------------------------
 
-    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; tags: string[] }> {
+    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; dreamedAt: number; tags: string[] }> {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json FROM memory_file_index WHERE space_id = ?')
-                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; tags_json: string }[]
-            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; tags: string[] }>()
+                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, tags_json FROM memory_file_index WHERE space_id = ?')
+                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; dreamed_at: number; tags_json: string }[]
+            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; dreamedAt: number; tags: string[] }>()
             for (const row of rows) {
-                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, knowledgeExtractedAt: row.knowledge_extracted_at || 0, tags: parseDocumentTags(row.tags_json) })
+                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, knowledgeExtractedAt: row.knowledge_extracted_at || 0, dreamedAt: row.dreamed_at || 0, tags: parseDocumentTags(row.tags_json) })
             }
             return map
         } catch {

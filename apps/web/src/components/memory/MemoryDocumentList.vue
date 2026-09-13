@@ -51,6 +51,7 @@ const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   }));
   void loadFiles();
 });
+const unsubscribeDreamUpdate = api.memory.onDreamUpdated(() => void loadFiles());
 
 // Upload
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -375,6 +376,7 @@ watch(
 
 onUnmounted(() => {
   unsubscribeGraphReset();
+  unsubscribeDreamUpdate();
 });
 
 defineExpose({ ingestFiles, moveGroupsToSpace });
@@ -704,6 +706,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             </div>
             <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-theme-600">
               <span>{{ formatFileSize(file.size) }}</span>
+              <Icon
+                v-if="file.dreamedAt"
+                icon="lucide:moon-star"
+                class="h-3.5 w-3.5 text-violet-400"
+                title="Created or updated by Dream"
+                aria-label="Created or updated by Dream"
+              />
               <span
                 v-for="tag in (file.tags || []).slice(0, 4)"
                 :key="tag"

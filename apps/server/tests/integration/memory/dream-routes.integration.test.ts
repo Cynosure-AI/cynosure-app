@@ -1,4 +1,4 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, beforeEach, expect, test } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -15,9 +15,9 @@ beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'cynosure-dream-routes-'))
     process.env.CYNOSURE_DATA_DIR = directory
     app = Fastify()
-    await app.register(instance => registerMemoryRoutes(instance, () => undefined), { prefix: '/api/memory' })
+    await app.register((instance: FastifyInstance) => registerMemoryRoutes(instance, () => undefined), { prefix: '/api/memory' })
     await app.register(registerActivityRoutes, { prefix: '/api/activity' })
-    getGateway().registerProvider({ id: 'dream-test', name: 'Dream test', type: 'ollama', baseUrl: 'http://localhost:11434', defaultModel: 'model', enabled: true })
+    getGateway().registerProvider({ id: 'dream-test', name: 'Dream test', type: 'ollama', baseUrl: 'http://localhost:11434', defaultModel: 'model', availableModels: ['model'], supportsStreaming: true, supportsToolCalls: true, supportsVision: false })
 })
 afterEach(async () => {
     await app.close()

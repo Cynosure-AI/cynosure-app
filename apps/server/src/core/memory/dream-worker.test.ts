@@ -29,8 +29,8 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
     }
 })
 import { closeDb, getDb } from '../../db/database.js'
-import { getDreamConfig, saveDreamConfig, listDreamRuns, buildDreamBatch } from './dream-store.js'
-import { startDreamWorker, sweepDream, settleDreamWork, cancelDreamRun, cancelAllDreamRuns, DREAM_IDLE_MS, DREAM_SWEEP_MS, resolveDreamSpaces } from './dream-worker.js'
+import { getDreamConfig, saveDreamConfig, listDreamRuns, buildDreamBatch, type DreamInput } from './dream-store.js'
+import { startDreamWorker, sweepDream, settleDreamWork, settleDreamRun, cancelDreamRun, cancelAllDreamRuns, invalidateDreamConversation, DREAM_IDLE_MS, DREAM_SWEEP_MS, DREAM_RETRY_BASE_MS, resolveDreamSpaces } from './dream-worker.js'
 
 let directory: string
 let stop: (() => Promise<void>) | undefined
@@ -108,10 +108,33 @@ describe('Dream worker', () => {
         expect(mocks.run).toHaveBeenCalledTimes(1)
         expect(mocks.run.mock.calls[0][0]).toMatchObject({ saveMessages: false, emitEvents: false, maxRounds: 10, contextStrategy: 'none' })
         expect(listDreamRuns()[0]).toMatchObject({ status: 'completed', reviewed_count: 1 })
+        expect((JSON.parse(listDreamRuns()[0].input_json) as DreamInput).sources[0].content).toBe('')
         expect(getDb().prepare('SELECT COUNT(*) AS n FROM messages').get()).toEqual({ n: 1 })
         await vi.advanceTimersByTimeAsync(DREAM_SWEEP_MS)
         expect(mocks.run).toHaveBeenCalledTimes(1)
         expect(broadcast).toHaveBeenCalledWith('memory:dream-updated', expect.objectContaining({ status: 'completed' }))
+    })
+    test('marks documents changed by Dream', async () => {
+        getDb().prepare(`
+            INSERT INTO memory_file_index
+                (document_id, document_ref, space_id, file_name, content_hash, created_at)
+            VALUES ('dream-doc', 'preference#dream', 'default', 'preference.md', 'hash', ?)
+        `).run(Date.now())
+        mocks.tool.mockImplementation(async (name: string, _params: unknown, opts: unknown) => {
+            if (name === 'memory_create') {
+                (opts as { onDocumentMutated?: (id: string) => void }).onDocumentMutated?.('dream-doc')
+            }
+            return { success: true, output: 'Saved document preference#dream' }
+        })
+        mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
+            await config.tools.find(tool => tool.name === 'memory_semantic_search')!.execute({ query: 'preference' })
+            await config.tools.find(tool => tool.name === 'memory_create')!.execute({ title: 'Preference', content: 'Concise replies' })
+        })
+
+        await ready()
+
+        const row = getDb().prepare("SELECT dreamed_at FROM memory_file_index WHERE document_id = 'dream-doc'").get() as { dreamed_at: number }
+        expect(row.dreamed_at).toBe(Date.now())
     })
     test('uses old messages only as context and excludes disabled-period history', async () => {
         conversation()
@@ -123,7 +146,9 @@ describe('Dream worker', () => {
         await settleDreamWork()
         const input = JSON.parse(listDreamRuns()[0].input_json)
         expect(input.sources.map((source: { id: string }) => source.id)).toEqual(['new'])
-        expect(input.context).toContain('old')
+        const reviewInput = JSON.parse(mocks.run.mock.calls[0][1][1].content as string)
+        expect(reviewInput.earlierContext).toContain('old')
+        expect(input.context).toBe('')
     })
     test('skips active, disabled, empty scope and scheduled conversations; includes channels', async () => {
         enable()
@@ -169,7 +194,7 @@ describe('Dream worker', () => {
         await ready()
         expect(listDreamRuns()[0].status).toBe('failed')
         expect(JSON.parse(listDreamRuns()[0].changes_json)).toHaveLength(1)
-        await vi.advanceTimersByTimeAsync(DREAM_SWEEP_MS)
+        await vi.advanceTimersByTimeAsync(DREAM_RETRY_BASE_MS)
         await settleDreamWork()
         expect(listDreamRuns()).toHaveLength(1)
         expect(listDreamRuns()[0]).toMatchObject({ status: 'completed', attempt: 2 })
@@ -178,17 +203,47 @@ describe('Dream worker', () => {
     test('retries with backoff at most three times without advancing failed progress', async () => {
         mocks.run.mockRejectedValue(new Error('Offline'))
         await ready()
-        await vi.advanceTimersByTimeAsync(60 * 60_000)
+        await vi.advanceTimersByTimeAsync(2 * 60 * 60_000)
         await settleDreamWork()
         expect(mocks.run).toHaveBeenCalledTimes(4)
         expect(listDreamRuns()[0]).toMatchObject({ status: 'failed', attempt: 4 })
-        expect(getDb().prepare('SELECT last_sequence FROM dream_progress').get()).toEqual({ last_sequence: 0 })
+        expect(listDreamRuns()[0].input_json).not.toContain('I prefer concise replies')
+        expect(getDb().prepare('SELECT last_sequence FROM dream_progress').get()).toEqual({ last_sequence: 1 })
+    })
+    test('continues with later messages after a batch exhausts its retries', async () => {
+        mocks.run.mockRejectedValue(new Error('Offline'))
+        await ready()
+        await vi.advanceTimersByTimeAsync(2 * 60 * 60_000)
+        expect(mocks.run).toHaveBeenCalledTimes(4)
+
+        mocks.run.mockResolvedValue({ content: 'Recovered' })
+        message('m2', 'chat', 'A later preference')
+        await vi.advanceTimersByTimeAsync(DREAM_IDLE_MS)
+        await sweepDream()
+
+        expect(mocks.run).toHaveBeenCalledTimes(5)
+        const completed = listDreamRuns().find(run => run.status === 'completed')!
+        expect((JSON.parse(completed.input_json) as DreamInput).sources.map(source => source.id)).toEqual(['m2'])
+    })
+    test('invalidates pending work and redacts copied text when conversation history changes', async () => {
+        mocks.run.mockRejectedValueOnce(new Error('Offline'))
+        await ready()
+        const failed = listDreamRuns()[0]
+        expect(failed.input_json).toContain('I prefer concise replies')
+
+        await invalidateDreamConversation('chat')
+
+        const invalidated = listDreamRuns()[0]
+        expect(invalidated.status).toBe('cancelled')
+        expect(invalidated.input_json).not.toContain('I prefer concise replies')
+        expect((JSON.parse(invalidated.input_json) as DreamInput).sources[0].content).toBe('')
     })
     test('requires search before writing and passes scoped tools only', async () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
             const result = await config.tools.find(tool => tool.name === 'memory_create')!.execute({})
             expect(result.success).toBe(false)
-            expect(config.tools).toHaveLength(7)
+            expect(config.tools).toHaveLength(6)
+            expect(config.tools.some(tool => tool.name === 'memory_replace_all')).toBe(false)
             expect(config.tools.some(tool => /delete|remove|shell|knowledge/.test(tool.name))).toBe(false)
         })
         await ready()
@@ -212,6 +267,20 @@ describe('Dream worker', () => {
         expect(mocks.run).toHaveBeenCalledTimes(2)
         expect(JSON.parse(listDreamRuns().find(run => run.status === 'completed')!.input_json).sources[0].id).toBe('m2')
     })
+    test('cancelling one review does not wait for the next conversation to finish', async () => {
+        mocks.run.mockImplementation((config: AgentExecutorConfig) => new Promise((_, reject) => config.signal!.addEventListener('abort', () => reject(config.signal!.reason))))
+        enable()
+        conversation('a'); message('a1', 'a')
+        conversation('b'); message('b1', 'b')
+        vi.setSystemTime(Date.now() + DREAM_IDLE_MS)
+        stop = startDreamWorker(broadcast)
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledTimes(1))
+        const firstId = listDreamRuns()[0].id
+        cancelDreamRun(firstId)
+        await settleDreamRun(firstId)
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledTimes(2))
+        expect(listDreamRuns().find(run => run.conversation_id === 'b')?.status).toBe('running')
+    })
     test('Stop All prevents the same sweep from starting another eligible review', async () => {
         mocks.run.mockImplementationOnce((config: AgentExecutorConfig) => new Promise((_, reject) => config.signal!.addEventListener('abort', () => reject(config.signal!.reason))))
         enable()
@@ -232,7 +301,7 @@ describe('Dream worker', () => {
         await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledTimes(1))
         await stop()
         expect(listDreamRuns()[0].status).toBe('interrupted')
-        vi.setSystemTime(Date.now() + DREAM_SWEEP_MS)
+        vi.setSystemTime(Date.now() + DREAM_RETRY_BASE_MS)
         stop = startDreamWorker(broadcast)
         await settleDreamWork()
         expect(listDreamRuns()[0]).toMatchObject({ status: 'completed', attempt: 2 })

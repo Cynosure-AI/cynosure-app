@@ -83,6 +83,7 @@ describe('Dream settings', () => {
   test('shows experimental opt-in and requires a model before enabling', async () => {
     const wrapper = createDreamSettings()
     await flushPromises()
+    expect(wrapper.text()).toContain('Building Knowledge')
     expect(wrapper.text()).toContain('Dream Mode')
     expect(wrapper.text()).toContain('Experimental')
     expect(wrapper.text()).toContain('provider costs')

@@ -1,5 +1,5 @@
 import { getDreamConfig, saveDreamConfig } from '../core/memory/dream-store.js'
-import { cancelAllDreamRuns, cancelDreamRun, settleDreamWork } from '../core/memory/dream-worker.js'
+import { cancelAllDreamRuns, cancelDreamRun, settleDreamWork, settleDreamRun } from '../core/memory/dream-worker.js'
 import type { FastifyInstance } from 'fastify'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryAggregator } from '../core/memory/memory-aggregator.js'
@@ -471,7 +471,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   })
   app.post<{ Params: { id: string } }>('/dream/runs/:id/cancel', async (req, reply) => {
     if (!cancelDreamRun(req.params.id)) return reply.status(409).send({ error: 'Dream review is no longer cancellable' })
-    await settleDreamWork()
+    await settleDreamRun(req.params.id)
     return { success: true }
   })
 

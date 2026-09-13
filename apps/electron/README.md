@@ -14,7 +14,7 @@ electron/
 
 **How it works:**
 
-1. The main process spawns the Fastify server as a child process, preferring port 3099
+1. The main process spawns the Fastify server as a child process, preferring port 3099. Development runs the current TypeScript source through `tsx`; packaged builds run the compiled server.
 2. Data is stored in the shared Cynosure app data directory, matching the standalone server
 3. In **development**: loads the Vite dev server (`http://localhost:5173`)
 4. In **production**: serves built web files via a custom `app://` protocol, while API calls are proxied to the embedded server and WebSocket calls use the embedded server port from preload

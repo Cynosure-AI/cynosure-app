@@ -94,6 +94,7 @@ export interface MemoryFileStatus {
     lastIndexedAt?: number
     knowledgeExtracted: boolean
     knowledgeExtractedAt?: number
+    dreamedAt?: number
     tags: string[]
 }
 
@@ -425,6 +426,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                 lastIndexedAt: indexed.lastIndexedAt,
                 knowledgeExtracted: status === 'indexed' && indexed.knowledgeExtractedAt > 0 && currentKnowledgeFiles.has(f.fileName),
                 knowledgeExtractedAt: indexed.knowledgeExtractedAt || undefined,
+                dreamedAt: indexed.dreamedAt || undefined,
                 tags: status === 'indexed' ? indexed.tags : [],
             }
         })
@@ -823,8 +825,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
         for (const sf of sourceFiles) {
             const uniqueName = await mem.resolveUniqueSourceFile(sf, target.id)
             if (uniqueName !== sf) renamedCount++
-            const existingIndex = db.prepare('SELECT document_id, document_ref, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(source.id, sf) as { document_id: string; document_ref: string; content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; created_at: number } | undefined
+            const existingIndex = db.prepare('SELECT document_id, document_ref, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, created_at FROM memory_file_index WHERE space_id = ? AND file_name = ?')
+                .get(source.id, sf) as { document_id: string; document_ref: string; content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; dreamed_at: number; created_at: number } | undefined
 
             // Move physical file if both spaces have folders
             if (source.folder_path && target.folder_path) {
@@ -855,8 +857,8 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
             if (existingIndex) {
                 db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(source.id, sf)
                 db.prepare(`
-                    INSERT OR REPLACE INTO memory_file_index (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO memory_file_index (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).run(
                     existingIndex.document_id,
                     existingIndex.document_ref,
@@ -866,6 +868,7 @@ export async function registerMemorySpacesRoutes(app: FastifyInstance): Promise<
                     existingIndex.chunk_count,
                     existingIndex.last_indexed_at,
                     existingIndex.knowledge_extracted_at,
+                    existingIndex.dreamed_at,
                     existingIndex.created_at,
                 )
             }
