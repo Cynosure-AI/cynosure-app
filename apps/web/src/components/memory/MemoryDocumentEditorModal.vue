@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { Marked } from "marked";
 import TurndownService from "turndown";
@@ -30,6 +30,7 @@ const memoryJobs = useMemoryJobsStore();
 
 const markdownParser = new Marked({ breaks: true });
 const headingLevels = [1, 2, 3] as const;
+const LARGE_DOCUMENT_THRESHOLD = 250_000;
 
 type HeadingLevel = (typeof headingLevels)[number];
 
@@ -69,7 +70,6 @@ turndown.addRule("table", {
 const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
-const loadedMarkdown = ref("");
 const loadedRevision = ref("");
 const editableTitle = ref("");
 const currentFileName = ref("");
@@ -79,7 +79,10 @@ const revisions = ref<MemoryRevisionSummary[]>([]);
 const selectedRevisionId = ref("");
 const revisionDiff = ref<MemoryDiffSegment[]>([]);
 const historyLoading = ref(false);
-const editorTick = ref(0);
+const editorDirty = ref(false);
+const largeDocumentMode = ref(false);
+const largeDocumentDirty = ref(false);
+const largeDocumentEditor = ref<HTMLTextAreaElement | null>(null);
 
 const editor = useEditor({
   extensions: [
@@ -108,15 +111,11 @@ const editor = useEditor({
     },
   },
   onUpdate: () => {
-    editorTick.value++;
+    editorDirty.value = true;
   },
 });
 
-const hasChanges = computed(() => {
-  void editorTick.value;
-  const current = editor.value ? editorToMarkdown() : "";
-  return normalizeMarkdown(current) !== normalizeMarkdown(loadedMarkdown.value);
-});
+const hasChanges = computed(() => largeDocumentMode.value ? largeDocumentDirty.value : editorDirty.value);
 
 const hasNameChange = computed(() => titleToFileName(editableTitle.value) !== currentFileName.value);
 const canSave = computed(() => Boolean(titleToFileName(editableTitle.value)) && (hasChanges.value || hasNameChange.value));
@@ -142,10 +141,6 @@ function titleToFileName(title: string): string {
   return stem ? `${stem}${ext}` : "";
 }
 
-function normalizeMarkdown(value: string): string {
-  return value.replace(/\r\n/g, "\n").trim();
-}
-
 function markdownToHtml(markdown: string): string {
   return markdownParser.parse(markdown) as string;
 }
@@ -159,15 +154,25 @@ async function loadContent() {
   if (!props.show || !props.categoryId || !props.sourceFile || !editor.value) return;
   loading.value = true;
   error.value = "";
+  largeDocumentMode.value = false;
+  largeDocumentDirty.value = false;
+  editorDirty.value = false;
   currentFileName.value = props.sourceFile;
   editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
     const res = await api.memoryCategories.getFileContent(props.categoryId, props.sourceFile);
-    loadedMarkdown.value = res.content;
     loadedRevision.value = res.revision;
     documentRef.value = res.documentRef || "";
-    editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
-    editorTick.value++;
+    largeDocumentMode.value = res.content.length >= LARGE_DOCUMENT_THRESHOLD;
+    if (largeDocumentMode.value) {
+      editor.value.commands.clearContent(false);
+      await nextTick();
+      if (largeDocumentEditor.value) largeDocumentEditor.value.value = res.content;
+    } else {
+      editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
+    }
+    editorDirty.value = false;
+    largeDocumentDirty.value = false;
   } catch (err) {
     error.value = (err as Error).message || "Failed to load memory";
     editor.value.commands.clearContent(false);
@@ -237,8 +242,10 @@ async function saveContent() {
   saving.value = true;
   error.value = "";
   try {
-    const markdown = editorToMarkdown();
-    let chunksStored = 0;
+    const markdown = largeDocumentMode.value
+      ? largeDocumentEditor.value?.value || ""
+      : editorToMarkdown();
+    const chunksStored = 0;
     const fileName = await applyRename();
     if (hasChanges.value) {
       const res = await api.memoryCategories.updateFileContent(
@@ -247,10 +254,11 @@ async function saveContent() {
         markdown,
         loadedRevision.value,
       );
-      loadedMarkdown.value = markdown;
       loadedRevision.value = res.revision;
       currentFileName.value = res.fileName;
       memoryJobs.upsertJob(res.job);
+      editorDirty.value = false;
+      largeDocumentDirty.value = false;
     }
     editableTitle.value = splitFileName(fileName).stem;
     emit("saved", { fileName, chunksStored });
@@ -285,6 +293,7 @@ watch(
   () => {
     if (props.show) void loadContent();
   },
+  { immediate: true },
 );
 
 onBeforeUnmount(() => {
@@ -300,6 +309,7 @@ onBeforeUnmount(() => {
     icon-color="accent"
     max-width="max-w-5xl"
     max-height="h-[88vh]"
+    body-overflow-hidden
     @close="close"
   >
     <div class="flex h-full min-h-0 flex-col rounded-2xl overflow-hidden">
@@ -318,7 +328,8 @@ onBeforeUnmount(() => {
         <button
           class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
           :class="{ 'bg-accent-500/15 text-accent-300': showHistory }"
-          :disabled="!documentRef || loading"
+          :disabled="!documentRef || loading || largeDocumentMode"
+          :title="largeDocumentMode ? 'Revision diffs are disabled in large document mode' : 'Revision history'"
           @click="toggleHistory"
         >
           <Icon icon="lucide:history" class="h-4 w-4" />
@@ -335,7 +346,7 @@ onBeforeUnmount(() => {
           :title="button.title"
           :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading"
+          :disabled="!editor || loading || largeDocumentMode"
           @click="button.action"
         >
           <Icon
@@ -352,7 +363,7 @@ onBeforeUnmount(() => {
           :title="`Heading ${level}`"
           :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="px-2.5 py-2 rounded-lg transition-colors text-xs font-semibold shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading"
+          :disabled="!editor || loading || largeDocumentMode"
           @click="toggleHeading(level)"
         >
           H{{ level }}
@@ -372,7 +383,7 @@ onBeforeUnmount(() => {
           :title="button.title"
           :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading"
+          :disabled="!editor || loading || largeDocumentMode"
           @click="button.action"
         >
           <Icon
@@ -387,6 +398,14 @@ onBeforeUnmount(() => {
         class="px-5 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300 shrink-0"
       >
         {{ error }}
+      </div>
+
+      <div
+        v-if="largeDocumentMode && !showHistory"
+        class="flex items-center gap-2 border-b border-theme-800 bg-amber-500/5 px-5 py-2 text-xs text-amber-300/90 shrink-0"
+      >
+        <Icon icon="lucide:gauge" class="h-3.5 w-3.5" />
+        Large document mode uses a lightweight plain-text editor for responsive loading and typing.
       </div>
 
       <div v-if="showHistory" class="grid min-h-0 flex-1 grid-cols-[220px_1fr] bg-theme-950/45">
@@ -405,7 +424,11 @@ onBeforeUnmount(() => {
         </div>
         <MemoryInlineDiff :segments="revisionDiff" class="m-3" />
       </div>
-      <div v-else class="relative flex-1 min-h-0 overflow-y-auto bg-theme-950/45">
+      <div
+        v-else
+        class="relative flex min-h-0 flex-1 bg-theme-950/45"
+        :class="largeDocumentMode ? 'overflow-hidden' : 'overflow-y-auto'"
+      >
         <div
           v-if="loading"
           class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-theme-950/65 text-theme-500 text-sm"
@@ -416,7 +439,18 @@ onBeforeUnmount(() => {
           />
           Loading…
         </div>
+        <textarea
+          v-if="largeDocumentMode"
+          ref="largeDocumentEditor"
+          class="memory-large-editor min-h-0 flex-1 resize-none overflow-auto bg-transparent p-5 font-mono text-sm leading-6 text-theme-200 outline-none"
+          aria-label="Large memory document content"
+          :disabled="loading || saving"
+          :spellcheck="false"
+          wrap="off"
+          @input="largeDocumentDirty = true"
+        />
         <EditorContent
+          v-else
           :editor="editor"
           class="memory-editor-shell"
         />

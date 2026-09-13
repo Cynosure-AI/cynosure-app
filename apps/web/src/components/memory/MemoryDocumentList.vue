@@ -396,9 +396,9 @@ watch(
   { immediate: true },
 );
 
-watch(() => props.focusFile, (fileName) => {
-  if (!fileName) return;
-  searchQuery.value = fileName;
+watch(() => props.focusFile, (fileName, previousFileName) => {
+  if (!fileName && !previousFileName) return;
+  searchQuery.value = fileName || "";
   page.value = 0;
 });
 
