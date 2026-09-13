@@ -147,7 +147,7 @@ onMounted(() => loadCategories())
 <template>
   <div class="space-y-4">
     <!-- Dreaming eligibility -->
-    <BaseCard class="p-5">
+    <BaseCard class="p-5 bg-dream-card">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -357,3 +357,12 @@ onMounted(() => loadCategories())
     </BaseCard>
   </div>
 </template>
+
+<style scoped>
+.bg-dream-card
+{
+  background: url("../../assets/img/settings/bg-dream.png") no-repeat center center;
+  background-size: cover;
+  background-position: center center;
+}
+</style>
