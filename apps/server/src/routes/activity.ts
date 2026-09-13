@@ -605,13 +605,32 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
 
         for (const run of listDreamRuns(queryLimit)) {
             const changes = JSON.parse(run.changes_json) as DreamChange[]
-            const changeSummary = changes.length ? `${changes.length} memory change${changes.length === 1 ? '' : 's'}` : 'No new memories'
-            const conversation = db.prepare('SELECT title FROM conversations WHERE id = ?').get(run.conversation_id) as { title: string | null } | undefined
+            const changeSummary = changes.length
+                ? `${changes.length} memory change${changes.length === 1 ? '' : 's'}`
+                : 'No new memories'
+
+            const conversation = db
+                .prepare('SELECT title FROM conversations WHERE id = ?')
+                .get(run.conversation_id) as { title: string | null } | undefined
+
+            const conversationTitle = conversation?.title || 'Untitled conversation'
+
             items.push({
-                id: `dream:${run.id}`, kind: 'dream', title: 'Dream review',
+                id: `dream:${run.id}`,
+                kind: 'dream',
+                title: `Dream review - ${conversationTitle}`,
                 description: `${run.reviewed_count} message excerpts reviewed · ${changeSummary}${run.error ? ` · ${run.error}` : ''}`,
-                createdAt: run.updated_at, agentId: null, agentName: null, agentIconUrl: null,
-                conversationId: run.conversation_id, conversationTitle: conversation?.title || 'Untitled conversation', status: run.status, sourceId: run.id, sourceLabel: 'Dream', model: run.model, dreamChanges: changes.map(({ tool, output }) => ({ tool, output })),
+                createdAt: run.updated_at,
+                agentId: null,
+                agentName: null,
+                agentIconUrl: null,
+                conversationId: run.conversation_id,
+                conversationTitle,
+                status: run.status,
+                sourceId: run.id,
+                sourceLabel: 'Dream',
+                model: run.model,
+                dreamChanges: changes.map(({ tool, output }) => ({ tool, output })),
             })
         }
 
