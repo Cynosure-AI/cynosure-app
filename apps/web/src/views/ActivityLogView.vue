@@ -411,6 +411,7 @@ function kindIcon(kind: ActivityKind): string {
 
 function kindClass(item: ActivityItem): string {
   if (item.kind === "instance") return "activity-instance";
+  if (item.kind === "dream") return "activity-dream";
   if (item.kind === "notification") return "activity-notification";
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
@@ -907,10 +908,21 @@ watch(searchQuery, () => {
                 {{ item.description }}
               </p>
 
-              <details v-if="item.dreamChanges?.length" class="mt-2 text-xs text-theme-400" @click.stop>
-                <summary class="cursor-pointer">Memory changes</summary>
+              <details
+                v-if="item.dreamChanges?.length"
+                class="mt-2 text-xs text-theme-400"
+                @click.stop
+              >
+                <summary class="cursor-pointer">
+                  Memory changes
+                </summary>
                 <ul class="mt-1 space-y-1">
-                  <li v-for="(change, index) in item.dreamChanges" :key="index">{{ change.output }}</li>
+                  <li
+                    v-for="(change, index) in item.dreamChanges"
+                    :key="index"
+                  >
+                    {{ change.output }}
+                  </li>
                 </ul>
               </details>
 
@@ -1133,6 +1145,7 @@ article.cursor-pointer:hover .activity-card {
   --activity-border: color-mix(in srgb, var(--color-accent-500) 35%, var(--color-theme-800));
 }
 
+/* Coral red */
 .activity-instance {
   --activity-color: #f87171;
   --activity-bg: color-mix(in srgb, #f87171 15%, var(--color-theme-950));
@@ -1143,42 +1156,56 @@ article.cursor-pointer:hover .activity-card {
   background:
     linear-gradient(90deg, color-mix(in srgb, #f87171 12%, transparent), transparent 42%),
     var(--color-theme-950);
+
   box-shadow: 0 0 0 1px color-mix(in srgb, #f87171 12%, transparent);
 }
 
+/* Indigo */
 .activity-cron {
-  --activity-color: #f472b6;
-  --activity-bg: color-mix(in srgb, #f472b6 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f472b6 35%, var(--color-theme-800));
+  --activity-color: #818cf8;
+  --activity-bg: color-mix(in srgb, #818cf8 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #818cf8 35%, var(--color-theme-800));
 }
 
+/* Emerald */
 .activity-artifact {
-  --activity-color: #22c55e;
-  --activity-bg: color-mix(in srgb, #22c55e 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #22c55e 35%, var(--color-theme-800));
+  --activity-color: #34d399;
+  --activity-bg: color-mix(in srgb, #34d399 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #34d399 35%, var(--color-theme-800));
 }
 
+/* Amber */
 .activity-notification {
-  --activity-color: #f59e0b;
-  --activity-bg: color-mix(in srgb, #f59e0b 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f59e0b 38%, var(--color-theme-800));
+  --activity-color: #fbbf24;
+  --activity-bg: color-mix(in srgb, #fbbf24 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #fbbf24 38%, var(--color-theme-800));
 }
 
+/* Violet */
 .activity-memory {
   --activity-color: #a78bfa;
   --activity-bg: color-mix(in srgb, #a78bfa 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #a78bfa 35%, var(--color-theme-800));
 }
 
-.activity-chat {
-  --activity-color: #60a5fa;
-  --activity-bg: color-mix(in srgb, #60a5fa 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #60a5fa 35%, var(--color-theme-800));
+/* Pink */
+.activity-dream {
+  --activity-color: #f472b6;
+  --activity-bg: color-mix(in srgb, #f472b6 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f472b6 38%, var(--color-theme-800));
 }
 
+/* Sky blue */
+.activity-chat {
+  --activity-color: #38bdf8;
+  --activity-bg: color-mix(in srgb, #38bdf8 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #38bdf8 35%, var(--color-theme-800));
+}
+
+/* Cyan */
 .activity-channels {
-  --activity-color: #2dd4bf;
-  --activity-bg: color-mix(in srgb, #2dd4bf 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #2dd4bf 35%, var(--color-theme-800));
+  --activity-color: #22d3ee;
+  --activity-bg: color-mix(in srgb, #22d3ee 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #22d3ee 35%, var(--color-theme-800));
 }
 </style>

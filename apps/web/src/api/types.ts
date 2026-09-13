@@ -367,6 +367,7 @@ export interface MemoryFileStatus {
     lastIndexedAt?: number
     knowledgeExtracted: boolean
     knowledgeExtractedAt?: number
+    dreamedAt?: number
     tags: string[]
 }
 

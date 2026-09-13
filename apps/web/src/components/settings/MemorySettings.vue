@@ -391,36 +391,8 @@ function cancelDrop() {
 
 <template>
   <div class="space-y-4">
-    <BaseCard v-if="showSection('dream-mode')" class="p-5 space-y-4">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <h3 class="text-sm font-medium text-theme-200 flex items-center gap-2">
-            <Icon icon="lucide:moon-star" class="w-5 h-5" />
-            Dream Mode
-            <span class="text-[10px] rounded px-2 py-0.5 bg-amber-400/10 text-amber-400">Experimental</span>
-          </h3>
-          <p class="text-xs text-theme-500 mt-1">
-            Automatically reviews new chat and channel activity to learn useful facts and update memory.
-            Checks every 5 minutes after a conversation has been inactive for 15 minutes, while the server is running.
-            Uses model requests and may incur provider costs. Existing history is used only as context.
-          </p>
-        </div>
-        <ToggleSwitch v-model="dreamEnabled" label="Enable Dream Mode" :disabled="!dreamLoaded || dreamSaving || (!dreamEnabled && (!dreamProviderId || !dreamModel))" />
-      </div>
-      <ProviderModelSelect
-        :provider-id="dreamProviderId" :model-value="dreamModel" :providers="providerStore.providers"
-        placeholder="Select Dream provider and model" dropdown-width="min-w-full"
-        @change="(selection) => { dreamProviderId = selection.providerId; dreamModel = selection.model }"
-      />
-      <p v-if="dreamError" role="alert" class="text-xs text-red-400">{{ dreamError }}</p>
-      <button :disabled="!dreamLoaded || dreamSaving || (dreamEnabled && (!dreamProviderId || !dreamModel))"
-        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
-        @click="saveDream">
-        {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
-      </button>
-    </BaseCard>
     <SettingsSubheading
-      v-if="showAnySection(['embedding-model', 'knowledge-extraction', 'reranker'])"
+      v-if="showAnySection(['embedding-model', 'reranker'])"
       label="Retrieval"
     />
 
@@ -600,6 +572,11 @@ function cancelDrop() {
       </div>
     </BaseCard>
 
+    <SettingsSubheading
+      v-if="showAnySection(['knowledge-extraction', 'dream-mode'])"
+      label="Building Knowledge"
+    />
+
     <!-- Knowledge Extraction Model -->
     <BaseCard
       v-if="showSection('knowledge-extraction')"
@@ -653,6 +630,57 @@ function cancelDrop() {
           :state="entityExtractionStatus"
         />
       </div>
+    </BaseCard>
+
+    <!-- Dream Mode -->
+    <BaseCard
+      v-if="showSection('dream-mode')"
+      class="p-6 space-y-4 bg-dream-card"
+    >
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-medium text-gray-200 flex items-center gap-2">
+            <Icon
+              icon="lucide:moon-star"
+              class="w-5 h-5"
+            />
+            Dream Mode
+            <span class="text-[10px] rounded px-2 py-0.5 bg-amber-400/10 text-amber-400">Experimental</span>
+          </h3>
+          <p class="text-xs text-gray-500 mt-1">
+            Automatically reviews new chat and channel activity to learn useful facts and update memory.
+            Checks every minute after a conversation has been inactive for 5 minutes, while the server is running.
+            Uses model requests and may incur provider costs. Existing history is used only as context.
+          </p>
+        </div>
+        <ToggleSwitch
+          v-model="dreamEnabled"
+          label="Enable Dream Mode"
+          :disabled="!dreamLoaded || dreamSaving || (!dreamEnabled && (!dreamProviderId || !dreamModel))"
+        />
+      </div>
+      <ProviderModelSelect
+        :provider-id="dreamProviderId"
+        :model-value="dreamModel"
+        :providers="providerStore.providers"
+        placeholder="Select Dream provider and model"
+        dropdown-width="min-w-full"
+        @change="(selection) => { dreamProviderId = selection.providerId; dreamModel = selection.model }"
+      />
+      <p
+        v-if="dreamError"
+        role="alert"
+        class="text-xs text-red-400"
+      >
+        {{ dreamError }}
+      </p>
+      <button
+        :disabled="!dreamLoaded || dreamSaving || (dreamEnabled && (!dreamProviderId || !dreamModel))"
+        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
+        @click="saveDream"
+      >
+        {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
+      </button>
     </BaseCard>
     
     <SettingsSubheading
@@ -782,3 +810,11 @@ function cancelDrop() {
     </ModalDialog>
   </div>
 </template>
+
+<style scoped>
+.bg-dream-card
+{
+  background: url("../../assets/img/settings/bg-dream.png") no-repeat center center;
+  background-size: cover;
+}
+</style>

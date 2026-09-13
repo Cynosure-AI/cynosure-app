@@ -111,6 +111,8 @@ export interface MemoryToolOptions {
     /** Optional background-curator guards; the mutation guard runs under the document lock. */
     onDocumentRead?: (documentId: string, revision: string) => void
     beforeDocumentMutation?: (documentId: string, content: string) => void
+    /** Called after a document has been successfully created or updated. */
+    onDocumentMutated?: (documentId: string) => void
 }
 
 const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'] as const
@@ -601,6 +603,7 @@ async function commitMemoryMutation(
     nextContent: string,
     signal?: AbortSignal,
 ): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
+    signal?.throwIfAborted()
     writeTextFile(resolved.folderPath, resolved.fileName, nextContent)
     let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
     try {
@@ -761,6 +764,12 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             const requestedMinIndex = minIndex!
             const requestedMaxIndex = maxIndex!
             const cappedMax = Math.min(requestedMaxIndex, requestedMinIndex + 19) // cap at 20 chunks per call
+            const readRevisions = opts.onDocumentRead
+                ? new Map((resolvedScope.space ? [resolvedScope.space] : assignedSpaces).map(space => {
+                    const ref = mem.getDocumentReference(space.id, sourceFile)
+                    return [space.id, ref?.revision] as const
+                }))
+                : undefined
             const chunks = await mem.getChunksByRange(sourceFile, requestedMinIndex, cappedMax, resolvedScope.filter)
 
             if (chunks.length === 0) {
@@ -781,7 +790,12 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
             const resolvedSpaceId = distinctSpaces.length === 1 ? distinctSpaces[0] : resolvedScope.space?.id
             const documentRef = resolvedSpaceId ? mem.getDocumentReference(resolvedSpaceId, sourceFile) : undefined
-            if (documentRef) opts.onDocumentRead?.(documentRef.documentId, documentRef.revision)
+            if (documentRef && opts.onDocumentRead) {
+                if (readRevisions?.get(documentRef.spaceId) !== documentRef.revision) {
+                    return { success: false, output: 'Document changed while reading. Retrieve it again before editing.' }
+                }
+                opts.onDocumentRead(documentRef.documentId, documentRef.revision)
+            }
             const formatted = chunks.map(c => {
                 const location = c.spaceId && !resolvedScope.space
                     ? `[${spaceMap.get(c.spaceId) || c.spaceId} · Part ${c.chunkIndex + 1}/${total}]`
@@ -1237,6 +1251,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             }
 
             const uniqueName = resolveUniqueFileName(folderPath, fileName)
+            signal?.throwIfAborted()
             writeTextFile(folderPath, uniqueName, content)
 
             let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
@@ -1246,6 +1261,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
                 deleteFile(folderPath, uniqueName)
                 throw new Error(`Memory creation failed; the unindexed source file was removed: ${(err as Error).message}`)
             }
+            opts.onDocumentMutated?.(indexed.documentId)
 
             return {
                 success: true,
@@ -1318,6 +1334,7 @@ export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
                     fileContent.trimEnd() + '\n\n' + input.content.trim() + '\n',
                     signal,
                 )
+                opts.onDocumentMutated?.(indexed.documentId)
                 return { success: true, output: `Content appended to "${resolved.fileName}" in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             }, opts.beforeDocumentMutation)
         },
@@ -1338,6 +1355,7 @@ export function makeMemoryReplaceAllTool(opts: MemoryToolOptions): ToolDefinitio
             const input = params as { documentRef: string; content: string }
             return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
                 const indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal)
+                opts.onDocumentMutated?.(indexed.documentId)
                 return { success: true, output: `Memory "${resolved.fileName}" fully replaced in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             }, opts.beforeDocumentMutation)
         },
@@ -1377,6 +1395,7 @@ export function makeMemoryReplaceRangeTool(opts: MemoryToolOptions): ToolDefinit
                 const replaced = replaceChunkRangeInText(fileContent, chunks, input.content)
                 if ('error' in replaced) return { success: false, output: replaced.error }
                 const indexed = await commitMemoryMutation(resolved, fileContent, replaced.content, signal)
+                opts.onDocumentMutated?.(indexed.documentId)
                 return { success: true, output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${resolved.fileName}" replaced and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             }, opts.beforeDocumentMutation)
         },

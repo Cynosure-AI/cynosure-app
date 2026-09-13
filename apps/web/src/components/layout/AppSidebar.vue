@@ -10,7 +10,7 @@ import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { usePreferencesStore } from "../../stores/preferences.store";
 import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
-import type { AgentInstance } from "../../api/types";
+import type { ActivityItem, AgentInstance } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import { useSidebar } from "../../composables/useSidebar";
 import { useAppBranding } from "../../composables/useAppBranding";
@@ -48,20 +48,24 @@ const notifPopoverStyle = computed(() => {
 });
 
 const instances = ref<AgentInstance[]>([]);
+const activeDreamRuns = ref<ActivityItem[]>([]);
 let instancePollTimer: ReturnType<typeof setInterval> | undefined;
+let dreamPollTimer: ReturnType<typeof setInterval> | undefined;
 let unsubHITLRequest: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
 let unsubStreamStart: (() => void) | undefined;
 let unsubStreamEnd: (() => void) | undefined;
 let unsubStreamError: (() => void) | undefined;
 let unsubChatExecutionState: (() => void) | undefined;
+let unsubDreamUpdate: (() => void) | undefined;
 let instanceLoadRevision = 0;
 const terminalChatConversations = new Map<string, number>();
 
 const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
 );
-const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.activeJobs.length);
+const isDreaming = computed(() => activeDreamRuns.value.length > 0);
+const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.activeJobs.length + activeDreamRuns.value.length);
 const runningConversationIds = computed(() => instances.value
   .filter((instance) => instance.status === "running" && instance.conversationId)
   .map((instance) => instance.conversationId as string));
@@ -89,6 +93,15 @@ async function loadInstances() {
   }
 }
 
+async function loadDreamRuns() {
+  try {
+    const result = await api.activity.list({ limit: 100, types: ["dream"] });
+    activeDreamRuns.value = result.items.filter((item) => item.status === "running");
+  } catch {
+    // Keep the last known state through a transient connection failure.
+  }
+}
+
 function removeFinishedChatInstance(data: { streamId: string; conversationId: string }) {
   // Invalidate an older in-flight poll before applying the terminal websocket
   // event. Otherwise its stale response can bring the spinner back after stop.
@@ -105,8 +118,10 @@ function removeFinishedChatInstance(data: { streamId: string; conversationId: st
 
 onMounted(() => {
   loadInstances();
+  void loadDreamRuns();
   memoryJobsStore.startPolling();
   instancePollTimer = setInterval(loadInstances, 1_500);
+  dreamPollTimer = setInterval(() => void loadDreamRuns(), 5_000);
   unsubHITLRequest = api.agent.onHITLRequest(() => {
     loadInstances();
   });
@@ -129,11 +144,13 @@ onMounted(() => {
     }
     removeFinishedChatInstance({ streamId: data.executionId, conversationId: data.conversationId });
   });
+  unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadDreamRuns());
   document.addEventListener("click", closeRecentFilterMenu);
 });
 
 onUnmounted(() => {
   clearInterval(instancePollTimer);
+  clearInterval(dreamPollTimer);
   memoryJobsStore.stopPolling();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
@@ -141,6 +158,7 @@ onUnmounted(() => {
   unsubStreamEnd?.();
   unsubStreamError?.();
   unsubChatExecutionState?.();
+  unsubDreamUpdate?.();
   document.removeEventListener("click", closeRecentFilterMenu);
 });
 
@@ -636,13 +654,14 @@ const chatRoute = computed(() =>
               'bg-accent-500 animate-pulse':
                 wsConnected &&
                 !hasAwaitingApproval &&
-                (instances.length > 0 || memoryJobsStore.hasRunningJobs),
+                (instances.length > 0 || memoryJobsStore.hasRunningJobs || isDreaming),
               'bg-emerald-500':
                 wsConnected &&
                 instances.length === 0 &&
                 !memoryJobsStore.hasRunningJobs &&
+                !isDreaming &&
                 providerStore.providers.length > 0,
-              'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !providerStore.providers.length,
+              'bg-theme-600': wsConnected && !memoryJobsStore.hasRunningJobs && !isDreaming && !providerStore.providers.length,
             }"
           />
         </span>
@@ -658,6 +677,7 @@ const chatRoute = computed(() =>
             <template v-else-if="hasAwaitingApproval">Needs Attention</template>
             <template v-else-if="instances.length > 0">Agents Running...</template>
             <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
+            <template v-else-if="isDreaming">Dreaming...</template>
             <template v-else-if="!providerStore.providers.length">No providers</template>
             <template v-else>Ready</template>
           </span>
