@@ -366,6 +366,10 @@ function formatClock(ts: number): string {
   });
 }
 
+function formatTimestamp(ts: number): string {
+  return `${formatDateLabel(ts)}, ${formatClock(ts)}`;
+}
+
 type ActivityGroupKind = "attention" | "active" | "queued" | "history";
 
 const groupedItems = computed(() => {
@@ -906,6 +910,18 @@ watch(searchQuery, () => {
                 class="mt-0.5 line-clamp-1 text-[11px] leading-4 text-theme-400 wrap-break-word"
               >
                 {{ item.description }}
+              </p>
+
+              <p
+                v-if="item.kind === 'dream' && item.conversationTitle"
+                class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-theme-500"
+              >
+                <Icon icon="lucide:message-square" class="h-3 w-3 shrink-0" />
+                <span class="truncate">{{ item.conversationTitle }}</span>
+                <span aria-hidden="true">·</span>
+                <time :datetime="new Date(item.createdAt).toISOString()" class="shrink-0 tabular-nums">
+                  {{ formatTimestamp(item.createdAt) }}
+                </time>
               </p>
 
               <details

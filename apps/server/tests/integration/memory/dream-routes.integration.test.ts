@@ -48,7 +48,7 @@ test('activity exposes a single filterable Dream entry with memory changes and a
     await seedRun()
     const response = await app.inject('/api/activity?types=dream&search=Dream')
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toMatchObject({ total: 1, totalsByKind: { dream: 1 }, items: [{ id: 'dream:run', kind: 'dream', sourceId: 'run', conversationId: 'chat', status: 'completed', dreamChanges: [{ tool: 'memory_append', output: 'Updated preferences.md' }] }] })
+    expect(response.json()).toMatchObject({ total: 1, totalsByKind: { dream: 1 }, items: [{ id: 'dream:run', kind: 'dream', sourceId: 'run', conversationId: 'chat', conversationTitle: 'My preferences', status: 'completed', dreamChanges: [{ tool: 'memory_append', output: 'Updated preferences.md' }] }] })
     expect(response.json().items[0].description).toContain('2 message excerpts reviewed')
     expect((await app.inject('/api/activity?types=memory')).json().items).toEqual([])
 })
