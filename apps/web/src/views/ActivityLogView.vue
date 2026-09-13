@@ -916,10 +916,16 @@ watch(searchQuery, () => {
                 v-if="item.kind === 'dream' && item.conversationTitle"
                 class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-theme-500"
               >
-                <Icon icon="lucide:message-square" class="h-3 w-3 shrink-0" />
+                <Icon
+                  icon="lucide:message-square"
+                  class="h-3 w-3 shrink-0"
+                />
                 <span class="truncate">{{ item.conversationTitle }}</span>
                 <span aria-hidden="true">·</span>
-                <time :datetime="new Date(item.createdAt).toISOString()" class="shrink-0 tabular-nums">
+                <time
+                  :datetime="new Date(item.createdAt).toISOString()"
+                  class="shrink-0 tabular-nums"
+                >
                   {{ formatTimestamp(item.createdAt) }}
                 </time>
               </p>
@@ -1206,9 +1212,9 @@ article.cursor-pointer:hover .activity-card {
 
 /* Pink */
 .activity-dream {
-  --activity-color: #f472b6;
-  --activity-bg: color-mix(in srgb, #f472b6 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f472b6 38%, var(--color-theme-800));
+  --activity-color: #f4c072;
+  --activity-bg: color-mix(in srgb, #f4c072 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f4c772 38%, var(--color-theme-800));
 }
 
 /* Sky blue */
