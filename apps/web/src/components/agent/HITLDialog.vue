@@ -88,7 +88,7 @@ function toggleExpand(index: number): void {
 <template>
   <div
     v-if="agentStore.pendingHITL && (!agentStore.pendingHITL.conversationId || agentStore.pendingHITL.conversationId === chatStore.activeConversationId)"
-    class="flex gap-4 px-4 py-3 justify-start"
+    class="hitl-request flex gap-4 px-4 py-3 justify-start"
   >
     <div class="relative shrink-0 mt-1">
       <div class="relative w-8 h-8 rounded-full flex items-center justify-center bg-amber-500/20 text-amber-500 border border-amber-500/30 shadow-sm">
@@ -96,9 +96,16 @@ function toggleExpand(index: number): void {
       </div>
     </div>
 
-    <div class="w-full max-w-[85%] rounded-xl border border-amber-500/30 bg-theme-800 shadow-lg shadow-black/20 overflow-hidden flex flex-col">
-      <div class="flex items-center justify-between px-4 py-2.5 bg-amber-500/5 border-b border-theme-700/50">
-        <span class="text-sm font-semibold text-amber-500 tracking-wide uppercase text-[11px]">Action Required</span>
+    <div class="hitl-card w-full max-w-[92%] rounded-xl border border-amber-500/30 bg-theme-800 shadow-lg shadow-black/20 overflow-hidden flex flex-col">
+      <div class="hitl-card-header flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/5 border-b border-theme-700/50">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-amber-500 tracking-wide uppercase text-[11px]">
+            Action Required
+          </div>
+          <p class="hitl-card-description mt-0.5 text-xs text-theme-500">
+            Review the requested tool actions before allowing them to run.
+          </p>
+        </div>
         <div class="flex items-center gap-2">
           <span
             v-if="agentStore.activeHITLQueue.length > 1"
@@ -113,15 +120,18 @@ function toggleExpand(index: number): void {
         </div>
       </div>
 
-      <div class="px-4 py-3 space-y-3">
+      <div class="hitl-card-body px-4 py-3 space-y-3">
         <div
           v-for="(tc, i) in agentStore.pendingHITL.toolCalls"
           :key="i"
           class="flex flex-col gap-1.5"
         >
           <div class="flex items-center justify-between">
-            <span class="rounded-md bg-accent-500/10 border border-accent-500/20 px-2 py-0.5 text-[11px] text-accent-400 font-mono font-medium">
-              <span class="text-accent-500/50 mr-1">ƒ</span>{{ tc.name }}
+            <span class="hitl-tool-name inline-flex items-center gap-1.5 rounded-md bg-accent-500/10 border border-accent-500/20 px-2 py-0.5 text-[11px] text-accent-400 font-mono font-medium">
+              <Icon
+                icon="lucide:wrench"
+                class="h-3 w-3 text-accent-500/70"
+              />{{ tc.name }}
             </span>
             <button
               v-if="formatArgs(tc.arguments).length > 250"
@@ -134,7 +144,7 @@ function toggleExpand(index: number): void {
           
           <pre
             v-if="tc.arguments"
-            class="mt-0.5 text-[11px] text-theme-300 whitespace-pre-wrap break-all bg-theme-950/50 border border-theme-700/50 rounded-lg p-2.5 overflow-x-auto max-h-40 overflow-y-auto shadow-inner font-mono leading-relaxed custom-scrollbar"
+            class="hitl-arguments mt-0.5 text-[11px] text-theme-300 whitespace-pre-wrap break-all bg-theme-950/50 border border-theme-700/50 rounded-lg p-2.5 overflow-x-auto max-h-40 overflow-y-auto shadow-inner font-mono leading-relaxed custom-scrollbar"
           >{{ expandedArgs.has(i) ? formatArgs(tc.arguments) : truncateArgs(tc.arguments) }}</pre>
         </div>
       </div>
@@ -156,7 +166,7 @@ function toggleExpand(index: number): void {
         </div>
       </Transition>
 
-      <div class="flex items-center justify-end gap-2 px-4 py-2.5 border-t border-theme-700/50 bg-theme-800/80">
+      <div class="hitl-card-footer flex items-center justify-end gap-2 px-4 py-2.5 border-t border-theme-700/50 bg-theme-800/80">
         <button
           v-if="showReasonInput"
           class="rounded-lg px-3 py-1.5 text-xs font-medium text-theme-400 hover:text-theme-100 hover:bg-theme-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-theme-500"

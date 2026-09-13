@@ -66,7 +66,7 @@ async function newChat(): Promise<void> {
 
 <template>
   <div
-    class="shrink-0 border-b border-theme-800/60 px-3 py-2 flex items-center gap-2"
+    class="chat-header-bar shrink-0 border-b border-theme-800/60 px-3 py-2 flex items-center gap-2"
   >
     <!-- Agent selector -->
     <div class="sm:w-44 md:w-64 shrink-0">
