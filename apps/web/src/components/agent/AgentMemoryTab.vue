@@ -17,10 +17,13 @@ const spacesLoading = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
 
 const assignedIds = computed(() => new Set(props.agent.memoryCategories ?? []))
+const rootCategory = computed(() => allSpaces.value.find(space => space.isUncategorized))
+const rootSelected = computed(() => Boolean(rootCategory.value && assignedIds.value.has(rootCategory.value.id)))
 
 const assignedCategories = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
 )
+const effectiveAssignedCount = computed(() => rootSelected.value ? allSpaces.value.length : assignedCategories.value.length)
 
 const visibleSpaces = computed(() =>
   allSpaces.value.filter((space) => {
@@ -72,7 +75,13 @@ function toggleSpace(categoryId: string) {
   const current = new Set(props.agent.memoryCategories ?? [])
   const scopedIds = memoryCategoryScopeIds(space)
 
-  if (current.has(categoryId)) {
+  if (space.isUncategorized) {
+    current.clear()
+    if (!rootSelected.value) current.add(space.id)
+  } else if (rootSelected.value) {
+    current.clear()
+    for (const id of scopedIds) current.add(id)
+  } else if (current.has(categoryId)) {
     for (const id of scopedIds) current.delete(id)
   } else {
     for (const id of scopedIds) current.add(id)
@@ -82,7 +91,16 @@ function toggleSpace(categoryId: string) {
 }
 
 function selectAll() {
-  emit('update', 'memoryCategories', allSpaces.value.map((space) => space.id))
+  emit('update', 'memoryCategories', rootCategory.value ? [rootCategory.value.id] : allSpaces.value.map(space => space.id))
+}
+
+function isSelected(space: MemoryCategory): boolean {
+  return rootSelected.value || assignedIds.value.has(space.id)
+}
+
+function categoryDepth(space: MemoryCategory): number {
+  if (space.isUncategorized) return 0
+  return Math.max(1, (space.categoryPath || '').split('/').filter(Boolean).length)
 }
 
 function deselectAll() {
@@ -201,11 +219,11 @@ onMounted(() => loadCategories())
         class="mb-2 flex items-center justify-between text-xs"
       >
         <span class="text-theme-500">
-          {{ assignedCategories.length === allSpaces.length ? 'All categories selected' : `${assignedCategories.length}/${allSpaces.length} selected` }}
+          {{ effectiveAssignedCount === allSpaces.length ? 'All memory selected' : `${effectiveAssignedCount}/${allSpaces.length} selected` }}
         </span>
         <div class="flex items-center gap-3">
           <button
-            v-if="assignedCategories.length < allSpaces.length"
+            v-if="effectiveAssignedCount < allSpaces.length"
             class="text-accent-400 hover:text-accent-300 transition-colors"
             @click="selectAll"
           >
@@ -253,7 +271,8 @@ onMounted(() => loadCategories())
             v-for="space in visibleSpaces"
             :key="space.id"
             class="flex items-center gap-2 w-full px-3 py-2.5 border-b border-theme-800 last:border-0 cursor-pointer transition-colors"
-            :class="assignedIds.has(space.id)
+            :data-category-depth="categoryDepth(space)"
+            :class="isSelected(space)
               ? 'bg-accent-600/10 hover:bg-accent-600/15'
               : isPartiallySelected(space)
                 ? 'bg-accent-600/8 hover:bg-accent-600/12'
@@ -262,9 +281,10 @@ onMounted(() => loadCategories())
           >
             <!-- Indent spacer -->
             <span
-              v-if="(space.depth || 0) > 0"
-              :style="{ width: `${(space.depth || 0) * 8}px` }"
-              class="shrink-0"
+              v-if="categoryDepth(space) > 0"
+              :style="{ width: `${categoryDepth(space) * 12}px` }"
+              class="shrink-0 self-stretch border-r border-theme-700/60"
+              aria-hidden="true"
             />
             <!-- Chevron: always rendered to keep all rows aligned -->
             <button
@@ -282,19 +302,19 @@ onMounted(() => loadCategories())
               <Icon
                 :icon="space.isUncategorized ? 'lucide:hard-drive' : 'lucide:folder'"
                 class="w-3.5 h-3.5"
-                :class="assignedIds.has(space.id) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
+                :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
               />
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-theme-200 truncate">
-                {{ space.name }}
+                {{ space.isUncategorized ? 'All Memory' : space.name }}
               </div>
               <div class="text-[11px] text-theme-500">
-                {{ space.fileCount }} doc{{ space.fileCount !== 1 ? 's' : '' }}
+                {{ space.isUncategorized ? 'Includes Uncategorized and every subcategory' : `${space.fileCount} doc${space.fileCount !== 1 ? 's' : ''}` }}
               </div>
             </div>
             <Icon
-              v-if="assignedIds.has(space.id) && !isPartiallySelected(space)"
+              v-if="isSelected(space) && !isPartiallySelected(space)"
               icon="mdi:check-circle"
               class="w-4 h-4 text-accent-400 shrink-0"
             />

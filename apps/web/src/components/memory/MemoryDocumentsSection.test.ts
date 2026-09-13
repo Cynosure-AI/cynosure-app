@@ -67,6 +67,17 @@ function mountSection() {
 }
 
 describe('MemoryDocumentsSection drag targets', () => {
+  test('presents Uncategorized as the root and indents physical categories beneath it', () => {
+    const wrapper = mountSection()
+    const root = wrapper.get('[data-space-id="uncategorized"]')
+    const archive = wrapper.get('[data-space-id="archive"]')
+
+    expect(root.attributes('data-category-depth')).toBe('0')
+    expect(root.text()).toContain('Root')
+    expect(archive.attributes('data-category-depth')).toBe('1')
+    expect(archive.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
+  })
+
   test('shows the upload treatment only for file drags over the document pane', async () => {
     const wrapper = mountSection()
     const dropZone = wrapper.get('[data-testid="memory-document-drop-zone"]')

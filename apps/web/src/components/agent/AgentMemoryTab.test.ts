@@ -70,14 +70,21 @@ describe('AgentMemoryTab', () => {
     ])
   })
 
-  test('offers deselect all when only one folder is selected', async () => {
+  test('presents the root grant as All Memory and selects its indented descendants', async () => {
     const wrapper = mount(AgentMemoryTab, { props: { agent } })
     await flushPromises()
 
     const actions = wrapper.findAll('button')
     const deselectAll = actions.find(button => button.text().trim() === 'Deselect all')
-    expect(actions.some(button => button.text().trim() === 'Select all')).toBe(true)
+    expect(wrapper.text()).toContain('All Memory')
+    expect(wrapper.text()).toContain('Includes Uncategorized and every subcategory')
+    expect(wrapper.text()).toContain('All memory selected')
+    expect(actions.some(button => button.text().trim() === 'Select all')).toBe(false)
     expect(deselectAll).toBeDefined()
+
+    const research = wrapper.get('[data-category-depth="1"]')
+    expect(research.classes()).toContain('bg-accent-600/10')
+    expect(research.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
 
     await deselectAll!.trigger('click')
     expect(wrapper.emitted('update')).toContainEqual(['memoryCategories', []])

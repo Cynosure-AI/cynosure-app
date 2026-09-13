@@ -61,6 +61,11 @@ function hasChildren(space: MemoryCategory): boolean {
   );
 }
 
+function categoryDepth(space: MemoryCategory): number {
+  if (space.isUncategorized) return 0;
+  return Math.max(1, (space.categoryPath || "").split("/").filter(Boolean).length);
+}
+
 function isCollapsed(space: MemoryCategory): boolean {
   return collapsedFolders.value.has(space.categoryPath || "");
 }
@@ -216,6 +221,7 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
             v-for="space in visibleSpaces"
             :key="space.id"
             :data-space-id="space.id"
+            :data-category-depth="categoryDepth(space)"
             class="group flex items-center gap-2 px-3 py-2.5 border-b border-theme-900/70 last:border-b-0 transition-colors"
             :class="[
               selectedCategoryId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
@@ -226,11 +232,12 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
             @dragover.stop="onDragOver($event, space.id)"
             @drop.stop="onFolderDrop($event, space.id)"
           >
-            <!-- Indent spacer, change this to adjust starting padding -->
+            <!-- Uncategorized is the root; every physical category is shown beneath it. -->
             <span
-              v-if="(space.depth || 0) > 1"
-              :style="{ width: `${((space.depth || 0) * 12)}px` }"
-              class="shrink-0"
+              v-if="categoryDepth(space) > 0"
+              :style="{ width: `${categoryDepth(space) * 12}px` }"
+              class="relative shrink-0 self-stretch border-r border-theme-800/60"
+              aria-hidden="true"
             />
             <!-- Chevron: always rendered to keep all rows aligned -->
             <button
@@ -260,7 +267,15 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
                 class="w-4 h-4 shrink-0"
                 :class="space.isUncategorized ? 'text-accent-400' : 'text-amber-400'"
               />
-              <span class="truncate text-sm font-medium">{{ space.name }}</span>
+              <span
+                class="truncate text-sm font-medium"
+                :title="space.isUncategorized ? 'Memory root — granting this category includes every descendant category' : space.categoryPath"
+              >{{ space.name }}</span>
+              <span
+                v-if="space.isUncategorized"
+                class="rounded bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-400"
+                title="Category grants made at the root include all current and future descendants"
+              >Root</span>
               <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
             </button>
             <!-- Action buttons -->
