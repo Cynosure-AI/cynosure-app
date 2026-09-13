@@ -381,7 +381,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 </script>
 
 <template>
-  <div class="min-w-0">
+  <div class="memory-document-list min-w-0">
     <!-- Folder header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">

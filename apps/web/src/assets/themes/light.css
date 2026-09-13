@@ -207,6 +207,35 @@
   border-color: #dce4ee;
 }
 
+/* Metadata chips and state labels need more ink than their dark-theme colors provide. */
+[data-theme="light"] .memory-document-list [class*="border-green-500"] {
+  background: #edf9f1;
+  border-color: #b9dfc5;
+}
+
+[data-theme="light"] .memory-document-list .text-green-400,
+[data-theme="light"] .memory-document-list .text-green-500 {
+  color: #15783a;
+}
+
+[data-theme="light"] .memory-document-list [class*="border-theme-700"][class*="text-theme-400"] {
+  background: #f6f8fc;
+  border-color: #c8d4e3;
+  color: #344b68;
+}
+
+[data-theme="light"] .artifact-filter-button[aria-pressed="true"] {
+  background: #e7f0ff;
+  border-color: #8db8fa;
+  color: #174f9e;
+  box-shadow: 0 3px 10px rgba(34, 101, 220, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="light"] .artifact-filter-button[aria-pressed="true"] > span {
+  background: #cbdcf5;
+  color: #29496f;
+}
+
 [data-theme="light"] ::selection { background: rgba(51, 127, 240, 0.2); color: var(--color-theme-100); }
 [data-theme="light"] .msg-markdown a { color: #2265dc; text-decoration-color: rgba(34, 101, 220, 0.3); }
 [data-theme="light"] .msg-markdown strong { color: #111d2e; }

@@ -40,6 +40,10 @@ describe('ThinkingModeButton', () => {
     await wrapper.get('button').trigger('click')
     const slider = document.body.querySelector<HTMLInputElement>('input[type="range"]')
     expect(slider).not.toBeNull()
+    const dots = document.body.querySelectorAll('.reasoning-slider__dot')
+    expect(dots[0]?.classList.contains('reasoning-slider__dot--endpoint')).toBe(true)
+    expect(dots[dots.length - 1]?.classList.contains('reasoning-slider__dot--endpoint')).toBe(true)
+    expect(dots[1]?.classList.contains('reasoning-slider__dot--endpoint')).toBe(false)
 
     await new DOMWrapper(slider!).setValue('0')
     expect(chatStore.sessionThinkingEnabled).toBe(false)
