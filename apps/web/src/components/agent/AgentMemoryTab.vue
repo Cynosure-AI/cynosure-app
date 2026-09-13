@@ -146,6 +146,33 @@ onMounted(() => loadCategories())
 
 <template>
   <div class="space-y-4">
+    <!-- Dreaming eligibility -->
+    <BaseCard class="p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <Icon
+              icon="lucide:moon-star"
+              class="w-4 h-4 text-accent-400"
+            />
+            <h3 class="text-sm font-medium text-theme-200">
+              Dreaming
+            </h3>
+          </div>
+          <p class="text-xs text-theme-500 leading-relaxed">
+            Allow conversations with this agent to be reviewed by Dream Mode after they become inactive. Disabled by default.
+          </p>
+        </div>
+        <ToggleSwitch
+          :model-value="agent.dreamingEnabled === true"
+          label="Allow Dreaming for this agent"
+          color="accent"
+          class="mt-0.5"
+          @update:model-value="emit('update', 'dreamingEnabled', $event)"
+        />
+      </div>
+    </BaseCard>
+
     <!-- Automatic Memory Retrieval -->
     <BaseCard class="p-5">
       <div class="flex items-start justify-between gap-4">

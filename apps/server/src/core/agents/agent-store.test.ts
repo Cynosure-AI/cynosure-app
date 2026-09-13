@@ -18,13 +18,13 @@ afterEach(async () => {
 
 test('new and legacy agents default to the agent model', () => {
     const agent = createAgent({ name: 'Default' })
-    expect(agent).toMatchObject({ autoRouterProviderId: '__agent_provider__', autoRouterModel: '__agent_model__' })
+    expect(agent).toMatchObject({ autoRouterProviderId: '__agent_provider__', autoRouterModel: '__agent_model__', dreamingEnabled: false })
     getDb().prepare("UPDATE agents SET auto_router_provider_id = '', auto_router_model = '' WHERE id = ?").run(agent.id)
     expect(getAgent(agent.id)).toMatchObject({ autoRouterProviderId: '__agent_provider__', autoRouterModel: '__agent_model__' })
 })
 
 test('creation and duplication retain explicit agent router overrides', () => {
-    const agent = createAgent({ name: 'Custom', autoRouterProviderId: 'custom', autoRouterModel: 'custom-model' })
-    expect(agent).toMatchObject({ autoRouterProviderId: 'custom', autoRouterModel: 'custom-model' })
-    expect(duplicateAgent(agent.id)).toMatchObject({ autoRouterProviderId: 'custom', autoRouterModel: 'custom-model' })
+    const agent = createAgent({ name: 'Custom', autoRouterProviderId: 'custom', autoRouterModel: 'custom-model', dreamingEnabled: true })
+    expect(agent).toMatchObject({ autoRouterProviderId: 'custom', autoRouterModel: 'custom-model', dreamingEnabled: true })
+    expect(duplicateAgent(agent.id)).toMatchObject({ autoRouterProviderId: 'custom', autoRouterModel: 'custom-model', dreamingEnabled: true })
 })

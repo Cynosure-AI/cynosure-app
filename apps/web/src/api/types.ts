@@ -258,6 +258,7 @@ export interface AgentDefinition {
     autoApproveTools: boolean
     autoToolRouting: boolean
     autoMemory: boolean
+    dreamingEnabled: boolean
     autoRouterProviderId: string
     autoRouterModel: string
     generateTitle: boolean

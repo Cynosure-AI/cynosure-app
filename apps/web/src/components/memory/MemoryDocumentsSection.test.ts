@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import type { MemoryCategory } from '../../api/types'
 import MemoryDocumentsSection from './MemoryDocumentsSection.vue'
 
@@ -52,10 +52,10 @@ function dragEvent(type: string, types: string[]): DragEvent {
   return event
 }
 
-function mountSection() {
+function mountSection(memorySpaces = spaces) {
   return mount(MemoryDocumentsSection, {
     props: {
-      spaces,
+      spaces: memorySpaces,
       spacesLoading: false,
       selectedCategoryId: 'uncategorized',
       selectedCategory: spaces[0],
@@ -67,6 +67,25 @@ function mountSection() {
 }
 
 describe('MemoryDocumentsSection drag targets', () => {
+  beforeEach(() => sessionStorage.clear())
+
+  test('collapses document folders initially and restores opened folders during the session', async () => {
+    const nestedSpaces: MemoryCategory[] = [
+      ...spaces,
+      { ...spaces[1], id: 'projects', name: 'Projects', categoryPath: 'projects', directoryPath: '/memory/projects' },
+      { ...spaces[1], id: 'acme', name: 'Acme', categoryPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
+    ]
+    const first = mountSection(nestedSpaces)
+    expect(first.find('[data-space-id="acme"]').exists()).toBe(false)
+
+    await first.get('[aria-label="Expand Projects"]').trigger('click')
+    expect(first.find('[data-space-id="acme"]').exists()).toBe(true)
+    first.unmount()
+
+    const restored = mountSection(nestedSpaces)
+    expect(restored.find('[data-space-id="acme"]').exists()).toBe(true)
+  })
+
   test('presents Uncategorized as the root and indents physical categories beneath it', () => {
     const wrapper = mountSection()
     const root = wrapper.get('[data-space-id="uncategorized"]')

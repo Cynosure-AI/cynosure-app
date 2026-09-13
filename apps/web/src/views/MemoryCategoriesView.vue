@@ -312,6 +312,12 @@ async function saveFolder() {
 }
 
 function confirmDeleteSpace(space: MemoryCategory) {
+  const prefix = space.categoryPath ? `${space.categoryPath}/` : "";
+  const hasSubfolders = Boolean(prefix && spaces.value.some(candidate => candidate.categoryPath?.startsWith(prefix)));
+  if (space.fileCount === 0 && !hasSubfolders) {
+    void deleteSpace(space);
+    return;
+  }
   pendingDeleteCategory.value = space;
   showDeleteConfirm.value = true;
 }

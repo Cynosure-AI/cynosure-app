@@ -7,6 +7,7 @@ import {
   AGENT_MEMORY_FOLDER_NAME,
   ensureMemoryCategoryPath,
   isIgnoredMemoryFolderName,
+  removeEmptyMemoryCategoryFolders,
   syncMemoryCategoriesFromFolders,
   validateRelativePath,
 } from './memory-category-directories.js'
@@ -75,5 +76,18 @@ describe('memory category directories', () => {
     expect(Number(db.prepare('SELECT COUNT(*) FROM memory_categories').pluck().get())).toBe(before)
     expect(existsSync(join(memoryRoot, 'Valid'))).toBe(true)
     db.close()
+  })
+
+  test('removes an empty category branch without removing a non-empty ancestor', () => {
+    const memoryRoot = join(dataDir, 'data', 'memories')
+    const branch = join(memoryRoot, 'Projects', 'Finished', 'Notes')
+    mkdirSync(branch, { recursive: true })
+    writeFileSync(join(memoryRoot, 'Projects', 'keep.md'), 'keep')
+
+    removeEmptyMemoryCategoryFolders(branch)
+
+    expect(existsSync(branch)).toBe(false)
+    expect(existsSync(join(memoryRoot, 'Projects', 'Finished'))).toBe(false)
+    expect(existsSync(join(memoryRoot, 'Projects'))).toBe(true)
   })
 })

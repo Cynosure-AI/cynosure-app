@@ -80,22 +80,24 @@ const createDreamSettings = () => mount(MemorySettings, {
 })
 
 describe('Dream settings', () => {
-  test('shows experimental opt-in and requires a model before enabling', async () => {
+  test('shows opt-in, requires a model before enabling, and marks edits unsaved', async () => {
     const wrapper = createDreamSettings()
     await flushPromises()
     expect(wrapper.text()).toContain('Building Knowledge')
     expect(wrapper.text()).toContain('Dream Mode')
-    expect(wrapper.text()).toContain('Experimental')
+    expect(wrapper.text()).not.toContain('Experimental')
     expect(wrapper.text()).toContain('provider costs')
     const toggle = wrapper.get('[role="switch"]')
     expect(toggle.attributes('aria-checked')).toBe('false')
     expect(toggle.attributes('disabled')).toBeDefined()
     wrapper.getComponent(ProviderModelSelect).vm.$emit('change', { providerId: 'provider', model: 'model' })
     await flushPromises()
+    expect(wrapper.text()).toContain('Unsaved changes')
     await toggle.trigger('click')
     await wrapper.findAll('button').find(button => button.text() === 'Save Dream Config')!.trigger('click')
     await flushPromises()
     expect(mocks.configureDream).toHaveBeenCalledWith({ enabled: true, providerId: 'provider', model: 'model' })
+    expect(wrapper.text()).not.toContain('Unsaved changes')
     wrapper.unmount()
   })
   test('loads persisted configuration and displays a failed save', async () => {
@@ -104,6 +106,8 @@ describe('Dream settings', () => {
     const wrapper = createDreamSettings()
     await flushPromises()
     expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+    wrapper.getComponent(ProviderModelSelect).vm.$emit('change', { providerId: 'provider', model: 'other-model' })
+    await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === 'Save Dream Config')!.trigger('click')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toBe('Provider unavailable')

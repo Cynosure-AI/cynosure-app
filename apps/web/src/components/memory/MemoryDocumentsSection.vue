@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
 import type { MemoryCategory } from "../../api/types";
@@ -29,7 +29,8 @@ const emit = defineEmits<{
 }>();
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
-const collapsedFolders = ref<Set<string>>(readCollapsedFolders());
+const collapsedFolders = ref<Set<string>>(new Set());
+let folderStateInitialized = false;
 const dragCounter = ref(0);
 const dropTargetSpaceId = ref<string | null>(null);
 
@@ -70,16 +71,27 @@ function isCollapsed(space: MemoryCategory): boolean {
   return collapsedFolders.value.has(space.categoryPath || "");
 }
 
-function readCollapsedFolders(): Set<string> {
+function initializeFolderState(spaces: MemoryCategory[]): void {
+  if (folderStateInitialized) return;
   try {
     const raw = sessionStorage.getItem(COLLAPSED_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed)
-      ? new Set(parsed.filter((value): value is string => typeof value === "string"))
-      : new Set();
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      collapsedFolders.value = Array.isArray(parsed)
+        ? new Set(parsed.filter((value): value is string => typeof value === "string"))
+        : new Set();
+      folderStateInitialized = true;
+      return;
+    }
   } catch {
-    return new Set();
+    /* fall back to the default collapsed state */
   }
+  if (spaces.length === 0) return;
+  collapsedFolders.value = new Set(spaces
+    .filter(space => hasChildren(space) && !space.isUncategorized)
+    .map(space => space.categoryPath || ""));
+  folderStateInitialized = true;
+  writeCollapsedFolders();
 }
 
 function writeCollapsedFolders(): void {
@@ -98,6 +110,8 @@ function toggleFolder(space: MemoryCategory) {
   collapsedFolders.value = next;
   writeCollapsedFolders();
 }
+
+watch(() => props.spaces, initializeFolderState, { immediate: true });
 
 function selectSpace(categoryId: string) {
   emit("update:selectedCategoryId", categoryId);

@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, type Dirent } from 'fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, type Dirent } from 'fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import { nanoid } from 'nanoid'
 import { getMemoryCategoriesRootDir } from '../data-dir.js'
@@ -296,9 +296,23 @@ export function removeFolderIfEmpty(directoryPath: string): void {
         const root = resolve(memoryRootDir())
         const target = resolve(directoryPath)
         if (target === root || !target.startsWith(root + sep)) return
-        rmSync(target, { recursive: false })
+        rmdirSync(target)
     } catch {
         /* keep non-empty folders */
+    }
+}
+
+/** Remove an empty category folder and any newly empty category ancestors. */
+export function removeEmptyMemoryCategoryFolders(directoryPath: string): void {
+    const root = resolve(memoryRootDir())
+    let target = resolve(directoryPath)
+    while (target !== root && target.startsWith(root + sep)) {
+        try {
+            rmdirSync(target)
+        } catch {
+            break
+        }
+        target = dirname(target)
     }
 }
 

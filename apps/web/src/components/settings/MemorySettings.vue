@@ -38,6 +38,8 @@ const dreamModel = ref('')
 const dreamSaving = ref(false)
 const dreamLoaded = ref(false)
 const dreamError = ref('')
+const savedDream = ref({ enabled: false, providerId: '', model: '' })
+const dreamStatus = ref<SettingsPersistenceState>('idle')
 
 async function loadDreamConfig() {
   try {
@@ -45,6 +47,7 @@ async function loadDreamConfig() {
     dreamEnabled.value = config.enabled
     dreamProviderId.value = config.providerId
     dreamModel.value = config.model
+    savedDream.value = { enabled: config.enabled, providerId: config.providerId, model: config.model }
     dreamLoaded.value = true
   } catch (error) {
     dreamError.value = error instanceof Error ? error.message : 'Could not load Dream settings.'
@@ -52,14 +55,18 @@ async function loadDreamConfig() {
 }
 async function saveDream() {
   dreamSaving.value = true
+  dreamStatus.value = 'saving'
   dreamError.value = ''
   try {
     const config = await api.memory.configureDream({ enabled: dreamEnabled.value, providerId: dreamProviderId.value, model: dreamModel.value })
     dreamEnabled.value = config.enabled
     dreamProviderId.value = config.providerId
     dreamModel.value = config.model
+    savedDream.value = { enabled: config.enabled, providerId: config.providerId, model: config.model }
+    dreamStatus.value = 'saved'
   } catch (error) {
     dreamError.value = error instanceof Error ? error.message : 'Could not save Dream settings.'
+    dreamStatus.value = 'error'
   } finally {
     dreamSaving.value = false
   }
@@ -111,7 +118,12 @@ const rerankDirty = computed(() =>
   rerankModel.value !== savedReranker.value.model ||
   rerankCandidateCount.value !== savedReranker.value.candidateCount
 )
-const manualDirty = computed(() => embDirty.value || chunkDirty.value || rerankDirty.value)
+const dreamDirty = computed(() => dreamLoaded.value && (
+  dreamEnabled.value !== savedDream.value.enabled ||
+  dreamProviderId.value !== savedDream.value.providerId ||
+  dreamModel.value !== savedDream.value.model
+))
+const manualDirty = computed(() => embDirty.value || chunkDirty.value || rerankDirty.value || dreamDirty.value)
 
 watch(manualDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
@@ -645,10 +657,9 @@ function cancelDrop() {
               class="w-5 h-5"
             />
             Dream Mode
-            <span class="text-[10px] rounded px-2 py-0.5 bg-amber-400/10 text-amber-400">Experimental</span>
           </h3>
           <p class="text-xs text-gray-500 mt-1">
-            Automatically reviews new chat and channel activity to learn useful facts and update memory.
+            Automatically reviews new Free Chat activity and conversations from agents that explicitly allow Dreaming to learn useful facts and update memory.
             Checks every minute after a conversation has been inactive for 5 minutes, while the server is running.
             Uses model requests and may incur provider costs. Existing history is used only as context.
           </p>
@@ -674,13 +685,19 @@ function cancelDrop() {
       >
         {{ dreamError }}
       </p>
-      <button
-        :disabled="!dreamLoaded || dreamSaving || (dreamEnabled && (!dreamProviderId || !dreamModel))"
-        class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
-        @click="saveDream"
-      >
-        {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
-      </button>
+      <div class="flex items-center justify-between gap-3">
+        <SettingsPersistenceStatus
+          mode="manual"
+          :state="dreamStatus === 'error' ? 'error' : dreamSaving ? 'saving' : dreamDirty ? 'dirty' : dreamStatus"
+        />
+        <button
+          :disabled="!dreamLoaded || dreamSaving || !dreamDirty || (dreamEnabled && (!dreamProviderId || !dreamModel))"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
+          @click="saveDream"
+        >
+          {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
+        </button>
+      </div>
     </BaseCard>
     
     <SettingsSubheading

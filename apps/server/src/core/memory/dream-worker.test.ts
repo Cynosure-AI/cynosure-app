@@ -30,7 +30,7 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
 })
 import { closeDb, getDb } from '../../db/database.js'
 import { getDreamConfig, saveDreamConfig, listDreamRuns, buildDreamBatch, type DreamInput } from './dream-store.js'
-import { startDreamWorker, sweepDream, settleDreamWork, settleDreamRun, cancelDreamRun, cancelAllDreamRuns, invalidateDreamConversation, DREAM_IDLE_MS, DREAM_SWEEP_MS, DREAM_RETRY_BASE_MS, resolveDreamCategories } from './dream-worker.js'
+import { startDreamWorker, sweepDream, settleDreamWork, settleDreamRun, cancelDreamRun, cancelAllDreamRuns, invalidateDreamConversation, DREAM_IDLE_MS, DREAM_SWEEP_MS, DREAM_RETRY_BASE_MS, resolveDreamCategories, isDreamEligibleConversation } from './dream-worker.js'
 
 let directory: string
 let stop: (() => Promise<void>) | undefined
@@ -156,17 +156,26 @@ describe('Dream worker', () => {
         expect(reviewInput.earlierContext).toContain('old')
         expect(input.context).toBe('')
     })
-    test('skips active and scheduled conversations, includes channels, and ignores auto-memory eligibility', async () => {
+    test('skips active, scheduled, and opted-out agent conversations while including Free Chat and opted-in channels', async () => {
         enable()
-        for (const id of ['active', 'disabled', 'empty', 'cron', 'channel']) {
-            conversation(id, id === 'disabled' ? { autoMemory: false } : id === 'empty' ? { memoryCategoryIds: [] } : {}, id === 'cron' ? 'cron' : id === 'channel' ? 'channel' : 'chat')
+        mocks.agent.mockImplementation((id: string) => id === 'dreaming-agent' ? { dreamingEnabled: true } : { dreamingEnabled: false })
+        for (const id of ['active', 'free-chat', 'opted-out-agent', 'cron', 'channel']) {
+            const agentId = id === 'opted-out-agent' ? 'ordinary-agent' : id === 'channel' ? 'dreaming-agent' : null
+            conversation(id, {}, id === 'cron' ? 'cron' : id === 'channel' ? 'channel' : 'chat', agentId)
             message(`${id}-m`, id)
         }
         mocks.active = ['active']
         vi.setSystemTime(Date.now() + DREAM_IDLE_MS)
         stop = startDreamWorker(broadcast)
         await settleDreamWork()
-        expect(listDreamRuns().map(run => run.conversation_id).sort()).toEqual(['channel', 'disabled', 'empty'])
+        expect(listDreamRuns().map(run => run.conversation_id).sort()).toEqual(['channel', 'free-chat'])
+    })
+    test('treats Free Chat as eligible and requires explicit agent opt-in', () => {
+        mocks.agent.mockImplementation((id: string) => id === 'enabled' ? { dreamingEnabled: true } : { dreamingEnabled: false })
+        expect(isDreamEligibleConversation({ agent_id: null })).toBe(true)
+        expect(isDreamEligibleConversation({ agent_id: 'enabled' })).toBe(true)
+        expect(isDreamEligibleConversation({ agent_id: 'disabled' })).toBe(false)
+        expect(isDreamEligibleConversation({ agent_id: 'missing' })).toBe(false)
     })
     test('resolves Dream categories from conversation overrides, agent assignments, then Uncategorized', () => {
         mkdirSync(join(directory, 'data', 'memories', 'Assigned'), { recursive: true })

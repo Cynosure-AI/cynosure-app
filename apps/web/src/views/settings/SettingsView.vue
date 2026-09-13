@@ -175,9 +175,9 @@ const sections: SettingsSection[] = [
   {
     id: 'dream-mode',
     categoryId: 'memory',
-    label: 'Dream Mode (Experimental)',
-    description: 'Automatically review conversations to learn and update memory in the background.',
-    terms: ['dream', 'dreaming', 'experimental', 'background', 'learn', 'remember', 'conversations']
+    label: 'Dream Mode',
+    description: 'Review Free Chat and opted-in agent conversations to learn and update memory in the background.',
+    terms: ['dream', 'dreaming', 'background', 'learn', 'remember', 'conversations']
   },
   {
     id: 'deep-research',

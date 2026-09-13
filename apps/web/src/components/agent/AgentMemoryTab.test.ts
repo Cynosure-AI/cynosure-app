@@ -51,9 +51,20 @@ const agent = {
   internalName: 'research_agent',
   memoryCategories: ['uncategorized'],
   autoMemory: false,
+  dreamingEnabled: false,
 } as AgentDefinition
 
 describe('AgentMemoryTab', () => {
+  test('Dreaming is opt-in per agent', async () => {
+    const wrapper = mount(AgentMemoryTab, { props: { agent } })
+    await flushPromises()
+
+    const dreamingToggle = wrapper.findAll('[role="switch"]')[0]
+    expect(dreamingToggle.attributes('aria-checked')).toBe('false')
+    await dreamingToggle.trigger('click')
+    expect(wrapper.emitted('update')).toContainEqual(['dreamingEnabled', true])
+  })
+
   beforeEach(() => {
     mocks.listSpaces.mockReset().mockResolvedValue(spaces)
     mocks.push.mockReset()
@@ -65,6 +76,7 @@ describe('AgentMemoryTab', () => {
 
     const cardTitles = wrapper.findAll('h3').map(title => title.text())
     expect(cardTitles).toEqual([
+      'Dreaming',
       'Automatic memory retrieval',
       'Memory Categories',
     ])

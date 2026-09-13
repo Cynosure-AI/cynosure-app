@@ -11,6 +11,7 @@ import { resolveMemoryCategoryOverrides } from '../chat/run-config.js'
 import { makeMemoryListDocumentsTool, makeMemoryRetrieveChunksTool, makeMemorySearchTool, makeMemoryCreateTool, makeMemoryUpdateTool, makeMemoryDeleteTool } from '../tools/builtin/memory-tools.js'
 import { buildDreamBatch, getDreamConfig, getDreamRun, type DreamInput, type DreamRun, type DreamChange } from './dream-store.js'
 import { recordAuxiliaryModelUsage } from '../usage-metering.js'
+import { getAgent } from '../agents/agent-store.js'
 
 export const DREAM_SWEEP_MS = 60_000
 export const DREAM_IDLE_MS = 5 * 60_000
@@ -41,6 +42,10 @@ export function resolveDreamCategories(conversation: Conversation): MemoryCatego
     }
     const fallback = getDefaultMemoryCategory()
     return fallback ? expandMemoryCategoryScope([fallback]) : []
+}
+export function isDreamEligibleConversation(conversation: Pick<Conversation, 'agent_id'>): boolean {
+    if (!conversation.agent_id) return true
+    return getAgent(conversation.agent_id)?.dreamingEnabled === true
 }
 function emit(runId: string): void {
     const run = getDreamRun(runId)
@@ -147,7 +152,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, categori
         const config = getDreamConfig()
         if (!config.enabled || config.windowId !== run.window_id) throw new Error('Dream Mode is disabled or its eligibility window changed')
         const current = getDb().prepare('SELECT id, agent_id, execution_config_json FROM conversations WHERE id = ?').get(conversation.id) as Conversation | undefined
-        if (!current || isActive(conversation.id) || latestSequence(conversation.id) !== input.snapshotSequence) throw new Error('Conversation changed during Dream review')
+        if (!current || !isDreamEligibleConversation(current) || isActive(conversation.id) || latestSequence(conversation.id) !== input.snapshotSequence) throw new Error('Conversation changed or is no longer eligible during Dream review')
         const allowed = resolveDreamCategories(current)
         if (!categories.every(category => allowed.some(candidate => candidate.id === category.id))) throw new Error('Conversation memory scope changed')
     }
@@ -237,6 +242,7 @@ async function sweep(): Promise<void> {
         GROUP BY c.id HAVING MAX(m.created_at) <= ? AND MAX(e.sequence) > ? ORDER BY MIN(CASE WHEN e.sequence > ? THEN m.created_at END), c.id`).all(Date.now() - DREAM_IDLE_MS, config.startSequence, config.startSequence) as Conversation[]
     for (const conversation of conversations) {
         if (generation !== sweepGeneration || stopped || !getDreamConfig().enabled || getDreamConfig().windowId !== config.windowId) return
+        if (!isDreamEligibleConversation(conversation)) continue
         if (isActive(conversation.id)) continue
         const categories = resolveDreamCategories(conversation)
         if (!categories.length) continue
