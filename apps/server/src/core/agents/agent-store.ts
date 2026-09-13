@@ -303,7 +303,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         '',
         '',
         input.autoMemory === true ? 1 : 0,
-        input.dreamingEnabled === true ? 1 : 0,
+        input.dreamingEnabled !== false ? 1 : 0,
         '',
         '',
         input.autoRouterProviderId || '__agent_provider__',

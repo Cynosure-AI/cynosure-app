@@ -51,18 +51,18 @@ const agent = {
   internalName: 'research_agent',
   memoryCategories: ['uncategorized'],
   autoMemory: false,
-  dreamingEnabled: false,
+  dreamingEnabled: true,
 } as AgentDefinition
 
 describe('AgentMemoryTab', () => {
-  test('Dreaming is opt-in per agent', async () => {
+  test('Dreaming is opt-out per agent', async () => {
     const wrapper = mount(AgentMemoryTab, { props: { agent } })
     await flushPromises()
 
     const dreamingToggle = wrapper.findAll('[role="switch"]')[0]
-    expect(dreamingToggle.attributes('aria-checked')).toBe('false')
+    expect(dreamingToggle.attributes('aria-checked')).toBe('true')
     await dreamingToggle.trigger('click')
-    expect(wrapper.emitted('update')).toContainEqual(['dreamingEnabled', true])
+    expect(wrapper.emitted('update')).toContainEqual(['dreamingEnabled', false])
   })
 
   beforeEach(() => {
