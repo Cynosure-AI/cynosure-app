@@ -23,7 +23,6 @@ export interface TaskContext {
     skipToolRouting: boolean
     /** Requests unrelated to stored context do not need automatic memory retrieval. */
     skipMemoryRouting: boolean
-    fastPath?: boolean
 }
 
 export interface BuildTaskContextInput {
@@ -47,12 +46,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
     if (!currentRequest || !hasEnabledMode(input.enabledModes)) return null
 
     const taskId = `auto_router_${nanoid()}`
-    const deterministic = buildDeterministicTaskContext(currentRequest, input.enabledModes)
-    emitTaskContextStatus(input.conversationId, taskId, input.eventMeta, Boolean(deterministic))
-    if (deterministic) {
-        emitTaskContextSelection(input.conversationId, taskId, deterministic, input.eventMeta, undefined, 'deterministic')
-        return deterministic
-    }
+    emitTaskContextStatus(input.conversationId, taskId, input.eventMeta)
 
     try {
         const request: Parameters<LLMGateway['complete']>[0] = {
@@ -105,12 +99,12 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
 
         const contextCall = result.toolCalls?.find((call) => call.function.name === TASK_CONTEXT_TOOL_NAME)
         const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments, input.enabledModes, currentRequest) : null
-        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated', 'llm')
+        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
         return parsed
     } catch (err) {
         if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
         console.warn('[auto-router] Task context build failed, using original request in downstream routers:', err)
-        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed', 'llm')
+        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed')
         return null
     }
 }
@@ -184,11 +178,7 @@ function parseTaskContextArguments(
             : []
 
         if (enabledModes.tools && !toolQuery) return null
-        const modelEffect = isRequestedToolEffect(parsed.requestedToolEffect) ? parsed.requestedToolEffect : 'read'
-        const requestedToolEffect = maxRequestedToolEffect(
-            maxRequestedToolEffect(modelEffect, inferRequestedToolEffect(toolQuery)),
-            inferRequestedToolEffect(originalRequest),
-        )
+        const requestedToolEffect = isRequestedToolEffect(parsed.requestedToolEffect) ? parsed.requestedToolEffect : 'read'
         return {
             toolQuery: toolQuery ? toolQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
             memoryQuery: memoryQueries[0],
@@ -211,47 +201,8 @@ function normalizeMemoryQueries(values: unknown[], originalRequest: string): str
         .slice(0, MAX_MEMORY_EXPANSIONS)
 }
 
-function buildDeterministicTaskContext(
-    request: string,
-    enabledModes: BuildTaskContextInput['enabledModes'],
-): TaskContext | null {
-    if (!enabledModes.memories || !isClearMemoryLookup(request)) return null
-    return {
-        memoryQuery: request,
-        memoryQueries: [],
-        requestedToolEffect: 'read',
-        skipToolRouting: true,
-        skipMemoryRouting: false,
-        fastPath: true,
-    }
-}
-
-function isClearMemoryLookup(request: string): boolean {
-    if (request.length > 240 || inferRequestedToolEffect(request) !== 'read') return false
-    const normalized = request.toLocaleLowerCase()
-    const personalReference = /\b(my|our|mine|meine|mein|meinen|meiner|unser|unsere|mich|mir)\b/i.test(normalized)
-    const memoryReference = /\b(remember|memory|previous|prior|erinner|wei(?:ß|ss)t du|wei(?:ß|ss)t du noch|what do you know|was wei(?:ß|ss)t du)\b/i.test(normalized)
-    return personalReference && memoryReference
-}
-
-export function inferRequestedToolEffect(request: string): RequestedToolEffect {
-    const normalized = request.toLocaleLowerCase()
-    if (/(delete|remove|erase|destroy|cancel|revoke|lösch|loesch|entfern|widerruf|kündig|kuendig)\w*/i.test(normalized)) {
-        return 'destructive'
-    }
-    if (/\b(create|add|append|update|edit|change|write|save|send|post|upload|schedule|book|notify|reply|forward|erstell|hinzufüg|anfueg|aktualisier|änder|aender|schreib|speicher|send|verschick|buch|benachrichtig|antwort)\w*/i.test(normalized)) {
-        return 'write'
-    }
-    return 'read'
-}
-
 function isRequestedToolEffect(value: unknown): value is RequestedToolEffect {
     return value === 'read' || value === 'write' || value === 'destructive'
-}
-
-function maxRequestedToolEffect(a: RequestedToolEffect, b: RequestedToolEffect): RequestedToolEffect {
-    const rank: Record<RequestedToolEffect, number> = { read: 0, write: 1, destructive: 2 }
-    return rank[a] >= rank[b] ? a : b
 }
 
 function buildRecentConversationBlock(messages: ChatMessage[]): string {
@@ -311,13 +262,13 @@ function enabledRequirementInstructions(modes: BuildTaskContextInput['enabledMod
     ].filter(Boolean)
 }
 
-function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>, deterministic = false): void {
+function emitTaskContextStatus(conversationId: string, taskId: string, eventMeta?: Record<string, unknown>): void {
     getEventBus().emit('step:status', {
         conversationId,
         taskId,
         iteration: 0,
         status: 'building-task-context',
-        message: deterministic ? 'Using direct retrieval query' : 'AI writing retrieval queries',
+        message: 'AI writing retrieval queries',
         ...eventMeta,
     })
 }
@@ -328,7 +279,6 @@ function emitTaskContextSelection(
     context: TaskContext | null,
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-generated' | 'routing-failed',
-    selectionMethod: 'llm' | 'deterministic' = 'llm',
 ): void {
     getEventBus().emit('step:tools-chosen', {
         conversationId,
@@ -339,14 +289,13 @@ function emitTaskContextSelection(
             name: 'Task context',
             arguments: JSON.stringify(stripUndefined({
                 type: 'task-context',
-                selectionMethod,
+            selectionMethod: 'llm',
                 toolQuery: context?.toolQuery,
                 memoryQuery: context?.memoryQuery,
                 memoryQueries: context?.memoryQueries,
                 requestedToolEffect: context?.requestedToolEffect,
                 skipToolRouting: context?.skipToolRouting,
                 skipMemoryRouting: context?.skipMemoryRouting,
-                fastPath: context?.fastPath,
                 emptyReason,
                 content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,
             })),

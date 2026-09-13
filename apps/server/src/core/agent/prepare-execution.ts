@@ -14,7 +14,7 @@ import { resolveExecutionTools, isToolRoutingEnabled } from './pre-execution/exe
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemoryContext, isAutoMemoryEnabled, hasExplicitEmptyMemoryScope } from './pre-execution/execution-memory.js'
 import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
-import { buildTaskContext, inferRequestedToolEffect } from './pre-execution/task-context.js'
+import { buildTaskContext } from './pre-execution/task-context.js'
 import { getAssignedMemoryFolders, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
@@ -211,7 +211,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
         userQuery: toolRoutingQuery,
-        requestedToolEffect: taskContext?.requestedToolEffect || inferRequestedToolEffect(input.userQuery || ''),
+        requestedToolEffect: taskContext?.requestedToolEffect,
         suppressAutoTools: taskContext?.skipToolRouting === true,
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,
