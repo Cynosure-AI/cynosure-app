@@ -34,7 +34,7 @@ export interface ResolveExecutionToolsInput {
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
     eventMeta?: Record<string, unknown>
     requestedToolEffect?: RequestedToolEffect
-    /** Bypass the external catalogue for deterministic memory-only fast paths. */
+    /** Bypass the external catalogue when intent routing says no external tool is needed. */
     suppressAutoTools?: boolean
     debugContextEnabled?: boolean
     /** Snapshot used when an agentless scheduling tool creates a durable job. */
