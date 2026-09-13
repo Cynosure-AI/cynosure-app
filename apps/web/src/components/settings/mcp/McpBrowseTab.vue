@@ -374,7 +374,7 @@ onMounted(() => {
         <span
           v-for="tag in getTypeTags(item.server)"
           :key="tag"
-          class="text-[11px] px-2 py-1 rounded-md"
+          class="mcp-registry-label text-[11px] px-2 py-1 rounded-md"
           :class="tag === 'npm'
             ? 'bg-sky-500/15 text-sky-300'
             : tag === 'pypi'
