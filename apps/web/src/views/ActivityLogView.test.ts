@@ -7,13 +7,15 @@ const mocks = vi.hoisted(() => ({ list: vi.fn(), cancel: vi.fn(), push: vi.fn(),
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock('../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ get: () => undefined }) }))
 vi.mock('../stores/memory-jobs.store', () => ({ useMemoryJobsStore: () => ({ activeJobs: [], refresh: async () => undefined }) }))
-vi.mock('../api/client', () => ({ api: {
-  activity: { list: mocks.list }, instances: { list: async () => [] },
-  memory: { onDreamUpdated: mocks.onDream, cancelDreamRun: mocks.cancel },
-  memoryCategories: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
-  agent: { onHITLRequest: () => () => undefined, onExecutionUpdate: () => () => undefined },
-  chat: { onExecutionState: () => () => undefined },
-} }))
+vi.mock('../api/client', () => ({
+  api: {
+    activity: { list: mocks.list }, instances: { list: async () => [] },
+    memory: { onDreamUpdated: mocks.onDream, cancelDreamRun: mocks.cancel },
+    memoryCategories: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
+    agent: { onHITLRequest: () => () => undefined, onExecutionUpdate: () => () => undefined },
+    chat: { onExecutionState: () => () => undefined },
+  }
+}))
 const running = { id: 'dream:run', kind: 'dream', title: 'Dream review', description: 'Reviewing conversation', status: 'running', sourceId: 'run', sourceLabel: 'Dream', conversationId: 'chat', conversationTitle: 'My preferences', createdAt: Date.now(), agentId: null, agentName: null, agentIconUrl: null }
 beforeEach(() => {
   sessionStorage.clear()
@@ -51,7 +53,7 @@ test('a live Dream update immediately appears under Active Now and can be cancel
   expect(mocks.unsubscribe).toHaveBeenCalledOnce()
 })
 test('the previous default filters include Dream after upgrading', async () => {
-  sessionStorage.setItem(SK_ACTIVITY_LOG_FILTERS, JSON.stringify(['instance', 'artifact', 'chat', 'channels', 'notification', 'cron', 'memory']))
+  sessionStorage.setItem(SK_ACTIVITY_LOG_FILTERS, JSON.stringify(['instance', 'artifact', 'chat', 'channels', 'cron', 'memory']))
   mocks.list.mockResolvedValue({ items: [running], total: 1 })
   const wrapper = mount(ActivityLogView, { global: { stubs: { Icon: true, HoverMenu: true, ModalDialog: true } } })
   await flushPromises()

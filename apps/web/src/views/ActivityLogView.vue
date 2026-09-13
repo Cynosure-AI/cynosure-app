@@ -48,15 +48,13 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Active", icon: "lucide:square-activity" },
   { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
-  { value: "channels", label: "Channels", icon: "lucide:radio" },
-  { value: "notification", label: "Notifications", icon: "lucide:bell" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
   { value: "dream", label: "Dream", icon: "lucide:moon-star" },
   { value: "memory", label: "Memory", icon: "lucide:brain" },
 ];
 
 const defaultSelectedKinds: ActivityKind[] = filterOptions.map((option) => option.value);
-const legacyDefaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "notification", "cron", "memory"];
+const legacyDefaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "cron", "memory"];
 const previousDefaultSelectedKinds: ActivityKind[] = ["instance", ...legacyDefaultSelectedKinds];
 const selectableKinds = new Set<ActivityKind>(filterOptions.map((option) => option.value));
 const selectedKinds = ref<ActivityKind[]>(readSelectedKinds());
@@ -92,7 +90,6 @@ function emptyTotalsByKind(): ActivityTotalsByKind {
   return {
     instance: 0,
     artifact: 0,
-    notification: 0,
     cron: 0,
     memory: 0,
     chat: 0,
@@ -398,8 +395,6 @@ function kindIcon(kind: ActivityKind): string {
       return "lucide:square-activity";
     case "artifact":
       return "lucide:file-output";
-    case "notification":
-      return "lucide:bell";
     case "cron":
       return "lucide:clock-check";
     case "memory":
@@ -416,7 +411,6 @@ function kindIcon(kind: ActivityKind): string {
 function kindClass(item: ActivityItem): string {
   if (item.kind === "instance") return "activity-instance";
   if (item.kind === "dream") return "activity-dream";
-  if (item.kind === "notification") return "activity-notification";
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
   if (item.kind === "memory") return "activity-memory";
@@ -1149,7 +1143,6 @@ article.cursor-pointer:hover .activity-card {
 .activity-info,
 .activity-instance,
 .activity-artifact,
-.activity-notification,
 .activity-cron,
 .activity-chat,
 .activity-channels,
@@ -1188,13 +1181,6 @@ article.cursor-pointer:hover .activity-card {
   --activity-color: #34d399;
   --activity-bg: color-mix(in srgb, #34d399 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #34d399 35%, var(--color-theme-800));
-}
-
-/* Amber */
-.activity-notification {
-  --activity-color: #fbbf24;
-  --activity-bg: color-mix(in srgb, #fbbf24 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #fbbf24 38%, var(--color-theme-800));
 }
 
 /* Violet */
