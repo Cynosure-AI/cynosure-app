@@ -1287,16 +1287,21 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
     }
 }
 
-function memoryMutationSchema(extra: Record<string, unknown> = {}, extraRequired: string[] = []): Record<string, unknown> {
+function memoryMutationSchema(extra: Record<string, unknown> = {}): Record<string, unknown> {
     return {
         type: 'object',
         additionalProperties: false,
         properties: {
             documentRef: { type: 'string', description: 'Stable document reference returned by memory reads (for example project-notes#4k8z2q). It remains unchanged after updates.' },
-            content: { type: 'string', description: 'Content to write.' },
+            content: { type: 'string', description: 'Optional complete replacement content. Omit it when only renaming or recategorizing the memory.' },
             ...extra,
         },
-        required: ['documentRef', 'content', ...extraRequired],
+        required: ['documentRef'],
+        anyOf: [
+            { required: ['content'] },
+            { required: ['title'] },
+            { required: ['category'] },
+        ],
     }
 }
 
@@ -1338,14 +1343,17 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
         name: 'memory_update',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-        description: 'Replace one topical memory using its stable documentRef. Search and read it first. Newer supported facts replace obsolete statements; do not append a change log. Optionally rename or recategorize it.',
+        description: 'Update one topical memory using its stable documentRef. Provide content for a complete topical replacement, or omit content to rename or recategorize the existing memory without rewriting it. Search and read before changing facts. Newer supported facts replace obsolete statements; do not append a change log.',
         parameters: memoryMutationSchema({
             title: { type: 'string', description: 'Optional new Subject - Aspect title.' },
             category: { type: 'string', description: 'Optional existing or new category path inside a granted category tree.' },
         }),
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = params as { documentRef: string; content: string; title?: string; category?: string }
+            const input = params as { documentRef: string; content?: string; title?: string; category?: string }
+            if (input.content === undefined && !input.title?.trim() && !input.category?.trim()) {
+                return { success: false, output: 'memory_update requires at least one of content, title, or category.' }
+            }
             return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
                 const target = input.category
                     ? await resolveTargetCategory(assignedCategories, input.category, undefined, getKnownCategories)
@@ -1362,15 +1370,22 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     return { success: false, output: `Memory "${finalName}" already exists in "${target.categoryName}".` }
                 }
 
-                let indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal, opts.revisionContext)
+                let indexed: Awaited<ReturnType<typeof reindexMemoryFile>> | undefined
+                if (input.content !== undefined) {
+                    indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal, opts.revisionContext)
+                }
                 if (relocating) {
                     const { renameSync } = await import('node:fs')
                     renameSync(join(resolved.directoryPath, resolved.fileName), join(targetDirectory, finalName))
                     await getAgentMemory().remapMovedFileByHash(target.categoryId, finalName, targetDirectory)
                     indexed = await reindexMemoryFile(target.categoryId, finalName, signal, opts.revisionContext)
                 }
+                if (!indexed) {
+                    return { success: false, output: 'The requested title and category already match the current memory.' }
+                }
                 opts.onDocumentMutated?.(indexed.documentId)
-                return { success: true, output: `Memory "${finalName}" replaced in "${target.categoryName}" (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).${indexed.chunkCount > 3 ? ' Warning: this memory exceeds the 1–3 chunk topical target.' : ''}` }
+                const action = input.content === undefined ? 'moved without changing its content' : 'replaced'
+                return { success: true, output: `Memory "${finalName}" ${action} in "${target.categoryName}" (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).${indexed.chunkCount > 3 ? ' Warning: this memory exceeds the 1–3 chunk topical target.' : ''}` }
             }, opts.beforeDocumentMutation)
         },
     }

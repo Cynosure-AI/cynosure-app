@@ -31,7 +31,12 @@ describe('memory mutation tool contracts', () => {
         const properties = tool.parameters.properties as Record<string, unknown>
         expect(properties).not.toHaveProperty('partStart')
         expect(properties).not.toHaveProperty('partEnd')
-        expect(tool.parameters.required).toEqual(['documentRef', 'content'])
+        expect(tool.parameters.required).toEqual(['documentRef'])
+        expect(tool.parameters.anyOf).toEqual([
+            { required: ['content'] },
+            { required: ['title'] },
+            { required: ['category'] },
+        ])
         expect(tool.parameters.additionalProperties).toBe(false)
     })
 
