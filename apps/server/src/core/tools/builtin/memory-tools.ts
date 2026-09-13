@@ -4,7 +4,7 @@ import { basename, join } from 'node:path'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemoryCategoryFilter as buildScopeFilter, getDefaultMemoryCategory, getMemoryCategoryDirectoryPath, type MemoryCategoryRef } from '../../memory/memory-category-scope.js'
-import { ensureMemoryCategoryPath, categoryPathForDirectory } from '../../memory/memory-category-directories.js'
+import { ensureMemoryCategoryPath, categoryPathForDirectory, removeEmptyMemoryCategoryFolders, syncMemoryCategoriesFromFolders } from '../../memory/memory-category-directories.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
@@ -1379,6 +1379,10 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     renameSync(join(resolved.directoryPath, resolved.fileName), join(targetDirectory, finalName))
                     await getAgentMemory().remapMovedFileByHash(target.categoryId, finalName, targetDirectory)
                     indexed = await reindexMemoryFile(target.categoryId, finalName, signal, opts.revisionContext)
+                    if (target.categoryId !== resolved.categoryId) {
+                        removeEmptyMemoryCategoryFolders(resolved.directoryPath)
+                        syncMemoryCategoriesFromFolders(getDb())
+                    }
                 }
                 if (!indexed) {
                     return { success: false, output: 'The requested title and category already match the current memory.' }

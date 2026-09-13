@@ -21,6 +21,7 @@ export interface AgentConfig {
     autoApproveTools: boolean
     autoToolRouting: boolean
     autoMemory: boolean
+    dreamingEnabled: boolean
     autoRouterProviderId: string
     autoRouterModel: string
     thinkingEnabled: boolean
@@ -55,6 +56,7 @@ export type CreateAgentInput = {
     autoApproveTools?: boolean
     autoToolRouting?: boolean
     autoMemory?: boolean
+    dreamingEnabled?: boolean
     autoRouterProviderId?: string
     autoRouterModel?: string
     thinkingEnabled?: boolean
@@ -149,6 +151,7 @@ interface AgentRow {
     tool_router_provider_id: string
     tool_router_model: string
     auto_memory: number
+    dreaming_enabled: number
     memory_router_provider_id: string
     memory_router_model: string
     auto_router_provider_id: string
@@ -194,6 +197,7 @@ function rowToAgentData(row: AgentRow): AgentData {
         autoApproveTools: row.auto_approve_tools === 1,
         autoToolRouting: row.auto_tool_routing === 1,
         autoMemory: row.auto_memory === 1,
+        dreamingEnabled: row.dreaming_enabled === 1,
         autoRouterProviderId: row.auto_router_provider_id || '__agent_provider__',
         autoRouterModel: row.auto_router_model || '__agent_model__',
         thinkingEnabled: row.thinking_enabled !== 0,
@@ -276,9 +280,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
+            auto_memory, dreaming_enabled, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
             sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -299,6 +303,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         '',
         '',
         input.autoMemory === true ? 1 : 0,
+        input.dreamingEnabled === true ? 1 : 0,
         '',
         '',
         input.autoRouterProviderId || '__agent_provider__',
@@ -340,6 +345,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedAutoApprove = input.autoApproveTools !== undefined ? input.autoApproveTools : (existing.auto_approve_tools === 1)
     const updatedAutoToolRouting = input.autoToolRouting !== undefined ? input.autoToolRouting : (existing.auto_tool_routing === 1)
     const updatedAutoMemory = input.autoMemory !== undefined ? input.autoMemory : (existing.auto_memory === 1)
+    const updatedDreamingEnabled = input.dreamingEnabled !== undefined ? input.dreamingEnabled : (existing.dreaming_enabled === 1)
     const updatedAutoRouterProviderId = input.autoRouterProviderId !== undefined ? (input.autoRouterProviderId || '') : (existing.auto_router_provider_id || '')
     const updatedAutoRouterModel = input.autoRouterModel !== undefined ? (input.autoRouterModel || '') : (existing.auto_router_model || '')
     const updatedThinkingEnabled = input.thinkingEnabled !== undefined ? input.thinkingEnabled : (existing.thinking_enabled !== 0)
@@ -371,7 +377,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
          internal_name = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
             thinking_enabled = ?, reasoning_effort = ?, max_context_tokens = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
-            auto_memory = ?, memory_router_provider_id = ?, memory_router_model = ?,
+            auto_memory = ?, dreaming_enabled = ?, memory_router_provider_id = ?, memory_router_model = ?,
             auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, tags_json = ?, favorite = ?, cron_prompt = ?,
          icon_data = ?, icon_mime = ?, updated_at = ?
          WHERE id = ?`
@@ -393,6 +399,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         existing.tool_router_provider_id || '',
         existing.tool_router_model || '',
         updatedAutoMemory ? 1 : 0,
+        updatedDreamingEnabled ? 1 : 0,
         existing.memory_router_provider_id || '',
         existing.memory_router_model || '',
         updatedAutoRouterProviderId,
@@ -448,9 +455,9 @@ export function duplicateAgent(id: string): AgentData | null {
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
+            auto_memory, dreaming_enabled, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
             sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -471,6 +478,7 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.tool_router_provider_id,
         existing.tool_router_model,
         existing.auto_memory,
+        existing.dreaming_enabled,
         existing.memory_router_provider_id,
         existing.memory_router_model,
         existing.auto_router_provider_id || '__agent_provider__',

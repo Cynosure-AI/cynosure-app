@@ -167,7 +167,7 @@ async function createAgent(): Promise<void> {
     name: newName.value.trim(), internalName: '', description: newDescription.value.trim(), category: '', tags: [],
     favorite: false, iconUrl: null, providerId: providerStore.lastUsedProviderId || '',
     model: providerStore.lastUsedProvider?.defaultModel || '', systemPrompt: '', cronPrompt: '', tools: [],
-    autoApproveTools: false, autoToolRouting: false, autoMemory: true, generateTitle: true,
+    autoApproveTools: false, autoToolRouting: false, autoMemory: true, dreamingEnabled: false, generateTitle: true,
   })
   showCreateDialog.value = false
   newName.value = ''
