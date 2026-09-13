@@ -309,7 +309,7 @@ function createTables(db: Database.Database): void {
       icon_url TEXT,
       internal_name TEXT NOT NULL DEFAULT '',
       memory_enabled INTEGER NOT NULL DEFAULT 1,
-      dreaming_enabled INTEGER NOT NULL DEFAULT 0,
+      dreaming_enabled INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -801,7 +801,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('agents', 'tool_router_provider_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'tool_router_model', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'auto_memory', 'INTEGER NOT NULL DEFAULT 1')
-  addColumnIfMissing('agents', 'dreaming_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('agents', 'dreaming_enabled', 'INTEGER NOT NULL DEFAULT 1')
   addColumnIfMissing('agents', 'memory_router_provider_id', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'memory_router_model', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('agents', 'auto_router_provider_id', "TEXT NOT NULL DEFAULT ''")

@@ -160,11 +160,11 @@ onMounted(() => loadCategories())
             </h3>
           </div>
           <p class="text-xs text-theme-500 leading-relaxed">
-            Allow conversations with this agent to be reviewed by Dream Mode after they become inactive. Disabled by default.
+            Allow conversations with this agent to be reviewed by Dream Mode after they become inactive. Enabled by default; turn this off to opt out.
           </p>
         </div>
         <ToggleSwitch
-          :model-value="agent.dreamingEnabled === true"
+          :model-value="agent.dreamingEnabled !== false"
           label="Allow Dreaming for this agent"
           color="accent"
           class="mt-0.5"
