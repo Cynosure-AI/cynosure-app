@@ -111,10 +111,10 @@ function record(event: KeyboardEvent): void {
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
-              Window shortcut
+              New chat shortcut
             </h3>
             <p class="mt-0.5 text-xs text-theme-500">
-              Show the main window at a compact size beside the mouse cursor.
+              Open a fresh empty chat in a compact window beside the mouse cursor.
             </p>
           </div>
         </div>

@@ -133,9 +133,9 @@ const sections: SettingsSection[] = [
   ...(isElectronBuild ? [{
     id: 'global-hotkey',
     categoryId: 'desktop-application' as const,
-    label: 'Window Shortcut',
-    description: 'Choose the global keyboard shortcut that shows the main window at a compact size near the mouse cursor.',
-    terms: ['desktop', 'electron', 'global hotkey', 'keyboard shortcut', 'main window', 'ctrl space', 'compact window']
+    label: 'New Chat Shortcut',
+    description: 'Choose the global keyboard shortcut that opens a fresh empty chat in a compact window near the mouse cursor.',
+    terms: ['desktop', 'electron', 'global hotkey', 'keyboard shortcut', 'new chat', 'main window', 'ctrl space', 'compact window']
   }] : []),
   {
     id: 'provider-actions',
