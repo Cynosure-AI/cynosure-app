@@ -10,6 +10,7 @@ interface ToolGroup {
 export type TimelineEntry =
   | { type: 'message'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'tool-group'; group: ToolGroup; ts: number; key: string; isSubAgent?: boolean }
+  | { type: 'continuation'; step: ExecutionStep; ts: number; key: string; isSubAgent?: false }
   | { type: 'tool-fallback'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
   | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
@@ -84,6 +85,15 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     // Group steps by taskId + iteration to keep outer and inner executor steps separate
     const grouped = new Map<string, ExecutionStep[]>()
     for (const step of executionSteps) {
+      if (step.status === 'continuing') {
+        entries.push({
+          type: 'continuation',
+          step,
+          ts: step.timestamp,
+          key: `continuation-${step.taskId ?? 'task'}-${step.timestamp}`,
+        })
+        continue
+      }
       const groupKey = JSON.stringify([step.maInvocationId ?? step.maCodename ?? '', step.taskId ?? '', step.iteration])
       if (!grouped.has(groupKey)) grouped.set(groupKey, [])
       grouped.get(groupKey)!.push(step)

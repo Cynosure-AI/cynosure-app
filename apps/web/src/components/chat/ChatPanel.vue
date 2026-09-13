@@ -9,6 +9,7 @@ import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
 import PreTurnContextTimeline from '../chat/PreTurnContextTimeline.vue'
 import PreResponseActionsCard from '../chat/PreResponseActionsCard.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
+import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
@@ -767,6 +768,11 @@ onMounted(() => {
           :iteration="entry.group.iteration"
           :steps="entry.group.steps"
           :is-active="agentStore.isExecuting && entry.key === lastToolGroupKey"
+        />
+
+        <ContinuationRoundMarker
+          v-else-if="entry.type === 'continuation'"
+          :message="entry.step.message"
         />
 
         <!-- Context compact event card -->
