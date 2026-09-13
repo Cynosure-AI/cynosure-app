@@ -1,0 +1,64 @@
+import { describe, expect, it } from 'vitest'
+import { buildChatTimeline } from './chat-timeline'
+import type { DisplayMessage } from '../stores/chat.store'
+import type { ExecutionStep } from '../stores/agent-runtime.store'
+
+const message = (id: string, createdAt: number, extra: Partial<DisplayMessage> = {}): DisplayMessage =>
+  ({ id, createdAt, role: 'assistant', content: id, ...extra })
+const step = (timestamp: number, extra: Partial<ExecutionStep> = {}): ExecutionStep =>
+  ({ timestamp, iteration: 1, status: 'done', taskId: `task-${timestamp}`, ...extra })
+const ids = (timeline: ReturnType<typeof buildChatTimeline>) => timeline.map(entry =>
+  entry.type === 'message' ? entry.msg.id : entry.type === 'sub-agent-group' ? entry.entries.map(inner => inner.key) : entry.ts)
+
+describe('chat timeline chronology', () => {
+  it('keeps a completed invocation below its own call and before a later retry', () => {
+    const messages = [message('user', 0, { role: 'user' }),
+      message('first-run', 2, { maInvocationId: 'first', maCodename: 'worker' }),
+      message('retry', 4), message('second-run', 6, { maInvocationId: 'second', maCodename: 'worker', isStreaming: true })]
+    const steps = [step(1), step(5)]
+    expect(ids(buildChatTimeline(messages, steps))).toEqual(['user', 1, ['m-first-run'], 'retry', 5, ['m-second-run']])
+  })
+
+  it('does not move earlier tools when a streaming assistant finishes', () => {
+    for (const isStreaming of [true, false]) {
+      expect(ids(buildChatTimeline([message('answer', 3, { isStreaming })], [step(1)]))).toEqual([1, 'answer'])
+    }
+  })
+
+  it('sorts out-of-order steps and isolates invocations sharing a task and iteration', () => {
+    const timeline = buildChatTimeline([], [step(5, { taskId: 'same', maInvocationId: 'b' }),
+      step(3, { taskId: 'same', maInvocationId: 'a' }), step(2, { taskId: 'same', maInvocationId: 'a' })])
+    expect(timeline.map(entry => entry.ts)).toEqual([2, 5])
+    expect(timeline[0].type).toBe('sub-agent-group')
+    if (timeline[0].type !== 'sub-agent-group') return
+    const inner = timeline[0].entries[0]
+    expect(inner.type === 'tool-group' && inner.group.steps.map(s => s.timestamp)).toEqual([2, 3])
+  })
+
+  it('keeps interleaved parallel runs at their first activity', () => {
+    const timeline = buildChatTimeline([
+      message('a1', 1, { maInvocationId: 'a' }), message('b1', 2, { maInvocationId: 'b' }),
+      message('main', 3), message('b2', 4, { maInvocationId: 'b' }), message('a2', 5, { maInvocationId: 'a' }),
+    ], [])
+    expect(ids(timeline)).toEqual([['m-a1', 'm-a2'], ['m-b1', 'm-b2'], 'main'])
+  })
+
+  it('keeps fallback tools inside their invocation and separates user turns', () => {
+    const timeline = buildChatTimeline([
+      message('a', 1, { maInvocationId: 'same' }), message('tool', 2, { role: 'tool', maInvocationId: 'same' }),
+      message('user', 3, { role: 'user' }), message('b', 4, { maInvocationId: 'same' }),
+    ], [])
+    expect(ids(timeline)).toEqual([['m-a', 'tf-tool'], 'user', ['m-b']])
+    expect(new Set(timeline.map(entry => entry.key)).size).toBe(3)
+  })
+
+  it('keeps compaction markers and equal-time messages stable without mutating inputs', () => {
+    const messages = [message('a', 1), message('b', 1), message('compact', 2, {
+      role: 'system', compactEventData: { summary: '', compactedMessageCount: 1, model: '', createdAt: 2 },
+    }), message('answer', 4)]
+    const steps = [step(3)]
+    const before = JSON.stringify({ messages, steps })
+    expect(ids(buildChatTimeline(messages, steps))).toEqual(['a', 'b', 2, 3, 'answer'])
+    expect(JSON.stringify({ messages, steps })).toBe(before)
+  })
+})
