@@ -4,11 +4,12 @@ import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
-import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryCategory, MemoryRevisionSummary } from "../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryCategory, MemoryDiffSegment, MemoryRevisionSummary } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
+import MemoryInlineDiff from "../components/memory/MemoryInlineDiff.vue";
 import KnowledgeFactsSection from "../components/memory/KnowledgeFactsSection.vue";
 import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vue";
 import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
@@ -91,7 +92,7 @@ const restoringDocumentRef = ref("");
 const deletedHistoryRef = ref("");
 const deletedRevisions = ref<MemoryRevisionSummary[]>([]);
 const deletedSelectedRevisionId = ref("");
-const deletedRevisionDiff = ref("");
+const deletedRevisionDiff = ref<MemoryDiffSegment[]>([]);
 const activePanel = ref<MemoryPanel>("documents");
 
 const graph = ref<KnowledgeGraph | null>(null);
@@ -143,7 +144,7 @@ async function openDeletedMemories() {
 async function openDeletedHistory(memory: DeletedMemory) {
   deletedHistoryRef.value = memory.documentRef;
   deletedSelectedRevisionId.value = "";
-  deletedRevisionDiff.value = "";
+  deletedRevisionDiff.value = [];
   deletedLoading.value = true;
   try {
     deletedRevisions.value = await api.memoryCategories.listRevisions(memory.documentRef);
@@ -162,10 +163,10 @@ async function selectDeletedRevision(revisionId: string) {
   const previous = deletedRevisions.value[index + 1];
   if (!selected) return;
   if (previous) {
-    deletedRevisionDiff.value = (await api.memoryCategories.getRevisionDiff(deletedHistoryRef.value, previous.id, selected.id)).diff;
+    deletedRevisionDiff.value = (await api.memoryCategories.getRevisionDiff(deletedHistoryRef.value, previous.id, selected.id)).segments;
   } else {
     const revision = await api.memoryCategories.getRevision(deletedHistoryRef.value, selected.id);
-    deletedRevisionDiff.value = revision.content.split("\n").map(line => `+${line}`).join("\n");
+    deletedRevisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
   }
 }
 
@@ -817,7 +818,7 @@ onMounted(() => loadCategories());
                   <div class="mt-1 text-theme-600">{{ new Date(revision.createdAt).toLocaleString() }}</div>
                 </button>
               </div>
-              <pre class="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-theme-950 p-3 font-mono text-xs text-theme-300">{{ deletedRevisionDiff || "No changes." }}</pre>
+              <MemoryInlineDiff :segments="deletedRevisionDiff" class="max-h-72" />
             </div>
             <button
               class="rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:opacity-50"

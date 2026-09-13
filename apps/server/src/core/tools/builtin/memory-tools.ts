@@ -437,7 +437,9 @@ function resolveReadableCategoryFilter(
     categoryParam?: string,
     getKnownCategories: () => MemoryCategoryRef[] = getKnownMemoryCategories,
 ): { filter?: string; category?: MemoryCategoryRef } | { error: string } {
-    if (!categoryParam?.trim()) return { filter: baseFilter }
+    if (!categoryParam?.trim()) {
+        return { filter: assignedCategories.length > 0 ? buildScopeFilter(assignedCategories) : baseFilter }
+    }
 
     const candidates = assignedCategories.length > 0 ? assignedCategories : getKnownCategories()
     const wanted = categoryParam.trim()
@@ -480,6 +482,9 @@ async function resolveTargetCategory(
         if (!allowed) return { error: `Category "${wanted}" is outside the granted memory category trees.\n${formatCategories(roots)}` }
         try {
             const created = ensureMemoryCategoryPath(getDb(), normalized)
+            if (!assignedCategories.some(category => category.id === created.id)) {
+                assignedCategories.push({ id: created.id, name: created.name, categoryPath: normalized })
+            }
             return { categoryId: created.id, categoryName: created.name }
         } catch (error) {
             return { error: error instanceof Error ? error.message : String(error) }

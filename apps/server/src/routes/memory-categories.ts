@@ -49,7 +49,7 @@ import {
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
-import { getMemoryDocument, getMemoryRevision, listMemoryRevisions, recordMemoryRevision, setMemoryDocumentIndexingStatus, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
+import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, recordMemoryRevision, setMemoryDocumentIndexingStatus, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -166,7 +166,10 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
     app.get<{ Params: { documentRef: string }; Querystring: { from?: string; to?: string } }>('/documents/:documentRef/diff', async (req, reply) => {
         if (!req.query.from || !req.query.to) return reply.status(400).send({ error: 'from and to revision IDs are required' })
         const diff = unifiedMemoryDiff(req.params.documentRef, req.query.from, req.query.to)
-        return diff === undefined ? reply.status(404).send({ error: 'Memory revision not found' }) : { format: 'unified', diff }
+        const segments = inlineMemoryDiff(req.params.documentRef, req.query.from, req.query.to)
+        return diff === undefined || segments === undefined
+            ? reply.status(404).send({ error: 'Memory revision not found' })
+            : { format: 'unified', diff, segments }
     })
 
     app.post<{ Params: { documentRef: string; revisionId: string }; Body: { expectedRevision?: string } }>('/documents/:documentRef/revisions/:revisionId/restore', async (req, reply) => {

@@ -9,6 +9,7 @@ import {
   listMemoryRevisions,
   markMemoryDocumentDeleted,
   recordMemoryRevision,
+  inlineMemoryDiff,
   unifiedMemoryDiff,
   updateMemoryDocumentLocation,
 } from './memory-revisions.js'
@@ -52,6 +53,12 @@ describe('memory revision snapshots', () => {
     })
     expect(unifiedMemoryDiff('profile#stable', first.id, second.id)).toContain('-Lives in Berlin.')
     expect(unifiedMemoryDiff('profile#stable', first.id, second.id)).toContain('+Lives in Hamburg.')
+    expect(inlineMemoryDiff('profile#stable', first.id, second.id)).toEqual([
+      { type: 'unchanged', text: 'Lives in ' },
+      { type: 'removed', text: 'Berlin' },
+      { type: 'added', text: 'Hamburg' },
+      { type: 'unchanged', text: '.\n' },
+    ])
   })
 
   test('keeps identity stable across moves and reactivates a matching deleted snapshot', () => {

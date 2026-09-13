@@ -11,8 +11,9 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
-import type { MemoryRevisionSummary } from "../../api/types";
+import type { MemoryDiffSegment, MemoryRevisionSummary } from "../../api/types";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
+import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
@@ -76,7 +77,7 @@ const documentRef = ref("");
 const showHistory = ref(false);
 const revisions = ref<MemoryRevisionSummary[]>([]);
 const selectedRevisionId = ref("");
-const revisionDiff = ref("");
+const revisionDiff = ref<MemoryDiffSegment[]>([]);
 const historyLoading = ref(false);
 const editorTick = ref(0);
 
@@ -196,10 +197,10 @@ async function selectRevision(id: string) {
   if (!selected) return;
   if (!previous) {
     const revision = await api.memoryCategories.getRevision(documentRef.value, id);
-    revisionDiff.value = revision.content.split("\n").map(line => `+${line}`).join("\n");
+    revisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
     return;
   }
-  revisionDiff.value = (await api.memoryCategories.getRevisionDiff(documentRef.value, previous.id, selected.id)).diff;
+  revisionDiff.value = (await api.memoryCategories.getRevisionDiff(documentRef.value, previous.id, selected.id)).segments;
 }
 
 async function toggleHistory() {
@@ -402,7 +403,7 @@ onBeforeUnmount(() => {
             <span class="block text-[10px] opacity-75">{{ revision.source }} · {{ new Date(revision.createdAt).toLocaleString() }}</span>
           </button>
         </div>
-        <pre class="overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-5 text-theme-300">{{ revisionDiff || "No changes." }}</pre>
+        <MemoryInlineDiff :segments="revisionDiff" class="m-3" />
       </div>
       <div v-else class="relative flex-1 min-h-0 overflow-y-auto bg-theme-950/45">
         <div

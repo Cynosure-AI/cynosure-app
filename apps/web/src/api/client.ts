@@ -454,7 +454,7 @@ export const api = {
     getRevision: (documentRef: string, revisionId: string) =>
       get<import('./types').MemoryRevisionSummary & { content: string; documentId: string }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}`),
     getRevisionDiff: (documentRef: string, from: string, to: string) =>
-      get<{ format: 'unified'; diff: string }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+      get<{ format: 'unified'; diff: string; segments: import('./types').MemoryDiffSegment[] }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     restoreRevision: (documentRef: string, revisionId: string, expectedRevision?: string) =>
       post<{ success: boolean; documentRef: string; revision: string; chunksStored: number }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}/restore`, { expectedRevision }),
     listDeleted: () =>

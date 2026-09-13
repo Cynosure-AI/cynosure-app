@@ -174,13 +174,22 @@ describe('Dream worker', () => {
             .run(join(directory, 'data', 'memories', 'Assigned'), Date.now())
         getDb().prepare("INSERT INTO agent_memory_categories(agent_id, category_id) VALUES ('agent-with-space', 'assigned')").run()
 
-        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memoryCategoryIds":["uncategorized"],"autoMemory":false}' })).toEqual([{ id: 'uncategorized', name: 'Uncategorized', categoryPath: '' }])
+        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memoryCategoryIds":["uncategorized"],"autoMemory":false}' })).toEqual([
+            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
+            { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
+        ])
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"autoMemory":false}' })).toEqual([
             expect.objectContaining({ id: 'assigned', name: 'Assigned' }),
         ])
-        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memoryCategoryIds":[],"autoMemory":false}' })).toEqual([{ id: 'uncategorized', name: 'Uncategorized' }])
+        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memoryCategoryIds":[],"autoMemory":false}' })).toEqual([
+            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
+            { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
+        ])
         expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{"memoryCategoryIds":["missing"]}' })).toEqual([])
-        expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([{ id: 'uncategorized', name: 'Uncategorized' }])
+        expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([
+            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
+            { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
+        ])
     })
     test('serializes sweeps and reviews oldest conversations first', async () => {
         enable()
@@ -261,7 +270,9 @@ describe('Dream worker', () => {
         })
         await ready()
         expect(mocks.tool).not.toHaveBeenCalled()
-        expect(mocks.scopes).toEqual(expect.arrayContaining([expect.objectContaining({ assignedCategories: [{ id: 'uncategorized', name: 'Uncategorized' }] })]))
+        expect(mocks.scopes).toEqual(expect.arrayContaining([expect.objectContaining({
+            assignedCategories: [expect.objectContaining({ id: 'uncategorized', name: 'Uncategorized' })],
+        })]))
     })
     test('cancels active work and skips its pending messages until new activity', async () => {
         mocks.run.mockImplementationOnce((config: AgentExecutorConfig) => new Promise((_, reject) => config.signal!.addEventListener('abort', () => reject(config.signal!.reason))))
