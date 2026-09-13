@@ -123,6 +123,8 @@ const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_KNOWLEDGE_GRAPH_
 
 const route = useRoute();
 const router = useRouter();
+const linkedCategoryId = computed(() => typeof route.query.category === "string" ? route.query.category : "");
+const linkedFileName = computed(() => typeof route.query.file === "string" ? route.query.file : "");
 let graphSuggestionTimer: number | null = null;
 let graphSuggestionRequest = 0;
 let graphRequest = 0;
@@ -246,6 +248,9 @@ async function loadCategories() {
       if (b.isUncategorized) return 1;
       return (a.categoryPath || "").localeCompare(b.categoryPath || "");
     });
+    if (linkedCategoryId.value && spaces.value.some(space => space.id === linkedCategoryId.value)) {
+      selectedCategoryId.value = linkedCategoryId.value;
+    }
     graphSelectedCategoryIds.value = previouslySelectedAll
       ? spaces.value.map((space) => space.id)
       : graphSelectedCategoryIds.value.filter((id) => spaces.value.some((space) => space.id === id));
@@ -584,6 +589,10 @@ watch(
   { immediate: true },
 );
 
+watch(linkedCategoryId, (categoryId) => {
+  if (categoryId && spaces.value.some(space => space.id === categoryId)) selectedCategoryId.value = categoryId;
+});
+
 onMounted(() => loadCategories());
 </script>
 
@@ -689,6 +698,7 @@ onMounted(() => loadCategories());
           :spaces="spaces"
           :spaces-loading="spacesLoading"
           :selected-category="selectedCategory"
+          :focus-file="linkedFileName"
           @create-folder="openCreateDialog"
           @edit-folder="openEditDialog"
           @delete-folder="confirmDeleteSpace"

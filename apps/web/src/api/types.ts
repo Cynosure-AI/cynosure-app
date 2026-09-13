@@ -333,7 +333,9 @@ export interface ActivityItem {
     instanceType?: AgentInstance['type']
     model?: string | null
     artifacts?: ActivityArtifact[]
-    dreamChanges?: Array<{ tool: string; output: string }>
+    memoryCategoryId?: string
+    memoryFileName?: string
+    dreamChanges?: Array<{ tool: string; output: string; memoryCategoryId?: string; memoryFileName?: string }>
 }
 
 export type ActivityTotalsByKind = Record<ActivityKind, number>

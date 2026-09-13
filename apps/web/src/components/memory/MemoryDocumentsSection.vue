@@ -18,6 +18,7 @@ const props = defineProps<{
   spacesLoading: boolean;
   selectedCategoryId: string | null;
   selectedCategory: MemoryCategory | null;
+  focusFile?: string;
 }>();
 
 const emit = defineEmits<{
@@ -33,6 +34,7 @@ const collapsedFolders = ref<Set<string>>(new Set());
 let folderStateInitialized = false;
 const dragCounter = ref(0);
 const dropTargetSpaceId = ref<string | null>(null);
+const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
 
 const sortedSpaces = computed(() =>
   [...props.spaces].sort((a, b) => {
@@ -81,6 +83,7 @@ function initializeFolderState(spaces: MemoryCategory[]): void {
         ? new Set(parsed.filter((value): value is string => typeof value === "string"))
         : new Set();
       folderStateInitialized = true;
+      revealFocusedCategory();
       return;
     }
   } catch {
@@ -91,6 +94,18 @@ function initializeFolderState(spaces: MemoryCategory[]): void {
     .filter(space => hasChildren(space) && !space.isUncategorized)
     .map(space => space.categoryPath || ""));
   folderStateInitialized = true;
+  writeCollapsedFolders();
+  revealFocusedCategory();
+}
+
+function revealFocusedCategory(): void {
+  if (!props.focusFile || !props.selectedCategoryId) return;
+  const category = props.spaces.find(space => space.id === props.selectedCategoryId);
+  const parts = (category?.categoryPath || "").split("/").filter(Boolean);
+  if (parts.length < 2) return;
+  const next = new Set(collapsedFolders.value);
+  for (let i = 1; i < parts.length; i++) next.delete(parts.slice(0, i).join("/"));
+  collapsedFolders.value = next;
   writeCollapsedFolders();
 }
 
@@ -112,13 +127,14 @@ function toggleFolder(space: MemoryCategory) {
 }
 
 watch(() => props.spaces, initializeFolderState, { immediate: true });
+watch([() => props.focusFile, () => props.selectedCategoryId], revealFocusedCategory);
 
 function selectSpace(categoryId: string) {
   emit("update:selectedCategoryId", categoryId);
 }
 
 function isDocumentDrag(e: DragEvent): boolean {
-  return e.dataTransfer?.types.includes(DOCUMENT_DRAG_MIME) ?? false;
+  return Boolean(activeDocumentDrag.value) || Array.from(e.dataTransfer?.types || []).includes(DOCUMENT_DRAG_MIME);
 }
 
 function isFileDrag(e: DragEvent): boolean {
@@ -145,6 +161,9 @@ function onDragEnter(e: DragEvent, categoryId?: string) {
 function onDragLeave(e: DragEvent, categoryId?: string) {
   e.preventDefault();
   if (categoryId) {
+    const current = e.currentTarget as HTMLElement | null;
+    const related = e.relatedTarget as Node | null;
+    if (current && related && current.contains(related)) return;
     if (dropTargetSpaceId.value === categoryId) dropTargetSpaceId.value = null;
   } else {
     dragCounter.value = Math.max(0, dragCounter.value - 1);
@@ -159,18 +178,22 @@ function onDragOver(e: DragEvent, categoryId?: string) {
   }
   if (!isDocumentDrag(e) && !isFileDrag(e)) return;
   e.preventDefault();
+  if (categoryId && categoryId !== props.selectedCategoryId && isDocumentDrag(e)) {
+    dropTargetSpaceId.value = categoryId;
+  }
   if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME) ? "move" : "copy";
+    e.dataTransfer.dropEffect = isDocumentDrag(e) ? "move" : "copy";
   }
 }
 
 async function onFolderDrop(e: DragEvent, targetCategoryId: string) {
-  const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME);
-  if (!documentPayload) return;
+  const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME)
+    || e.dataTransfer?.getData("text/plain");
+  if (!documentPayload && !activeDocumentDrag.value) return;
   e.preventDefault();
   dropTargetSpaceId.value = null;
   try {
-    const parsed = JSON.parse(documentPayload) as DocumentDragPayload;
+    const parsed = documentPayload ? JSON.parse(documentPayload) as DocumentDragPayload : activeDocumentDrag.value!;
     const sourceCategoryId = typeof parsed.sourceCategoryId === "string" ? parsed.sourceCategoryId : props.selectedCategoryId;
     const sourceFiles = Array.isArray(parsed.sourceFiles)
       ? parsed.sourceFiles.filter((value): value is string => typeof value === "string")
@@ -184,7 +207,14 @@ async function onFolderDrop(e: DragEvent, targetCategoryId: string) {
     }
   } catch {
     /* ignore malformed drag payload */
+  } finally {
+    activeDocumentDrag.value = null;
   }
+}
+
+function setDocumentDragState(active: boolean, payload?: DocumentDragPayload) {
+  activeDocumentDrag.value = active && payload ? payload : null;
+  if (!active) dropTargetSpaceId.value = null;
 }
 
 async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
@@ -356,9 +386,11 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
           ref="docList"
           :category-id="selectedCategoryId"
           :spaces="spaces"
+          :focus-file="focusFile"
           @edit-space="selectedCategory && emit('edit-folder', selectedCategory)"
           @delete-space="selectedCategory && emit('delete-folder', selectedCategory)"
           @spaces-changed="emit('refresh-spaces')"
+          @document-drag-state="setDocumentDragState"
         />
       </div>
     </div>

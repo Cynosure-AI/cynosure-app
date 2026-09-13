@@ -40,15 +40,19 @@ async function seedRun(status = 'completed') {
     await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { enabled: true, providerId: 'dream-test', model: 'model' } })
     const now = Date.now()
     getDb().prepare("INSERT INTO conversations(id, title, origin, created_at, updated_at) VALUES ('chat', 'My preferences', 'chat', ?, ?)").run(now, now)
+    getDb().prepare(`INSERT INTO memory_documents
+        (document_id, document_ref, category_id, file_name, current_hash, status, indexing_status, created_at, updated_at)
+        VALUES ('doc', 'preferences#abc', 'uncategorized', 'preferences.md', 'hash', 'active', 'indexed', ?, ?)`)
+        .run(now, now)
     getDb().prepare(`INSERT INTO dream_runs(id, conversation_id, window_id, status, provider_id, model, input_json, reviewed_count, changes_json, created_at, updated_at)
         VALUES ('run', 'chat', ?, ?, 'dream-test', 'model', '{}', 2, ?, ?, ?)`)
-        .run(getDreamConfig().windowId, status, JSON.stringify([{ key: 'change', tool: 'memory_append', output: 'Updated preferences.md' }]), now, now)
+        .run(getDreamConfig().windowId, status, JSON.stringify([{ key: 'change', tool: 'memory_update', output: 'Updated preferences.md (documentRef=preferences#abc, chunks=1).' }]), now, now)
 }
 test('activity exposes a single filterable Dream entry with memory changes and a conversation link', async () => {
     await seedRun()
     const response = await app.inject('/api/activity?types=dream&search=Dream')
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toMatchObject({ total: 1, totalsByKind: { dream: 1 }, items: [{ id: 'dream:run', kind: 'dream', sourceId: 'run', conversationId: 'chat', conversationTitle: 'My preferences', status: 'completed', dreamChanges: [{ tool: 'memory_append', output: 'Updated preferences.md' }] }] })
+    expect(response.json()).toMatchObject({ total: 1, totalsByKind: { dream: 1 }, items: [{ id: 'dream:run', kind: 'dream', sourceId: 'run', conversationId: 'chat', conversationTitle: 'My preferences', status: 'completed', dreamChanges: [{ tool: 'memory_update', memoryCategoryId: 'uncategorized', memoryFileName: 'preferences.md' }] }] })
     expect(response.json().items[0].description).toContain('2 message excerpts reviewed')
     expect((await app.inject('/api/activity?types=memory')).json().items).toEqual([])
 })

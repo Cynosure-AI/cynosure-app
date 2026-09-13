@@ -61,3 +61,20 @@ test('the previous default filters include Dream after upgrading', async () => {
   expect(wrapper.text()).toContain('Active Now')
   wrapper.unmount()
 })
+
+test('memory and Dream change links open the changed document with a pagination-safe filter', async () => {
+  mocks.list.mockResolvedValue({
+    items: [{
+      id: 'memory-file:category:notes', kind: 'memory', title: 'Updated knowledge graph for notes.md',
+      description: 'Knowledge · 3 chunks', createdAt: Date.now(), agentId: null, agentName: null,
+      agentIconUrl: null, conversationId: null, memoryCategoryId: 'category', memoryFileName: 'notes.md',
+    }],
+    total: 1,
+  })
+  const wrapper = mount(ActivityLogView, { global: { stubs: { Icon: true, HoverMenu: true, ModalDialog: true } } })
+  await flushPromises()
+  await wrapper.get('article').trigger('click')
+  expect(mocks.push).toHaveBeenCalledWith({
+    path: '/memory-categories/documents', query: { category: 'category', file: 'notes.md' },
+  })
+})
