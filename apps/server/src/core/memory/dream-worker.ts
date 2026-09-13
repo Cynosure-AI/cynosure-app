@@ -10,6 +10,7 @@ import { buildMemorySpaceFilter, getAssignedOrDefaultSpaces, getDefaultMemorySpa
 import { resolveMemorySpaceOverrides } from '../chat/run-config.js'
 import { makeMemoryListDocumentsTool, makeMemoryRetrieveChunksTool, makeMemorySearchTool, makeMemoryCreateTool, makeMemoryAppendTool, makeMemoryReplaceRangeTool } from '../tools/builtin/memory-tools.js'
 import { buildDreamBatch, getDreamConfig, getDreamRun, type DreamInput, type DreamRun, type DreamChange } from './dream-store.js'
+import { recordAuxiliaryModelUsage } from '../usage-metering.js'
 
 export const DREAM_SWEEP_MS = 60_000
 export const DREAM_IDLE_MS = 5 * 60_000
@@ -183,7 +184,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, spaces: 
     emit(run.id)
     try {
         guard()
-        await new AgentExecutor({
+        const result = await new AgentExecutor({
             gateway: getGateway(), tools: wrapped, conversationId: `dream:${run.id}`, broadcast: () => undefined,
             providerId: run.provider_id, model: run.model, signal: controller.signal, saveMessages: false, emitEvents: false,
             maxRounds: 10, contextWindow, contextStrategy: 'none', thinkingEnabled: false, maxOutputTokens: 2048,
@@ -191,6 +192,10 @@ async function executeReview(run: DreamRun, conversation: Conversation, spaces: 
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: JSON.stringify({ conversationId: conversation.id, permittedFolders: spaces, earlierContext: input.context, newExcerpts: input.sources, alreadyAppliedChanges: changes }), metadata: { untrusted: true } },
         ])
+        recordAuxiliaryModelUsage({
+            kind: 'dreaming', provider: result?.provider ?? run.provider_id, model: result?.model ?? run.model,
+            inputTokens: result?.usage?.promptTokens, outputTokens: result?.usage?.completionTokens,
+        })
         await Promise.allSettled([...inFlight])
         guard()
         if (failedMutation) throw new Error('One or more memory changes failed; review will be retried')

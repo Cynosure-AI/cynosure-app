@@ -14,7 +14,7 @@ interface ModelUsage {
 }
 
 interface AuxiliaryModelUsage extends ModelUsage {
-    kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router'
+    kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router' | 'dreaming'
 }
 
 interface ToolUsage {
@@ -48,6 +48,7 @@ interface MetricsSummary {
         estimatedCost: number | null
         chatEstimatedCost: number | null
         auxiliaryEstimatedCost: number | null
+        dreamingEstimatedCost: number | null
     }
     modelUsage: ModelUsage[]
     auxiliaryModelUsage: AuxiliaryModelUsage[]
@@ -201,7 +202,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             GROUP BY kind, provider, model
             ORDER BY request_count DESC
         `).all(sinceMs) as {
-            kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router'
+            kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router' | 'dreaming'
             provider: string
             model: string
             request_count: number
@@ -419,11 +420,15 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             return (sum ?? 0) + m.estimatedCost
         }, null)
         const auxiliaryEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {
-            if (m.estimatedCost === null) return sum
+            if (m.kind === 'dreaming' || m.estimatedCost === null) return sum
             return (sum ?? 0) + m.estimatedCost
         }, null)
-        const totalEstimatedCost = chatEstimatedCost !== null || auxiliaryEstimatedCost !== null
-            ? (chatEstimatedCost ?? 0) + (auxiliaryEstimatedCost ?? 0)
+        const dreamingEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {
+            if (m.kind !== 'dreaming' || m.estimatedCost === null) return sum
+            return (sum ?? 0) + m.estimatedCost
+        }, null)
+        const totalEstimatedCost = chatEstimatedCost !== null || auxiliaryEstimatedCost !== null || dreamingEstimatedCost !== null
+            ? (chatEstimatedCost ?? 0) + (auxiliaryEstimatedCost ?? 0) + (dreamingEstimatedCost ?? 0)
             : null
 
         const response: MetricsSummary = {
@@ -437,6 +442,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 estimatedCost: totalEstimatedCost,
                 chatEstimatedCost,
                 auxiliaryEstimatedCost,
+                dreamingEstimatedCost,
             },
             modelUsage: modelUsageWithCost.slice(0, 20),
             auxiliaryModelUsage: auxiliaryUsageWithCost.slice(0, 20),

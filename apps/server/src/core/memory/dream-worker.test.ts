@@ -58,7 +58,10 @@ beforeEach(() => {
     process.env.CYNOSURE_DATA_DIR = directory
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-07T10:00:00Z'))
-    mocks.run.mockReset().mockResolvedValue({ content: 'Nothing useful' })
+    mocks.run.mockReset().mockResolvedValue({
+        content: 'Nothing useful', provider: 'provider', model: 'model',
+        usage: { promptTokens: 120, completionTokens: 30, totalTokens: 150 },
+    })
     mocks.tool.mockReset().mockResolvedValue({ success: true, output: 'Saved document note#abc123' })
     mocks.modelInfo.mockReset().mockResolvedValue({ contextLength: 16384 })
     mocks.agent.mockReset()
@@ -110,6 +113,9 @@ describe('Dream worker', () => {
         expect(listDreamRuns()[0]).toMatchObject({ status: 'completed', reviewed_count: 1 })
         expect((JSON.parse(listDreamRuns()[0].input_json) as DreamInput).sources[0].content).toBe('')
         expect(getDb().prepare('SELECT COUNT(*) AS n FROM messages').get()).toEqual({ n: 1 })
+        expect(getDb().prepare(`SELECT kind, provider, model, input_tokens, output_tokens, request_count FROM auxiliary_model_usage WHERE kind = 'dreaming'`).get()).toEqual({
+            kind: 'dreaming', provider: 'provider', model: 'model', input_tokens: 120, output_tokens: 30, request_count: 1,
+        })
         await vi.advanceTimersByTimeAsync(DREAM_SWEEP_MS)
         expect(mocks.run).toHaveBeenCalledTimes(1)
         expect(broadcast).toHaveBeenCalledWith('memory:dream-updated', expect.objectContaining({ status: 'completed' }))
