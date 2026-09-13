@@ -6,7 +6,7 @@ import { estimateToolDefinitionTokens } from '../agent/context-trimmer.js'
 import { listActiveInstances } from '../../routes/instances.js'
 import type { BroadcastFn } from '../agent/pre-execution/execution-input.js'
 import type { ToolDefinition } from '../gateway/providers/base.provider.js'
-import { buildMemoryCategoryFilter, getAssignedMemoryCategories, getDefaultMemoryCategory, type MemoryCategoryRef } from './memory-category-scope.js'
+import { buildMemoryCategoryFilter, expandMemoryCategoryScope, getAssignedMemoryCategories, getDefaultMemoryCategory, type MemoryCategoryRef } from './memory-category-scope.js'
 import { resolveMemoryCategoryOverrides } from '../chat/run-config.js'
 import { makeMemoryListDocumentsTool, makeMemoryRetrieveChunksTool, makeMemorySearchTool, makeMemoryCreateTool, makeMemoryUpdateTool, makeMemoryDeleteTool } from '../tools/builtin/memory-tools.js'
 import { buildDreamBatch, getDreamConfig, getDreamRun, type DreamInput, type DreamRun, type DreamChange } from './dream-store.js'
@@ -40,7 +40,7 @@ export function resolveDreamCategories(conversation: Conversation): MemoryCatego
         if (assigned.length > 0) return assigned
     }
     const fallback = getDefaultMemoryCategory()
-    return fallback ? [fallback] : []
+    return fallback ? expandMemoryCategoryScope([fallback]) : []
 }
 function emit(runId: string): void {
     const run = getDreamRun(runId)

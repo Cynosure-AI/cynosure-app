@@ -3,7 +3,7 @@ import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { categoryPathForDirectory } from '../memory/memory-category-directories.js'
-import type { MemoryCategoryRef } from '../memory/memory-category-scope.js'
+import { expandMemoryCategoryScope, type MemoryCategoryRef } from '../memory/memory-category-scope.js'
 
 export interface ToolSelectionConfig {
     selectedToolKeys: string[]
@@ -71,7 +71,7 @@ export function resolveMemoryCategoryOverrides(
     if (!Array.isArray(requestedSpaceIds)) return undefined
 
     const uniqueSpaceIds = Array.from(new Set(requestedSpaceIds.map((sid) => sid.trim()).filter(Boolean)))
-    return uniqueSpaceIds
+    const selected = uniqueSpaceIds
         .map((sid) => db.prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_categories WHERE id = ?').get(sid) as { id: string; name: string; directory_path: string; is_uncategorized: number } | undefined)
         .filter((row): row is { id: string; name: string; directory_path: string; is_uncategorized: number } => Boolean(row))
         .map((row) => ({
@@ -79,6 +79,7 @@ export function resolveMemoryCategoryOverrides(
             name: row.name,
             categoryPath: row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path),
         }))
+    return expandMemoryCategoryScope(selected, db)
 }
 
 export function buildPersistedChatConfig(input: PersistedChatConfigInput): ConversationExecutionConfig {

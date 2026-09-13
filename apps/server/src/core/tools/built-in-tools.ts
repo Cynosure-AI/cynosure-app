@@ -2,6 +2,7 @@ import type { RegistryAwareToolDefinition, ToolDefinition } from "../gateway/pro
 import type { ConversationExecutionConfig } from "@shared/types";
 import {
     buildMemoryCategoryFilter,
+    expandMemoryCategoryScope,
     getAssignedMemoryCategories,
     getDefaultMemoryCategory,
     type MemoryCategoryRef,
@@ -238,9 +239,10 @@ export function hydrateBuiltInTools(
         scheduleExecutionConfig?: ConversationExecutionConfig;
     },
 ): RegistryAwareToolDefinition[] {
-    const assignedCategories =
+    const selectedCategories =
         ctx.memoryCategoryOverrides ??
         (ctx.agentId ? getAssignedMemoryCategories(ctx.agentId) : getDefaultMemoryCategories());
+    const assignedCategories = expandMemoryCategoryScope(selectedCategories);
     const categoryFilter = buildMemoryCategoryFilter(assignedCategories);
 
     const hydrationContext: BuiltInHydrationContext = {

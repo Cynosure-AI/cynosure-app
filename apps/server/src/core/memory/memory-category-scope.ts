@@ -1,4 +1,5 @@
 import { getDb } from '../../db/database.js'
+import type Database from 'better-sqlite3'
 import { lanceDbInFilter } from './lancedb-filter.js'
 import { listAllMemoryCategoryRefs, categoryPathForDirectory } from './memory-category-directories.js'
 
@@ -48,11 +49,21 @@ export function getAssignedMemoryCategories(agentId: string): MemoryCategoryRef[
             categoryPath: row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path),
         }))
 
-        const all = listAllMemoryCategoryRefs(db)
-        const paths = assigned.map(item => item.categoryPath ?? '')
-        return all.filter(item => paths.some(path => !path || item.categoryPath === path || item.categoryPath.startsWith(`${path}/`)))
+        return expandMemoryCategoryScope(assigned, db)
     } catch {
         return []
+    }
+}
+
+/** Expand category grants to every currently registered descendant. */
+export function expandMemoryCategoryScope(categories: MemoryCategoryRef[], db: Database.Database = getDb()): MemoryCategoryRef[] {
+    if (categories.length === 0) return []
+    try {
+        const all = listAllMemoryCategoryRefs(db)
+        const paths = categories.map(item => item.categoryPath ?? '')
+        return all.filter(item => paths.some(path => !path || item.categoryPath === path || item.categoryPath.startsWith(`${path}/`)))
+    } catch {
+        return categories
     }
 }
 

@@ -383,6 +383,11 @@ export interface MemoryRevisionSummary {
     createdAt: number
 }
 
+export interface MemoryDiffSegment {
+    type: 'unchanged' | 'added' | 'removed'
+    text: string
+}
+
 export interface MemoryDocumentKnowledgePreview {
     items: Array<{
         kind: 'relationship' | 'entity'

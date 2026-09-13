@@ -10,6 +10,7 @@ import {
   syncMemoryCategoriesFromFolders,
   validateRelativePath,
 } from './memory-category-directories.js'
+import { expandMemoryCategoryScope } from './memory-category-scope.js'
 
 describe('memory category directories', () => {
   let dataDir: string
@@ -57,6 +58,15 @@ describe('memory category directories', () => {
     const created = ensureMemoryCategoryPath(db, 'People/Veronica Flowers/Hobbies')
     expect(created.name).toBe('Hobbies')
     expect(existsSync(join(memoryRoot, 'People', 'Veronica Flowers', 'Hobbies'))).toBe(true)
+    const people = db.prepare("SELECT id, name FROM memory_categories WHERE name = 'People'").get() as { id: string; name: string }
+    const peopleScope = expandMemoryCategoryScope([{ ...people, categoryPath: 'People' }], db)
+    expect(peopleScope.map(category => category.categoryPath)).toEqual([
+      'People',
+      'People/Veronica Flowers',
+      'People/Veronica Flowers/Hobbies',
+    ])
+    expect(expandMemoryCategoryScope([{ id: 'uncategorized', name: 'Uncategorized', categoryPath: '' }], db))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
 
     mkdirSync(join(memoryRoot, 'Valid'))
     writeFileSync(join(memoryRoot, 'Valid', 'collision'), 'file')

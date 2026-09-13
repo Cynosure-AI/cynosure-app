@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { diffLines, createTwoFilesPatch } from 'diff'
+import { diffLines, diffWordsWithSpace, createTwoFilesPatch } from 'diff'
 import { getDb } from '../../db/database.js'
 
 export type MemoryRevisionSource = 'ai' | 'dream' | 'user' | 'filesystem' | 'import' | 'restore'
@@ -20,6 +20,11 @@ export interface MemoryRevisionSummary {
   agentId?: string
   messageIds: string[]
   createdAt: number
+}
+
+export interface MemoryDiffSegment {
+  type: 'unchanged' | 'added' | 'removed'
+  text: string
 }
 
 interface DocumentRow {
@@ -135,6 +140,17 @@ export function unifiedMemoryDiff(documentRef: string, fromId: string, toId: str
   // Avoid emitting a header-only patch for equivalent snapshots.
   if (diffLines(from.content, to.content).every(part => !part.added && !part.removed)) return ''
   return createTwoFilesPatch(`revision-${from.revisionNumber}`, `revision-${to.revisionNumber}`, from.content, to.content, '', '', { context: 3 })
+}
+
+/** Word-level changes for presenting a revision as readable prose instead of patch syntax. */
+export function inlineMemoryDiff(documentRef: string, fromId: string, toId: string): MemoryDiffSegment[] | undefined {
+  const from = getMemoryRevision(documentRef, fromId)
+  const to = getMemoryRevision(documentRef, toId)
+  if (!from || !to) return undefined
+  return diffWordsWithSpace(from.content, to.content).map(part => ({
+    type: part.added ? 'added' : part.removed ? 'removed' : 'unchanged',
+    text: part.value,
+  }))
 }
 
 function rowToSummary(row: RevisionRow): MemoryRevisionSummary {
