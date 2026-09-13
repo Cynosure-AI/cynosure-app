@@ -540,7 +540,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   getEmbeddingProvider().loadFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
-  adoptUnindexedMemoryFiles(ragStore.consumeLegacyCategorySchemaReset())
+  const legacySchemaReset = ragStore.consumeLegacyCategorySchemaReset()
+  if (legacySchemaReset) getMemoryKnowledgeStore().markSearchProjectionsPending()
+  adoptUnindexedMemoryFiles(legacySchemaReset)
   registerBuiltInTools()
 
   // Start filesystem watchers for all existing memory category folders

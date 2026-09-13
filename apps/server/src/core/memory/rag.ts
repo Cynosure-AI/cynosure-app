@@ -129,13 +129,18 @@ export class RAGStore {
     let discarded = false
     const tableNames = await this.db.tableNames()
     for (const tableName of tableNames) {
-      if (!/^permanent_memory(?:_v_[a-z0-9_]+)?$/.test(tableName)) continue
+      const isPermanentMemory = /^permanent_memory(?:_v_[a-z0-9_]+)?$/.test(tableName)
+      const isKnowledgeProjection = tableName === 'memory_knowledge_v2'
+      if (!isPermanentMemory && !isKnowledgeProjection) continue
 
       try {
         const table = await this.db.openTable(tableName)
         const schema = await table.schema()
         const fields = new Set(schema.fields.map((field: { name: string }) => field.name))
-        if (!fields.has('categoryId') && fields.has('spaceId')) {
+        const isLegacy = isPermanentMemory
+          ? !fields.has('categoryId') && fields.has('spaceId')
+          : !fields.has('categoryId')
+        if (isLegacy) {
           await this.db.dropTable(tableName)
           this.clearTableCaches(tableName)
           discarded = true
