@@ -618,6 +618,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
         chatEstimatedCost: number | null
         auxiliaryEstimatedCost: number | null
+        dreamingEstimatedCost: number | null
     }
     modelUsage: {
         provider: string
@@ -628,7 +629,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
     }[]
     auxiliaryModelUsage: {
-        kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router'
+        kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router' | 'dreaming'
         provider: string
         model: string
         requestCount: number

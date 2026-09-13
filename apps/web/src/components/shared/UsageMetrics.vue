@@ -266,6 +266,9 @@ async function confirmReset(): Promise<void> {
           <div class="flex justify-between text-theme-400 mb-0.5">
             <span>Auxiliary models</span><span class="text-theme-300">{{ formatCost(metrics.totals.auxiliaryEstimatedCost) }}</span>
           </div>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Dreaming</span><span class="text-theme-300">{{ formatCost(metrics.totals.dreamingEstimatedCost) }}</span>
+          </div>
           <div class="flex justify-between text-theme-400">
             <span>Avg latency</span><span class="text-theme-300">{{ metrics.totals.avgLatencyMs.toLocaleString() }}ms</span>
           </div>
@@ -370,7 +373,7 @@ async function confirmReset(): Promise<void> {
               />
             </div>
             <div class="text-[10px] text-theme-600 mt-0.5">
-              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : m.kind === 'knowledge-extraction' ? 'Entity extraction' : m.kind === 'memory-router' ? 'Memory router' : 'Tool router' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
+              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : m.kind === 'knowledge-extraction' ? 'Entity extraction' : m.kind === 'memory-router' ? 'Memory router' : m.kind === 'dreaming' ? 'Dreaming' : 'Tool router' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
                 class="text-amber-500/80 ml-1"
