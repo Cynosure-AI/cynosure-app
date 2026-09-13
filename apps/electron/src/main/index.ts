@@ -444,6 +444,16 @@ function showMainWindowNearCursor(): void {
     const win = mainWindow
     if (!win || win.isDestroyed()) return
 
+    const requestNewChat = (): void => {
+        if (!win.isDestroyed()) win.webContents.send('desktop:new-chat')
+    }
+
+    if (win.webContents.isLoadingMainFrame()) {
+        win.webContents.once('did-finish-load', requestNewChat)
+    } else {
+        requestNewChat()
+    }
+
     if (win.isFullScreen()) win.setFullScreen(false)
     if (win.isMaximized()) win.unmaximize()
     if (win.isMinimized()) win.restore()

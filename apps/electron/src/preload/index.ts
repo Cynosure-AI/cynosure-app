@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld('electron', {
     setUiPrefs: (prefs: Record<string, string>) => ipcRenderer.sendSync('set-ui-prefs', prefs),
     getGlobalHotkey: () => ipcRenderer.invoke('global-hotkey:get'),
     setGlobalHotkey: (accelerator: string) => ipcRenderer.invoke('global-hotkey:set', accelerator),
+    onNewChatRequested: (listener: () => void) => {
+        const handler = () => listener()
+        ipcRenderer.on('desktop:new-chat', handler)
+        return () => ipcRenderer.removeListener('desktop:new-chat', handler)
+    },
     quitApp: () => ipcRenderer.invoke('app:quit'),
     getUpdateState: () => ipcRenderer.invoke('updater:get-state'),
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),

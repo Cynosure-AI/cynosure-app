@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { nextTick, onMounted, onUnmounted } from 'vue'
 import { useProviderStore } from './stores/provider.store'
 import { useChatStore } from './stores/chat.store'
 import { useAgentStore, type HITLRequest } from './stores/agent-runtime.store'
@@ -10,7 +10,7 @@ import { api } from './api/client'
 import { wsConnected } from './api/http'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import ModalDialog from './components/shared/ModalDialog.vue'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
 import { useSidebar } from './composables/useSidebar'
@@ -26,7 +26,14 @@ const preferencesStore = usePreferencesStore()
 
 const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
+const router = useRouter()
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
+
+type ElectronDesktopApi = {
+  onNewChatRequested?: (listener: () => void) => () => void
+}
+
+const electron = (window as unknown as { electron?: ElectronDesktopApi }).electron
 
 // Close mobile sidebar on route change
 watch(() => route.path, () => closeSidebar())
@@ -99,6 +106,15 @@ function isExecutionUpdatePayload(data: unknown): data is { event: string; data:
 
 onMounted(async () => {
   loadAllStores()
+
+  if (electron?.onNewChatRequested) {
+    cleanups.push(electron.onNewChatRequested(async () => {
+      await chatStore.startNewChat()
+      await router.push({ name: 'triggers-chat' })
+      await nextTick()
+      document.querySelector<HTMLTextAreaElement>('.chat-input-bar textarea')?.focus()
+    }))
+  }
 
   // Set up WebSocket event listeners
   cleanups.push(
