@@ -16,7 +16,8 @@ const selectedMemoryCategories = computed(() => {
   return chatStore.memoryCategories.filter(s => ids.includes(s.id))
 })
 
-const memoryCategoryCount = computed(() => selectedMemoryCategories.value.length)
+const rootSelected = computed(() => selectedMemoryCategories.value.some(category => category.isUncategorized))
+const memoryCategoryCount = computed(() => rootSelected.value ? chatStore.memoryCategories.length : selectedMemoryCategories.value.length)
 const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
 </script>
 
@@ -38,8 +39,8 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         :class="autoMemoryEnabled ? 'bg-emerald-600' : 'bg-accent-600'"
       >
         <Icon
-          v-if="autoMemoryEnabled && memoryCategoryCount === 1 && selectedMemoryCategories[0].isUncategorized"
-          icon="lucide:sparkles"
+          v-if="rootSelected"
+          icon="lucide:layers-3"
           class="w-2.5 h-2.5"
         />
         <template v-else>
@@ -49,7 +50,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
-        Memory Categories ({{ memoryCategoryCount }} selected)
+        {{ rootSelected ? 'All Memory selected' : `Memory Categories (${memoryCategoryCount} selected)` }}
       </div>
       <div
         v-if="autoMemoryEnabled"
@@ -79,10 +80,10 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
           />
           <div class="min-w-0">
             <div class="text-theme-300 text-[11px] truncate">
-              {{ s.name }}
+              {{ s.isUncategorized ? 'All Memory' : s.name }}
             </div>
             <div class="text-theme-500 text-[10px]">
-              {{ s.fileCount }} docs
+              {{ s.isUncategorized ? 'Includes Uncategorized and every subcategory' : `${s.fileCount} docs` }}
             </div>
           </div>
         </div>

@@ -37,7 +37,10 @@ watch(visible, async (val) => {
 })
 
 const selected = computed(() => chatStore.freeChatMemoryCategoryIds)
-const allSelected = computed(() => spaces.value.length > 0 && spaces.value.every((space) => selected.value.includes(space.id)))
+const rootCategory = computed(() => spaces.value.find(space => space.isUncategorized))
+const rootSelected = computed(() => Boolean(rootCategory.value && selected.value.includes(rootCategory.value.id)))
+const allSelected = computed(() => spaces.value.length > 0 && (rootSelected.value || spaces.value.every((space) => selected.value.includes(space.id))))
+const effectiveSelectedCount = computed(() => rootSelected.value ? spaces.value.length : spaces.value.filter(space => selected.value.includes(space.id)).length)
 
 function collapseFoldersWithChildren(memoryCategories: MemoryCategory[]) {
   const pathsWithChildren = new Set<string>()
@@ -89,7 +92,8 @@ function toggleCollapsed(space: MemoryCategory) {
 }
 
 function selectAll() {
-  chatStore.freeChatMemoryCategoryIds.splice(0, chatStore.freeChatMemoryCategoryIds.length, ...spaces.value.map((space) => space.id))
+  const ids = rootCategory.value ? [rootCategory.value.id] : spaces.value.map(space => space.id)
+  chatStore.freeChatMemoryCategoryIds.splice(0, chatStore.freeChatMemoryCategoryIds.length, ...ids)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
@@ -107,7 +111,14 @@ function toggle(id: string) {
   const current = new Set(chatStore.freeChatMemoryCategoryIds)
   const scopedIds = memoryCategoryScopeIds(space)
 
-  if (current.has(id)) {
+  if (space.isUncategorized) {
+    current.clear()
+    if (!rootSelected.value) current.add(space.id)
+  } else if (rootSelected.value) {
+    // Moving from the root grant to a child means narrowing the scope to that subtree.
+    current.clear()
+    for (const scopedId of scopedIds) current.add(scopedId)
+  } else if (current.has(id)) {
     for (const scopedId of scopedIds) current.delete(scopedId)
   } else {
     for (const scopedId of scopedIds) current.add(scopedId)
@@ -116,6 +127,15 @@ function toggle(id: string) {
   chatStore.freeChatMemoryCategoryIds.splice(0, chatStore.freeChatMemoryCategoryIds.length, ...current)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
+}
+
+function isSelected(space: MemoryCategory): boolean {
+  return rootSelected.value || selected.value.includes(space.id)
+}
+
+function categoryDepth(space: MemoryCategory): number {
+  if (space.isUncategorized) return 0
+  return Math.max(1, (space.categoryPath || '').split('/').filter(Boolean).length)
 }
 
 function memoryCategoryScopeIds(space: MemoryCategory): string[] {
@@ -172,7 +192,7 @@ function toggleAutoMemory(enabled: boolean) {
       class="mb-2 flex items-center justify-between text-xs"
     >
       <span class="text-theme-500">
-        {{ allSelected ? 'All categories selected' : `${selected.length}/${spaces.length} categories selected` }}
+        {{ allSelected ? 'All memory selected' : `${effectiveSelectedCount}/${spaces.length} categories selected` }}
       </span>
       <div class="flex items-center gap-4">
         <button
@@ -210,7 +230,8 @@ function toggleAutoMemory(enabled: boolean) {
         v-for="space in visibleSpaces"
         :key="space.id"
         class="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
-        :class="selected.includes(space.id)
+        :data-category-depth="categoryDepth(space)"
+        :class="isSelected(space)
           ? 'bg-accent-600/15 border border-accent-500/30'
           : isPartiallySelected(space)
             ? 'bg-accent-600/8 border border-accent-500/15 hover:bg-accent-600/12'
@@ -218,9 +239,10 @@ function toggleAutoMemory(enabled: boolean) {
       >
         <!-- Indent spacer -->
         <span
-          v-if="(space.depth || 0) > 1"
-          :style="{ width: `${((space.depth || 0) * 12)}px` }"
-          class="shrink-0"
+          v-if="categoryDepth(space) > 0"
+          :style="{ width: `${categoryDepth(space) * 12}px` }"
+          class="shrink-0 self-stretch border-r border-theme-700/60"
+          aria-hidden="true"
         />
         <!-- Chevron: always rendered to keep all rows aligned -->
         <button
@@ -243,19 +265,19 @@ function toggleAutoMemory(enabled: boolean) {
             <Icon
               :icon="space.isUncategorized ? 'lucide:hard-drive' : 'lucide:folder'"
               class="w-3.5 h-3.5"
-              :class="selected.includes(space.id) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
+              :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
             />
           </div>
           <div class="flex-1 min-w-0">
             <div class="text-sm text-theme-200 truncate">
-              {{ space.name }}
+              {{ space.isUncategorized ? 'All Memory' : space.name }}
             </div>
             <div class="text-[11px] text-theme-500">
-              {{ space.fileCount }} document{{ space.fileCount !== 1 ? 's' : '' }}
+              {{ space.isUncategorized ? 'Includes Uncategorized and every subcategory' : `${space.fileCount} document${space.fileCount !== 1 ? 's' : ''}` }}
             </div>
           </div>
           <Icon
-            v-if="selected.includes(space.id)"
+            v-if="isSelected(space)"
             icon="mdi:check-circle"
             class="w-4 h-4 text-accent-400 shrink-0"
           />
