@@ -913,15 +913,9 @@ watch(searchQuery, () => {
               </p>
 
               <p
-                v-if="item.kind === 'dream' && item.conversationTitle"
+                v-if="item.kind === 'dream'"
                 class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-theme-500"
               >
-                <Icon
-                  icon="lucide:message-square"
-                  class="h-3 w-3 shrink-0"
-                />
-                <span class="truncate">{{ item.conversationTitle }}</span>
-                <span aria-hidden="true">·</span>
                 <time
                   :datetime="new Date(item.createdAt).toISOString()"
                   class="shrink-0 tabular-nums"
