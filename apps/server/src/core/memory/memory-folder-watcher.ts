@@ -1,5 +1,5 @@
 /**
- * Chokidar-based filesystem watchers for memory category folders.
+ * Chokidar-based filesystem watchers for memory folders.
  *
  * On startup, chokidar scans the folder and fires `add` for every file found.
  * When `ready` fires, we compare those files against the DB index and purge
@@ -69,12 +69,12 @@ async function tryRemapAddedFile(categoryId: string, directoryPath: string, file
 }
 
 /**
- * Start (or restart) a chokidar watcher for a memory category folder.
+ * Start (or restart) a chokidar watcher for a memory folder folder.
  * Safe to call multiple times — stops any existing watcher first.
  * The watcher handles both the startup offline-diff purge and realtime deletions.
  */
-export function watchMemoryCategory(categoryId: string, directoryPath: string): void {
-    stopWatchingMemoryCategory(categoryId)
+export function watchMemoryFolder(categoryId: string, directoryPath: string): void {
+    stopWatchingMemoryFolder(categoryId)
 
     if (!existsSync(directoryPath)) {
         console.warn(`[memory-watcher] not watching missing folder for space ${categoryId}: ${directoryPath}`)
@@ -147,7 +147,7 @@ export function watchMemoryCategory(categoryId: string, directoryPath: string): 
     watcher.on('unlinkDir', (deletedPath) => {
         if (resolve(deletedPath) !== watchedRoot) return
         console.warn(`[memory-watcher] watched folder for space ${categoryId} was removed: ${directoryPath}`)
-        stopWatchingMemoryCategory(categoryId)
+        stopWatchingMemoryFolder(categoryId)
     })
 
     watcher.on('error', (err) => {
@@ -156,14 +156,14 @@ export function watchMemoryCategory(categoryId: string, directoryPath: string): 
         } else {
             console.warn(`[memory-watcher] watcher error for space ${categoryId}:`, err)
         }
-        stopWatchingMemoryCategory(categoryId)
+        stopWatchingMemoryFolder(categoryId)
     })
 
     activeWatchers.set(categoryId, watcher)
 }
 
 /** Stop watching a specific space folder. */
-export function stopWatchingMemoryCategory(categoryId: string): void {
+export function stopWatchingMemoryFolder(categoryId: string): void {
     const watcher = activeWatchers.get(categoryId)
     if (!watcher) return
     watcher.close().catch(() => { /* ignore */ })
@@ -181,7 +181,7 @@ export function stopWatchingMemoryCategory(categoryId: string): void {
 }
 
 /** Stop all active watchers (called on server shutdown). */
-export async function stopAllMemoryCategoryWatchers(): Promise<void> {
+export async function stopAllMemoryFolderWatchers(): Promise<void> {
     await Promise.all([...activeWatchers.values()].map(w => w.close().catch(() => { /* ignore */ })))
     activeWatchers.clear()
     for (const pending of pendingDeletes.values()) clearTimeout(pending.timer)

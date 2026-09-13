@@ -268,7 +268,7 @@ export interface AgentDefinition {
     sortOrder: number
     tags: string[]
     favorite: boolean
-    memoryCategories: string[]
+    memoryFolders: string[]
     createdAt: number
     updatedAt: number
 }
@@ -333,16 +333,16 @@ export interface ActivityItem {
     instanceType?: AgentInstance['type']
     model?: string | null
     artifacts?: ActivityArtifact[]
-    memoryCategoryId?: string
+    memoryFolderId?: string
     memoryFileName?: string
-    dreamChanges?: Array<{ tool: string; output: string; memoryCategoryId?: string; memoryFileName?: string }>
+    dreamChanges?: Array<{ tool: string; output: string; memoryFolderId?: string; memoryFileName?: string }>
 }
 
 export type ActivityTotalsByKind = Record<ActivityKind, number>
 
 // ── Memory ──────────────────────────────────────────────────────────────────
 
-export interface MemoryCategory {
+export interface MemoryFolder {
     id: string
     name: string
     description: string

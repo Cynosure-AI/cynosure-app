@@ -160,7 +160,7 @@ async function loadContent() {
   currentFileName.value = props.sourceFile;
   editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
-    const res = await api.memoryCategories.getFileContent(props.categoryId, props.sourceFile);
+    const res = await api.memoryFolders.getFileContent(props.categoryId, props.sourceFile);
     loadedRevision.value = res.revision;
     documentRef.value = res.documentRef || "";
     largeDocumentMode.value = res.content.length >= LARGE_DOCUMENT_THRESHOLD;
@@ -185,7 +185,7 @@ async function loadHistory() {
   if (!documentRef.value) return;
   historyLoading.value = true;
   try {
-    revisions.value = await api.memoryCategories.listRevisions(documentRef.value);
+    revisions.value = await api.memoryFolders.listRevisions(documentRef.value);
     if (revisions.value.length) await selectRevision(revisions.value[0].id);
   } catch (err) {
     error.value = (err as Error).message || "Failed to load revision history";
@@ -201,11 +201,11 @@ async function selectRevision(id: string) {
   const previous = revisions.value[index + 1];
   if (!selected) return;
   if (!previous) {
-    const revision = await api.memoryCategories.getRevision(documentRef.value, id);
+    const revision = await api.memoryFolders.getRevision(documentRef.value, id);
     revisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
     return;
   }
-  revisionDiff.value = (await api.memoryCategories.getRevisionDiff(documentRef.value, previous.id, selected.id)).segments;
+  revisionDiff.value = (await api.memoryFolders.getRevisionDiff(documentRef.value, previous.id, selected.id)).segments;
 }
 
 async function toggleHistory() {
@@ -217,7 +217,7 @@ async function restoreSelectedRevision() {
   if (!selectedRevisionId.value || !window.confirm("Restore this revision as the current memory?")) return;
   saving.value = true;
   try {
-    await api.memoryCategories.restoreRevision(documentRef.value, selectedRevisionId.value, loadedRevision.value);
+    await api.memoryFolders.restoreRevision(documentRef.value, selectedRevisionId.value, loadedRevision.value);
     showHistory.value = false;
     await loadContent();
     emit("saved", { fileName: currentFileName.value, chunksStored: 0 });
@@ -231,7 +231,7 @@ async function restoreSelectedRevision() {
 async function applyRename() {
   const nextFileName = titleToFileName(editableTitle.value);
   if (!nextFileName || nextFileName === currentFileName.value) return currentFileName.value;
-  const res = await api.memoryCategories.renameFile(props.categoryId, currentFileName.value, nextFileName);
+  const res = await api.memoryFolders.renameFile(props.categoryId, currentFileName.value, nextFileName);
   currentFileName.value = res.fileName;
   editableTitle.value = splitFileName(res.fileName).stem;
   return res.fileName;
@@ -248,7 +248,7 @@ async function saveContent() {
     const chunksStored = 0;
     const fileName = await applyRename();
     if (hasChanges.value) {
-      const res = await api.memoryCategories.updateFileContent(
+      const res = await api.memoryFolders.updateFileContent(
         props.categoryId,
         fileName,
         markdown,

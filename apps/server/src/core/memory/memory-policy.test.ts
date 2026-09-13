@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { fuseRetrievalChannels, inferDocumentTitle, inferSectionPath, isRetrievableChunk } from './parser.js'
-import { hasExactMemoryCategoryScope } from './memory-aggregator.js'
+import { hasExactMemoryFolderScope } from './memory-aggregator.js'
 import type { SearchResult } from './rag.js'
 import { withSearchKeywords } from './rag.js'
 
@@ -25,8 +25,8 @@ describe('memory retrieval policy', () => {
   })
 
   test('explicit memory scopes fail closed on missing IDs', () => {
-    expect(hasExactMemoryCategoryScope(['a', 'b'], [{ id: 'a' }, { id: 'b' }])).toBe(true)
-    expect(hasExactMemoryCategoryScope(['a', 'missing'], [{ id: 'a' }])).toBe(false)
+    expect(hasExactMemoryFolderScope(['a', 'b'], [{ id: 'a' }, { id: 'b' }])).toBe(true)
+    expect(hasExactMemoryFolderScope(['a', 'missing'], [{ id: 'a' }])).toBe(false)
   })
 
   test('derives stable retrieval context from document structure', () => {

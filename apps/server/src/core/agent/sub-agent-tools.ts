@@ -3,7 +3,7 @@ import { getAgent, type SubAgentAssignment } from '../agents/agent-store.js'
 import { AgentExecutor } from './agent-executor.js'
 import { prepareAgentExecution } from './prepare-execution.js'
 import { getDb } from '../../db/database.js'
-import { getAssignedMemoryCategories } from '../memory/memory-category-scope.js'
+import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { customAlphabet, nanoid } from 'nanoid'
 import type { ChatMessage, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
@@ -101,7 +101,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             includeSubAgents: false,
             userQuery: typeof latestUserMessage === 'string' ? latestUserMessage : '',
             autoMemory: agentData.autoMemory === true,
-            memoryCategoryOverrides: getAssignedMemoryCategories(agentData.id),
+            memoryFolderOverrides: getAssignedMemoryFolders(agentData.id),
             eventMeta,
             signal: activeSignal,
         })

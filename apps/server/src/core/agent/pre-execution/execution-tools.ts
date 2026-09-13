@@ -1,6 +1,6 @@
 import { getBuiltInMemoryReadToolKeys, getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
-import { isRuntimeMemoryEnabled, type ExecutionMemoryCategoryRef } from './execution-memory.js'
+import { isRuntimeMemoryEnabled, type ExecutionMemoryFolderRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
@@ -29,7 +29,7 @@ export interface ResolveExecutionToolsInput {
     includeSubAgents?: boolean
     subAgentAssignments?: SubAgentAssignment[]
     signal?: AbortSignal
-    memoryCategoryOverrides?: ExecutionMemoryCategoryRef[]
+    memoryFolderOverrides?: ExecutionMemoryFolderRef[]
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
     eventMeta?: Record<string, unknown>
@@ -65,7 +65,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         includeSubAgents = true,
         subAgentAssignments,
         signal,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
         hydrationAgentId,
         eventMeta,
         requestedToolEffect = 'read',
@@ -109,7 +109,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         emitAutoToolRoutingSkipped(conversationId, 'disabled', eventMeta)
     }
 
-    if (isRuntimeMemoryEnabled(preset, autoMemory, memoryCategoryOverrides)) {
+    if (isRuntimeMemoryEnabled(preset, autoMemory, memoryFolderOverrides)) {
         const memoryToolKeys = requestedToolEffect === 'read'
             ? getBuiltInMemoryReadToolKeys()
             : getBuiltInMemoryToolKeys()
@@ -141,7 +141,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         agentId: hydrationAgentId !== undefined ? hydrationAgentId : preset.id,
         conversationId,
         broadcast,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
         scheduleExecutionConfig,
     })
     // MCP configuration is an application-level capability, so it remains

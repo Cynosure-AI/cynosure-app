@@ -8,7 +8,7 @@ import { EmbeddingProvider, getEmbeddingProvider } from '../core/memory/embeddin
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
-import { buildMemoryCategoryFilter, getAllMemoryCategories } from '../core/memory/memory-category-scope.js'
+import { buildMemoryFolderFilter, getAllMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import type { KnowledgeEntityType, ImportanceLevel } from '../core/memory/knowledge-types.js'
 import { getDeepResearchConfig, saveDeepResearchConfig, type DeepResearchConfig } from '../core/memory/memory-deep-research.js'
 import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
@@ -73,12 +73,12 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     if (categoryId?.trim()) {
       const db = getDb()
       const row = db
-        .prepare('SELECT id, name FROM memory_categories WHERE id = ?')
+        .prepare('SELECT id, name FROM memory_folders WHERE id = ?')
         .get(categoryId.trim()) as { id: string; name: string } | undefined
-      if (!row) return reply.code(404).send({ error: 'Memory category not found' })
-      filter = buildMemoryCategoryFilter([row])
+      if (!row) return reply.code(404).send({ error: 'Memory folder not found' })
+      filter = buildMemoryFolderFilter([row])
     } else {
-      filter = buildMemoryCategoryFilter(getAllMemoryCategories())
+      filter = buildMemoryFolderFilter(getAllMemoryFolders())
     }
 
     return mem.recall(query.trim(), boundedTopK, filter)
@@ -110,9 +110,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const query = req.body.query?.trim()
     const categoryIds = Array.from(new Set((req.body.categoryIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0)))
     if (!query) return reply.status(400).send({ error: 'A non-empty query is required' })
-    if (!categoryIds.length) return reply.status(400).send({ error: 'At least one memory category is required' })
-    const known = getDb().prepare(`SELECT id FROM memory_categories WHERE id IN (${categoryIds.map(() => '?').join(', ')})`).all(...categoryIds) as Array<{ id: string }>
-    if (known.length !== categoryIds.length) return reply.status(404).send({ error: 'Memory category not found' })
+    if (!categoryIds.length) return reply.status(400).send({ error: 'At least one memory folder is required' })
+    const known = getDb().prepare(`SELECT id FROM memory_folders WHERE id IN (${categoryIds.map(() => '?').join(', ')})`).all(...categoryIds) as Array<{ id: string }>
+    if (known.length !== categoryIds.length) return reply.status(404).send({ error: 'Memory folder not found' })
     return getMemoryKnowledgeStore().search(query, categoryIds, Math.min(50, Math.max(1, req.body.limit || 8)))
   })
 
@@ -134,8 +134,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       ? []
       : Array.from(new Set((req.query.categoryIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
     if (categoryIds.length) {
-      const known = getDb().prepare(`SELECT id FROM memory_categories WHERE id IN (${categoryIds.map(() => '?').join(', ')})`).all(...categoryIds) as Array<{ id: string }>
-      if (known.length !== categoryIds.length) return reply.status(404).send({ error: 'Memory category not found' })
+      const known = getDb().prepare(`SELECT id FROM memory_folders WHERE id IN (${categoryIds.map(() => '?').join(', ')})`).all(...categoryIds) as Array<{ id: string }>
+      if (known.length !== categoryIds.length) return reply.status(404).send({ error: 'Memory folder not found' })
     }
     if (explicitlyEmpty) {
       return {

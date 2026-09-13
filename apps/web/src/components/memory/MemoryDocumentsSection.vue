@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
-import type { MemoryCategory } from "../../api/types";
+import type { MemoryFolder } from "../../api/types";
 import MemoryDocumentList from "./MemoryDocumentList.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
@@ -14,18 +14,18 @@ interface DocumentDragPayload {
 }
 
 const props = defineProps<{
-  spaces: MemoryCategory[];
+  spaces: MemoryFolder[];
   spacesLoading: boolean;
   selectedCategoryId: string | null;
-  selectedCategory: MemoryCategory | null;
+  selectedCategory: MemoryFolder | null;
   focusFile?: string;
 }>();
 
 const emit = defineEmits<{
   "update:selectedCategoryId": [value: string | null];
-  "create-folder": [parent?: MemoryCategory];
-  "edit-folder": [space: MemoryCategory];
-  "delete-folder": [space: MemoryCategory];
+  "create-folder": [parent?: MemoryFolder];
+  "edit-folder": [space: MemoryFolder];
+  "delete-folder": [space: MemoryFolder];
   "refresh-spaces": [];
   "category-navigation": [];
 }>();
@@ -56,7 +56,7 @@ const visibleSpaces = computed(() =>
   }),
 );
 
-function hasChildren(space: MemoryCategory): boolean {
+function hasChildren(space: MemoryFolder): boolean {
   const prefix = space.categoryPath ? `${space.categoryPath}/` : "";
   return props.spaces.some((candidate) =>
     space.isUncategorized
@@ -65,16 +65,16 @@ function hasChildren(space: MemoryCategory): boolean {
   );
 }
 
-function categoryDepth(space: MemoryCategory): number {
+function categoryDepth(space: MemoryFolder): number {
   if (space.isUncategorized) return 0;
   return Math.max(1, (space.categoryPath || "").split("/").filter(Boolean).length);
 }
 
-function isCollapsed(space: MemoryCategory): boolean {
+function isCollapsed(space: MemoryFolder): boolean {
   return collapsedFolders.value.has(space.categoryPath || "");
 }
 
-function initializeFolderState(spaces: MemoryCategory[]): void {
+function initializeFolderState(spaces: MemoryFolder[]): void {
   if (folderStateInitialized) return;
   try {
     const raw = sessionStorage.getItem(COLLAPSED_KEY);
@@ -118,7 +118,7 @@ function writeCollapsedFolders(): void {
   }
 }
 
-function toggleFolder(space: MemoryCategory) {
+function toggleFolder(space: MemoryFolder) {
   const key = space.categoryPath || "";
   const next = new Set(collapsedFolders.value);
   if (next.has(key)) next.delete(key);
@@ -147,7 +147,7 @@ function onDragEnter(e: DragEvent, categoryId?: string) {
   if (categoryId) {
     if (!isDocumentDrag(e)) return;
     e.preventDefault();
-    // A document is already in the selected category, so it cannot be moved there.
+    // A document is already in the selected folder, so it cannot be moved there.
     if (isDocumentDrag(e) && categoryId === props.selectedCategoryId) return;
     dropTargetSpaceId.value = categoryId;
     return;
@@ -204,7 +204,7 @@ async function onFolderDrop(e: DragEvent, targetCategoryId: string) {
     if (sourceCategoryId === props.selectedCategoryId) {
       await docList.value?.moveDocumentsToCategory(targetCategoryId, sourceFiles);
     } else {
-      await api.memoryCategories.moveDocuments(sourceCategoryId, sourceFiles, targetCategoryId);
+      await api.memoryFolders.moveDocuments(sourceCategoryId, sourceFiles, targetCategoryId);
       emit("refresh-spaces");
     }
   } catch {
@@ -257,7 +257,7 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
           v-if="spaces.length === 0"
           class="px-4 py-8 text-center text-sm text-theme-500"
         >
-          No memory category found.
+          No memory folder found.
         </div>
         <div
           v-else
@@ -315,19 +315,19 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
               />
               <span
                 class="truncate text-sm font-medium"
-                :title="space.isUncategorized ? 'Memory root — granting this category includes every descendant category' : space.categoryPath"
+                :title="space.isUncategorized ? 'Memory root — granting this folder includes every descendant folder' : space.categoryPath"
               >{{ space.name }}</span>
               <span
                 v-if="space.isUncategorized"
                 class="rounded bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-400"
-                title="Category grants made at the root include all current and future descendants"
+                title="Folder grants made at the root include all current and future descendants"
               >Root</span>
               <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
             </button>
             <!-- Action buttons -->
             <button
               class="p-1 text-theme-600 hover:text-accent-400 opacity-0 group-hover:opacity-100 transition-colors"
-              title="New subcategory"
+              title="New subfolder"
               @click.stop="emit('create-folder', space)"
             >
               <Icon
@@ -337,7 +337,7 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
             </button>
             <button
               class="p-1 text-theme-600 hover:text-theme-200 opacity-0 group-hover:opacity-100 transition-colors"
-              title="Rename category"
+              title="Rename folder"
               @click.stop="emit('edit-folder', space)"
             >
               <Icon
@@ -379,7 +379,7 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
               class="w-12 h-12 text-accent-400 mx-auto mb-2"
             />
             <p class="text-accent-300 font-medium">
-              Drop files into {{ selectedCategory?.name || "selected category" }}
+              Drop files into {{ selectedCategory?.name || "selected folder" }}
             </p>
           </div>
         </div>

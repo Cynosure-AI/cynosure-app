@@ -8,9 +8,9 @@ import { closePlanningRun } from '../agent/planning-state.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
-import { getAssignedMemoryCategories } from '../memory/memory-category-scope.js'
+import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { buildPersistedChatConfig } from '../chat/run-config.js'
-import { resolveMemoryCategoryOverrides } from '../chat/run-config.js'
+import { resolveMemoryFolderOverrides } from '../chat/run-config.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -82,9 +82,9 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     let planningRunId: string | undefined
 
     try {
-        const memoryCategories = agent
-            ? getAssignedMemoryCategories(agent.id)
-            : (resolveMemoryCategoryOverrides(db, executionConfig?.memoryCategoryIds) ?? [])
+        const memoryFolders = agent
+            ? getAssignedMemoryFolders(agent.id)
+            : (resolveMemoryFolderOverrides(db, executionConfig?.memoryFolderIds) ?? [])
         const planned = await planExecution({
             resolvedAgent: agent,
             conversationId,
@@ -102,7 +102,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
                 requestedSubAgents: executionConfig?.subAgents,
                 selectedToolKeys: executionConfig?.allowedTools,
                 hasExplicitToolAllowlist: executionConfig ? executionConfig.autoToolRouting !== true : undefined,
-                memoryCategoryOverrides: memoryCategories,
+                memoryFolderOverrides: memoryFolders,
                 autoToolRouting: executionConfig?.autoToolRouting ?? (agent?.autoToolRouting === true),
                 autoMemory: executionConfig?.autoMemory ?? (agent?.autoMemory === true),
                 autoRouterProviderId: executionConfig?.autoRouterProviderId,
@@ -116,7 +116,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         const persistedExecutionConfig = buildPersistedChatConfig({
             selectedToolKeys: executionConfig?.allowedTools ?? agent?.tools ?? [],
             requestedSubAgents: executionConfig?.subAgents ?? agent?.subAgents ?? [],
-            requestedMemoryCategoryIds: memoryCategories.map((space) => space.id),
+            requestedMemoryFolderIds: memoryFolders.map((space) => space.id),
             systemPrompt: planned.messages.find((message) => message.role === 'system')?.content.toString(),
             responseModel: planned.responseModel,
             responseProvider: planned.responseProvider,

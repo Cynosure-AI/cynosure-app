@@ -17,19 +17,19 @@ import {
 } from '../core/memory/memory-file-manager.js'
 import { basename, extname, join, sep } from 'path'
 import { existsSync, renameSync, writeFileSync } from 'fs'
-import { watchMemoryCategory, stopWatchingMemoryCategory } from '../core/memory/memory-category-watcher.js'
+import { watchMemoryFolder, stopWatchingMemoryFolder } from '../core/memory/memory-folder-watcher.js'
 import {
-    archiveMemoryCategoryDirectory,
+    archiveMemoryFolderDirectory,
     directoryPathForRelative,
     makeChildCategoryPath,
-    memoryCategoryDirectoryData,
-    newMemoryCategoryId,
+    memoryFolderDirectoryData,
+    newMemoryFolderId,
     categoryPathForDirectory,
-    renameMemoryCategoryDirectory,
-    syncMemoryCategoriesFromFolders,
+    renameMemoryFolderDirectory,
+    syncMemoryFoldersFromFolders,
     validateRelativePath,
-    type MemoryCategoryDirectoryData,
-} from '../core/memory/memory-category-directories.js'
+    type MemoryFolderDirectoryData,
+} from '../core/memory/memory-folder-directories.js'
 import {
     deleteMemoryKnowledgeSource,
     deleteMemoryKnowledgeCategory,
@@ -55,7 +55,7 @@ import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevis
 // Row / response types
 // ---------------------------------------------------------------------------
 
-interface MemoryCategoryRow {
+interface MemoryFolderRow {
     id: string
     name: string
     description: string
@@ -65,7 +65,7 @@ interface MemoryCategoryRow {
     created_at: number
 }
 
-interface MemoryCategoryData {
+interface MemoryFolderData {
     id: string
     name: string
     description: string
@@ -103,8 +103,8 @@ export interface MemoryFileStatus {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function rowToData(row: MemoryCategoryRow, fileCount: number): MemoryCategoryData {
-    const folderData: MemoryCategoryDirectoryData = memoryCategoryDirectoryData(row)
+function rowToData(row: MemoryFolderRow, fileCount: number): MemoryFolderData {
+    const folderData: MemoryFolderDirectoryData = memoryFolderDirectoryData(row)
     return {
         id: row.id,
         name: row.name,
@@ -120,10 +120,10 @@ function rowToData(row: MemoryCategoryRow, fileCount: number): MemoryCategoryDat
     }
 }
 
-function loadCategoryRow(id: string): MemoryCategoryRow | undefined {
+function loadCategoryRow(id: string): MemoryFolderRow | undefined {
     const db = getDb()
-    syncMemoryCategoriesFromFolders(db)
-    return db.prepare('SELECT * FROM memory_categories WHERE id = ?').get(decodeCategoryIdParam(id)) as MemoryCategoryRow | undefined
+    syncMemoryFoldersFromFolders(db)
+    return db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(decodeCategoryIdParam(id)) as MemoryFolderRow | undefined
 }
 
 function validateEditableFileName(fileName: string): string {
@@ -150,7 +150,7 @@ function decodeCategoryIdParam(id: string): string {
 // Routes
 // ---------------------------------------------------------------------------
 
-export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Promise<void> {
+export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise<void> {
 
     app.get<{ Params: { documentRef: string } }>('/documents/:documentRef/revisions', async (req, reply) => {
         const document = getMemoryDocument(req.params.documentRef)
@@ -177,7 +177,7 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         const revision = getMemoryRevision(req.params.documentRef, req.params.revisionId)
         if (!document || !revision) return reply.status(404).send({ error: 'Memory revision not found' })
         const category = loadCategoryRow(document.category_id)
-        if (!category?.directory_path) return reply.status(409).send({ error: 'Memory category is unavailable' })
+        if (!category?.directory_path) return reply.status(409).send({ error: 'Memory folder is unavailable' })
         const filePath = join(category.directory_path, document.file_name)
         const currentHash = existsSync(filePath) ? computeFileHash(filePath) : ''
         if (req.body.expectedRevision !== undefined && req.body.expectedRevision !== currentHash) {
@@ -197,26 +197,26 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
       FROM memory_documents WHERE status = 'deleted' ORDER BY deleted_at DESC
     `).all())
 
-    // GET /api/memory-categories/jobs — list recent background indexing jobs
+    // GET /api/memory-folders/jobs — list recent background indexing jobs
     app.get('/jobs', async () => {
         return listMemoryIndexJobs()
     })
 
-    // GET /api/memory-categories/jobs/:jobId — inspect one background indexing job
+    // GET /api/memory-folders/jobs/:jobId — inspect one background indexing job
     app.get<{ Params: { jobId: string } }>('/jobs/:jobId', async (req, reply) => {
         const job = getMemoryIndexJob(req.params.jobId)
         if (!job) return reply.status(404).send({ error: 'Job not found' })
         return job
     })
 
-    // POST /api/memory-categories/jobs/:jobId/cancel — cancel one background indexing job
+    // POST /api/memory-folders/jobs/:jobId/cancel — cancel one background indexing job
     app.post<{ Params: { jobId: string } }>('/jobs/:jobId/cancel', async (req, reply) => {
         const job = cancelMemoryIndexJob(req.params.jobId)
         if (!job) return reply.status(404).send({ error: 'Job not found' })
         return job
     })
 
-    // DELETE /api/memory-categories/jobs/:jobId — discard a paused extraction checkpoint.
+    // DELETE /api/memory-folders/jobs/:jobId — discard a paused extraction checkpoint.
     app.delete<{ Params: { jobId: string } }>('/jobs/:jobId', async (req, reply) => {
         await waitForMemoryIndexJob(req.params.jobId)
         if (!discardMemoryIndexJob(req.params.jobId)) {
@@ -225,24 +225,24 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         return { success: true }
     })
 
-    // GET /api/memory-categories — list all categories with file counts
+    // GET /api/memory-folders — list all categories with file counts
     app.get('/', async () => {
         const db = getDb()
-        syncMemoryCategoriesFromFolders(db)
-        const rows = db.prepare('SELECT * FROM memory_categories ORDER BY is_uncategorized DESC, directory_path ASC').all() as MemoryCategoryRow[]
+        syncMemoryFoldersFromFolders(db)
+        const rows = db.prepare('SELECT * FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as MemoryFolderRow[]
         return rows.map(row => {
             const files = listFilesInFolder(row.directory_path).filter(f => f.supported)
             return rowToData(row, files.length)
         })
     })
 
-    // POST /api/memory-categories — create a directory-backed category
+    // POST /api/memory-folders — create a directory-backed category
     app.post<{ Body: { name: string; description?: string; parentCategoryPath?: string } }>('/', async (req, reply) => {
         const { name, description, parentCategoryPath } = req.body
         if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
         const trimmedName = name.trim()
         const db = getDb()
-        syncMemoryCategoriesFromFolders(db)
+        syncMemoryFoldersFromFolders(db)
         let categoryPath: string
         try {
             categoryPath = makeChildCategoryPath(trimmedName, parentCategoryPath || '')
@@ -250,24 +250,24 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
             return reply.status(400).send({ error: (err as Error).message })
         }
         const resolvedFolder = directoryPathForRelative(categoryPath)
-        const existing = db.prepare('SELECT id FROM memory_categories WHERE directory_path = ?').get(resolvedFolder) as { id: string } | undefined
-        if (existing) return reply.status(409).send({ error: 'A memory category with that path already exists.' })
+        const existing = db.prepare('SELECT id FROM memory_folders WHERE directory_path = ?').get(resolvedFolder) as { id: string } | undefined
+        if (existing) return reply.status(409).send({ error: 'A memory folder with that path already exists.' })
 
-        const id = newMemoryCategoryId()
+        const id = newMemoryFolderId()
         const now = Date.now()
         ensureFolder(resolvedFolder)
-        db.prepare('INSERT INTO memory_categories (id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        db.prepare('INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
             .run(id, trimmedName, description || '', resolvedFolder, 0, 0, now)
-        watchMemoryCategory(id, resolvedFolder)
+        watchMemoryFolder(id, resolvedFolder)
         return rowToData({ id, name: trimmedName, description: description || '', directory_path: resolvedFolder, sort_order: 0, is_uncategorized: 0, created_at: now }, 0)
     })
 
-    // PUT /api/memory-categories/reorder — update sort order
+    // PUT /api/memory-folders/reorder — update sort order
     app.put<{ Body: { ids: string[] } }>('/reorder', async (req, reply) => {
         const { ids } = req.body
         if (!Array.isArray(ids)) return reply.status(400).send({ error: 'ids must be an array' })
         const db = getDb()
-        const stmt = db.prepare('UPDATE memory_categories SET sort_order = ? WHERE id = ?')
+        const stmt = db.prepare('UPDATE memory_folders SET sort_order = ? WHERE id = ?')
         const runAll = db.transaction(() => {
             for (let i = 0; i < ids.length; i++) stmt.run(i, ids[i])
         })
@@ -275,13 +275,13 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         return { success: true }
     })
 
-    // PUT /api/memory-categories/:id — update name/description/categoryPath
+    // PUT /api/memory-folders/:id — update name/description/categoryPath
     app.put<{ Params: { id: string }; Body: { name?: string; description?: string; categoryPath?: string } }>('/:id', async (req, reply) => {
         const db = getDb()
-        syncMemoryCategoriesFromFolders(db)
+        syncMemoryFoldersFromFolders(db)
         const categoryId = decodeCategoryIdParam(req.params.id)
-        const row = db.prepare('SELECT * FROM memory_categories WHERE id = ?').get(categoryId) as MemoryCategoryRow | undefined
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        const row = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(categoryId) as MemoryFolderRow | undefined
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
 
         const name = req.body.name?.trim() || row.name
         const description = req.body.description !== undefined ? req.body.description : row.description
@@ -289,7 +289,7 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         let nextName = name
 
         if (row.is_uncategorized === 1 && req.body.categoryPath !== undefined && validateRelativePath(req.body.categoryPath) !== '') {
-            return reply.status(400).send({ error: 'Cannot move the Uncategorized memory category.' })
+            return reply.status(400).send({ error: 'Cannot move the Uncategorized memory folder.' })
         }
 
         if (row.is_uncategorized === 0) {
@@ -309,14 +309,14 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
             if (nextRelativePath !== currentRelativePath) {
                 try {
                     const oldFolderPath = row.directory_path
-                    const descendants = db.prepare('SELECT * FROM memory_categories WHERE id != ? AND directory_path LIKE ?').all(row.id, `${oldFolderPath}${oldFolderPath.endsWith(sep) ? '' : sep}%`) as MemoryCategoryRow[]
-                    const renamed = renameMemoryCategoryDirectory(row, nextRelativePath)
+                    const descendants = db.prepare('SELECT * FROM memory_folders WHERE id != ? AND directory_path LIKE ?').all(row.id, `${oldFolderPath}${oldFolderPath.endsWith(sep) ? '' : sep}%`) as MemoryFolderRow[]
+                    const renamed = renameMemoryFolderDirectory(row, nextRelativePath)
                     directoryPath = renamed.directory_path
                     nextName = renamed.name
                     for (const child of descendants) {
                         const childFolderPath = `${directoryPath}${child.directory_path.slice(oldFolderPath.length)}`
-                        db.prepare('UPDATE memory_categories SET directory_path = ? WHERE id = ?').run(childFolderPath, child.id)
-                        watchMemoryCategory(child.id, childFolderPath)
+                        db.prepare('UPDATE memory_folders SET directory_path = ? WHERE id = ?').run(childFolderPath, child.id)
+                        watchMemoryFolder(child.id, childFolderPath)
                     }
                 } catch (err) {
                     return reply.status(409).send({ error: (err as Error).message })
@@ -324,38 +324,38 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
             }
         }
 
-        db.prepare('UPDATE memory_categories SET name = ?, description = ?, directory_path = ? WHERE id = ?').run(nextName, description, directoryPath, row.id)
-        watchMemoryCategory(row.id, directoryPath)
+        db.prepare('UPDATE memory_folders SET name = ?, description = ?, directory_path = ? WHERE id = ?').run(nextName, description, directoryPath, row.id)
+        watchMemoryFolder(row.id, directoryPath)
         const files = listFilesInFolder(directoryPath).filter(f => f.supported)
         return rowToData({ ...row, name: nextName, description, directory_path: directoryPath }, files.length)
     })
 
-    // DELETE /api/memory-categories/:id — archive folder + delete vectors/index
+    // DELETE /api/memory-folders/:id — archive folder + delete vectors/index
     app.delete<{ Params: { id: string } }>('/:id', async (req, reply) => {
         const db = getDb()
-        syncMemoryCategoriesFromFolders(db)
+        syncMemoryFoldersFromFolders(db)
         const categoryId = decodeCategoryIdParam(req.params.id)
-        const row = db.prepare('SELECT * FROM memory_categories WHERE id = ?').get(categoryId) as MemoryCategoryRow | undefined
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        const row = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(categoryId) as MemoryFolderRow | undefined
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         if (row.is_uncategorized) {
-            return reply.status(400).send({ error: 'Cannot delete the Uncategorized memory category.' })
+            return reply.status(400).send({ error: 'Cannot delete the Uncategorized memory folder.' })
         }
         const rag = getRAGStore()
         const categoryPath = categoryPathForDirectory(row.directory_path)
-        const descendants = db.prepare('SELECT * FROM memory_categories WHERE id != ? AND directory_path LIKE ?').all(row.id, `${row.directory_path}${row.directory_path.endsWith(sep) ? '' : sep}%`) as MemoryCategoryRow[]
+        const descendants = db.prepare('SELECT * FROM memory_folders WHERE id != ? AND directory_path LIKE ?').all(row.id, `${row.directory_path}${row.directory_path.endsWith(sep) ? '' : sep}%`) as MemoryFolderRow[]
         const rowsToDelete = [row, ...descendants]
         for (const target of rowsToDelete) {
             await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('categoryId', target.id))
-            stopWatchingMemoryCategory(target.id)
+            stopWatchingMemoryFolder(target.id)
             // Retire the knowledge derived from this category.
             deleteMemoryKnowledgeCategory(target.id)
         }
-        archiveMemoryCategoryDirectory(row)
+        archiveMemoryFolderDirectory(row)
         const deleteRows = db.transaction(() => {
             for (const target of rowsToDelete) {
                 db.prepare('DELETE FROM memory_file_index WHERE category_id = ?').run(target.id)
-                db.prepare('DELETE FROM agent_memory_categories WHERE category_id = ?').run(target.id)
-                db.prepare('DELETE FROM memory_categories WHERE id = ?').run(target.id)
+                db.prepare('DELETE FROM agent_memory_folders WHERE category_id = ?').run(target.id)
+                db.prepare('DELETE FROM memory_folders WHERE id = ?').run(target.id)
             }
         })
         deleteRows()
@@ -366,21 +366,21 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
     // File browser
     // -----------------------------------------------------------------------
 
-    // GET /api/memory-categories/:id/jobs — list recent indexing jobs for a category
+    // GET /api/memory-folders/:id/jobs — list recent indexing jobs for a category
     app.get<{ Params: { id: string } }>('/:id/jobs', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         return listMemoryIndexJobs(row.id)
     })
 
-    // POST /api/memory-categories/:id/knowledge/rebuild — migrate every current
+    // POST /api/memory-folders/:id/knowledge/rebuild — migrate every current
     // source document in a category into the versioned knowledge projection.
     // Jobs are durable, bounded by the shared worker pool, and independently
     // retryable; source files and their current RAG index remain untouched.
     app.post<{ Params: { id: string } }>('/:id/knowledge/rebuild', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
         const mem = getAgentMemory()
         const indexedFiles = mem.getFileIndex(row.id)
         const jobs = []
@@ -411,11 +411,11 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         return { success: true, scheduled: jobs.length, jobs, skipped }
     })
 
-    // GET /api/memory-categories/:id/files — list files in folder with index status
+    // GET /api/memory-folders/:id/files — list files in folder with index status
     app.get<{ Params: { id: string } }>('/:id/files', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         const mem = getAgentMemory()
         const fileIndex = mem.getFileIndex(row.id)
@@ -480,19 +480,19 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         return result.sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
     })
 
-    // GET /api/memory-categories/:id/files/:fileName/knowledge-preview — a small,
+    // GET /api/memory-folders/:id/files/:fileName/knowledge-preview — a small,
     // source-specific summary for the document list hover popover.
     app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/knowledge-preview', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         return getMemoryKnowledgeStore().documentDeepResearchPreview(row.id, req.params.fileName, 15)
     })
 
-    // POST /api/memory-categories/:id/files/:fileName/reindex — re-index a specific file
+    // POST /api/memory-folders/:id/files/:fileName/reindex — re-index a specific file
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/reindex', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         const mem = getAgentMemory()
         try {
@@ -503,11 +503,11 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         }
     })
 
-    // POST /api/memory-categories/:id/files/:fileName/reindex-job — start a background re-index job
+    // POST /api/memory-folders/:id/files/:fileName/reindex-job — start a background re-index job
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/reindex-job', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         const mem = getAgentMemory()
         return startMemoryIndexJob({
@@ -524,8 +524,8 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
     // Extract one indexed document into governed knowledge.
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/deep-research', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         const mem = getAgentMemory()
         const status = mem.checkFileStatus(row.id, req.params.fileName, row.directory_path)
@@ -551,8 +551,8 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
     // Start a background deep-research job.
     app.post<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/deep-research-job', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         const mem = getAgentMemory()
         const status = mem.checkFileStatus(row.id, req.params.fileName, row.directory_path)
@@ -586,10 +586,10 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         })
     })
 
-    // DELETE /api/memory-categories/:id/files/:fileName — archive a file and remove its indexes
+    // DELETE /api/memory-folders/:id/files/:fileName — archive a file and remove its indexes
     app.delete<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
 
         const mem = getAgentMemory()
         await mem.deleteSourceFile(req.params.fileName, row.id)
@@ -597,11 +597,11 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         return { success: true }
     })
 
-    // GET /api/memory-categories/:id/files/:fileName/content — read editable file content
+    // GET /api/memory-folders/:id/files/:fileName/content — read editable file content
     app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/content', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         let fileName: string
         try {
@@ -623,11 +623,11 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         }
     })
 
-    // PUT /api/memory-categories/:id/files/:fileName/content — persist editable content, then refresh vectors in the background
+    // PUT /api/memory-folders/:id/files/:fileName/content — persist editable content, then refresh vectors in the background
     app.put<{ Params: { id: string; fileName: string }; Body: { content: string; expectedRevision?: string } }>('/:id/files/:fileName/content', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
         if (typeof req.body.content !== 'string') return reply.status(400).send({ error: 'content is required' })
 
         let fileName: string
@@ -684,11 +684,11 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         }
     })
 
-    // PUT /api/memory-categories/:id/files/:fileName/name — rename an editable memory file
+    // PUT /api/memory-folders/:id/files/:fileName/name — rename an editable memory file
     app.put<{ Params: { id: string; fileName: string }; Body: { fileName?: string } }>('/:id/files/:fileName/name', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         let currentFileName: string
         let nextFileName: string
@@ -735,13 +735,13 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
     // Ingest / upload
     // -----------------------------------------------------------------------
 
-    // POST /api/memory-categories/:id/ingest-file — upload a document to a category without indexing it
+    // POST /api/memory-folders/:id/ingest-file — upload a document to a category without indexing it
     app.post<{ Params: { id: string }; Body: { fileName: string; content: string } }>('/:id/ingest-file', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         const { fileName, content } = req.body
         if (!fileName || content == null) return reply.status(400).send({ error: 'fileName and content are required' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
 
         try {
             ensureFolder(row.directory_path)
@@ -775,11 +775,11 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         }
     })
 
-    // POST /api/memory-categories/:id/reingest-file — re-index an existing file in the category
+    // POST /api/memory-folders/:id/reingest-file — re-index an existing file in the category
     app.post<{ Params: { id: string }; Body: { fileName?: string; sourceFile?: string } }>('/:id/reingest-file', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
-        if (!row.directory_path) return reply.status(400).send({ error: 'Memory category has no backing directory' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
         const fileName = req.body.fileName || req.body.sourceFile
         if (!fileName) return reply.status(400).send({ error: 'fileName is required' })
 
@@ -792,10 +792,10 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         }
     })
 
-    // POST /api/memory-categories/:id/delete-documents — archive documents and remove their indexes
+    // POST /api/memory-folders/:id/delete-documents — archive documents and remove their indexes
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[] } }>('/:id/delete-documents', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         const { sourceFiles } = req.body
         if (!sourceFiles?.length) return reply.status(400).send({ error: 'No sourceFiles provided' })
         const mem = getAgentMemory()
@@ -806,11 +806,11 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         return { success: true }
     })
 
-    // POST /api/memory-categories/:id/drop-indexes — forget derived vectors and
+    // POST /api/memory-folders/:id/drop-indexes — forget derived vectors and
     // extracted facts while preserving the source documents unchanged.
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[] } }>('/:id/drop-indexes', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
-        if (!row) return reply.status(404).send({ error: 'Memory category not found' })
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         const sourceFiles = Array.from(new Set(
             (req.body.sourceFiles || []).filter((sourceFile): sourceFile is string =>
                 typeof sourceFile === 'string' && sourceFile.length > 0
@@ -832,20 +832,20 @@ export async function registerMemoryCategoriesRoutes(app: FastifyInstance): Prom
         }
     })
 
-    // POST /api/memory-categories/:id/move-documents — move files to another category
+    // POST /api/memory-folders/:id/move-documents — move files to another category
     app.post<{ Params: { id: string }; Body: { sourceFiles: string[]; targetCategoryId: string } }>('/:id/move-documents', async (req, reply) => {
         const db = getDb()
-        syncMemoryCategoriesFromFolders(db)
+        syncMemoryFoldersFromFolders(db)
         const categoryId = decodeCategoryIdParam(req.params.id)
-        const source = db.prepare('SELECT * FROM memory_categories WHERE id = ?').get(categoryId) as MemoryCategoryRow | undefined
-        if (!source) return reply.status(404).send({ error: 'Source memory category not found' })
+        const source = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(categoryId) as MemoryFolderRow | undefined
+        if (!source) return reply.status(404).send({ error: 'Source memory folder not found' })
         const { sourceFiles, targetCategoryId } = req.body
         if (!sourceFiles?.length) return reply.status(400).send({ error: 'No sourceFiles provided' })
         if (!targetCategoryId) return reply.status(400).send({ error: 'targetCategoryId is required' })
-        if (targetCategoryId === source.id) return reply.status(400).send({ error: 'Target memory category must be different from source' })
+        if (targetCategoryId === source.id) return reply.status(400).send({ error: 'Target memory folder must be different from source' })
 
-        const target = db.prepare('SELECT * FROM memory_categories WHERE id = ?').get(targetCategoryId) as MemoryCategoryRow | undefined
-        if (!target) return reply.status(404).send({ error: 'Target memory category not found' })
+        const target = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(targetCategoryId) as MemoryFolderRow | undefined
+        if (!target) return reply.status(404).send({ error: 'Target memory folder not found' })
 
         const rag = getRAGStore()
         const mem = getAgentMemory()

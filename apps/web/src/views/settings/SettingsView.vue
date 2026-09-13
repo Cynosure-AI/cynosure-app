@@ -296,7 +296,7 @@ const sections: SettingsSection[] = [
     categoryId: 'backup',
     label: 'Export Backup',
     description: 'Download your configuration as a zip file.',
-    terms: ['backup', 'export', 'download', 'zip', 'agents', 'providers', 'settings', 'conversations', 'memory categories']
+    terms: ['backup', 'export', 'download', 'zip', 'agents', 'providers', 'settings', 'conversations', 'memory folders']
   },
   {
     id: 'backup-import',

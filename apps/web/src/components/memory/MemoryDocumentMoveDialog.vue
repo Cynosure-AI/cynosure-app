@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { Icon } from "@iconify/vue";
-import type { MemoryCategory } from "../../api/types";
+import type { MemoryFolder } from "../../api/types";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 defineProps<{
   show: boolean;
   sourceCategoryId: string;
   selectedCount: number;
-  spaces: MemoryCategory[];
+  spaces: MemoryFolder[];
   moving: boolean;
 }>();
 
@@ -27,7 +27,7 @@ defineEmits<{
     @close="$emit('close')"
   >
     <p class="mb-4 text-sm text-theme-500">
-      Select the destination memory category.
+      Select the destination memory folder.
     </p>
     <div class="grid max-h-[55vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
       <button

@@ -26,7 +26,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         if (refreshing.value) return
         refreshing.value = true
         try {
-            jobs.value = await api.memoryCategories.listAllJobs()
+            jobs.value = await api.memoryFolders.listAllJobs()
             loaded.value = true
         } catch {
             jobs.value = []
@@ -45,7 +45,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
 
     async function cancelJob(jobId: string): Promise<void> {
         try {
-            upsertJob(await api.memoryCategories.cancelJob(jobId))
+            upsertJob(await api.memoryFolders.cancelJob(jobId))
             await refresh()
         } catch {
             /* ignore */

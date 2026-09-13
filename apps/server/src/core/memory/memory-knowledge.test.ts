@@ -55,7 +55,7 @@ beforeEach(() => {
     process.env.CYNOSURE_DATA_DIR = dataDir
     const db = getDb()
     db.prepare(`
-        INSERT INTO memory_categories (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
+        INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
         VALUES ('test-space', 'Test', '', ?, 1, 0, ?)
     `).run(dataDir, Date.now())
     store = new MemoryKnowledgeStore()
@@ -362,9 +362,9 @@ describe('memory knowledge v3', () => {
             .get(result.entity.id) as { count: number }).count).toBe(2)
     })
 
-    test('merges entities across selected memory categories and keeps future indexing resolved', async () => {
+    test('merges entities across selected memory folders and keeps future indexing resolved', async () => {
         getDb().prepare(`
-            INSERT INTO memory_categories (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
+            INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
             VALUES ('second-space', 'Second', '', ?, 2, 0, ?)
         `).run(dataDir, Date.now())
         addDocument('doc-primary-person', 'primary.md', 'revision-1')
@@ -646,9 +646,9 @@ describe('memory knowledge v3', () => {
         expect(store.browseGraph({ categoryIds: ['test-space'] }).edges).toHaveLength(0)
     })
 
-    test('scopes graph rows and graph statistics to selected memory categories', () => {
+    test('scopes graph rows and graph statistics to selected memory folders', () => {
         getDb().prepare(`
-            INSERT INTO memory_categories (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
+            INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
             VALUES ('other-space', 'Other', '', ?, 2, 0, ?)
         `).run(join(dataDir, 'other'), Date.now())
         addDocument('doc-scoped-a', 'a.md', 'revision-1')

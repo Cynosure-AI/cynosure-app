@@ -51,7 +51,7 @@ describe('schedule built-in tools', () => {
             executionConfig: {
                 allowedTools: ['builtin::schedule_create'],
                 subAgents: [],
-                memoryCategoryIds: [],
+                memoryFolderIds: [],
                 systemPrompt: 'Keep this configuration.',
                 model: 'model-at-scheduling-time',
                 providerId: 'provider-at-scheduling-time',

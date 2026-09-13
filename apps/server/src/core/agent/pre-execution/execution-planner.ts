@@ -50,7 +50,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         systemPrompt,
         systemPromptSuffix,
         requestedSubAgents,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
         autoToolRouting,
         autoMemory,
         autoRouterProviderId,
@@ -117,7 +117,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         // context and wasted router tokens.
         recentMessages: messages.at(-1)?.role === 'user' ? messages.slice(0, -1) : messages,
         userQuery: userText,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
         eventMeta,
         inlineAttachmentTextLimit,
         debugContextEnabled,

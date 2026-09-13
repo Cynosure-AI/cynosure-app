@@ -11,7 +11,7 @@ vi.mock('../api/client', () => ({
   api: {
     activity: { list: mocks.list }, instances: { list: async () => [] },
     memory: { onDreamUpdated: mocks.onDream, cancelDreamRun: mocks.cancel },
-    memoryCategories: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
+    memoryFolders: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
     agent: { onHITLRequest: () => () => undefined, onExecutionUpdate: () => () => undefined },
     chat: { onExecutionState: () => () => undefined },
   }
@@ -67,7 +67,7 @@ test('memory and Dream change links open the changed document with a pagination-
     items: [{
       id: 'memory-file:category:notes', kind: 'memory', title: 'Updated knowledge graph for notes.md',
       description: 'Knowledge · 3 chunks', createdAt: Date.now(), agentId: null, agentName: null,
-      agentIconUrl: null, conversationId: null, memoryCategoryId: 'category', memoryFileName: 'notes.md',
+      agentIconUrl: null, conversationId: null, memoryFolderId: 'category', memoryFileName: 'notes.md',
     }],
     total: 1,
   })
@@ -75,6 +75,6 @@ test('memory and Dream change links open the changed document with a pagination-
   await flushPromises()
   await wrapper.get('article').trigger('click')
   expect(mocks.push).toHaveBeenCalledWith({
-    path: '/memory-categories/documents', query: { category: 'category', file: 'notes.md' },
+    path: '/memory-folders/documents', query: { category: 'category', file: 'notes.md' },
   })
 })

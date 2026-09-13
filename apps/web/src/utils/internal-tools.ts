@@ -68,7 +68,7 @@ export function agentRequiredToolStates(hasAgent: boolean): Record<AgentRequired
   ) as Record<AgentRequiredToolName, { met: boolean; criteria: string }>
 }
 
-export function memoryAutomaticToolStates(active: boolean, criteria = 'memory category selected'): Record<AutoMemoryToolName, { active: boolean; criteria: string }> {
+export function memoryAutomaticToolStates(active: boolean, criteria = 'memory folder selected'): Record<AutoMemoryToolName, { active: boolean; criteria: string }> {
   return Object.fromEntries(
     AUTO_MEMORY_TOOL_NAMES.map((name) => [name, { active, criteria }])
   ) as Record<AutoMemoryToolName, { active: boolean; criteria: string }>

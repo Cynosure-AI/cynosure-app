@@ -100,15 +100,15 @@ const router = createRouter({
       name: 'artifacts',
       component: () => import('@/views/ArtifactsView.vue')
     },
-    // Memory Categories
+    // Memory Folders
     {
-      path: '/memory-categories',
-      redirect: '/memory-categories/documents'
+      path: '/memory-folders',
+      redirect: '/memory-folders/documents'
     },
     {
-      path: '/memory-categories/:section(documents|relationships|visual-graph)',
-      name: 'memory-categories',
-      component: () => import('@/views/MemoryCategoriesView.vue')
+      path: '/memory-folders/:section(documents|relationships|visual-graph)',
+      name: 'memory-folders',
+      component: () => import('@/views/MemoryFoldersView.vue')
     },
     {
       path: '/tools-policy',

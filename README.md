@@ -8,7 +8,7 @@ Open-source AI agent platform with tool use, memory, multi-provider LLM support,
 - **Streaming chat** — Real-time token streaming with image/file attachments and voice input (local Whisper STT)
 - **Tool system** — Built-in tools + [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers, discoverable via a built-in registry browser
 - **Agents** — Reusable AI presets with custom system prompts, model selection, tool access, and sub-agent orchestration
-- **Memory categories** — Hybrid RAG retrieval plus a source-grounded knowledge graph with manual corrections and portable backups
+- **Memory folders** — Hybrid RAG retrieval plus a source-grounded knowledge graph with manual corrections and portable backups
 - **Messaging channels** — Telegram, Discord, and Slack integrations so agents can respond remotely
 - **Triggers** — Cron jobs for automated, unattended agent execution
 - **Human-in-the-loop** — Granular approval gates for tool execution (per-tool, per-session, or always)

@@ -20,16 +20,16 @@ import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
 import { makeManageMcpTool } from '../core/tools/builtin/manage-mcp.js'
-import { getDefaultMemoryCategory } from '../core/memory/memory-category-scope.js'
+import { getDefaultMemoryFolder } from '../core/memory/memory-folder-scope.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
-function defaultMemoryCategoryIds(db = getDb()): string[] {
+function defaultMemoryFolderIds(db = getDb()): string[] {
     const row = db
-        .prepare('SELECT id FROM memory_categories WHERE is_uncategorized = 1 ORDER BY sort_order ASC, created_at ASC LIMIT 1')
+        .prepare('SELECT id FROM memory_folders WHERE is_uncategorized = 1 ORDER BY sort_order ASC, created_at ASC LIMIT 1')
         .get() as { id: string } | undefined
     if (row) return [row.id]
 
-    const uncategorizedCategory = getDefaultMemoryCategory()
+    const uncategorizedCategory = getDefaultMemoryFolder()
     return uncategorizedCategory ? [uncategorizedCategory.id] : []
 }
 
@@ -38,14 +38,14 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     app.get('/', async () => {
         const db = getDb()
         const agents = listAgents()
-        const allLinks = db.prepare('SELECT agent_id, category_id FROM agent_memory_categories').all() as { agent_id: string; category_id: string }[]
+        const allLinks = db.prepare('SELECT agent_id, category_id FROM agent_memory_folders').all() as { agent_id: string; category_id: string }[]
         const linkMap = new Map<string, string[]>()
         for (const row of allLinks) {
             const arr = linkMap.get(row.agent_id) || []
             arr.push(row.category_id)
             linkMap.set(row.agent_id, arr)
         }
-        return agents.map(a => ({ ...a, memoryCategories: linkMap.get(a.id) || [] }))
+        return agents.map(a => ({ ...a, memoryFolders: linkMap.get(a.id) || [] }))
     })
 
     // GET /api/agents/:id — get single
@@ -56,8 +56,8 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             return { error: 'Agent not found' }
         }
         const db = getDb()
-        const categoryRows = db.prepare('SELECT category_id FROM agent_memory_categories WHERE agent_id = ?').all(agent.id) as { category_id: string }[]
-        return { ...agent, memoryCategories: categoryRows.map((row) => row.category_id) }
+        const categoryRows = db.prepare('SELECT category_id FROM agent_memory_folders WHERE agent_id = ?').all(agent.id) as { category_id: string }[]
+        return { ...agent, memoryFolders: categoryRows.map((row) => row.category_id) }
     })
 
     // GET /api/agents/:id/icon — serve agent icon
@@ -73,36 +73,36 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     })
 
     // POST /api/agents — create
-    app.post<{ Body: CreateAgentInput & { memoryCategories?: string[] } }>('/', async (req) => {
-        const { memoryCategories, ...rest } = req.body
+    app.post<{ Body: CreateAgentInput & { memoryFolders?: string[] } }>('/', async (req) => {
+        const { memoryFolders, ...rest } = req.body
         const agent = createAgent(rest)
-        const assignedMemoryCategories = memoryCategories !== undefined ? memoryCategories : defaultMemoryCategoryIds()
+        const assignedMemoryFolders = memoryFolders !== undefined ? memoryFolders : defaultMemoryFolderIds()
         const db = getDb()
-        const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_categories (agent_id, category_id) VALUES (?, ?)')
-        for (const categoryId of assignedMemoryCategories) insert.run(agent.id, categoryId)
+        const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
+        for (const categoryId of assignedMemoryFolders) insert.run(agent.id, categoryId)
         getChannelManager().refreshAllCommands()
-        return { ...agent, memoryCategories: assignedMemoryCategories }
+        return { ...agent, memoryFolders: assignedMemoryFolders }
     })
 
     // PUT /api/agents/:id — update
-    app.put<{ Params: { id: string }; Body: UpdateAgentInput & { memoryCategories?: string[] } }>('/:id', async (req, reply) => {
-        const { memoryCategories, ...rest } = req.body
+    app.put<{ Params: { id: string }; Body: UpdateAgentInput & { memoryFolders?: string[] } }>('/:id', async (req, reply) => {
+        const { memoryFolders, ...rest } = req.body
         const agent = updateAgent(req.params.id, rest)
         if (!agent) {
             reply.code(404)
             return { error: 'Agent not found' }
         }
-        // Sync memory category assignments if provided
-        if (memoryCategories !== undefined) {
+        // Sync memory folder assignments if provided
+        if (memoryFolders !== undefined) {
             const db = getDb()
-            db.prepare('DELETE FROM agent_memory_categories WHERE agent_id = ?').run(agent.id)
-            const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_categories (agent_id, category_id) VALUES (?, ?)')
-            for (const categoryId of memoryCategories) insert.run(agent.id, categoryId)
+            db.prepare('DELETE FROM agent_memory_folders WHERE agent_id = ?').run(agent.id)
+            const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
+            for (const categoryId of memoryFolders) insert.run(agent.id, categoryId)
         }
         const db = getDb()
-        const categoryRows = db.prepare('SELECT category_id FROM agent_memory_categories WHERE agent_id = ?').all(agent.id) as { category_id: string }[]
+        const categoryRows = db.prepare('SELECT category_id FROM agent_memory_folders WHERE agent_id = ?').all(agent.id) as { category_id: string }[]
         getChannelManager().refreshAllCommands()
-        return { ...agent, memoryCategories: categoryRows.map(r => r.category_id) }
+        return { ...agent, memoryFolders: categoryRows.map(r => r.category_id) }
     })
 
     // POST /api/agents/:id/duplicate — duplicate

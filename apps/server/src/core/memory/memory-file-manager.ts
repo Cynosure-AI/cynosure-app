@@ -1,7 +1,7 @@
 /**
  * Memory File Manager
  *
- * Handles file I/O for memory categories. Each memory category is backed by a folder
+ * Handles file I/O for memory folders. Each memory folder is backed by a folder
  * on disk. Markdown files in the folder are the source-of-truth for content.
  * SQLite + LanceDB serve only as the retrieval index.
  */

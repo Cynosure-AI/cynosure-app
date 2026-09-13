@@ -131,7 +131,7 @@ async function cancelMemoryJob(job: MemoryIndexJob, event?: Event): Promise<void
 }
 
 function openMemoryJobs(): void {
-  router.push("/memory-categories/documents");
+  router.push("/memory-folders/documents");
 }
 
 function formatTimeAgo(ts: number): string {
@@ -231,7 +231,7 @@ onMounted(() => {
   unsubChatExecutionState = api.chat.onExecutionState(() => {
     void loadData();
   });
-  unsubMemoryJobUpdate = api.memoryCategories.onJobUpdated((job) => {
+  unsubMemoryJobUpdate = api.memoryFolders.onJobUpdated((job) => {
     memoryJobsStore.upsertJob(job);
   });
 });

@@ -1037,7 +1037,7 @@ export class MemoryKnowledgeStore {
 
       // Preserve aliases on merged rows as namespace-local redirects so later
       // indexing resolves to the shared canonical entity instead of recreating
-      // the duplicate in its original memory category.
+      // the duplicate in its original memory folder.
       getDb().prepare('DELETE FROM memory_knowledge_entity_aliases WHERE entity_id = ?').run(primaryId)
       const insertAlias = getDb().prepare(`
         INSERT INTO memory_knowledge_entity_aliases

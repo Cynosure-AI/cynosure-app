@@ -39,7 +39,7 @@ describe('memory search routes', () => {
     await app.close()
   }, 30_000)
 
-  test('fails closed when an explicit memory category does not exist', async () => {
+  test('fails closed when an explicit memory folder does not exist', async () => {
     const app = await createApp()
     const response = await app.inject({
       method: 'POST',
@@ -48,7 +48,7 @@ describe('memory search routes', () => {
     })
 
     expect(response.statusCode).toBe(404)
-    expect(response.json()).toEqual({ error: 'Memory category not found' })
+    expect(response.json()).toEqual({ error: 'Memory folder not found' })
     await app.close()
   })
 

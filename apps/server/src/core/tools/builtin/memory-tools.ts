@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
-import { buildMemoryCategoryFilter as buildScopeFilter, getDefaultMemoryCategory, getMemoryCategoryDirectoryPath, type MemoryCategoryRef } from '../../memory/memory-category-scope.js'
-import { ensureMemoryCategoryPath, categoryPathForDirectory, removeEmptyMemoryCategoryFolders, syncMemoryCategoriesFromFolders } from '../../memory/memory-category-directories.js'
+import { buildMemoryFolderFilter as buildScopeFilter, getDefaultMemoryFolder, getMemoryFolderDirectoryPath, type MemoryFolderRef } from '../../memory/memory-folder-scope.js'
+import { ensureMemoryFolderPath, categoryPathForDirectory, removeEmptyMemoryFolderFolders, syncMemoryFoldersFromFolders } from '../../memory/memory-folder-directories.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
@@ -46,8 +46,8 @@ async function reindexMemoryFile(
     signal?: AbortSignal,
     revisionContext?: MemoryRevisionContext,
 ): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
-    const directoryPath = getMemoryCategoryDirectoryPath(categoryId)
-    if (!directoryPath) throw new Error('Memory category has no category configured')
+    const directoryPath = getMemoryFolderDirectoryPath(categoryId)
+    if (!directoryPath) throw new Error('Memory folder has no category configured')
     cancelMemoryIndexJobsForFile(categoryId, fileName)
     const memory = getAgentMemory()
     const result = await memory.reindexFile(directoryPath, fileName, categoryId, { signal, revisionContext })
@@ -104,10 +104,10 @@ export function isKnowledgeReadToolName(toolName: string): toolName is Knowledge
 }
 
 export interface MemoryToolOptions {
-    /** SQL filter covering all selected memory categories, e.g. `categoryId IN ('...', '...')`. */
+    /** SQL filter covering all selected memory folders, e.g. `categoryId IN ('...', '...')`. */
     categoryFilter?: string
-    /** Selected memory categories for write tools and read disambiguation. */
-    assignedCategories?: MemoryCategoryRef[]
+    /** Selected memory folders for write tools and read disambiguation. */
+    assignedCategories?: MemoryFolderRef[]
     revisionContext?: MemoryRevisionContext
     /** Optional background-curator guards; the mutation guard runs under the document lock. */
     onDocumentRead?: (documentId: string, revision: string) => void
@@ -169,7 +169,7 @@ function resolveKnowledgeEntityIds(values: unknown, categoryIds: string[]): { id
         .filter(Boolean)))
         .slice(0, 20)
     if (requested.length < 1) return { error: 'Provide at least one entity ID to merge.' }
-    if (categoryIds.length === 0) return { error: 'No memory category is selected for knowledge access.' }
+    if (categoryIds.length === 0) return { error: 'No memory folder is selected for knowledge access.' }
     const scopePlaceholders = categoryIds.map(() => '?').join(', ')
     const ids: string[] = []
     let readableHandleRows: Array<{ id: string }> | undefined
@@ -293,11 +293,11 @@ function toEntityInput(value: unknown): { name: string; type: KnowledgeEntityTyp
     }
 }
 
-function getKnownMemoryCategories(): MemoryCategoryRef[] {
+function getKnownMemoryFolders(): MemoryFolderRef[] {
     try {
         const db = getDb()
         const rows = db
-            .prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_categories ORDER BY is_uncategorized DESC, directory_path ASC')
+            .prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC')
             .all() as { id: string; name: string; directory_path: string; is_uncategorized: number }[]
         return rows.map((row) => ({
             id: row.id,
@@ -309,23 +309,23 @@ function getKnownMemoryCategories(): MemoryCategoryRef[] {
     }
 }
 
-function createKnownMemoryCategoriesLoader(): () => MemoryCategoryRef[] {
-    let cached: MemoryCategoryRef[] | undefined
+function createKnownMemoryFoldersLoader(): () => MemoryFolderRef[] {
+    let cached: MemoryFolderRef[] | undefined
     return () => {
-        cached ??= getKnownMemoryCategories()
+        cached ??= getKnownMemoryFolders()
         return cached
     }
 }
 
-function formatCategories(categories: MemoryCategoryRef[]): string {
-    if (categories.length === 0) return 'No memory categories exist yet.'
+function formatCategories(categories: MemoryFolderRef[]): string {
+    if (categories.length === 0) return 'No memory folders exist yet.'
     return categories.map(s => {
         const path = s.categoryPath ? `, category: ${s.categoryPath}` : ', category: Uncategorized'
         return `  - "${s.name}" (id: ${s.id}${path})`
     }).join('\n')
 }
 
-function findSpaceByIdOrName(categories: MemoryCategoryRef[], wanted: string): MemoryCategoryRef | undefined {
+function findSpaceByIdOrName(categories: MemoryFolderRef[], wanted: string): MemoryFolderRef | undefined {
     const normalized = wanted.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase()
     return categories.find(s =>
         s.id === wanted ||
@@ -335,16 +335,16 @@ function findSpaceByIdOrName(categories: MemoryCategoryRef[], wanted: string): M
     )
 }
 
-function makeScopeSummary(assignedCategories: MemoryCategoryRef[]): string {
+function makeScopeSummary(assignedCategories: MemoryFolderRef[]): string {
     if (assignedCategories.length === 0) {
-        const uncategorizedCategory = getDefaultMemoryCategory()
-        return uncategorizedCategory ? `Scope: all memory categories; writes default to "${uncategorizedCategory.name}".` : 'Scope: no memory categories.'
+        const uncategorizedCategory = getDefaultMemoryFolder()
+        return uncategorizedCategory ? `Scope: all memory folders; writes default to "${uncategorizedCategory.name}".` : 'Scope: no memory folders.'
     }
     if (assignedCategories.length === 1) return `Scope: "${assignedCategories[0].name}" category only.`
-    return `Scope: selected memory categories only (${assignedCategories.map(s => `"${s.name}"`).join(', ')}).`
+    return `Scope: selected memory folders only (${assignedCategories.map(s => `"${s.name}"`).join(', ')}).`
 }
 
-function buildCategoryMap(...spaceGroups: MemoryCategoryRef[][]): Map<string, string> {
+function buildCategoryMap(...spaceGroups: MemoryFolderRef[][]): Map<string, string> {
     const map = new Map<string, string>()
     for (const group of spaceGroups) {
         for (const category of group) map.set(category.id, category.name)
@@ -432,11 +432,11 @@ function removeChunkRangeFromText(
 }
 
 function resolveReadableCategoryFilter(
-    assignedCategories: MemoryCategoryRef[],
+    assignedCategories: MemoryFolderRef[],
     baseFilter?: string,
     categoryParam?: string,
-    getKnownCategories: () => MemoryCategoryRef[] = getKnownMemoryCategories,
-): { filter?: string; category?: MemoryCategoryRef } | { error: string } {
+    getKnownCategories: () => MemoryFolderRef[] = getKnownMemoryFolders,
+): { filter?: string; category?: MemoryFolderRef } | { error: string } {
     if (!categoryParam?.trim()) {
         return { filter: assignedCategories.length > 0 ? buildScopeFilter(assignedCategories) : baseFilter }
     }
@@ -445,9 +445,9 @@ function resolveReadableCategoryFilter(
     const wanted = categoryParam.trim()
     const match = findSpaceByIdOrName(candidates, wanted)
     if (!match) {
-        const scopeLabel = assignedCategories.length > 0 ? 'selected memory categories' : 'existing memory categories'
+        const scopeLabel = assignedCategories.length > 0 ? 'selected memory folders' : 'existing memory folders'
         return {
-            error: `Memory category "${wanted}" was not found in ${scopeLabel}.\n${formatCategories(candidates)}`
+            error: `Memory folder "${wanted}" was not found in ${scopeLabel}.\n${formatCategories(candidates)}`
         }
     }
 
@@ -464,10 +464,10 @@ function resolveReadableCategoryFilter(
  * 5. If no folders exist → error
  */
 async function resolveTargetCategory(
-    assignedCategories: MemoryCategoryRef[],
+    assignedCategories: MemoryFolderRef[],
     categoryParam?: string,
     existingTitle?: string,
-    getKnownCategories: () => MemoryCategoryRef[] = getKnownMemoryCategories,
+    getKnownCategories: () => MemoryFolderRef[] = getKnownMemoryFolders,
 ): Promise<{ categoryId: string; categoryName: string } | { error: string }> {
     // --- Explicit category parameter provided ---
     if (categoryParam?.trim()) {
@@ -475,13 +475,13 @@ async function resolveTargetCategory(
         const candidates = assignedCategories.length > 0 ? assignedCategories : getKnownCategories()
         const match = findSpaceByIdOrName(candidates, wanted)
         if (match) return { categoryId: match.id, categoryName: match.name }
-        if (wanted.includes(':')) return { error: `Unknown memory category ID "${wanted}".` }
+        if (wanted.includes(':')) return { error: `Unknown memory folder ID "${wanted}".` }
         const normalized = wanted.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
-        const roots = assignedCategories.length > 0 ? assignedCategories : [getDefaultMemoryCategory()].filter(Boolean) as MemoryCategoryRef[]
+        const roots = assignedCategories.length > 0 ? assignedCategories : [getDefaultMemoryFolder()].filter(Boolean) as MemoryFolderRef[]
         const allowed = roots.some(root => !root.categoryPath || normalized === root.categoryPath || normalized.startsWith(`${root.categoryPath}/`))
-        if (!allowed) return { error: `Category "${wanted}" is outside the granted memory category trees.\n${formatCategories(roots)}` }
+        if (!allowed) return { error: `Category "${wanted}" is outside the granted memory folder trees.\n${formatCategories(roots)}` }
         try {
-            const created = ensureMemoryCategoryPath(getDb(), normalized)
+            const created = ensureMemoryFolderPath(getDb(), normalized)
             if (!assignedCategories.some(category => category.id === created.id)) {
                 assignedCategories.push({ id: created.id, name: created.name, categoryPath: normalized })
             }
@@ -526,23 +526,23 @@ async function resolveTargetCategory(
         return { categoryId: assignedCategories[0].id, categoryName: assignedCategories[0].name }
     }
 
-    // Unspecified writes outside a single selected scope land in the root/Uncategorized memory category.
-    const uncategorizedCategory = getDefaultMemoryCategory()
+    // Unspecified writes outside a single selected scope land in the root/Uncategorized memory folder.
+    const uncategorizedCategory = getDefaultMemoryFolder()
     if (uncategorizedCategory) {
         return { categoryId: uncategorizedCategory.id, categoryName: uncategorizedCategory.name }
     }
 
     // Multiple selected categorys but no default or unambiguous match → error
     if (assignedCategories.length > 1) {
-        return { error: `Multiple memory categories are selected. Please specify which to write to using the 'category' parameter.\nAvailable categories:\n${formatCategories(assignedCategories)}` }
+        return { error: `Multiple memory folders are selected. Please specify which to write to using the 'category' parameter.\nAvailable categories:\n${formatCategories(assignedCategories)}` }
     }
 
     // 4. No folders at all
     const existing = getKnownCategories()
     return {
         error:
-            'No memory category is selected for writes. Provide the target memory category using the "category" parameter, select one in the conversation, or assign one to the agent.\n' +
-            `Existing memory categories:\n${formatCategories(existing)}`
+            'No memory folder is selected for writes. Provide the target memory folder using the "category" parameter, select one in the conversation, or assign one to the agent.\n' +
+            `Existing memory folders:\n${formatCategories(existing)}`
     }
 }
 
@@ -558,8 +558,8 @@ interface ResolvedMemoryDocument {
 
 function resolveMemoryDocumentRef(
     documentRef: string,
-    assignedCategories: MemoryCategoryRef[],
-    getKnownCategories: () => MemoryCategoryRef[],
+    assignedCategories: MemoryFolderRef[],
+    getKnownCategories: () => MemoryFolderRef[],
 ): ResolvedMemoryDocument | { error: string } {
     const parsed = parseMemoryDocumentRef(documentRef)
     if (!parsed) {
@@ -582,11 +582,11 @@ function resolveMemoryDocumentRef(
         : undefined
     if (!ref) return { error: 'No memory document matches this documentRef. Search or list memories again to get a current reference.' }
     if (assignedCategories.length > 0 && !assignedCategories.some((category) => category.id === ref.categoryId)) {
-        return { error: 'The referenced memory document is outside the selected memory-category scope.' }
+        return { error: 'The referenced memory document is outside the selected memory-folder scope.' }
     }
     const category = [...assignedCategories, ...getKnownCategories()].find((candidate) => candidate.id === ref.categoryId)
-    const directoryPath = getMemoryCategoryDirectoryPath(ref.categoryId)
-    if (!category || !directoryPath) return { error: 'The memory category for the referenced document is unavailable.' }
+    const directoryPath = getMemoryFolderDirectoryPath(ref.categoryId)
+    if (!category || !directoryPath) return { error: 'The memory folder for the referenced document is unavailable.' }
     if (!fileExists(directoryPath, ref.fileName)) return { error: 'The referenced memory document no longer exists.' }
     return {
         documentId: ref.documentId,
@@ -663,7 +663,7 @@ async function commitMemoryRemoval(
  */
 export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefinition {
     const { categoryFilter, assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryCategoriesLoader()
+    const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
         name: 'memory_list_documents',
         execution: { readOnly: true },
@@ -673,14 +673,14 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
             'Results are newest first. ' +
             'Use this to discover what documents are available before using memory_retrieve_chunks or memory_semantic_search. ' +
-            'Selected memory categories are treated as one unified knowledge base for reading — use the optional "category" parameter to filter to a specific category. ' +
+            'Selected memory folders are treated as one unified knowledge base for reading — use the optional "category" parameter to filter to a specific category. ' +
             makeScopeSummary(assignedCategories),
         parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
                 pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
-                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, lists all selected categorys.' },
+                category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, lists all selected categorys.' },
             },
         },
         timeout: 15_000,
@@ -736,7 +736,7 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
  */
 export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefinition {
     const { categoryFilter, assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryCategoriesLoader()
+    const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
         name: 'memory_retrieve_chunks',
         execution: { readOnly: true },
@@ -752,7 +752,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                 sourceFile: { type: 'string', description: 'The source file name exactly as shown in the memory context (e.g. "report.pdf", "notes.md").' },
                 minPart: { type: 'number', description: 'Minimum Part number to retrieve, matching the 1-based Part number shown in memory search results.' },
                 maxPart: { type: 'number', description: 'Maximum Part number to retrieve, inclusive, matching the 1-based Part number shown in memory search results.' },
-                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one category.' }
+                category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one category.' }
             },
             required: ['sourceFile', 'minPart', 'maxPart']
         },
@@ -795,7 +795,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                 const listing = distinctCategories.map(id => `  - "${categoryMap.get(id) || id}" (id: ${id})`).join('\n')
                 return {
                     success: false,
-                    output: `Source file "${sourceFile}" exists in multiple memory categories. Re-run with the 'category' parameter.\nMatching categories:\n${listing}`
+                    output: `Source file "${sourceFile}" exists in multiple memory folders. Re-run with the 'category' parameter.\nMatching categories:\n${listing}`
                 }
             }
 
@@ -833,7 +833,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
  */
 export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
     const { categoryFilter, assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryCategoriesLoader()
+    const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
         name: 'memory_semantic_search',
         execution: { readOnly: true },
@@ -841,15 +841,15 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             'Search through stored RAG memories using a semantic query. ' +
             'Use this to get a rough starting point for memories, which can then be refined or expanded using other tools. ' +
-            'Returns the most relevant memory chunks with their source, memory category, and chunk index. ' +
-            'Selected memory categories are treated as one unified knowledge base — use the optional "category" parameter to filter to a specific category. ' +
+            'Returns the most relevant memory chunks with their source, memory folder, and chunk index. ' +
+            'Selected memory folders are treated as one unified knowledge base — use the optional "category" parameter to filter to a specific category. ' +
             makeScopeSummary(assignedCategories),
         parameters: {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'A descriptive search query to find relevant memories.' },
                 limit: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 20).' },
-                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected categorys.' }
+                category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected categorys.' }
             },
             required: ['query']
         },
@@ -928,18 +928,18 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
  * relationships and their connected entities.
  */
 function resolveKnowledgeSpace(
-    assignedCategories: MemoryCategoryRef[],
+    assignedCategories: MemoryFolderRef[],
     category?: string,
-): MemoryCategoryRef | { error: string } {
+): MemoryFolderRef | { error: string } {
     if (assignedCategories.length === 0) {
-        return { error: 'No memory category is selected for knowledge access.' }
+        return { error: 'No memory folder is selected for knowledge access.' }
     }
     if (category?.trim()) {
         const match = findSpaceByIdOrName(assignedCategories, category.trim())
-        return match || { error: `Memory category "${category.trim()}" is not in the selected knowledge scope.` }
+        return match || { error: `Memory folder "${category.trim()}" is not in the selected knowledge scope.` }
     }
     if (assignedCategories.length === 1) return assignedCategories[0]
-    return { error: `Multiple memory categories are selected. Specify the target using the "category" parameter.\n${formatCategories(assignedCategories)}` }
+    return { error: `Multiple memory folders are selected. Specify the target using the "category" parameter.\n${formatCategories(assignedCategories)}` }
 }
 
 export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefinition {
@@ -964,7 +964,7 @@ export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefin
         timeout: 15_000,
         execute: async (params: unknown) => {
             if (categoryIds.length === 0) {
-                return { success: false, output: 'No memory category is selected for knowledge access.' }
+                return { success: false, output: 'No memory folder is selected for knowledge access.' }
             }
             const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
             const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
@@ -991,7 +991,7 @@ export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefin
 
             const snapshot = knowledge.browseGraph({ limit: cappedLimit, categoryIds })
             if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
-                return { success: false, output: 'No knowledge entries are available in the selected memory categories.' }
+                return { success: false, output: 'No knowledge entries are available in the selected memory folders.' }
             }
 
             const nodeLines = snapshot.nodes.map(formatKnowledgeEntity)
@@ -1048,7 +1048,7 @@ export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefin
                 },
                 importance: { type: 'string', enum: IMPORTANCE_LABELS, description: 'Importance: temporary, minor, useful (durable fact), or core.' },
                 note: { type: 'string', description: 'Short contextual note explaining the relationship.' },
-                category: { type: 'string', description: 'Target memory category name or ID. Required when multiple memory categories are selected.' },
+                category: { type: 'string', description: 'Target memory folder name or ID. Required when multiple memory folders are selected.' },
             },
             required: ['from', 'relation', 'to'],
         },
@@ -1091,7 +1091,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
         name: 'knowledge_entity_merge',
         description:
             'Manually repair confirmed duplicate knowledge entities. Routine entity resolution happens during memory indexing; use this only for exceptional repairs, not uncertain candidate matches. Provide entity IDs returned by knowledge_search and a new canonical mainName. ' +
-            'Entities may come from different selected memory categories. If mainName already belongs to an active entity anywhere in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
+            'Entities may come from different selected memory folders. If mainName already belongs to an active entity anywhere in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
             'All other entities are redirected into it, and their former names and aliases become normalized aliases. ' +
             'Relationships, mentions, and resolution records are rewired; duplicate relationships are consolidated.',
         parameters: {
@@ -1139,7 +1139,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
                     ENTITY_MERGE_REQUIRES_MULTIPLE: 'Provide at least two distinct entities, either as IDs or as one ID plus an existing mainName owner.',
                     ENTITY_MERGE_INVALID_NAME: 'mainName is not valid.',
                     ENTITY_MERGE_ENTITY_NOT_FOUND: 'One or more entities no longer exist or were already merged. Search again and retry.',
-                    ENTITY_MERGE_OUT_OF_SCOPE: 'One or more entities are outside the selected memory category scope.',
+                    ENTITY_MERGE_OUT_OF_SCOPE: 'One or more entities are outside the selected memory folder scope.',
                 }
                 return { success: false, output: messages[code] || `Entity merge failed: ${code || 'unknown error'}` }
             }
@@ -1187,7 +1187,7 @@ export function makeKnowledgeDeleteTool(opts: MemoryToolOptions = {}): ToolDefin
         timeout: 15_000,
         execute: async (params: unknown) => {
             if (categoryIds.length === 0) {
-                return { success: false, output: 'No memory category is selected for knowledge access.' }
+                return { success: false, output: 'No memory folder is selected for knowledge access.' }
             }
             const { edgeId, from, relation, to } = (params || {}) as {
                 edgeId?: string; from?: unknown; relation?: unknown; to?: unknown
@@ -1229,23 +1229,23 @@ function formatKnowledgeDeleteOutput(message: string, orphanedNodeCount: number)
  */
 export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryCategoriesLoader()
+    const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
         name: 'memory_create',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         description:
             'Create a new memory entry with a title and content. ' +
-            'Writes a Markdown file to the memory category and indexes it for semantic retrieval. ' +
+            'Writes a Markdown file to the memory folder and indexes it for semantic retrieval. ' +
             'Use this to persistently store notes, findings, or any information worth remembering. ' +
-            'If exactly one memory category is selected, omit "category" to write there; otherwise omitted "category" writes to the default root memory category. ' +
+            'If exactly one memory folder is selected, omit "category" to write there; otherwise omitted "category" writes to the default root memory folder. ' +
             'Provide "category" to store in a specific selected category.',
         parameters: {
             type: 'object',
             properties: {
                 title: { type: 'string', description: 'A focused Subject - Aspect title for the memory entry (for example "Veronica Flowers - Hobbies"). The .md extension is appended automatically.' },
                 content: { type: 'string', description: 'The Markdown text content to store in memory.' },
-                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID. Omit to write to the only selected category, or to the default root category when no single selected category is in scope.' }
+                category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Omit to write to the only selected category, or to the default root category when no single selected category is in scope.' }
             },
             required: ['title', 'content']
         },
@@ -1261,9 +1261,9 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
             if (basename(fileName) !== fileName || fileName.startsWith('.') || !fileName.trim()) {
                 return { success: false, output: 'The memory title must be a plain, visible file name without path separators.' }
             }
-            const directoryPath = getMemoryCategoryDirectoryPath(resolved.categoryId)
+            const directoryPath = getMemoryFolderDirectoryPath(resolved.categoryId)
             if (!directoryPath) {
-                return { success: false, output: `Memory category "${resolved.categoryName}" has no category configured. Cannot create memory.` }
+                return { success: false, output: `Memory folder "${resolved.categoryName}" has no category configured. Cannot create memory.` }
             }
 
             const uniqueName = resolveUniqueFileName(directoryPath, fileName)
@@ -1312,7 +1312,7 @@ async function prepareMemoryMutation(
     try {
         fileContent = readTextFile(resolved.directoryPath, resolved.fileName)
     } catch {
-        return { error: `Could not read file "${resolved.fileName}" from memory category.` }
+        return { error: `Could not read file "${resolved.fileName}" from memory folder.` }
     }
     const referenceError = verifyDocumentRef(fileContent, resolved)
     return referenceError ? { error: referenceError } : { resolved, fileContent }
@@ -1320,8 +1320,8 @@ async function prepareMemoryMutation(
 
 async function runPreparedMemoryMutation(
     params: { documentRef: string },
-    assignedCategories: MemoryCategoryRef[],
-    getKnownCategories: () => MemoryCategoryRef[],
+    assignedCategories: MemoryFolderRef[],
+    getKnownCategories: () => MemoryFolderRef[],
     signal: AbortSignal | undefined,
     operation: (prepared: { resolved: ResolvedMemoryDocument; fileContent: string }) => Promise<ToolResult>,
     beforeMutation?: (documentId: string, content: string) => void,
@@ -1338,7 +1338,7 @@ async function runPreparedMemoryMutation(
 
 export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryCategoriesLoader()
+    const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
         name: 'memory_update',
         execution: { readOnly: false },
@@ -1363,8 +1363,8 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                 if (basename(finalName) !== finalName || finalName.startsWith('.') || !finalName.trim()) {
                     return { success: false, output: 'The memory title must be a plain, visible file name without path separators.' }
                 }
-                const targetDirectory = getMemoryCategoryDirectoryPath(target.categoryId)
-                if (!targetDirectory) return { success: false, output: 'Target memory category is unavailable.' }
+                const targetDirectory = getMemoryFolderDirectoryPath(target.categoryId)
+                if (!targetDirectory) return { success: false, output: 'Target memory folder is unavailable.' }
                 const relocating = target.categoryId !== resolved.categoryId || finalName !== resolved.fileName
                 if (relocating && fileExists(targetDirectory, finalName)) {
                     return { success: false, output: `Memory "${finalName}" already exists in "${target.categoryName}".` }
@@ -1380,8 +1380,8 @@ export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
                     await getAgentMemory().remapMovedFileByHash(target.categoryId, finalName, targetDirectory)
                     indexed = await reindexMemoryFile(target.categoryId, finalName, signal, opts.revisionContext)
                     if (target.categoryId !== resolved.categoryId) {
-                        removeEmptyMemoryCategoryFolders(resolved.directoryPath)
-                        syncMemoryCategoriesFromFolders(getDb())
+                        removeEmptyMemoryFolderFolders(resolved.directoryPath)
+                        syncMemoryFoldersFromFolders(getDb())
                     }
                 }
                 if (!indexed) {
@@ -1408,7 +1408,7 @@ function memoryRemovalSchema(): Record<string, unknown> {
 
 export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryCategoriesLoader()
+    const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
         name: 'memory_delete',
         execution: { readOnly: false },

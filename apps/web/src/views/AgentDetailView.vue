@@ -70,7 +70,7 @@ const sections: AgentSection[] = [
   {
     id: 'memory',
     label: 'Memory',
-    description: 'Control memory categories and retrieval behavior for this agent.',
+    description: 'Control memory folders and retrieval behavior for this agent.',
     icon: 'lucide:brain',
     component: AgentMemoryTab
   },

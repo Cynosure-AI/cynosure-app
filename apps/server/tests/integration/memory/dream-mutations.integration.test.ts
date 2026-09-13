@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { closeDb, getDb } from '../../../src/db/database.js'
 import { getAgentMemory } from '../../../src/core/memory/agent-memory.js'
-import { getMemoryCategoryDirectoryPath } from '../../../src/core/memory/memory-category-scope.js'
+import { getMemoryFolderDirectoryPath } from '../../../src/core/memory/memory-folder-scope.js'
 import { makeMemoryRetrieveChunksTool, makeMemoryUpdateTool } from '../../../src/core/tools/builtin/memory-tools.js'
 
 let directory: string
@@ -27,7 +27,7 @@ beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), 'cynosure-dream-mutations-'))
     process.env.CYNOSURE_DATA_DIR = directory
     const db = getDb()
-    file = join(getMemoryCategoryDirectoryPath('uncategorized')!, 'notes.md')
+    file = join(getMemoryFolderDirectoryPath('uncategorized')!, 'notes.md')
     db.prepare(`INSERT INTO memory_file_index(document_id, document_ref, category_id, file_name, content_hash, chunk_count, created_at)
         VALUES ('doc', 'notes#abc123', 'uncategorized', 'notes.md', ?, 1, ?)`).run(hash('Unrelated fact.'), Date.now())
     writeFileSync(file, 'Unrelated fact.')

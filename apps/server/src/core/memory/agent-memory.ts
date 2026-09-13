@@ -1,7 +1,7 @@
 import { getMemoryParser, type MemoryRetrievalStatusDetails, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
 import { getDb } from '../../db/database.js'
-import { buildMemoryCategoryFilter, getMemoryCategoryDirectoryPath } from './memory-category-scope.js'
+import { buildMemoryFolderFilter, getMemoryFolderDirectoryPath } from './memory-folder-scope.js'
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import {
     deleteMemoryKnowledgeSource,
@@ -125,7 +125,7 @@ function parseDocumentTags(value: unknown): string[] {
 
 /**
  * Persistent knowledge store backed by LanceDB.
- * All memory is scoped to memory categories (categoryId).
+ * All memory is scoped to memory folders (categoryId).
  * Files on disk are the source of truth; LanceDB is the retrieval index.
  */
 export class AgentMemory {
@@ -163,7 +163,7 @@ export class AgentMemory {
         const ragStore = getRAGStore()
         const tableName = getActivePermanentMemoryTableName()
         const oldFilter = andLanceDbFilters(
-            buildMemoryCategoryFilter([{ id: categoryId }]),
+            buildMemoryFolderFilter([{ id: categoryId }]),
             lanceDbInFilter('sourceFile', Array.from(new Set(replacedSourceFiles.filter(Boolean)))),
         )
         const oldIds = oldFilter
@@ -334,7 +334,7 @@ export class AgentMemory {
     async deleteSourceFile(sourceFile: string, categoryId: string): Promise<number> {
         const document = this.getDocumentReference(categoryId, sourceFile)
         const ragStore = getRAGStore()
-        const spaceFilter = buildMemoryCategoryFilter([{ id: categoryId }])
+        const spaceFilter = buildMemoryFolderFilter([{ id: categoryId }])
         const deleted = await ragStore.deleteBySource(
             getActivePermanentMemoryTableName(),
             sourceFile,
@@ -342,7 +342,7 @@ export class AgentMemory {
             { throwOnError: true },
         )
 
-        const directoryPath = getMemoryCategoryDirectoryPath(categoryId)
+        const directoryPath = getMemoryFolderDirectoryPath(categoryId)
         if (directoryPath) {
             archiveFile(directoryPath, sourceFile)
         }
@@ -367,7 +367,7 @@ export class AgentMemory {
         const deleted = await getRAGStore().deleteBySources(
             getActivePermanentMemoryTableName(),
             uniqueSourceFiles,
-            buildMemoryCategoryFilter([{ id: categoryId }]),
+            buildMemoryFolderFilter([{ id: categoryId }]),
         )
 
         const db = getDb()
@@ -438,7 +438,7 @@ export class AgentMemory {
                 createdAt: row.created_at,
             }))
             .find((row) => {
-                const oldFolderPath = getMemoryCategoryDirectoryPath(row.categoryId)
+                const oldFolderPath = getMemoryFolderDirectoryPath(row.categoryId)
                 return !oldFolderPath || !existsSync(join(oldFolderPath, row.fileName))
             })
 
@@ -504,7 +504,7 @@ export class AgentMemory {
         if (overrideFilter) {
             filter = overrideFilter
         } else if (categoryId) {
-            filter = buildMemoryCategoryFilter([{ id: categoryId }])
+            filter = buildMemoryFolderFilter([{ id: categoryId }])
         }
         const docs = await ragStore.listDocuments(getActivePermanentMemoryTableName(), filter)
         const indexedFiles = this.getIndexedFilePairs()
@@ -546,7 +546,7 @@ export class AgentMemory {
      */
     async resolveUniqueSourceFile(sourceFile: string, categoryId?: string): Promise<string> {
         if (categoryId) {
-            const directoryPath = getMemoryCategoryDirectoryPath(categoryId)
+            const directoryPath = getMemoryFolderDirectoryPath(categoryId)
             if (directoryPath) {
                 return resolveUniqueFileName(directoryPath, sourceFile)
             }

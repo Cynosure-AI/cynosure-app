@@ -146,7 +146,7 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     status: job.status,
     sourceId: job.id,
     sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Deep Research" : "Search indexing",
-    memoryCategoryId: toolJob ? undefined : job.categoryId,
+    memoryFolderId: toolJob ? undefined : job.categoryId,
     memoryFileName: toolJob ? undefined : job.fileName,
   };
 }
@@ -442,8 +442,8 @@ async function openItem(item: ActivityItem) {
     router.push("/tools-policy");
     return;
   }
-  if (item.memoryCategoryId && item.memoryFileName) {
-    router.push({ path: "/memory-categories/documents", query: { category: item.memoryCategoryId, file: item.memoryFileName } });
+  if (item.memoryFolderId && item.memoryFileName) {
+    router.push({ path: "/memory-folders/documents", query: { category: item.memoryFolderId, file: item.memoryFileName } });
     return;
   }
   if (item.conversationId) {
@@ -455,7 +455,7 @@ async function openItem(item: ActivityItem) {
 
 function openMemoryLocation(categoryId: string | undefined, fileName: string | undefined) {
   if (!categoryId || !fileName) return;
-  router.push({ path: "/memory-categories/documents", query: { category: categoryId, file: fileName } });
+  router.push({ path: "/memory-folders/documents", query: { category: categoryId, file: fileName } });
 }
 
 function isActiveInstance(item: ActivityItem): boolean {
@@ -564,7 +564,7 @@ onMounted(() => {
   }, 30_000);
   unsubNotification = api.notifications.onCreated(() => void loadActivity());
   unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadActivity());
-  unsubMemoryJobUpdate = api.memoryCategories.onJobUpdated(() => void loadActivity());
+  unsubMemoryJobUpdate = api.memoryFolders.onJobUpdated(() => void loadActivity());
   unsubHITLRequest = api.agent.onHITLRequest(() => void loadActivity());
   unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
     const payload = data as { event?: string };
@@ -942,10 +942,10 @@ watch(searchQuery, () => {
                     :key="index"
                   >
                     <button
-                      v-if="change.memoryCategoryId && change.memoryFileName"
+                      v-if="change.memoryFolderId && change.memoryFileName"
                       type="button"
                       class="text-left text-accent-300 hover:text-accent-200 hover:underline"
-                      @click="openMemoryLocation(change.memoryCategoryId, change.memoryFileName)"
+                      @click="openMemoryLocation(change.memoryFolderId, change.memoryFileName)"
                     >
                       {{ change.output }}
                     </button>

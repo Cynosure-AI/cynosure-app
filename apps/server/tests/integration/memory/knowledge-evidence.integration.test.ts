@@ -10,7 +10,7 @@ test('an assertion survives until its final active evidence source is retired', 
   const { MemoryKnowledgeStore } = await import('../../../src/core/memory/memory-knowledge.js')
   try {
     const db = getDb()
-    db.prepare(`INSERT INTO memory_categories (id, name, description, directory_path, created_at) VALUES ('space-a', 'A', '', ?, ?)`)
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, created_at) VALUES ('space-a', 'A', '', ?, ?)`)
       .run(directory, Date.now())
     const store = new MemoryKnowledgeStore()
     const relation = [{

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
-import type { MemoryCategory } from '../../../api/types'
+import type { MemoryFolder } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
@@ -12,22 +12,22 @@ const visible = defineModel<boolean>({ required: true })
 
 const loading = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
-const spaces = computed(() => chatStore.memoryCategories)
+const spaces = computed(() => chatStore.memoryFolders)
 
 watch(visible, async (val) => {
   if (!val) return
   loading.value = true
   try {
-    await chatStore.loadMemoryCategories()
+    await chatStore.loadMemoryFolders()
     collapseFoldersWithChildren(spaces.value)
 
     // Prune any stale IDs that no longer exist
     const validIds = new Set(spaces.value.map((space) => space.id))
-    const nextSelected = chatStore.freeChatMemoryCategoryIds.filter((id) => validIds.has(id))
-    if (nextSelected.length !== chatStore.freeChatMemoryCategoryIds.length) {
-      chatStore.freeChatMemoryCategoryIds.splice(
+    const nextSelected = chatStore.freeChatMemoryFolderIds.filter((id) => validIds.has(id))
+    if (nextSelected.length !== chatStore.freeChatMemoryFolderIds.length) {
+      chatStore.freeChatMemoryFolderIds.splice(
         0,
-        chatStore.freeChatMemoryCategoryIds.length,
+        chatStore.freeChatMemoryFolderIds.length,
         ...nextSelected,
       )
       chatStore.markOverridesModified()
@@ -36,15 +36,15 @@ watch(visible, async (val) => {
   loading.value = false
 })
 
-const selected = computed(() => chatStore.freeChatMemoryCategoryIds)
+const selected = computed(() => chatStore.freeChatMemoryFolderIds)
 const rootCategory = computed(() => spaces.value.find(space => space.isUncategorized))
 const rootSelected = computed(() => Boolean(rootCategory.value && selected.value.includes(rootCategory.value.id)))
 const allSelected = computed(() => spaces.value.length > 0 && (rootSelected.value || spaces.value.every((space) => selected.value.includes(space.id))))
 const effectiveSelectedCount = computed(() => rootSelected.value ? spaces.value.length : spaces.value.filter(space => selected.value.includes(space.id)).length)
 
-function collapseFoldersWithChildren(memoryCategories: MemoryCategory[]) {
+function collapseFoldersWithChildren(memoryFolders: MemoryFolder[]) {
   const pathsWithChildren = new Set<string>()
-  const paths = memoryCategories
+  const paths = memoryFolders
     .map((space) => space.categoryPath || '')
     .filter(Boolean)
 
@@ -69,12 +69,12 @@ const visibleSpaces = computed(() =>
   })
 )
 
-function hasChildren(space: MemoryCategory): boolean {
+function hasChildren(space: MemoryFolder): boolean {
   const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
   return spaces.value.some((candidate) => space.isUncategorized ? Boolean(candidate.categoryPath) : candidate.categoryPath?.startsWith(prefix))
 }
 
-function isPartiallySelected(space: MemoryCategory): boolean {
+function isPartiallySelected(space: MemoryFolder): boolean {
   if (space.isUncategorized || !hasChildren(space)) return false
   // Show partial icon whenever children are selected but the parent itself is not
   if (selected.value.includes(space.id)) return false
@@ -83,7 +83,7 @@ function isPartiallySelected(space: MemoryCategory): boolean {
   return directChildren.some(c => selected.value.includes(c.id))
 }
 
-function toggleCollapsed(space: MemoryCategory) {
+function toggleCollapsed(space: MemoryFolder) {
   const key = space.categoryPath || ''
   const next = new Set(collapsedFolders.value)
   if (next.has(key)) next.delete(key)
@@ -93,13 +93,13 @@ function toggleCollapsed(space: MemoryCategory) {
 
 function selectAll() {
   const ids = rootCategory.value ? [rootCategory.value.id] : spaces.value.map(space => space.id)
-  chatStore.freeChatMemoryCategoryIds.splice(0, chatStore.freeChatMemoryCategoryIds.length, ...ids)
+  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length, ...ids)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 
 function deselectAll() {
-  chatStore.freeChatMemoryCategoryIds.splice(0, chatStore.freeChatMemoryCategoryIds.length)
+  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
@@ -108,8 +108,8 @@ function toggle(id: string) {
   const space = spaces.value.find((candidate) => candidate.id === id)
   if (!space) return
 
-  const current = new Set(chatStore.freeChatMemoryCategoryIds)
-  const scopedIds = memoryCategoryScopeIds(space)
+  const current = new Set(chatStore.freeChatMemoryFolderIds)
+  const scopedIds = memoryFolderScopeIds(space)
 
   if (space.isUncategorized) {
     current.clear()
@@ -124,21 +124,21 @@ function toggle(id: string) {
     for (const scopedId of scopedIds) current.add(scopedId)
   }
 
-  chatStore.freeChatMemoryCategoryIds.splice(0, chatStore.freeChatMemoryCategoryIds.length, ...current)
+  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length, ...current)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 
-function isSelected(space: MemoryCategory): boolean {
+function isSelected(space: MemoryFolder): boolean {
   return rootSelected.value || selected.value.includes(space.id)
 }
 
-function categoryDepth(space: MemoryCategory): number {
+function categoryDepth(space: MemoryFolder): number {
   if (space.isUncategorized) return 0
   return Math.max(1, (space.categoryPath || '').split('/').filter(Boolean).length)
 }
 
-function memoryCategoryScopeIds(space: MemoryCategory): string[] {
+function memoryFolderScopeIds(space: MemoryFolder): string[] {
   if (space.isUncategorized) return [space.id]
   const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
   return spaces.value
@@ -156,7 +156,7 @@ function toggleAutoMemory(enabled: boolean) {
 <template>
   <ModalDialog
     :show="visible"
-    title="Memory Categories"
+    title="Memory Folders"
     icon="lucide:brain"
     icon-color="accent"
     max-width="max-w-lg"
@@ -175,7 +175,7 @@ function toggleAutoMemory(enabled: boolean) {
             Automatic memory retrieval
           </div>
           <div class="text-[11px] text-theme-500 leading-relaxed">
-            Retrieve relevant snippets from selected categorys before sending.
+            Retrieve relevant snippets from selected folders before sending.
           </div>
         </div>
       </div>
@@ -192,7 +192,7 @@ function toggleAutoMemory(enabled: boolean) {
       class="mb-2 flex items-center justify-between text-xs"
     >
       <span class="text-theme-500">
-        {{ allSelected ? 'All memory selected' : `${effectiveSelectedCount}/${spaces.length} categories selected` }}
+        {{ allSelected ? 'All memory selected' : `${effectiveSelectedCount}/${spaces.length} folders selected` }}
       </span>
       <div class="flex items-center gap-4">
         <button
@@ -224,7 +224,7 @@ function toggleAutoMemory(enabled: boolean) {
         v-else-if="spaces.length === 0"
         class="text-sm text-theme-500 text-center py-6"
       >
-        No memory categories found
+        No memory folders found
       </div>
       <div
         v-for="space in visibleSpaces"
@@ -273,7 +273,7 @@ function toggleAutoMemory(enabled: boolean) {
               {{ space.isUncategorized ? 'All Memory' : space.name }}
             </div>
             <div class="text-[11px] text-theme-500">
-              {{ space.isUncategorized ? 'Includes Uncategorized and every subcategory' : `${space.fileCount} document${space.fileCount !== 1 ? 's' : ''}` }}
+              {{ space.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${space.fileCount} document${space.fileCount !== 1 ? 's' : ''}` }}
             </div>
           </div>
           <Icon
