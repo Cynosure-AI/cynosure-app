@@ -323,7 +323,7 @@ onBeforeUnmount(() => {
         class="group relative cursor-pointer mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-theme-800/70"
         :class="{
           'bg-theme-800': conversation.id === chatStore.activeConversationId,
-          'bg-amber-500/10 ring-1 ring-inset ring-amber-500/20': awaitingIds.has(conversation.id),
+          'bg-amber-500/20 hover:bg-amber-500/25': awaitingIds.has(conversation.id),
         }"
         @click="selectConversation(conversation)"
         @contextmenu.prevent="openContextMenu(conversation.id, $event)"
@@ -348,7 +348,7 @@ onBeforeUnmount(() => {
           />
           <span
             v-if="awaitingIds.has(conversation.id)"
-            class="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-theme-900"
+            class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-900 animate-pulse"
             title="Waiting for your approval"
           />
         </span>
@@ -373,7 +373,8 @@ onBeforeUnmount(() => {
             >
             <span
               v-else
-              class="truncate text-xs text-theme-300"
+              class="truncate text-xs"
+              :class="awaitingIds.has(conversation.id) ? 'font-medium text-amber-200' : 'text-theme-300'"
             >{{ conversation.title }}</span>
           </span>
           <span
