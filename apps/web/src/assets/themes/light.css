@@ -236,6 +236,41 @@
   color: #29496f;
 }
 
+/* MCP table badges use dark-theme 300/400 colors by default, which wash out on white. */
+[data-theme="light"] .mcp-tool-count.bg-emerald-500\/15 {
+  background: #def5e9;
+  color: #126b3a;
+}
+
+[data-theme="light"] .mcp-server-status.text-emerald-400 {
+  color: #13733f;
+}
+
+[data-theme="light"] .mcp-registry-label.bg-sky-500\/15 {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+[data-theme="light"] .mcp-registry-label.bg-indigo-500\/15 {
+  background: #e8eafe;
+  color: #4338a8;
+}
+
+[data-theme="light"] .mcp-registry-label.bg-accent-500\/15 {
+  background: #e7f0ff;
+  color: #174f9e;
+}
+
+[data-theme="light"] .mcp-registry-label.bg-emerald-500\/15 {
+  background: #def5e9;
+  color: #126b3a;
+}
+
+[data-theme="light"] .mcp-registry-label.bg-violet-500\/15 {
+  background: #eee8ff;
+  color: #5b34a5;
+}
+
 [data-theme="light"] ::selection { background: rgba(51, 127, 240, 0.2); color: var(--color-theme-100); }
 [data-theme="light"] .msg-markdown a { color: #2265dc; text-decoration-color: rgba(34, 101, 220, 0.3); }
 [data-theme="light"] .msg-markdown strong { color: #111d2e; }

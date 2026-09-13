@@ -591,7 +591,7 @@ defineExpose({ loadServers })
           :max-width="220"
         >
           <span
-            class="inline-flex items-center text-[11px] px-2 py-1 rounded-md"
+            class="mcp-tool-count inline-flex items-center text-[11px] px-2 py-1 rounded-md"
             :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300 cursor-default' : 'bg-theme-700/60 text-theme-400'"
           >
             {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
@@ -620,7 +620,7 @@ defineExpose({ loadServers })
       <!-- Status column -->
       <template #col-status="{ item: server }">
         <span
-          class="inline-flex items-center gap-1.5 text-xs"
+          class="mcp-server-status inline-flex items-center gap-1.5 text-xs"
           :class="server.connected ? 'text-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'text-accent-400' : 'text-red-400') : 'text-theme-500'"
         >
           <span
