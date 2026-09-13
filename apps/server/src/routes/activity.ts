@@ -1,10 +1,12 @@
+import { listDreamRuns, type DreamChange } from '../core/memory/dream-store.js'
+import { cancelAllDreamRuns } from '../core/memory/dream-worker.js'
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { listActiveInstances } from './instances.js'
 import { stopAllActivity } from '../core/activity/stop-all.js'
 
-type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels'
+type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
 interface ActivityArtifact {
     href: string
@@ -30,6 +32,7 @@ interface ActivityItem {
     instanceType?: 'chat' | 'multi-agent' | 'cron' | 'channel'
     model?: string | null
     artifacts?: ActivityArtifact[]
+    dreamChanges?: Array<{ tool: string; output: string }>
 }
 
 type ActivityTotalsByKind = Record<ActivityKind, number>
@@ -112,6 +115,7 @@ function parseTypeFilter(value: string | undefined): Set<ActivityKind> | null {
             part === 'cron' ||
             part === 'memory' ||
             part === 'chat' ||
+            part === 'dream' ||
             part === 'channels'
         )
     return kinds.length ? new Set(kinds) : null
@@ -261,7 +265,13 @@ function activitySearchText(item: ActivityItem): string {
 
 export async function registerActivityRoutes(app: FastifyInstance): Promise<void> {
     app.post('/stop-all', async () => {
-        return stopAllActivity()
+        const result = stopAllActivity()
+        const counts = { dreamRuns: cancelAllDreamRuns(), ...result.counts }
+        return {
+            success: true,
+            total: Object.values(counts).reduce((sum, count) => sum + count, 0),
+            counts,
+        }
     })
 
     app.get<{ Querystring: { limit?: string; offset?: string; types?: string; search?: string } }>('/', async (req) => {
@@ -591,6 +601,17 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         }
 
+        for (const run of listDreamRuns(queryLimit)) {
+            const changes = JSON.parse(run.changes_json) as DreamChange[]
+            const changeSummary = changes.length ? `${changes.length} memory change${changes.length === 1 ? '' : 's'}` : 'No new memories'
+            items.push({
+                id: `dream:${run.id}`, kind: 'dream', title: 'Dream review',
+                description: `${run.reviewed_count} message excerpts reviewed · ${changeSummary}${run.error ? ` · ${run.error}` : ''}`,
+                createdAt: run.updated_at, agentId: null, agentName: null, agentIconUrl: null,
+                conversationId: run.conversation_id, status: run.status, sourceId: run.id, sourceLabel: 'Dream', model: run.model, dreamChanges: changes.map(({ tool, output }) => ({ tool, output })),
+            })
+        }
+
         const searched = items.filter((item) => !searchQuery || activitySearchText(item).includes(searchQuery))
         const totalsByKind = searched.reduce<ActivityTotalsByKind>((totals, item) => {
             totals[item.kind] += 1
@@ -603,6 +624,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             memory: 0,
             chat: 0,
             channels: 0,
+            dream: 0,
         })
         const filtered = searched.filter((item) => !typeFilter || typeFilter.has(item.kind))
         const sorted = filtered

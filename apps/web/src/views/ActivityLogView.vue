@@ -33,6 +33,7 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let unsubNotification: (() => void) | undefined;
+let unsubDreamUpdate: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
 let unsubHITLRequest: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
@@ -50,6 +51,7 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "channels", label: "Channels", icon: "lucide:radio" },
   { value: "notification", label: "Notifications", icon: "lucide:bell" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
+  { value: "dream", label: "Dream", icon: "lucide:moon-star" },
   { value: "memory", label: "Memory", icon: "lucide:brain" },
 ];
 
@@ -69,7 +71,7 @@ function readSelectedKinds(): ActivityKind[] {
       typeof value === "string" && selectableKinds.has(value as ActivityKind),
     );
     const uniqueKinds = [...new Set(validKinds)];
-    const matchesPriorDefault = [legacyDefaultSelectedKinds, previousDefaultSelectedKinds].some((defaults) =>
+    const matchesPriorDefault = [legacyDefaultSelectedKinds, previousDefaultSelectedKinds, defaultSelectedKinds.filter(kind => kind !== "dream")].some((defaults) =>
       uniqueKinds.length === defaults.length && defaults.every((kind) => uniqueKinds.includes(kind)),
     );
     return matchesPriorDefault ? [...defaultSelectedKinds] : uniqueKinds;
@@ -95,6 +97,7 @@ function emptyTotalsByKind(): ActivityTotalsByKind {
     memory: 0,
     chat: 0,
     channels: 0,
+    dream: 0,
   };
 }
 
@@ -385,6 +388,7 @@ const groupedItems = computed(() => {
 });
 
 function kindIcon(kind: ActivityKind): string {
+  if (kind === "dream") return "lucide:moon-star";
   switch (kind) {
     case "instance":
       return "lucide:square-activity";
@@ -457,11 +461,16 @@ function isActiveMemoryJob(item: ActivityItem): boolean {
     && (item.status === "running" || item.status === "retrying" || item.status === "queued");
 }
 
+function isActiveDream(item: ActivityItem): boolean {
+  return item.kind === "dream" && item.status === "running";
+}
+
 function isActiveWork(item: ActivityItem): boolean {
+  if (isActiveDream(item)) return true;
   return isActiveInstance(item) || isActiveMemoryJob(item);
 }
 
-const knownActiveWorkCount = computed(() => activeInstances.value.length + memoryJobsStore.activeJobs.length);
+const knownActiveWorkCount = computed(() => activeInstances.value.length + memoryJobsStore.activeJobs.length + items.value.filter(isActiveDream).length);
 
 function openStopAllConfirm(): void {
   stopAllError.value = "";
@@ -515,7 +524,8 @@ async function cancelMemoryJob(item: ActivityItem, event: Event): Promise<void> 
   if (!item.sourceId || cancellingJobIds.value.has(item.sourceId)) return;
   cancellingJobIds.value.add(item.sourceId);
   try {
-    await memoryJobsStore.cancelJob(item.sourceId);
+    if (item.kind === "dream") await api.memory.cancelDreamRun(item.sourceId);
+    else await memoryJobsStore.cancelJob(item.sourceId);
   } finally {
     cancellingJobIds.value.delete(item.sourceId);
     await loadActivity();
@@ -547,6 +557,7 @@ onMounted(() => {
     now.value = Date.now();
   }, 30_000);
   unsubNotification = api.notifications.onCreated(() => void loadActivity());
+  unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadActivity());
   unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated(() => void loadActivity());
   unsubHITLRequest = api.agent.onHITLRequest(() => void loadActivity());
   unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
@@ -566,6 +577,7 @@ onUnmounted(() => {
   clearTimeout(searchTimer);
   clearTimeout(stopAllMessageTimer);
   unsubNotification?.();
+  unsubDreamUpdate?.();
   unsubMemoryJobUpdate?.();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
@@ -865,7 +877,7 @@ watch(searchQuery, () => {
                     Stop
                   </button>
                   <button
-                    v-else-if="isActiveMemoryJob(item)"
+                    v-else-if="isActiveMemoryJob(item) || isActiveDream(item)"
                     type="button"
                     class="inline-flex items-center gap-1 rounded-md border border-purple-400/35 bg-purple-400/10 px-2 py-1 text-[10px] font-semibold text-purple-300 transition hover:border-purple-300/50 hover:bg-purple-400/20 hover:text-purple-200 disabled:cursor-wait disabled:opacity-60"
                     :disabled="Boolean(item.sourceId && cancellingJobIds.has(item.sourceId))"
@@ -894,6 +906,13 @@ watch(searchQuery, () => {
               >
                 {{ item.description }}
               </p>
+
+              <details v-if="item.dreamChanges?.length" class="mt-2 text-xs text-theme-400" @click.stop>
+                <summary class="cursor-pointer">Memory changes</summary>
+                <ul class="mt-1 space-y-1">
+                  <li v-for="(change, index) in item.dreamChanges" :key="index">{{ change.output }}</li>
+                </ul>
+              </details>
 
               <div
                 v-if="item.artifacts?.length"

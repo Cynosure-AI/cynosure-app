@@ -1,6 +1,6 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
-  LLMProviderConfig, McpServerInfo, McpRegistryResponse,
+  DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse,
   AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
   AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
@@ -292,6 +292,10 @@ export const api = {
   },
 
   memory: {
+    getDreamConfig: () => get<DreamConfig>('/api/memory/dream/config'),
+    configureDream: (config: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
+    cancelDreamRun: (id: string) => post<{ success: boolean }>(`/api/memory/dream/runs/${encodeURIComponent(id)}/cancel`, {}),
+    onDreamUpdated: (cb: (data: { id: string; status: string }) => void) => onWsEvent('memory:dream-updated', cb as WsHandler),
     search: (query: string, topK?: number, spaceId?: string) =>
       post<unknown[]>('/api/memory/search', { query, topK, spaceId }),
     deleteEntries: (ids: string[]) =>

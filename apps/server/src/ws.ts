@@ -20,6 +20,7 @@ const clients = new Map<WebSocket, ClientState>()
 // regressions (an event forgotten from an allowlist silently broadcast globally).
 const globalEventNames = new Set([
   'memory:job-updated',
+  'memory:dream-updated',
   'memory:reembed-progress',
   'backup:restore-progress',
   'notification:created',

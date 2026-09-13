@@ -173,6 +173,13 @@ const sections: SettingsSection[] = [
     terms: ['generate chat titles', 'titles', 'chat titles', 'conversation titles', 'title model', 'pre-response action']
   },
   {
+    id: 'dream-mode',
+    categoryId: 'memory',
+    label: 'Dream Mode (Experimental)',
+    description: 'Automatically review conversations to learn and update memory in the background.',
+    terms: ['dream', 'dreaming', 'experimental', 'background', 'learn', 'remember', 'conversations']
+  },
+  {
     id: 'knowledge-extraction',
     categoryId: 'memory',
     label: 'Knowledge Extraction Model',
