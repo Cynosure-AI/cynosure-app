@@ -150,7 +150,7 @@ describe('Dream worker', () => {
         expect(reviewInput.earlierContext).toContain('old')
         expect(input.context).toBe('')
     })
-    test('skips active, disabled, empty scope and scheduled conversations; includes channels', async () => {
+    test('skips active and scheduled conversations, includes channels, and ignores auto-memory eligibility', async () => {
         enable()
         for (const id of ['active', 'disabled', 'empty', 'cron', 'channel']) {
             conversation(id, id === 'disabled' ? { autoMemory: false } : id === 'empty' ? { memorySpaceIds: [] } : {}, id === 'cron' ? 'cron' : id === 'channel' ? 'channel' : 'chat')
@@ -160,11 +160,17 @@ describe('Dream worker', () => {
         vi.setSystemTime(Date.now() + DREAM_IDLE_MS)
         stop = startDreamWorker(broadcast)
         await settleDreamWork()
-        expect(listDreamRuns().map(run => run.conversation_id)).toEqual(['channel'])
+        expect(listDreamRuns().map(run => run.conversation_id).sort()).toEqual(['channel', 'disabled', 'empty'])
     })
-    test('does not fall back from empty agent assignments or explicit unknown folders', () => {
-        mocks.agent.mockReturnValue({ autoMemory: true })
-        expect(resolveDreamSpaces({ id: 'x', agent_id: 'agent', execution_config_json: '{}' })).toEqual([])
+    test('resolves Dream folders from conversation overrides, agent assignments, then the global default', () => {
+        getDb().prepare("INSERT INTO memory_spaces(id, name, folder_path, created_at) VALUES ('assigned', 'Assigned', '/tmp/assigned', ?)").run(Date.now())
+        getDb().prepare("INSERT INTO agent_memory_spaces(agent_id, space_id) VALUES ('agent-with-space', 'assigned')").run()
+
+        expect(resolveDreamSpaces({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memorySpaceIds":["default"],"autoMemory":false}' })).toEqual([{ id: 'default', name: 'Default', relativePath: '' }])
+        expect(resolveDreamSpaces({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"autoMemory":false}' })).toEqual([
+            expect.objectContaining({ id: 'assigned', name: 'Assigned' }),
+        ])
+        expect(resolveDreamSpaces({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memorySpaceIds":[],"autoMemory":false}' })).toEqual([{ id: 'default', name: 'Default' }])
         expect(resolveDreamSpaces({ id: 'x', agent_id: null, execution_config_json: '{"memorySpaceIds":["missing"]}' })).toEqual([])
         expect(resolveDreamSpaces({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([{ id: 'default', name: 'Default' }])
     })
@@ -330,7 +336,7 @@ describe('Dream worker', () => {
     test('rejects writes after disabling or changing the conversation scope', async () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
             await config.tools.find(tool => tool.name === 'memory_semantic_search')!.execute({ query: 'preference' })
-            getDb().prepare("UPDATE conversations SET execution_config_json = '{\"memorySpaceIds\":[]}' WHERE id = 'chat'").run()
+            getDb().prepare("UPDATE conversations SET execution_config_json = '{\"memorySpaceIds\":[\"missing\"]}' WHERE id = 'chat'").run()
             await expect(config.tools.find(tool => tool.name === 'memory_create')!.execute({ title: 'Blocked' })).rejects.toThrow('scope changed')
         })
         await ready()

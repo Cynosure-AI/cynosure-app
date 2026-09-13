@@ -3,7 +3,6 @@ import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { AgentExecutor } from '../agent/agent-executor.js'
 import { estimateToolDefinitionTokens } from '../agent/context-trimmer.js'
-import { getAgent } from '../agents/agent-store.js'
 import { listActiveInstances } from '../../routes/instances.js'
 import type { BroadcastFn } from '../agent/pre-execution/execution-input.js'
 import type { ToolDefinition } from '../gateway/providers/base.provider.js'
@@ -30,14 +29,15 @@ let stopped = true
 let sweepGeneration = 0
 
 export function resolveDreamSpaces(conversation: Conversation): MemorySpaceRef[] {
-    let config: { memorySpaceIds?: string[]; autoMemory?: boolean }
+    let config: { memorySpaceIds?: string[] }
     try { config = JSON.parse(conversation.execution_config_json) } catch { return [] }
-    if (config.autoMemory === false) return []
-    const agent = conversation.agent_id ? getAgent(conversation.agent_id) : undefined
-    if (conversation.agent_id && !agent) return []
-    if (config.autoMemory === undefined && agent?.autoMemory === false) return []
-    if (Array.isArray(config.memorySpaceIds)) return resolveMemorySpaceOverrides(getDb(), config.memorySpaceIds) ?? []
-    if (conversation.agent_id) return getAssignedOrDefaultSpaces(conversation.agent_id)
+    if (Array.isArray(config.memorySpaceIds) && config.memorySpaceIds.length > 0) {
+        return resolveMemorySpaceOverrides(getDb(), config.memorySpaceIds) ?? []
+    }
+    if (conversation.agent_id) {
+        const assigned = getAssignedOrDefaultSpaces(conversation.agent_id)
+        if (assigned.length > 0) return assigned
+    }
     const fallback = getDefaultMemorySpace()
     return fallback ? [fallback] : []
 }
