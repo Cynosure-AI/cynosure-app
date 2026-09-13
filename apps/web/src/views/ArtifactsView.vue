@@ -330,7 +330,8 @@ onUnmounted(() => clearTimeout(searchTimer))
             v-for="option in filterOptions"
             :key="option.value"
             type="button"
-            class="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
+            class="artifact-filter-button inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
+            :aria-pressed="selectedFilter === option.value"
             :class="selectedFilter === option.value
               ? 'border-accent-500/50 bg-accent-500/15 text-accent-200'
               : 'border-theme-700 bg-theme-950/50 text-theme-400 hover:border-theme-600 hover:text-theme-200'"

@@ -135,7 +135,10 @@ function selectIndex(event: Event): void {
               v-for="(level, index) in levels"
               :key="level.value"
               class="reasoning-slider__dot"
-              :class="{ 'reasoning-slider__dot--active': index <= selectedIndex }"
+              :class="{
+                'reasoning-slider__dot--active': index <= selectedIndex,
+                'reasoning-slider__dot--endpoint': index === 0 || index === levels.length - 1,
+              }"
               :style="{ left: `${(index / (levels.length - 1)) * 100}%` }"
             />
           </div>
@@ -201,6 +204,10 @@ function selectIndex(event: Event): void {
 
 .reasoning-slider__dot--active {
   background: color-mix(in srgb, white 40%, var(--color-accent-300));
+}
+
+.reasoning-slider__dot--endpoint {
+  opacity: 0;
 }
 
 .reasoning-slider__input {
