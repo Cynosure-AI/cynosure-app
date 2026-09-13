@@ -6,7 +6,6 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
 import { useProviderLogos } from '../composables/useProviderLogos'
-import BaseCard from '../components/shared/BaseCard.vue'
 import DataTable from '../components/shared/DataTable.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
@@ -588,32 +587,120 @@ function formatDate(timestamp: number): string {
         </template>
       </DataTable>
 
-      <BaseCard
+      <section
         v-else
-        class="p-12 text-center"
+        class="agents-empty-state"
+        aria-labelledby="agents-empty-title"
       >
-        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-500/10">
-          <Icon
-            icon="lucide:bot"
-            class="h-8 w-8 text-accent-400"
-          />
+        <div
+          class="agents-empty-orbit agents-empty-orbit--top"
+          aria-hidden="true"
+        />
+        <div
+          class="agents-empty-orbit agents-empty-orbit--bottom"
+          aria-hidden="true"
+        />
+        <div
+          class="agents-empty-dots agents-empty-dots--top"
+          aria-hidden="true"
+        />
+        <div
+          class="agents-empty-dots agents-empty-dots--bottom"
+          aria-hidden="true"
+        />
+
+        <div class="relative z-10 mx-auto flex max-w-6xl flex-col items-center">
+          <div class="agents-empty-icon-wrap mb-5">
+            <span class="agents-empty-icon-ring agents-empty-icon-ring--outer" />
+            <span class="agents-empty-icon-ring agents-empty-icon-ring--inner" />
+            <span class="agents-empty-spark agents-empty-spark--left">+</span>
+            <span class="agents-empty-spark agents-empty-spark--right">+</span>
+            <div class="agents-empty-icon">
+              <Icon
+                icon="lucide:bot"
+                class="h-9 w-9"
+              />
+            </div>
+          </div>
+
+          <h2
+            id="agents-empty-title"
+            class="text-center text-2xl font-semibold tracking-tight text-theme-100 sm:text-3xl"
+          >
+            No <span class="text-accent-400">Agents</span> Yet
+          </h2>
+          <p class="mt-2 max-w-2xl text-center text-sm leading-6 text-theme-400 sm:text-base">
+            Create your first agent for a smarter, more personal AI experience built around the way you work.
+          </p>
+
+          <div class="mt-8 grid w-full gap-3 text-left md:grid-cols-3 md:gap-4">
+            <article class="agents-empty-feature">
+              <div class="agents-empty-feature-icon">
+                <Icon
+                  icon="lucide:brain-circuit"
+                  class="h-5 w-5"
+                />
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-theme-100 sm:text-base">
+                  Persistent Memory
+                </h3>
+                <p class="mt-1.5 text-sm leading-5 text-theme-500">
+                  Remember context, preferences, and long-term goals so every conversation feels connected.
+                </p>
+              </div>
+            </article>
+
+            <article class="agents-empty-feature">
+              <div class="agents-empty-feature-icon">
+                <Icon
+                  icon="lucide:wrench"
+                  class="h-5 w-5"
+                />
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-theme-100 sm:text-base">
+                  Dedicated Tools
+                </h3>
+                <p class="mt-1.5 text-sm leading-5 text-theme-500">
+                  Choose only the tools each agent needs for focused, efficient, and safer work.
+                </p>
+              </div>
+            </article>
+
+            <article class="agents-empty-feature">
+              <div class="agents-empty-feature-icon">
+                <Icon
+                  icon="lucide:user-round"
+                  class="h-5 w-5"
+                />
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-theme-100 sm:text-base">
+                  Personalised Behaviour
+                </h3>
+                <p class="mt-1.5 text-sm leading-5 text-theme-500">
+                  Shape the role, tone, model, and capabilities to fit every task and workflow.
+                </p>
+              </div>
+            </article>
+          </div>
+
+          <button
+            class="agents-empty-cta mt-8 inline-flex items-center gap-2 rounded-xl bg-accent-600 px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-accent-500 sm:px-6 sm:text-base"
+            @click="showCreateDialog = true"
+          >
+            <Icon
+              icon="lucide:plus"
+              class="h-5 w-5"
+            />
+            Create Your First Agent
+          </button>
+          <p class="mt-3 text-xs text-theme-500 sm:text-sm">
+            It only takes a minute. You can adjust everything later.
+          </p>
         </div>
-        <h3 class="mb-2 text-lg font-medium text-theme-200">
-          No Agents Yet
-        </h3>
-        <p class="mx-auto mb-6 max-w-md text-sm text-theme-500">
-          Create your first agent to get started. Each agent can be configured with its own model, tools, memory, and tags.
-        </p>
-        <button
-          class="inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500"
-          @click="showCreateDialog = true"
-        >
-          <Icon
-            icon="lucide:plus"
-            class="h-4 w-4"
-          />Create Agent
-        </button>
-      </BaseCard>
+      </section>
       <div
         v-if="hasAnyAgents && hasFilters"
         class="mt-4 flex items-center justify-between text-sm text-theme-500"
@@ -706,3 +793,178 @@ function formatDate(timestamp: number): string {
     </div>
   </div>
 </template>
+
+<style scoped>
+.agents-empty-state {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 32rem;
+  padding: 2.5rem 2rem;
+  border: 1px solid color-mix(in srgb, var(--color-theme-600) 42%, transparent);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 7% 5%, color-mix(in srgb, var(--color-accent-600) 14%, transparent), transparent 18rem),
+    radial-gradient(circle at 96% 92%, color-mix(in srgb, var(--color-accent-600) 13%, transparent), transparent 20rem),
+    linear-gradient(145deg, color-mix(in srgb, var(--color-theme-800) 78%, transparent), color-mix(in srgb, var(--color-theme-900) 92%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-theme-100) 5%, transparent);
+}
+
+.agents-empty-state::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--color-theme-100) 2%, transparent) 10px 11px);
+  mask-image: linear-gradient(to bottom, transparent 35%, #000 100%);
+  content: '';
+}
+
+.agents-empty-orbit {
+  position: absolute;
+  width: 20rem;
+  height: 20rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.agents-empty-orbit::after {
+  position: absolute;
+  inset: 4.25rem;
+  border: 1px solid color-mix(in srgb, var(--color-theme-300) 12%, transparent);
+  border-radius: inherit;
+  content: '';
+}
+
+.agents-empty-orbit--top {
+  top: -12.5rem;
+  left: -7rem;
+}
+
+.agents-empty-orbit--bottom {
+  right: -7.5rem;
+  bottom: -13.5rem;
+}
+
+.agents-empty-dots {
+  position: absolute;
+  width: 9rem;
+  height: 5rem;
+  opacity: .48;
+  background-image: radial-gradient(circle, var(--color-accent-400) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+  pointer-events: none;
+}
+
+.agents-empty-dots--top {
+  top: 2rem;
+  right: 2rem;
+  mask-image: linear-gradient(135deg, transparent, #000);
+}
+
+.agents-empty-dots--bottom {
+  bottom: 2rem;
+  left: 2rem;
+  mask-image: linear-gradient(315deg, transparent, #000);
+}
+
+.agents-empty-icon-wrap {
+  position: relative;
+  display: grid;
+  width: 7.5rem;
+  height: 7.5rem;
+  place-items: center;
+}
+
+.agents-empty-icon-ring {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 33%, transparent);
+  border-radius: 9999px;
+}
+
+.agents-empty-icon-ring--outer {
+  inset: 0;
+  box-shadow: inset 0 0 28px color-mix(in srgb, var(--color-accent-500) 5%, transparent);
+}
+
+.agents-empty-icon-ring--inner {
+  inset: .55rem;
+  border-color: color-mix(in srgb, var(--color-accent-400) 24%, transparent);
+}
+
+.agents-empty-icon {
+  display: grid;
+  width: 4.25rem;
+  height: 4.25rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-accent-400) 40%, transparent);
+  border-radius: 1.25rem;
+  background: radial-gradient(circle at 35% 25%, color-mix(in srgb, var(--color-accent-400) 24%, transparent), color-mix(in srgb, var(--color-theme-900) 93%, transparent));
+  color: var(--color-accent-300);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--color-accent-500) 20%, transparent), inset 0 1px 0 color-mix(in srgb, var(--color-theme-100) 12%, transparent);
+}
+
+.agents-empty-spark {
+  position: absolute;
+  color: var(--color-accent-400);
+  font-size: 1.25rem;
+  font-weight: 300;
+  line-height: 1;
+  text-shadow: 0 0 12px var(--color-accent-500);
+}
+
+.agents-empty-spark--left {
+  top: 62%;
+  left: -.1rem;
+}
+
+.agents-empty-spark--right {
+  top: 20%;
+  right: -.15rem;
+}
+
+.agents-empty-feature {
+  display: flex;
+  min-width: 0;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--color-theme-600) 38%, transparent);
+  border-radius: .875rem;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-theme-800) 58%, transparent), color-mix(in srgb, var(--color-theme-900) 52%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-theme-100) 4%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.agents-empty-feature-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+  color: var(--color-accent-300);
+}
+
+.agents-empty-cta {
+  color: var(--accent-button-foreground);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--color-accent-600) 28%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+}
+
+@media (max-width: 767px) {
+  .agents-empty-state {
+    min-height: auto;
+    padding: 2rem 1rem;
+  }
+
+  .agents-empty-feature {
+    padding: 1rem;
+  }
+
+  .agents-empty-orbit,
+  .agents-empty-dots {
+    opacity: .45;
+  }
+}
+</style>
