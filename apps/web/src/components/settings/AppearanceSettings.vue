@@ -194,46 +194,48 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           type="button"
           :aria-pressed="prefs.theme === t.id"
           :aria-label="`${t.label} theme${prefs.theme === t.id ? ', selected' : ''}`"
-          class="group relative rounded-lg border-2 p-3 transition-all duration-200 text-left"
+          class="group relative flex justify-center rounded-lg border-2 p-3 transition-all duration-200 text-left"
           :class="prefs.theme === t.id
             ? 'border-accent-500 ring-1 ring-accent-500/30'
             : 'border-theme-700 hover:border-theme-600'"
           @click="prefs.setTheme(t.id)"
         >
-          <div
-            class="rounded-md overflow-hidden mb-2.5 h-16 p-1.5 flex flex-col gap-1"
-            :style="{ backgroundColor: t.colors.bg }"
-          >
-            <div class="flex gap-1 flex-1 max-w-32">
-              <div
-                class="w-5 rounded-sm"
-                :style="{ backgroundColor: t.colors.surface }"
-              />
-              <div class="flex-1 flex flex-col gap-0.5">
+          <div class="w-fit flex flex-col items-start">
+            <div
+              class="rounded-md overflow-hidden mb-2.5 h-16 p-1.5 flex flex-col gap-1 w-28"
+              :style="{ backgroundColor: t.colors.bg }"
+            >
+              <div class="flex gap-1 flex-1">
                 <div
-                  class="h-2 rounded-sm w-3/4"
+                  class="w-5 rounded-sm"
                   :style="{ backgroundColor: t.colors.surface }"
                 />
-                <div
-                  class="h-1.5 rounded-sm w-1/2 opacity-50"
-                  :style="{ backgroundColor: t.colors.text }"
-                />
-                <div class="flex-1" />
-                <div
-                  class="h-2 rounded-sm w-1/3"
-                  :style="{ backgroundColor: t.colors.accent }"
-                />
+                <div class="flex-1 flex flex-col gap-0.5">
+                  <div
+                    class="h-2 rounded-sm w-3/4"
+                    :style="{ backgroundColor: t.colors.surface }"
+                  />
+                  <div
+                    class="h-1.5 rounded-sm w-1/2 opacity-50"
+                    :style="{ backgroundColor: t.colors.text }"
+                  />
+                  <div class="flex-1" />
+                  <div
+                    class="h-2 rounded-sm w-1/3"
+                    :style="{ backgroundColor: t.colors.accent }"
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="flex items-center gap-2">
-            <Icon
-              :icon="t.icon"
-              class="w-3.5 h-3.5"
-              :style="{ color: t.colors.accent }"
-            />
-            <span class="text-xs font-medium text-theme-200">{{ t.label }}</span>
+            <div class="flex items-center gap-2">
+              <Icon
+                :icon="t.icon"
+                class="w-3.5 h-3.5"
+                :style="{ color: t.colors.accent }"
+              />
+              <span class="text-xs font-medium text-theme-200">{{ t.label }}</span>
+            </div>
           </div>
 
           <div
