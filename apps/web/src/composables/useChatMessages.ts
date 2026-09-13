@@ -34,7 +34,7 @@ export function useChatMessages(
         sessionAutoMemory: Ref<boolean>
         selectedToolNames: Ref<string[]>
         freeChatSubAgentIds: Ref<string[]>
-        freeChatMemorySpaceIds: Ref<string[]>
+        freeChatMemoryCategoryIds: Ref<string[]>
         freeChatMemorySelectionInitialized: Ref<boolean>
     },
 ): ChatMessagesApi {
@@ -112,7 +112,7 @@ export function useChatMessages(
                 systemPrompt: agentConfig.sessionSystemPrompt.value || activeAgent?.systemPrompt || undefined,
                 generateTitle: prefs.generateTitle,
                 subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
-                memorySpaceIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemorySpaceIds.value] : undefined,
+                memoryCategoryIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemoryCategoryIds.value] : undefined,
                 thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
                 reasoningEffort: agentConfig.sessionReasoningEffort.value,
                 contextStrategy: prefs.contextStrategy,

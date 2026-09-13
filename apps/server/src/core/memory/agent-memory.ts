@@ -1,12 +1,12 @@
 import { getMemoryParser, type MemoryRetrievalStatusDetails, type RetrievedChunk } from './parser.js'
 import { getRAGStore } from './rag.js'
 import { getDb } from '../../db/database.js'
-import { buildMemorySpaceFilter, getMemorySpaceFolderPath } from './memory-space-scope.js'
+import { buildMemoryCategoryFilter, getMemoryCategoryDirectoryPath } from './memory-category-scope.js'
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import {
     deleteMemoryKnowledgeSource,
     moveMemoryKnowledgeSource,
-} from './memory-knowledge-extraction.js'
+} from './memory-deep-research.js'
 import {
     writeTextFile,
     readTextFile,
@@ -23,6 +23,7 @@ import { cancelMemoryIndexJobsForFile } from './memory-index-jobs.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 import { randomBytes } from 'node:crypto'
 import { createStableMemoryDocumentRef } from './memory-reference.js'
+import { markMemoryDocumentDeleted, recordMemoryRevision, updateMemoryDocumentLocation, type MemoryRevisionContext } from './memory-revisions.js'
 
 export interface ReindexFileResult {
     fileName: string
@@ -32,7 +33,7 @@ export interface ReindexFileResult {
 export interface MemoryDocumentReference {
     documentId: string
     documentRef: string
-    spaceId: string
+    categoryId: string
     fileName: string
     revision: string
     chunkCount: number
@@ -46,7 +47,7 @@ function throwIfAborted(signal?: AbortSignal): void {
 }
 
 function upsertFileIndex(
-    spaceId: string,
+    categoryId: string,
     fileName: string,
     contentHash: string,
     chunkCount: number,
@@ -55,8 +56,8 @@ function upsertFileIndex(
         const db = getDb()
         const now = Date.now()
         const existing = db.prepare(`
-            SELECT document_id, document_ref FROM memory_file_index WHERE space_id = ? AND file_name = ?
-        `).get(spaceId, fileName) as { document_id: string; document_ref: string } | undefined
+            SELECT document_id, document_ref, content_hash FROM memory_file_index WHERE category_id = ? AND file_name = ?
+        `).get(categoryId, fileName) as { document_id: string; document_ref: string; content_hash: string } | undefined
         const documentId = existing?.document_id || randomBytes(16).toString('hex')
         let collisionAttempt = 0
         let documentRef = existing?.document_ref || ''
@@ -65,15 +66,15 @@ function upsertFileIndex(
             if (!db.prepare('SELECT 1 FROM memory_file_index WHERE document_ref = ?').get(candidate)) documentRef = candidate
         }
         db.prepare(`
-            INSERT INTO memory_file_index (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, created_at)
+            INSERT INTO memory_file_index (document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(space_id, file_name) DO UPDATE SET
+            ON CONFLICT(category_id, file_name) DO UPDATE SET
                 document_ref = CASE
                     WHEN memory_file_index.document_ref = '' THEN excluded.document_ref
                     ELSE memory_file_index.document_ref
                 END,
-                knowledge_extracted_at = CASE
-                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.knowledge_extracted_at
+                deep_researched_at = CASE
+                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.deep_researched_at
                     ELSE 0
                 END,
                 tags_json = CASE
@@ -83,28 +84,31 @@ function upsertFileIndex(
                 content_hash = excluded.content_hash,
                 chunk_count = excluded.chunk_count,
                 last_indexed_at = excluded.last_indexed_at
-        `).run(documentId, documentRef, spaceId, fileName, contentHash, chunkCount, now, now)
+        `).run(documentId, documentRef, categoryId, fileName, contentHash, chunkCount, now, now)
+        if (existing?.content_hash && existing.content_hash !== contentHash) {
+            deleteMemoryKnowledgeSource(categoryId, fileName)
+        }
     } catch {
         /* non-fatal */
     }
 }
 
-function removeFileIndex(spaceId: string, fileName: string): void {
+function removeFileIndex(categoryId: string, fileName: string): void {
     try {
         const db = getDb()
-        db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?').run(spaceId, fileName)
+        db.prepare('DELETE FROM memory_file_index WHERE category_id = ? AND file_name = ?').run(categoryId, fileName)
     } catch { /* non-fatal */ }
 }
 
 interface FileIndexMoveCandidate {
     documentId: string
     documentRef: string
-    spaceId: string
+    categoryId: string
     fileName: string
     contentHash: string
     chunkCount: number
     lastIndexedAt: number
-    knowledgeExtractedAt: number
+    deepResearchedAt: number
     dreamedAt: number
     tags: string[]
     createdAt: number
@@ -121,7 +125,7 @@ function parseDocumentTags(value: unknown): string[] {
 
 /**
  * Persistent knowledge store backed by LanceDB.
- * All memory is scoped to memory spaces (spaceId).
+ * All memory is scoped to memory categories (categoryId).
  * Files on disk are the source of truth; LanceDB is the retrieval index.
  */
 export class AgentMemory {
@@ -134,14 +138,14 @@ export class AgentMemory {
     private async ingestText(
         text: string,
         sourceFile: string,
-        spaceId: string,
+        categoryId: string,
         signal?: AbortSignal,
         tableName = getActivePermanentMemoryTableName(),
     ): Promise<number> {
         return this.parser.ingest(tableName, text, {
             source: 'permanent',
             sourceFile,
-            spaceId,
+            categoryId,
         }, { signal })
     }
 
@@ -152,21 +156,21 @@ export class AgentMemory {
     private async replaceIndexedText(
         text: string,
         sourceFile: string,
-        spaceId: string,
+        categoryId: string,
         replacedSourceFiles: string[],
         signal?: AbortSignal,
     ): Promise<number> {
         const ragStore = getRAGStore()
         const tableName = getActivePermanentMemoryTableName()
         const oldFilter = andLanceDbFilters(
-            buildMemorySpaceFilter([{ id: spaceId }]),
+            buildMemoryCategoryFilter([{ id: categoryId }]),
             lanceDbInFilter('sourceFile', Array.from(new Set(replacedSourceFiles.filter(Boolean)))),
         )
         const oldIds = oldFilter
             ? (await ragStore.listDocuments(tableName, oldFilter, { throwOnError: true })).map((doc) => doc.id)
             : []
 
-        const count = await this.ingestText(text, sourceFile, spaceId, signal, tableName)
+        const count = await this.ingestText(text, sourceFile, categoryId, signal, tableName)
         const allCurrentIds = oldFilter
             ? (await ragStore.listDocuments(tableName, oldFilter, { throwOnError: true })).map((doc) => doc.id)
             : []
@@ -192,46 +196,50 @@ export class AgentMemory {
 
     /**
      * Re-index an existing file in a space folder (delete old vectors, re-ingest).
-     * The file must already exist on disk at folderPath/fileName.
+     * The file must already exist on disk at directoryPath/fileName.
      * Handles both plain text and parseable document formats.
      */
     async reindexFile(
-        folderPath: string,
+        directoryPath: string,
         fileName: string,
-        spaceId: string,
-        opts?: { signal?: AbortSignal },
+        categoryId: string,
+        opts?: { signal?: AbortSignal; revisionContext?: MemoryRevisionContext },
     ): Promise<ReindexFileResult> {
         throwIfAborted(opts?.signal)
-        const filePath = join(folderPath, fileName)
+        const filePath = join(directoryPath, fileName)
 
         let text: string
         const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase()
 
         if (PLAIN_TEXT_EXTENSIONS.has(ext)) {
-            text = readTextFile(folderPath, fileName)
+            text = readTextFile(directoryPath, fileName)
         } else if (isParseableDocument(fileName)) {
             const buf = readFileSync(filePath)
             throwIfAborted(opts?.signal)
             text = await parseDocument(buf, fileName)
             throwIfAborted(opts?.signal)
-            const mdName = resolveUniqueFileName(folderPath, toMarkdownFileName(fileName))
-            const mdPath = writeTextFile(folderPath, mdName, text)
+            const mdName = resolveUniqueFileName(directoryPath, toMarkdownFileName(fileName))
+            const mdPath = writeTextFile(directoryPath, mdName, text)
 
-            const count = await this.replaceIndexedText(text, mdName, spaceId, [fileName, mdName], opts?.signal)
+            const count = await this.replaceIndexedText(text, mdName, categoryId, [fileName, mdName], opts?.signal)
             throwIfAborted(opts?.signal)
-            archiveFile(folderPath, fileName)
-            removeFileIndex(spaceId, fileName)
+            archiveFile(directoryPath, fileName)
+            removeFileIndex(categoryId, fileName)
             const hash = computeFileHash(mdPath)
-            upsertFileIndex(spaceId, mdName, hash, count)
+            upsertFileIndex(categoryId, mdName, hash, count)
+            const ref = this.getDocumentReference(categoryId, mdName)
+            if (ref) recordMemoryRevision({ documentId: ref.documentId, documentRef: ref.documentRef, categoryId, fileName: mdName, content: text, context: opts?.revisionContext ?? { source: 'import' } })
             return { fileName: mdName, chunkCount: count }
         } else {
             throw new Error(`Unsupported file type: ${ext}`)
         }
 
-        const count = await this.replaceIndexedText(text, fileName, spaceId, [fileName], opts?.signal)
+        const count = await this.replaceIndexedText(text, fileName, categoryId, [fileName], opts?.signal)
         throwIfAborted(opts?.signal)
         const hash = computeFileHash(filePath)
-        upsertFileIndex(spaceId, fileName, hash, count)
+        upsertFileIndex(categoryId, fileName, hash, count)
+        const ref = this.getDocumentReference(categoryId, fileName)
+        if (ref) recordMemoryRevision({ documentId: ref.documentId, documentRef: ref.documentRef, categoryId, fileName, content: text, context: opts?.revisionContext })
         return { fileName, chunkCount: count }
     }
 
@@ -248,16 +256,16 @@ export class AgentMemory {
         return this.parser.retrieve(getActivePermanentMemoryTableName(), query, topK, filter || undefined, onStatus)
     }
 
-    getDocumentReference(spaceId: string, fileName: string): MemoryDocumentReference | undefined {
+    getDocumentReference(categoryId: string, fileName: string): MemoryDocumentReference | undefined {
         try {
             const row = getDb().prepare(`
-                SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count
+                SELECT document_id, document_ref, category_id, file_name, content_hash, chunk_count
                 FROM memory_file_index
-                WHERE space_id = ? AND file_name = ?
-            `).get(spaceId, fileName) as {
+                WHERE category_id = ? AND file_name = ?
+            `).get(categoryId, fileName) as {
                 document_id: string
                 document_ref: string
-                space_id: string
+                category_id: string
                 file_name: string
                 content_hash: string
                 chunk_count: number
@@ -265,7 +273,7 @@ export class AgentMemory {
             return row ? {
                 documentId: row.document_id,
                 documentRef: row.document_ref,
-                spaceId: row.space_id,
+                categoryId: row.category_id,
                 fileName: row.file_name,
                 revision: row.content_hash,
                 chunkCount: row.chunk_count,
@@ -278,13 +286,13 @@ export class AgentMemory {
     getDocumentReferenceById(documentId: string): MemoryDocumentReference | undefined {
         try {
             const row = getDb().prepare(`
-                SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count
+                SELECT document_id, document_ref, category_id, file_name, content_hash, chunk_count
                 FROM memory_file_index
                 WHERE document_id = ?
             `).get(documentId) as {
                 document_id: string
                 document_ref: string
-                space_id: string
+                category_id: string
                 file_name: string
                 content_hash: string
                 chunk_count: number
@@ -292,7 +300,7 @@ export class AgentMemory {
             return row ? {
                 documentId: row.document_id,
                 documentRef: row.document_ref,
-                spaceId: row.space_id,
+                categoryId: row.category_id,
                 fileName: row.file_name,
                 revision: row.content_hash,
                 chunkCount: row.chunk_count,
@@ -307,7 +315,7 @@ export class AgentMemory {
         minIndex: number,
         maxIndex: number,
         filter?: string,
-    ): Promise<{ text: string; chunkIndex: number; sourceFile: string; spaceId?: string }[]> {
+    ): Promise<{ text: string; chunkIndex: number; sourceFile: string; categoryId?: string }[]> {
         return getRAGStore().getChunksByRange(getActivePermanentMemoryTableName(), sourceFile, minIndex, maxIndex, filter)
     }
 
@@ -323,9 +331,10 @@ export class AgentMemory {
      * Delete all vectors for a source file and archive its physical source in
      * the space's hidden trash folder if it still exists.
      */
-    async deleteSourceFile(sourceFile: string, spaceId: string): Promise<number> {
+    async deleteSourceFile(sourceFile: string, categoryId: string): Promise<number> {
+        const document = this.getDocumentReference(categoryId, sourceFile)
         const ragStore = getRAGStore()
-        const spaceFilter = buildMemorySpaceFilter([{ id: spaceId }])
+        const spaceFilter = buildMemoryCategoryFilter([{ id: categoryId }])
         const deleted = await ragStore.deleteBySource(
             getActivePermanentMemoryTableName(),
             sourceFile,
@@ -333,11 +342,12 @@ export class AgentMemory {
             { throwOnError: true },
         )
 
-        const folderPath = getMemorySpaceFolderPath(spaceId)
-        if (folderPath) {
-            archiveFile(folderPath, sourceFile)
+        const directoryPath = getMemoryCategoryDirectoryPath(categoryId)
+        if (directoryPath) {
+            archiveFile(directoryPath, sourceFile)
         }
-        removeFileIndex(spaceId, sourceFile)
+        removeFileIndex(categoryId, sourceFile)
+        if (document) markMemoryDocumentDeleted(document.documentId)
         return deleted
     }
 
@@ -346,24 +356,24 @@ export class AgentMemory {
      * physical files. The files will appear as not indexed and can be cleanly
      * re-indexed later.
      */
-    async dropSourceIndexes(sourceFiles: string[], spaceId: string): Promise<number> {
+    async dropSourceIndexes(sourceFiles: string[], categoryId: string): Promise<number> {
         const uniqueSourceFiles = Array.from(new Set(sourceFiles.filter(Boolean)))
         if (uniqueSourceFiles.length === 0) return 0
 
         for (const sourceFile of uniqueSourceFiles) {
-            cancelMemoryIndexJobsForFile(spaceId, sourceFile)
+            cancelMemoryIndexJobsForFile(categoryId, sourceFile)
         }
 
         const deleted = await getRAGStore().deleteBySources(
             getActivePermanentMemoryTableName(),
             uniqueSourceFiles,
-            buildMemorySpaceFilter([{ id: spaceId }]),
+            buildMemoryCategoryFilter([{ id: categoryId }]),
         )
 
         const db = getDb()
         const removeIndexes = db.transaction(() => {
-            const stmt = db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-            for (const sourceFile of uniqueSourceFiles) stmt.run(spaceId, sourceFile)
+            const stmt = db.prepare('DELETE FROM memory_file_index WHERE category_id = ? AND file_name = ?')
+            for (const sourceFile of uniqueSourceFiles) stmt.run(categoryId, sourceFile)
         })
         removeIndexes()
 
@@ -381,11 +391,11 @@ export class AgentMemory {
      * edges intact, avoiding a full re-index after filesystem moves.
      */
     async remapMovedFileByHash(
-        targetSpaceId: string,
+        targetCategoryId: string,
         targetFileName: string,
         targetFolderPath: string,
     ): Promise<{ remapped: boolean; fromSpaceId?: string; fromFileName?: string }> {
-        const existingTarget = this.getFileIndexEntry(targetSpaceId, targetFileName)
+        const existingTarget = this.getFileIndexEntry(targetCategoryId, targetFileName)
         if (existingTarget) return { remapped: false }
 
         const targetPath = join(targetFolderPath, targetFileName)
@@ -394,20 +404,20 @@ export class AgentMemory {
 
         const db = getDb()
         const candidates = db.prepare(`
-            SELECT document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, tags_json, created_at
+            SELECT document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json, created_at
             FROM memory_file_index
             WHERE content_hash = ?
-              AND NOT (space_id = ? AND file_name = ?)
+              AND NOT (category_id = ? AND file_name = ?)
             ORDER BY last_indexed_at DESC
-        `).all(contentHash, targetSpaceId, targetFileName) as {
+        `).all(contentHash, targetCategoryId, targetFileName) as {
             document_id: string
             document_ref: string
-            space_id: string
+            category_id: string
             file_name: string
             content_hash: string
             chunk_count: number
             last_indexed_at: number
-            knowledge_extracted_at: number
+            deep_researched_at: number
             dreamed_at: number
             tags_json: string
             created_at: number
@@ -417,18 +427,18 @@ export class AgentMemory {
             .map((row): FileIndexMoveCandidate => ({
                 documentId: row.document_id,
                 documentRef: row.document_ref,
-                spaceId: row.space_id,
+                categoryId: row.category_id,
                 fileName: row.file_name,
                 contentHash: row.content_hash,
                 chunkCount: row.chunk_count,
                 lastIndexedAt: row.last_indexed_at,
-                knowledgeExtractedAt: row.knowledge_extracted_at || 0,
+                deepResearchedAt: row.deep_researched_at || 0,
                 dreamedAt: row.dreamed_at || 0,
                 tags: parseDocumentTags(row.tags_json),
                 createdAt: row.created_at,
             }))
             .find((row) => {
-                const oldFolderPath = getMemorySpaceFolderPath(row.spaceId)
+                const oldFolderPath = getMemoryCategoryDirectoryPath(row.categoryId)
                 return !oldFolderPath || !existsSync(join(oldFolderPath, row.fileName))
             })
 
@@ -436,7 +446,7 @@ export class AgentMemory {
 
         const ragStore = getRAGStore()
         const oldFilter = andLanceDbFilters(
-            lanceDbEqFilter('spaceId', candidate.spaceId),
+            lanceDbEqFilter('categoryId', candidate.categoryId),
             lanceDbEqFilter('sourceFile', candidate.fileName),
         )
         if (oldFilter && candidate.fileName !== targetFileName) {
@@ -444,29 +454,29 @@ export class AgentMemory {
         }
 
         const newNameFilter = andLanceDbFilters(
-            lanceDbEqFilter('spaceId', candidate.spaceId),
+            lanceDbEqFilter('categoryId', candidate.categoryId),
             lanceDbEqFilter('sourceFile', targetFileName),
         )
-        if (newNameFilter && candidate.spaceId !== targetSpaceId) {
-            await ragStore.updateSpaceId(getActivePermanentMemoryTableName(), newNameFilter, targetSpaceId)
+        if (newNameFilter && candidate.categoryId !== targetCategoryId) {
+            await ragStore.updateCategoryId(getActivePermanentMemoryTableName(), newNameFilter, targetCategoryId)
         }
 
         const moveIndex = db.transaction(() => {
-            db.prepare('DELETE FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .run(candidate.spaceId, candidate.fileName)
+            db.prepare('DELETE FROM memory_file_index WHERE category_id = ? AND file_name = ?')
+                .run(candidate.categoryId, candidate.fileName)
             db.prepare(`
                 INSERT OR REPLACE INTO memory_file_index
-                    (document_id, document_ref, space_id, file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, tags_json, created_at)
+                    (document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 candidate.documentId,
                 candidate.documentRef,
-                targetSpaceId,
+                targetCategoryId,
                 targetFileName,
                 candidate.contentHash,
                 candidate.chunkCount,
                 candidate.lastIndexedAt,
-                candidate.knowledgeExtractedAt,
+                candidate.deepResearchedAt,
                 candidate.dreamedAt,
                 JSON.stringify(candidate.tags),
                 candidate.createdAt || Date.now(),
@@ -474,9 +484,11 @@ export class AgentMemory {
         })
         moveIndex()
 
-        moveMemoryKnowledgeSource(candidate.spaceId, candidate.fileName, targetSpaceId, targetFileName)
-        cancelMemoryIndexJobsForFile(candidate.spaceId, candidate.fileName)
-        return { remapped: true, fromSpaceId: candidate.spaceId, fromFileName: candidate.fileName }
+        updateMemoryDocumentLocation(candidate.documentId, targetCategoryId, targetFileName)
+
+        moveMemoryKnowledgeSource(candidate.categoryId, candidate.fileName, targetCategoryId, targetFileName)
+        cancelMemoryIndexJobsForFile(candidate.categoryId, candidate.fileName)
+        return { remapped: true, fromSpaceId: candidate.categoryId, fromFileName: candidate.fileName }
     }
 
     // -----------------------------------------------------------------------
@@ -484,35 +496,35 @@ export class AgentMemory {
     // -----------------------------------------------------------------------
 
     async listSourceFiles(
-        spaceId?: string,
+        categoryId?: string,
         overrideFilter?: string,
-    ): Promise<{ sourceFile: string; spaceId?: string; chunkCount: number; createdAt: number }[]> {
+    ): Promise<{ sourceFile: string; categoryId?: string; chunkCount: number; createdAt: number }[]> {
         const ragStore = getRAGStore()
         let filter: string | undefined
         if (overrideFilter) {
             filter = overrideFilter
-        } else if (spaceId) {
-            filter = buildMemorySpaceFilter([{ id: spaceId }])
+        } else if (categoryId) {
+            filter = buildMemoryCategoryFilter([{ id: categoryId }])
         }
         const docs = await ragStore.listDocuments(getActivePermanentMemoryTableName(), filter)
         const indexedFiles = this.getIndexedFilePairs()
 
-        const map = new Map<string, { sourceFile: string; spaceId?: string; count: number; latest: number }>()
+        const map = new Map<string, { sourceFile: string; categoryId?: string; count: number; latest: number }>()
         for (const doc of docs) {
-            if (doc.spaceId && !indexedFiles.has(`${doc.spaceId}\0${doc.sourceFile || ''}`)) continue
+            if (doc.categoryId && !indexedFiles.has(`${doc.categoryId}\0${doc.sourceFile || ''}`)) continue
             const sourceFile = doc.sourceFile || '(untitled)'
-            const key = `${doc.spaceId || ''}\0${sourceFile}`
+            const key = `${doc.categoryId || ''}\0${sourceFile}`
             const existing = map.get(key)
             if (existing) {
                 existing.count++
                 if (doc.createdAt > existing.latest) existing.latest = doc.createdAt
             } else {
-                map.set(key, { sourceFile, spaceId: doc.spaceId, count: 1, latest: doc.createdAt })
+                map.set(key, { sourceFile, categoryId: doc.categoryId, count: 1, latest: doc.createdAt })
             }
         }
 
         return Array.from(map.values())
-            .map(({ sourceFile, spaceId, count, latest }) => ({ sourceFile, spaceId, chunkCount: count, createdAt: latest }))
+            .map(({ sourceFile, categoryId, count, latest }) => ({ sourceFile, categoryId, chunkCount: count, createdAt: latest }))
             .sort((a, b) => b.createdAt - a.createdAt || a.sourceFile.localeCompare(b.sourceFile))
     }
 
@@ -520,9 +532,9 @@ export class AgentMemory {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT space_id, file_name FROM memory_file_index')
-                .all() as { space_id: string; file_name: string }[]
-            return new Set(rows.map((row) => `${row.space_id}\0${row.file_name}`))
+                .prepare('SELECT category_id, file_name FROM memory_file_index')
+                .all() as { category_id: string; file_name: string }[]
+            return new Set(rows.map((row) => `${row.category_id}\0${row.file_name}`))
         } catch {
             return new Set()
         }
@@ -532,15 +544,15 @@ export class AgentMemory {
      * Resolve a unique source file name within a space.
      * Now checks the actual folder on disk instead of LanceDB.
      */
-    async resolveUniqueSourceFile(sourceFile: string, spaceId?: string): Promise<string> {
-        if (spaceId) {
-            const folderPath = getMemorySpaceFolderPath(spaceId)
-            if (folderPath) {
-                return resolveUniqueFileName(folderPath, sourceFile)
+    async resolveUniqueSourceFile(sourceFile: string, categoryId?: string): Promise<string> {
+        if (categoryId) {
+            const directoryPath = getMemoryCategoryDirectoryPath(categoryId)
+            if (directoryPath) {
+                return resolveUniqueFileName(directoryPath, sourceFile)
             }
         }
         // Fallback to LanceDB check (legacy path)
-        const existing = await this.listSourceFiles(spaceId)
+        const existing = await this.listSourceFiles(categoryId)
         const existingNames = new Set(existing.map(e => e.sourceFile))
         if (!existingNames.has(sourceFile)) return sourceFile
         const dotIdx = sourceFile.lastIndexOf('.')
@@ -559,15 +571,15 @@ export class AgentMemory {
     // File index read helpers
     // -----------------------------------------------------------------------
 
-    getFileIndex(spaceId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; dreamedAt: number; tags: string[] }> {
+    getFileIndex(categoryId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; deepResearchedAt: number; dreamedAt: number; tags: string[] }> {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, dreamed_at, tags_json FROM memory_file_index WHERE space_id = ?')
-                .all(spaceId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; dreamed_at: number; tags_json: string }[]
-            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; dreamedAt: number; tags: string[] }>()
+                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json FROM memory_file_index WHERE category_id = ?')
+                .all(categoryId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; deep_researched_at: number; dreamed_at: number; tags_json: string }[]
+            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; deepResearchedAt: number; dreamedAt: number; tags: string[] }>()
             for (const row of rows) {
-                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, knowledgeExtractedAt: row.knowledge_extracted_at || 0, dreamedAt: row.dreamed_at || 0, tags: parseDocumentTags(row.tags_json) })
+                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, deepResearchedAt: row.deep_researched_at || 0, dreamedAt: row.dreamed_at || 0, tags: parseDocumentTags(row.tags_json) })
             }
             return map
         } catch {
@@ -575,14 +587,14 @@ export class AgentMemory {
         }
     }
 
-    getFileIndexEntry(spaceId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; knowledgeExtractedAt: number; tags: string[] } | undefined {
+    getFileIndexEntry(categoryId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; deepResearchedAt: number; tags: string[] } | undefined {
         try {
             const db = getDb()
             const row = db
-                .prepare('SELECT content_hash, chunk_count, last_indexed_at, knowledge_extracted_at, tags_json FROM memory_file_index WHERE space_id = ? AND file_name = ?')
-                .get(spaceId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; knowledge_extracted_at: number; tags_json: string } | undefined
+                .prepare('SELECT content_hash, chunk_count, last_indexed_at, deep_researched_at, tags_json FROM memory_file_index WHERE category_id = ? AND file_name = ?')
+                .get(categoryId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; deep_researched_at: number; tags_json: string } | undefined
             if (!row) return undefined
-            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, knowledgeExtractedAt: row.knowledge_extracted_at || 0, tags: parseDocumentTags(row.tags_json) }
+            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, deepResearchedAt: row.deep_researched_at || 0, tags: parseDocumentTags(row.tags_json) }
         } catch {
             return undefined
         }
@@ -592,10 +604,10 @@ export class AgentMemory {
      * Check whether a file's content hash matches the indexed hash.
      * Returns: 'current' | 'outdated' | 'not_indexed'
      */
-    checkFileStatus(spaceId: string, fileName: string, folderPath: string): 'current' | 'outdated' | 'not_indexed' {
-        const entry = this.getFileIndexEntry(spaceId, fileName)
+    checkFileStatus(categoryId: string, fileName: string, directoryPath: string): 'current' | 'outdated' | 'not_indexed' {
+        const entry = this.getFileIndexEntry(categoryId, fileName)
         if (!entry) return 'not_indexed'
-        const currentHash = computeFileHash(join(folderPath, fileName))
+        const currentHash = computeFileHash(join(directoryPath, fileName))
         return currentHash === entry.contentHash ? 'current' : 'outdated'
     }
 }

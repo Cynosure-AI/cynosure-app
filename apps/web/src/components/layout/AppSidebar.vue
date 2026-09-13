@@ -509,7 +509,7 @@ const chatRoute = computed(() =>
             v-for="item in [
               { to: '/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
               { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
-              { to: '/memory-spaces', icon: 'lucide:brain', label: 'Memories' },
+              { to: '/memory-categories', icon: 'lucide:brain', label: 'Memories' },
               { to: '/artifacts', icon: 'lucide:shapes', label: 'Artifacts' },
             ]"
             :key="item.to"

@@ -1,20 +1,20 @@
 import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 import { describe, expect, test } from 'vitest'
-import type { MemorySpace } from '../../api/types'
+import type { MemoryCategory } from '../../api/types'
 import MemoryDocumentsSection from './MemoryDocumentsSection.vue'
 
 const DOCUMENT_DRAG_MIME = 'application/x-cynosure-memory-documents'
 
-const spaces: MemorySpace[] = [
+const spaces: MemoryCategory[] = [
   {
-    id: 'default',
-    name: 'Default',
+    id: 'uncategorized',
+    name: 'Uncategorized',
     description: '',
-    folderPath: '/memory',
-    relativePath: '',
+    directoryPath: '/memory',
+    categoryPath: '',
     sortOrder: 0,
-    isDefault: true,
+    isUncategorized: true,
     createdAt: 1,
     fileCount: 1,
   },
@@ -22,10 +22,10 @@ const spaces: MemorySpace[] = [
     id: 'archive',
     name: 'Archive',
     description: '',
-    folderPath: '/memory/archive',
-    relativePath: 'archive',
+    directoryPath: '/memory/archive',
+    categoryPath: 'archive',
     sortOrder: 1,
-    isDefault: false,
+    isUncategorized: false,
     createdAt: 1,
     fileCount: 0,
   },
@@ -34,7 +34,7 @@ const spaces: MemorySpace[] = [
 const MemoryDocumentListStub = defineComponent({
   name: 'MemoryDocumentList',
   setup(_, { expose }) {
-    expose({ ingestFiles: () => undefined, moveGroupsToSpace: () => undefined })
+    expose({ ingestFiles: () => undefined, moveDocumentsToCategory: () => undefined })
     return () => null
   },
 })
@@ -57,8 +57,8 @@ function mountSection() {
     props: {
       spaces,
       spacesLoading: false,
-      selectedSpaceId: 'default',
-      selectedSpace: spaces[0],
+      selectedCategoryId: 'uncategorized',
+      selectedCategory: spaces[0],
     },
     global: {
       stubs: { MemoryDocumentList: MemoryDocumentListStub },
@@ -73,17 +73,17 @@ describe('MemoryDocumentsSection drag targets', () => {
 
     dropZone.element.dispatchEvent(dragEvent('dragenter', ['Files']))
     await nextTick()
-    expect(dropZone.text()).toContain('Drop files into Default')
+    expect(dropZone.text()).toContain('Drop files into Uncategorized')
 
     dropZone.element.dispatchEvent(dragEvent('dragleave', ['Files']))
     dropZone.element.dispatchEvent(dragEvent('dragenter', [DOCUMENT_DRAG_MIME]))
     await nextTick()
-    expect(dropZone.text()).not.toContain('Drop files into Default')
+    expect(dropZone.text()).not.toContain('Drop files into Uncategorized')
   })
 
   test('excludes the source folder while allowing another folder as a move target', async () => {
     const wrapper = mountSection()
-    const selectedFolder = wrapper.get('[data-space-id="default"]')
+    const selectedFolder = wrapper.get('[data-space-id="uncategorized"]')
     const archiveFolder = wrapper.get('[data-space-id="archive"]')
 
     selectedFolder.element.dispatchEvent(dragEvent('dragenter', [DOCUMENT_DRAG_MIME]))

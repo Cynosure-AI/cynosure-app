@@ -48,7 +48,7 @@ async function loadAllStores() {
   await preferencesStore.loadUserSettings()
   await providerStore.loadProviders()
   await agentDefs.load()
-  await chatStore.loadMemorySpaces()
+  await chatStore.loadMemoryCategories()
   await chatStore.loadConversations()
   chatStore.syncAgentBaseline()
   await agentStore.loadTools()

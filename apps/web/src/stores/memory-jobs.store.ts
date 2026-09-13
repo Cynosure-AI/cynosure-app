@@ -12,11 +12,11 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
     const activeJobs = computed(() => jobs.value.filter(job => job.status === 'queued' || job.status === 'running' || job.status === 'retrying'))
     const runningJobs = computed(() => jobs.value.filter(job => job.status === 'running' || job.status === 'retrying'))
     const runningReindexJobs = computed(() => activeJobs.value.filter(job => job.kind === 'reindex'))
-    const runningKnowledgeExtractionJobs = computed(() => activeJobs.value.filter(job => job.kind === 'knowledge-extraction'))
+    const runningDeepResearchJobs = computed(() => activeJobs.value.filter(job => job.kind === 'deep-research'))
     const hasRunningJobs = computed(() => activeJobs.value.length > 0)
     const statusLabel = computed(() => {
-        if (runningKnowledgeExtractionJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs active...'
-        if (runningKnowledgeExtractionJobs.value.length > 0) return 'Knowledge extraction active...'
+        if (runningDeepResearchJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs active...'
+        if (runningDeepResearchJobs.value.length > 0) return 'Deep Research active...'
         if (runningReindexJobs.value.length > 0) return 'Memory indexing active...'
         if (activeJobs.value.some(job => job.kind === 'tool-embeddings')) return 'Tool indexing active...'
         return ''
@@ -26,7 +26,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         if (refreshing.value) return
         refreshing.value = true
         try {
-            jobs.value = await api.memorySpaces.listAllJobs()
+            jobs.value = await api.memoryCategories.listAllJobs()
             loaded.value = true
         } catch {
             jobs.value = []
@@ -45,7 +45,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
 
     async function cancelJob(jobId: string): Promise<void> {
         try {
-            upsertJob(await api.memorySpaces.cancelJob(jobId))
+            upsertJob(await api.memoryCategories.cancelJob(jobId))
             await refresh()
         } catch {
             /* ignore */
@@ -78,7 +78,7 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         runningJobs,
         activeJobs,
         runningReindexJobs,
-        runningKnowledgeExtractionJobs,
+        runningDeepResearchJobs,
         hasRunningJobs,
         statusLabel,
         refresh,

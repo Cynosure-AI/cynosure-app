@@ -9,7 +9,8 @@ export const AUTO_MEMORY_TOOL_NAMES = [
   'memory_retrieve_chunks',
   'memory_semantic_search',
   'memory_create',
-  'memory_append',
+  'memory_update',
+  'memory_delete',
 ] as const
 
 export const AGENT_REQUIRED_TOOL_NAMES = [
@@ -27,8 +28,6 @@ export type AutoMemoryToolName = (typeof AUTO_MEMORY_TOOL_NAMES)[number]
 
 const INTERNAL_TOOL_NAMES = new Set([
   'expand_available_toolset',
-  'memory_remove_all',
-  'memory_remove_range',
   'spawn_subagent',
   'continue_subagent',
 ])
@@ -69,7 +68,7 @@ export function agentRequiredToolStates(hasAgent: boolean): Record<AgentRequired
   ) as Record<AgentRequiredToolName, { met: boolean; criteria: string }>
 }
 
-export function memoryAutomaticToolStates(active: boolean, criteria = 'memory folder selected'): Record<AutoMemoryToolName, { active: boolean; criteria: string }> {
+export function memoryAutomaticToolStates(active: boolean, criteria = 'memory category selected'): Record<AutoMemoryToolName, { active: boolean; criteria: string }> {
   return Object.fromEntries(
     AUTO_MEMORY_TOOL_NAMES.map((name) => [name, { active, criteria }])
   ) as Record<AutoMemoryToolName, { active: boolean; criteria: string }>

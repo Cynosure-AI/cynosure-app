@@ -2,13 +2,13 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 
-export type MemoryIndexJobKind = 'reindex' | 'knowledge-extraction' | 'tool-embeddings'
+export type MemoryIndexJobKind = 'reindex' | 'deep-research' | 'tool-embeddings'
 export type MemoryIndexJobStatus = 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
 
 export interface MemoryIndexJobSnapshot<T = unknown> {
     id: string
     kind: MemoryIndexJobKind
-    spaceId: string
+    categoryId: string
     fileName: string
     status: MemoryIndexJobStatus
     createdAt: number
@@ -39,7 +39,7 @@ function persistedRowToSnapshot(row: Record<string, unknown>): MemoryIndexJobSna
     try { result = row.result_json ? JSON.parse(String(row.result_json)) : undefined } catch { result = undefined }
     return {
         id: String(row.id), kind: row.kind as MemoryIndexJobKind,
-        spaceId: String(row.space_id), fileName: String(row.file_name),
+        categoryId: String(row.category_id), fileName: String(row.file_name),
         status: row.status as MemoryIndexJobStatus,
         createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
         attempt: Number(row.attempt || 0), maxAttempts: Number(row.max_attempts || DEFAULT_MAX_ATTEMPTS),
@@ -52,24 +52,24 @@ function persistedRowToSnapshot(row: Record<string, unknown>): MemoryIndexJobSna
 
 async function runRecoveredJob(
     kind: MemoryIndexJobKind,
-    spaceId: string,
+    categoryId: string,
     fileName: string,
     signal: AbortSignal,
     reportProgress: (current: number, total: number, checkpoint?: unknown) => void,
 ): Promise<unknown> {
-    const space = getDb().prepare('SELECT folder_path FROM memory_spaces WHERE id = ?').get(spaceId) as { folder_path: string } | undefined
-    if (!space?.folder_path) throw new Error('Memory space is no longer available')
+    const space = getDb().prepare('SELECT directory_path FROM memory_categories WHERE id = ?').get(categoryId) as { directory_path: string } | undefined
+    if (!space?.directory_path) throw new Error('Memory category is no longer available')
     if (kind === 'reindex') {
         const { getAgentMemory } = await import('./agent-memory.js')
-        const result = await getAgentMemory().reindexFile(space.folder_path, fileName, spaceId, { signal })
+        const result = await getAgentMemory().reindexFile(space.directory_path, fileName, categoryId, { signal })
         return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
     }
-    const { indexMemoryFileIntoKnowledge } = await import('./memory-knowledge-extraction.js')
+    const { deepResearchMemoryFile } = await import('./memory-deep-research.js')
     return {
         success: true,
-        ...(await indexMemoryFileIntoKnowledge({
-            folderPath: space.folder_path, spaceId, fileName, replaceExisting: true, signal,
-            onExtractionProgress: (current, total) => reportProgress(current, total),
+        ...(await deepResearchMemoryFile({
+            directoryPath: space.directory_path, categoryId, fileName, replaceExisting: true, signal,
+            onDeepResearchProgress: (current, total) => reportProgress(current, total),
         })),
     }
 }
@@ -77,7 +77,7 @@ async function runRecoveredJob(
 function persistJob(job: MemoryIndexJobSnapshot): void {
     getDb().prepare(`
         INSERT INTO memory_index_jobs
-            (id, kind, space_id, file_name, status, attempt, max_attempts, next_attempt_at,
+            (id, kind, category_id, file_name, status, attempt, max_attempts, next_attempt_at,
              result_json, error, progress_current, progress_total, created_at, updated_at, started_at, completed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
@@ -88,7 +88,7 @@ function persistJob(job: MemoryIndexJobSnapshot): void {
             started_at = COALESCE(memory_index_jobs.started_at, excluded.started_at),
             completed_at = excluded.completed_at
     `).run(
-        job.id, job.kind, job.spaceId, job.fileName, job.status, job.attempt, job.maxAttempts,
+        job.id, job.kind, job.categoryId, job.fileName, job.status, job.attempt, job.maxAttempts,
         job.nextAttemptAt ?? null, job.result === undefined ? null : JSON.stringify(job.result), job.error || null,
         job.progressCurrent ?? null, job.progressTotal ?? null,
         job.createdAt, job.updatedAt, job.status === 'running' ? job.updatedAt : null,
@@ -98,7 +98,7 @@ function persistJob(job: MemoryIndexJobSnapshot): void {
 
 function snapshot<T>(job: MemoryIndexJob<T>): MemoryIndexJobSnapshot<T> {
     return {
-        id: job.id, kind: job.kind, spaceId: job.spaceId, fileName: job.fileName,
+        id: job.id, kind: job.kind, categoryId: job.categoryId, fileName: job.fileName,
         status: job.status, createdAt: job.createdAt, updatedAt: job.updatedAt,
         attempt: job.attempt, maxAttempts: job.maxAttempts, nextAttemptAt: job.nextAttemptAt,
         progressCurrent: job.progressCurrent, progressTotal: job.progressTotal,
@@ -136,7 +136,7 @@ function ensurePersistedJobsLoaded(): void {
             nextAttemptAt: undefined,
             error: interrupted ? 'Interrupted by server restart' : saved.error,
             controller, promise: Promise.resolve(),
-            run: (signal, reportProgress) => runRecoveredJob(saved.kind, saved.spaceId, saved.fileName, signal, reportProgress),
+            run: (signal, reportProgress) => runRecoveredJob(saved.kind, saved.categoryId, saved.fileName, signal, reportProgress),
         }
         jobs.set(job.id, job)
         if (interrupted) persistJob(job)
@@ -156,7 +156,7 @@ function pruneJobs(): void {
 
 export function startMemoryIndexJob<T>(opts: {
     kind: MemoryIndexJobKind
-    spaceId: string
+    categoryId: string
     fileName: string
     replaceExisting?: boolean
     resume?: { current: number; total: number; checkpoint: unknown }
@@ -165,7 +165,7 @@ export function startMemoryIndexJob<T>(opts: {
     ensurePersistedJobsLoaded()
     pruneJobs()
     const existing = Array.from(jobs.values()).find(job =>
-        isActive(job) && job.kind === opts.kind && job.spaceId === opts.spaceId && job.fileName === opts.fileName
+        isActive(job) && job.kind === opts.kind && job.categoryId === opts.categoryId && job.fileName === opts.fileName
     ) as MemoryIndexJob<T> | undefined
     if (existing) {
         if (!opts.replaceExisting) return snapshot(existing)
@@ -177,7 +177,7 @@ export function startMemoryIndexJob<T>(opts: {
 
     const now = Date.now()
     const job: MemoryIndexJob<T> = {
-        id: nanoid(), kind: opts.kind, spaceId: opts.spaceId, fileName: opts.fileName,
+        id: nanoid(), kind: opts.kind, categoryId: opts.categoryId, fileName: opts.fileName,
         status: 'queued', createdAt: now, updatedAt: now, attempt: 0,
         maxAttempts: DEFAULT_MAX_ATTEMPTS,
         progressCurrent: opts.resume?.current,
@@ -256,11 +256,11 @@ function startQueuedJob<T>(job: MemoryIndexJob<T>): void {
         })
 }
 
-export function cancelMemoryIndexJobsForFile(spaceId: string, fileName: string): void {
+export function cancelMemoryIndexJobsForFile(categoryId: string, fileName: string): void {
     ensurePersistedJobsLoaded()
     pruneJobs()
     for (const job of jobs.values()) {
-        if (!isActive(job) || job.spaceId !== spaceId || job.fileName !== fileName) continue
+        if (!isActive(job) || job.categoryId !== categoryId || job.fileName !== fileName) continue
         job.controller.abort()
         job.status = 'cancelled'
         job.updatedAt = Date.now()
@@ -299,11 +299,11 @@ export function cancelAllMemoryIndexJobs(): number {
     return cancelled
 }
 
-export function listMemoryIndexJobs(spaceId?: string): MemoryIndexJobSnapshot[] {
+export function listMemoryIndexJobs(categoryId?: string): MemoryIndexJobSnapshot[] {
     ensurePersistedJobsLoaded()
     pruneJobs()
     return Array.from(jobs.values())
-        .filter(job => !spaceId || job.spaceId === spaceId)
+        .filter(job => !categoryId || job.categoryId === categoryId)
         .map(job => snapshot(job))
         .sort((a, b) => b.createdAt - a.createdAt)
 }
@@ -330,10 +330,10 @@ export function cancelMemoryIndexJob(id: string): MemoryIndexJobSnapshot | undef
     return snapshot(job)
 }
 
-export function latestResumableMemoryIndexJob(spaceId: string, fileName: string): MemoryIndexJobSnapshot | undefined {
+export function latestResumableMemoryIndexJob(categoryId: string, fileName: string): MemoryIndexJobSnapshot | undefined {
     ensurePersistedJobsLoaded()
     const matching = Array.from(jobs.values())
-        .filter((job) => job.kind === 'knowledge-extraction' && job.spaceId === spaceId && job.fileName === fileName)
+        .filter((job) => job.kind === 'deep-research' && job.categoryId === categoryId && job.fileName === fileName)
         .sort((a, b) => b.createdAt - a.createdAt)
     if (matching[0]?.status !== 'cancelled') return undefined
     const resumable = matching.find((job) => job.status === 'cancelled'
@@ -349,7 +349,7 @@ export function discardMemoryIndexJob(id: string): boolean {
     const discardedIds = Array.from(jobs.values())
         .filter((candidate) => candidate.status === 'cancelled'
             && candidate.kind === job.kind
-            && candidate.spaceId === job.spaceId
+            && candidate.categoryId === job.categoryId
             && candidate.fileName === job.fileName)
         .map((candidate) => candidate.id)
     for (const discardedId of discardedIds) jobs.delete(discardedId)

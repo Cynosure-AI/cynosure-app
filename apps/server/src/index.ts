@@ -35,9 +35,9 @@ import { registerActivityRoutes } from './routes/activity.js'
 import { registerCronJobRoutes } from './routes/cron-jobs.js'
 import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
-import { registerMemorySpacesRoutes } from './routes/memory-spaces.js'
-import { watchMemorySpace, stopAllMemorySpaceWatchers } from './core/memory/memory-space-watcher.js'
-import { runFolderModelCleanupOnce, syncMemorySpacesFromFolders } from './core/memory/memory-space-folders.js'
+import { registerMemoryCategoriesRoutes } from './routes/memory-categories.js'
+import { watchMemoryCategory, stopAllMemoryCategoryWatchers } from './core/memory/memory-category-watcher.js'
+import { runCategoryModelCleanupOnce, syncMemoryCategoriesFromFolders } from './core/memory/memory-category-directories.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
@@ -47,6 +47,9 @@ import { getEmbeddingProvider } from './core/memory/embedding.js'
 import { startToolEmbeddingWarmup } from './core/agent/tool-embedding-warmup.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
+import { listFilesInFolder } from './core/memory/memory-file-manager.js'
+import { startMemoryIndexJob } from './core/memory/memory-index-jobs.js'
+import { getAgentMemory } from './core/memory/agent-memory.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 
 const APP_NAME = 'cynosure-server'
@@ -298,14 +301,31 @@ async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<v
   })
 }
 
-function startMemorySpaceWatchers(): void {
+function startMemoryCategoryWatchers(): void {
   const db = getDb()
-  syncMemorySpacesFromFolders(db)
+  syncMemoryCategoriesFromFolders(db)
   const rows = db
-    .prepare("SELECT id, folder_path FROM memory_spaces WHERE folder_path IS NOT NULL AND folder_path != ''")
-    .all() as { id: string; folder_path: string }[]
+    .prepare("SELECT id, directory_path FROM memory_categories WHERE directory_path IS NOT NULL AND directory_path != ''")
+    .all() as { id: string; directory_path: string }[]
   for (const row of rows) {
-    watchMemorySpace(row.id, row.folder_path)
+    watchMemoryCategory(row.id, row.directory_path)
+  }
+}
+
+function adoptUnindexedMemoryFiles(forceReindex = false): void {
+  const db = getDb()
+  const rows = db.prepare('SELECT id, directory_path FROM memory_categories').all() as Array<{ id: string; directory_path: string }>
+  for (const category of rows) {
+    const indexed = getAgentMemory().getFileIndex(category.id)
+    for (const file of listFilesInFolder(category.directory_path).filter(item => item.supported && (forceReindex || !indexed.has(item.fileName)))) {
+      startMemoryIndexJob({
+        kind: 'reindex', categoryId: category.id, fileName: file.fileName,
+        run: async signal => {
+          const result = await getAgentMemory().reindexFile(category.directory_path, file.fileName, category.id, { signal, revisionContext: { source: 'filesystem' } })
+          return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
+        },
+      })
+    }
   }
 }
 
@@ -322,8 +342,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
 
-  await runFolderModelCleanupOnce(getDb())
-  syncMemorySpacesFromFolders(getDb())
+  await runCategoryModelCleanupOnce(getDb())
+  syncMemoryCategoriesFromFolders(getDb())
 
   await app.register(fastifyCors)
   await app.register(fastifyWebsocket)
@@ -499,7 +519,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerCronJobRoutes, { prefix: '/api/cron-jobs' })
   app.register(async (instance) => registerBackupRoutes(instance, broadcast), { prefix: '/api/backup' })
   app.register(registerChannelRoutes, { prefix: '/api/channels' })
-  app.register(registerMemorySpacesRoutes, { prefix: '/api/memory-spaces' })
+  app.register(registerMemoryCategoriesRoutes, { prefix: '/api/memory-categories' })
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })
   app.register(registerFileRoutes, { prefix: '/api/files' })
   app.register(registerUserSettingsRoutes, { prefix: '/api/user-settings' })
@@ -518,11 +538,13 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   loadSavedProviders()
   getEmbeddingProvider().loadFromDb()
-  await getRAGStore().initialize(undefined, { optimizeOnStartup: true })
+  const ragStore = getRAGStore()
+  await ragStore.initialize(undefined, { optimizeOnStartup: true })
+  adoptUnindexedMemoryFiles(ragStore.consumeLegacyCategorySchemaReset())
   registerBuiltInTools()
 
-  // Start filesystem watchers for all existing memory space folders
-  startMemorySpaceWatchers()
+  // Start filesystem watchers for all existing memory category folders
+  startMemoryCategoryWatchers()
 
   // Set the server base URL so MCP HTTP transport can construct OAuth callback URLs
   getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
@@ -569,7 +591,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       await stopDreamWorker()
       await stopCronScheduler()
       await getChannelManager().stopAll()
-      await stopAllMemorySpaceWatchers()
+      await stopAllMemoryCategoryWatchers()
 
       await app.close()
 

@@ -66,7 +66,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'memory',
     label: 'Memory',
-    description: 'Tune embeddings, knowledge extraction, reranking, chunking, and vector storage.',
+    description: 'Tune embeddings, Deep Research, reranking, chunking, and vector storage.',
     icon: 'lucide:brain',
     component: MemorySettings
   },
@@ -180,11 +180,11 @@ const sections: SettingsSection[] = [
     terms: ['dream', 'dreaming', 'experimental', 'background', 'learn', 'remember', 'conversations']
   },
   {
-    id: 'knowledge-extraction',
+    id: 'deep-research',
     categoryId: 'memory',
-    label: 'Knowledge Extraction Model',
-    description: 'Provider and model used when document analysis creates grounded knowledge and relationships.',
-    terms: ['knowledge graph', 'knowledge extraction', 'entity extraction', 'relationships', 'relation extraction', 'knowledge graph', 'document indexing']
+    label: 'Deep Research Model',
+    description: 'Provider and model used when Deep Research creates grounded knowledge and relationships.',
+    terms: ['knowledge graph', 'Deep Research', 'Deep Research', 'relationships', 'relation extraction', 'knowledge graph', 'document indexing']
   },
   {
     id: 'context-strategy',
@@ -296,7 +296,7 @@ const sections: SettingsSection[] = [
     categoryId: 'backup',
     label: 'Export Backup',
     description: 'Download your configuration as a zip file.',
-    terms: ['backup', 'export', 'download', 'zip', 'agents', 'providers', 'settings', 'conversations', 'memory spaces']
+    terms: ['backup', 'export', 'download', 'zip', 'agents', 'providers', 'settings', 'conversations', 'memory categories']
   },
   {
     id: 'backup-import',

@@ -11,12 +11,13 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
+import type { MemoryRevisionSummary } from "../../api/types";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
   show: boolean;
-  spaceId: string;
+  categoryId: string;
   sourceFile: string;
 }>();
 
@@ -71,6 +72,12 @@ const loadedMarkdown = ref("");
 const loadedRevision = ref("");
 const editableTitle = ref("");
 const currentFileName = ref("");
+const documentRef = ref("");
+const showHistory = ref(false);
+const revisions = ref<MemoryRevisionSummary[]>([]);
+const selectedRevisionId = ref("");
+const revisionDiff = ref("");
+const historyLoading = ref(false);
 const editorTick = ref(0);
 
 const editor = useEditor({
@@ -148,15 +155,16 @@ function editorToMarkdown(): string {
 }
 
 async function loadContent() {
-  if (!props.show || !props.spaceId || !props.sourceFile || !editor.value) return;
+  if (!props.show || !props.categoryId || !props.sourceFile || !editor.value) return;
   loading.value = true;
   error.value = "";
   currentFileName.value = props.sourceFile;
   editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
-    const res = await api.memorySpaces.getFileContent(props.spaceId, props.sourceFile);
+    const res = await api.memoryCategories.getFileContent(props.categoryId, props.sourceFile);
     loadedMarkdown.value = res.content;
     loadedRevision.value = res.revision;
+    documentRef.value = res.documentRef || "";
     editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
     editorTick.value++;
   } catch (err) {
@@ -167,10 +175,57 @@ async function loadContent() {
   }
 }
 
+async function loadHistory() {
+  if (!documentRef.value) return;
+  historyLoading.value = true;
+  try {
+    revisions.value = await api.memoryCategories.listRevisions(documentRef.value);
+    if (revisions.value.length) await selectRevision(revisions.value[0].id);
+  } catch (err) {
+    error.value = (err as Error).message || "Failed to load revision history";
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+async function selectRevision(id: string) {
+  selectedRevisionId.value = id;
+  const index = revisions.value.findIndex(item => item.id === id);
+  const selected = revisions.value[index];
+  const previous = revisions.value[index + 1];
+  if (!selected) return;
+  if (!previous) {
+    const revision = await api.memoryCategories.getRevision(documentRef.value, id);
+    revisionDiff.value = revision.content.split("\n").map(line => `+${line}`).join("\n");
+    return;
+  }
+  revisionDiff.value = (await api.memoryCategories.getRevisionDiff(documentRef.value, previous.id, selected.id)).diff;
+}
+
+async function toggleHistory() {
+  showHistory.value = !showHistory.value;
+  if (showHistory.value) await loadHistory();
+}
+
+async function restoreSelectedRevision() {
+  if (!selectedRevisionId.value || !window.confirm("Restore this revision as the current memory?")) return;
+  saving.value = true;
+  try {
+    await api.memoryCategories.restoreRevision(documentRef.value, selectedRevisionId.value, loadedRevision.value);
+    showHistory.value = false;
+    await loadContent();
+    emit("saved", { fileName: currentFileName.value, chunksStored: 0 });
+  } catch (err) {
+    error.value = (err as Error).message || "Failed to restore revision";
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function applyRename() {
   const nextFileName = titleToFileName(editableTitle.value);
   if (!nextFileName || nextFileName === currentFileName.value) return currentFileName.value;
-  const res = await api.memorySpaces.renameFile(props.spaceId, currentFileName.value, nextFileName);
+  const res = await api.memoryCategories.renameFile(props.categoryId, currentFileName.value, nextFileName);
   currentFileName.value = res.fileName;
   editableTitle.value = splitFileName(res.fileName).stem;
   return res.fileName;
@@ -185,8 +240,8 @@ async function saveContent() {
     let chunksStored = 0;
     const fileName = await applyRename();
     if (hasChanges.value) {
-      const res = await api.memorySpaces.updateFileContent(
-        props.spaceId,
+      const res = await api.memoryCategories.updateFileContent(
+        props.categoryId,
         fileName,
         markdown,
         loadedRevision.value,
@@ -225,7 +280,7 @@ function close() {
 }
 
 watch(
-  () => [props.show, props.spaceId, props.sourceFile, editor.value] as const,
+  () => [props.show, props.categoryId, props.sourceFile, editor.value] as const,
   () => {
     if (props.show) void loadContent();
   },
@@ -259,6 +314,15 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
+        <button
+          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
+          :class="{ 'bg-accent-500/15 text-accent-300': showHistory }"
+          :disabled="!documentRef || loading"
+          @click="toggleHistory"
+        >
+          <Icon icon="lucide:history" class="h-4 w-4" />
+          History
+        </button>
         <button
           v-for="button in [
             { icon: 'lucide:bold', title: 'Bold', action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive('bold') },
@@ -324,7 +388,23 @@ onBeforeUnmount(() => {
         {{ error }}
       </div>
 
-      <div class="relative flex-1 min-h-0 overflow-y-auto bg-theme-950/45">
+      <div v-if="showHistory" class="grid min-h-0 flex-1 grid-cols-[220px_1fr] bg-theme-950/45">
+        <div class="overflow-y-auto border-r border-theme-800 p-2">
+          <div v-if="historyLoading" class="p-3 text-xs text-theme-500">Loading history…</div>
+          <button
+            v-for="revision in revisions"
+            :key="revision.id"
+            class="mb-1 block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-theme-800"
+            :class="selectedRevisionId === revision.id ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400'"
+            @click="selectRevision(revision.id)"
+          >
+            <span class="block font-medium">Revision {{ revision.revisionNumber }}</span>
+            <span class="block text-[10px] opacity-75">{{ revision.source }} · {{ new Date(revision.createdAt).toLocaleString() }}</span>
+          </button>
+        </div>
+        <pre class="overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-5 text-theme-300">{{ revisionDiff || "No changes." }}</pre>
+      </div>
+      <div v-else class="relative flex-1 min-h-0 overflow-y-auto bg-theme-950/45">
         <div
           v-if="loading"
           class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-theme-950/65 text-theme-500 text-sm"
@@ -344,6 +424,14 @@ onBeforeUnmount(() => {
 
     <template #actions>
       <div class="flex justify-end gap-2">
+        <button
+          v-if="showHistory && selectedRevisionId"
+          class="px-3 py-1.5 text-amber-300 hover:bg-amber-500/10 rounded-lg text-sm transition-colors"
+          :disabled="saving"
+          @click="restoreSelectedRevision"
+        >
+          Restore revision
+        </button>
         <button
           class="px-3 py-1.5 text-theme-400 hover:text-theme-100 rounded-lg text-sm transition-colors"
           :disabled="saving"

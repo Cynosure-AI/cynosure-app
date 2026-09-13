@@ -10,7 +10,7 @@ vi.mock('../stores/memory-jobs.store', () => ({ useMemoryJobsStore: () => ({ act
 vi.mock('../api/client', () => ({ api: {
   activity: { list: mocks.list }, instances: { list: async () => [] },
   memory: { onDreamUpdated: mocks.onDream, cancelDreamRun: mocks.cancel },
-  memorySpaces: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
+  memoryCategories: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
   agent: { onHITLRequest: () => () => undefined, onExecutionUpdate: () => () => undefined },
   chat: { onExecutionState: () => () => undefined },
 } }))

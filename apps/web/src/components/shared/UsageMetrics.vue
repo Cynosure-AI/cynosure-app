@@ -343,7 +343,7 @@ async function confirmReset(): Promise<void> {
         </div>
       </BaseCard>
 
-      <!-- Embedding / Reranker / Entity Extraction Usage -->
+      <!-- Embedding / Reranker / Deep Research Usage -->
       <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-theme-400 mb-3">
           Auxiliary Models
@@ -373,7 +373,7 @@ async function confirmReset(): Promise<void> {
               />
             </div>
             <div class="text-[10px] text-theme-600 mt-0.5">
-              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : m.kind === 'knowledge-extraction' ? 'Entity extraction' : m.kind === 'memory-router' ? 'Memory router' : m.kind === 'dreaming' ? 'Dreaming' : 'Tool router' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
+              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : m.kind === 'deep-research' ? 'Deep Research' : m.kind === 'memory-router' ? 'Memory router' : m.kind === 'dreaming' ? 'Dreaming' : 'Tool router' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
                 class="text-amber-500/80 ml-1"

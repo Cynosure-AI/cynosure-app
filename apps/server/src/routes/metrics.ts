@@ -14,7 +14,7 @@ interface ModelUsage {
 }
 
 interface AuxiliaryModelUsage extends ModelUsage {
-    kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router' | 'dreaming'
+    kind: 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
 }
 
 interface ToolUsage {
@@ -202,7 +202,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             GROUP BY kind, provider, model
             ORDER BY request_count DESC
         `).all(sinceMs) as {
-            kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router' | 'dreaming'
+            kind: 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
             provider: string
             model: string
             request_count: number

@@ -8,9 +8,9 @@ import { EmbeddingProvider, getEmbeddingProvider } from '../core/memory/embeddin
 import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
-import { buildMemorySpaceFilter, getAllMemorySpaces } from '../core/memory/memory-space-scope.js'
+import { buildMemoryCategoryFilter, getAllMemoryCategories } from '../core/memory/memory-category-scope.js'
 import type { KnowledgeEntityType, ImportanceLevel } from '../core/memory/knowledge-types.js'
-import { getKnowledgeExtractionConfig, saveKnowledgeExtractionConfig, type KnowledgeExtractionConfig } from '../core/memory/memory-knowledge-extraction.js'
+import { getDeepResearchConfig, saveDeepResearchConfig, type DeepResearchConfig } from '../core/memory/memory-deep-research.js'
 import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 import { getDb } from '../db/database.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_VECTOR_TABLE } from '../core/memory/memory-knowledge.js'
@@ -28,7 +28,7 @@ function markMemoryIndexesForRebuild(): void {
   getDb().prepare(`
     UPDATE memory_file_index
     SET content_hash = '', chunk_count = 0, last_indexed_at = 0,
-        knowledge_extracted_at = 0, tags_json = '[]'
+        deep_researched_at = 0, tags_json = '[]'
   `).run()
 }
 
@@ -61,8 +61,8 @@ async function detectEmbeddingDimensions(providerId: string | undefined, model: 
 
 export async function registerMemoryRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   // POST /api/memory/search — search permanent memory
-  app.post<{ Body: { query: string; topK?: number; spaceId?: string } }>('/search', async (req, reply) => {
-    const { query, topK, spaceId } = req.body
+  app.post<{ Body: { query: string; topK?: number; categoryId?: string } }>('/search', async (req, reply) => {
+    const { query, topK, categoryId } = req.body
     if (typeof query !== 'string' || !query.trim()) {
       return reply.code(400).send({ error: 'A non-empty search query is required' })
     }
@@ -70,32 +70,23 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const mem = getAgentMemory()
     let filter: string | undefined
 
-    if (spaceId?.trim()) {
+    if (categoryId?.trim()) {
       const db = getDb()
       const row = db
-        .prepare('SELECT id, name FROM memory_spaces WHERE id = ?')
-        .get(spaceId.trim()) as { id: string; name: string } | undefined
-      if (!row) return reply.code(404).send({ error: 'Memory space not found' })
-      filter = buildMemorySpaceFilter([row])
+        .prepare('SELECT id, name FROM memory_categories WHERE id = ?')
+        .get(categoryId.trim()) as { id: string; name: string } | undefined
+      if (!row) return reply.code(404).send({ error: 'Memory category not found' })
+      filter = buildMemoryCategoryFilter([row])
     } else {
-      filter = buildMemorySpaceFilter(getAllMemorySpaces())
+      filter = buildMemoryCategoryFilter(getAllMemoryCategories())
     }
 
     return mem.recall(query.trim(), boundedTopK, filter)
   })
 
-  // POST /api/memory/entries/delete — delete entries by IDs
-  app.post<{ Body: { ids: string[] } }>('/entries/delete', async (req) => {
-    const { ids } = req.body
-    if (!ids?.length) return { success: false, error: 'No IDs provided' }
-    const rag = getRAGStore()
-    await rag.deleteByIds(getActivePermanentMemoryTableName(), ids)
-    return { success: true, deleted: ids.length }
-  })
-
   // POST /api/memory/aggregate — aggregated search
   app.post<{
-    Body: { query: string; opts?: { taskId?: string; conversationId?: string; agentId?: string; spaceIds?: string[] } }
+    Body: { query: string; opts?: { taskId?: string; conversationId?: string; agentId?: string; categoryIds?: string[] } }
   }>('/aggregate', async (req) => {
     const { query, opts } = req.body
     const aggregator = getMemoryAggregator()
@@ -115,14 +106,14 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // POST /api/memory/knowledge/search — evidence-oriented diagnostics. This
   // returns exact source chunks as well as the selected assertion projection.
-  app.post<{ Body: { query: string; spaceIds: string[]; limit?: number } }>('/knowledge/search', async (req, reply) => {
+  app.post<{ Body: { query: string; categoryIds: string[]; limit?: number } }>('/knowledge/search', async (req, reply) => {
     const query = req.body.query?.trim()
-    const spaceIds = Array.from(new Set((req.body.spaceIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0)))
+    const categoryIds = Array.from(new Set((req.body.categoryIds || []).filter((id): id is string => typeof id === 'string' && id.trim().length > 0)))
     if (!query) return reply.status(400).send({ error: 'A non-empty query is required' })
-    if (!spaceIds.length) return reply.status(400).send({ error: 'At least one memory space is required' })
-    const known = getDb().prepare(`SELECT id FROM memory_spaces WHERE id IN (${spaceIds.map(() => '?').join(', ')})`).all(...spaceIds) as Array<{ id: string }>
-    if (known.length !== spaceIds.length) return reply.status(404).send({ error: 'Memory space not found' })
-    return getMemoryKnowledgeStore().search(query, spaceIds, Math.min(50, Math.max(1, req.body.limit || 8)))
+    if (!categoryIds.length) return reply.status(400).send({ error: 'At least one memory category is required' })
+    const known = getDb().prepare(`SELECT id FROM memory_categories WHERE id IN (${categoryIds.map(() => '?').join(', ')})`).all(...categoryIds) as Array<{ id: string }>
+    if (known.length !== categoryIds.length) return reply.status(404).send({ error: 'Memory category not found' })
+    return getMemoryKnowledgeStore().search(query, categoryIds, Math.min(50, Math.max(1, req.body.limit || 8)))
   })
 
   // GET /api/memory/knowledge/chunks/:id — lazily hydrate an exact source chunk for graph provenance.
@@ -133,18 +124,18 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   })
 
   // GET /api/memory/knowledge/graph — inspect the authoritative knowledge graph projection.
-  app.get<{ Querystring: { query?: string; nodeId?: string; nodeIds?: string; limit?: string; view?: string; minImportance?: string; spaceIds?: string } }>('/knowledge/graph', async (req, reply) => {
+  app.get<{ Querystring: { query?: string; nodeId?: string; nodeIds?: string; limit?: string; view?: string; minImportance?: string; categoryIds?: string } }>('/knowledge/graph', async (req, reply) => {
     const knowledge = getMemoryKnowledgeStore()
     const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 5000)
     const minImportance = Math.min(Math.max(Number(req.query.minImportance) || 0, 0), 3) as ImportanceLevel
     const nodeIds = (req.query.nodeIds || '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, 50)
-    const explicitlyEmpty = req.query.spaceIds === '__none__'
-    const spaceIds = explicitlyEmpty
+    const explicitlyEmpty = req.query.categoryIds === '__none__'
+    const categoryIds = explicitlyEmpty
       ? []
-      : Array.from(new Set((req.query.spaceIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
-    if (spaceIds.length) {
-      const known = getDb().prepare(`SELECT id FROM memory_spaces WHERE id IN (${spaceIds.map(() => '?').join(', ')})`).all(...spaceIds) as Array<{ id: string }>
-      if (known.length !== spaceIds.length) return reply.status(404).send({ error: 'Memory space not found' })
+      : Array.from(new Set((req.query.categoryIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
+    if (categoryIds.length) {
+      const known = getDb().prepare(`SELECT id FROM memory_categories WHERE id IN (${categoryIds.map(() => '?').join(', ')})`).all(...categoryIds) as Array<{ id: string }>
+      if (known.length !== categoryIds.length) return reply.status(404).send({ error: 'Memory category not found' })
     }
     if (explicitlyEmpty) {
       return {
@@ -158,7 +149,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       query: req.query.query?.trim(),
       nodeId: req.query.nodeId?.trim(),
       nodeIds,
-      spaceIds,
+      categoryIds,
       limit,
       minImportance,
       // The relationship table should list facts directly involving the selected
@@ -166,7 +157,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       depth: req.query.view === 'relationships' ? 1 : 2,
     })
     return {
-      stats: knowledge.graphStats(spaceIds),
+      stats: knowledge.graphStats(categoryIds),
       seedNodes: overview.seedNodes,
       nodes: overview.nodes,
       edges: overview.edges
@@ -174,12 +165,12 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   })
 
   // GET /api/memory/knowledge/graph/suggestions — autocomplete entity names
-  app.get<{ Querystring: { query?: string; limit?: string; spaceIds?: string } }>('/knowledge/graph/suggestions', async (req) => {
+  app.get<{ Querystring: { query?: string; limit?: string; categoryIds?: string } }>('/knowledge/graph/suggestions', async (req) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20)
-    if (req.query.spaceIds === '__none__') return { suggestions: [] }
-    const spaceIds = Array.from(new Set((req.query.spaceIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
+    if (req.query.categoryIds === '__none__') return { suggestions: [] }
+    const categoryIds = Array.from(new Set((req.query.categoryIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
     return {
-      suggestions: getMemoryKnowledgeStore().suggestNodes(req.query.query?.trim() || '', limit, spaceIds)
+      suggestions: getMemoryKnowledgeStore().suggestNodes(req.query.query?.trim() || '', limit, categoryIds)
     }
   })
 
@@ -353,7 +344,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
               source: doc.source,
               sourceFile: doc.sourceFile || '',
               chunkIndex: doc.chunkIndex ?? 0,
-              spaceId: doc.spaceId || '',
+              categoryId: doc.categoryId || '',
               createdAt: doc.createdAt,
               documentTitle: doc.documentTitle || '',
               sectionPath: doc.sectionPath || '',
@@ -475,18 +466,18 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     return { success: true }
   })
 
-  // GET /api/memory/knowledge-extraction/config — get the extraction model target.
-  app.get('/knowledge-extraction/config', async () => {
-    return getKnowledgeExtractionConfig()
+  // GET /api/memory/deep-research/config — get the extraction model target.
+  app.get('/deep-research/config', async () => {
+    return getDeepResearchConfig()
   })
 
-  // POST /api/memory/knowledge-extraction/configure — set the extraction model target.
-  app.post<{ Body: KnowledgeExtractionConfig }>('/knowledge-extraction/configure', async (req, reply) => {
+  // POST /api/memory/deep-research/configure — set the extraction model target.
+  app.post<{ Body: DeepResearchConfig }>('/deep-research/configure', async (req, reply) => {
     const providerId = req.body.providerId?.trim()
     if (providerId && !getGateway().getProvider(providerId)) {
-      return reply.status(400).send({ error: 'Knowledge extraction provider not found' })
+      return reply.status(400).send({ error: 'Deep Research provider not found' })
     }
-    const config = saveKnowledgeExtractionConfig({
+    const config = saveDeepResearchConfig({
       providerId,
       model: req.body.model,
     })

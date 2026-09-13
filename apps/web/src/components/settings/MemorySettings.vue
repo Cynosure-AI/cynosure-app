@@ -93,11 +93,11 @@ const rerankSaving = ref(false)
 const savedReranker = ref({ enabled: false, providerId: '', model: '', candidateCount: 50 })
 const rerankStatus = ref<SettingsPersistenceState>('idle')
 
-// Entity extraction state
-const entityExtractionProviderId = ref('')
-const entityExtractionModel = ref('')
-const entityExtractionSaving = ref(false)
-const entityExtractionStatus = ref<SettingsPersistenceState>('idle')
+// Deep Research state
+const deepResearchProviderId = ref('')
+const deepResearchModel = ref('')
+const deepResearchSaving = ref(false)
+const deepResearchStatus = ref<SettingsPersistenceState>('idle')
 
 const embDirty = computed(() =>
   embProviderId.value !== savedEmbedding.value.providerId || embModel.value !== savedEmbedding.value.model
@@ -151,7 +151,7 @@ onMounted(async () => {
   await providerStore.loadProviders()
   await loadDreamConfig()
   await loadEmbeddingConfig()
-  await loadEntityExtractionConfig()
+  await loadDeepResearchConfig()
   await loadChunkingConfig()
   await loadRerankerConfig()
 })
@@ -225,53 +225,53 @@ async function loadRerankerConfig() {
   }
 }
 
-async function loadEntityExtractionConfig() {
+async function loadDeepResearchConfig() {
   try {
-    const config = await api.memory.getEntityExtractionConfig()
-    entityExtractionProviderId.value = config.providerId || ''
-    entityExtractionModel.value = config.model || ''
+    const config = await api.memory.getDeepResearchConfig()
+    deepResearchProviderId.value = config.providerId || ''
+    deepResearchModel.value = config.model || ''
 
-    if (!entityExtractionProviderId.value && !entityExtractionModel.value && (prefs.knowledgeProviderId || prefs.knowledgeModel)) {
-      await saveEntityExtractionSelection({
+    if (!deepResearchProviderId.value && !deepResearchModel.value && (prefs.knowledgeProviderId || prefs.knowledgeModel)) {
+      await saveDeepResearchSelection({
         providerId: prefs.knowledgeProviderId,
         model: prefs.knowledgeModel,
       })
     }
   } catch {
-    entityExtractionProviderId.value = prefs.knowledgeProviderId || ''
-    entityExtractionModel.value = prefs.knowledgeModel || ''
+    deepResearchProviderId.value = prefs.knowledgeProviderId || ''
+    deepResearchModel.value = prefs.knowledgeModel || ''
   }
 }
 
-async function saveEntityExtractionSelection(selection: { providerId: string; model: string }) {
+async function saveDeepResearchSelection(selection: { providerId: string; model: string }) {
   const previous = {
-    providerId: entityExtractionProviderId.value,
-    model: entityExtractionModel.value,
+    providerId: deepResearchProviderId.value,
+    model: deepResearchModel.value,
   }
-  entityExtractionProviderId.value = selection.providerId
-  entityExtractionModel.value = selection.model
+  deepResearchProviderId.value = selection.providerId
+  deepResearchModel.value = selection.model
   prefs.knowledgeProviderId = selection.providerId
   prefs.knowledgeModel = selection.model
-  entityExtractionSaving.value = true
-  entityExtractionStatus.value = 'saving'
+  deepResearchSaving.value = true
+  deepResearchStatus.value = 'saving'
   try {
-    const res = await api.memory.configureEntityExtraction({
+    const res = await api.memory.configureDeepResearch({
       providerId: selection.providerId || undefined,
       model: selection.model || undefined,
     })
-    entityExtractionProviderId.value = res.providerId || ''
-    entityExtractionModel.value = res.model || ''
-    prefs.knowledgeProviderId = entityExtractionProviderId.value
-    prefs.knowledgeModel = entityExtractionModel.value
-    entityExtractionStatus.value = 'saved'
+    deepResearchProviderId.value = res.providerId || ''
+    deepResearchModel.value = res.model || ''
+    prefs.knowledgeProviderId = deepResearchProviderId.value
+    prefs.knowledgeModel = deepResearchModel.value
+    deepResearchStatus.value = 'saved'
   } catch {
-    entityExtractionProviderId.value = previous.providerId
-    entityExtractionModel.value = previous.model
+    deepResearchProviderId.value = previous.providerId
+    deepResearchModel.value = previous.model
     prefs.knowledgeProviderId = previous.providerId
     prefs.knowledgeModel = previous.model
-    entityExtractionStatus.value = 'error'
+    deepResearchStatus.value = 'error'
   }
-  entityExtractionSaving.value = false
+  deepResearchSaving.value = false
 }
 
 async function saveReranker() {
@@ -573,13 +573,13 @@ function cancelDrop() {
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showAnySection(['knowledge-extraction', 'dream-mode'])"
+      v-if="showAnySection(['deep-research', 'dream-mode'])"
       label="Building Knowledge"
     />
 
-    <!-- Knowledge Extraction Model -->
+    <!-- Deep Research Model -->
     <BaseCard
-      v-if="showSection('knowledge-extraction')"
+      v-if="showSection('deep-research')"
       class="p-5 space-y-4"
     >
       <div class="flex items-start gap-3">
@@ -591,43 +591,43 @@ function cancelDrop() {
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
-            Knowledge Extraction Model
+            Deep Research Model
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used when documents are analysed into facts for the local knowledge graph.
+            Provider and model used when documents undergo Deep Research into facts for the local knowledge graph.
           </p>
         </div>
       </div>
 
       <div
         class="pt-1 border-t border-theme-700"
-        :class="{ 'opacity-60': entityExtractionSaving }"
-        :inert="entityExtractionSaving || undefined"
-        :aria-busy="entityExtractionSaving"
+        :class="{ 'opacity-60': deepResearchSaving }"
+        :inert="deepResearchSaving || undefined"
+        :aria-busy="deepResearchSaving"
       >
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <label class="block text-xs text-theme-400">Provider / Model</label>
         </div>
         <ProviderModelSelect
-          :provider-id="entityExtractionProviderId"
-          :model-value="entityExtractionModel"
+          :provider-id="deepResearchProviderId"
+          :model-value="deepResearchModel"
           :providers="providerStore.providers"
           include-default
           default-label="Use active provider default"
           placeholder="Use active provider default"
-          @change="saveEntityExtractionSelection"
+          @change="saveDeepResearchSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          This setting is used for explicit knowledge extraction. Leaving it on the default uses the server's active provider and that provider's default model.
+          This setting is used for Deep Research. Leaving it on the default uses the server's active provider and that provider's default model.
         </p>
       </div>
       <div
-        v-if="entityExtractionStatus === 'saving' || entityExtractionStatus === 'error'"
+        v-if="deepResearchStatus === 'saving' || deepResearchStatus === 'error'"
         class="flex justify-end"
       >
         <SettingsPersistenceStatus
           mode="auto"
-          :state="entityExtractionStatus"
+          :state="deepResearchStatus"
         />
       </div>
     </BaseCard>

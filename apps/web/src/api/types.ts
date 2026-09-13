@@ -267,7 +267,7 @@ export interface AgentDefinition {
     sortOrder: number
     tags: string[]
     favorite: boolean
-    memorySpaces: string[]
+    memoryCategories: string[]
     createdAt: number
     updatedAt: number
 }
@@ -339,16 +339,16 @@ export type ActivityTotalsByKind = Record<ActivityKind, number>
 
 // ── Memory ──────────────────────────────────────────────────────────────────
 
-export interface MemorySpace {
+export interface MemoryCategory {
     id: string
     name: string
     description: string
-    folderPath: string
-    relativePath: string
+    directoryPath: string
+    categoryPath: string
     depth?: number
-    parentRelativePath?: string | null
+    parentCategoryPath?: string | null
     sortOrder: number
-    isDefault: boolean
+    isUncategorized: boolean
     createdAt: number
     fileCount: number
 }
@@ -366,10 +366,21 @@ export interface MemoryFileStatus {
     /** Approximate count based on file size and the active chunking settings. */
     estimatedChunkCount?: number
     lastIndexedAt?: number
-    knowledgeExtracted: boolean
-    knowledgeExtractedAt?: number
+    deepResearched: boolean
+    deepResearchedAt?: number
     dreamedAt?: number
     tags: string[]
+}
+
+export interface MemoryRevisionSummary {
+    id: string
+    revisionNumber: number
+    contentHash: string
+    source: 'ai' | 'dream' | 'user' | 'filesystem' | 'import' | 'restore'
+    conversationId?: string
+    agentId?: string
+    messageIds: string[]
+    createdAt: number
 }
 
 export interface MemoryDocumentKnowledgePreview {
@@ -382,8 +393,8 @@ export interface MemoryDocumentKnowledgePreview {
 
 export interface MemoryIndexJob<T = unknown> {
     id: string
-    kind: 'reindex' | 'knowledge-extraction' | 'tool-embeddings'
-    spaceId: string
+    kind: 'reindex' | 'deep-research' | 'tool-embeddings'
+    categoryId: string
     fileName: string
     status: 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
     createdAt: number
@@ -629,7 +640,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
     }[]
     auxiliaryModelUsage: {
-        kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router' | 'dreaming'
+        kind: 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
         provider: string
         model: string
         requestCount: number

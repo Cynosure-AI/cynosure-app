@@ -15,7 +15,7 @@ import {
     type MediaArtifactKind,
 } from '../core/artifacts/image-artifacts.js'
 import { deleteConversationAttachmentIndexes, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
-import { getAssignedOrDefaultSpaces } from '../core/memory/memory-space-scope.js'
+import { getAssignedMemoryCategories } from '../core/memory/memory-category-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import type { ConversationExecutionConfig } from '@shared/types'
@@ -93,8 +93,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const id = nanoid()
         const now = Date.now()
         const agent = agentId ? getAgent(agentId) : null
-        const memorySpaceIds = agentId ? getAssignedOrDefaultSpaces(agentId).map((space) => space.id) : []
-        const initialExecutionConfig = executionConfig ?? buildInitialExecutionConfig({ agent, memorySpaceIds })
+        const memoryCategoryIds = agentId ? getAssignedMemoryCategories(agentId).map((space) => space.id) : []
+        const initialExecutionConfig = executionConfig ?? buildInitialExecutionConfig({ agent, memoryCategoryIds })
         db.prepare(
             'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, origin || 'chat', JSON.stringify(initialExecutionConfig), '{}', now, now)

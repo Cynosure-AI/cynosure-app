@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, AppNotification, MemorySpace, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
+  AgentDefinition, AppNotification, MemoryCategory, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
   AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
@@ -16,7 +16,7 @@ import type {
 import type { WsHandler } from './http'
 import type { ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
 
-function memorySpacePathId(id: string): string {
+function memoryCategoryPathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
 }
 
@@ -296,10 +296,8 @@ export const api = {
     configureDream: (config: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
     cancelDreamRun: (id: string) => post<{ success: boolean }>(`/api/memory/dream/runs/${encodeURIComponent(id)}/cancel`, {}),
     onDreamUpdated: (cb: (data: { id: string; status: string }) => void) => onWsEvent('memory:dream-updated', cb as WsHandler),
-    search: (query: string, topK?: number, spaceId?: string) =>
-      post<unknown[]>('/api/memory/search', { query, topK, spaceId }),
-    deleteEntries: (ids: string[]) =>
-      post<{ success: boolean; deleted: number }>('/api/memory/entries/delete', { ids }),
+    search: (query: string, topK?: number, categoryId?: string) =>
+      post<unknown[]>('/api/memory/search', { query, topK, categoryId }),
     aggregate: (
       query: string,
       opts?: { conversationId?: string }
@@ -320,10 +318,10 @@ export const api = {
     }) => post<{ success: boolean; vectorsDropped: boolean; reembedded: boolean; reembeddedCount: number; dimensions: number }>('/api/memory/embeddings/configure', opts),
     getEmbeddingConfig: () =>
       get<{ providerId?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
-    getEntityExtractionConfig: () =>
-      get<{ providerId?: string; model?: string }>('/api/memory/knowledge-extraction/config'),
-    configureEntityExtraction: (opts: { providerId?: string; model?: string }) =>
-      post<{ success: boolean; providerId?: string; model?: string }>('/api/memory/knowledge-extraction/configure', opts),
+    getDeepResearchConfig: () =>
+      get<{ providerId?: string; model?: string }>('/api/memory/deep-research/config'),
+    configureDeepResearch: (opts: { providerId?: string; model?: string }) =>
+      post<{ success: boolean; providerId?: string; model?: string }>('/api/memory/deep-research/configure', opts),
     dropVectors: () =>
       post<{ success: boolean }>('/api/memory/embeddings/drop', {}),
     probeEmbedding: (opts: { providerId?: string; model: string }) =>
@@ -336,22 +334,22 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
-    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeIds?: string[], minImportance?: number | null, spaceIds?: string[]) => {
+    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeIds?: string[], minImportance?: number | null, categoryIds?: string[]) => {
       const params = new URLSearchParams()
       if (query) params.set('query', query)
       if (nodeIds?.length) params.set('nodeIds', nodeIds.join(','))
       if (limit) params.set('limit', String(limit))
       if (view) params.set('view', view)
       if (minImportance !== undefined && minImportance !== null) params.set('minImportance', String(minImportance))
-      if (spaceIds) params.set('spaceIds', spaceIds.length ? spaceIds.join(',') : '__none__')
+      if (categoryIds) params.set('categoryIds', categoryIds.length ? categoryIds.join(',') : '__none__')
       const qs = params.toString()
       return get<KnowledgeGraph>(`/api/memory/knowledge/graph${qs ? `?${qs}` : ''}`)
     },
-    getGraphSuggestions: (query: string, limit?: number, spaceIds?: string[]) => {
+    getGraphSuggestions: (query: string, limit?: number, categoryIds?: string[]) => {
       const params = new URLSearchParams()
       params.set('query', query)
       if (limit) params.set('limit', String(limit))
-      if (spaceIds) params.set('spaceIds', spaceIds.length ? spaceIds.join(',') : '__none__')
+      if (categoryIds) params.set('categoryIds', categoryIds.length ? categoryIds.join(',') : '__none__')
       return get<KnowledgeGraphSuggestionsResponse>(`/api/memory/knowledge/graph/suggestions?${params.toString()}`)
     },
     updateGraphNode: (id: string, data: { name?: string; type?: KnowledgeGraph['nodes'][number]['type']; aliases?: string[]; importance?: number }) =>
@@ -378,111 +376,108 @@ export const api = {
       onWsEvent('memory:knowledge-reset', cb as WsHandler)
   },
 
-  memorySpaces: {
+  memoryCategories: {
     list: () =>
-      get<MemorySpace[]>('/api/memory-spaces'),
-    create: (name: string, description?: string, parentRelativePath?: string) =>
-      post<MemorySpace>('/api/memory-spaces', { name, description, parentRelativePath }),
-    update: (id: string, data: { name?: string; description?: string; relativePath?: string }) =>
-      put<MemorySpace>(`/api/memory-spaces/${memorySpacePathId(id)}`, data),
+      get<MemoryCategory[]>('/api/memory-categories'),
+    create: (name: string, description?: string, parentCategoryPath?: string) =>
+      post<MemoryCategory>('/api/memory-categories', { name, description, parentCategoryPath }),
+    update: (id: string, data: { name?: string; description?: string; categoryPath?: string }) =>
+      put<MemoryCategory>(`/api/memory-categories/${memoryCategoryPathId(id)}`, data),
     remove: (id: string) =>
-      del<{ success: boolean }>(`/api/memory-spaces/${memorySpacePathId(id)}`),
+      del<{ success: boolean }>(`/api/memory-categories/${memoryCategoryPathId(id)}`),
     reorder: (ids: string[]) =>
-      put<{ success: boolean }>('/api/memory-spaces/reorder', { ids }),
+      put<{ success: boolean }>('/api/memory-categories/reorder', { ids }),
     listAllJobs: () =>
-      get<MemoryIndexJob[]>('/api/memory-spaces/jobs'),
+      get<MemoryIndexJob[]>('/api/memory-categories/jobs'),
     /** List files in the space folder with their index status. Hash computation is async server-side. */
-    listFiles: (spaceId: string) =>
-      get<MemoryFileStatus[]>(`/api/memory-spaces/${memorySpacePathId(spaceId)}/files`),
-    getDocumentKnowledgePreview: (spaceId: string, fileName: string) =>
+    listFiles: (categoryId: string) =>
+      get<MemoryFileStatus[]>(`/api/memory-categories/${memoryCategoryPathId(categoryId)}/files`),
+    getDocumentKnowledgePreview: (categoryId: string, fileName: string) =>
       get<MemoryDocumentKnowledgePreview>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
       ),
-    listJobs: (spaceId: string) =>
-      get<MemoryIndexJob[]>(`/api/memory-spaces/${memorySpacePathId(spaceId)}/jobs`),
-    rebuildKnowledge: (spaceId: string) =>
+    listJobs: (categoryId: string) =>
+      get<MemoryIndexJob[]>(`/api/memory-categories/${memoryCategoryPathId(categoryId)}/jobs`),
+    rebuildKnowledge: (categoryId: string) =>
       post<{ success: boolean; scheduled: number; jobs: MemoryIndexJob[]; skipped: Array<{ fileName: string; reason: string }> }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/knowledge/rebuild`,
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/knowledge/rebuild`,
         {}
       ),
     getJob: (jobId: string) =>
-      get<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}`),
+      get<MemoryIndexJob>(`/api/memory-categories/jobs/${encodeURIComponent(jobId)}`),
     cancelJob: (jobId: string) =>
-      post<MemoryIndexJob>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
+      post<MemoryIndexJob>(`/api/memory-categories/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     discardJob: (jobId: string) =>
-      del<{ success: boolean }>(`/api/memory-spaces/jobs/${encodeURIComponent(jobId)}`),
+      del<{ success: boolean }>(`/api/memory-categories/jobs/${encodeURIComponent(jobId)}`),
     onJobUpdated: (cb: (data: MemoryIndexJob) => void) =>
       onWsEvent('memory:job-updated', cb as WsHandler),
-    reindexFile: (spaceId: string, fileName: string) =>
+    reindexFile: (categoryId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/reingest-file`,
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/reingest-file`,
         { fileName }
       ),
-    startReindexFile: (spaceId: string, fileName: string) =>
+    startReindexFile: (categoryId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }>>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
         {}
       ),
-    extractKnowledgeFromFile: (spaceId: string, fileName: string) =>
-      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; knowledgeExtractedAt: number; tags: string[] }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/knowledge-extraction`,
+    extractKnowledgeFromFile: (categoryId: string, fileName: string) =>
+      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>(
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research`,
         {}
       ),
-    startKnowledgeExtractionFile: (spaceId: string, fileName: string) =>
-      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; knowledgeExtractedAt: number; tags: string[] }>>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/knowledge-extraction-job`,
+    startDeepResearchFile: (categoryId: string, fileName: string) =>
+      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>>(
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research-job`,
         {}
       ),
-    deleteFile: (spaceId: string, fileName: string) =>
+    deleteFile: (categoryId: string, fileName: string) =>
       del<{ success: boolean }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}`
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}`
       ),
-    getFileContent: (spaceId: string, fileName: string) =>
-      get<{ fileName: string; content: string; revision: string }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`
+    getFileContent: (categoryId: string, fileName: string) =>
+      get<{ fileName: string; content: string; revision: string; documentRef?: string }>(
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`
       ),
-    updateFileContent: (spaceId: string, fileName: string, content: string, expectedRevision?: string) =>
+    updateFileContent: (categoryId: string, fileName: string, content: string, expectedRevision?: string) =>
       put<{ success: boolean; fileName: string; revision: string; job: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/content`,
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`,
         { content, expectedRevision }
       ),
-    renameFile: (spaceId: string, fileName: string, nextFileName: string) =>
+    renameFile: (categoryId: string, fileName: string, nextFileName: string) =>
       put<{ success: boolean; fileName: string }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/files/${encodeURIComponent(fileName)}/name`,
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/name`,
         { fileName: nextFileName }
       ),
-    /** Legacy: list indexed source files from LanceDB (no disk status). */
-    listGroups: (spaceId: string) =>
-      get<{ sourceFile: string; chunkCount: number; createdAt: number }[]>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/groups`
-      ),
-    listEntries: (spaceId: string, sourceFile?: string) => {
-      const params = new URLSearchParams()
-      if (sourceFile) params.set('sourceFile', sourceFile)
-      const qs = params.toString()
-      return get<{ id: string; text: string; source: string; sourceFile?: string; chunkIndex?: number; createdAt: number }[]>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/entries${qs ? `?${qs}` : ''}`
-      )
-    },
-    ingestFile: (spaceId: string, fileName: string, content: string) =>
+    listRevisions: (documentRef: string) =>
+      get<import('./types').MemoryRevisionSummary[]>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions`),
+    getRevision: (documentRef: string, revisionId: string) =>
+      get<import('./types').MemoryRevisionSummary & { content: string; documentId: string }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}`),
+    getRevisionDiff: (documentRef: string, from: string, to: string) =>
+      get<{ format: 'unified'; diff: string }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    restoreRevision: (documentRef: string, revisionId: string, expectedRevision?: string) =>
+      post<{ success: boolean; documentRef: string; revision: string; chunksStored: number }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}/restore`, { expectedRevision }),
+    listDeleted: () =>
+      get<Array<{ documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number }>>('/api/memory-categories/deleted'),
+    ingestFile: (categoryId: string, fileName: string, content: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string; job?: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/ingest-file`, { fileName, content }
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/ingest-file`, { fileName, content }
       ),
-    reingestFile: (spaceId: string, fileName: string) =>
+    reingestFile: (categoryId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/reingest-file`, { fileName }
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/reingest-file`, { fileName }
       ),
-    deleteGroups: (spaceId: string, sourceFiles: string[]) =>
+    deleteDocuments: (categoryId: string, sourceFiles: string[]) =>
       post<{ success: boolean }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/delete-groups`, { sourceFiles }
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/delete-documents`, { sourceFiles }
       ),
-    forgetMemories: (spaceId: string, sourceFiles: string[]) =>
+    forgetMemories: (categoryId: string, sourceFiles: string[]) =>
       post<{ success: boolean; filesReset: number; chunksDeleted: number; graphEdgesDeleted: number }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/drop-indexes`, { sourceFiles }
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/drop-indexes`, { sourceFiles }
       ),
-    moveGroups: (spaceId: string, sourceFiles: string[], targetSpaceId: string) =>
+    moveDocuments: (categoryId: string, sourceFiles: string[], targetCategoryId: string) =>
       post<{ success: boolean; moved: number }>(
-        `/api/memory-spaces/${memorySpacePathId(spaceId)}/move-groups`, { sourceFiles, targetSpaceId }
+        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/move-documents`, { sourceFiles, targetCategoryId }
       ),
   },
 

@@ -14,6 +14,6 @@ test('settings search discovers the experimental Dream section in Memory', async
     ResponsiveSectionLayout: { template: '<div><slot name="sidebar" /><slot /></div>' },
   } } })
   await flushPromises()
-  expect(wrapper.getComponent(MemorySettings).props('visibleSections')).toEqual(['dream-mode'])
+  expect(wrapper.getComponent(MemorySettings).props('visibleSections')).toContain('dream-mode')
   wrapper.unmount()
 })

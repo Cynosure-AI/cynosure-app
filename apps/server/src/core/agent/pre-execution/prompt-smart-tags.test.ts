@@ -8,7 +8,7 @@ import { resolveSystemPromptMessages } from './execution-prompts.js'
 import { resolvePromptSmartTags } from './prompt-smart-tags.js'
 
 describe('prompt smart tags', () => {
-    test('resolves execution identity, ISO time, and unique memory folders', () => {
+    test('resolves execution identity, ISO time, and unique memory categories', () => {
         const result = resolvePromptSmartTags(
             '{{userName}} + {{agentName}}/{{providerId}}/{{model}} at {{isoDate}} {{isoTime}}. {{selectedMemFolderNames}}',
             {
@@ -22,7 +22,7 @@ describe('prompt smart tags', () => {
         )
 
         expect(result).toBe(
-            'Ada + Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Spaces are: Project, Shared',
+            'Ada + Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Categories are: Project, Shared',
         )
     })
 

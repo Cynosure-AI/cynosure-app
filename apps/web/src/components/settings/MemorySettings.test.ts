@@ -32,7 +32,7 @@ vi.mock('../../api/client', () => ({
       getDreamConfig: mocks.getDreamConfig,
       configureDream: mocks.configureDream,
       getEmbeddingConfig: mocks.getEmbeddingConfig,
-      getEntityExtractionConfig: vi.fn().mockResolvedValue({ providerId: '', model: '' }),
+      getDeepResearchConfig: vi.fn().mockResolvedValue({ providerId: '', model: '' }),
       getChunkingConfig: vi.fn().mockResolvedValue({ chunkSize: 512, chunkOverlap: 64 }),
       getRerankerConfig: vi.fn().mockResolvedValue({
         enabled: false,

@@ -5,8 +5,8 @@ describe('tool approval policy', () => {
     test('auto-approves memory and graph reads, but not writes', () => {
         expect(isSystemAutoApprovedTool('memory_semantic_search')).toBe(true)
         expect(isSystemAutoApprovedTool('knowledge_search')).toBe(true)
-        expect(isSystemAutoApprovedTool('memory_replace_all')).toBe(false)
-        expect(isSystemAutoApprovedTool('memory_remove_all')).toBe(false)
+        expect(isSystemAutoApprovedTool('memory_update')).toBe(false)
+        expect(isSystemAutoApprovedTool('memory_delete')).toBe(false)
         expect(isSystemAutoApprovedTool('knowledge_assert')).toBe(false)
         expect(isSystemAutoApprovedTool('knowledge_delete')).toBe(false)
         expect(isSystemAutoApprovedTool('knowledge_entity_merge')).toBe(false)

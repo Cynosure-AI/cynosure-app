@@ -10,9 +10,9 @@ vi.mock('../gateway/gateway.js', () => ({
   }),
 }))
 
-import { extractKnowledgeFromContent, mergeKnowledgeChunkTags, normalizeKnowledgeTags } from './knowledge-extractor.js'
+import { deepResearchContent, mergeDeepResearchChunkTags, normalizeKnowledgeTags } from './deep-research-extractor.js'
 
-describe('knowledge extractor notes', () => {
+describe('Deep Research notes', () => {
   beforeEach(() => complete.mockReset())
 
   test('keeps concise notes alongside chunk-grounded relationships and mentions', async () => {
@@ -35,7 +35,7 @@ describe('knowledge extractor notes', () => {
       ]),
     })
 
-    const result = await extractKnowledgeFromContent({
+    const result = await deepResearchContent({
       segments: [{ content: '<source_chunk index="4">Nora uses TypeScript. Selene is the keynote speaker.</source_chunk>', chunkIndexes: [4] }],
     })
 
@@ -64,7 +64,7 @@ describe('knowledge extractor notes', () => {
         ]),
       })
 
-    const result = await extractKnowledgeFromContent({
+    const result = await deepResearchContent({
       segments: [
         { content: '<source_chunk index="0">TypeScript planning.</source_chunk>', chunkIndex: 0, chunkIndexes: [0] },
         { content: '<source_chunk index="1">SQLite API design.</source_chunk>', chunkIndex: 1, chunkIndexes: [1] },
@@ -75,7 +75,7 @@ describe('knowledge extractor notes', () => {
       { sourceChunkIndex: 0, tags: ['typescript', 'project planning', 'api design'] },
       { sourceChunkIndex: 1, tags: ['project planning', 'sqlite', 'api design'] },
     ])
-    expect(mergeKnowledgeChunkTags(result.chunkTags)).toEqual([
+    expect(mergeDeepResearchChunkTags(result.chunkTags)).toEqual([
       'typescript', 'project planning', 'api design', 'sqlite',
     ])
     expect(normalizeKnowledgeTags(['Ｃｏｄｅｘ', ' codex ', '#Memory'])).toEqual(['codex', 'memory'])
@@ -88,7 +88,7 @@ describe('knowledge extractor notes', () => {
     const onCheckpoint = vi.fn()
     const onProgress = vi.fn()
 
-    const result = await extractKnowledgeFromContent({
+    const result = await deepResearchContent({
       segments: [{ content: '<source_chunk index="1">New.</source_chunk>', chunkIndex: 1, chunkIndexes: [1] }],
       initialResult: { relations: [], mentions: [], chunkTags: [{ sourceChunkIndex: 0, tags: ['saved chunk'] }] },
       onCheckpoint,

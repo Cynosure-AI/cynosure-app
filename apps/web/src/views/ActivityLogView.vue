@@ -131,7 +131,7 @@ function instanceActivityItem(instance: AgentInstance): ActivityItem {
 }
 
 function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
-  const knowledgeJob = job.kind === "knowledge-extraction";
+  const knowledgeJob = job.kind === "deep-research";
   const toolJob = job.kind === "tool-embeddings";
   const batchProgress = knowledgeJob && job.progressCurrent && job.progressTotal
     ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
@@ -139,8 +139,8 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
   return {
     id: `live-memory:${job.id}`,
     kind: "memory",
-    title: toolJob ? "Indexing tool capabilities" : `${knowledgeJob ? `Extracting knowledge${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
-    description: toolJob ? `${job.progressCurrent ?? 0}/${job.progressTotal ?? 0} embeddings` : knowledgeJob && batchProgress ? `Extraction batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
+    title: toolJob ? "Indexing tool capabilities" : `${knowledgeJob ? `Running Deep Research${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
+    description: toolJob ? `${job.progressCurrent ?? 0}/${job.progressTotal ?? 0} embeddings` : knowledgeJob && batchProgress ? `Deep Research batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
     createdAt: job.createdAt,
     agentId: null,
     agentName: null,
@@ -148,7 +148,7 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     conversationId: null,
     status: job.status,
     sourceId: job.id,
-    sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Knowledge extraction" : "Search indexing",
+    sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Deep Research" : "Search indexing",
   };
 }
 
@@ -447,7 +447,7 @@ async function openItem(item: ActivityItem) {
     return;
   }
   if (isActiveMemoryJob(item)) {
-    router.push("/memory-spaces/documents");
+    router.push("/memory-categories/documents");
     return;
   }
   if (item.conversationId) {
@@ -563,7 +563,7 @@ onMounted(() => {
   }, 30_000);
   unsubNotification = api.notifications.onCreated(() => void loadActivity());
   unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadActivity());
-  unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated(() => void loadActivity());
+  unsubMemoryJobUpdate = api.memoryCategories.onJobUpdated(() => void loadActivity());
   unsubHITLRequest = api.agent.onHITLRequest(() => void loadActivity());
   unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
     const payload = data as { event?: string };
@@ -1038,7 +1038,7 @@ watch(searchQuery, () => {
   >
     <p class="text-sm leading-6 text-theme-300">
       This cancels all work currently running on the server, including chats, cron runs, channel agents,
-      search indexing and knowledge extraction, vector re-embedding, and auxiliary chat actions.
+      search indexing and Deep Research, vector re-embedding, and auxiliary chat actions.
     </p>
     <p class="mt-3 text-xs leading-5 text-theme-500">
       {{ knownActiveWorkCount > 0 ? `${knownActiveWorkCount} active operation${knownActiveWorkCount === 1 ? '' : 's'} currently visible.` : 'The server will also check for background work not currently visible in this view.' }}

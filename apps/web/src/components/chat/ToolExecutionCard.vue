@@ -273,7 +273,7 @@ function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = [])
 function contextCallKey(call: ToolCall): string {
   const parsed = parseArgs(call.arguments)
   if (parsed?.type === 'memory') {
-    return ['memory', call.name, parsed.sourceFile, parsed.folderPath, parsed.chunkIndex, parsed.content]
+    return ['memory', call.name, parsed.sourceFile, parsed.directoryPath, parsed.chunkIndex, parsed.content]
       .map((value) => String(value ?? ''))
       .join('|')
   }
