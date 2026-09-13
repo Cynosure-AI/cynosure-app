@@ -291,7 +291,7 @@ export interface AppNotification {
 
 // ── Activity ────────────────────────────────────────────────────────────────
 
-export type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
+export type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
 export interface ActivityArtifact {
     href: string

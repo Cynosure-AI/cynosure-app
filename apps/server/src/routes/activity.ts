@@ -6,7 +6,7 @@ import { getAgent } from '../core/agents/agent-store.js'
 import { listActiveInstances } from './instances.js'
 import { stopAllActivity } from '../core/activity/stop-all.js'
 
-type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
+type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
 interface ActivityArtifact {
     href: string
@@ -112,7 +112,6 @@ function parseTypeFilter(value: string | undefined): Set<ActivityKind> | null {
         .filter((part): part is ActivityKind =>
             part === 'instance' ||
             part === 'artifact' ||
-            part === 'notification' ||
             part === 'cron' ||
             part === 'memory' ||
             part === 'chat' ||
@@ -318,33 +317,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 sourceLabel: `${typeLabel} instance`,
                 instanceType: instance.type,
                 model: instance.model,
-            })
-        }
-
-        const notificationRows = db.prepare('SELECT id, agent_id, conversation_id, title, body, severity, read, created_at FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
-            id: string
-            agent_id: string
-            conversation_id: string | null
-            title: string
-            body: string
-            severity: string
-            read: number
-            created_at: number
-        }[]
-        for (const row of notificationRows) {
-            items.push({
-                id: `notification:${row.id}`,
-                kind: 'notification',
-                title: row.title,
-                description: row.body,
-                createdAt: row.created_at,
-                agentId: row.agent_id || null,
-                ...agentInfo(row.agent_id || null),
-                conversationId: row.conversation_id,
-                severity: row.severity,
-                status: row.read === 1 ? 'read' : 'unread',
-                sourceId: row.id,
-                sourceLabel: 'Notification',
             })
         }
 
@@ -641,7 +613,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }, {
             instance: 0,
             artifact: 0,
-            notification: 0,
             cron: 0,
             memory: 0,
             chat: 0,
