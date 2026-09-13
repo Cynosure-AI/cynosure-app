@@ -2,19 +2,19 @@ import type Database from 'better-sqlite3'
 import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, type Dirent } from 'fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import { nanoid } from 'nanoid'
-import { getMemoryCategoriesRootDir } from '../data-dir.js'
+import { getMemoryFoldersRootDir } from '../data-dir.js'
 import { lanceDbEqFilter } from './lancedb-filter.js'
 import { getRAGStore } from './rag.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
-import { stopWatchingMemoryCategory, watchMemoryCategory } from './memory-category-watcher.js'
+import { stopWatchingMemoryFolder, watchMemoryFolder } from './memory-folder-watcher.js'
 
-export const UNCATEGORIZED_MEMORY_CATEGORY_ID = 'uncategorized'
+export const UNCATEGORIZED_MEMORY_FOLDER_ID = 'uncategorized'
 const FOLDER_MODEL_MIGRATION_KEY = 'memory.folder_model_v1'
 const AGENT_FOLDER_MIGRATION_KEY = 'memory.agent_folder_v2'
 export const AGENT_MEMORY_FOLDER_NAME = '.agents'
 const IGNORED_FOLDER_NAMES = new Set(['default', '.trash', '.revisions', 'revisions', '.cynosure'])
 
-export interface MemoryCategoryDirectoryRow {
+export interface MemoryFolderDirectoryRow {
     id: string
     name: string
     description: string
@@ -24,7 +24,7 @@ export interface MemoryCategoryDirectoryRow {
     created_at: number
 }
 
-export interface MemoryCategoryDirectoryData {
+export interface MemoryFolderDirectoryData {
     id: string
     name: string
     categoryPath: string
@@ -34,7 +34,7 @@ export interface MemoryCategoryDirectoryData {
 }
 
 export function memoryRootDir(): string {
-    return getMemoryCategoriesRootDir()
+    return getMemoryFoldersRootDir()
 }
 
 export function ensureMemoryRoot(): string {
@@ -64,7 +64,7 @@ export function parentCategoryPath(categoryPath: string): string | null {
     return idx < 0 ? '' : categoryPath.slice(0, idx)
 }
 
-export function memoryCategoryDirectoryData(row: MemoryCategoryDirectoryRow): MemoryCategoryDirectoryData {
+export function memoryFolderDirectoryData(row: MemoryFolderDirectoryRow): MemoryFolderDirectoryData {
     const categoryPath = row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path)
     const depth = categoryPath ? categoryPath.split('/').length : 0
     return {
@@ -88,7 +88,7 @@ export function validateRelativePath(input: string): string {
         }
         const isAgentMemoryRoot = index === 0 && segment.toLowerCase() === AGENT_MEMORY_FOLDER_NAME
         if ((segment.startsWith('.') && !isAgentMemoryRoot) || IGNORED_FOLDER_NAMES.has(segment.toLowerCase())) {
-            throw new Error(`Folder "${segment}" is reserved and cannot be used as a memory category.`)
+            throw new Error(`Folder "${segment}" is reserved and cannot be used as a memory folder.`)
         }
     }
     return segments.join('/')
@@ -184,8 +184,8 @@ export async function runCategoryModelCleanupOnce(db: Database.Database): Promis
         }
 
         db.transaction(() => {
-            db.prepare('UPDATE memory_categories SET name = ?, description = ?, directory_path = ?, sort_order = ?, is_uncategorized = ? WHERE id = ?')
-                .run('Uncategorized', 'Memories that do not yet have a category', memoryRootDir(), 0, 1, UNCATEGORIZED_MEMORY_CATEGORY_ID)
+            db.prepare('UPDATE memory_folders SET name = ?, description = ?, directory_path = ?, sort_order = ?, is_uncategorized = ? WHERE id = ?')
+                .run('Uncategorized', 'Memories that do not yet have a category', memoryRootDir(), 0, 1, UNCATEGORIZED_MEMORY_FOLDER_ID)
             markMigrationComplete(db, FOLDER_MODEL_MIGRATION_KEY)
         })()
     }
@@ -195,9 +195,9 @@ export async function runCategoryModelCleanupOnce(db: Database.Database): Promis
         const agentFolder = join(root, AGENT_MEMORY_FOLDER_NAME)
         if (existsSync(legacyAgentFolder) && !existsSync(agentFolder)) {
             renameSync(legacyAgentFolder, agentFolder)
-            const rows = db.prepare('SELECT id, directory_path FROM memory_categories').all() as Array<{ id: string; directory_path: string }>
+            const rows = db.prepare('SELECT id, directory_path FROM memory_folders').all() as Array<{ id: string; directory_path: string }>
             const legacyPrefix = `${legacyAgentFolder}${sep}`
-            const updateFolder = db.prepare('UPDATE memory_categories SET directory_path = ? WHERE id = ?')
+            const updateFolder = db.prepare('UPDATE memory_folders SET directory_path = ? WHERE id = ?')
             const updatePaths = db.transaction(() => {
                 for (const row of rows) {
                     if (row.directory_path === legacyAgentFolder) updateFolder.run(agentFolder, row.id)
@@ -212,19 +212,19 @@ export async function runCategoryModelCleanupOnce(db: Database.Database): Promis
     }
 }
 
-export function syncMemoryCategoriesFromFolders(db: Database.Database): MemoryCategoryDirectoryRow[] {
+export function syncMemoryFoldersFromFolders(db: Database.Database): MemoryFolderDirectoryRow[] {
     const root = ensureMemoryRoot()
-    db.prepare('UPDATE memory_categories SET directory_path = ?, is_uncategorized = 1 WHERE id = ?').run(root, UNCATEGORIZED_MEMORY_CATEGORY_ID)
+    db.prepare('UPDATE memory_folders SET directory_path = ?, is_uncategorized = 1 WHERE id = ?').run(root, UNCATEGORIZED_MEMORY_FOLDER_ID)
 
     const discovered = discoverRelativeFolders(root)
-    const existingRows = db.prepare('SELECT * FROM memory_categories').all() as MemoryCategoryDirectoryRow[]
-    const existingByRelative = new Map<string, MemoryCategoryDirectoryRow>()
+    const existingRows = db.prepare('SELECT * FROM memory_folders').all() as MemoryFolderDirectoryRow[]
+    const existingByRelative = new Map<string, MemoryFolderDirectoryRow>()
     for (const row of existingRows) {
         if (row.is_uncategorized !== 1 && (!row.directory_path || !existsSync(row.directory_path))) {
-            stopWatchingMemoryCategory(row.id)
+            stopWatchingMemoryFolder(row.id)
             db.prepare('DELETE FROM memory_file_index WHERE category_id = ?').run(row.id)
-            db.prepare('DELETE FROM agent_memory_categories WHERE category_id = ?').run(row.id)
-            db.prepare('DELETE FROM memory_categories WHERE id = ?').run(row.id)
+            db.prepare('DELETE FROM agent_memory_folders WHERE category_id = ?').run(row.id)
+            db.prepare('DELETE FROM memory_folders WHERE id = ?').run(row.id)
             continue
         }
         existingByRelative.set(row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path), row)
@@ -232,7 +232,7 @@ export function syncMemoryCategoriesFromFolders(db: Database.Database): MemoryCa
 
     const now = Date.now()
     const insert = db.prepare(`
-        INSERT INTO memory_categories (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
+        INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `)
     for (const categoryPath of discovered) {
@@ -240,17 +240,17 @@ export function syncMemoryCategoriesFromFolders(db: Database.Database): MemoryCa
         insert.run(idForRelativePath(categoryPath), nameForRelativePath(categoryPath), '', directoryPathForRelative(categoryPath), 0, 0, now)
     }
 
-    const rows = db.prepare('SELECT * FROM memory_categories ORDER BY is_uncategorized DESC, sort_order ASC, directory_path ASC').all() as MemoryCategoryDirectoryRow[]
+    const rows = db.prepare('SELECT * FROM memory_folders ORDER BY is_uncategorized DESC, sort_order ASC, directory_path ASC').all() as MemoryFolderDirectoryRow[]
     for (const row of rows) {
         if (!row.directory_path) continue
-        watchMemoryCategory(row.id, row.directory_path)
+        watchMemoryFolder(row.id, row.directory_path)
     }
     return rows
 }
 
-export function listAllMemoryCategoryRefs(db: Database.Database): { id: string; name: string; categoryPath: string }[] {
-    syncMemoryCategoriesFromFolders(db)
-    const rows = db.prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_categories ORDER BY is_uncategorized DESC, directory_path ASC').all() as {
+export function listAllMemoryFolderRefs(db: Database.Database): { id: string; name: string; categoryPath: string }[] {
+    syncMemoryFoldersFromFolders(db)
+    const rows = db.prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as {
         id: string
         name: string
         directory_path: string
@@ -263,21 +263,21 @@ export function listAllMemoryCategoryRefs(db: Database.Database): { id: string; 
     }))
 }
 
-export function renameMemoryCategoryDirectory(row: MemoryCategoryDirectoryRow, nextRelativePath: string): MemoryCategoryDirectoryRow {
+export function renameMemoryFolderDirectory(row: MemoryFolderDirectoryRow, nextRelativePath: string): MemoryFolderDirectoryRow {
     const categoryPath = validateRelativePath(nextRelativePath)
-    if (!categoryPath) throw new Error('Uncategorized memory category cannot be moved or renamed.')
+    if (!categoryPath) throw new Error('Uncategorized memory folder cannot be moved or renamed.')
     const nextFolderPath = directoryPathForRelative(categoryPath)
-    if (existsSync(nextFolderPath)) throw new Error('A memory category already exists at that path.')
+    if (existsSync(nextFolderPath)) throw new Error('A memory folder already exists at that path.')
 
     mkdirSync(dirname(nextFolderPath), { recursive: true })
     renameSync(row.directory_path, nextFolderPath)
-    stopWatchingMemoryCategory(row.id)
-    watchMemoryCategory(row.id, nextFolderPath)
+    stopWatchingMemoryFolder(row.id)
+    watchMemoryFolder(row.id, nextFolderPath)
     return { ...row, name: nameForRelativePath(categoryPath), directory_path: nextFolderPath }
 }
 
-export function archiveMemoryCategoryDirectory(row: MemoryCategoryDirectoryRow): string | undefined {
-    if (row.is_uncategorized === 1) throw new Error('Uncategorized memory category cannot be archived.')
+export function archiveMemoryFolderDirectory(row: MemoryFolderDirectoryRow): string | undefined {
+    if (row.is_uncategorized === 1) throw new Error('Uncategorized memory folder cannot be archived.')
     if (!existsSync(row.directory_path)) return undefined
 
     const categoryPath = categoryPathForDirectory(row.directory_path)
@@ -287,7 +287,7 @@ export function archiveMemoryCategoryDirectory(row: MemoryCategoryDirectoryRow):
     mkdirSync(trashRoot, { recursive: true })
     const dest = join(trashRoot, `${leaf || row.id}-${stamp}`)
     renameSync(row.directory_path, dest)
-    stopWatchingMemoryCategory(row.id)
+    stopWatchingMemoryFolder(row.id)
     return dest
 }
 
@@ -303,7 +303,7 @@ export function removeFolderIfEmpty(directoryPath: string): void {
 }
 
 /** Remove an empty category folder and any newly empty category ancestors. */
-export function removeEmptyMemoryCategoryFolders(directoryPath: string): void {
+export function removeEmptyMemoryFolderFolders(directoryPath: string): void {
     const root = resolve(memoryRootDir())
     let target = resolve(directoryPath)
     while (target !== root && target.startsWith(root + sep)) {
@@ -316,16 +316,16 @@ export function removeEmptyMemoryCategoryFolders(directoryPath: string): void {
     }
 }
 
-export function newMemoryCategoryId(): string {
+export function newMemoryFolderId(): string {
     return `category:${nanoid()}`
 }
 
 /** Ensure every segment of a validated category path exists and is registered. */
-export function ensureMemoryCategoryPath(db: Database.Database, requestedPath: string): MemoryCategoryDirectoryRow {
+export function ensureMemoryFolderPath(db: Database.Database, requestedPath: string): MemoryFolderDirectoryRow {
     const categoryPath = validateRelativePath(requestedPath)
     if (!categoryPath) {
-        const root = db.prepare('SELECT * FROM memory_categories WHERE is_uncategorized = 1 LIMIT 1').get() as MemoryCategoryDirectoryRow | undefined
-        if (!root) throw new Error('Uncategorized memory category is unavailable.')
+        const root = db.prepare('SELECT * FROM memory_folders WHERE is_uncategorized = 1 LIMIT 1').get() as MemoryFolderDirectoryRow | undefined
+        if (!root) throw new Error('Uncategorized memory folder is unavailable.')
         return root
     }
     const createdDirectories: string[] = []
@@ -336,7 +336,7 @@ export function ensureMemoryCategoryPath(db: Database.Database, requestedPath: s
             for (const segment of categoryPath.split('/')) {
                 current = current ? `${current}/${segment}` : segment
                 const directoryPath = directoryPathForRelative(current)
-                if (db.prepare('SELECT 1 FROM memory_categories WHERE directory_path = ?').get(directoryPath)) continue
+                if (db.prepare('SELECT 1 FROM memory_folders WHERE directory_path = ?').get(directoryPath)) continue
                 if (existsSync(directoryPath) && !statSync(directoryPath).isDirectory()) {
                     throw new Error(`Category path collides with a file at "${current}".`)
                 }
@@ -344,8 +344,8 @@ export function ensureMemoryCategoryPath(db: Database.Database, requestedPath: s
                     mkdirSync(directoryPath)
                     createdDirectories.push(directoryPath)
                 }
-                const id = newMemoryCategoryId()
-                db.prepare('INSERT INTO memory_categories(id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)')
+                const id = newMemoryFolderId()
+                db.prepare('INSERT INTO memory_folders(id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)')
                     .run(id, segment, '', directoryPath, Date.now())
                 createdRows.push({ id, directoryPath })
             }
@@ -354,6 +354,6 @@ export function ensureMemoryCategoryPath(db: Database.Database, requestedPath: s
         for (const directoryPath of createdDirectories.reverse()) removeFolderIfEmpty(directoryPath)
         throw error
     }
-    for (const row of createdRows) watchMemoryCategory(row.id, row.directoryPath)
-    return db.prepare('SELECT * FROM memory_categories WHERE directory_path = ?').get(directoryPathForRelative(categoryPath)) as MemoryCategoryDirectoryRow
+    for (const row of createdRows) watchMemoryFolder(row.id, row.directoryPath)
+    return db.prepare('SELECT * FROM memory_folders WHERE directory_path = ?').get(directoryPathForRelative(categoryPath)) as MemoryFolderDirectoryRow
 }

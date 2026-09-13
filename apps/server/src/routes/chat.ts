@@ -36,7 +36,7 @@ import {
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
-import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryCategoryOverrides, resolveToolSelection } from '../core/chat/run-config.js'
+import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 import type { ChatQueueRequest } from '@shared/types'
@@ -270,7 +270,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         systemPrompt,
         generateTitle: generateTitlePref,
         subAgents: reqSubAgents,
-        memoryCategoryIds: reqMemoryCategoryIds,
+        memoryFolderIds: reqMemoryFolderIds,
         thinkingEnabled: reqThinkingEnabled,
         reasoningEffort: reqReasoningEffort,
         contextStrategy: reqContextStrategy,
@@ -464,8 +464,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         autoMemory: reqAutoMemory,
       })
 
-      // Resolve memory category overrides (request body ids -> { id, name } objects)
-      const memoryCategoryOverrides = resolveMemoryCategoryOverrides(db, reqMemoryCategoryIds)
+      // Resolve memory folder overrides (request body ids -> { id, name } objects)
+      const memoryFolderOverrides = resolveMemoryFolderOverrides(db, reqMemoryFolderIds)
 
       const usedToolNames = new Set<string>()
 
@@ -496,7 +496,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             modelOverride: model || undefined,
             systemPrompt: systemPrompt || undefined,
             requestedSubAgents: reqSubAgents,
-            memoryCategoryOverrides,
+            memoryFolderOverrides,
             autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
             autoMemory: effectiveRunFlags.autoMemory,
             autoRouterProviderId: reqAutoRouterProviderId || undefined,
@@ -569,7 +569,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         executionConfig = buildPersistedChatConfig({
           selectedToolKeys,
           requestedSubAgents: reqSubAgents,
-          requestedMemoryCategoryIds: reqMemoryCategoryIds,
+          requestedMemoryFolderIds: reqMemoryFolderIds,
           systemPrompt,
           responseModel,
           responseProvider,

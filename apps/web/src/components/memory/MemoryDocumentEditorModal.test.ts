@@ -25,7 +25,7 @@ vi.mock('@tiptap/vue-3', async () => {
 
 vi.mock('../../api/client', () => ({
   api: {
-    memoryCategories: {
+    memoryFolders: {
       getFileContent: mocks.getFileContent,
       updateFileContent: mocks.updateFileContent,
       renameFile: vi.fn(), listRevisions: vi.fn(), getRevision: vi.fn(),

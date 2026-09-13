@@ -24,7 +24,7 @@ describe('chat agent provider defaults', () => {
       model: 'agent-model',
       tools: [],
       subAgents: [],
-      memoryCategories: [],
+      memoryFolders: [],
       autoMemory: true,
     } as unknown as AgentDefinition]
     definitions.update = vi.fn().mockResolvedValue(undefined)
@@ -62,7 +62,7 @@ describe('chat agent provider defaults', () => {
       name: 'Agent',
       tools: [],
       subAgents: [],
-      memoryCategories: [],
+      memoryFolders: [],
     } as unknown as AgentDefinition]
     const runtime = useAgentStore()
     runtime.availableTools = [tool('builtin::schedule_create', 'schedule_create')]

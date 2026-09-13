@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
-import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryCategory, MemoryDiffSegment, MemoryRevisionSummary } from "../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder, MemoryDiffSegment, MemoryRevisionSummary } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
@@ -44,21 +44,21 @@ const ENTITY_NODE_TYPES: KnowledgeGraphNodeType[] = [
 const memorySections = [
   {
     id: "documents",
-    path: "/memory-categories/documents",
+    path: "/memory-folders/documents",
     label: "Documents",
-    description: "Browse categories, upload files, and manage indexed memory documents.",
+    description: "Browse folders, upload files, and manage indexed memory documents.",
     icon: "lucide:file-text",
   },
   {
     id: "relationships",
-    path: "/memory-categories/relationships",
+    path: "/memory-folders/relationships",
     label: "Knowledge",
     description: "Inspect, correct, and manage facts extracted from memory.",
     icon: "lucide:git-branch",
   },
   {
     id: "visual",
-    path: "/memory-categories/visual-graph",
+    path: "/memory-folders/visual-graph",
     label: "Knowledge Graph",
     description: "Explore extracted knowledge as a spatial graph with more room to breathe.",
     icon: "lucide:network",
@@ -71,18 +71,18 @@ const memoryTabs: TabDef<MemoryPanel>[] = memorySections.map((section) => ({
   icon: section.icon,
 }));
 
-const spaces = ref<MemoryCategory[]>([]);
+const spaces = ref<MemoryFolder[]>([]);
 const spacesLoading = ref(false);
 const selectedCategoryId = ref<string | null>(null);
 const graphSelectedCategoryIds = ref<string[]>([]);
 const graphCategorySelectionInitialized = ref(false);
 const showCreateDialog = ref(false);
-const editingCategory = ref<MemoryCategory | null>(null);
-const parentForCreate = ref<MemoryCategory | null>(null);
+const editingCategory = ref<MemoryFolder | null>(null);
+const parentForCreate = ref<MemoryFolder | null>(null);
 const folderName = ref("");
 const folderDescription = ref("");
 const showDeleteConfirm = ref(false);
-const pendingDeleteCategory = ref<MemoryCategory | null>(null);
+const pendingDeleteCategory = ref<MemoryFolder | null>(null);
 type DeletedMemory = { documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number };
 const showDeletedMemories = ref(false);
 const deletedMemories = ref<DeletedMemory[]>([]);
@@ -135,7 +135,7 @@ async function openDeletedMemories() {
   deletedLoading.value = true;
   deletedError.value = "";
   try {
-    deletedMemories.value = await api.memoryCategories.listDeleted();
+    deletedMemories.value = await api.memoryFolders.listDeleted();
   } catch (error) {
     deletedError.value = (error as Error).message || "Failed to load deleted memories";
   } finally {
@@ -149,7 +149,7 @@ async function openDeletedHistory(memory: DeletedMemory) {
   deletedRevisionDiff.value = [];
   deletedLoading.value = true;
   try {
-    deletedRevisions.value = await api.memoryCategories.listRevisions(memory.documentRef);
+    deletedRevisions.value = await api.memoryFolders.listRevisions(memory.documentRef);
     if (deletedRevisions.value[0]) await selectDeletedRevision(deletedRevisions.value[0].id);
   } catch (error) {
     deletedError.value = (error as Error).message || "Failed to load revision history";
@@ -165,9 +165,9 @@ async function selectDeletedRevision(revisionId: string) {
   const previous = deletedRevisions.value[index + 1];
   if (!selected) return;
   if (previous) {
-    deletedRevisionDiff.value = (await api.memoryCategories.getRevisionDiff(deletedHistoryRef.value, previous.id, selected.id)).segments;
+    deletedRevisionDiff.value = (await api.memoryFolders.getRevisionDiff(deletedHistoryRef.value, previous.id, selected.id)).segments;
   } else {
-    const revision = await api.memoryCategories.getRevision(deletedHistoryRef.value, selected.id);
+    const revision = await api.memoryFolders.getRevision(deletedHistoryRef.value, selected.id);
     deletedRevisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
   }
 }
@@ -176,10 +176,10 @@ async function restoreDeletedMemory(memory: DeletedMemory) {
   restoringDocumentRef.value = memory.documentRef;
   deletedError.value = "";
   try {
-    const revisions = deletedHistoryRef.value === memory.documentRef ? deletedRevisions.value : await api.memoryCategories.listRevisions(memory.documentRef);
+    const revisions = deletedHistoryRef.value === memory.documentRef ? deletedRevisions.value : await api.memoryFolders.listRevisions(memory.documentRef);
     const selected = revisions.find(revision => revision.id === deletedSelectedRevisionId.value) || revisions[0];
     if (!selected) throw new Error("This memory has no restorable revision.");
-    await api.memoryCategories.restoreRevision(memory.documentRef, selected.id, "");
+    await api.memoryFolders.restoreRevision(memory.documentRef, selected.id, "");
     deletedMemories.value = deletedMemories.value.filter(item => item.documentRef !== memory.documentRef);
     deletedHistoryRef.value = "";
     await loadCategories();
@@ -242,7 +242,7 @@ async function loadCategories() {
     const previousSpaceIds = spaces.value.map((space) => space.id);
     const previouslySelectedAll = !graphCategorySelectionInitialized.value
       || (previousSpaceIds.length > 0 && previousSpaceIds.every((id) => graphSelectedCategoryIds.value.includes(id)));
-    const loaded = await api.memoryCategories.list();
+    const loaded = await api.memoryFolders.list();
     spaces.value = [...loaded].sort((a, b) => {
       if (a.isUncategorized) return -1;
       if (b.isUncategorized) return 1;
@@ -266,7 +266,7 @@ async function loadCategories() {
   spacesLoading.value = false;
 }
 
-function openCreateDialog(parent?: MemoryCategory) {
+function openCreateDialog(parent?: MemoryFolder) {
   editingCategory.value = null;
   parentForCreate.value = parent || selectedCategory.value;
   folderName.value = "";
@@ -274,7 +274,7 @@ function openCreateDialog(parent?: MemoryCategory) {
   showCreateDialog.value = true;
 }
 
-function openEditDialog(space: MemoryCategory) {
+function openEditDialog(space: MemoryFolder) {
   editingCategory.value = space;
   parentForCreate.value = null;
   folderName.value = space.name;
@@ -282,7 +282,7 @@ function openEditDialog(space: MemoryCategory) {
   showCreateDialog.value = true;
 }
 
-function relativePathForName(space: MemoryCategory, name: string): string {
+function relativePathForName(space: MemoryFolder, name: string): string {
   const trimmed = name.trim();
   if (space.isUncategorized) return "";
   const current = space.categoryPath || "";
@@ -299,10 +299,10 @@ async function saveFolder() {
         description: folderDescription.value,
       };
       if (!editingCategory.value.isUncategorized) data.categoryPath = relativePathForName(editingCategory.value, folderName.value);
-      const updated = await api.memoryCategories.update(editingCategory.value.id, data);
+      const updated = await api.memoryFolders.update(editingCategory.value.id, data);
       selectedCategoryId.value = updated.id;
     } else {
-      const created = await api.memoryCategories.create(
+      const created = await api.memoryFolders.create(
         folderName.value.trim(),
         folderDescription.value,
         parentForCreate.value?.categoryPath || "",
@@ -316,7 +316,7 @@ async function saveFolder() {
   showCreateDialog.value = false;
 }
 
-function confirmDeleteSpace(space: MemoryCategory) {
+function confirmDeleteSpace(space: MemoryFolder) {
   const prefix = space.categoryPath ? `${space.categoryPath}/` : "";
   const hasSubfolders = Boolean(prefix && spaces.value.some(candidate => candidate.categoryPath?.startsWith(prefix)));
   if (space.fileCount === 0 && !hasSubfolders) {
@@ -327,11 +327,11 @@ function confirmDeleteSpace(space: MemoryCategory) {
   showDeleteConfirm.value = true;
 }
 
-async function deleteSpace(space: MemoryCategory) {
+async function deleteSpace(space: MemoryFolder) {
   showDeleteConfirm.value = false;
   pendingDeleteCategory.value = null;
   try {
-    await api.memoryCategories.remove(space.id);
+    await api.memoryFolders.remove(space.id);
     await loadCategories();
   } catch {
     /* ignore */
@@ -623,8 +623,8 @@ onMounted(() => loadCategories());
                 v-if="activePanel === 'relationships' || activePanel === 'visual'"
                 :model-value="graphSelectedCategoryIds"
                 :options="graphCategoryOptions"
-                placeholder="No memory categories"
-                all-selected-label="All memory categories"
+                placeholder="No memory folders"
+                all-selected-label="All memory folders"
                 show-bulk-actions
                 class="min-w-64"
                 @update:model-value="updateGraphSpaceSelection"
@@ -646,7 +646,7 @@ onMounted(() => loadCategories());
                   icon="lucide:folder-plus"
                   class="h-4 w-4"
                 />
-                New Category
+                New Folder
               </button>
               <button
                 v-if="activePanel === 'relationships' || activePanel === 'visual'"
@@ -697,7 +697,7 @@ onMounted(() => loadCategories());
             icon="lucide:loader-2"
             class="w-5 h-5 animate-spin"
           />
-          Loading categories...
+          Loading folders...
         </div>
 
         <MemoryDocumentsSection
@@ -769,7 +769,7 @@ onMounted(() => loadCategories());
         >
           <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl">
             <h3 class="text-base font-medium text-theme-200 mb-4">
-              {{ editingCategory ? "Edit Category" : "New Memory Category" }}
+              {{ editingCategory ? "Edit Folder" : "New Memory Folder" }}
             </h3>
             <div class="space-y-3">
               <div
@@ -872,7 +872,7 @@ onMounted(() => loadCategories());
 
       <ModalDialog
         :show="showDeleteConfirm"
-        title="Remove Memory Category"
+        title="Remove Memory Folder"
         icon="lucide:trash-2"
         icon-color="red"
         @close="showDeleteConfirm = false"
@@ -885,7 +885,7 @@ onMounted(() => loadCategories());
             class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
             @click="deleteSpace(pendingDeleteCategory!)"
           >
-            Remove Category
+            Remove Folder
           </button>
           <button
             class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"

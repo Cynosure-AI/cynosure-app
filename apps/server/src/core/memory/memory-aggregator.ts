@@ -1,6 +1,6 @@
 import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
-import { buildMemoryCategoryFilter, getAllMemoryCategories, getAssignedMemoryCategories } from './memory-category-scope.js'
+import { buildMemoryFolderFilter, getAllMemoryFolders, getAssignedMemoryFolders } from './memory-folder-scope.js'
 import type { MemoryRetrievalStatusDetails, RetrievedChunk } from './parser.js'
 import type { KnowledgeGraphProjection } from './knowledge-types.js'
 import { getMemoryKnowledgeStore } from './memory-knowledge.js'
@@ -18,7 +18,7 @@ export interface AggregatedMemory {
  * - If explicit space IDs are provided → query only those spaces
  * - If an agent is provided → query only that agent's assigned spaces
  * - If an agent has no assignments → return no memory
- * - If no agent or explicit scope is provided → query all memory categories
+ * - If no agent or explicit scope is provided → query all memory folders
  */
 export class MemoryAggregator {
   /**
@@ -53,21 +53,21 @@ export class MemoryAggregator {
         const uniqueSpaceIds = [...new Set(opts.categoryIds.map((s) => s.trim()).filter(Boolean))]
         if (uniqueSpaceIds.length > 0) {
           const placeholders = uniqueSpaceIds.map(() => '?').join(', ')
-          scopedSpaces = db.prepare(`SELECT id, name FROM memory_categories WHERE id IN (${placeholders})`).all(...uniqueSpaceIds) as { id: string; name: string }[]
+          scopedSpaces = db.prepare(`SELECT id, name FROM memory_folders WHERE id IN (${placeholders})`).all(...uniqueSpaceIds) as { id: string; name: string }[]
           // Explicit scopes are security boundaries. A stale or invalid ID
           // must never broaden or partially alter the requested scope.
-          if (!hasExactMemoryCategoryScope(uniqueSpaceIds, scopedSpaces)) {
+          if (!hasExactMemoryFolderScope(uniqueSpaceIds, scopedSpaces)) {
             return { permanent: [], graph: undefined }
           }
         }
       } catch { /* DB not ready */ }
     } else if (opts?.agentId) {
-      scopedSpaces = getAssignedMemoryCategories(opts.agentId)
+      scopedSpaces = getAssignedMemoryFolders(opts.agentId)
       if (scopedSpaces.length === 0) {
         return { permanent: [], graph: undefined }
       }
     } else {
-      scopedSpaces = getAllMemoryCategories()
+      scopedSpaces = getAllMemoryFolders()
     }
 
     if (Array.isArray(opts?.categoryIds) && scopedSpaces.length === 0) {
@@ -76,7 +76,7 @@ export class MemoryAggregator {
 
     if (scopedSpaces.length > 0) {
       for (const row of scopedSpaces) categoryNameMap.set(row.id, row.name)
-      spaceFilter = buildMemoryCategoryFilter(scopedSpaces)
+      spaceFilter = buildMemoryFolderFilter(scopedSpaces)
     }
 
     const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter, opts?.onStatus).catch(() => [])
@@ -104,7 +104,7 @@ export class MemoryAggregator {
       const counts = await Promise.all(
         uniqueSourceKeys.map(key => {
           const [sf, categoryId] = key.split('\u0000')
-          const filter = categoryId ? buildMemoryCategoryFilter([{ id: categoryId }]) : spaceFilter
+          const filter = categoryId ? buildMemoryFolderFilter([{ id: categoryId }]) : spaceFilter
           return permanentMem.countChunks(sf, filter)
         })
       )
@@ -120,7 +120,7 @@ export class MemoryAggregator {
     if (categoryNameMap.size === 0) {
       try {
         const db = getDb()
-        const rows = db.prepare('SELECT id, name FROM memory_categories').all() as { id: string; name: string }[]
+        const rows = db.prepare('SELECT id, name FROM memory_folders').all() as { id: string; name: string }[]
         for (const row of rows) categoryNameMap.set(row.id, row.name)
       } catch { /* DB not ready */ }
     }
@@ -216,7 +216,7 @@ export class MemoryAggregator {
   }
 }
 
-export function hasExactMemoryCategoryScope(
+export function hasExactMemoryFolderScope(
   requestedIds: string[],
   resolvedSpaces: Array<{ id: string }>,
 ): boolean {

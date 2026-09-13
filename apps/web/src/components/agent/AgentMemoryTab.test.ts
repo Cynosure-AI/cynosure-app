@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { AgentDefinition, MemoryCategory } from '../../api/types'
+import type { AgentDefinition, MemoryFolder } from '../../api/types'
 import AgentMemoryTab from './AgentMemoryTab.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api/client', () => ({
   api: {
-    memoryCategories: {
+    memoryFolders: {
       list: mocks.listSpaces,
     },
   },
@@ -20,7 +20,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-const spaces: MemoryCategory[] = [
+const spaces: MemoryFolder[] = [
   {
     id: 'uncategorized',
     name: 'Uncategorized',
@@ -49,7 +49,7 @@ const agent = {
   id: 'agent-1',
   name: 'Research Agent',
   internalName: 'research_agent',
-  memoryCategories: ['uncategorized'],
+  memoryFolders: ['uncategorized'],
   autoMemory: false,
   dreamingEnabled: true,
 } as AgentDefinition
@@ -70,7 +70,7 @@ describe('AgentMemoryTab', () => {
     mocks.push.mockReset()
   })
 
-  test('shows retrieval settings and the ordinary memory category selector', async () => {
+  test('shows retrieval settings and the ordinary memory folder selector', async () => {
     const wrapper = mount(AgentMemoryTab, { props: { agent } })
     await flushPromises()
 
@@ -78,7 +78,7 @@ describe('AgentMemoryTab', () => {
     expect(cardTitles).toEqual([
       'Dreaming',
       'Automatic memory retrieval',
-      'Memory Categories',
+      'Memory Folders',
     ])
   })
 
@@ -89,7 +89,7 @@ describe('AgentMemoryTab', () => {
     const actions = wrapper.findAll('button')
     const deselectAll = actions.find(button => button.text().trim() === 'Deselect all')
     expect(wrapper.text()).toContain('All Memory')
-    expect(wrapper.text()).toContain('Includes Uncategorized and every subcategory')
+    expect(wrapper.text()).toContain('Includes Uncategorized and every subfolder')
     expect(wrapper.text()).toContain('All memory selected')
     expect(actions.some(button => button.text().trim() === 'Select all')).toBe(false)
     expect(deselectAll).toBeDefined()
@@ -99,6 +99,6 @@ describe('AgentMemoryTab', () => {
     expect(research.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
 
     await deselectAll!.trigger('click')
-    expect(wrapper.emitted('update')).toContainEqual(['memoryCategories', []])
+    expect(wrapper.emitted('update')).toContainEqual(['memoryFolders', []])
   })
 })

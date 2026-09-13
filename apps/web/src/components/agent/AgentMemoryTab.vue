@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
-import type { AgentDefinition, MemoryCategory } from '../../api/types'
+import type { AgentDefinition, MemoryFolder } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
@@ -11,12 +11,12 @@ const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 const router = useRouter()
 
-// --- Memory Categories ---
-const allSpaces = ref<MemoryCategory[]>([])
+// --- Memory Folders ---
+const allSpaces = ref<MemoryFolder[]>([])
 const spacesLoading = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
 
-const assignedIds = computed(() => new Set(props.agent.memoryCategories ?? []))
+const assignedIds = computed(() => new Set(props.agent.memoryFolders ?? []))
 const rootCategory = computed(() => allSpaces.value.find(space => space.isUncategorized))
 const rootSelected = computed(() => Boolean(rootCategory.value && assignedIds.value.has(rootCategory.value.id)))
 
@@ -39,7 +39,7 @@ const visibleSpaces = computed(() =>
 async function loadCategories() {
   spacesLoading.value = true
   try {
-    const spaces = await api.memoryCategories.list()
+    const spaces = await api.memoryFolders.list()
     allSpaces.value = [...spaces].sort((a, b) => {
       if (a.isUncategorized) return -1
       if (b.isUncategorized) return 1
@@ -52,7 +52,7 @@ async function loadCategories() {
   spacesLoading.value = false
 }
 
-function collapseFoldersWithChildren(spaces: MemoryCategory[]) {
+function collapseFoldersWithChildren(spaces: MemoryFolder[]) {
   const pathsWithChildren = new Set<string>()
   const paths = spaces
     .map((space) => space.categoryPath || '')
@@ -72,8 +72,8 @@ function toggleSpace(categoryId: string) {
   const space = allSpaces.value.find((candidate) => candidate.id === categoryId)
   if (!space) return
 
-  const current = new Set(props.agent.memoryCategories ?? [])
-  const scopedIds = memoryCategoryScopeIds(space)
+  const current = new Set(props.agent.memoryFolders ?? [])
+  const scopedIds = memoryFolderScopeIds(space)
 
   if (space.isUncategorized) {
     current.clear()
@@ -87,27 +87,27 @@ function toggleSpace(categoryId: string) {
     for (const id of scopedIds) current.add(id)
   }
 
-  emit('update', 'memoryCategories', Array.from(current))
+  emit('update', 'memoryFolders', Array.from(current))
 }
 
 function selectAll() {
-  emit('update', 'memoryCategories', rootCategory.value ? [rootCategory.value.id] : allSpaces.value.map(space => space.id))
+  emit('update', 'memoryFolders', rootCategory.value ? [rootCategory.value.id] : allSpaces.value.map(space => space.id))
 }
 
-function isSelected(space: MemoryCategory): boolean {
+function isSelected(space: MemoryFolder): boolean {
   return rootSelected.value || assignedIds.value.has(space.id)
 }
 
-function categoryDepth(space: MemoryCategory): number {
+function categoryDepth(space: MemoryFolder): number {
   if (space.isUncategorized) return 0
   return Math.max(1, (space.categoryPath || '').split('/').filter(Boolean).length)
 }
 
 function deselectAll() {
-  emit('update', 'memoryCategories', [])
+  emit('update', 'memoryFolders', [])
 }
 
-function memoryCategoryScopeIds(space: MemoryCategory): string[] {
+function memoryFolderScopeIds(space: MemoryFolder): string[] {
   if (space.isUncategorized) return [space.id]
   const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
   return allSpaces.value
@@ -115,12 +115,12 @@ function memoryCategoryScopeIds(space: MemoryCategory): string[] {
     .map((candidate) => candidate.id)
 }
 
-function hasChildren(space: MemoryCategory): boolean {
+function hasChildren(space: MemoryFolder): boolean {
   const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
   return allSpaces.value.some((candidate) => space.isUncategorized ? Boolean(candidate.categoryPath) : candidate.categoryPath?.startsWith(prefix))
 }
 
-function isPartiallySelected(space: MemoryCategory): boolean {
+function isPartiallySelected(space: MemoryFolder): boolean {
   if (space.isUncategorized || !hasChildren(space)) return false
   // Show partial icon whenever children are selected but the parent itself is not
   if (assignedIds.value.has(space.id)) return false
@@ -129,7 +129,7 @@ function isPartiallySelected(space: MemoryCategory): boolean {
   return directChildren.some(c => assignedIds.value.has(c.id))
 }
 
-function toggleCollapsed(space: MemoryCategory) {
+function toggleCollapsed(space: MemoryFolder) {
   const key = space.categoryPath || ''
   const next = new Set(collapsedFolders.value)
   if (next.has(key)) next.delete(key)
@@ -138,7 +138,7 @@ function toggleCollapsed(space: MemoryCategory) {
 }
 
 function goToMemory() {
-  router.push('/memory-categories')
+  router.push('/memory-folders')
 }
 
 onMounted(() => loadCategories())
@@ -187,7 +187,7 @@ onMounted(() => loadCategories())
             </h3>
           </div>
           <p class="text-xs text-theme-500 leading-relaxed">
-            Retrieve and inject relevant document snippets before this agent responds. Relationship tools use the same selected-category scope on demand.
+            Retrieve and inject relevant document snippets before this agent responds. Relationship tools use the same selected-folder scope on demand.
           </p>
         </div>
         <ToggleSwitch
@@ -200,7 +200,7 @@ onMounted(() => loadCategories())
       </div>
     </BaseCard>
 
-    <!-- Memory Categories -->
+    <!-- Memory Folders -->
     <BaseCard class="p-5">
       <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-2">
@@ -209,7 +209,7 @@ onMounted(() => loadCategories())
             class="w-4 h-4 text-accent-400"
           />
           <h3 class="text-sm font-medium text-theme-200">
-            Memory Categories
+            Memory Folders
           </h3>
         </div>
         <div class="flex items-center gap-2">
@@ -237,7 +237,7 @@ onMounted(() => loadCategories())
         </div>
       </div>
       <p class="text-xs text-theme-500 mb-3">
-        Select memory categories to give this agent access to shared knowledge.
+        Select memory folders to give this agent access to shared knowledge.
       </p>
 
       <!-- Count + select all/none -->
@@ -276,7 +276,7 @@ onMounted(() => loadCategories())
             icon="lucide:loader-2"
             class="w-4 h-4 animate-spin mx-auto mb-2"
           />
-          Loading categories…
+          Loading folders…
         </div>
         <div
           v-else-if="allSpaces.length === 0"
@@ -287,7 +287,7 @@ onMounted(() => loadCategories())
             class="w-8 h-8 text-theme-700 mx-auto mb-2"
           />
           <p class="text-sm text-theme-500">
-            No memory categories found
+            No memory folders found
           </p>
         </div>
         <div
@@ -337,7 +337,7 @@ onMounted(() => loadCategories())
                 {{ space.isUncategorized ? 'All Memory' : space.name }}
               </div>
               <div class="text-[11px] text-theme-500">
-                {{ space.isUncategorized ? 'Includes Uncategorized and every subcategory' : `${space.fileCount} doc${space.fileCount !== 1 ? 's' : ''}` }}
+                {{ space.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${space.fileCount} doc${space.fileCount !== 1 ? 's' : ''}` }}
               </div>
             </div>
             <Icon

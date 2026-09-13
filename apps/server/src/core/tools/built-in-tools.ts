@@ -1,12 +1,12 @@
 import type { RegistryAwareToolDefinition, ToolDefinition } from "../gateway/providers/base.provider.js";
 import type { ConversationExecutionConfig } from "@shared/types";
 import {
-    buildMemoryCategoryFilter,
-    expandMemoryCategoryScope,
-    getAssignedMemoryCategories,
-    getDefaultMemoryCategory,
-    type MemoryCategoryRef,
-} from "../memory/memory-category-scope.js";
+    buildMemoryFolderFilter,
+    expandMemoryFolderScope,
+    getAssignedMemoryFolders,
+    getDefaultMemoryFolder,
+    type MemoryFolderRef,
+} from "../memory/memory-folder-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
 import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
@@ -89,7 +89,7 @@ interface BuiltInHydrationContext {
     agentId?: string;
     conversationId: string;
     broadcast: BroadcastFn;
-    assignedCategories: MemoryCategoryRef[];
+    assignedCategories: MemoryFolderRef[];
     categoryFilter?: string;
     scheduleExecutionConfig?: ConversationExecutionConfig;
 }
@@ -218,10 +218,10 @@ export function registerBuiltInTools(): void {
 // ─── Hydration helpers ─────────────────────────────────────
 
 /**
- * Get the default memory category when no agent context is available.
+ * Get the default memory folder when no agent context is available.
  */
-function getDefaultMemoryCategories(): MemoryCategoryRef[] {
-    const uncategorizedCategory = getDefaultMemoryCategory();
+function getDefaultMemoryFolders(): MemoryFolderRef[] {
+    const uncategorizedCategory = getDefaultMemoryFolder();
     return uncategorizedCategory ? [uncategorizedCategory] : [];
 }
 
@@ -235,15 +235,15 @@ export function hydrateBuiltInTools(
         agentId?: string;
         conversationId: string;
         broadcast: BroadcastFn;
-        memoryCategoryOverrides?: MemoryCategoryRef[];
+        memoryFolderOverrides?: MemoryFolderRef[];
         scheduleExecutionConfig?: ConversationExecutionConfig;
     },
 ): RegistryAwareToolDefinition[] {
     const selectedCategories =
-        ctx.memoryCategoryOverrides ??
-        (ctx.agentId ? getAssignedMemoryCategories(ctx.agentId) : getDefaultMemoryCategories());
-    const assignedCategories = expandMemoryCategoryScope(selectedCategories);
-    const categoryFilter = buildMemoryCategoryFilter(assignedCategories);
+        ctx.memoryFolderOverrides ??
+        (ctx.agentId ? getAssignedMemoryFolders(ctx.agentId) : getDefaultMemoryFolders());
+    const assignedCategories = expandMemoryFolderScope(selectedCategories);
+    const categoryFilter = buildMemoryFolderFilter(assignedCategories);
 
     const hydrationContext: BuiltInHydrationContext = {
         agentId: ctx.agentId,

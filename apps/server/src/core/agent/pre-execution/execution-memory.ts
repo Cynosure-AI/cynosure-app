@@ -2,10 +2,10 @@ import { applyAutoMemoryRoutingWithEvidence, emitAutoMemoryRoutingSkipped } from
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
-import type { MemoryCategoryRef } from '../../memory/memory-category-scope.js'
+import type { MemoryFolderRef } from '../../memory/memory-folder-scope.js'
 import type { ContextEvidence } from '@shared/types'
 
-export type ExecutionMemoryCategoryRef = MemoryCategoryRef
+export type ExecutionMemoryFolderRef = MemoryFolderRef
 
 export interface ResolveMemoryContextInput {
     preset: ExecutionPreset
@@ -14,7 +14,7 @@ export interface ResolveMemoryContextInput {
     providerId?: string
     model?: string
     autoMemory?: boolean
-    memoryCategoryOverrides?: ExecutionMemoryCategoryRef[]
+    memoryFolderOverrides?: ExecutionMemoryFolderRef[]
     userQuery?: string
     /** Original request plus optional same-language retrieval expansions. */
     retrievalQueries?: string[]
@@ -36,16 +36,16 @@ export function isAutoMemoryEnabled(preset: ExecutionPreset, sessionEnabled?: bo
 export function isRuntimeMemoryEnabled(
     preset: ExecutionPreset,
     sessionEnabled: boolean | undefined,
-    memoryCategoryOverrides: ExecutionMemoryCategoryRef[] | undefined,
+    memoryFolderOverrides: ExecutionMemoryFolderRef[] | undefined,
 ): boolean {
-    if (hasExplicitEmptyMemoryScope(memoryCategoryOverrides)) return false
-    return Boolean(memoryCategoryOverrides?.length) || isAutoMemoryEnabled(preset, sessionEnabled)
+    if (hasExplicitEmptyMemoryScope(memoryFolderOverrides)) return false
+    return Boolean(memoryFolderOverrides?.length) || isAutoMemoryEnabled(preset, sessionEnabled)
 }
 
 export function hasExplicitEmptyMemoryScope(
-    memoryCategoryOverrides: ExecutionMemoryCategoryRef[] | undefined,
+    memoryFolderOverrides: ExecutionMemoryFolderRef[] | undefined,
 ): boolean {
-    return Array.isArray(memoryCategoryOverrides) && memoryCategoryOverrides.length === 0
+    return Array.isArray(memoryFolderOverrides) && memoryFolderOverrides.length === 0
 }
 
 export interface ResolvedMemoryContext {
@@ -61,7 +61,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         providerId,
         model,
         autoMemory,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
         userQuery,
         retrievalQueries,
         recentMessages,
@@ -75,7 +75,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         emitAutoMemoryRoutingSkipped(conversationId, 'disabled', eventMeta)
         return { messages: [], evidence: [] }
     }
-    if (hasExplicitEmptyMemoryScope(memoryCategoryOverrides)) {
+    if (hasExplicitEmptyMemoryScope(memoryFolderOverrides)) {
         emitAutoMemoryRoutingSkipped(conversationId, 'empty-scope', eventMeta)
         return { messages: [], evidence: [] }
     }
@@ -94,7 +94,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         providerId,
         model,
         agentId: preset.id === '__agentless__' ? undefined : preset.id,
-        memoryCategoryIds: memoryCategoryOverrides?.map((space) => space.id),
+        memoryFolderIds: memoryFolderOverrides?.map((space) => space.id),
         eventMeta,
         signal,
         debugContextEnabled,

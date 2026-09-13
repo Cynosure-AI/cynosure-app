@@ -1,7 +1,7 @@
 import type { AgentData, SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
-import type { MemoryCategoryRef } from '../../memory/memory-category-scope.js'
+import type { MemoryFolderRef } from '../../memory/memory-folder-scope.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 import type { ReasoningEffort } from '@shared/types'
 
@@ -22,7 +22,7 @@ export interface ExecutionRequest {
         systemPrompt?: string
         systemPromptSuffix?: string
         requestedSubAgents?: SubAgentAssignment[]
-        memoryCategoryOverrides?: MemoryCategoryRef[]
+        memoryFolderOverrides?: MemoryFolderRef[]
         autoToolRouting?: boolean
         autoMemory?: boolean
         autoRouterProviderId?: string
@@ -53,7 +53,7 @@ export interface ExecutionPlanInput {
     systemPrompt?: string
     systemPromptSuffix?: string
     requestedSubAgents?: SubAgentAssignment[]
-    memoryCategoryOverrides?: MemoryCategoryRef[]
+    memoryFolderOverrides?: MemoryFolderRef[]
     autoToolRouting?: boolean
     autoMemory?: boolean
     autoRouterProviderId?: string
@@ -84,7 +84,7 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         systemPrompt: run.systemPrompt,
         systemPromptSuffix: run.systemPromptSuffix,
         requestedSubAgents: run.requestedSubAgents,
-        memoryCategoryOverrides: run.memoryCategoryOverrides,
+        memoryFolderOverrides: run.memoryFolderOverrides,
         autoToolRouting: run.autoToolRouting,
         autoMemory: run.autoMemory,
         autoRouterProviderId: run.autoRouterProviderId,

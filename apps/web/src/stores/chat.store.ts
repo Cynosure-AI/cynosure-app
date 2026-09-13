@@ -1,7 +1,7 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
-import type { ChatExecutionState, MemoryCategory, ModelPricing } from '../api/types'
+import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
 import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto, StoredMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
@@ -70,7 +70,7 @@ export const useChatStore = defineStore('chat', () => {
   const modelModalities = ref<{ input: string[]; output: string[] } | null>(null)
   const modelInfoStatus = ref<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
   let modelInfoRequestId = 0
-  const memoryCategories = ref<MemoryCategory[]>([])
+  const memoryFolders = ref<MemoryFolder[]>([])
   const queuedMessages = ref<QueuedChatMessageDto[]>([])
   const queuePaused = ref(false)
   const postActionsMap = new Map<string, Set<string>>()
@@ -164,21 +164,21 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function setActiveAgent(id: string | null): Promise<void> {
-    if (!memoryCategories.value.length) await loadMemoryCategories()
+    if (!memoryFolders.value.length) await loadMemoryFolders()
     await agentConfig.setActiveAgent(id)
   }
 
   const agentConfig = useChatAgentConfig(activeConversationId, messages, conversations, loadConversations)
 
-  async function loadMemoryCategories(): Promise<void> {
+  async function loadMemoryFolders(): Promise<void> {
     try {
-      const spaces = await api.memoryCategories.list()
-      memoryCategories.value = [...spaces].sort((a, b) => {
+      const spaces = await api.memoryFolders.list()
+      memoryFolders.value = [...spaces].sort((a, b) => {
         if (a.isUncategorized) return -1
         if (b.isUncategorized) return 1
         return (a.categoryPath || '').localeCompare(b.categoryPath || '')
       })
-      agentConfig.setFreeChatDefaultMemoryCategoryIds(memoryCategories.value.filter((space) => space.isUncategorized).map((space) => space.id))
+      agentConfig.setFreeChatDefaultMemoryFolderIds(memoryFolders.value.filter((space) => space.isUncategorized).map((space) => space.id))
     } catch {
       // Non-critical; memory selectors can retry later.
     }
@@ -234,7 +234,7 @@ export const useChatStore = defineStore('chat', () => {
   )
 
   async function sendMessage(...args: Parameters<typeof chatMessages.sendMessage>): Promise<void> {
-    if (!memoryCategories.value.length) await loadMemoryCategories()
+    if (!memoryFolders.value.length) await loadMemoryFolders()
     agentConfig.ensureFreeChatPreset()
     const conversationId = activeConversationId.value
     await chatMessages.sendMessage(...args)
@@ -497,7 +497,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function startNewChat(): Promise<void> {
-    if (!memoryCategories.value.length) await loadMemoryCategories()
+    if (!memoryFolders.value.length) await loadMemoryFolders()
     // New chat starts from the selected agent defaults, while free chat keeps its current preset.
     agentConfig.syncAgentBaseline()
 
@@ -625,7 +625,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  void loadMemoryCategories()
+  void loadMemoryFolders()
 
   return {
     // Core state
@@ -634,7 +634,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     messages,
     loadingMessages,
-    memoryCategories,
+    memoryFolders,
     queuedMessages,
     queuePaused,
     activeConversation,
@@ -723,7 +723,7 @@ export const useChatStore = defineStore('chat', () => {
     // Messages (delegated)
     sendMessage,
     async queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void> {
-      if (!memoryCategories.value.length) await loadMemoryCategories()
+      if (!memoryFolders.value.length) await loadMemoryFolders()
       agentConfig.ensureFreeChatPreset()
       await chatMessages.queueMessage(content, delivery, imageDataUrls, files, audioDataUrls)
       await loadQueue()
@@ -784,11 +784,11 @@ export const useChatStore = defineStore('chat', () => {
     selectedToolNames: agentConfig.selectedToolNames,
     agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
     freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
-    freeChatMemoryCategoryIds: agentConfig.freeChatMemoryCategoryIds,
+    freeChatMemoryFolderIds: agentConfig.freeChatMemoryFolderIds,
     freeChatMemorySelectionInitialized: agentConfig.freeChatMemorySelectionInitialized,
     agentOriginalTools: agentConfig.agentOriginalTools,
     agentOriginalSubAgentIds: agentConfig.agentOriginalSubAgentIds,
-    agentOriginalMemoryCategoryIds: agentConfig.agentOriginalMemoryCategoryIds,
+    agentOriginalMemoryFolderIds: agentConfig.agentOriginalMemoryFolderIds,
     hasAgentOverrides: agentConfig.hasAgentOverrides,
     agentOverrideFields: agentConfig.agentOverrideFields,
     hasFreeChatOverrides: agentConfig.hasFreeChatOverrides,
@@ -801,7 +801,7 @@ export const useChatStore = defineStore('chat', () => {
     setSessionModel: agentConfig.setSessionModel,
     setSessionReasoningEffort: agentConfig.setSessionReasoningEffort,
     syncAgentBaseline: agentConfig.syncAgentBaseline,
-    loadMemoryCategories,
+    loadMemoryFolders,
     fetchContextWindow,
 
     // Conversation CRUD

@@ -6,8 +6,8 @@ import { estimateToolDefinitionTokens } from '../agent/context-trimmer.js'
 import { listActiveInstances } from '../../routes/instances.js'
 import type { BroadcastFn } from '../agent/pre-execution/execution-input.js'
 import type { ToolDefinition } from '../gateway/providers/base.provider.js'
-import { buildMemoryCategoryFilter, expandMemoryCategoryScope, getAssignedMemoryCategories, getDefaultMemoryCategory, type MemoryCategoryRef } from './memory-category-scope.js'
-import { resolveMemoryCategoryOverrides } from '../chat/run-config.js'
+import { buildMemoryFolderFilter, expandMemoryFolderScope, getAssignedMemoryFolders, getDefaultMemoryFolder, type MemoryFolderRef } from './memory-folder-scope.js'
+import { resolveMemoryFolderOverrides } from '../chat/run-config.js'
 import { makeMemoryListDocumentsTool, makeMemoryRetrieveChunksTool, makeMemorySearchTool, makeMemoryCreateTool, makeMemoryUpdateTool, makeMemoryDeleteTool } from '../tools/builtin/memory-tools.js'
 import { buildDreamBatch, getDreamConfig, getDreamRun, type DreamInput, type DreamRun, type DreamChange } from './dream-store.js'
 import { recordAuxiliaryModelUsage } from '../usage-metering.js'
@@ -30,18 +30,18 @@ let active: { run: DreamRun; controller: AbortController; finished: Promise<void
 let stopped = true
 let sweepGeneration = 0
 
-export function resolveDreamCategories(conversation: Conversation): MemoryCategoryRef[] {
-    let config: { memoryCategoryIds?: string[] }
+export function resolveDreamCategories(conversation: Conversation): MemoryFolderRef[] {
+    let config: { memoryFolderIds?: string[] }
     try { config = JSON.parse(conversation.execution_config_json) } catch { return [] }
-    if (Array.isArray(config.memoryCategoryIds) && config.memoryCategoryIds.length > 0) {
-        return resolveMemoryCategoryOverrides(getDb(), config.memoryCategoryIds) ?? []
+    if (Array.isArray(config.memoryFolderIds) && config.memoryFolderIds.length > 0) {
+        return resolveMemoryFolderOverrides(getDb(), config.memoryFolderIds) ?? []
     }
     if (conversation.agent_id) {
-        const assigned = getAssignedMemoryCategories(conversation.agent_id)
+        const assigned = getAssignedMemoryFolders(conversation.agent_id)
         if (assigned.length > 0) return assigned
     }
-    const fallback = getDefaultMemoryCategory()
-    return fallback ? expandMemoryCategoryScope([fallback]) : []
+    const fallback = getDefaultMemoryFolder()
+    return fallback ? expandMemoryFolderScope([fallback]) : []
 }
 export function isDreamEligibleConversation(conversation: Pick<Conversation, 'agent_id'>): boolean {
     if (!conversation.agent_id) return true
@@ -117,7 +117,7 @@ function canonical(value: unknown): string {
     return JSON.stringify(value)
 }
 
-async function executeReview(run: DreamRun, conversation: Conversation, categories: MemoryCategoryRef[], contextWindow: number): Promise<void> {
+async function executeReview(run: DreamRun, conversation: Conversation, categories: MemoryFolderRef[], contextWindow: number): Promise<void> {
     const controller = new AbortController()
     let resolveFinished!: () => void
     const finished = new Promise<void>(resolve => { resolveFinished = resolve })
@@ -131,7 +131,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, categori
     let failedMutation = false
     const readRevisions = new Map<string, string>()
     const scope = {
-        assignedCategories: categories, categoryFilter: buildMemoryCategoryFilter(categories),
+        assignedCategories: categories, categoryFilter: buildMemoryFolderFilter(categories),
         revisionContext: { source: 'dream' as const, conversationId: conversation.id, messageIds: input.sources.map(source => source.id) },
         onDocumentRead: (id: string, revision: string) => { readRevisions.set(id, revision) },
         beforeDocumentMutation: (id: string, content: string) => {
@@ -264,7 +264,7 @@ async function sweep(): Promise<void> {
         if (generation !== sweepGeneration || stopped || !getDreamConfig().enabled || getDreamConfig().windowId !== config.windowId) return
         let run = pending
         if (!run) {
-            const scope = { assignedCategories: categories, categoryFilter: buildMemoryCategoryFilter(categories) }
+            const scope = { assignedCategories: categories, categoryFilter: buildMemoryFolderFilter(categories) }
             const toolTokens = estimateToolDefinitionTokens([makeMemoryListDocumentsTool(scope), makeMemoryRetrieveChunksTool(scope), makeMemorySearchTool(scope), makeMemoryCreateTool(scope), makeMemoryUpdateTool(scope), makeMemoryDeleteTool(scope)])
             // Budget characters conservatively (one per token) and reserve room for tool results.
             const maxChars = Math.max(256, Math.floor((contextWindow - toolTokens - 4096) / 3))

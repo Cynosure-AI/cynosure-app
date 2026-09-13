@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
-import type { MemoryCategory, MemoryFileStatus, MemoryDocumentKnowledgePreview } from "../../api/types";
+import type { MemoryFolder, MemoryFileStatus, MemoryDocumentKnowledgePreview } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import DataTable, { type Column } from "../shared/DataTable.vue";
@@ -21,7 +21,7 @@ type DocumentRow = MemoryFileStatus & { id: string };
 
 const props = defineProps<{
   categoryId: string;
-  spaces: MemoryCategory[];
+  spaces: MemoryFolder[];
   focusFile?: string;
 }>();
 
@@ -132,7 +132,7 @@ async function loadFiles() {
   filesLoading.value = true;
   knowledgePreviews.value = {};
   try {
-    files.value = await api.memoryCategories.listFiles(props.categoryId);
+    files.value = await api.memoryFolders.listFiles(props.categoryId);
   } catch {
     files.value = [];
   }
@@ -181,7 +181,7 @@ async function loadKnowledgePreview(fileName: string) {
     [fileName]: { status: "loading" },
   };
   try {
-    const data = await api.memoryCategories.getDocumentKnowledgePreview(props.categoryId, fileName);
+    const data = await api.memoryFolders.getDocumentKnowledgePreview(props.categoryId, fileName);
     knowledgePreviews.value = {
       ...knowledgePreviews.value,
       [fileName]: { status: "ready", data },
@@ -207,7 +207,7 @@ async function deleteSelectedFiles() {
   if (selectedFiles.value.size === 0) return;
   deleting.value = true;
   try {
-    await api.memoryCategories.deleteDocuments(props.categoryId, Array.from(selectedFiles.value));
+    await api.memoryFolders.deleteDocuments(props.categoryId, Array.from(selectedFiles.value));
     const deleted = selectedFiles.value;
     selectedFiles.value = new Set();
     files.value = files.value.filter((f) => !deleted.has(f.fileName));
@@ -223,7 +223,7 @@ async function forgetSelectedMemories() {
   if (sourceFiles.length === 0) return;
   forgettingMemories.value = true;
   try {
-    await api.memoryCategories.forgetMemories(props.categoryId, sourceFiles);
+    await api.memoryFolders.forgetMemories(props.categoryId, sourceFiles);
     selectedFiles.value = new Set();
     await loadFiles();
     await loadJobs();
@@ -239,7 +239,7 @@ async function moveSelectedFiles(targetCategoryId: string) {
   if (selectedFiles.value.size === 0 || targetCategoryId === props.categoryId) return;
   moving.value = true;
   try {
-    await api.memoryCategories.moveDocuments(props.categoryId, Array.from(selectedFiles.value), targetCategoryId);
+    await api.memoryFolders.moveDocuments(props.categoryId, Array.from(selectedFiles.value), targetCategoryId);
     const moved = selectedFiles.value;
     selectedFiles.value = new Set();
     files.value = files.value.filter((f) => !moved.has(f.fileName));
@@ -254,7 +254,7 @@ async function moveSelectedFiles(targetCategoryId: string) {
 async function moveDocumentsToCategory(targetCategoryId: string, sourceFiles: string[]) {
   if (sourceFiles.length === 0 || targetCategoryId === props.categoryId) return;
   try {
-    await api.memoryCategories.moveDocuments(props.categoryId, sourceFiles, targetCategoryId);
+    await api.memoryFolders.moveDocuments(props.categoryId, sourceFiles, targetCategoryId);
     files.value = files.value.filter((f) => !sourceFiles.includes(f.fileName));
     emit("spacesChanged");
   } catch {
@@ -307,7 +307,7 @@ async function ingestFiles(fileList: File[]) {
     }
     try {
       const content = await readFileContent(file);
-      const res = await api.memoryCategories.ingestFile(props.categoryId, file.name, content);
+      const res = await api.memoryFolders.ingestFile(props.categoryId, file.name, content);
       if (res.job) upsertJob(res.job);
       results.push({ fileName: res.fileName, chunks: res.chunksStored });
     } catch (err) {
@@ -422,7 +422,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
           type="button"
           class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
           title="Edit folder"
-          :aria-label="`Edit ${currentSpace?.name || 'category'}`"
+          :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
           @click="emit('editSpace')"
         >
           <Icon
@@ -433,8 +433,8 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
         <button
           type="button"
           :disabled="currentSpace?.isUncategorized"
-          :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove category'"
-          :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'category'}`"
+          :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
+          :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
           class="p-1 text-theme-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-theme-500"
           @click="emit('deleteSpace')"
         >

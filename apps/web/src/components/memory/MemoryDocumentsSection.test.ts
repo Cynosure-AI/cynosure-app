@@ -1,12 +1,12 @@
 import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 import { beforeEach, describe, expect, test } from 'vitest'
-import type { MemoryCategory } from '../../api/types'
+import type { MemoryFolder } from '../../api/types'
 import MemoryDocumentsSection from './MemoryDocumentsSection.vue'
 
 const DOCUMENT_DRAG_MIME = 'application/x-cynosure-memory-documents'
 
-const spaces: MemoryCategory[] = [
+const spaces: MemoryFolder[] = [
   {
     id: 'uncategorized',
     name: 'Uncategorized',
@@ -71,7 +71,7 @@ describe('MemoryDocumentsSection drag targets', () => {
   beforeEach(() => sessionStorage.clear())
 
   test('collapses document folders initially and restores opened folders during the session', async () => {
-    const nestedSpaces: MemoryCategory[] = [
+    const nestedSpaces: MemoryFolder[] = [
       ...spaces,
       { ...spaces[1], id: 'projects', name: 'Projects', categoryPath: 'projects', directoryPath: '/memory/projects' },
       { ...spaces[1], id: 'acme', name: 'Acme', categoryPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
@@ -88,7 +88,7 @@ describe('MemoryDocumentsSection drag targets', () => {
   })
 
   test('reveals the linked category and keeps drag highlighting when MIME inspection is unavailable', async () => {
-    const nestedSpaces: MemoryCategory[] = [
+    const nestedSpaces: MemoryFolder[] = [
       ...spaces,
       { ...spaces[1], id: 'projects', name: 'Projects', categoryPath: 'projects', directoryPath: '/memory/projects' },
       { ...spaces[1], id: 'acme', name: 'Acme', categoryPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
@@ -108,7 +108,7 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(wrapper.get('[data-space-id="archive"]').classes()).toContain('ring-1')
   })
 
-  test('presents Uncategorized as the root and indents physical categories beneath it', () => {
+  test('presents Uncategorized as the root and indents physical folders beneath it', () => {
     const wrapper = mountSection()
     const root = wrapper.get('[data-space-id="uncategorized"]')
     const archive = wrapper.get('[data-space-id="archive"]')

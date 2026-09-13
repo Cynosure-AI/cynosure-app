@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
-import { getAppDataDir, getDefaultMemoryCategoryDir } from '../core/data-dir.js'
+import { getAppDataDir, getDefaultMemoryFolderDir } from '../core/data-dir.js'
 import { createStableMemoryDocumentRef } from '../core/memory/memory-reference.js'
 
 let db: Database.Database | null = null
@@ -31,10 +31,11 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
     const brainReset = resetLegacyMemoryBrain(db)
+    migrateMemoryFolderTerminology(db)
     createTables(db)
     if (brainReset) {
-      ensureDefaultMemoryCategory(db)
-      db.prepare("INSERT OR IGNORE INTO agent_memory_categories(agent_id, category_id) SELECT id, 'uncategorized' FROM agents").run()
+      ensureDefaultMemoryFolder(db)
+      db.prepare("INSERT OR IGNORE INTO agent_memory_folders(agent_id, category_id) SELECT id, 'uncategorized' FROM agents").run()
       db.prepare("DELETE FROM settings WHERE key = 'dreamMode'").run()
       db.prepare("INSERT OR REPLACE INTO settings(key, value_json) VALUES ('memory.brain_v1', ?)").run(JSON.stringify({ resetAt: Date.now() }))
     }
@@ -46,6 +47,29 @@ export function getDb(): Database.Database {
   return db
 }
 
+/** Preserve existing installations while adopting the memory-folder name. */
+function migrateMemoryFolderTerminology(database: Database.Database): void {
+  const hasOldFoldersTable = database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_categories'",
+  ).get()
+  const hasNewFoldersTable = database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_folders'",
+  ).get()
+  if (hasOldFoldersTable && !hasNewFoldersTable) {
+    database.exec('ALTER TABLE memory_categories RENAME TO memory_folders')
+  }
+
+  const hasOldAssignmentsTable = database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_memory_categories'",
+  ).get()
+  const hasNewAssignmentsTable = database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_memory_folders'",
+  ).get()
+  if (hasOldAssignmentsTable && !hasNewAssignmentsTable) {
+    database.exec('ALTER TABLE agent_memory_categories RENAME TO agent_memory_folders')
+  }
+}
+
 /** The brain redesign intentionally adopts source files but discards legacy metadata. */
 function resetLegacyMemoryBrain(database: Database.Database): boolean {
   const legacy = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_spaces'").get()
@@ -55,27 +79,27 @@ function resetLegacyMemoryBrain(database: Database.Database): boolean {
   if (!legacy || completed) return false
   database.pragma('foreign_keys = OFF')
   const tables = database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND (
-    name LIKE 'memory_%' OR name IN ('agent_memory_spaces', 'agent_memory_categories', 'dream_progress', 'dream_runs')
+    name LIKE 'memory_%' OR name IN ('agent_memory_spaces', 'agent_memory_categories', 'agent_memory_folders', 'dream_progress', 'dream_runs')
   )`).all() as Array<{ name: string }>
   for (const { name } of tables) database.exec(`DROP TABLE IF EXISTS "${name.replace(/"/g, '""')}"`)
   database.pragma('foreign_keys = ON')
   return true
 }
 
-export function ensureDefaultMemoryCategory(database: Database.Database = getDb()): void {
+export function ensureDefaultMemoryFolder(database: Database.Database = getDb()): void {
   const uncategorizedCategoryId = 'uncategorized'
-  const defaultFolderPath = getDefaultMemoryCategoryDir()
+  const defaultFolderPath = getDefaultMemoryFolderDir()
   mkdirSync(defaultFolderPath, { recursive: true })
 
-  const uncategorizedCategoryExists = database.prepare("SELECT id FROM memory_categories WHERE id = ?").get(uncategorizedCategoryId)
+  const uncategorizedCategoryExists = database.prepare("SELECT id FROM memory_folders WHERE id = ?").get(uncategorizedCategoryId)
   if (!uncategorizedCategoryExists) {
     const now = Date.now()
-    database.prepare("INSERT INTO memory_categories (id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    database.prepare("INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(uncategorizedCategoryId, 'Uncategorized', 'Memories that do not yet have a category', defaultFolderPath, 0, 1, now)
     return
   }
 
-  database.prepare("UPDATE memory_categories SET name = ?, description = ?, directory_path = ?, is_uncategorized = 1 WHERE id = ?")
+  database.prepare("UPDATE memory_folders SET name = ?, description = ?, directory_path = ?, is_uncategorized = 1 WHERE id = ?")
     .run('Uncategorized', 'Memories that do not yet have a category', defaultFolderPath, uncategorizedCategoryId)
 }
 
@@ -358,7 +382,7 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_channels_agent ON channels(agent_id);
 
-    CREATE TABLE IF NOT EXISTS memory_categories (
+    CREATE TABLE IF NOT EXISTS memory_folders (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
@@ -413,13 +437,13 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_memory_revisions_document ON memory_document_revisions(document_id, revision_number DESC);
 
-    CREATE TABLE IF NOT EXISTS agent_memory_categories (
+    CREATE TABLE IF NOT EXISTS agent_memory_folders (
       agent_id TEXT NOT NULL,
       category_id TEXT NOT NULL,
       PRIMARY KEY (agent_id, category_id)
     );
-    CREATE INDEX IF NOT EXISTS idx_ams_agent ON agent_memory_categories(agent_id);
-    CREATE INDEX IF NOT EXISTS idx_ams_category ON agent_memory_categories(category_id);
+    CREATE INDEX IF NOT EXISTS idx_ams_agent ON agent_memory_folders(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_ams_category ON agent_memory_folders(category_id);
 
     -- Source documents and their revisions remain the
     -- authority; every entity, assertion, and search projection is derived
@@ -702,9 +726,9 @@ function createTables(db: Database.Database): void {
   const addColumnIfMissing = (table: string, column: string, definition: string) => {
     try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`) } catch { /* column already exists */ }
   }
-  addColumnIfMissing('memory_categories', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_categories', 'is_uncategorized', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_categories', 'directory_path', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('memory_folders', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_folders', 'is_uncategorized', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_folders', 'directory_path', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
   addColumnIfMissing('mcp_servers', 'description', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
@@ -790,7 +814,7 @@ function createTables(db: Database.Database): void {
     } catch { /* keep malformed legacy values untouched */ }
   }
 
-  ensureDefaultMemoryCategory(db)
+  ensureDefaultMemoryFolder(db)
 
   // Agent table: add columns for DB-only storage (migrating away from filesystem)
   addColumnIfMissing('agents', 'category', "TEXT NOT NULL DEFAULT ''")
@@ -833,6 +857,11 @@ function createTables(db: Database.Database): void {
   // Conversation unread tracking
   addColumnIfMissing('conversations', 'last_read_at', 'INTEGER')
   addColumnIfMissing('conversations', 'execution_config_json', "TEXT NOT NULL DEFAULT '{}'")
+
+  // Keep saved run configurations readable after the public field rename.
+  for (const table of ['conversations', 'cron_jobs']) {
+    db.prepare(`UPDATE ${table} SET execution_config_json = replace(replace(execution_config_json, '"memoryCategoryIds"', '"memoryFolderIds"'), '"memoryCategories"', '"memoryFolders"') WHERE execution_config_json LIKE '%memoryCategor%'`).run()
+  }
 
   // Split the former single built-in namespace into UI categories while
   // preserving tool selections stored in conversations and scheduled jobs.

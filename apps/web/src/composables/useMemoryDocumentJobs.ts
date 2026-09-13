@@ -5,7 +5,7 @@ import { useMemoryJobsStore } from "../stores/memory-jobs.store";
 
 const ACTIVE_JOB_STATUSES = new Set<MemoryIndexJob["status"]>(["queued", "running", "retrying"]);
 
-/** Owns polling and job transitions for one memory category's document list. */
+/** Owns polling and job transitions for one memory folder's document list. */
 export function useMemoryDocumentJobs(options: {
   categoryId: Ref<string>;
   files: Ref<MemoryFileStatus[]>;
@@ -54,7 +54,7 @@ export function useMemoryDocumentJobs(options: {
 
   async function loadJobs(): Promise<void> {
     try {
-      const nextJobs = await api.memoryCategories.listJobs(options.categoryId.value);
+      const nextJobs = await api.memoryFolders.listJobs(options.categoryId.value);
       jobs.value = nextJobs;
       await applyTerminalJobs(nextJobs);
       if (nextJobs.some(isActive)) startPolling();
@@ -79,8 +79,8 @@ export function useMemoryDocumentJobs(options: {
   async function startFileJob(kind: "reindex" | "deep-research", fileName: string): Promise<void> {
     try {
       const job = kind === "reindex"
-        ? await api.memoryCategories.startReindexFile(options.categoryId.value, fileName)
-        : await api.memoryCategories.startDeepResearchFile(options.categoryId.value, fileName);
+        ? await api.memoryFolders.startReindexFile(options.categoryId.value, fileName)
+        : await api.memoryFolders.startDeepResearchFile(options.categoryId.value, fileName);
       upsertJob(job);
     } catch {
       // The next authoritative refresh exposes failures without inventing a
@@ -106,7 +106,7 @@ export function useMemoryDocumentJobs(options: {
   async function cancelJob(job?: MemoryIndexJob): Promise<void> {
     if (!job) return;
     try {
-      upsertJob(await api.memoryCategories.cancelJob(job.id));
+      upsertJob(await api.memoryFolders.cancelJob(job.id));
       await options.reloadFiles();
     } catch {
       // Polling remains the source of truth if cancellation races completion.
@@ -116,7 +116,7 @@ export function useMemoryDocumentJobs(options: {
   async function discardJob(job?: MemoryIndexJob): Promise<void> {
     if (!job) return;
     try {
-      await api.memoryCategories.discardJob(job.id);
+      await api.memoryFolders.discardJob(job.id);
       jobs.value = jobs.value.filter((item) => item.id !== job.id);
       appJobs.removeJob(job.id);
     } catch {

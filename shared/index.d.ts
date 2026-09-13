@@ -30,7 +30,7 @@ export interface ChatRunConfig {
   systemPrompt?: string
   generateTitle?: boolean
   subAgents?: SubAgentAssignmentDto[]
-  memoryCategoryIds?: string[]
+  memoryFolderIds?: string[]
   thinkingEnabled?: boolean
   reasoningEffort?: ReasoningEffort
   contextStrategy?: ContextStrategy
@@ -162,7 +162,7 @@ export interface ChatQueueRequest extends ChatSendRequest {
 export interface ConversationExecutionConfig {
   allowedTools: string[]
   subAgents: SubAgentAssignmentDto[]
-  memoryCategoryIds: string[]
+  memoryFolderIds: string[]
   systemPrompt: string
   model: string
   providerId: string

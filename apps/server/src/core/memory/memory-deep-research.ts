@@ -215,7 +215,7 @@ export function deleteMemoryKnowledgeSource(categoryId: string, fileName: string
   return { edgesDeleted: before, orphanedNodeIds: [] }
 }
 
-/** Retire every active knowledge revision sourced from a memory category. */
+/** Retire every active knowledge revision sourced from a memory folder. */
 export function deleteMemoryKnowledgeCategory(categoryId: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
   const edgesDeleted = Number((getDb().prepare(`SELECT COUNT(DISTINCT ev.assertion_id) AS count FROM memory_knowledge_assertion_evidence ev JOIN memory_knowledge_index_runs r ON r.id = ev.run_id WHERE r.category_id = ? AND r.status = 'active'`).get(categoryId) as { count: number } | undefined)?.count || 0)
   const documents = getDb().prepare(`

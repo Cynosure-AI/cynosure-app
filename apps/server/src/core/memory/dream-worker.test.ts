@@ -179,22 +179,22 @@ describe('Dream worker', () => {
     })
     test('resolves Dream categories from conversation overrides, agent assignments, then Uncategorized', () => {
         mkdirSync(join(directory, 'data', 'memories', 'Assigned'), { recursive: true })
-        getDb().prepare("INSERT INTO memory_categories(id, name, directory_path, created_at) VALUES ('assigned', 'Assigned', ?, ?)")
+        getDb().prepare("INSERT INTO memory_folders(id, name, directory_path, created_at) VALUES ('assigned', 'Assigned', ?, ?)")
             .run(join(directory, 'data', 'memories', 'Assigned'), Date.now())
-        getDb().prepare("INSERT INTO agent_memory_categories(agent_id, category_id) VALUES ('agent-with-space', 'assigned')").run()
+        getDb().prepare("INSERT INTO agent_memory_folders(agent_id, category_id) VALUES ('agent-with-space', 'assigned')").run()
 
-        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memoryCategoryIds":["uncategorized"],"autoMemory":false}' })).toEqual([
+        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memoryFolderIds":["uncategorized"],"autoMemory":false}' })).toEqual([
             { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
             { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
         ])
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"autoMemory":false}' })).toEqual([
             expect.objectContaining({ id: 'assigned', name: 'Assigned' }),
         ])
-        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memoryCategoryIds":[],"autoMemory":false}' })).toEqual([
+        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memoryFolderIds":[],"autoMemory":false}' })).toEqual([
             { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
             { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
         ])
-        expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{"memoryCategoryIds":["missing"]}' })).toEqual([])
+        expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{"memoryFolderIds":["missing"]}' })).toEqual([])
         expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([
             { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
             { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
@@ -363,7 +363,7 @@ describe('Dream worker', () => {
     test('rejects writes after disabling or changing the conversation scope', async () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
             await config.tools.find(tool => tool.name === 'memory_semantic_search')!.execute({ query: 'preference' })
-            getDb().prepare("UPDATE conversations SET execution_config_json = '{\"memoryCategoryIds\":[\"missing\"]}' WHERE id = 'chat'").run()
+            getDb().prepare("UPDATE conversations SET execution_config_json = '{\"memoryFolderIds\":[\"missing\"]}' WHERE id = 'chat'").run()
             await expect(config.tools.find(tool => tool.name === 'memory_create')!.execute({ title: 'Blocked' })).rejects.toThrow('scope changed')
         })
         await ready()

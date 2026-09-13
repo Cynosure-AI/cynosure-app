@@ -57,8 +57,8 @@ async function runRecoveredJob(
     signal: AbortSignal,
     reportProgress: (current: number, total: number, checkpoint?: unknown) => void,
 ): Promise<unknown> {
-    const space = getDb().prepare('SELECT directory_path FROM memory_categories WHERE id = ?').get(categoryId) as { directory_path: string } | undefined
-    if (!space?.directory_path) throw new Error('Memory category is no longer available')
+    const space = getDb().prepare('SELECT directory_path FROM memory_folders WHERE id = ?').get(categoryId) as { directory_path: string } | undefined
+    if (!space?.directory_path) throw new Error('Memory folder is no longer available')
     if (kind === 'reindex') {
         const { getAgentMemory } = await import('./agent-memory.js')
         const result = await getAgentMemory().reindexFile(space.directory_path, fileName, categoryId, { signal })

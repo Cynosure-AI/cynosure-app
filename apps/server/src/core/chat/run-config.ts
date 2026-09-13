@@ -2,8 +2,8 @@ import type Database from 'better-sqlite3'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
-import { categoryPathForDirectory } from '../memory/memory-category-directories.js'
-import { expandMemoryCategoryScope, type MemoryCategoryRef } from '../memory/memory-category-scope.js'
+import { categoryPathForDirectory } from '../memory/memory-folder-directories.js'
+import { expandMemoryFolderScope, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 
 export interface ToolSelectionConfig {
     selectedToolKeys: string[]
@@ -17,7 +17,7 @@ export interface EffectiveChatRunFlags {
 export interface PersistedChatConfigInput {
     selectedToolKeys: string[]
     requestedSubAgents?: SubAgentAssignment[]
-    requestedMemoryCategoryIds?: string[]
+    requestedMemoryFolderIds?: string[]
     systemPrompt?: string
     responseModel: string
     responseProvider: string
@@ -64,29 +64,29 @@ export function resolveChatRunFlags(input: {
     }
 }
 
-export function resolveMemoryCategoryOverrides(
+export function resolveMemoryFolderOverrides(
     db: Database.Database,
     requestedSpaceIds?: string[],
-): MemoryCategoryRef[] | undefined {
+): MemoryFolderRef[] | undefined {
     if (!Array.isArray(requestedSpaceIds)) return undefined
 
     const uniqueSpaceIds = Array.from(new Set(requestedSpaceIds.map((sid) => sid.trim()).filter(Boolean)))
     const selected = uniqueSpaceIds
-        .map((sid) => db.prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_categories WHERE id = ?').get(sid) as { id: string; name: string; directory_path: string; is_uncategorized: number } | undefined)
+        .map((sid) => db.prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_folders WHERE id = ?').get(sid) as { id: string; name: string; directory_path: string; is_uncategorized: number } | undefined)
         .filter((row): row is { id: string; name: string; directory_path: string; is_uncategorized: number } => Boolean(row))
         .map((row) => ({
             id: row.id,
             name: row.name,
             categoryPath: row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path),
         }))
-    return expandMemoryCategoryScope(selected, db)
+    return expandMemoryFolderScope(selected, db)
 }
 
 export function buildPersistedChatConfig(input: PersistedChatConfigInput): ConversationExecutionConfig {
     return {
         allowedTools: input.selectedToolKeys,
         subAgents: input.requestedSubAgents ?? [],
-        memoryCategoryIds: input.requestedMemoryCategoryIds ?? [],
+        memoryFolderIds: input.requestedMemoryFolderIds ?? [],
         systemPrompt: input.systemPrompt || '',
         model: input.responseModel,
         providerId: input.responseProvider,
@@ -99,13 +99,13 @@ export function buildPersistedChatConfig(input: PersistedChatConfigInput): Conve
 
 export function buildInitialExecutionConfig(input: {
     agent?: AgentData | null
-    memoryCategoryIds?: string[]
+    memoryFolderIds?: string[]
 } = {}): ConversationExecutionConfig {
     const agent = input.agent ?? null
     return {
         allowedTools: agent?.tools ? [...agent.tools] : [],
         subAgents: agent?.subAgents ? [...agent.subAgents] : [],
-        memoryCategoryIds: input.memoryCategoryIds ?? [],
+        memoryFolderIds: input.memoryFolderIds ?? [],
         systemPrompt: agent?.systemPrompt ?? '',
         model: agent?.model ?? '',
         providerId: agent?.providerId ?? '',
@@ -126,7 +126,7 @@ export function parseExecutionConfig(raw: string | null | undefined): Conversati
                 Boolean(value) && typeof value === 'object' && typeof value.agentId === 'string'
             ))
             : [],
-        memoryCategoryIds: Array.isArray(parsed.memoryCategoryIds) ? parsed.memoryCategoryIds.filter((value): value is string => typeof value === 'string') : [],
+        memoryFolderIds: Array.isArray(parsed.memoryFolderIds) ? parsed.memoryFolderIds.filter((value): value is string => typeof value === 'string') : [],
         systemPrompt: typeof parsed.systemPrompt === 'string' ? parsed.systemPrompt : '',
         model: typeof parsed.model === 'string' ? parsed.model : '',
         providerId: typeof parsed.providerId === 'string' ? parsed.providerId : '',

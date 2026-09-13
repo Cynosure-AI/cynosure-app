@@ -35,9 +35,9 @@ import { registerActivityRoutes } from './routes/activity.js'
 import { registerCronJobRoutes } from './routes/cron-jobs.js'
 import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
-import { registerMemoryCategoriesRoutes } from './routes/memory-categories.js'
-import { watchMemoryCategory, stopAllMemoryCategoryWatchers } from './core/memory/memory-category-watcher.js'
-import { runCategoryModelCleanupOnce, syncMemoryCategoriesFromFolders } from './core/memory/memory-category-directories.js'
+import { registerMemoryFoldersRoutes } from './routes/memory-folders.js'
+import { watchMemoryFolder, stopAllMemoryFolderWatchers } from './core/memory/memory-folder-watcher.js'
+import { runCategoryModelCleanupOnce, syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
@@ -301,20 +301,20 @@ async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<v
   })
 }
 
-function startMemoryCategoryWatchers(): void {
+function startMemoryFolderWatchers(): void {
   const db = getDb()
-  syncMemoryCategoriesFromFolders(db)
+  syncMemoryFoldersFromFolders(db)
   const rows = db
-    .prepare("SELECT id, directory_path FROM memory_categories WHERE directory_path IS NOT NULL AND directory_path != ''")
+    .prepare("SELECT id, directory_path FROM memory_folders WHERE directory_path IS NOT NULL AND directory_path != ''")
     .all() as { id: string; directory_path: string }[]
   for (const row of rows) {
-    watchMemoryCategory(row.id, row.directory_path)
+    watchMemoryFolder(row.id, row.directory_path)
   }
 }
 
 function adoptUnindexedMemoryFiles(forceReindex = false): void {
   const db = getDb()
-  const rows = db.prepare('SELECT id, directory_path FROM memory_categories').all() as Array<{ id: string; directory_path: string }>
+  const rows = db.prepare('SELECT id, directory_path FROM memory_folders').all() as Array<{ id: string; directory_path: string }>
   for (const category of rows) {
     const indexed = getAgentMemory().getFileIndex(category.id)
     for (const file of listFilesInFolder(category.directory_path).filter(item => item.supported && (forceReindex || !indexed.has(item.fileName)))) {
@@ -343,7 +343,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
 
   await runCategoryModelCleanupOnce(getDb())
-  syncMemoryCategoriesFromFolders(getDb())
+  syncMemoryFoldersFromFolders(getDb())
 
   await app.register(fastifyCors)
   await app.register(fastifyWebsocket)
@@ -519,7 +519,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerCronJobRoutes, { prefix: '/api/cron-jobs' })
   app.register(async (instance) => registerBackupRoutes(instance, broadcast), { prefix: '/api/backup' })
   app.register(registerChannelRoutes, { prefix: '/api/channels' })
-  app.register(registerMemoryCategoriesRoutes, { prefix: '/api/memory-categories' })
+  app.register(registerMemoryFoldersRoutes, { prefix: '/api/memory-folders' })
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })
   app.register(registerFileRoutes, { prefix: '/api/files' })
   app.register(registerUserSettingsRoutes, { prefix: '/api/user-settings' })
@@ -545,8 +545,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   adoptUnindexedMemoryFiles(legacySchemaReset)
   registerBuiltInTools()
 
-  // Start filesystem watchers for all existing memory category folders
-  startMemoryCategoryWatchers()
+  // Start filesystem watchers for all existing memory folders
+  startMemoryFolderWatchers()
 
   // Set the server base URL so MCP HTTP transport can construct OAuth callback URLs
   getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
@@ -593,7 +593,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       await stopDreamWorker()
       await stopCronScheduler()
       await getChannelManager().stopAll()
-      await stopAllMemoryCategoryWatchers()
+      await stopAllMemoryFolderWatchers()
 
       await app.close()
 

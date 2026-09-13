@@ -15,7 +15,7 @@ import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.j
 import { resolveMemoryContext, isAutoMemoryEnabled, hasExplicitEmptyMemoryScope } from './pre-execution/execution-memory.js'
 import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
 import { buildTaskContext, inferRequestedToolEffect } from './pre-execution/task-context.js'
-import { getAssignedMemoryCategories, type MemoryCategoryRef } from '../memory/memory-category-scope.js'
+import { getAssignedMemoryFolders, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
@@ -75,8 +75,8 @@ export interface PrepareExecutionInput {
 
     // ── Agentless overrides ──
 
-    /** Memory category overrides for agentless chat (bypasses agent's assigned spaces) */
-    memoryCategoryOverrides?: MemoryCategoryRef[]
+    /** Memory folder overrides for agentless chat (bypasses agent's assigned spaces) */
+    memoryFolderOverrides?: MemoryFolderRef[]
     /** Agent id used during built-in tool hydration. Defaults to agent.id. */
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
@@ -131,7 +131,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         modelOverride,
         systemPromptOverride,
         systemPromptSuffix,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
     } = input
 
     const gateway = getGateway()
@@ -148,7 +148,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         ? {
             allowedTools: [...(input.scheduleSelectedToolKeys ?? preset.tools)],
             subAgents: [...(input.subAgentAssignments ?? preset.subAgents)],
-            memoryCategoryIds: memoryCategoryOverrides?.map((space) => space.id) ?? [],
+            memoryFolderIds: memoryFolderOverrides?.map((space) => space.id) ?? [],
             systemPrompt: systemPromptOverride ?? preset.systemPrompt ?? '',
             model: providerModel.model,
             providerId: providerModel.providerId,
@@ -162,7 +162,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         : undefined
     const autoModes = {
         tools: isToolRoutingEnabled(preset, input.autoToolRouting),
-        memories: !hasExplicitEmptyMemoryScope(memoryCategoryOverrides) && isAutoMemoryEnabled(preset, input.autoMemory),
+        memories: !hasExplicitEmptyMemoryScope(memoryFolderOverrides) && isAutoMemoryEnabled(preset, input.autoMemory),
     }
     const taskContextRouter = resolveTaskContextRouter({
         gateway,
@@ -222,7 +222,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         subAgentAssignments: input.subAgentAssignments,
         signal: input.signal,
         debugContextEnabled: input.debugContextEnabled,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
         hydrationAgentId: input.hydrationAgentId,
         eventMeta: input.eventMeta,
         scheduleExecutionConfig,
@@ -233,7 +233,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerId: taskContextRouter.providerId,
         model: taskContextRouter.model,
         autoMemory: input.autoMemory,
-        memoryCategoryOverrides,
+        memoryFolderOverrides,
         userQuery: input.userQuery,
         retrievalQueries: memoryRoutingQueries,
         recentMessages: routingMessages,
@@ -258,7 +258,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             providerId: providerModel.providerId,
             model: providerModel.model,
             conversationId,
-            selectedMemFolderNames: resolveSelectedMemoryFolderNames(preset.id, memoryCategoryOverrides),
+            selectedMemFolderNames: resolveSelectedMemoryFolderNames(preset.id, memoryFolderOverrides),
         },
     })
 
@@ -286,13 +286,13 @@ function uniqueQueries(values: Array<string | undefined>): string[] {
 
 function resolveSelectedMemoryFolderNames(
     agentId: string,
-    memoryCategoryOverrides: MemoryCategoryRef[] | undefined,
+    memoryFolderOverrides: MemoryFolderRef[] | undefined,
 ): string[] {
-    if (Array.isArray(memoryCategoryOverrides)) {
-        return memoryCategoryOverrides.map((space) => space.name)
+    if (Array.isArray(memoryFolderOverrides)) {
+        return memoryFolderOverrides.map((space) => space.name)
     }
 
     if (agentId === '__agentless__') return []
 
-    return getAssignedMemoryCategories(agentId).map((space) => space.name)
+    return getAssignedMemoryFolders(agentId).map((space) => space.name)
 }

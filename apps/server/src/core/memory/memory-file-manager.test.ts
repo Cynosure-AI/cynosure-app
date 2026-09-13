@@ -25,7 +25,7 @@ describe('archiveFile', () => {
         expect(() => readFileSync(join(directoryPath, 'notes.md'), 'utf-8')).toThrow()
     })
 
-    test('does not allow a path outside the memory category', () => {
+    test('does not allow a path outside the memory folder', () => {
         const directoryPath = mkdtempSync(join(tmpdir(), 'cynosure-memory-'))
         temporaryFolders.push(directoryPath)
         expect(() => archiveFile(directoryPath, '../notes.md')).toThrow('Invalid memory file name')

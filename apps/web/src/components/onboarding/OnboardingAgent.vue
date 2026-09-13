@@ -93,7 +93,7 @@ async function createAgent(): Promise<boolean> {
       autoToolRouting: false,
       autoMemory: false,
       generateTitle: true,
-      memoryCategories: [],
+      memoryFolders: [],
     })
 
     return true

@@ -41,17 +41,17 @@ export function getAppDataDir(): string {
 }
 
 /**
- * Returns the root directory that contains all memory category folders.
- * The root itself is the default memory category. Sub-directories under this root
- * are additional memory categories/categories.
+ * Returns the root directory that contains all memory folders.
+ * The root itself is the default memory folder. Sub-directories under this root
+ * are additional memory folders/categories.
  */
-export function getMemoryCategoriesRootDir(): string {
+export function getMemoryFoldersRootDir(): string {
     return join(getAppDataDir(), 'memories')
 }
 
 /**
- * Returns the default memory category folder path.
+ * Returns the default memory folder folder path.
  */
-export function getDefaultMemoryCategoryDir(): string {
-    return getMemoryCategoriesRootDir()
+export function getDefaultMemoryFolderDir(): string {
+    return getMemoryFoldersRootDir()
 }

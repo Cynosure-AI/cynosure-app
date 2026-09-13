@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
-import { ensureDefaultMemoryCategory, getDb } from '../db/database.js'
-import { getAppDataDir, getDefaultMemoryCategoryDir, getMemoryCategoriesRootDir } from '../core/data-dir.js'
+import { ensureDefaultMemoryFolder, getDb } from '../db/database.js'
+import { getAppDataDir, getDefaultMemoryFolderDir, getMemoryFoldersRootDir } from '../core/data-dir.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import { loadSavedProviders } from './providers.js'
 import { loadSavedMcpServers } from './mcp/index.js'
@@ -21,8 +21,8 @@ import {
 } from 'fs'
 import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
 import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
-import { directoryPathForRelative, categoryPathForDirectory, validateRelativePath } from '../core/memory/memory-category-directories.js'
-import { stopAllMemoryCategoryWatchers, watchMemoryCategory } from '../core/memory/memory-category-watcher.js'
+import { directoryPathForRelative, categoryPathForDirectory, validateRelativePath } from '../core/memory/memory-folder-directories.js'
+import { stopAllMemoryFolderWatchers, watchMemoryFolder } from '../core/memory/memory-folder-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
@@ -97,7 +97,7 @@ interface MemoryFileIdentityBackup {
 type MemoryDocumentBackup = Record<string, string | number | null>
 type MemoryRevisionBackup = Record<string, string | number | null>
 
-interface MemoryCategoryBackupRow extends Record<string, unknown> {
+interface MemoryFolderBackupRow extends Record<string, unknown> {
     id?: unknown
     name?: unknown
     directory_path?: unknown
@@ -172,8 +172,8 @@ function getMemoryKnowledgeBackup(zip: AdmZip): MemoryKnowledgeBackup | null {
     return JSON.parse(entry.getData().toString('utf-8')) as MemoryKnowledgeBackup
 }
 
-function relativePathFromBackupCategory(category: MemoryCategoryBackupRow): string {
-    if (typeof category.categoryPath !== 'string') throw new Error('Memory category path is missing from backup.')
+function relativePathFromBackupCategory(category: MemoryFolderBackupRow): string {
+    if (typeof category.categoryPath !== 'string') throw new Error('Memory folder path is missing from backup.')
     return validateRelativePath(category.categoryPath)
 }
 
@@ -194,22 +194,22 @@ async function resetVectorIndexes(): Promise<void> {
     try { getDb().prepare('DELETE FROM memory_file_index').run() } catch { /* ignore */ }
 }
 
-async function resetMemoryCategories(db = getDb()): Promise<void> {
-    await stopAllMemoryCategoryWatchers()
+async function resetMemoryFolders(db = getDb()): Promise<void> {
+    await stopAllMemoryFolderWatchers()
     await resetVectorIndexes()
     await getMemoryKnowledgeStore().reset()
     db.prepare('DELETE FROM memory_document_revisions').run()
     db.prepare('DELETE FROM memory_documents').run()
-    db.prepare('DELETE FROM agent_memory_categories').run()
-    db.prepare('DELETE FROM memory_categories').run()
+    db.prepare('DELETE FROM agent_memory_folders').run()
+    db.prepare('DELETE FROM memory_folders').run()
 
-    const memoryRoot = getMemoryCategoriesRootDir()
+    const memoryRoot = getMemoryFoldersRootDir()
     if (existsSync(memoryRoot)) {
         rmSync(memoryRoot, { recursive: true, force: true })
     }
 
-    ensureDefaultMemoryCategory(db)
-    watchMemoryCategory('uncategorized', getDefaultMemoryCategoryDir())
+    ensureDefaultMemoryFolder(db)
+    watchMemoryFolder('uncategorized', getDefaultMemoryFolderDir())
 }
 
 async function resetKnowledge(): Promise<void> {
@@ -282,7 +282,7 @@ function resetAgents(db = getDb()): void {
     db.prepare('DELETE FROM session_tool_approvals').run()
     db.prepare('DELETE FROM cron_jobs').run()
     db.prepare('DELETE FROM channels').run()
-    db.prepare('DELETE FROM agent_memory_categories').run()
+    db.prepare('DELETE FROM agent_memory_folders').run()
     db.prepare('DELETE FROM agents').run()
 }
 
@@ -311,7 +311,7 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     await run('conversations', () => resetConversations(db))
     await run('notifications', () => resetNotifications(db))
     await run('usage', () => resetUsage(db))
-    await run('memory', () => resetMemoryCategories(db))
+    await run('memory', () => resetMemoryFolders(db))
     await run('vectors', resetVectorIndexes)
     await run('knowledge', resetKnowledge)
     await run('settings', () => resetSettings(db))
@@ -321,15 +321,15 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     await run('mcp', () => resetMcpServers(db))
 
     if (selected.has('memory')) {
-        // resetMemoryCategories already restarted the default watcher.
+        // resetMemoryFolders already restarted the default watcher.
     } else {
         try {
-            const categories = db.prepare('SELECT id, directory_path FROM memory_categories WHERE directory_path != ?').all('') as {
+            const categories = db.prepare('SELECT id, directory_path FROM memory_folders WHERE directory_path != ?').all('') as {
                 id: string
                 directory_path: string
             }[]
             for (const category of categories) {
-                watchMemoryCategory(category.id, category.directory_path)
+                watchMemoryFolder(category.id, category.directory_path)
             }
         } catch { /* ignore watcher refresh failures */ }
     }
@@ -351,8 +351,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             return row.count
         }
 
-        const memoryCategories = db.prepare('SELECT directory_path FROM memory_categories').all() as { directory_path: string }[]
-        const memoryDocuments = memoryCategories.reduce((total, category) => {
+        const memoryFolders = db.prepare('SELECT directory_path FROM memory_folders').all() as { directory_path: string }[]
+        const memoryDocuments = memoryFolders.reduce((total, category) => {
             if (!category.directory_path) return total
             return total + listFilesInFolder(category.directory_path).filter((file) => file.supported).length
         }, 0)
@@ -381,7 +381,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             channels: { count: count('channels') },
             memory: {
                 count: memoryDocuments,
-                details: { categories: memoryCategories.length, documents: memoryDocuments }
+                details: { categories: memoryFolders.length, documents: memoryDocuments }
             },
             knowledge: {
                 count: knowledgeRows,
@@ -506,7 +506,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             // --- Categorized, revisional memory ---
             if (requested.includes('memory')) {
                 const db = getDb()
-                const categories: MemoryCategoryBackupRow[] = (db.prepare('SELECT * FROM memory_categories ORDER BY created_at').all() as MemoryCategoryBackupRow[])
+                const categories: MemoryFolderBackupRow[] = (db.prepare('SELECT * FROM memory_folders ORDER BY created_at').all() as MemoryFolderBackupRow[])
                     .map((category) => {
                         const directoryPath = typeof category.directory_path === 'string' ? category.directory_path : ''
                         const isUncategorized = category.is_uncategorized === 1 || category.is_uncategorized === true
@@ -515,7 +515,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             categoryPath: isUncategorized || !directoryPath ? '' : portableRelativePathForFolder(directoryPath),
                         }
                     })
-                const assignments = db.prepare('SELECT * FROM agent_memory_categories').all()
+                const assignments = db.prepare('SELECT * FROM agent_memory_folders').all()
                 const fileIndex = db.prepare(`
                     SELECT document_id, document_ref, category_id, file_name, dreamed_at, created_at
                     FROM memory_file_index ORDER BY created_at
@@ -973,7 +973,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             const res = { restored: 0, errors: [] as string[] }
             emitRestoreProgress('memory', 'started')
             try {
-                await stopAllMemoryCategoryWatchers()
+                await stopAllMemoryFolderWatchers()
 
                 // Memory replacement must not leave facts from the previous
                 // workspace addressable under reused category IDs such as default.
@@ -989,10 +989,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 await ragStore.initialize()
 
                 db.prepare('DELETE FROM memory_file_index').run()
-                db.prepare('DELETE FROM agent_memory_categories').run()
-                db.prepare('DELETE FROM memory_categories').run()
+                db.prepare('DELETE FROM agent_memory_folders').run()
+                db.prepare('DELETE FROM memory_folders').run()
 
-                const memoryRoot = getMemoryCategoriesRootDir()
+                const memoryRoot = getMemoryFoldersRootDir()
                 if (existsSync(memoryRoot)) {
                     rmSync(memoryRoot, { recursive: true, force: true })
                 }
@@ -1003,7 +1003,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const categoryIdMap = new Map<string, string>()
                 if (categoriesEntry) {
                     const { categories, assignments, fileIndex, documents, revisions } = JSON.parse(categoriesEntry.getData().toString('utf-8')) as {
-                        categories: MemoryCategoryBackupRow[]
+                        categories: MemoryFolderBackupRow[]
                         assignments: Record<string, unknown>[]
                         fileIndex?: MemoryFileIdentityBackup[]
                         documents?: MemoryDocumentBackup[]
@@ -1015,10 +1015,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         const isUncategorized = sp.is_uncategorized === 1 || sp.is_uncategorized === true || importedId === 'uncategorized'
                         const id = isUncategorized ? 'uncategorized' : importedId
                         categoryIdMap.set(importedId, id)
-                        const directoryPath = id === 'uncategorized' ? getDefaultMemoryCategoryDir() : directoryPathForRelative(relativePathFromBackupCategory(sp))
+                        const directoryPath = id === 'uncategorized' ? getDefaultMemoryFolderDir() : directoryPathForRelative(relativePathFromBackupCategory(sp))
                         ensureFolder(directoryPath)
                         db.prepare(`
-                            INSERT OR REPLACE INTO memory_categories
+                            INSERT OR REPLACE INTO memory_folders
                                 (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?)
                         `).run(
@@ -1031,10 +1031,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             sp.created_at || Date.now()
                         )
                     }
-                    ensureDefaultMemoryCategory(db)
+                    ensureDefaultMemoryFolder(db)
                     for (const asg of assignments) {
                         const mappedCategoryId = categoryIdMap.get(String(asg.category_id || '')) || asg.category_id
-                        db.prepare('INSERT OR IGNORE INTO agent_memory_categories (agent_id, category_id) VALUES (?, ?)')
+                        db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
                             .run(asg.agent_id, mappedCategoryId)
                     }
                     for (const file of fileIndex || []) {
@@ -1081,9 +1081,9 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             }
                             const targetCategoryId = categoryIdMap.get(file.categoryId) || file.categoryId
 
-                            const category = db.prepare('SELECT directory_path FROM memory_categories WHERE id = ?')
+                            const category = db.prepare('SELECT directory_path FROM memory_folders WHERE id = ?')
                                 .get(targetCategoryId) as { directory_path: string } | undefined
-                            if (!category?.directory_path) throw new Error(`Memory category "${targetCategoryId}" not found`)
+                            if (!category?.directory_path) throw new Error(`Memory folder "${targetCategoryId}" not found`)
 
                             const entry = zip.getEntry(file.archiveName)
                             if (!entry || entry.isDirectory) throw new Error('File content missing from backup')
@@ -1097,12 +1097,12 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     }
                 }
 
-                const restoredCategories = db.prepare('SELECT id, directory_path FROM memory_categories WHERE directory_path != ?').all('') as {
+                const restoredCategories = db.prepare('SELECT id, directory_path FROM memory_folders WHERE directory_path != ?').all('') as {
                     id: string
                     directory_path: string
                 }[]
                 for (const category of restoredCategories) {
-                    watchMemoryCategory(category.id, category.directory_path)
+                    watchMemoryFolder(category.id, category.directory_path)
                 }
             } catch (e) {
                 res.errors.push((e as Error).message)

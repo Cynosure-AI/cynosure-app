@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-test('deleting one memory-category knowledge projection leaves other categories intact', async () => {
+test('deleting one memory-folder knowledge projection leaves other categories intact', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cynosure-knowledge-space-'))
   process.env.CYNOSURE_DATA_DIR = directory
   const { closeDb, getDb } = await import('../../../src/db/database.js')
@@ -13,7 +13,7 @@ test('deleting one memory-category knowledge projection leaves other categories 
     const db = getDb()
     const store = new MemoryKnowledgeStore()
     for (const categoryId of ['space-a', 'space-b']) {
-      db.prepare(`INSERT INTO memory_categories (id, name, description, directory_path, created_at) VALUES (?, ?, '', ?, ?)`)
+      db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, created_at) VALUES (?, ?, '', ?, ?)`)
         .run(categoryId, categoryId, directory, Date.now())
       const documentId = `doc-${categoryId}`
       db.prepare(`INSERT INTO memory_file_index (document_id, document_ref, category_id, file_name, content_hash, created_at) VALUES (?, ?, ?, 'architecture.md', 'revision-1', ?)`)

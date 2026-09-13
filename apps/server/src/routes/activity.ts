@@ -33,9 +33,9 @@ interface ActivityItem {
     instanceType?: 'chat' | 'multi-agent' | 'cron' | 'channel'
     model?: string | null
     artifacts?: ActivityArtifact[]
-    memoryCategoryId?: string
+    memoryFolderId?: string
     memoryFileName?: string
-    dreamChanges?: Array<{ tool: string; output: string; memoryCategoryId?: string; memoryFileName?: string }>
+    dreamChanges?: Array<{ tool: string; output: string; memoryFolderId?: string; memoryFileName?: string }>
 }
 
 type ActivityTotalsByKind = Record<ActivityKind, number>
@@ -243,14 +243,14 @@ function agentInfo(agentId: string | null): Pick<ActivityItem, 'agentName' | 'ag
     }
 }
 
-function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memoryCategoryId' | 'memoryFileName'> {
+function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memoryFolderId' | 'memoryFileName'> {
     const documentRef = output.match(/documentRef=([^,;)\s]+)/)?.[1]
     if (!documentRef) return {}
     const document = getDb().prepare(`
         SELECT category_id, file_name FROM memory_documents
         WHERE document_ref = ? AND status = 'active'
     `).get(documentRef) as { category_id: string; file_name: string } | undefined
-    return document ? { memoryCategoryId: document.category_id, memoryFileName: document.file_name } : {}
+    return document ? { memoryFolderId: document.category_id, memoryFileName: document.file_name } : {}
 }
 
 function activitySearchText(item: ActivityItem): string {
@@ -538,7 +538,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         const memoryRows = db.prepare(
             `SELECT mfi.category_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.deep_researched_at, ms.name AS category_name
              FROM memory_file_index mfi
-             LEFT JOIN memory_categories ms ON ms.id = mfi.category_id
+             LEFT JOIN memory_folders ms ON ms.id = mfi.category_id
              ORDER BY MAX(mfi.last_indexed_at, mfi.deep_researched_at, mfi.created_at) DESC
              LIMIT ?`
         ).all(queryLimit) as {
@@ -559,7 +559,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 id: `memory-file:${row.category_id}:${row.file_name}:${createdAt}`,
                 kind: 'memory',
                 title: deepResearched ? `Updated knowledge graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
-                description: `${row.category_name || 'Memory category'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
+                description: `${row.category_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
                 createdAt,
                 agentId: null,
                 agentName: null,
@@ -568,7 +568,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 status: 'completed',
                 sourceId: row.category_id,
                 sourceLabel: 'Memory',
-                memoryCategoryId: row.category_id,
+                memoryFolderId: row.category_id,
                 memoryFileName: row.file_name,
             })
         }

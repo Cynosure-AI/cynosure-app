@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, AppNotification, MemoryCategory, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
+  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
   AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
@@ -16,7 +16,7 @@ import type {
 import type { WsHandler } from './http'
 import type { ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
 
-function memoryCategoryPathId(id: string): string {
+function memoryFolderPathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
 }
 
@@ -376,108 +376,108 @@ export const api = {
       onWsEvent('memory:knowledge-reset', cb as WsHandler)
   },
 
-  memoryCategories: {
+  memoryFolders: {
     list: () =>
-      get<MemoryCategory[]>('/api/memory-categories'),
+      get<MemoryFolder[]>('/api/memory-folders'),
     create: (name: string, description?: string, parentCategoryPath?: string) =>
-      post<MemoryCategory>('/api/memory-categories', { name, description, parentCategoryPath }),
+      post<MemoryFolder>('/api/memory-folders', { name, description, parentCategoryPath }),
     update: (id: string, data: { name?: string; description?: string; categoryPath?: string }) =>
-      put<MemoryCategory>(`/api/memory-categories/${memoryCategoryPathId(id)}`, data),
+      put<MemoryFolder>(`/api/memory-folders/${memoryFolderPathId(id)}`, data),
     remove: (id: string) =>
-      del<{ success: boolean }>(`/api/memory-categories/${memoryCategoryPathId(id)}`),
+      del<{ success: boolean }>(`/api/memory-folders/${memoryFolderPathId(id)}`),
     reorder: (ids: string[]) =>
-      put<{ success: boolean }>('/api/memory-categories/reorder', { ids }),
+      put<{ success: boolean }>('/api/memory-folders/reorder', { ids }),
     listAllJobs: () =>
-      get<MemoryIndexJob[]>('/api/memory-categories/jobs'),
+      get<MemoryIndexJob[]>('/api/memory-folders/jobs'),
     /** List files in the space folder with their index status. Hash computation is async server-side. */
     listFiles: (categoryId: string) =>
-      get<MemoryFileStatus[]>(`/api/memory-categories/${memoryCategoryPathId(categoryId)}/files`),
+      get<MemoryFileStatus[]>(`/api/memory-folders/${memoryFolderPathId(categoryId)}/files`),
     getDocumentKnowledgePreview: (categoryId: string, fileName: string) =>
       get<MemoryDocumentKnowledgePreview>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
       ),
     listJobs: (categoryId: string) =>
-      get<MemoryIndexJob[]>(`/api/memory-categories/${memoryCategoryPathId(categoryId)}/jobs`),
+      get<MemoryIndexJob[]>(`/api/memory-folders/${memoryFolderPathId(categoryId)}/jobs`),
     rebuildKnowledge: (categoryId: string) =>
       post<{ success: boolean; scheduled: number; jobs: MemoryIndexJob[]; skipped: Array<{ fileName: string; reason: string }> }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/knowledge/rebuild`,
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/knowledge/rebuild`,
         {}
       ),
     getJob: (jobId: string) =>
-      get<MemoryIndexJob>(`/api/memory-categories/jobs/${encodeURIComponent(jobId)}`),
+      get<MemoryIndexJob>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}`),
     cancelJob: (jobId: string) =>
-      post<MemoryIndexJob>(`/api/memory-categories/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
+      post<MemoryIndexJob>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     discardJob: (jobId: string) =>
-      del<{ success: boolean }>(`/api/memory-categories/jobs/${encodeURIComponent(jobId)}`),
+      del<{ success: boolean }>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}`),
     onJobUpdated: (cb: (data: MemoryIndexJob) => void) =>
       onWsEvent('memory:job-updated', cb as WsHandler),
     reindexFile: (categoryId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/reingest-file`,
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/reingest-file`,
         { fileName }
       ),
     startReindexFile: (categoryId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }>>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
         {}
       ),
     extractKnowledgeFromFile: (categoryId: string, fileName: string) =>
       post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research`,
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research`,
         {}
       ),
     startDeepResearchFile: (categoryId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research-job`,
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research-job`,
         {}
       ),
     deleteFile: (categoryId: string, fileName: string) =>
       del<{ success: boolean }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}`
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}`
       ),
     getFileContent: (categoryId: string, fileName: string) =>
       get<{ fileName: string; content: string; revision: string; documentRef?: string }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`
       ),
     updateFileContent: (categoryId: string, fileName: string, content: string, expectedRevision?: string) =>
       put<{ success: boolean; fileName: string; revision: string; job: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`,
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`,
         { content, expectedRevision }
       ),
     renameFile: (categoryId: string, fileName: string, nextFileName: string) =>
       put<{ success: boolean; fileName: string }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/files/${encodeURIComponent(fileName)}/name`,
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/name`,
         { fileName: nextFileName }
       ),
     listRevisions: (documentRef: string) =>
-      get<import('./types').MemoryRevisionSummary[]>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions`),
+      get<import('./types').MemoryRevisionSummary[]>(`/api/memory-folders/documents/${encodeURIComponent(documentRef)}/revisions`),
     getRevision: (documentRef: string, revisionId: string) =>
-      get<import('./types').MemoryRevisionSummary & { content: string; documentId: string }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}`),
+      get<import('./types').MemoryRevisionSummary & { content: string; documentId: string }>(`/api/memory-folders/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}`),
     getRevisionDiff: (documentRef: string, from: string, to: string) =>
-      get<{ format: 'unified'; diff: string; segments: import('./types').MemoryDiffSegment[] }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+      get<{ format: 'unified'; diff: string; segments: import('./types').MemoryDiffSegment[] }>(`/api/memory-folders/documents/${encodeURIComponent(documentRef)}/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     restoreRevision: (documentRef: string, revisionId: string, expectedRevision?: string) =>
-      post<{ success: boolean; documentRef: string; revision: string; chunksStored: number }>(`/api/memory-categories/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}/restore`, { expectedRevision }),
+      post<{ success: boolean; documentRef: string; revision: string; chunksStored: number }>(`/api/memory-folders/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}/restore`, { expectedRevision }),
     listDeleted: () =>
-      get<Array<{ documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number }>>('/api/memory-categories/deleted'),
+      get<Array<{ documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number }>>('/api/memory-folders/deleted'),
     ingestFile: (categoryId: string, fileName: string, content: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string; job?: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/ingest-file`, { fileName, content }
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/ingest-file`, { fileName, content }
       ),
     reingestFile: (categoryId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/reingest-file`, { fileName }
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/reingest-file`, { fileName }
       ),
     deleteDocuments: (categoryId: string, sourceFiles: string[]) =>
       post<{ success: boolean }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/delete-documents`, { sourceFiles }
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/delete-documents`, { sourceFiles }
       ),
     forgetMemories: (categoryId: string, sourceFiles: string[]) =>
       post<{ success: boolean; filesReset: number; chunksDeleted: number; graphEdgesDeleted: number }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/drop-indexes`, { sourceFiles }
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/drop-indexes`, { sourceFiles }
       ),
     moveDocuments: (categoryId: string, sourceFiles: string[], targetCategoryId: string) =>
       post<{ success: boolean; moved: number }>(
-        `/api/memory-categories/${memoryCategoryPathId(categoryId)}/move-documents`, { sourceFiles, targetCategoryId }
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/move-documents`, { sourceFiles, targetCategoryId }
       ),
   },
 

@@ -3,21 +3,21 @@ import { ref, computed, onMounted } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
-import MemoryCategorySelectorModal from '../modals/MemoryCategorySelectorModal.vue'
+import MemoryFolderSelectorModal from '../modals/MemoryFolderSelectorModal.vue'
 
 const chatStore = useChatStore()
 
 const showModal = ref(false)
 
-onMounted(() => chatStore.loadMemoryCategories())
+onMounted(() => chatStore.loadMemoryFolders())
 
-const selectedMemoryCategories = computed(() => {
-  const ids = chatStore.freeChatMemoryCategoryIds
-  return chatStore.memoryCategories.filter(s => ids.includes(s.id))
+const selectedMemoryFolders = computed(() => {
+  const ids = chatStore.freeChatMemoryFolderIds
+  return chatStore.memoryFolders.filter(s => ids.includes(s.id))
 })
 
-const rootSelected = computed(() => selectedMemoryCategories.value.some(category => category.isUncategorized))
-const memoryCategoryCount = computed(() => rootSelected.value ? chatStore.memoryCategories.length : selectedMemoryCategories.value.length)
+const rootSelected = computed(() => selectedMemoryFolders.value.some(category => category.isUncategorized))
+const memoryFolderCount = computed(() => rootSelected.value ? chatStore.memoryFolders.length : selectedMemoryFolders.value.length)
 const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
 </script>
 
@@ -25,7 +25,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
   <HoverTooltip :max-width="260">
     <button
       class="relative p-2.5 rounded-xl transition-colors shrink-0 focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
-      aria-label="Memory categorys"
+      aria-label="Memory folders"
       @click="showModal = true"
     >
       <Icon
@@ -34,7 +34,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         :class="{ 'text-emerald-600': chatStore.sessionAutoMemory === true }"
       />
       <span
-        v-if="autoMemoryEnabled || memoryCategoryCount > 0"
+        v-if="autoMemoryEnabled || memoryFolderCount > 0"
         class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
         :class="autoMemoryEnabled ? 'bg-emerald-600' : 'bg-accent-600'"
       >
@@ -44,13 +44,13 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
           class="w-2.5 h-2.5"
         />
         <template v-else>
-          {{ memoryCategoryCount }}
+          {{ memoryFolderCount }}
         </template>
       </span>
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
-        {{ rootSelected ? 'All Memory selected' : `Memory Categories (${memoryCategoryCount} selected)` }}
+        {{ rootSelected ? 'All Memory selected' : `Memory Folders (${memoryFolderCount} selected)` }}
       </div>
       <div
         v-if="autoMemoryEnabled"
@@ -68,9 +68,9 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         />
         Automatic retrieval off
       </div>
-      <template v-if="selectedMemoryCategories.length">
+      <template v-if="selectedMemoryFolders.length">
         <div
-          v-for="s in selectedMemoryCategories.slice(0, 6)"
+          v-for="s in selectedMemoryFolders.slice(0, 6)"
           :key="s.id"
           class="flex items-start gap-1.5 mb-1 last:mb-0"
         >
@@ -83,22 +83,22 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
               {{ s.isUncategorized ? 'All Memory' : s.name }}
             </div>
             <div class="text-theme-500 text-[10px]">
-              {{ s.isUncategorized ? 'Includes Uncategorized and every subcategory' : `${s.fileCount} docs` }}
+              {{ s.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${s.fileCount} docs` }}
             </div>
           </div>
         </div>
         <div
-          v-if="selectedMemoryCategories.length > 6"
+          v-if="selectedMemoryFolders.length > 6"
           class="text-theme-500 text-[10px] mt-1"
         >
-          +{{ selectedMemoryCategories.length - 6 }} more
+          +{{ selectedMemoryFolders.length - 6 }} more
         </div>
       </template>
       <div
         v-else
         class="text-theme-500"
       >
-        No memory categories selected
+        No memory folders selected
       </div>
       <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">
         Click to configure
@@ -106,5 +106,5 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
     </template>
   </HoverTooltip>
 
-  <MemoryCategorySelectorModal v-model="showModal" />
+  <MemoryFolderSelectorModal v-model="showModal" />
 </template>

@@ -13,7 +13,7 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
 const agentStore = useAgentStore()
 
-const hasMemoryScope = computed(() => (props.agent.memoryCategories?.length ?? 0) > 0)
+const hasMemoryScope = computed(() => (props.agent.memoryFolders?.length ?? 0) > 0)
 const hasSelectableExecutionTools = computed(() => props.agent.tools.length > 0 || props.agent.autoToolRouting)
 
 const automaticToolStates = computed(() => ({
@@ -24,7 +24,7 @@ const automaticToolStates = computed(() => ({
   ...memoryAutomaticToolStates(hasMemoryScope.value),
   knowledge_search: {
     active: hasMemoryScope.value,
-    criteria: 'memory category selected',
+    criteria: 'memory folder selected',
   },
   attachment_search: {
     active: false,

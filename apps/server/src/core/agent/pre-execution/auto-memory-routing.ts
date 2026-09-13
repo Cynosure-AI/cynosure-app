@@ -30,7 +30,7 @@ export interface ApplyAutoMemoryRoutingInput {
     providerId?: string
     model?: string
     agentId?: string
-    memoryCategoryIds?: string[]
+    memoryFolderIds?: string[]
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
@@ -83,7 +83,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         providerId,
         model,
         agentId,
-        memoryCategoryIds,
+        memoryFolderIds,
         eventMeta,
         signal,
         debugContextEnabled,
@@ -124,7 +124,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         let retrievalResults = await Promise.all(
             retrievalQueries.map((query, queryIndex) => aggregator.aggregate(query, {
                 agentId,
-                categoryIds: memoryCategoryIds,
+                categoryIds: memoryFolderIds,
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(primaryQuery),
@@ -179,7 +179,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             const correctedStats: MemoryRetrievalStatusDetails = {}
             const corrected = await aggregator.aggregate(correctiveQuery, {
                 agentId,
-                categoryIds: memoryCategoryIds,
+                categoryIds: memoryFolderIds,
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(correctiveQuery),
@@ -813,7 +813,7 @@ function memoryEmptyLabel(reason?: string): string {
         case 'none-relevant': return 'No relevant memories'
         case 'routing-failed': return 'Memory routing skipped'
         case 'disabled': return 'Auto memory disabled'
-        case 'empty-scope': return 'No memory categories selected'
+        case 'empty-scope': return 'No memory folders selected'
         case 'no-query': return 'No memory query'
         default: return 'No memories selected'
     }
@@ -830,7 +830,7 @@ function memoryEmptyContent(reason?: string): string {
         case 'disabled':
             return 'Auto memory is disabled for this turn.'
         case 'empty-scope':
-            return 'Auto memory did not run because no memory categories are selected for this turn.'
+            return 'Auto memory did not run because no memory folders are selected for this turn.'
         case 'no-query':
             return 'Auto memory did not run because there was no text query to search with.'
         default:
