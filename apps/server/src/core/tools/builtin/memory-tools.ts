@@ -1420,7 +1420,7 @@ export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
             const input = params as { documentRef: string }
             return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
                 const removed = await commitMemoryRemoval(resolved, fileContent)
-                return { success: true, output: `Memory "${resolved.fileName}" forgotten from "${resolved.categoryName}" (${removed.deletedChunks} indexed chunks and ${removed.deletedEdges} graph edges removed).` }
+                return { success: true, output: `Memory "${resolved.fileName}" forgotten from "${resolved.categoryName}" (documentRef=${resolved.documentRef}; ${removed.deletedChunks} indexed chunks and ${removed.deletedEdges} graph edges removed).` }
             }, opts.beforeDocumentMutation)
         },
     }

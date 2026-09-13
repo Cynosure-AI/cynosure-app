@@ -146,6 +146,8 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     status: job.status,
     sourceId: job.id,
     sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Deep Research" : "Search indexing",
+    memoryCategoryId: toolJob ? undefined : job.categoryId,
+    memoryFileName: toolJob ? undefined : job.fileName,
   };
 }
 
@@ -440,8 +442,8 @@ async function openItem(item: ActivityItem) {
     router.push("/tools-policy");
     return;
   }
-  if (isActiveMemoryJob(item)) {
-    router.push("/memory-categories/documents");
+  if (item.memoryCategoryId && item.memoryFileName) {
+    router.push({ path: "/memory-categories/documents", query: { category: item.memoryCategoryId, file: item.memoryFileName } });
     return;
   }
   if (item.conversationId) {
@@ -449,6 +451,11 @@ async function openItem(item: ActivityItem) {
   } else if (item.agentId) {
     router.push(`/agents/${item.agentId}`);
   }
+}
+
+function openMemoryLocation(categoryId: string | undefined, fileName: string | undefined) {
+  if (!categoryId || !fileName) return;
+  router.push({ path: "/memory-categories/documents", query: { category: categoryId, file: fileName } });
 }
 
 function isActiveInstance(item: ActivityItem): boolean {
@@ -818,7 +825,7 @@ watch(searchQuery, () => {
             :key="item.id"
             class="activity-row grid grid-cols-[1.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[3.35rem_1.5rem_minmax(0,1fr)]"
             :class="[kindClass(item), {
-              'cursor-pointer': item.conversationId || item.agentId || isActiveMemoryJob(item),
+              'cursor-pointer': item.conversationId || item.agentId || item.memoryFileName,
               'activity-requires-attention': item.status === 'awaiting-approval',
             }]"
             @click="openItem(item)"
@@ -916,6 +923,9 @@ watch(searchQuery, () => {
                 >
                   {{ formatTimestamp(item.createdAt) }}
                 </time>
+                <span v-if="item.conversationTitle" class="truncate">
+                  · {{ item.conversationTitle }}
+                </span>
               </p>
 
               <details
@@ -931,7 +941,15 @@ watch(searchQuery, () => {
                     v-for="(change, index) in item.dreamChanges"
                     :key="index"
                   >
-                    {{ change.output }}
+                    <button
+                      v-if="change.memoryCategoryId && change.memoryFileName"
+                      type="button"
+                      class="text-left text-accent-300 hover:text-accent-200 hover:underline"
+                      @click="openMemoryLocation(change.memoryCategoryId, change.memoryFileName)"
+                    >
+                      {{ change.output }}
+                    </button>
+                    <span v-else>{{ change.output }}</span>
                   </li>
                 </ul>
               </details>

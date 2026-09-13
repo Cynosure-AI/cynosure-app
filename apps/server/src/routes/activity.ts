@@ -33,7 +33,9 @@ interface ActivityItem {
     instanceType?: 'chat' | 'multi-agent' | 'cron' | 'channel'
     model?: string | null
     artifacts?: ActivityArtifact[]
-    dreamChanges?: Array<{ tool: string; output: string }>
+    memoryCategoryId?: string
+    memoryFileName?: string
+    dreamChanges?: Array<{ tool: string; output: string; memoryCategoryId?: string; memoryFileName?: string }>
 }
 
 type ActivityTotalsByKind = Record<ActivityKind, number>
@@ -239,6 +241,16 @@ function agentInfo(agentId: string | null): Pick<ActivityItem, 'agentName' | 'ag
         agentName: agent?.name || null,
         agentIconUrl: agent?.iconUrl || null,
     }
+}
+
+function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memoryCategoryId' | 'memoryFileName'> {
+    const documentRef = output.match(/documentRef=([^,;)\s]+)/)?.[1]
+    if (!documentRef) return {}
+    const document = getDb().prepare(`
+        SELECT category_id, file_name FROM memory_documents
+        WHERE document_ref = ? AND status = 'active'
+    `).get(documentRef) as { category_id: string; file_name: string } | undefined
+    return document ? { memoryCategoryId: document.category_id, memoryFileName: document.file_name } : {}
 }
 
 function activitySearchText(item: ActivityItem): string {
@@ -556,6 +568,8 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 status: 'completed',
                 sourceId: row.category_id,
                 sourceLabel: 'Memory',
+                memoryCategoryId: row.category_id,
+                memoryFileName: row.file_name,
             })
         }
 
@@ -602,7 +616,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 sourceId: run.id,
                 sourceLabel: 'Dream',
                 model: run.model,
-                dreamChanges: changes.map(({ tool, output }) => ({ tool, output })),
+                dreamChanges: changes.map(({ tool, output }) => ({ tool, output, ...memoryLocationFromToolOutput(output) })),
             })
         }
 

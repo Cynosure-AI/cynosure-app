@@ -22,12 +22,14 @@ type DocumentRow = MemoryFileStatus & { id: string };
 const props = defineProps<{
   categoryId: string;
   spaces: MemoryCategory[];
+  focusFile?: string;
 }>();
 
 const emit = defineEmits<{
   editSpace: [];
   deleteSpace: [];
   spacesChanged: [];
+  documentDragState: [active: boolean, payload?: DocumentDragPayload];
 }>();
 
 // --- Constants ---
@@ -114,6 +116,16 @@ const selectedRememberedFiles = computed(() =>
 const selectedDeepResearchIdleCount = computed(() =>
   selectedDeepResearchFiles.value.filter((f) => !isJobActive("deep-research", f.fileName)).length,
 );
+const selectedSearchIndexFiles = computed(() =>
+  files.value.filter((file) =>
+    file.supported &&
+    (file.status === "needs_reindex" || file.status === "not_indexed") &&
+    selectedFiles.value.has(file.fileName),
+  ),
+);
+const selectedSearchIndexIdleCount = computed(() =>
+  selectedSearchIndexFiles.value.filter((file) => !isJobActive("reindex", file.fileName)).length,
+);
 
 // --- Data loading ---
 async function loadFiles() {
@@ -153,6 +165,12 @@ const {
 async function deepResearchSelected(): Promise<void> {
   for (const file of selectedDeepResearchFiles.value) {
     if (!isJobActive("deep-research", file.fileName)) await extractKnowledgeFromFile(file.fileName);
+  }
+}
+
+async function makeSearchableSelected(): Promise<void> {
+  for (const file of selectedSearchIndexFiles.value) {
+    if (!isJobActive("reindex", file.fileName)) await reindexFile(file.fileName);
   }
 }
 
@@ -324,11 +342,15 @@ async function handleEditorSaved() {
 function startDocumentDrag(event: DragEvent, fileName: string) {
   const fileNames = selectedFiles.value.size > 0 ? Array.from(selectedFiles.value) : [fileName];
   if (!event.dataTransfer) return;
+  const payload = { sourceCategoryId: props.categoryId, sourceFiles: fileNames } satisfies DocumentDragPayload;
   event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData(
-    DOCUMENT_DRAG_MIME,
-    JSON.stringify({ sourceCategoryId: props.categoryId, sourceFiles: fileNames } satisfies DocumentDragPayload),
-  );
+  event.dataTransfer.setData(DOCUMENT_DRAG_MIME, JSON.stringify(payload));
+  event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+  emit("documentDragState", true, payload);
+}
+
+function endDocumentDrag() {
+  emit("documentDragState", false);
 }
 
 // --- Helpers ---
@@ -366,13 +388,19 @@ watch(
     resetJobs();
     showEditorModal.value = false;
     editorFileName.value = "";
-    searchQuery.value = "";
+    searchQuery.value = props.focusFile || "";
     page.value = 0;
     loadFiles();
     loadJobs();
   },
   { immediate: true },
 );
+
+watch(() => props.focusFile, (fileName) => {
+  if (!fileName) return;
+  searchQuery.value = fileName;
+  page.value = 0;
+});
 
 onUnmounted(() => {
   unsubscribeGraphReset();
@@ -600,6 +628,20 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
           Move
         </button>
         <button
+          v-if="selectedSearchIndexFiles.length > 0"
+          :disabled="selectedSearchIndexIdleCount === 0"
+          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
+          title="Build or refresh semantic search vectors for the selected documents"
+          @click="makeSearchableSelected"
+        >
+          <Icon
+            :icon="selectedSearchIndexIdleCount === 0 ? 'lucide:loader-2' : 'lucide:search-check'"
+            class="h-3.5 w-3.5"
+            :class="{ 'animate-spin': selectedSearchIndexIdleCount === 0 }"
+          />
+          Make searchable ({{ selectedSearchIndexFiles.length }})
+        </button>
+        <button
           v-if="selectedDeepResearchFiles.length > 0"
           :disabled="selectedDeepResearchIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
@@ -688,6 +730,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
       :empty-message="searchQuery.trim() ? `No files matching '${searchQuery.trim()}'` : 'No files in this folder yet.'"
       @row-click="(file) => openEditorModal(file.fileName)"
       @row-dragstart="(file, event) => startDocumentDrag(event, file.fileName)"
+      @row-dragend="endDocumentDrag"
       @visible-items-change="visibleDocumentRows = $event"
     >
       <template #col-fileName="{ item: file }">

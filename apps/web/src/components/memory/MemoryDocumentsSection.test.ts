@@ -52,13 +52,14 @@ function dragEvent(type: string, types: string[]): DragEvent {
   return event
 }
 
-function mountSection(memorySpaces = spaces) {
+function mountSection(memorySpaces = spaces, extraProps: Record<string, unknown> = {}) {
   return mount(MemoryDocumentsSection, {
     props: {
       spaces: memorySpaces,
       spacesLoading: false,
       selectedCategoryId: 'uncategorized',
       selectedCategory: spaces[0],
+      ...extraProps,
     },
     global: {
       stubs: { MemoryDocumentList: MemoryDocumentListStub },
@@ -84,6 +85,27 @@ describe('MemoryDocumentsSection drag targets', () => {
 
     const restored = mountSection(nestedSpaces)
     expect(restored.find('[data-space-id="acme"]').exists()).toBe(true)
+  })
+
+  test('reveals the linked category and keeps drag highlighting when MIME inspection is unavailable', async () => {
+    const nestedSpaces: MemoryCategory[] = [
+      ...spaces,
+      { ...spaces[1], id: 'projects', name: 'Projects', categoryPath: 'projects', directoryPath: '/memory/projects' },
+      { ...spaces[1], id: 'acme', name: 'Acme', categoryPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
+    ]
+    const wrapper = mountSection(nestedSpaces, {
+      selectedCategoryId: 'acme',
+      selectedCategory: nestedSpaces[3],
+      focusFile: 'notes.md',
+    })
+    expect(wrapper.find('[data-space-id="acme"]').exists()).toBe(true)
+
+    wrapper.getComponent(MemoryDocumentListStub).vm.$emit('documentDragState', true, {
+      sourceCategoryId: 'acme', sourceFiles: ['notes.md'],
+    })
+    wrapper.get('[data-space-id="archive"]').element.dispatchEvent(dragEvent('dragover', []))
+    await nextTick()
+    expect(wrapper.get('[data-space-id="archive"]').classes()).toContain('ring-1')
   })
 
   test('presents Uncategorized as the root and indents physical categories beneath it', () => {
