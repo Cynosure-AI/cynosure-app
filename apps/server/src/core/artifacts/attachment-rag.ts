@@ -14,7 +14,7 @@ export function conversationAttachmentSpaceId(conversationId: string): string {
 }
 
 export function buildAttachmentFilter(conversationId: string, attachmentIds?: string[]): string | undefined {
-    const scope = lanceDbEqFilter('spaceId', conversationAttachmentSpaceId(conversationId))
+    const scope = lanceDbEqFilter('categoryId', conversationAttachmentSpaceId(conversationId))
     const ids = attachmentIds?.length ? lanceDbInFilter('sourceFile', attachmentIds) : undefined
     return andLanceDbFilters(scope, ids)
 }
@@ -30,7 +30,7 @@ export async function indexConversationAttachment(
         const chunkCount = await getMemoryParser().ingest(CONVERSATION_ATTACHMENTS_TABLE, text, {
             source: 'conversation_attachment',
             sourceFile: attachment.id,
-            spaceId: conversationAttachmentSpaceId(conversationId),
+            categoryId: conversationAttachmentSpaceId(conversationId),
         })
         updateConversationAttachmentChunkCount(attachment.id, chunkCount)
         return chunkCount
@@ -118,7 +118,7 @@ export async function getConversationAttachmentChunks(
     attachmentId: string,
     minIndex: number,
     maxIndex: number,
-): Promise<{ text: string; chunkIndex: number; sourceFile: string; spaceId?: string }[]> {
+): Promise<{ text: string; chunkIndex: number; sourceFile: string; categoryId?: string }[]> {
     const attachments = listConversationFileAttachments(getDb(), conversationId)
     await ensureConversationAttachmentsIndexed(conversationId, attachments, [attachmentId])
     const filter = buildAttachmentFilter(conversationId)
@@ -142,8 +142,8 @@ export async function deleteConversationAttachmentChunks(conversationId: string,
 }
 
 export async function deleteConversationAttachmentIndexes(conversationIds: string[]): Promise<void> {
-    const spaceIds = Array.from(new Set(conversationIds.map(conversationAttachmentSpaceId)))
-    const filter = lanceDbInFilter('spaceId', spaceIds)
+    const categoryIds = Array.from(new Set(conversationIds.map(conversationAttachmentSpaceId)))
+    const filter = lanceDbInFilter('categoryId', categoryIds)
     if (!filter) return
     await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
 }

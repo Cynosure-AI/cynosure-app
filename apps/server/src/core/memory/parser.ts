@@ -10,7 +10,7 @@ import { getDb } from '../../db/database.js'
 export interface DocumentMeta {
   source: string
   sourceFile?: string
-  spaceId?: string
+  categoryId?: string
 }
 
 export interface RetrievedChunk {
@@ -25,8 +25,8 @@ export interface RetrievedChunk {
   scoreType?: 'dense' | 'lexical' | 'fusion' | 'reranker' | 'entity-resolution'
   sourceFile?: string
   chunkIndex?: number
-  spaceId?: string
-  spaceName?: string
+  categoryId?: string
+  categoryName?: string
   totalChunks?: number
   documentTitle?: string
   sectionPath?: string
@@ -182,7 +182,7 @@ export class MemoryParser {
           source: meta.source,
           sourceFile: meta.sourceFile || '',
           chunkIndex: item.chunkIndex,
-          spaceId: meta.spaceId || '',
+          categoryId: meta.categoryId || '',
           createdAt: Date.now(),
           documentTitle,
           sectionPath: item.sectionPath,
@@ -287,7 +287,7 @@ export class MemoryParser {
       contentHash: r.contentHash,
       sourceFile: r.sourceFile,
       chunkIndex: r.chunkIndex,
-      spaceId: r.spaceId
+      categoryId: r.categoryId
     }))
   }
 

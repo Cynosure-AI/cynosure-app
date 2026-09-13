@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { AgentDefinition, MemorySpace } from '../../api/types'
+import type { AgentDefinition, MemoryCategory } from '../../api/types'
 import AgentMemoryTab from './AgentMemoryTab.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api/client', () => ({
   api: {
-    memorySpaces: {
+    memoryCategories: {
       list: mocks.listSpaces,
     },
   },
@@ -20,15 +20,15 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-const spaces: MemorySpace[] = [
+const spaces: MemoryCategory[] = [
   {
-    id: 'default',
-    name: 'Default',
+    id: 'uncategorized',
+    name: 'Uncategorized',
     description: '',
-    folderPath: '/memory/default',
-    relativePath: '',
+    directoryPath: '/memory/default',
+    categoryPath: '',
     sortOrder: 0,
-    isDefault: true,
+    isUncategorized: true,
     createdAt: 1,
     fileCount: 2,
   },
@@ -36,10 +36,10 @@ const spaces: MemorySpace[] = [
     id: 'research',
     name: 'Research',
     description: '',
-    folderPath: '/memory/research',
-    relativePath: 'research',
+    directoryPath: '/memory/research',
+    categoryPath: 'research',
     sortOrder: 1,
-    isDefault: false,
+    isUncategorized: false,
     createdAt: 1,
     fileCount: 3,
   },
@@ -49,7 +49,7 @@ const agent = {
   id: 'agent-1',
   name: 'Research Agent',
   internalName: 'research_agent',
-  memorySpaces: ['default'],
+  memoryCategories: ['uncategorized'],
   autoMemory: false,
 } as AgentDefinition
 
@@ -59,14 +59,14 @@ describe('AgentMemoryTab', () => {
     mocks.push.mockReset()
   })
 
-  test('shows retrieval settings and the ordinary memory folder selector', async () => {
+  test('shows retrieval settings and the ordinary memory category selector', async () => {
     const wrapper = mount(AgentMemoryTab, { props: { agent } })
     await flushPromises()
 
     const cardTitles = wrapper.findAll('h3').map(title => title.text())
     expect(cardTitles).toEqual([
       'Automatic memory retrieval',
-      'Memory Folders',
+      'Memory Categories',
     ])
   })
 
@@ -80,6 +80,6 @@ describe('AgentMemoryTab', () => {
     expect(deselectAll).toBeDefined()
 
     await deselectAll!.trigger('click')
-    expect(wrapper.emitted('update')).toContainEqual(['memorySpaces', []])
+    expect(wrapper.emitted('update')).toContainEqual(['memoryCategories', []])
   })
 })

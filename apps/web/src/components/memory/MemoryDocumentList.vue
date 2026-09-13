@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
-import type { MemorySpace, MemoryFileStatus, MemoryDocumentKnowledgePreview } from "../../api/types";
+import type { MemoryCategory, MemoryFileStatus, MemoryDocumentKnowledgePreview } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import DataTable, { type Column } from "../shared/DataTable.vue";
@@ -13,15 +13,15 @@ import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
 interface DocumentDragPayload {
-  sourceSpaceId: string;
+  sourceCategoryId: string;
   sourceFiles: string[];
 }
 
 type DocumentRow = MemoryFileStatus & { id: string };
 
 const props = defineProps<{
-  spaceId: string;
-  spaces: MemorySpace[];
+  categoryId: string;
+  spaces: MemoryCategory[];
 }>();
 
 const emit = defineEmits<{
@@ -46,8 +46,8 @@ const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   knowledgePreviews.value = {};
   files.value = files.value.map((file) => ({
     ...file,
-    knowledgeExtracted: false,
-    knowledgeExtractedAt: undefined,
+    deepResearched: false,
+    deepResearchedAt: undefined,
   }));
   void loadFiles();
 });
@@ -64,7 +64,7 @@ const searchQuery = ref("");
 const page = ref(0);
 const visibleDocumentRows = ref<DocumentRow[]>([]);
 
-const currentSpace = computed(() => props.spaces.find((s) => s.id === props.spaceId));
+const currentSpace = computed(() => props.spaces.find((s) => s.id === props.categoryId));
 
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -87,7 +87,7 @@ const columns: Column<DocumentRow>[] = [
   { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.status === "indexed" ? (file.chunkCount || 0) : (file.estimatedChunkCount || 0) },
-  { key: "knowledgeExtracted", label: "Analysed", minWidth: "190px", sortable: true, sortValue: (file) => file.knowledgeExtracted },
+  { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (file) => file.deepResearched },
   { key: "status", label: "Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
 ];
 
@@ -101,18 +101,18 @@ const supportedFiles = computed(() => files.value.filter((f) => f.supported));
 const needsAttentionCount = computed(
   () => supportedFiles.value.filter((f) => f.status === "needs_reindex" || f.status === "not_indexed").length,
 );
-const selectedKnowledgeExtractableFiles = computed(() =>
+const selectedDeepResearchFiles = computed(() =>
   files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
 );
 const selectedRememberedFiles = computed(() =>
   files.value.filter((f) =>
     f.supported &&
-    (f.status !== "not_indexed" || f.knowledgeExtracted) &&
+    (f.status !== "not_indexed" || f.deepResearched) &&
     selectedFiles.value.has(f.fileName),
   ),
 );
-const selectedKnowledgeExtractableIdleCount = computed(() =>
-  selectedKnowledgeExtractableFiles.value.filter((f) => !isJobActive("knowledge-extraction", f.fileName)).length,
+const selectedDeepResearchIdleCount = computed(() =>
+  selectedDeepResearchFiles.value.filter((f) => !isJobActive("deep-research", f.fileName)).length,
 );
 
 // --- Data loading ---
@@ -120,7 +120,7 @@ async function loadFiles() {
   filesLoading.value = true;
   knowledgePreviews.value = {};
   try {
-    files.value = await api.memorySpaces.listFiles(props.spaceId);
+    files.value = await api.memoryCategories.listFiles(props.categoryId);
   } catch {
     files.value = [];
   }
@@ -141,18 +141,18 @@ const {
   cancelJob,
   discardJob,
   reset: resetJobs,
-  entityExtractionProgress,
+  deepResearchProgress,
   searchIndexProgress,
 } = useMemoryDocumentJobs({
-  spaceId: toRef(props, "spaceId"),
+  categoryId: toRef(props, "categoryId"),
   files,
   reloadFiles: loadFiles,
   onCompleted: () => emit("spacesChanged"),
 });
 
-async function knowledgeExtractionSelected(): Promise<void> {
-  for (const file of selectedKnowledgeExtractableFiles.value) {
-    if (!isJobActive("knowledge-extraction", file.fileName)) await extractKnowledgeFromFile(file.fileName);
+async function deepResearchSelected(): Promise<void> {
+  for (const file of selectedDeepResearchFiles.value) {
+    if (!isJobActive("deep-research", file.fileName)) await extractKnowledgeFromFile(file.fileName);
   }
 }
 
@@ -163,7 +163,7 @@ async function loadKnowledgePreview(fileName: string) {
     [fileName]: { status: "loading" },
   };
   try {
-    const data = await api.memorySpaces.getDocumentKnowledgePreview(props.spaceId, fileName);
+    const data = await api.memoryCategories.getDocumentKnowledgePreview(props.categoryId, fileName);
     knowledgePreviews.value = {
       ...knowledgePreviews.value,
       [fileName]: { status: "ready", data },
@@ -189,7 +189,7 @@ async function deleteSelectedFiles() {
   if (selectedFiles.value.size === 0) return;
   deleting.value = true;
   try {
-    await api.memorySpaces.deleteGroups(props.spaceId, Array.from(selectedFiles.value));
+    await api.memoryCategories.deleteDocuments(props.categoryId, Array.from(selectedFiles.value));
     const deleted = selectedFiles.value;
     selectedFiles.value = new Set();
     files.value = files.value.filter((f) => !deleted.has(f.fileName));
@@ -205,7 +205,7 @@ async function forgetSelectedMemories() {
   if (sourceFiles.length === 0) return;
   forgettingMemories.value = true;
   try {
-    await api.memorySpaces.forgetMemories(props.spaceId, sourceFiles);
+    await api.memoryCategories.forgetMemories(props.categoryId, sourceFiles);
     selectedFiles.value = new Set();
     await loadFiles();
     await loadJobs();
@@ -217,11 +217,11 @@ async function forgetSelectedMemories() {
 }
 
 // --- Move ---
-async function moveSelectedFiles(targetSpaceId: string) {
-  if (selectedFiles.value.size === 0 || targetSpaceId === props.spaceId) return;
+async function moveSelectedFiles(targetCategoryId: string) {
+  if (selectedFiles.value.size === 0 || targetCategoryId === props.categoryId) return;
   moving.value = true;
   try {
-    await api.memorySpaces.moveGroups(props.spaceId, Array.from(selectedFiles.value), targetSpaceId);
+    await api.memoryCategories.moveDocuments(props.categoryId, Array.from(selectedFiles.value), targetCategoryId);
     const moved = selectedFiles.value;
     selectedFiles.value = new Set();
     files.value = files.value.filter((f) => !moved.has(f.fileName));
@@ -233,10 +233,10 @@ async function moveSelectedFiles(targetSpaceId: string) {
   moving.value = false;
 }
 
-async function moveGroupsToSpace(targetSpaceId: string, sourceFiles: string[]) {
-  if (sourceFiles.length === 0 || targetSpaceId === props.spaceId) return;
+async function moveDocumentsToCategory(targetCategoryId: string, sourceFiles: string[]) {
+  if (sourceFiles.length === 0 || targetCategoryId === props.categoryId) return;
   try {
-    await api.memorySpaces.moveGroups(props.spaceId, sourceFiles, targetSpaceId);
+    await api.memoryCategories.moveDocuments(props.categoryId, sourceFiles, targetCategoryId);
     files.value = files.value.filter((f) => !sourceFiles.includes(f.fileName));
     emit("spacesChanged");
   } catch {
@@ -289,7 +289,7 @@ async function ingestFiles(fileList: File[]) {
     }
     try {
       const content = await readFileContent(file);
-      const res = await api.memorySpaces.ingestFile(props.spaceId, file.name, content);
+      const res = await api.memoryCategories.ingestFile(props.categoryId, file.name, content);
       if (res.job) upsertJob(res.job);
       results.push({ fileName: res.fileName, chunks: res.chunksStored });
     } catch (err) {
@@ -327,7 +327,7 @@ function startDocumentDrag(event: DragEvent, fileName: string) {
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData(
     DOCUMENT_DRAG_MIME,
-    JSON.stringify({ sourceSpaceId: props.spaceId, sourceFiles: fileNames } satisfies DocumentDragPayload),
+    JSON.stringify({ sourceCategoryId: props.categoryId, sourceFiles: fileNames } satisfies DocumentDragPayload),
   );
 }
 
@@ -358,7 +358,7 @@ function formatFileSize(bytes: number): string {
 
 // --- Lifecycle ---
 watch(
-  () => props.spaceId,
+  () => props.categoryId,
   () => {
     files.value = [];
     knowledgePreviews.value = {};
@@ -379,7 +379,7 @@ onUnmounted(() => {
   unsubscribeDreamUpdate();
 });
 
-defineExpose({ ingestFiles, moveGroupsToSpace });
+defineExpose({ ingestFiles, moveDocumentsToCategory });
 </script>
 
 <template>
@@ -394,7 +394,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           type="button"
           class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
           title="Edit folder"
-          :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
+          :aria-label="`Edit ${currentSpace?.name || 'category'}`"
           @click="emit('editSpace')"
         >
           <Icon
@@ -404,9 +404,9 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </button>
         <button
           type="button"
-          :disabled="currentSpace?.isDefault"
-          :title="currentSpace?.isDefault ? 'Cannot remove the default memory folder' : 'Remove folder'"
-          :aria-label="currentSpace?.isDefault ? 'Default memory folder cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
+          :disabled="currentSpace?.isUncategorized"
+          :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove category'"
+          :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'category'}`"
           class="p-1 text-theme-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-theme-500"
           @click="emit('deleteSpace')"
         >
@@ -459,7 +459,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 
     <!-- Folder path hint -->
     <div
-      v-if="currentSpace?.folderPath"
+      v-if="currentSpace?.directoryPath"
       class="mb-3 flex items-center gap-1.5 text-xs text-theme-600 min-w-0 overflow-hidden"
     >
       <Icon
@@ -467,7 +467,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         class="w-3.5 h-3.5 shrink-0"
       />
 
-      <span class="truncate font-mono">{{ currentSpace.folderPath }}</span>
+      <span class="truncate font-mono">{{ currentSpace.directoryPath }}</span>
     </div>
 
     <!-- Upload progress -->
@@ -600,16 +600,16 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
           Move
         </button>
         <button
-          v-if="selectedKnowledgeExtractableFiles.length > 0"
-          :disabled="selectedKnowledgeExtractableIdleCount === 0"
+          v-if="selectedDeepResearchFiles.length > 0"
+          :disabled="selectedDeepResearchIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
           title="Extract and classify facts from the selected searchable documents"
-          @click="knowledgeExtractionSelected"
+          @click="deepResearchSelected"
         >
           <Icon
-            :icon="selectedKnowledgeExtractableIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
+            :icon="selectedDeepResearchIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
             class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': selectedKnowledgeExtractableIdleCount === 0 }"
+            :class="{ 'animate-spin': selectedDeepResearchIdleCount === 0 }"
           />
           Extract facts
         </button>
@@ -756,25 +756,25 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
         </span>
       </template>
 
-      <template #col-knowledgeExtracted="{ item: file }">
+      <template #col-deepResearched="{ item: file }">
         <div
           v-if="file.supported"
           class="flex items-center gap-1.5"
-          :title="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted ? (file.status === 'indexed' ? 'Facts not extracted' : 'Fact extraction requires a search index first') : undefined"
+          :title="!isJobRunning('deep-research', file.fileName) && !file.deepResearched ? (file.status === 'indexed' ? 'Facts not extracted' : 'Deep Research requires a search index first') : undefined"
         >
           <button
-            v-if="isJobRunning('knowledge-extraction', file.fileName)"
+            v-if="isJobRunning('deep-research', file.fileName)"
             type="button"
             class="job-cancel-control inline-flex items-center rounded-md px-2 py-1 text-[11px] text-accent-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
-            title="Cancel fact extraction"
-            @click.stop="cancelJob(runningJob('knowledge-extraction', file.fileName))"
+            title="Cancel Deep Research"
+            @click.stop="cancelJob(runningJob('deep-research', file.fileName))"
           >
             <span class="job-progress inline-flex items-center gap-1.5">
               <Icon
                 icon="lucide:loader-2"
                 class="h-3.5 w-3.5 animate-spin"
               />
-              {{ entityExtractionProgress(file.fileName) }}
+              {{ deepResearchProgress(file.fileName) }}
             </span>
             <span class="job-cancel items-center gap-1.5 font-medium">
               <Icon
@@ -785,7 +785,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             </span>
           </button>
           <HoverTooltip
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !resumableJob(file.fileName) && file.knowledgeExtracted"
+            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && file.deepResearched"
             :max-width="380"
             @show="loadKnowledgePreview(file.fileName)"
           >
@@ -795,13 +795,13 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
                   icon="lucide:check-circle"
                   class="h-3.5 w-3.5"
                 />
-                Analysed
+                Deep Research
               </span>
               <button
                 type="button"
                 class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
-                title="Analyse this document again"
-                aria-label="Analyse this document again"
+                title="Run Deep Research again"
+                aria-label="Run Deep Research again"
                 @click.stop="extractKnowledgeFromFile(file.fileName)"
               >
                 <Icon
@@ -863,10 +863,10 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
             </template>
           </HoverTooltip>
           <SplitButton
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && file.status === 'indexed' && resumableJob(file.fileName)"
-            :primary-label="`Resume analysis of ${file.fileName}`"
-            :menu-label="`Analysis options for ${file.fileName}`"
-            title="Continue analysing the remaining document parts"
+            v-if="!isJobRunning('deep-research', file.fileName) && file.status === 'indexed' && resumableJob(file.fileName)"
+            :primary-label="`Resume Deep Research of ${file.fileName}`"
+            :menu-label="`Deep Research options for ${file.fileName}`"
+            title="Continue running Deep Research on the remaining document parts"
             placement="above"
             @primary="extractKnowledgeFromFile(file.fileName)"
           >
@@ -890,23 +890,23 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
                 />
                 <span>
                   <span class="block text-xs font-medium">Cancel</span>
-                  <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Discard saved analysis progress and start over next time.</span>
+                  <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Discard saved Deep Research progress and start over next time.</span>
                 </span>
               </button>
             </template>
           </SplitButton>
           <span
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !file.knowledgeExtracted && file.status !== 'indexed'"
+            v-if="!isJobRunning('deep-research', file.fileName) && !file.deepResearched && file.status !== 'indexed'"
             class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
           >
             <Icon
               icon="lucide:circle-dashed"
               class="h-3.5 w-3.5"
             />
-            Not analysed
+            Not researched
           </span>
           <button
-            v-if="!isJobRunning('knowledge-extraction', file.fileName) && !resumableJob(file.fileName) && !file.knowledgeExtracted && file.status === 'indexed'"
+            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && !file.deepResearched && file.status === 'indexed'"
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/15 bg-accent-500/10 px-2 py-1 text-[11px] text-accent-300 transition-colors hover:bg-accent-500/20"
             title="Extract and classify facts from this document"
@@ -916,7 +916,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
               icon="lucide:network"
               class="h-3.5 w-3.5"
             />
-            Analyse
+            Run Deep Research
           </button>
         </div>
       </template>
@@ -1004,7 +1004,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 
     <MemoryDocumentEditorModal
       :show="showEditorModal"
-      :space-id="spaceId"
+      :category-id="categoryId"
       :source-file="editorFileName"
       @close="showEditorModal = false"
       @saved="handleEditorSaved"
@@ -1022,7 +1022,7 @@ defineExpose({ ingestFiles, moveGroupsToSpace });
 
     <MemoryDocumentMoveDialog
       :show="showMoveDialog"
-      :source-space-id="spaceId"
+      :source-category-id="categoryId"
       :selected-count="selectedFiles.size"
       :spaces="spaces"
       :moving="moving"

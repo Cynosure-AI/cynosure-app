@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentExecutorConfig } from '../agent/agent-executor.js'
@@ -25,12 +25,12 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
     return {
         makeMemoryListDocumentsTool: make('memory_list_documents'), makeMemoryRetrieveChunksTool: make('memory_retrieve_chunks'),
         makeMemorySearchTool: make('memory_semantic_search'), makeMemoryCreateTool: make('memory_create'),
-        makeMemoryAppendTool: make('memory_append'), makeMemoryReplaceRangeTool: make('memory_replace_range'), makeMemoryReplaceAllTool: make('memory_replace_all'),
+        makeMemoryUpdateTool: make('memory_update'), makeMemoryDeleteTool: make('memory_delete'),
     }
 })
 import { closeDb, getDb } from '../../db/database.js'
 import { getDreamConfig, saveDreamConfig, listDreamRuns, buildDreamBatch, type DreamInput } from './dream-store.js'
-import { startDreamWorker, sweepDream, settleDreamWork, settleDreamRun, cancelDreamRun, cancelAllDreamRuns, invalidateDreamConversation, DREAM_IDLE_MS, DREAM_SWEEP_MS, DREAM_RETRY_BASE_MS, resolveDreamSpaces } from './dream-worker.js'
+import { startDreamWorker, sweepDream, settleDreamWork, settleDreamRun, cancelDreamRun, cancelAllDreamRuns, invalidateDreamConversation, DREAM_IDLE_MS, DREAM_SWEEP_MS, DREAM_RETRY_BASE_MS, resolveDreamCategories } from './dream-worker.js'
 
 let directory: string
 let stop: (() => Promise<void>) | undefined
@@ -123,8 +123,8 @@ describe('Dream worker', () => {
     test('marks documents changed by Dream', async () => {
         getDb().prepare(`
             INSERT INTO memory_file_index
-                (document_id, document_ref, space_id, file_name, content_hash, created_at)
-            VALUES ('dream-doc', 'preference#dream', 'default', 'preference.md', 'hash', ?)
+                (document_id, document_ref, category_id, file_name, content_hash, created_at)
+            VALUES ('dream-doc', 'preference#dream', 'uncategorized', 'preference.md', 'hash', ?)
         `).run(Date.now())
         mocks.tool.mockImplementation(async (name: string, _params: unknown, opts: unknown) => {
             if (name === 'memory_create') {
@@ -159,7 +159,7 @@ describe('Dream worker', () => {
     test('skips active and scheduled conversations, includes channels, and ignores auto-memory eligibility', async () => {
         enable()
         for (const id of ['active', 'disabled', 'empty', 'cron', 'channel']) {
-            conversation(id, id === 'disabled' ? { autoMemory: false } : id === 'empty' ? { memorySpaceIds: [] } : {}, id === 'cron' ? 'cron' : id === 'channel' ? 'channel' : 'chat')
+            conversation(id, id === 'disabled' ? { autoMemory: false } : id === 'empty' ? { memoryCategoryIds: [] } : {}, id === 'cron' ? 'cron' : id === 'channel' ? 'channel' : 'chat')
             message(`${id}-m`, id)
         }
         mocks.active = ['active']
@@ -168,17 +168,19 @@ describe('Dream worker', () => {
         await settleDreamWork()
         expect(listDreamRuns().map(run => run.conversation_id).sort()).toEqual(['channel', 'disabled', 'empty'])
     })
-    test('resolves Dream folders from conversation overrides, agent assignments, then the global default', () => {
-        getDb().prepare("INSERT INTO memory_spaces(id, name, folder_path, created_at) VALUES ('assigned', 'Assigned', '/tmp/assigned', ?)").run(Date.now())
-        getDb().prepare("INSERT INTO agent_memory_spaces(agent_id, space_id) VALUES ('agent-with-space', 'assigned')").run()
+    test('resolves Dream categories from conversation overrides, agent assignments, then Uncategorized', () => {
+        mkdirSync(join(directory, 'data', 'memories', 'Assigned'), { recursive: true })
+        getDb().prepare("INSERT INTO memory_categories(id, name, directory_path, created_at) VALUES ('assigned', 'Assigned', ?, ?)")
+            .run(join(directory, 'data', 'memories', 'Assigned'), Date.now())
+        getDb().prepare("INSERT INTO agent_memory_categories(agent_id, category_id) VALUES ('agent-with-space', 'assigned')").run()
 
-        expect(resolveDreamSpaces({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memorySpaceIds":["default"],"autoMemory":false}' })).toEqual([{ id: 'default', name: 'Default', relativePath: '' }])
-        expect(resolveDreamSpaces({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"autoMemory":false}' })).toEqual([
+        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memoryCategoryIds":["uncategorized"],"autoMemory":false}' })).toEqual([{ id: 'uncategorized', name: 'Uncategorized', categoryPath: '' }])
+        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"autoMemory":false}' })).toEqual([
             expect.objectContaining({ id: 'assigned', name: 'Assigned' }),
         ])
-        expect(resolveDreamSpaces({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memorySpaceIds":[],"autoMemory":false}' })).toEqual([{ id: 'default', name: 'Default' }])
-        expect(resolveDreamSpaces({ id: 'x', agent_id: null, execution_config_json: '{"memorySpaceIds":["missing"]}' })).toEqual([])
-        expect(resolveDreamSpaces({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([{ id: 'default', name: 'Default' }])
+        expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memoryCategoryIds":[],"autoMemory":false}' })).toEqual([{ id: 'uncategorized', name: 'Uncategorized' }])
+        expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{"memoryCategoryIds":["missing"]}' })).toEqual([])
+        expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([{ id: 'uncategorized', name: 'Uncategorized' }])
     })
     test('serializes sweeps and reviews oldest conversations first', async () => {
         enable()
@@ -217,8 +219,8 @@ describe('Dream worker', () => {
         await ready()
         await vi.advanceTimersByTimeAsync(2 * 60 * 60_000)
         await settleDreamWork()
-        expect(mocks.run).toHaveBeenCalledTimes(4)
-        expect(listDreamRuns()[0]).toMatchObject({ status: 'failed', attempt: 4 })
+        expect(mocks.run).toHaveBeenCalledTimes(3)
+        expect(listDreamRuns()[0]).toMatchObject({ status: 'failed', attempt: 3 })
         expect(listDreamRuns()[0].input_json).not.toContain('I prefer concise replies')
         expect(getDb().prepare('SELECT last_sequence FROM dream_progress').get()).toEqual({ last_sequence: 1 })
     })
@@ -226,14 +228,14 @@ describe('Dream worker', () => {
         mocks.run.mockRejectedValue(new Error('Offline'))
         await ready()
         await vi.advanceTimersByTimeAsync(2 * 60 * 60_000)
-        expect(mocks.run).toHaveBeenCalledTimes(4)
+        expect(mocks.run).toHaveBeenCalledTimes(3)
 
         mocks.run.mockResolvedValue({ content: 'Recovered' })
         message('m2', 'chat', 'A later preference')
         await vi.advanceTimersByTimeAsync(DREAM_IDLE_MS)
         await sweepDream()
 
-        expect(mocks.run).toHaveBeenCalledTimes(5)
+        expect(mocks.run).toHaveBeenCalledTimes(4)
         const completed = listDreamRuns().find(run => run.status === 'completed')!
         expect((JSON.parse(completed.input_json) as DreamInput).sources.map(source => source.id)).toEqual(['m2'])
     })
@@ -255,12 +257,11 @@ describe('Dream worker', () => {
             const result = await config.tools.find(tool => tool.name === 'memory_create')!.execute({})
             expect(result.success).toBe(false)
             expect(config.tools).toHaveLength(6)
-            expect(config.tools.some(tool => tool.name === 'memory_replace_all')).toBe(false)
-            expect(config.tools.some(tool => /delete|remove|shell|knowledge/.test(tool.name))).toBe(false)
+            expect(config.tools.some(tool => /append|replace_range|remove_range|shell|knowledge/.test(tool.name))).toBe(false)
         })
         await ready()
         expect(mocks.tool).not.toHaveBeenCalled()
-        expect(mocks.scopes).toEqual(expect.arrayContaining([expect.objectContaining({ assignedSpaces: [{ id: 'default', name: 'Default' }] })]))
+        expect(mocks.scopes).toEqual(expect.arrayContaining([expect.objectContaining({ assignedCategories: [{ id: 'uncategorized', name: 'Uncategorized' }] })]))
     })
     test('cancels active work and skips its pending messages until new activity', async () => {
         mocks.run.mockImplementationOnce((config: AgentExecutorConfig) => new Promise((_, reject) => config.signal!.addEventListener('abort', () => reject(config.signal!.reason))))
@@ -342,7 +343,7 @@ describe('Dream worker', () => {
     test('rejects writes after disabling or changing the conversation scope', async () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
             await config.tools.find(tool => tool.name === 'memory_semantic_search')!.execute({ query: 'preference' })
-            getDb().prepare("UPDATE conversations SET execution_config_json = '{\"memorySpaceIds\":[\"missing\"]}' WHERE id = 'chat'").run()
+            getDb().prepare("UPDATE conversations SET execution_config_json = '{\"memoryCategoryIds\":[\"missing\"]}' WHERE id = 'chat'").run()
             await expect(config.tools.find(tool => tool.name === 'memory_create')!.execute({ title: 'Blocked' })).rejects.toThrow('scope changed')
         })
         await ready()

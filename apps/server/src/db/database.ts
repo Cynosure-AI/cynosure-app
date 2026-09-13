@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
-import { getAppDataDir, getDefaultMemorySpaceDir } from '../core/data-dir.js'
+import { getAppDataDir, getDefaultMemoryCategoryDir } from '../core/data-dir.js'
 import { createStableMemoryDocumentRef } from '../core/memory/memory-reference.js'
 
 let db: Database.Database | null = null
@@ -30,7 +30,14 @@ export function getDb(): Database.Database {
     db = new Database(getDbPath())
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
+    const brainReset = resetLegacyMemoryBrain(db)
     createTables(db)
+    if (brainReset) {
+      ensureDefaultMemoryCategory(db)
+      db.prepare("INSERT OR IGNORE INTO agent_memory_categories(agent_id, category_id) SELECT id, 'uncategorized' FROM agents").run()
+      db.prepare("DELETE FROM settings WHERE key = 'dreamMode'").run()
+      db.prepare("INSERT OR REPLACE INTO settings(key, value_json) VALUES ('memory.brain_v1', ?)").run(JSON.stringify({ resetAt: Date.now() }))
+    }
     // All pending HITL are void after a server restart — the executor promises are gone.
     db.prepare('DELETE FROM pending_hitl').run()
     // Queued chat messages survive restarts, but never resume work unexpectedly.
@@ -39,21 +46,37 @@ export function getDb(): Database.Database {
   return db
 }
 
-export function ensureDefaultMemorySpace(database: Database.Database = getDb()): void {
-  const defaultSpaceId = 'default'
-  const defaultFolderPath = getDefaultMemorySpaceDir()
+/** The brain redesign intentionally adopts source files but discards legacy metadata. */
+function resetLegacyMemoryBrain(database: Database.Database): boolean {
+  const legacy = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_spaces'").get()
+  const completed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'").get()
+    ? database.prepare("SELECT 1 FROM settings WHERE key = 'memory.brain_v1'").get()
+    : undefined
+  if (!legacy || completed) return false
+  database.pragma('foreign_keys = OFF')
+  const tables = database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND (
+    name LIKE 'memory_%' OR name IN ('agent_memory_spaces', 'agent_memory_categories', 'dream_progress', 'dream_runs')
+  )`).all() as Array<{ name: string }>
+  for (const { name } of tables) database.exec(`DROP TABLE IF EXISTS "${name.replace(/"/g, '""')}"`)
+  database.pragma('foreign_keys = ON')
+  return true
+}
+
+export function ensureDefaultMemoryCategory(database: Database.Database = getDb()): void {
+  const uncategorizedCategoryId = 'uncategorized'
+  const defaultFolderPath = getDefaultMemoryCategoryDir()
   mkdirSync(defaultFolderPath, { recursive: true })
 
-  const defaultSpaceExists = database.prepare("SELECT id FROM memory_spaces WHERE id = ?").get(defaultSpaceId)
-  if (!defaultSpaceExists) {
+  const uncategorizedCategoryExists = database.prepare("SELECT id FROM memory_categories WHERE id = ?").get(uncategorizedCategoryId)
+  if (!uncategorizedCategoryExists) {
     const now = Date.now()
-    database.prepare("INSERT INTO memory_spaces (id, name, description, folder_path, sort_order, is_default, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(defaultSpaceId, 'Default', 'Default memory folder for general knowledge and notes', defaultFolderPath, 0, 1, now)
+    database.prepare("INSERT INTO memory_categories (id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(uncategorizedCategoryId, 'Uncategorized', 'Memories that do not yet have a category', defaultFolderPath, 0, 1, now)
     return
   }
 
-  database.prepare("UPDATE memory_spaces SET name = ?, description = ?, folder_path = ?, is_default = 1 WHERE id = ?")
-    .run('Default', 'Default memory folder for general knowledge and notes', defaultFolderPath, defaultSpaceId)
+  database.prepare("UPDATE memory_categories SET name = ?, description = ?, directory_path = ?, is_uncategorized = 1 WHERE id = ?")
+    .run('Uncategorized', 'Memories that do not yet have a category', defaultFolderPath, uncategorizedCategoryId)
 }
 
 function createTables(db: Database.Database): void {
@@ -334,39 +357,68 @@ function createTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_channels_agent ON channels(agent_id);
 
-    CREATE TABLE IF NOT EXISTS memory_spaces (
+    CREATE TABLE IF NOT EXISTS memory_categories (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
-      folder_path TEXT NOT NULL DEFAULT '',
+      directory_path TEXT NOT NULL DEFAULT '',
       sort_order INTEGER NOT NULL DEFAULT 0,
-      is_default INTEGER NOT NULL DEFAULT 0,
+      is_uncategorized INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS memory_file_index (
       document_id TEXT NOT NULL DEFAULT '',
       document_ref TEXT NOT NULL DEFAULT '',
-      space_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       content_hash TEXT NOT NULL DEFAULT '',
       chunk_count INTEGER NOT NULL DEFAULT 0,
       last_indexed_at INTEGER NOT NULL DEFAULT 0,
-      knowledge_extracted_at INTEGER NOT NULL DEFAULT 0,
+      deep_researched_at INTEGER NOT NULL DEFAULT 0,
       dreamed_at INTEGER NOT NULL DEFAULT 0,
       tags_json TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL,
-      PRIMARY KEY (space_id, file_name)
+      PRIMARY KEY (category_id, file_name)
     );
-    CREATE INDEX IF NOT EXISTS idx_mfi_space ON memory_file_index(space_id);
+    CREATE INDEX IF NOT EXISTS idx_mfi_category ON memory_file_index(category_id);
 
-    CREATE TABLE IF NOT EXISTS agent_memory_spaces (
-      agent_id TEXT NOT NULL,
-      space_id TEXT NOT NULL,
-      PRIMARY KEY (agent_id, space_id)
+    CREATE TABLE IF NOT EXISTS memory_documents (
+      document_id TEXT PRIMARY KEY,
+      document_ref TEXT NOT NULL UNIQUE,
+      category_id TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      current_hash TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'deleted')),
+      indexing_status TEXT NOT NULL DEFAULT 'pending' CHECK(indexing_status IN ('pending', 'indexed', 'error')),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
     );
-    CREATE INDEX IF NOT EXISTS idx_ams_agent ON agent_memory_spaces(agent_id);
-    CREATE INDEX IF NOT EXISTS idx_ams_space ON agent_memory_spaces(space_id);
+    CREATE INDEX IF NOT EXISTS idx_memory_documents_category ON memory_documents(category_id, status);
+
+    CREATE TABLE IF NOT EXISTS memory_document_revisions (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL REFERENCES memory_documents(document_id) ON DELETE CASCADE,
+      revision_number INTEGER NOT NULL,
+      content_hash TEXT NOT NULL,
+      content TEXT NOT NULL,
+      source TEXT NOT NULL CHECK(source IN ('ai', 'dream', 'user', 'filesystem', 'import', 'restore')),
+      conversation_id TEXT,
+      agent_id TEXT,
+      message_ids_json TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      UNIQUE(document_id, revision_number)
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_revisions_document ON memory_document_revisions(document_id, revision_number DESC);
+
+    CREATE TABLE IF NOT EXISTS agent_memory_categories (
+      agent_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
+      PRIMARY KEY (agent_id, category_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ams_agent ON agent_memory_categories(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_ams_category ON agent_memory_categories(category_id);
 
     -- Source documents and their revisions remain the
     -- authority; every entity, assertion, and search projection is derived
@@ -375,13 +427,13 @@ function createTables(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       document_id TEXT NOT NULL,
       content_hash TEXT NOT NULL,
-      space_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       source_id TEXT NOT NULL,
       pipeline_version TEXT NOT NULL,
       prompt_version TEXT NOT NULL,
-      extractor_provider_id TEXT NOT NULL DEFAULT '',
-      extractor_model TEXT NOT NULL DEFAULT '',
+      deep_research_provider_id TEXT NOT NULL DEFAULT '',
+      deep_research_model TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'staging'
         CHECK(status IN ('staging', 'active', 'retired', 'failed')),
       started_at INTEGER NOT NULL,
@@ -394,14 +446,14 @@ function createTables(db: Database.Database): void {
       UNIQUE(document_id, content_hash, pipeline_version)
     );
     CREATE INDEX IF NOT EXISTS idx_mkir_document ON memory_knowledge_index_runs(document_id, status);
-    CREATE INDEX IF NOT EXISTS idx_mkir_scope ON memory_knowledge_index_runs(space_id, status);
+    CREATE INDEX IF NOT EXISTS idx_mkir_scope ON memory_knowledge_index_runs(category_id, status);
 
     CREATE TABLE IF NOT EXISTS memory_knowledge_text_units (
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL REFERENCES memory_knowledge_index_runs(id) ON DELETE CASCADE,
       document_id TEXT NOT NULL,
       content_hash TEXT NOT NULL,
-      space_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       chunk_index INTEGER NOT NULL,
       text TEXT NOT NULL,
@@ -413,7 +465,7 @@ function createTables(db: Database.Database): void {
       UNIQUE(run_id, chunk_index)
     );
     CREATE INDEX IF NOT EXISTS idx_mktu_revision ON memory_knowledge_text_units(document_id, content_hash, chunk_index);
-    CREATE INDEX IF NOT EXISTS idx_mktu_scope ON memory_knowledge_text_units(space_id, file_name);
+    CREATE INDEX IF NOT EXISTS idx_mktu_scope ON memory_knowledge_text_units(category_id, file_name);
 
     CREATE TABLE IF NOT EXISTS memory_knowledge_entities (
       id TEXT PRIMARY KEY,
@@ -598,7 +650,7 @@ function createTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS memory_index_jobs (
       id TEXT PRIMARY KEY,
       kind TEXT NOT NULL,
-      space_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       status TEXT NOT NULL
         CHECK(status IN ('queued', 'running', 'retrying', 'completed', 'cancelled', 'error', 'dead_letter')),
@@ -615,7 +667,7 @@ function createTables(db: Database.Database): void {
       completed_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_mij_queue ON memory_index_jobs(status, next_attempt_at, created_at);
-    CREATE INDEX IF NOT EXISTS idx_mij_file ON memory_index_jobs(space_id, file_name, kind);
+    CREATE INDEX IF NOT EXISTS idx_mij_file ON memory_index_jobs(category_id, file_name, kind);
 
   `)
 
@@ -649,9 +701,9 @@ function createTables(db: Database.Database): void {
   const addColumnIfMissing = (table: string, column: string, definition: string) => {
     try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`) } catch { /* column already exists */ }
   }
-  addColumnIfMissing('memory_spaces', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_spaces', 'is_default', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_spaces', 'folder_path', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('memory_categories', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_categories', 'is_uncategorized', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_categories', 'directory_path', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
   addColumnIfMissing('mcp_servers', 'description', "TEXT NOT NULL DEFAULT ''")
   addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
@@ -675,7 +727,7 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
   db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
 
-  addColumnIfMissing('memory_file_index', 'knowledge_extracted_at', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('memory_file_index', 'deep_researched_at', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('memory_file_index', 'dreamed_at', 'INTEGER NOT NULL DEFAULT 0')
   addColumnIfMissing('memory_file_index', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
   addColumnIfMissing('memory_index_jobs', 'progress_current', 'INTEGER')
@@ -693,6 +745,7 @@ function createTables(db: Database.Database): void {
   db.prepare("UPDATE memory_file_index SET document_id = lower(hex(randomblob(16))) WHERE document_id = ''").run()
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_id ON memory_file_index(document_id)')
   addColumnIfMissing('memory_file_index', 'document_ref', "TEXT NOT NULL DEFAULT ''")
+  addColumnIfMissing('memory_documents', 'indexing_status', "TEXT NOT NULL DEFAULT 'pending'")
   const documentsWithoutStableRefs = db.prepare(`
     SELECT document_id, file_name, created_at FROM memory_file_index WHERE document_ref = ''
   `).all() as Array<{ document_id: string; file_name: string; created_at: number }>
@@ -713,8 +766,7 @@ function createTables(db: Database.Database): void {
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_ref ON memory_file_index(document_ref) WHERE document_ref != ''")
 
-  // Migrate persisted selections from the former mode-switching memory tools
-  // to the operation-specific contracts. Preserve order and remove duplicates.
+  // Rewrite persisted selections to the whole-document memory contracts.
   const agentToolRows = db.prepare('SELECT id, tools_json FROM agents').all() as { id: string; tools_json: string }[]
   const updateAgentTools = db.prepare('UPDATE agents SET tools_json = ? WHERE id = ?')
   for (const row of agentToolRows) {
@@ -722,23 +774,22 @@ function createTables(db: Database.Database): void {
       const current = JSON.parse(row.tools_json || '[]') as unknown[]
       if (!Array.isArray(current)) continue
       const migrated = current.flatMap((key) => {
-        if (key === 'builtin::memory_update') return [
-          'builtin:memory::memory_append',
-          'builtin:memory::memory_replace_range',
-          'builtin:memory::memory_replace_all',
-        ]
-        if (key === 'builtin::memory_remove') return [
-          'builtin:memory::memory_remove_range',
-          'builtin:memory::memory_remove_all',
-        ]
-        return typeof key === 'string' ? [migrateBuiltInToolKey(key)] : []
+        if (typeof key !== 'string') return []
+        const normalized = migrateBuiltInToolKey(key)
+        if (/::memory_(append|replace_range|replace_all|update)$/.test(normalized)) {
+          return ['builtin:memory::memory_update']
+        }
+        if (/::memory_(remove|remove_range|remove_all|delete)$/.test(normalized)) {
+          return ['builtin:memory::memory_delete']
+        }
+        return [normalized]
       })
       const deduped = Array.from(new Set(migrated))
       if (JSON.stringify(deduped) !== JSON.stringify(current)) updateAgentTools.run(JSON.stringify(deduped), row.id)
     } catch { /* keep malformed legacy values untouched */ }
   }
 
-  ensureDefaultMemorySpace(db)
+  ensureDefaultMemoryCategory(db)
 
   // Agent table: add columns for DB-only storage (migrating away from filesystem)
   addColumnIfMissing('agents', 'category', "TEXT NOT NULL DEFAULT ''")

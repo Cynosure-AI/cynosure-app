@@ -14,11 +14,11 @@ describe('MultiSelect', () => {
         modelValue: ['personal', 'work'],
         options,
         showBulkActions: true,
-        allSelectedLabel: 'All memory folders',
+        allSelectedLabel: 'All memory categories',
       },
     })
 
-    expect(wrapper.get('button').text()).toContain('All memory folders')
+    expect(wrapper.get('button').text()).toContain('All memory categories')
     await wrapper.get('button').trigger('click')
     const unselect = wrapper.findAll('button').find((button) => button.text() === 'Unselect All')
     expect(unselect).toBeDefined()

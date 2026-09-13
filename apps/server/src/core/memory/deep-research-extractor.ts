@@ -1,18 +1,18 @@
 import { getGateway } from '../gateway/gateway.js'
 import { recordAuxiliaryModelUsage } from '../usage-metering.js'
-import type { KnowledgeExtractedChunkTags, KnowledgeExtractedEntity, KnowledgeExtractedMention, KnowledgeExtractedRelation } from './memory-knowledge.js'
+import type { DeepResearchExtractedChunkTags, DeepResearchExtractedEntity, DeepResearchExtractedMention, DeepResearchExtractedRelation } from './memory-knowledge.js'
 import type { KnowledgeEntityType, ImportanceLevel } from './knowledge-types.js'
 
-export interface KnowledgeExtractionSegment {
+export interface DeepResearchSegment {
   content: string
   chunkIndex?: number
   chunkIndexes?: number[]
 }
 
-export interface KnowledgeExtractionResult {
-  relations: KnowledgeExtractedRelation[]
-  mentions: KnowledgeExtractedMention[]
-  chunkTags: KnowledgeExtractedChunkTags[]
+export interface DeepResearchResult {
+  relations: DeepResearchExtractedRelation[]
+  mentions: DeepResearchExtractedMention[]
+  chunkTags: DeepResearchExtractedChunkTags[]
 }
 
 const ENTITY_TYPES = new Set<KnowledgeEntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
@@ -50,7 +50,7 @@ export function normalizeKnowledgeTags(value: unknown): string[] {
   return tags.slice(0, 12)
 }
 
-export function mergeKnowledgeChunkTags(chunkTags: KnowledgeExtractedChunkTags[]): string[] {
+export function mergeDeepResearchChunkTags(chunkTags: DeepResearchExtractedChunkTags[]): string[] {
   const merged: string[] = []
   const seen = new Set<string>()
   for (const chunk of [...chunkTags].sort((a, b) => a.sourceChunkIndex - b.sourceChunkIndex)) {
@@ -84,7 +84,7 @@ function parseJsonArray(raw: string): unknown[] {
   return []
 }
 
-function toEntity(value: unknown): KnowledgeExtractedEntity | null {
+function toEntity(value: unknown): DeepResearchExtractedEntity | null {
   if (!value || typeof value !== 'object') return null
   const raw = value as Record<string, unknown>
   const name = cleanDisplay(raw.name, 120)
@@ -108,15 +108,15 @@ function importance(value: unknown): ImportanceLevel {
     : 2
 }
 
-export async function extractKnowledgeFromContent(opts: {
-  segments: KnowledgeExtractionSegment[]
+export async function deepResearchContent(opts: {
+  segments: DeepResearchSegment[]
   providerId?: string
   model?: string
   signal?: AbortSignal
   onProgress?: (current: number, total: number) => void
-  initialResult?: KnowledgeExtractionResult
-  onCheckpoint?: (result: KnowledgeExtractionResult) => void
-}): Promise<KnowledgeExtractionResult> {
+  initialResult?: DeepResearchResult
+  onCheckpoint?: (result: DeepResearchResult) => void
+}): Promise<DeepResearchResult> {
   const gateway = getGateway()
   const provider = opts.providerId
     ? gateway.getProvider(opts.providerId) || gateway.getLastUsedProvider()
@@ -141,8 +141,8 @@ export async function extractKnowledgeFromContent(opts: {
     'Always return the tags object for the source chunk; omit relationship and mention objects when nothing durable and grounded is present.',
   ].join('\n')
 
-  const relations: KnowledgeExtractedRelation[] = [...(opts.initialResult?.relations || [])]
-  const mentions: KnowledgeExtractedMention[] = [...(opts.initialResult?.mentions || [])]
+  const relations: DeepResearchExtractedRelation[] = [...(opts.initialResult?.relations || [])]
+  const mentions: DeepResearchExtractedMention[] = [...(opts.initialResult?.mentions || [])]
   const tagsByChunk = new Map<number, string[]>((opts.initialResult?.chunkTags || []).map((item) => [item.sourceChunkIndex, item.tags]))
   const totalSegments = opts.segments.length
   for (let segmentIndex = 0; segmentIndex < totalSegments; segmentIndex++) {
@@ -160,7 +160,7 @@ export async function extractKnowledgeFromContent(opts: {
     }, provider.config.id)
 
     recordAuxiliaryModelUsage({
-      kind: 'knowledge-extraction',
+      kind: 'deep-research',
       provider: provider.config.id,
       model: response.model || opts.model || provider.config.defaultModel,
       inputTokens: response.usage?.promptTokens,

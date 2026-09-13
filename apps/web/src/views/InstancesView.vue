@@ -131,7 +131,7 @@ async function cancelMemoryJob(job: MemoryIndexJob, event?: Event): Promise<void
 }
 
 function openMemoryJobs(): void {
-  router.push("/memory-spaces/documents");
+  router.push("/memory-categories/documents");
 }
 
 function formatTimeAgo(ts: number): string {
@@ -164,19 +164,19 @@ function instanceTypeClass(type: AgentInstance["type"]): string {
 }
 
 function memoryJobTitle(job: MemoryIndexJob): string {
-  const progress = job.kind === "knowledge-extraction" && job.progressCurrent && job.progressTotal
+  const progress = job.kind === "deep-research" && job.progressCurrent && job.progressTotal
     ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
     : "";
-  const action = job.kind === "knowledge-extraction" ? `Extracting knowledge${progress} from` : "Indexing";
+  const action = job.kind === "deep-research" ? `Running Deep Research${progress} from` : "Indexing";
   return `${action} ${job.fileName}`;
 }
 
 function memoryJobLabel(job: MemoryIndexJob): string {
-  return job.kind === "knowledge-extraction" ? "Knowledge extraction" : "Memory indexing";
+  return job.kind === "deep-research" ? "Deep Research" : "Memory indexing";
 }
 
 function memoryJobIcon(job: MemoryIndexJob): string {
-  return job.kind === "knowledge-extraction" ? "lucide:network" : "lucide:database-zap";
+  return job.kind === "deep-research" ? "lucide:network" : "lucide:database-zap";
 }
 
 function entryRowClass(entry: WorkEntry): string {
@@ -231,7 +231,7 @@ onMounted(() => {
   unsubChatExecutionState = api.chat.onExecutionState(() => {
     void loadData();
   });
-  unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated((job) => {
+  unsubMemoryJobUpdate = api.memoryCategories.onJobUpdated((job) => {
     memoryJobsStore.upsertJob(job);
   });
 });

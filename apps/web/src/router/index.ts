@@ -100,15 +100,15 @@ const router = createRouter({
       name: 'artifacts',
       component: () => import('@/views/ArtifactsView.vue')
     },
-    // Memory Spaces
+    // Memory Categories
     {
-      path: '/memory-spaces',
-      redirect: '/memory-spaces/documents'
+      path: '/memory-categories',
+      redirect: '/memory-categories/documents'
     },
     {
-      path: '/memory-spaces/:section(documents|relationships|visual-graph)',
-      name: 'memory-spaces',
-      component: () => import('@/views/MemorySpacesView.vue')
+      path: '/memory-categories/:section(documents|relationships|visual-graph)',
+      name: 'memory-categories',
+      component: () => import('@/views/MemoryCategoriesView.vue')
     },
     {
       path: '/tools-policy',

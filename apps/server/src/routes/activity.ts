@@ -483,7 +483,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const messageArtifactKeysByConversation = new Map<string, Set<string>>()
-        // Paginate after artifact extraction and deduplication. A bounded window
+        // Paginate after artiDeep Research and deduplication. A bounded window
         // of messages lets ordinary replies push older artifacts out of history
         // and can incorrectly report hasMore=false before they are reached.
         const messageRows = db.prepare(
@@ -552,37 +552,37 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const memoryRows = db.prepare(
-            `SELECT mfi.space_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.knowledge_extracted_at, ms.name AS space_name
+            `SELECT mfi.category_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.deep_researched_at, ms.name AS category_name
              FROM memory_file_index mfi
-             LEFT JOIN memory_spaces ms ON ms.id = mfi.space_id
-             ORDER BY MAX(mfi.last_indexed_at, mfi.knowledge_extracted_at, mfi.created_at) DESC
+             LEFT JOIN memory_categories ms ON ms.id = mfi.category_id
+             ORDER BY MAX(mfi.last_indexed_at, mfi.deep_researched_at, mfi.created_at) DESC
              LIMIT ?`
         ).all(queryLimit) as {
-            space_id: string
+            category_id: string
             file_name: string
             chunk_count: number
             created_at: number
             last_indexed_at: number
-            knowledge_extracted_at: number
-            space_name: string | null
+            deep_researched_at: number
+            category_name: string | null
         }[]
 
         for (const row of memoryRows) {
-            const createdAt = Math.max(row.last_indexed_at || 0, row.knowledge_extracted_at || 0, row.created_at || 0)
+            const createdAt = Math.max(row.last_indexed_at || 0, row.deep_researched_at || 0, row.created_at || 0)
             if (!createdAt) continue
-            const knowledgeExtracted = row.knowledge_extracted_at && row.knowledge_extracted_at >= row.last_indexed_at
+            const deepResearched = row.deep_researched_at && row.deep_researched_at >= row.last_indexed_at
             items.push({
-                id: `memory-file:${row.space_id}:${row.file_name}:${createdAt}`,
+                id: `memory-file:${row.category_id}:${row.file_name}:${createdAt}`,
                 kind: 'memory',
-                title: knowledgeExtracted ? `Updated knowledge graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
-                description: `${row.space_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
+                title: deepResearched ? `Updated knowledge graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
+                description: `${row.category_name || 'Memory category'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
                 createdAt,
                 agentId: null,
                 agentName: null,
                 agentIconUrl: null,
                 conversationId: null,
                 status: 'completed',
-                sourceId: row.space_id,
+                sourceId: row.category_id,
                 sourceLabel: 'Memory',
             })
         }

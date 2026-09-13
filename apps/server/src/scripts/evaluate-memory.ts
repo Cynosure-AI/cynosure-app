@@ -6,7 +6,7 @@ interface EvaluationCase {
   relevantSourceFiles?: string[]
   relevantRelations?: Array<{ from: string; predicate: string; to: string }>
   expectNoAnswer?: boolean
-  spaceId?: string
+  categoryId?: string
   mode?: 'chunks' | 'aggregate' | 'knowledge'
 }
 
@@ -67,10 +67,10 @@ for (const item of cases) {
     ? '/api/memory/search'
     : mode === 'knowledge' ? '/api/memory/knowledge/search' : '/api/memory/aggregate'
   const body = mode === 'chunks'
-    ? { query: item.query, topK, spaceId: item.spaceId }
+    ? { query: item.query, topK, categoryId: item.categoryId }
     : mode === 'knowledge'
-      ? { query: item.query, limit: topK, spaceIds: item.spaceId ? [item.spaceId] : [] }
-      : { query: item.query, opts: { permanentTopK: topK, includeGraph: true, spaceIds: item.spaceId ? [item.spaceId] : undefined } }
+      ? { query: item.query, limit: topK, categoryIds: item.categoryId ? [item.categoryId] : [] }
+      : { query: item.query, opts: { permanentTopK: topK, includeGraph: true, categoryIds: item.categoryId ? [item.categoryId] : undefined } }
   const response = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

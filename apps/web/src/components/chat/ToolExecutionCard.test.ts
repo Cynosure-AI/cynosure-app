@@ -14,7 +14,7 @@ describe('ToolExecutionCard', () => {
       type: 'memory',
       contextPhase: 'gathered-context',
       sourceFile: 'Communication Personality Analysis.md',
-      folderPath: 'Default',
+      directoryPath: 'Default',
       chunkIndex,
       content: `Memory chunk ${chunkIndex}`,
     })
@@ -50,7 +50,7 @@ describe('ToolExecutionCard', () => {
       type: 'memory',
       contextPhase: 'gathered-results',
       sourceFile,
-      folderPath: 'Product Research',
+      directoryPath: 'Product Research',
       chunkIndex,
       content: `Memory chunk ${chunkIndex}`,
     })

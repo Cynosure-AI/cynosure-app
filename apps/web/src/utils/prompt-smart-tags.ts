@@ -92,8 +92,8 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
   },
   {
     name: "selectedMemFolderNames",
-    label: "Selected memory folders",
-    description: "Names of the memory folders provided to this execution.",
+    label: "Selected memory categories",
+    description: "Names of the memory categories provided to this execution.",
   },
 ];
 

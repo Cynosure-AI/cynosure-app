@@ -98,7 +98,7 @@ async function saveAsNewAgent(): Promise<void> {
       systemPrompt: chatStore.sessionSystemPrompt,
       tools: [...chatStore.selectedToolNames],
       subAgents,
-      memorySpaces: [...chatStore.freeChatMemorySpaceIds],
+      memoryCategories: [...chatStore.freeChatMemoryCategoryIds],
       thinkingEnabled: chatStore.sessionThinkingEnabled,
       reasoningEffort: chatStore.sessionReasoningEffort,
     })
@@ -260,7 +260,7 @@ async function saveAsNewAgent(): Promise<void> {
     @close="saveModalOpen = false"
   >
     <p class="mb-4 text-sm text-theme-400">
-      Create a new agent from the current session configuration, including tools, sub-agents, memory folders, and system prompt.
+      Create a new agent from the current session configuration, including tools, sub-agents, memory categories, and system prompt.
     </p>
     <div class="space-y-3">
       <div>
@@ -292,8 +292,8 @@ async function saveAsNewAgent(): Promise<void> {
         <p v-if="chatStore.freeChatSubAgentIds.length">
           {{ chatStore.freeChatSubAgentIds.length }} sub-agent{{ chatStore.freeChatSubAgentIds.length === 1 ? '' : 's' }}
         </p>
-        <p v-if="chatStore.freeChatMemorySpaceIds.length">
-          {{ chatStore.freeChatMemorySpaceIds.length }} memory folder{{ chatStore.freeChatMemorySpaceIds.length === 1 ? '' : 's' }}
+        <p v-if="chatStore.freeChatMemoryCategoryIds.length">
+          {{ chatStore.freeChatMemoryCategoryIds.length }} memory category{{ chatStore.freeChatMemoryCategoryIds.length === 1 ? '' : 's' }}
         </p>
         <p v-if="chatStore.sessionSystemPrompt.trim()">
           Custom system prompt

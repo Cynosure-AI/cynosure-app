@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
-import type { AgentDefinition, MemorySpace } from '../../api/types'
+import type { AgentDefinition, MemoryCategory } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
@@ -11,21 +11,21 @@ const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 const router = useRouter()
 
-// --- Memory Folders ---
-const allSpaces = ref<MemorySpace[]>([])
+// --- Memory Categories ---
+const allSpaces = ref<MemoryCategory[]>([])
 const spacesLoading = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
 
-const assignedIds = computed(() => new Set(props.agent.memorySpaces ?? []))
+const assignedIds = computed(() => new Set(props.agent.memoryCategories ?? []))
 
-const assignedSpaces = computed(() =>
+const assignedCategories = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
 )
 
 const visibleSpaces = computed(() =>
   allSpaces.value.filter((space) => {
-    if (space.isDefault) return true
-    const parts = (space.relativePath || '').split('/')
+    if (space.isUncategorized) return true
+    const parts = (space.categoryPath || '').split('/')
     for (let i = 1; i < parts.length; i++) {
       if (collapsedFolders.value.has(parts.slice(0, i).join('/'))) return false
     }
@@ -33,14 +33,14 @@ const visibleSpaces = computed(() =>
   })
 )
 
-async function loadSpaces() {
+async function loadCategories() {
   spacesLoading.value = true
   try {
-    const spaces = await api.memorySpaces.list()
+    const spaces = await api.memoryCategories.list()
     allSpaces.value = [...spaces].sort((a, b) => {
-      if (a.isDefault) return -1
-      if (b.isDefault) return 1
-      return (a.relativePath || '').localeCompare(b.relativePath || '')
+      if (a.isUncategorized) return -1
+      if (b.isUncategorized) return 1
+      return (a.categoryPath || '').localeCompare(b.categoryPath || '')
     })
     collapseFoldersWithChildren(allSpaces.value)
   } catch (err) {
@@ -49,10 +49,10 @@ async function loadSpaces() {
   spacesLoading.value = false
 }
 
-function collapseFoldersWithChildren(spaces: MemorySpace[]) {
+function collapseFoldersWithChildren(spaces: MemoryCategory[]) {
   const pathsWithChildren = new Set<string>()
   const paths = spaces
-    .map((space) => space.relativePath || '')
+    .map((space) => space.categoryPath || '')
     .filter(Boolean)
 
   for (const path of paths) {
@@ -65,54 +65,54 @@ function collapseFoldersWithChildren(spaces: MemorySpace[]) {
   collapsedFolders.value = pathsWithChildren
 }
 
-function toggleSpace(spaceId: string) {
-  const space = allSpaces.value.find((candidate) => candidate.id === spaceId)
+function toggleSpace(categoryId: string) {
+  const space = allSpaces.value.find((candidate) => candidate.id === categoryId)
   if (!space) return
 
-  const current = new Set(props.agent.memorySpaces ?? [])
-  const scopedIds = memorySpaceScopeIds(space)
+  const current = new Set(props.agent.memoryCategories ?? [])
+  const scopedIds = memoryCategoryScopeIds(space)
 
-  if (current.has(spaceId)) {
+  if (current.has(categoryId)) {
     for (const id of scopedIds) current.delete(id)
   } else {
     for (const id of scopedIds) current.add(id)
   }
 
-  emit('update', 'memorySpaces', Array.from(current))
+  emit('update', 'memoryCategories', Array.from(current))
 }
 
 function selectAll() {
-  emit('update', 'memorySpaces', allSpaces.value.map((space) => space.id))
+  emit('update', 'memoryCategories', allSpaces.value.map((space) => space.id))
 }
 
 function deselectAll() {
-  emit('update', 'memorySpaces', [])
+  emit('update', 'memoryCategories', [])
 }
 
-function memorySpaceScopeIds(space: MemorySpace): string[] {
-  if (space.isDefault) return [space.id]
-  const prefix = space.relativePath ? `${space.relativePath}/` : ''
+function memoryCategoryScopeIds(space: MemoryCategory): string[] {
+  if (space.isUncategorized) return [space.id]
+  const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
   return allSpaces.value
-    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.relativePath?.startsWith(prefix)))
+    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.categoryPath?.startsWith(prefix)))
     .map((candidate) => candidate.id)
 }
 
-function hasChildren(space: MemorySpace): boolean {
-  const prefix = space.relativePath ? `${space.relativePath}/` : ''
-  return allSpaces.value.some((candidate) => space.isDefault ? Boolean(candidate.relativePath) : candidate.relativePath?.startsWith(prefix))
+function hasChildren(space: MemoryCategory): boolean {
+  const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
+  return allSpaces.value.some((candidate) => space.isUncategorized ? Boolean(candidate.categoryPath) : candidate.categoryPath?.startsWith(prefix))
 }
 
-function isPartiallySelected(space: MemorySpace): boolean {
-  if (space.isDefault || !hasChildren(space)) return false
+function isPartiallySelected(space: MemoryCategory): boolean {
+  if (space.isUncategorized || !hasChildren(space)) return false
   // Show partial icon whenever children are selected but the parent itself is not
   if (assignedIds.value.has(space.id)) return false
-  const prefix = `${space.relativePath}/`
-  const directChildren = allSpaces.value.filter(c => c.relativePath?.startsWith(prefix))
+  const prefix = `${space.categoryPath}/`
+  const directChildren = allSpaces.value.filter(c => c.categoryPath?.startsWith(prefix))
   return directChildren.some(c => assignedIds.value.has(c.id))
 }
 
-function toggleCollapsed(space: MemorySpace) {
-  const key = space.relativePath || ''
+function toggleCollapsed(space: MemoryCategory) {
+  const key = space.categoryPath || ''
   const next = new Set(collapsedFolders.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
@@ -120,10 +120,10 @@ function toggleCollapsed(space: MemorySpace) {
 }
 
 function goToMemory() {
-  router.push('/memory-spaces')
+  router.push('/memory-categories')
 }
 
-onMounted(() => loadSpaces())
+onMounted(() => loadCategories())
 </script>
 
 <template>
@@ -142,7 +142,7 @@ onMounted(() => loadSpaces())
             </h3>
           </div>
           <p class="text-xs text-theme-500 leading-relaxed">
-            Retrieve and inject relevant document snippets before this agent responds. Relationship tools use the same selected-folder scope on demand.
+            Retrieve and inject relevant document snippets before this agent responds. Relationship tools use the same selected-category scope on demand.
           </p>
         </div>
         <ToggleSwitch
@@ -155,7 +155,7 @@ onMounted(() => loadSpaces())
       </div>
     </BaseCard>
 
-    <!-- Memory Spaces -->
+    <!-- Memory Categories -->
     <BaseCard class="p-5">
       <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-2">
@@ -164,7 +164,7 @@ onMounted(() => loadSpaces())
             class="w-4 h-4 text-accent-400"
           />
           <h3 class="text-sm font-medium text-theme-200">
-            Memory Folders
+            Memory Categories
           </h3>
         </div>
         <div class="flex items-center gap-2">
@@ -181,7 +181,7 @@ onMounted(() => loadSpaces())
           <button
             :disabled="spacesLoading"
             class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200 transition-colors"
-            @click="loadSpaces"
+            @click="loadCategories"
           >
             <Icon
               :icon="spacesLoading ? 'lucide:loader-2' : 'lucide:refresh-cw'"
@@ -192,7 +192,7 @@ onMounted(() => loadSpaces())
         </div>
       </div>
       <p class="text-xs text-theme-500 mb-3">
-        Select memory folders to give this agent access to shared knowledge.
+        Select memory categories to give this agent access to shared knowledge.
       </p>
 
       <!-- Count + select all/none -->
@@ -201,18 +201,18 @@ onMounted(() => loadSpaces())
         class="mb-2 flex items-center justify-between text-xs"
       >
         <span class="text-theme-500">
-          {{ assignedSpaces.length === allSpaces.length ? 'All folders selected' : `${assignedSpaces.length}/${allSpaces.length} selected` }}
+          {{ assignedCategories.length === allSpaces.length ? 'All categories selected' : `${assignedCategories.length}/${allSpaces.length} selected` }}
         </span>
         <div class="flex items-center gap-3">
           <button
-            v-if="assignedSpaces.length < allSpaces.length"
+            v-if="assignedCategories.length < allSpaces.length"
             class="text-accent-400 hover:text-accent-300 transition-colors"
             @click="selectAll"
           >
             Select all
           </button>
           <button
-            v-if="assignedSpaces.length > 0"
+            v-if="assignedCategories.length > 0"
             class="text-theme-400 hover:text-theme-200 transition-colors"
             @click="deselectAll"
           >
@@ -231,7 +231,7 @@ onMounted(() => loadSpaces())
             icon="lucide:loader-2"
             class="w-4 h-4 animate-spin mx-auto mb-2"
           />
-          Loading folders…
+          Loading categories…
         </div>
         <div
           v-else-if="allSpaces.length === 0"
@@ -242,7 +242,7 @@ onMounted(() => loadSpaces())
             class="w-8 h-8 text-theme-700 mx-auto mb-2"
           />
           <p class="text-sm text-theme-500">
-            No memory folders found
+            No memory categories found
           </p>
         </div>
         <div
@@ -269,18 +269,18 @@ onMounted(() => loadSpaces())
             <!-- Chevron: always rendered to keep all rows aligned -->
             <button
               class="p-0.5 shrink-0 text-theme-500 hover:text-theme-200 transition-colors"
-              :class="{ 'invisible pointer-events-none': space.isDefault || !hasChildren(space) }"
+              :class="{ 'invisible pointer-events-none': space.isUncategorized || !hasChildren(space) }"
               @click.stop="toggleCollapsed(space)"
             >
               <Icon
                 icon="lucide:chevron-down"
                 class="w-3.5 h-3.5 transition-transform"
-                :class="{ '-rotate-90': collapsedFolders.has(space.relativePath || '') }"
+                :class="{ '-rotate-90': collapsedFolders.has(space.categoryPath || '') }"
               />
             </button>
             <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
               <Icon
-                :icon="space.isDefault ? 'lucide:hard-drive' : 'lucide:folder'"
+                :icon="space.isUncategorized ? 'lucide:hard-drive' : 'lucide:folder'"
                 class="w-3.5 h-3.5"
                 :class="assignedIds.has(space.id) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
               />

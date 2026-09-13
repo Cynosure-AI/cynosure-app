@@ -129,7 +129,7 @@
             Memory embeddings are ready
           </p>
           <p class="text-xs text-theme-400 mt-0.5">
-            Cynosure can now index memory spaces and retrieve relevant knowledge for your agents.
+            Cynosure can now index memory categories and retrieve relevant knowledge for your agents.
           </p>
         </div>
       </div>

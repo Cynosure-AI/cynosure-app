@@ -7,7 +7,7 @@ import { generateTitle } from '../../agent/post-execution.js'
 import { getAgent } from '../../agents/agent-store.js'
 import { getToolRegistry } from '../../tools/tool-registry.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
-import { getAssignedOrDefaultSpaces } from '../../memory/memory-space-scope.js'
+import { getAssignedMemoryCategories } from '../../memory/memory-category-scope.js'
 import { buildInitialExecutionConfig } from '../../chat/run-config.js'
 import type { ChatMessage, ContentPart } from '../../gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
@@ -180,7 +180,7 @@ export async function processMessage(ctx: DiscordCtx, msg: Message): Promise<voi
             resolvedAgent, conversationId, broadcast: ctx.broadcast, abortSignal: execAbort.signal,
             gateway: getGateway(), toolRegistry: getToolRegistry(), messages, userText,
             run: {
-                memorySpaceOverrides: getAssignedOrDefaultSpaces(resolvedAgent.id),
+                memoryCategoryOverrides: getAssignedMemoryCategories(resolvedAgent.id),
                 autoMemory: resolvedAgent.autoMemory === true,
                 thinkingEnabled: resolvedAgent.thinkingEnabled !== false,
             },
@@ -448,8 +448,8 @@ export function getOrCreateConversation(ctx: DiscordCtx, discordChannelId: strin
     const now = Date.now()
     const metadataJson = JSON.stringify({ channelKey })
     const agent = getAgent(resolvedAgentId)
-    const memorySpaceIds = getAssignedOrDefaultSpaces(resolvedAgentId).map((space) => space.id)
-    const executionConfig = buildInitialExecutionConfig({ agent, memorySpaceIds })
+    const memoryCategoryIds = getAssignedMemoryCategories(resolvedAgentId).map((space) => space.id)
+    const executionConfig = buildInitialExecutionConfig({ agent, memoryCategoryIds })
     db.prepare(
         'INSERT INTO conversations (id, title, agent_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(id, senderName, resolvedAgentId, 'channel', JSON.stringify(executionConfig), metadataJson, now, now)

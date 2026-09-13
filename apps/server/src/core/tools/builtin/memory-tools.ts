@@ -1,22 +1,24 @@
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
 import { createHash } from 'node:crypto'
+import { basename, join } from 'node:path'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
-import { buildMemorySpaceFilter as buildScopeFilter, getDefaultMemorySpace, getMemorySpaceFolderPath, type MemorySpaceRef } from '../../memory/memory-space-scope.js'
-import { relativePathForFolder } from '../../memory/memory-space-folders.js'
+import { buildMemoryCategoryFilter as buildScopeFilter, getDefaultMemoryCategory, getMemoryCategoryDirectoryPath, type MemoryCategoryRef } from '../../memory/memory-category-scope.js'
+import { ensureMemoryCategoryPath, categoryPathForDirectory } from '../../memory/memory-category-directories.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
-import { deleteMemoryKnowledgeSource } from '../../memory/memory-knowledge-extraction.js'
+import { deleteMemoryKnowledgeSource } from '../../memory/memory-deep-research.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
     memoryDocumentRefMatchesContentHash,
     parseMemoryDocumentRef,
     type ParsedMemoryDocumentRef,
 } from '../../memory/memory-reference.js'
+import type { MemoryRevisionContext } from '../../memory/memory-revisions.js'
 
-function abortPendingMemoryIndexJobs(spaceId: string, fileName: string): void {
-    cancelMemoryIndexJobsForFile(spaceId, fileName)
+function abortPendingMemoryIndexJobs(categoryId: string, fileName: string): void {
+    cancelMemoryIndexJobsForFile(categoryId, fileName)
 }
 
 const memoryDocumentMutationTails = new Map<string, Promise<void>>()
@@ -39,16 +41,17 @@ async function withMemoryDocumentLock<T>(documentId: string, signal: AbortSignal
 }
 
 async function reindexMemoryFile(
-    spaceId: string,
+    categoryId: string,
     fileName: string,
     signal?: AbortSignal,
+    revisionContext?: MemoryRevisionContext,
 ): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
-    const folderPath = getMemorySpaceFolderPath(spaceId)
-    if (!folderPath) throw new Error('Memory folder has no folder configured')
-    cancelMemoryIndexJobsForFile(spaceId, fileName)
+    const directoryPath = getMemoryCategoryDirectoryPath(categoryId)
+    if (!directoryPath) throw new Error('Memory category has no category configured')
+    cancelMemoryIndexJobsForFile(categoryId, fileName)
     const memory = getAgentMemory()
-    const result = await memory.reindexFile(folderPath, fileName, spaceId, { signal })
-    const ref = memory.getDocumentReference(spaceId, result.fileName)
+    const result = await memory.reindexFile(directoryPath, fileName, categoryId, { signal, revisionContext })
+    const ref = memory.getDocumentReference(categoryId, result.fileName)
     if (!ref) throw new Error('Memory was indexed but its document reference could not be loaded')
     return { chunkCount: result.chunkCount, revision: ref.revision, documentId: ref.documentId, documentRef: ref.documentRef }
 }
@@ -61,11 +64,8 @@ export const MEMORY_READ_TOOL_NAMES = [
 
 export const MEMORY_WRITE_TOOL_NAMES = [
     'memory_create',
-    'memory_append',
-    'memory_replace_range',
-    'memory_replace_all',
-    'memory_remove_all',
-    'memory_remove_range',
+    'memory_update',
+    'memory_delete',
 ] as const
 
 export const MEMORY_TOOL_NAMES = [
@@ -104,10 +104,11 @@ export function isKnowledgeReadToolName(toolName: string): toolName is Knowledge
 }
 
 export interface MemoryToolOptions {
-    /** SQL filter covering all selected memory folders, e.g. `spaceId IN ('...', '...')`. */
-    spaceFilter?: string
-    /** Selected memory folders for write tools and read disambiguation. */
-    assignedSpaces?: MemorySpaceRef[]
+    /** SQL filter covering all selected memory categories, e.g. `categoryId IN ('...', '...')`. */
+    categoryFilter?: string
+    /** Selected memory categories for write tools and read disambiguation. */
+    assignedCategories?: MemoryCategoryRef[]
+    revisionContext?: MemoryRevisionContext
     /** Optional background-curator guards; the mutation guard runs under the document lock. */
     onDocumentRead?: (documentId: string, revision: string) => void
     beforeDocumentMutation?: (documentId: string, content: string) => void
@@ -160,7 +161,7 @@ function resolveKnowledgeAssertionId(value: string): { id: string } | { error: s
     return { id: trimmed }
 }
 
-function resolveKnowledgeEntityIds(values: unknown, spaceIds: string[]): { ids: string[] } | { error: string } {
+function resolveKnowledgeEntityIds(values: unknown, categoryIds: string[]): { ids: string[] } | { error: string } {
     if (!Array.isArray(values)) return { error: 'entityIds must be an array containing at least one entity ID.' }
     const requested = Array.from(new Set(values
         .filter((value): value is string => typeof value === 'string')
@@ -168,8 +169,8 @@ function resolveKnowledgeEntityIds(values: unknown, spaceIds: string[]): { ids: 
         .filter(Boolean)))
         .slice(0, 20)
     if (requested.length < 1) return { error: 'Provide at least one entity ID to merge.' }
-    if (spaceIds.length === 0) return { error: 'No memory folder is selected for knowledge access.' }
-    const scopePlaceholders = spaceIds.map(() => '?').join(', ')
+    if (categoryIds.length === 0) return { error: 'No memory category is selected for knowledge access.' }
+    const scopePlaceholders = categoryIds.map(() => '?').join(', ')
     const ids: string[] = []
     let readableHandleRows: Array<{ id: string }> | undefined
     for (const requestedId of requested) {
@@ -182,7 +183,7 @@ function resolveKnowledgeEntityIds(values: unknown, spaceIds: string[]): { ids: 
                 SELECT id FROM memory_knowledge_entities
                 WHERE status = 'active' AND namespace_id IN (${scopePlaceholders})
                 ORDER BY updated_at DESC
-              `).all(...spaceIds) as Array<{ id: string }>
+              `).all(...categoryIds) as Array<{ id: string }>
         }
         const rows = readableSuffix
             ? readableHandleRows!.filter((row) => knowledgeHandleSuffix(row.id) === readableSuffix)
@@ -191,12 +192,12 @@ function resolveKnowledgeEntityIds(values: unknown, spaceIds: string[]): { ids: 
                 SELECT id FROM memory_knowledge_entities
                 WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id LIKE ?
                 ORDER BY updated_at DESC LIMIT 2
-              `).all(...spaceIds, `${candidate}%`) as Array<{ id: string }>
+              `).all(...categoryIds, `${candidate}%`) as Array<{ id: string }>
               : getDb().prepare(`
                 SELECT id FROM memory_knowledge_entities
                 WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id = ?
                 LIMIT 1
-              `).all(...spaceIds, candidate) as Array<{ id: string }>
+              `).all(...categoryIds, candidate) as Array<{ id: string }>
         if (rows.length === 0) return { error: `No active entity matched ID ${requestedId}. Use knowledge_search to refresh the IDs.` }
         if (rows.length > 1) return { error: `Multiple entities match ID ${requestedId}. Use knowledge_search to refresh the IDs and retry.` }
         ids.push(rows[0].id)
@@ -292,61 +293,61 @@ function toEntityInput(value: unknown): { name: string; type: KnowledgeEntityTyp
     }
 }
 
-function getKnownMemorySpaces(): MemorySpaceRef[] {
+function getKnownMemoryCategories(): MemoryCategoryRef[] {
     try {
         const db = getDb()
         const rows = db
-            .prepare('SELECT id, name, folder_path, is_default FROM memory_spaces ORDER BY is_default DESC, folder_path ASC')
-            .all() as { id: string; name: string; folder_path: string; is_default: number }[]
+            .prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_categories ORDER BY is_uncategorized DESC, directory_path ASC')
+            .all() as { id: string; name: string; directory_path: string; is_uncategorized: number }[]
         return rows.map((row) => ({
             id: row.id,
             name: row.name,
-            relativePath: row.is_default === 1 ? '' : relativePathForFolder(row.folder_path),
+            categoryPath: row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path),
         }))
     } catch {
         return []
     }
 }
 
-function createKnownMemorySpacesLoader(): () => MemorySpaceRef[] {
-    let cached: MemorySpaceRef[] | undefined
+function createKnownMemoryCategoriesLoader(): () => MemoryCategoryRef[] {
+    let cached: MemoryCategoryRef[] | undefined
     return () => {
-        cached ??= getKnownMemorySpaces()
+        cached ??= getKnownMemoryCategories()
         return cached
     }
 }
 
-function formatSpaces(spaces: MemorySpaceRef[]): string {
-    if (spaces.length === 0) return 'No memory folders exist yet.'
-    return spaces.map(s => {
-        const path = s.relativePath ? `, folder: ${s.relativePath}` : ', folder: Default'
+function formatCategories(categories: MemoryCategoryRef[]): string {
+    if (categories.length === 0) return 'No memory categories exist yet.'
+    return categories.map(s => {
+        const path = s.categoryPath ? `, category: ${s.categoryPath}` : ', category: Uncategorized'
         return `  - "${s.name}" (id: ${s.id}${path})`
     }).join('\n')
 }
 
-function findSpaceByIdOrName(spaces: MemorySpaceRef[], wanted: string): MemorySpaceRef | undefined {
+function findSpaceByIdOrName(categories: MemoryCategoryRef[], wanted: string): MemoryCategoryRef | undefined {
     const normalized = wanted.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase()
-    return spaces.find(s =>
+    return categories.find(s =>
         s.id === wanted ||
         s.name.toLowerCase() === wanted.toLowerCase() ||
-        (s.relativePath || '').toLowerCase() === normalized ||
-        (s.relativePath === '' && normalized === 'default')
+        (s.categoryPath || '').toLowerCase() === normalized ||
+        (s.categoryPath === '' && normalized === 'uncategorized')
     )
 }
 
-function makeScopeSummary(assignedSpaces: MemorySpaceRef[]): string {
-    if (assignedSpaces.length === 0) {
-        const defaultSpace = getDefaultMemorySpace()
-        return defaultSpace ? `Scope: all memory folders; writes default to "${defaultSpace.name}".` : 'Scope: no memory folders.'
+function makeScopeSummary(assignedCategories: MemoryCategoryRef[]): string {
+    if (assignedCategories.length === 0) {
+        const uncategorizedCategory = getDefaultMemoryCategory()
+        return uncategorizedCategory ? `Scope: all memory categories; writes default to "${uncategorizedCategory.name}".` : 'Scope: no memory categories.'
     }
-    if (assignedSpaces.length === 1) return `Scope: "${assignedSpaces[0].name}" folder only.`
-    return `Scope: selected memory folders only (${assignedSpaces.map(s => `"${s.name}"`).join(', ')}).`
+    if (assignedCategories.length === 1) return `Scope: "${assignedCategories[0].name}" category only.`
+    return `Scope: selected memory categories only (${assignedCategories.map(s => `"${s.name}"`).join(', ')}).`
 }
 
-function buildSpaceMap(...spaceGroups: MemorySpaceRef[][]): Map<string, string> {
+function buildCategoryMap(...spaceGroups: MemoryCategoryRef[][]): Map<string, string> {
     const map = new Map<string, string>()
     for (const group of spaceGroups) {
-        for (const space of group) map.set(space.id, space.name)
+        for (const category of group) map.set(category.id, category.name)
     }
     return map
 }
@@ -430,107 +431,113 @@ function removeChunkRangeFromText(
     }
 }
 
-function resolveReadableSpaceFilter(
-    assignedSpaces: MemorySpaceRef[],
+function resolveReadableCategoryFilter(
+    assignedCategories: MemoryCategoryRef[],
     baseFilter?: string,
-    folderParam?: string,
-    getKnownSpaces: () => MemorySpaceRef[] = getKnownMemorySpaces,
-): { filter?: string; space?: MemorySpaceRef } | { error: string } {
-    if (!folderParam?.trim()) return { filter: baseFilter }
+    categoryParam?: string,
+    getKnownCategories: () => MemoryCategoryRef[] = getKnownMemoryCategories,
+): { filter?: string; category?: MemoryCategoryRef } | { error: string } {
+    if (!categoryParam?.trim()) return { filter: baseFilter }
 
-    const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
-    const wanted = folderParam.trim()
+    const candidates = assignedCategories.length > 0 ? assignedCategories : getKnownCategories()
+    const wanted = categoryParam.trim()
     const match = findSpaceByIdOrName(candidates, wanted)
     if (!match) {
-        const scopeLabel = assignedSpaces.length > 0 ? 'selected memory folders' : 'existing memory folders'
+        const scopeLabel = assignedCategories.length > 0 ? 'selected memory categories' : 'existing memory categories'
         return {
-            error: `Memory folder "${wanted}" was not found in ${scopeLabel}.\n${formatSpaces(candidates)}`
+            error: `Memory category "${wanted}" was not found in ${scopeLabel}.\n${formatCategories(candidates)}`
         }
     }
 
-    return { filter: buildScopeFilter([match]), space: match }
+    return { filter: buildScopeFilter([match]), category: match }
 }
 
 /**
- * Resolve the target folder for a write operation, with smart name-based fallback.
- * Priority (when no explicit folder param):
- * 1. If title exists in exactly one selected folder → use that
- * 2. If exactly one folder is selected → use it
- * 3. If default folder exists → use it for unspecified writes
+ * Resolve the target category for a write operation, with smart name-based fallback.
+ * Priority (when no explicit category param):
+ * 1. If title exists in exactly one selected category → use that
+ * 2. If exactly one category is selected → use it
+ * 3. If default category exists → use it for unspecified writes
  * 4. If multiple folders are selected and no default exists → error
  * 5. If no folders exist → error
  */
-async function resolveTargetSpace(
-    assignedSpaces: MemorySpaceRef[],
-    folderParam?: string,
+async function resolveTargetCategory(
+    assignedCategories: MemoryCategoryRef[],
+    categoryParam?: string,
     existingTitle?: string,
-    getKnownSpaces: () => MemorySpaceRef[] = getKnownMemorySpaces,
-): Promise<{ spaceId: string; spaceName: string } | { error: string }> {
-    // --- Explicit folder parameter provided ---
-    if (folderParam?.trim()) {
-        const wanted = folderParam.trim()
-        const candidates = assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces()
+    getKnownCategories: () => MemoryCategoryRef[] = getKnownMemoryCategories,
+): Promise<{ categoryId: string; categoryName: string } | { error: string }> {
+    // --- Explicit category parameter provided ---
+    if (categoryParam?.trim()) {
+        const wanted = categoryParam.trim()
+        const candidates = assignedCategories.length > 0 ? assignedCategories : getKnownCategories()
         const match = findSpaceByIdOrName(candidates, wanted)
-        if (match) return { spaceId: match.id, spaceName: match.name }
-
-        const scopeLabel = assignedSpaces.length > 0 ? 'selected memory folders' : 'existing memory folders'
-        return {
-            error: `Memory folder "${wanted}" not found in ${scopeLabel}.\n${formatSpaces(candidates.length > 0 ? candidates : getKnownSpaces())}`
+        if (match) return { categoryId: match.id, categoryName: match.name }
+        if (wanted.includes(':')) return { error: `Unknown memory category ID "${wanted}".` }
+        const normalized = wanted.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+        const roots = assignedCategories.length > 0 ? assignedCategories : [getDefaultMemoryCategory()].filter(Boolean) as MemoryCategoryRef[]
+        const allowed = roots.some(root => !root.categoryPath || normalized === root.categoryPath || normalized.startsWith(`${root.categoryPath}/`))
+        if (!allowed) return { error: `Category "${wanted}" is outside the granted memory category trees.\n${formatCategories(roots)}` }
+        try {
+            const created = ensureMemoryCategoryPath(getDb(), normalized)
+            return { categoryId: created.id, categoryName: created.name }
+        } catch (error) {
+            return { error: error instanceof Error ? error.message : String(error) }
         }
     }
 
-    // --- No explicit folder parameter ---
+    // --- No explicit category parameter ---
     // For updates: try smart title-based resolution first
-    if (existingTitle && assignedSpaces.length > 0) {
+    if (existingTitle && assignedCategories.length > 0) {
         const mem = getAgentMemory()
         const counts = await Promise.all(
-            assignedSpaces.map(async (space) => {
-                const filter = buildScopeFilter([space])
+            assignedCategories.map(async (category) => {
+                const filter = buildScopeFilter([category])
                 try {
                     return await mem.countChunks(existingTitle, filter)
                 } catch {
-                    // Ignore errors in checking individual spaces
+                    // Ignore errors in checking individual categories
                     return 0
                 }
             })
         )
-        const matchingSpaces = assignedSpaces.filter((_, i) => counts[i] > 0)
+        const matchingCategories = assignedCategories.filter((_, i) => counts[i] > 0)
 
-        if (matchingSpaces.length === 1) {
-            // Title exists in exactly one space — use that
-            return { spaceId: matchingSpaces[0].id, spaceName: matchingSpaces[0].name }
+        if (matchingCategories.length === 1) {
+            // Title exists in exactly one category — use that
+            return { categoryId: matchingCategories[0].id, categoryName: matchingCategories[0].name }
         }
 
-        if (matchingSpaces.length > 1) {
-            // Title exists in multiple spaces — need explicit selection
-            const listing = matchingSpaces.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
-            return { error: `Memory entry "${existingTitle}" exists in multiple folders. Please specify which to update using the 'folder' parameter:\n${listing}` }
+        if (matchingCategories.length > 1) {
+            // Title exists in multiple categories — need explicit selection
+            const listing = matchingCategories.map(s => `  - "${s.name}" (id: ${s.id})`).join('\n')
+            return { error: `Memory entry "${existingTitle}" exists in multiple folders. Please specify which to update using the 'category' parameter:\n${listing}` }
         }
     }
 
     // --- Smart fallback logic ---
-    // If exactly one space is in scope, omitted "folder" writes target that space.
-    if (assignedSpaces.length === 1) {
-        return { spaceId: assignedSpaces[0].id, spaceName: assignedSpaces[0].name }
+    // If exactly one category is in scope, omitted "category" writes target that category.
+    if (assignedCategories.length === 1) {
+        return { categoryId: assignedCategories[0].id, categoryName: assignedCategories[0].name }
     }
 
-    // Unspecified writes outside a single selected scope land in the root/default memory folder.
-    const defaultSpace = getDefaultMemorySpace()
-    if (defaultSpace) {
-        return { spaceId: defaultSpace.id, spaceName: defaultSpace.name }
+    // Unspecified writes outside a single selected scope land in the root/Uncategorized memory category.
+    const uncategorizedCategory = getDefaultMemoryCategory()
+    if (uncategorizedCategory) {
+        return { categoryId: uncategorizedCategory.id, categoryName: uncategorizedCategory.name }
     }
 
-    // Multiple selected folders but no default or unambiguous match → error
-    if (assignedSpaces.length > 1) {
-        return { error: `Multiple memory folders are selected. Please specify which to write to using the 'folder' parameter.\nAvailable folders:\n${formatSpaces(assignedSpaces)}` }
+    // Multiple selected categorys but no default or unambiguous match → error
+    if (assignedCategories.length > 1) {
+        return { error: `Multiple memory categories are selected. Please specify which to write to using the 'category' parameter.\nAvailable categories:\n${formatCategories(assignedCategories)}` }
     }
 
     // 4. No folders at all
-    const existing = getKnownSpaces()
+    const existing = getKnownCategories()
     return {
         error:
-            'No memory folder is selected for writes. Provide the target memory folder using the "folder" parameter, select one in the conversation, or assign one to the agent.\n' +
-            `Existing memory folders:\n${formatSpaces(existing)}`
+            'No memory category is selected for writes. Provide the target memory category using the "category" parameter, select one in the conversation, or assign one to the agent.\n' +
+            `Existing memory categories:\n${formatCategories(existing)}`
     }
 }
 
@@ -538,16 +545,16 @@ interface ResolvedMemoryDocument {
     documentId: string
     revision: string
     documentRef: ParsedMemoryDocumentRef
-    spaceId: string
-    spaceName: string
+    categoryId: string
+    categoryName: string
     fileName: string
-    folderPath: string
+    directoryPath: string
 }
 
 function resolveMemoryDocumentRef(
     documentRef: string,
-    assignedSpaces: MemorySpaceRef[],
-    getKnownSpaces: () => MemorySpaceRef[],
+    assignedCategories: MemoryCategoryRef[],
+    getKnownCategories: () => MemoryCategoryRef[],
 ): ResolvedMemoryDocument | { error: string } {
     const parsed = parseMemoryDocumentRef(documentRef)
     if (!parsed) {
@@ -569,21 +576,21 @@ function resolveMemoryDocumentRef(
         ? getAgentMemory().getDocumentReferenceById(matches[0].document_id)
         : undefined
     if (!ref) return { error: 'No memory document matches this documentRef. Search or list memories again to get a current reference.' }
-    if (assignedSpaces.length > 0 && !assignedSpaces.some((space) => space.id === ref.spaceId)) {
-        return { error: 'The referenced memory document is outside the selected memory-folder scope.' }
+    if (assignedCategories.length > 0 && !assignedCategories.some((category) => category.id === ref.categoryId)) {
+        return { error: 'The referenced memory document is outside the selected memory-category scope.' }
     }
-    const space = [...assignedSpaces, ...getKnownSpaces()].find((candidate) => candidate.id === ref.spaceId)
-    const folderPath = getMemorySpaceFolderPath(ref.spaceId)
-    if (!space || !folderPath) return { error: 'The memory folder for the referenced document is unavailable.' }
-    if (!fileExists(folderPath, ref.fileName)) return { error: 'The referenced memory document no longer exists.' }
+    const category = [...assignedCategories, ...getKnownCategories()].find((candidate) => candidate.id === ref.categoryId)
+    const directoryPath = getMemoryCategoryDirectoryPath(ref.categoryId)
+    if (!category || !directoryPath) return { error: 'The memory category for the referenced document is unavailable.' }
+    if (!fileExists(directoryPath, ref.fileName)) return { error: 'The referenced memory document no longer exists.' }
     return {
         documentId: ref.documentId,
         revision: ref.revision,
         documentRef: parsed,
-        spaceId: ref.spaceId,
-        spaceName: space.name,
+        categoryId: ref.categoryId,
+        categoryName: category.name,
         fileName: ref.fileName,
-        folderPath,
+        directoryPath,
     }
 }
 
@@ -602,17 +609,18 @@ async function commitMemoryMutation(
     previousContent: string,
     nextContent: string,
     signal?: AbortSignal,
+    revisionContext?: MemoryRevisionContext,
 ): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
     signal?.throwIfAborted()
-    writeTextFile(resolved.folderPath, resolved.fileName, nextContent)
+    writeTextFile(resolved.directoryPath, resolved.fileName, nextContent)
     let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
     try {
-        indexed = await reindexMemoryFile(resolved.spaceId, resolved.fileName, signal)
+        indexed = await reindexMemoryFile(resolved.categoryId, resolved.fileName, signal, revisionContext)
     } catch (err) {
         // Restore source and retrieval index together; a failed embedding call
         // must not leave disk and search representing different revisions.
-        writeTextFile(resolved.folderPath, resolved.fileName, previousContent)
-        await reindexMemoryFile(resolved.spaceId, resolved.fileName).catch(() => undefined)
+        writeTextFile(resolved.directoryPath, resolved.fileName, previousContent)
+        await reindexMemoryFile(resolved.categoryId, resolved.fileName).catch(() => undefined)
         throw new Error(`Memory update failed and the previous content was restored: ${(err as Error).message}`)
     }
     return indexed
@@ -622,21 +630,21 @@ async function commitMemoryRemoval(
     resolved: ResolvedMemoryDocument,
     previousContent: string,
 ): Promise<{ deletedChunks: number; deletedEdges: number }> {
-    abortPendingMemoryIndexJobs(resolved.spaceId, resolved.fileName)
+    abortPendingMemoryIndexJobs(resolved.categoryId, resolved.fileName)
     let deletedChunks: number
     try {
-        deletedChunks = await getAgentMemory().deleteSourceFile(resolved.fileName, resolved.spaceId)
+        deletedChunks = await getAgentMemory().deleteSourceFile(resolved.fileName, resolved.categoryId)
     } catch (err) {
         // A vector-store failure or filesystem failure must not leave only one
         // side removed. Recreate the source if needed, then rebuild its index.
-        if (!fileExists(resolved.folderPath, resolved.fileName)) {
-            writeTextFile(resolved.folderPath, resolved.fileName, previousContent)
+        if (!fileExists(resolved.directoryPath, resolved.fileName)) {
+            writeTextFile(resolved.directoryPath, resolved.fileName, previousContent)
         }
-        await reindexMemoryFile(resolved.spaceId, resolved.fileName).catch(() => undefined)
+        await reindexMemoryFile(resolved.categoryId, resolved.fileName).catch(() => undefined)
         throw new Error(`Memory removal failed and the previous source was restored: ${(err as Error).message}`)
     }
     try {
-        const { edgesDeleted } = deleteMemoryKnowledgeSource(resolved.spaceId, resolved.fileName)
+        const { edgesDeleted } = deleteMemoryKnowledgeSource(resolved.categoryId, resolved.fileName)
         return { deletedChunks, deletedEdges: edgesDeleted }
     } catch (err) {
         console.warn('[memory-tools] Failed to remove derived graph data after memory removal:', err)
@@ -649,8 +657,8 @@ async function commitMemoryRemoval(
  * document names with their chunk counts.
  */
 export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefinition {
-    const { spaceFilter, assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
+    const { categoryFilter, assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryCategoriesLoader()
     return {
         name: 'memory_list_documents',
         execution: { readOnly: true },
@@ -660,26 +668,26 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
             'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
             'Results are newest first. ' +
             'Use this to discover what documents are available before using memory_retrieve_chunks or memory_semantic_search. ' +
-            'Selected memory folders are treated as one unified knowledge base for reading — use the optional "folder" parameter to filter to a specific folder. ' +
-            makeScopeSummary(assignedSpaces),
+            'Selected memory categories are treated as one unified knowledge base for reading — use the optional "category" parameter to filter to a specific category. ' +
+            makeScopeSummary(assignedCategories),
         parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
                 pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, lists all selected folders.' },
+                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, lists all selected categorys.' },
             },
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { pageIndex, folder } = (params || {}) as { pageIndex?: number; folder?: string }
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
+            const { pageIndex, category } = (params || {}) as { pageIndex?: number; category?: string }
+            const resolvedScope = resolveReadableCategoryFilter(assignedCategories, categoryFilter, category, getKnownCategories)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
             const allFiles = await mem.listSourceFiles(undefined, resolvedScope.filter)
 
             if (allFiles.length === 0) {
-                const location = resolvedScope.space ? `"${resolvedScope.space.name}"` : 'memory'
+                const location = resolvedScope.category ? `"${resolvedScope.category.name}"` : 'memory'
                 return {
                     success: false,
                     output: `No documents stored in ${location} yet.`
@@ -696,15 +704,15 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
                 return { success: false, output: `Page ${page + 1} is out of range. Total pages: ${totalPages} (${allFiles.length} documents).` }
             }
 
-            const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
+            const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
             const lines = pageFiles.map((file) => {
-                const ref = file.spaceId ? mem.getDocumentReference(file.spaceId, file.sourceFile) : undefined
-                const location = file.spaceId ? `, folder=${spaceMap.get(file.spaceId) || file.spaceId}` : ''
+                const ref = file.categoryId ? mem.getDocumentReference(file.categoryId, file.sourceFile) : undefined
+                const location = file.categoryId ? `, category=${categoryMap.get(file.categoryId) || file.categoryId}` : ''
                 const identity = ref ? `, documentRef=${ref.documentRef}` : ''
                 return `- ${file.sourceFile} (${file.chunkCount} chunk${file.chunkCount !== 1 ? 's' : ''}${location}${identity})`
             })
 
-            const scope = resolvedScope.space ? ` in "${resolvedScope.space.name}"` : ''
+            const scope = resolvedScope.category ? ` in "${resolvedScope.category.name}"` : ''
             const header = allFiles.length <= PAGE_SIZE
                 ? `${allFiles.length} document${allFiles.length !== 1 ? 's' : ''}${scope}:`
                 : `Page ${page + 1}/${totalPages}${scope} (showing ${pageFiles.length} of ${allFiles.length} documents):`
@@ -722,8 +730,8 @@ export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefini
  * additional chunks from a document by source file name and Part range.
  */
 export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefinition {
-    const { spaceFilter, assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
+    const { categoryFilter, assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryCategoriesLoader()
     return {
         name: 'memory_retrieve_chunks',
         execution: { readOnly: true },
@@ -732,24 +740,24 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             'Retrieve additional chunks from a stored document by source file and part number range. ' +
             'Very useful to gather more detail of a section (e.g. "Part 4 - 6" when Part 5 matches). ' +
             'Returns the text of each chunk in order. ' +
-            makeScopeSummary(assignedSpaces),
+            makeScopeSummary(assignedCategories),
         parameters: {
             type: 'object',
             properties: {
                 sourceFile: { type: 'string', description: 'The source file name exactly as shown in the memory context (e.g. "report.pdf", "notes.md").' },
                 minPart: { type: 'number', description: 'Minimum Part number to retrieve, matching the 1-based Part number shown in memory search results.' },
                 maxPart: { type: 'number', description: 'Maximum Part number to retrieve, inclusive, matching the 1-based Part number shown in memory search results.' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one folder.' }
+                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one category.' }
             },
             required: ['sourceFile', 'minPart', 'maxPart']
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { sourceFile, minPart, maxPart, minIndex: legacyMinIndex, maxIndex: legacyMaxIndex, folder } = params as {
-                sourceFile: string; minPart?: number; maxPart?: number; minIndex?: number; maxIndex?: number; folder?: string
+            const { sourceFile, minPart, maxPart, minIndex: legacyMinIndex, maxIndex: legacyMaxIndex, category } = params as {
+                sourceFile: string; minPart?: number; maxPart?: number; minIndex?: number; maxIndex?: number; category?: string
             }
-            const requestedFolder = folder
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, requestedFolder, getKnownSpaces)
+            const requestedFolder = category
+            const resolvedScope = resolveReadableCategoryFilter(assignedCategories, categoryFilter, requestedFolder, getKnownCategories)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
@@ -765,9 +773,9 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             const requestedMaxIndex = maxIndex!
             const cappedMax = Math.min(requestedMaxIndex, requestedMinIndex + 19) // cap at 20 chunks per call
             const readRevisions = opts.onDocumentRead
-                ? new Map((resolvedScope.space ? [resolvedScope.space] : assignedSpaces).map(space => {
-                    const ref = mem.getDocumentReference(space.id, sourceFile)
-                    return [space.id, ref?.revision] as const
+                ? new Map((resolvedScope.category ? [resolvedScope.category] : assignedCategories).map(category => {
+                    const ref = mem.getDocumentReference(category.id, sourceFile)
+                    return [category.id, ref?.revision] as const
                 }))
                 : undefined
             const chunks = await mem.getChunksByRange(sourceFile, requestedMinIndex, cappedMax, resolvedScope.filter)
@@ -776,29 +784,29 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
                 return { success: false, output: `No chunks found for "${sourceFile}" in Part range ${requestedMinIndex + 1}-${cappedMax + 1}.` }
             }
 
-            const distinctSpaces = [...new Set(chunks.map(c => c.spaceId).filter((id): id is string => Boolean(id)))]
-            if (!requestedFolder && distinctSpaces.length > 1) {
-                const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
-                const listing = distinctSpaces.map(id => `  - "${spaceMap.get(id) || id}" (id: ${id})`).join('\n')
+            const distinctCategories = [...new Set(chunks.map(c => c.categoryId).filter((id): id is string => Boolean(id)))]
+            if (!requestedFolder && distinctCategories.length > 1) {
+                const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
+                const listing = distinctCategories.map(id => `  - "${categoryMap.get(id) || id}" (id: ${id})`).join('\n')
                 return {
                     success: false,
-                    output: `Source file "${sourceFile}" exists in multiple memory folders. Re-run with the 'folder' parameter.\nMatching folders:\n${listing}`
+                    output: `Source file "${sourceFile}" exists in multiple memory categories. Re-run with the 'category' parameter.\nMatching categories:\n${listing}`
                 }
             }
 
             const total = await mem.countChunks(sourceFile, resolvedScope.filter)
-            const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
-            const resolvedSpaceId = distinctSpaces.length === 1 ? distinctSpaces[0] : resolvedScope.space?.id
+            const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
+            const resolvedSpaceId = distinctCategories.length === 1 ? distinctCategories[0] : resolvedScope.category?.id
             const documentRef = resolvedSpaceId ? mem.getDocumentReference(resolvedSpaceId, sourceFile) : undefined
             if (documentRef && opts.onDocumentRead) {
-                if (readRevisions?.get(documentRef.spaceId) !== documentRef.revision) {
+                if (readRevisions?.get(documentRef.categoryId) !== documentRef.revision) {
                     return { success: false, output: 'Document changed while reading. Retrieve it again before editing.' }
                 }
                 opts.onDocumentRead(documentRef.documentId, documentRef.revision)
             }
             const formatted = chunks.map(c => {
-                const location = c.spaceId && !resolvedScope.space
-                    ? `[${spaceMap.get(c.spaceId) || c.spaceId} · Part ${c.chunkIndex + 1}/${total}]`
+                const location = c.categoryId && !resolvedScope.category
+                    ? `[${categoryMap.get(c.categoryId) || c.categoryId} · Part ${c.chunkIndex + 1}/${total}]`
                     : `[Part ${c.chunkIndex + 1}/${total}]`
                 return `${location}\n${c.text}`
             }).join('\n\n---\n\n')
@@ -819,8 +827,8 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
  * a new semantic search query against stored memories.
  */
 export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
-    const { spaceFilter, assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
+    const { categoryFilter, assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryCategoriesLoader()
     return {
         name: 'memory_semantic_search',
         execution: { readOnly: true },
@@ -828,15 +836,15 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         description:
             'Search through stored RAG memories using a semantic query. ' +
             'Use this to get a rough starting point for memories, which can then be refined or expanded using other tools. ' +
-            'Returns the most relevant memory chunks with their source, memory folder, and chunk index. ' +
-            'Selected memory folders are treated as one unified knowledge base — use the optional "folder" parameter to filter to a specific folder. ' +
-            makeScopeSummary(assignedSpaces),
+            'Returns the most relevant memory chunks with their source, memory category, and chunk index. ' +
+            'Selected memory categories are treated as one unified knowledge base — use the optional "category" parameter to filter to a specific category. ' +
+            makeScopeSummary(assignedCategories),
         parameters: {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'A descriptive search query to find relevant memories.' },
                 limit: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 20).' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected folders.' }
+                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected categorys.' }
             },
             required: ['query']
         },
@@ -846,8 +854,8 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             if (!query) {
                 return { success: false, output: 'A non-empty "query" string is required for memory_semantic_search.' }
             }
-            const { limit, topK, folder } = (params || {}) as { limit?: number; topK?: number; folder?: string }
-            const resolvedScope = resolveReadableSpaceFilter(assignedSpaces, spaceFilter, folder, getKnownSpaces)
+            const { limit, topK, category } = (params || {}) as { limit?: number; topK?: number; category?: string }
+            const resolvedScope = resolveReadableCategoryFilter(assignedCategories, categoryFilter, category, getKnownCategories)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
@@ -855,7 +863,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             const results = await mem.recall(query, k, resolvedScope.filter)
 
             if (results.length === 0) {
-                return { success: false, output: `No relevant memories found for this query${resolvedScope.space ? ` in "${resolvedScope.space.name}"` : ''}.` }
+                return { success: false, output: `No relevant memories found for this query${resolvedScope.category ? ` in "${resolvedScope.category.name}"` : ''}.` }
             }
 
             console.log(`[memory_semantic_search] Found ${results.length} results for query "${query.slice(0, 60)}" (limit=${k})`)
@@ -864,7 +872,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
             const uniqueSourceKeys = [...new Set(
                 results
                     .filter(r => r.sourceFile)
-                    .map(r => `${r.sourceFile!}\u0000${r.spaceId || ''}`)
+                    .map(r => `${r.sourceFile!}\u0000${r.categoryId || ''}`)
             )]
             const counts = await Promise.all(uniqueSourceKeys.map(key => {
                 const [sf, sid] = key.split('\u0000')
@@ -872,40 +880,40 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
                 return mem.countChunks(sf, filter)
             }))
             const countMap = new Map(uniqueSourceKeys.map((key, i) => [key, counts[i]]))
-            const spaceMap = buildSpaceMap(assignedSpaces, getKnownSpaces())
+            const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
 
             const formatted = results.map(r => {
                 const parts: string[] = []
-                const spaceName = r.spaceId ? spaceMap.get(r.spaceId) || r.spaceId : undefined
-                const ref = r.sourceFile && r.spaceId ? mem.getDocumentReference(r.spaceId, r.sourceFile) : undefined
+                const categoryName = r.categoryId ? categoryMap.get(r.categoryId) || r.categoryId : undefined
+                const ref = r.sourceFile && r.categoryId ? mem.getDocumentReference(r.categoryId, r.sourceFile) : undefined
                 if (ref) parts.push(`[documentRef=${ref.documentRef}]`)
                 if (r.sourceFile) {
-                    const total = countMap.get(`${r.sourceFile}\u0000${r.spaceId || ''}`)
-                    const label = spaceName ? `${spaceName} · ${r.sourceFile}` : r.sourceFile
+                    const total = countMap.get(`${r.sourceFile}\u0000${r.categoryId || ''}`)
+                    const label = categoryName ? `${categoryName} · ${r.sourceFile}` : r.sourceFile
                     if (r.chunkIndex != null && total) {
                         parts.push(`[${label} · Part ${r.chunkIndex + 1}/${total}]`)
                     } else {
                         parts.push(`[${label}]`)
                     }
-                } else if (spaceName) {
-                    parts.push(`[${spaceName}]`)
+                } else if (categoryName) {
+                    parts.push(`[${categoryName}]`)
                 }
                 parts.push(`(score: ${(r.score * 100).toFixed(1)}%)`)
                 parts.push(r.text)
                 return parts.join(' ')
             }).join('\n\n---\n\n')
 
-            const graphSpaces = resolvedScope.space
-                ? [resolvedScope.space]
-                : (assignedSpaces.length > 0 ? assignedSpaces : getKnownSpaces())
+            const graphCategories = resolvedScope.category
+                ? [resolvedScope.category]
+                : (assignedCategories.length > 0 ? assignedCategories : getKnownCategories())
             const knowledge = getMemoryKnowledgeStore()
-            const graphResult = graphSpaces.length > 0
-                ? await knowledge.search(query, graphSpaces.map((space) => space.id), 8)
+            const graphResult = graphCategories.length > 0
+                ? await knowledge.search(query, graphCategories.map((category) => category.id), 8)
                 : { graph: undefined }
             const graphContext = graphResult.graph ? knowledge.formatWalk(graphResult.graph) : ''
             const graphSection = graphContext ? `\n\n---\n\n${graphContext}` : ''
 
-            return { success: true, output: `Showing ${results.length} result${results.length !== 1 ? 's' : ''}${resolvedScope.space ? ` from "${resolvedScope.space.name}"` : ''}:\n\n${formatted}${graphSection}` }
+            return { success: true, output: `Showing ${results.length} result${results.length !== 1 ? 's' : ''}${resolvedScope.category ? ` from "${resolvedScope.category.name}"` : ''}:\n\n${formatted}${graphSection}` }
         }
     }
 }
@@ -915,23 +923,23 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
  * relationships and their connected entities.
  */
 function resolveKnowledgeSpace(
-    assignedSpaces: MemorySpaceRef[],
-    folder?: string,
-): MemorySpaceRef | { error: string } {
-    if (assignedSpaces.length === 0) {
-        return { error: 'No memory folder is selected for knowledge access.' }
+    assignedCategories: MemoryCategoryRef[],
+    category?: string,
+): MemoryCategoryRef | { error: string } {
+    if (assignedCategories.length === 0) {
+        return { error: 'No memory category is selected for knowledge access.' }
     }
-    if (folder?.trim()) {
-        const match = findSpaceByIdOrName(assignedSpaces, folder.trim())
-        return match || { error: `Memory folder "${folder.trim()}" is not in the selected knowledge scope.` }
+    if (category?.trim()) {
+        const match = findSpaceByIdOrName(assignedCategories, category.trim())
+        return match || { error: `Memory category "${category.trim()}" is not in the selected knowledge scope.` }
     }
-    if (assignedSpaces.length === 1) return assignedSpaces[0]
-    return { error: `Multiple memory folders are selected. Specify the target using the "folder" parameter.\n${formatSpaces(assignedSpaces)}` }
+    if (assignedCategories.length === 1) return assignedCategories[0]
+    return { error: `Multiple memory categories are selected. Specify the target using the "category" parameter.\n${formatCategories(assignedCategories)}` }
 }
 
 export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const assignedSpaces = opts.assignedSpaces || []
-    const spaceIds = assignedSpaces.map((space) => space.id)
+    const assignedCategories = opts.assignedCategories || []
+    const categoryIds = assignedCategories.map((category) => category.id)
     return {
         name: 'knowledge_search',
         execution: { readOnly: true },
@@ -950,8 +958,8 @@ export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefin
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            if (spaceIds.length === 0) {
-                return { success: false, output: 'No memory folder is selected for knowledge access.' }
+            if (categoryIds.length === 0) {
+                return { success: false, output: 'No memory category is selected for knowledge access.' }
             }
             const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
             const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
@@ -960,7 +968,7 @@ export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefin
 
             if (query) {
                 const walkDepth = Math.floor(clampToolNumber(depth, 1, 1, 3))
-                const result = await knowledge.search(query, spaceIds, cappedLimit, { depth: walkDepth })
+                const result = await knowledge.search(query, categoryIds, cappedLimit, { depth: walkDepth })
                 const walk = result.graph
                 if (!walk || (walk.nodes.length === 0 && walk.edges.length === 0)) {
                     return { success: false, output: `No knowledge nodes matched "${query}".` }
@@ -976,9 +984,9 @@ export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefin
                 return { success: true, output: sections.join('\n\n') }
             }
 
-            const snapshot = knowledge.browseGraph({ limit: cappedLimit, spaceIds })
+            const snapshot = knowledge.browseGraph({ limit: cappedLimit, categoryIds })
             if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
-                return { success: false, output: 'No knowledge entries are available in the selected memory folders.' }
+                return { success: false, output: 'No knowledge entries are available in the selected memory categories.' }
             }
 
             const nodeLines = snapshot.nodes.map(formatKnowledgeEntity)
@@ -1000,7 +1008,7 @@ export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefin
  * or correct a relationship in the knowledge.
  */
 export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const assignedSpaces = opts.assignedSpaces || []
+    const assignedCategories = opts.assignedCategories || []
     return {
         name: 'knowledge_assert',
         execution: { readOnly: false },
@@ -1035,16 +1043,16 @@ export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefin
                 },
                 importance: { type: 'string', enum: IMPORTANCE_LABELS, description: 'Importance: temporary, minor, useful (durable fact), or core.' },
                 note: { type: 'string', description: 'Short contextual note explaining the relationship.' },
-                folder: { type: 'string', description: 'Target memory folder name or ID. Required when multiple memory folders are selected.' },
+                category: { type: 'string', description: 'Target memory category name or ID. Required when multiple memory categories are selected.' },
             },
             required: ['from', 'relation', 'to'],
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { from, relation, to, importance, note, folder } = (params || {}) as {
-                from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; note?: unknown; folder?: string
+            const { from, relation, to, importance, note, category } = (params || {}) as {
+                from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; note?: unknown; category?: string
             }
-            const targetSpace = resolveKnowledgeSpace(assignedSpaces, folder)
+            const targetSpace = resolveKnowledgeSpace(assignedCategories, category)
             if ('error' in targetSpace) return { success: false, output: targetSpace.error }
             const fromEntity = toEntityInput(from)
             if ('error' in fromEntity) return { success: false, output: `Invalid from entity: ${fromEntity.error}` }
@@ -1057,7 +1065,7 @@ export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefin
             }
 
             const edge = getMemoryKnowledgeStore().assertRelationship({
-                spaceId: targetSpace.id,
+                categoryId: targetSpace.id,
                 from: fromEntity,
                 relation: rel,
                 to: toEntity,
@@ -1073,12 +1081,12 @@ export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefin
 
 /** Merge duplicate graph entities into an existing canonical owner or the first supplied entity ID. */
 export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const spaceIds = (opts.assignedSpaces || []).map((space) => space.id)
+    const categoryIds = (opts.assignedCategories || []).map((category) => category.id)
     return {
         name: 'knowledge_entity_merge',
         description:
             'Manually repair confirmed duplicate knowledge entities. Routine entity resolution happens during memory indexing; use this only for exceptional repairs, not uncertain candidate matches. Provide entity IDs returned by knowledge_search and a new canonical mainName. ' +
-            'Entities may come from different selected memory folders. If mainName already belongs to an active entity anywhere in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
+            'Entities may come from different selected memory categories. If mainName already belongs to an active entity anywhere in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
             'All other entities are redirected into it, and their former names and aliases become normalized aliases. ' +
             'Relationships, mentions, and resolution records are rewired; duplicate relationships are consolidated.',
         parameters: {
@@ -1101,7 +1109,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
         timeout: 30_000,
         execute: async (params: unknown) => {
             const { entityIds, mainName } = (params || {}) as { entityIds?: unknown; mainName?: unknown }
-            const resolved = resolveKnowledgeEntityIds(entityIds, spaceIds)
+            const resolved = resolveKnowledgeEntityIds(entityIds, categoryIds)
             if ('error' in resolved) return { success: false, output: resolved.error }
             const canonicalName = cleanEntityName(mainName)
             if (!canonicalName) return { success: false, output: 'mainName is required.' }
@@ -1109,7 +1117,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
                 const result = await getMemoryKnowledgeStore().mergeEntities({
                     entityIds: resolved.ids,
                     canonicalName,
-                    spaceIds,
+                    categoryIds,
                 })
                 const aliases = result.entity.aliases.length ? result.entity.aliases.join(', ') : 'none'
                 return {
@@ -1126,7 +1134,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
                     ENTITY_MERGE_REQUIRES_MULTIPLE: 'Provide at least two distinct entities, either as IDs or as one ID plus an existing mainName owner.',
                     ENTITY_MERGE_INVALID_NAME: 'mainName is not valid.',
                     ENTITY_MERGE_ENTITY_NOT_FOUND: 'One or more entities no longer exist or were already merged. Search again and retry.',
-                    ENTITY_MERGE_OUT_OF_SCOPE: 'One or more entities are outside the selected memory folder scope.',
+                    ENTITY_MERGE_OUT_OF_SCOPE: 'One or more entities are outside the selected memory category scope.',
                 }
                 return { success: false, output: messages[code] || `Entity merge failed: ${code || 'unknown error'}` }
             }
@@ -1139,8 +1147,8 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
  * incorrect relationship by ID or by exact relationship triple.
  */
 export function makeKnowledgeDeleteTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const assignedSpaces = opts.assignedSpaces || []
-    const spaceIds = assignedSpaces.map((space) => space.id)
+    const assignedCategories = opts.assignedCategories || []
+    const categoryIds = assignedCategories.map((category) => category.id)
     return {
         name: 'knowledge_delete',
         execution: { readOnly: false },
@@ -1173,8 +1181,8 @@ export function makeKnowledgeDeleteTool(opts: MemoryToolOptions = {}): ToolDefin
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            if (spaceIds.length === 0) {
-                return { success: false, output: 'No memory folder is selected for knowledge access.' }
+            if (categoryIds.length === 0) {
+                return { success: false, output: 'No memory category is selected for knowledge access.' }
             }
             const { edgeId, from, relation, to } = (params || {}) as {
                 edgeId?: string; from?: unknown; relation?: unknown; to?: unknown
@@ -1184,7 +1192,7 @@ export function makeKnowledgeDeleteTool(opts: MemoryToolOptions = {}): ToolDefin
             if (edgeId?.trim()) {
                 const resolvedEdgeId = resolveKnowledgeAssertionId(edgeId)
                 if ('error' in resolvedEdgeId) return { success: false, output: resolvedEdgeId.error }
-                const result = knowledge.deleteEdge(resolvedEdgeId.id, spaceIds)
+                const result = knowledge.deleteEdge(resolvedEdgeId.id, categoryIds)
                 return result.edgeDeleted
                     ? { success: true, output: formatKnowledgeDeleteOutput(`Deleted knowledge edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
                     : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
@@ -1197,7 +1205,7 @@ export function makeKnowledgeDeleteTool(opts: MemoryToolOptions = {}): ToolDefin
             const rel = cleanRelationName(relation)
             if (!rel) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
 
-            const result = knowledge.deleteMatchingEdge(fromEntity.name, rel, toEntity.name, spaceIds)
+            const result = knowledge.deleteMatchingEdge(fromEntity.name, rel, toEntity.name, categoryIds)
             return result.edgeDeleted
                 ? { success: true, output: formatKnowledgeDeleteOutput('Deleted 1 matching knowledge edge.', result.orphanedNodeIds.length) }
                 : { success: false, output: 'No matching knowledge edge was found.' }
@@ -1212,60 +1220,63 @@ function formatKnowledgeDeleteOutput(message: string, orphanedNodeCount: number)
 
 /**
  * Create a `memory_create` tool that lets the LLM store new memory entries.
- * Writes a Markdown file to the target folder and indexes it.
+ * Writes a Markdown file to the target category and indexes it.
  */
 export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
-    const { assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
+    const { assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryCategoriesLoader()
     return {
         name: 'memory_create',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         description:
             'Create a new memory entry with a title and content. ' +
-            'Writes a Markdown file to the memory folder and indexes it for semantic retrieval. ' +
+            'Writes a Markdown file to the memory category and indexes it for semantic retrieval. ' +
             'Use this to persistently store notes, findings, or any information worth remembering. ' +
-            'If exactly one memory folder is selected, omit "folder" to write there; otherwise omitted "folder" writes to the default root memory folder. ' +
-            'Provide "folder" to store in a specific selected folder.',
+            'If exactly one memory category is selected, omit "category" to write there; otherwise omitted "category" writes to the default root memory category. ' +
+            'Provide "category" to store in a specific selected category.',
         parameters: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'A short descriptive title for the memory entry (used as the file name, e.g. "project-notes" or "meeting-summary"). Will have .md appended automatically.' },
+                title: { type: 'string', description: 'A focused Subject - Aspect title for the memory entry (for example "Veronica Flowers - Hobbies"). The .md extension is appended automatically.' },
                 content: { type: 'string', description: 'The Markdown text content to store in memory.' },
-                folder: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Omit to write to the only selected folder, or to the default root folder when no single selected folder is in scope.' }
+                category: { type: 'string', description: 'Optional memory category name, relative path (e.g. "projects/acme"), or ID. Omit to write to the only selected category, or to the default root category when no single selected category is in scope.' }
             },
             required: ['title', 'content']
         },
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
-            const { title, content, folder } = params as { title: string; content: string; folder?: string }
+            const { title, content, category } = params as { title: string; content: string; category?: string }
 
-            const resolved = await resolveTargetSpace(assignedSpaces, folder, undefined, getKnownSpaces)
+            const resolved = await resolveTargetCategory(assignedCategories, category, undefined, getKnownCategories)
             if ('error' in resolved) return { success: false, output: resolved.error }
 
             // Ensure .md extension
             const fileName = title.endsWith('.md') ? title : `${title}.md`
-            const folderPath = getMemorySpaceFolderPath(resolved.spaceId)
-            if (!folderPath) {
-                return { success: false, output: `Memory folder "${resolved.spaceName}" has no folder configured. Cannot create memory.` }
+            if (basename(fileName) !== fileName || fileName.startsWith('.') || !fileName.trim()) {
+                return { success: false, output: 'The memory title must be a plain, visible file name without path separators.' }
+            }
+            const directoryPath = getMemoryCategoryDirectoryPath(resolved.categoryId)
+            if (!directoryPath) {
+                return { success: false, output: `Memory category "${resolved.categoryName}" has no category configured. Cannot create memory.` }
             }
 
-            const uniqueName = resolveUniqueFileName(folderPath, fileName)
+            const uniqueName = resolveUniqueFileName(directoryPath, fileName)
             signal?.throwIfAborted()
-            writeTextFile(folderPath, uniqueName, content)
+            writeTextFile(directoryPath, uniqueName, content)
 
             let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
             try {
-                indexed = await reindexMemoryFile(resolved.spaceId, uniqueName, signal)
+                indexed = await reindexMemoryFile(resolved.categoryId, uniqueName, signal, opts.revisionContext)
             } catch (err) {
-                deleteFile(folderPath, uniqueName)
+                deleteFile(directoryPath, uniqueName)
                 throw new Error(`Memory creation failed; the unindexed source file was removed: ${(err as Error).message}`)
             }
             opts.onDocumentMutated?.(indexed.documentId)
 
             return {
                 success: true,
-                output: `Memory "${uniqueName}" created and indexed in "${resolved.spaceName}" (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).`
+                output: `Memory "${uniqueName}" created and indexed in "${resolved.categoryName}" (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).${indexed.chunkCount > 3 ? ' Warning: this memory exceeds the 1–3 chunk topical target; consider splitting it by aspect.' : ''}`
             }
         }
     }
@@ -1289,9 +1300,9 @@ async function prepareMemoryMutation(
 ): Promise<{ resolved: ResolvedMemoryDocument; fileContent: string } | { error: string }> {
     let fileContent: string
     try {
-        fileContent = readTextFile(resolved.folderPath, resolved.fileName)
+        fileContent = readTextFile(resolved.directoryPath, resolved.fileName)
     } catch {
-        return { error: `Could not read file "${resolved.fileName}" from memory folder.` }
+        return { error: `Could not read file "${resolved.fileName}" from memory category.` }
     }
     const referenceError = verifyDocumentRef(fileContent, resolved)
     return referenceError ? { error: referenceError } : { resolved, fileContent }
@@ -1299,13 +1310,13 @@ async function prepareMemoryMutation(
 
 async function runPreparedMemoryMutation(
     params: { documentRef: string },
-    assignedSpaces: MemorySpaceRef[],
-    getKnownSpaces: () => MemorySpaceRef[],
+    assignedCategories: MemoryCategoryRef[],
+    getKnownCategories: () => MemoryCategoryRef[],
     signal: AbortSignal | undefined,
     operation: (prepared: { resolved: ResolvedMemoryDocument; fileContent: string }) => Promise<ToolResult>,
     beforeMutation?: (documentId: string, content: string) => void,
 ): Promise<ToolResult> {
-    const resolved = resolveMemoryDocumentRef(params.documentRef, assignedSpaces, getKnownSpaces)
+    const resolved = resolveMemoryDocumentRef(params.documentRef, assignedCategories, getKnownCategories)
     if ('error' in resolved) return { success: false, output: resolved.error }
     return withMemoryDocumentLock(resolved.documentId, signal, async () => {
         const prepared = await prepareMemoryMutation(resolved)
@@ -1315,166 +1326,78 @@ async function runPreparedMemoryMutation(
     })
 }
 
-export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
-    const { assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
+export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryCategoriesLoader()
     return {
-        name: 'memory_append',
-        execution: { readOnly: false },
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-        description: 'Append content to an existing memory document without modifying its current text. Use its stable documentRef from any prior memory result or creation response.',
-        parameters: memoryMutationSchema(),
-        timeout: 120_000,
-        execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = params as { documentRef: string; content: string }
-            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
-                const indexed = await commitMemoryMutation(
-                    resolved,
-                    fileContent,
-                    fileContent.trimEnd() + '\n\n' + input.content.trim() + '\n',
-                    signal,
-                )
-                opts.onDocumentMutated?.(indexed.documentId)
-                return { success: true, output: `Content appended to "${resolved.fileName}" in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
-            }, opts.beforeDocumentMutation)
-        },
-    }
-}
-
-export function makeMemoryReplaceAllTool(opts: MemoryToolOptions): ToolDefinition {
-    const { assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
-    return {
-        name: 'memory_replace_all',
+        name: 'memory_update',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-        description: 'Replace an entire existing memory document using its stable documentRef. Retrieve it first when the replacement depends on its current contents.',
-        parameters: memoryMutationSchema(),
-        timeout: 120_000,
-        execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = params as { documentRef: string; content: string }
-            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
-                const indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal)
-                opts.onDocumentMutated?.(indexed.documentId)
-                return { success: true, output: `Memory "${resolved.fileName}" fully replaced in "${resolved.spaceName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
-            }, opts.beforeDocumentMutation)
-        },
-    }
-}
-
-export function makeMemoryReplaceRangeTool(opts: MemoryToolOptions): ToolDefinition {
-    const { assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
-    return {
-        name: 'memory_replace_range',
-        execution: { readOnly: false },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Replace a contiguous Part range in an existing memory document. First retrieve the current parts and pass the returned documentRef unchanged.',
+        description: 'Replace one topical memory using its stable documentRef. Search and read it first. Newer supported facts replace obsolete statements; do not append a change log. Optionally rename or recategorize it.',
         parameters: memoryMutationSchema({
-            partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to replace.' },
-            partEnd: { type: 'integer', minimum: 1, description: 'Last 1-based Part number to replace, inclusive.' },
-        }, ['partStart', 'partEnd']),
+            title: { type: 'string', description: 'Optional new Subject - Aspect title.' },
+            category: { type: 'string', description: 'Optional existing or new category path inside a granted category tree.' },
+        }),
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = params as { documentRef: string; content: string; partStart: number; partEnd: number }
-            if (!Number.isInteger(input.partStart) || !Number.isInteger(input.partEnd) || input.partStart < 1 || input.partEnd < input.partStart) {
-                return { success: false, output: 'partStart and partEnd must be valid 1-based integers with partEnd greater than or equal to partStart.' }
-            }
-            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
-                const startIndex = toPartIndex(input.partStart)!
-                const endIndex = toPartIndex(input.partEnd)!
-                const chunks = await getAgentMemory().getChunksByRange(
-                    resolved.fileName,
-                    startIndex,
-                    endIndex,
-                    buildScopeFilter([{ id: resolved.spaceId }]),
-                )
-                if (chunks.length !== endIndex - startIndex + 1) {
-                    return { success: false, output: `The requested Part range is stale or incomplete. Retrieve "${resolved.fileName}" again and retry.` }
+            const input = params as { documentRef: string; content: string; title?: string; category?: string }
+            return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
+                const target = input.category
+                    ? await resolveTargetCategory(assignedCategories, input.category, undefined, getKnownCategories)
+                    : { categoryId: resolved.categoryId, categoryName: resolved.categoryName }
+                if ('error' in target) return { success: false, output: target.error }
+                const finalName = input.title ? (input.title.endsWith('.md') ? input.title : `${input.title}.md`) : resolved.fileName
+                if (basename(finalName) !== finalName || finalName.startsWith('.') || !finalName.trim()) {
+                    return { success: false, output: 'The memory title must be a plain, visible file name without path separators.' }
                 }
-                const replaced = replaceChunkRangeInText(fileContent, chunks, input.content)
-                if ('error' in replaced) return { success: false, output: replaced.error }
-                const indexed = await commitMemoryMutation(resolved, fileContent, replaced.content, signal)
+                const targetDirectory = getMemoryCategoryDirectoryPath(target.categoryId)
+                if (!targetDirectory) return { success: false, output: 'Target memory category is unavailable.' }
+                const relocating = target.categoryId !== resolved.categoryId || finalName !== resolved.fileName
+                if (relocating && fileExists(targetDirectory, finalName)) {
+                    return { success: false, output: `Memory "${finalName}" already exists in "${target.categoryName}".` }
+                }
+
+                let indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal, opts.revisionContext)
+                if (relocating) {
+                    const { renameSync } = await import('node:fs')
+                    renameSync(join(resolved.directoryPath, resolved.fileName), join(targetDirectory, finalName))
+                    await getAgentMemory().remapMovedFileByHash(target.categoryId, finalName, targetDirectory)
+                    indexed = await reindexMemoryFile(target.categoryId, finalName, signal, opts.revisionContext)
+                }
                 opts.onDocumentMutated?.(indexed.documentId)
-                return { success: true, output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${resolved.fileName}" replaced and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
+                return { success: true, output: `Memory "${finalName}" replaced in "${target.categoryName}" (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).${indexed.chunkCount > 3 ? ' Warning: this memory exceeds the 1–3 chunk topical target.' : ''}` }
             }, opts.beforeDocumentMutation)
         },
     }
 }
 
-function memoryRemovalSchema(withRange: boolean): Record<string, unknown> {
+function memoryRemovalSchema(): Record<string, unknown> {
     return {
         type: 'object',
         additionalProperties: false,
         properties: {
             documentRef: { type: 'string', description: 'Stable document reference returned by memory reads (for example project-notes#4k8z2q). It remains unchanged after updates.' },
-            ...(withRange ? {
-                partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to remove.' },
-                partEnd: { type: 'integer', minimum: 1, description: 'Last 1-based Part number to remove, inclusive.' },
-            } : {}),
         },
-        required: withRange
-            ? ['documentRef', 'partStart', 'partEnd']
-            : ['documentRef'],
+        required: ['documentRef'],
     }
 }
 
-export function makeMemoryRemoveAllTool(opts: MemoryToolOptions): ToolDefinition {
-    const { assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
+export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryCategoriesLoader()
     return {
-        name: 'memory_remove_all',
+        name: 'memory_delete',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         description: 'Forget an entire memory document using its stable documentRef. This archives the source in hidden trash and removes its retrieval and graph indexes.',
-        parameters: memoryRemovalSchema(false),
+        parameters: memoryRemovalSchema(),
         timeout: 30_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
             const input = params as { documentRef: string }
-            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
+            return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
                 const removed = await commitMemoryRemoval(resolved, fileContent)
-                return { success: true, output: `Memory "${resolved.fileName}" forgotten from "${resolved.spaceName}" (${removed.deletedChunks} indexed chunks and ${removed.deletedEdges} graph edges removed).` }
-            })
-        },
-    }
-}
-
-export function makeMemoryRemoveRangeTool(opts: MemoryToolOptions): ToolDefinition {
-    const { assignedSpaces = [] } = opts
-    const getKnownSpaces = createKnownMemorySpacesLoader()
-    return {
-        name: 'memory_remove_range',
-        execution: { readOnly: false },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Forget a contiguous Part range from a memory document. Retrieve the current parts first and pass the returned documentRef unchanged.',
-        parameters: memoryRemovalSchema(true),
-        timeout: 120_000,
-        execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = params as { documentRef: string; partStart: number; partEnd: number }
-            if (!Number.isInteger(input.partStart) || !Number.isInteger(input.partEnd) || input.partStart < 1 || input.partEnd < input.partStart) {
-                return { success: false, output: 'partStart and partEnd must be valid 1-based integers with partEnd greater than or equal to partStart.' }
-            }
-            return runPreparedMemoryMutation(input, assignedSpaces, getKnownSpaces, signal, async ({ resolved, fileContent }) => {
-                const startIndex = toPartIndex(input.partStart)!
-                const endIndex = toPartIndex(input.partEnd)!
-                const chunks = await getAgentMemory().getChunksByRange(
-                    resolved.fileName,
-                    startIndex,
-                    endIndex,
-                    buildScopeFilter([{ id: resolved.spaceId }]),
-                )
-                if (chunks.length !== endIndex - startIndex + 1) {
-                    return { success: false, output: `The requested Part range is stale or incomplete. Retrieve "${resolved.fileName}" again and retry.` }
-                }
-                const removed = removeChunkRangeFromText(fileContent, chunks)
-                if ('error' in removed) return { success: false, output: removed.error }
-                if (!removed.content.trim()) {
-                    const deleted = await commitMemoryRemoval(resolved, fileContent)
-                    return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed; the empty memory was forgotten (${deleted.deletedChunks} indexed chunks and ${deleted.deletedEdges} graph edges removed).` }
-                }
-                const indexed = await commitMemoryMutation(resolved, fileContent, removed.content, signal)
-                return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
-            })
+                return { success: true, output: `Memory "${resolved.fileName}" forgotten from "${resolved.categoryName}" (${removed.deletedChunks} indexed chunks and ${removed.deletedEdges} graph edges removed).` }
+            }, opts.beforeDocumentMutation)
         },
     }
 }

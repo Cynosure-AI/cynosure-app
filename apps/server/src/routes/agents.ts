@@ -20,17 +20,17 @@ import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
 import { makeManageMcpTool } from '../core/tools/builtin/manage-mcp.js'
-import { getDefaultMemorySpace } from '../core/memory/memory-space-scope.js'
+import { getDefaultMemoryCategory } from '../core/memory/memory-category-scope.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
-function defaultMemorySpaceIds(db = getDb()): string[] {
+function defaultMemoryCategoryIds(db = getDb()): string[] {
     const row = db
-        .prepare('SELECT id FROM memory_spaces WHERE is_default = 1 ORDER BY sort_order ASC, created_at ASC LIMIT 1')
+        .prepare('SELECT id FROM memory_categories WHERE is_uncategorized = 1 ORDER BY sort_order ASC, created_at ASC LIMIT 1')
         .get() as { id: string } | undefined
     if (row) return [row.id]
 
-    const defaultSpace = getDefaultMemorySpace()
-    return defaultSpace ? [defaultSpace.id] : []
+    const uncategorizedCategory = getDefaultMemoryCategory()
+    return uncategorizedCategory ? [uncategorizedCategory.id] : []
 }
 
 export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promise<void> {
@@ -38,14 +38,14 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     app.get('/', async () => {
         const db = getDb()
         const agents = listAgents()
-        const allLinks = db.prepare('SELECT agent_id, space_id FROM agent_memory_spaces').all() as { agent_id: string; space_id: string }[]
+        const allLinks = db.prepare('SELECT agent_id, category_id FROM agent_memory_categories').all() as { agent_id: string; category_id: string }[]
         const linkMap = new Map<string, string[]>()
         for (const row of allLinks) {
             const arr = linkMap.get(row.agent_id) || []
-            arr.push(row.space_id)
+            arr.push(row.category_id)
             linkMap.set(row.agent_id, arr)
         }
-        return agents.map(a => ({ ...a, memorySpaces: linkMap.get(a.id) || [] }))
+        return agents.map(a => ({ ...a, memoryCategories: linkMap.get(a.id) || [] }))
     })
 
     // GET /api/agents/:id — get single
@@ -56,8 +56,8 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             return { error: 'Agent not found' }
         }
         const db = getDb()
-        const spaceRows = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agent.id) as { space_id: string }[]
-        return { ...agent, memorySpaces: spaceRows.map((row) => row.space_id) }
+        const categoryRows = db.prepare('SELECT category_id FROM agent_memory_categories WHERE agent_id = ?').all(agent.id) as { category_id: string }[]
+        return { ...agent, memoryCategories: categoryRows.map((row) => row.category_id) }
     })
 
     // GET /api/agents/:id/icon — serve agent icon
@@ -73,36 +73,36 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     })
 
     // POST /api/agents — create
-    app.post<{ Body: CreateAgentInput & { memorySpaces?: string[] } }>('/', async (req) => {
-        const { memorySpaces, ...rest } = req.body
+    app.post<{ Body: CreateAgentInput & { memoryCategories?: string[] } }>('/', async (req) => {
+        const { memoryCategories, ...rest } = req.body
         const agent = createAgent(rest)
-        const assignedMemorySpaces = memorySpaces !== undefined ? memorySpaces : defaultMemorySpaceIds()
+        const assignedMemoryCategories = memoryCategories !== undefined ? memoryCategories : defaultMemoryCategoryIds()
         const db = getDb()
-        const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
-        for (const spaceId of assignedMemorySpaces) insert.run(agent.id, spaceId)
+        const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_categories (agent_id, category_id) VALUES (?, ?)')
+        for (const categoryId of assignedMemoryCategories) insert.run(agent.id, categoryId)
         getChannelManager().refreshAllCommands()
-        return { ...agent, memorySpaces: assignedMemorySpaces }
+        return { ...agent, memoryCategories: assignedMemoryCategories }
     })
 
     // PUT /api/agents/:id — update
-    app.put<{ Params: { id: string }; Body: UpdateAgentInput & { memorySpaces?: string[] } }>('/:id', async (req, reply) => {
-        const { memorySpaces, ...rest } = req.body
+    app.put<{ Params: { id: string }; Body: UpdateAgentInput & { memoryCategories?: string[] } }>('/:id', async (req, reply) => {
+        const { memoryCategories, ...rest } = req.body
         const agent = updateAgent(req.params.id, rest)
         if (!agent) {
             reply.code(404)
             return { error: 'Agent not found' }
         }
-        // Sync memory space assignments if provided
-        if (memorySpaces !== undefined) {
+        // Sync memory category assignments if provided
+        if (memoryCategories !== undefined) {
             const db = getDb()
-            db.prepare('DELETE FROM agent_memory_spaces WHERE agent_id = ?').run(agent.id)
-            const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
-            for (const spaceId of memorySpaces) insert.run(agent.id, spaceId)
+            db.prepare('DELETE FROM agent_memory_categories WHERE agent_id = ?').run(agent.id)
+            const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_categories (agent_id, category_id) VALUES (?, ?)')
+            for (const categoryId of memoryCategories) insert.run(agent.id, categoryId)
         }
         const db = getDb()
-        const spaceRows = db.prepare('SELECT space_id FROM agent_memory_spaces WHERE agent_id = ?').all(agent.id) as { space_id: string }[]
+        const categoryRows = db.prepare('SELECT category_id FROM agent_memory_categories WHERE agent_id = ?').all(agent.id) as { category_id: string }[]
         getChannelManager().refreshAllCommands()
-        return { ...agent, memorySpaces: spaceRows.map(r => r.space_id) }
+        return { ...agent, memoryCategories: categoryRows.map(r => r.category_id) }
     })
 
     // POST /api/agents/:id/duplicate — duplicate

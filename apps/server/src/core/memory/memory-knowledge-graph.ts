@@ -25,9 +25,9 @@ export interface DocumentKnowledgePreview {
  * literal nodes, and scoped edges must be assembled by the same rules.
  */
 export class MemoryKnowledgeGraphStore {
-  graphRows(spaceIds: string[] = [], limit = 5000, assertionId?: string): Array<Record<string, unknown>> {
-    const scopes = Array.from(new Set(spaceIds.filter(Boolean)))
-    const scopeClause = scopes.length ? `AND r.space_id IN (${scopes.map(() => '?').join(', ')})` : ''
+  graphRows(categoryIds: string[] = [], limit = 5000, assertionId?: string): Array<Record<string, unknown>> {
+    const scopes = Array.from(new Set(categoryIds.filter(Boolean)))
+    const scopeClause = scopes.length ? `AND r.category_id IN (${scopes.map(() => '?').join(', ')})` : ''
     const assertionClause = assertionId ? 'AND a.id = ?' : ''
     return getDb().prepare(`
       SELECT a.*, p.canonical_name, p.aliases_json,
@@ -40,7 +40,7 @@ export class MemoryKnowledgeGraphStore {
           JOIN memory_knowledge_index_runs evidence_run ON evidence_run.id = evidence.run_id AND evidence_run.status = 'active'
           WHERE evidence.assertion_id = a.id) AS evidence_count,
         c.evidence_text AS correction_evidence, c.confidence AS manual_confidence,
-        r.source_id, r.document_id, r.content_hash, r.space_id, r.file_name,
+        r.source_id, r.document_id, r.content_hash, r.category_id, r.file_name,
         tu.id AS text_unit_id, tu.text_hash,
         tu.chunk_index, tu.document_title, tu.section_path
       FROM memory_knowledge_assertions a
@@ -215,10 +215,10 @@ export class MemoryKnowledgeGraphStore {
     return row ? this.graphEdge(row) : null
   }
 
-  graphStats(spaceIds: string[] = []): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
+  graphStats(categoryIds: string[] = []): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
     const since = Date.now() - 30 * 24 * 60 * 60 * 1000
-    const scopes = Array.from(new Set(spaceIds.filter(Boolean)))
-    const scopeClause = scopes.length ? `AND r.space_id IN (${scopes.map(() => '?').join(', ')})` : ''
+    const scopes = Array.from(new Set(categoryIds.filter(Boolean)))
+    const scopeClause = scopes.length ? `AND r.category_id IN (${scopes.map(() => '?').join(', ')})` : ''
     const row = getDb().prepare(`
       SELECT
         (SELECT COUNT(*) FROM memory_knowledge_entities WHERE status = 'active' AND EXISTS (
@@ -237,13 +237,13 @@ export class MemoryKnowledgeGraphStore {
     return { nodeCount: row.nodes, edgeCount: row.edges, recentEdgeCount: row.recent }
   }
 
-  documentExtractionPreview(spaceId: string, fileName: string, limit = 15): DocumentKnowledgePreview {
+  documentDeepResearchPreview(categoryId: string, fileName: string, limit = 15): DocumentKnowledgePreview {
     const boundedLimit = Math.min(15, Math.max(1, Math.round(limit)))
     const run = getDb().prepare(`
       SELECT id FROM memory_knowledge_index_runs
-      WHERE space_id = ? AND file_name = ? AND status = 'active'
+      WHERE category_id = ? AND file_name = ? AND status = 'active'
       ORDER BY activated_at DESC LIMIT 1
-    `).get(spaceId, fileName) as { id: string } | undefined
+    `).get(categoryId, fileName) as { id: string } | undefined
     if (!run) return { items: [], total: 0 }
 
     const relationshipCount = Number((getDb().prepare(`
@@ -318,20 +318,20 @@ export class MemoryKnowledgeGraphStore {
     nodeIds?: string[]
     limit?: number
     minImportance?: ImportanceLevel
-    spaceIds?: string[]
+    categoryIds?: string[]
     depth?: number
   } = {}): KnowledgeGraphProjection {
     const limit = Math.max(1, opts.limit || 80)
     const minImportance = opts.minImportance || 0
     const requestedNodeIds = Array.from(new Set([opts.nodeId, ...(opts.nodeIds || [])].filter((id): id is string => Boolean(id))))
-    let edges = this.graphRows(opts.spaceIds, Math.max(limit * 4, 100)).map((row) => this.graphEdge(row)).filter((edge) => edge.importance >= minImportance)
+    let edges = this.graphRows(opts.categoryIds, Math.max(limit * 4, 100)).map((row) => this.graphEdge(row)).filter((edge) => edge.importance >= minImportance)
     const allEntityIds = new Set(edges.flatMap((edge) => [edge.fromNodeId, ...(edge.toNodeId.startsWith('literal:') ? [] : [edge.toNodeId])]))
-    const scopes = Array.from(new Set((opts.spaceIds || []).filter(Boolean)))
+    const scopes = Array.from(new Set((opts.categoryIds || []).filter(Boolean)))
     const mentionedRows = getDb().prepare(`
       SELECT DISTINCT e.* FROM memory_knowledge_entities e
       JOIN memory_knowledge_entity_mentions m ON m.entity_id = e.id
       JOIN memory_knowledge_index_runs r ON r.id = m.run_id AND r.status = 'active'
-      WHERE e.status = 'active' ${scopes.length ? `AND r.space_id IN (${scopes.map(() => '?').join(', ')})` : ''}
+      WHERE e.status = 'active' ${scopes.length ? `AND r.category_id IN (${scopes.map(() => '?').join(', ')})` : ''}
       ORDER BY e.updated_at DESC LIMIT ?
     `).all(...scopes, Math.max(limit * 2, 100)) as Array<Record<string, unknown>>
     for (const row of mentionedRows) allEntityIds.add(String(row.id))
@@ -396,9 +396,9 @@ export class MemoryKnowledgeGraphStore {
     return { seedNodes, nodes, edges }
   }
 
-  suggestNodes(query: string, limit = 8, spaceIds: string[] = []): KnowledgeEntity[] {
+  suggestNodes(query: string, limit = 8, categoryIds: string[] = []): KnowledgeEntity[] {
     const normalized = normalize(query)
-    const scopeClause = spaceIds.length ? `AND r.space_id IN (${spaceIds.map(() => '?').join(', ')})` : ''
+    const scopeClause = categoryIds.length ? `AND r.category_id IN (${categoryIds.map(() => '?').join(', ')})` : ''
     const rows = getDb().prepare(`
       SELECT DISTINCT e.* FROM memory_knowledge_entities e
       JOIN memory_knowledge_entity_mentions m ON m.entity_id = e.id
@@ -408,7 +408,7 @@ export class MemoryKnowledgeGraphStore {
           SELECT 1 FROM memory_knowledge_entity_aliases a WHERE a.entity_id = e.id AND a.normalized_alias LIKE ? ESCAPE '\\'
         ))
       ORDER BY e.updated_at DESC LIMIT ?
-    `).all(...spaceIds, normalized, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, limit) as Array<Record<string, unknown>>
+    `).all(...categoryIds, normalized, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, limit) as Array<Record<string, unknown>>
     return rows.map((row) => this.hydrateGraphNode(row))
   }
 
