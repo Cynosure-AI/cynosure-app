@@ -172,7 +172,9 @@ function contextCallKind(call: ToolCall, status: string): ContextSectionKind | n
 
 function toolDisplayName(name = 'Tool'): string {
   if (name === 'Task context') return 'Preparing Context'
-  return isSubAgentSpawnCall(name) ? 'Spawn sub-agent' : name
+  if (name === 'spawn_subagent') return 'Spawn sub-agent'
+  if (name === 'continue_subagent') return 'Continue sub-agent'
+  return name
 }
 
 function memoryFileName(call?: ToolCall | null): string | null {
@@ -203,8 +205,9 @@ function scoreTitleForCall(call: ToolCall): string {
 }
 
 function callContent(call?: ToolCall | null): string | null {
-  if (!call || (!isMemoryCall(call) && !isToolRouterCall(call))) return null
-  return visibleText(parseArgs(call.arguments)?.content)
+  if (!call || (!isMemoryCall(call) && !isToolRouterCall(call) && !isSubAgentSpawnCall(call.name))) return null
+  const parsed = parseArgs(call.arguments)
+  return visibleText(parsed?.content) ?? visibleText(parsed?.instructions)
 }
 
 function memoryCallMetadata(call: ToolCall): string {
@@ -990,7 +993,7 @@ const hasDisplayableActivity = computed(() =>
                     class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
                   >{{ memoryCallMetadata(execution.call) }}</pre>
                   <pre
-                    v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !scoreForCall(execution.call)"
+                    v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !scoreForCall(execution.call) && !callContent(execution.call)"
                     class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
                   >{{ prettifyJson(execution.call.arguments) }}</pre>
 
