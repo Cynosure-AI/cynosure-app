@@ -109,6 +109,8 @@ export interface DebugContextSnapshot {
 export interface ChatAttachmentInput {
   name: string
   content: string
+  /** Server-side preprocessed draft attachment. Content is omitted when this is set. */
+  stagedId?: string
 }
 
 export interface ChatResendAttachments {

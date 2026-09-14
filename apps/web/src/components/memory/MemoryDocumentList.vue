@@ -54,6 +54,15 @@ const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   void loadFiles();
 });
 const unsubscribeDreamUpdate = api.memory.onDreamUpdated(() => void loadFiles());
+const DREAM_INDICATOR_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
+const dreamIndicatorNow = ref(Date.now());
+const dreamIndicatorTimer = window.setInterval(() => {
+  dreamIndicatorNow.value = Date.now();
+}, 60_000);
+
+function hasRecentDreamUpdate(file: MemoryFileStatus): boolean {
+  return Boolean(file.dreamedAt && dreamIndicatorNow.value - file.dreamedAt < DREAM_INDICATOR_DURATION_MS);
+}
 
 // Upload
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -403,6 +412,7 @@ watch(() => props.focusFile, (fileName, previousFileName) => {
 });
 
 onUnmounted(() => {
+  window.clearInterval(dreamIndicatorTimer);
   unsubscribeGraphReset();
   unsubscribeDreamUpdate();
 });
@@ -742,20 +752,20 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
           />
           <div class="min-w-0">
             <div
-              class="truncate text-sm"
-              :class="file.supported ? 'text-theme-200' : 'text-theme-500'"
+              class="flex items-center gap-1.5 truncate text-sm"
+              :class="hasRecentDreamUpdate(file) ? 'text-violet-400' : file.supported ? 'text-theme-200' : 'text-theme-500'"
             >
-              {{ file.fileName }}
+              <Icon
+                v-if="hasRecentDreamUpdate(file)"
+                icon="lucide:moon-star"
+                class="h-3.5 w-3.5 shrink-0"
+                title="Created or updated by Dream in the last 2 days"
+                aria-label="Created or updated by Dream in the last 2 days"
+              />
+              <span class="truncate">{{ file.fileName }}</span>
             </div>
             <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-theme-600">
               <span>{{ formatFileSize(file.size) }}</span>
-              <Icon
-                v-if="file.dreamedAt"
-                icon="lucide:moon-star"
-                class="h-3.5 w-3.5 text-violet-400"
-                title="Created or updated by Dream"
-                aria-label="Created or updated by Dream"
-              />
               <span
                 v-for="tag in (file.tags || []).slice(0, 4)"
                 :key="tag"

@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import InputBar from './InputBar.vue'
+import { api } from '../../api/client'
 
 const chatStore = reactive({
   activeConversationId: 'conversation-1' as string | null,
@@ -17,6 +18,7 @@ const chatStore = reactive({
   removeQueuedAttachment: vi.fn(),
   steerQueuedMessage: vi.fn(),
   runNextQueuedMessage: vi.fn(),
+  createConversation: vi.fn<() => Promise<string>>(),
 })
 
 vi.mock('../../stores/chat.store', () => ({
@@ -170,5 +172,23 @@ describe('InputBar drafts', () => {
       undefined,
       ['data:audio/wav;base64,audio'],
     )
+  })
+
+  test('re-enables sending when attachment preprocessing completes', async () => {
+    let finish!: (value: { id: string; name: string; chunkCount: number }) => void
+    const stage = vi.spyOn(api.chat, 'stageAttachment').mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const wrapper = mountInputBar()
+    await wrapper.get('textarea').setValue('Read this')
+
+    wrapper.vm.processFiles([new File(['notes'], 'notes.txt', { type: 'text/plain' })])
+    await vi.waitFor(() => {
+      expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(false)
+    })
+
+    finish({ id: 'staged-1', name: 'notes.txt', chunkCount: 1 })
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(true)
+
+    stage.mockRestore()
   })
 })
