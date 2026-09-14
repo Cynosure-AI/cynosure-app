@@ -1,0 +1,93 @@
+import Database from 'better-sqlite3'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import {
+  AGENT_MEMORY_FOLDER_NAME,
+  ensureMemoryFolderPath,
+  isIgnoredMemoryFolderName,
+  removeEmptyMemoryFolderFolders,
+  syncMemoryFoldersFromFolders,
+  validateRelativePath,
+} from './memory-folder-directories.js'
+import { expandMemoryFolderScope } from './memory-folder-scope.js'
+
+describe('memory folder directories', () => {
+  let dataDir: string
+
+  beforeEach(() => {
+    dataDir = mkdtempSync(join(tmpdir(), 'cynosure-memory-folders-'))
+    process.env.CYNOSURE_DATA_DIR = dataDir
+  })
+
+  afterEach(() => {
+    delete process.env.CYNOSURE_DATA_DIR
+    rmSync(dataDir, { recursive: true, force: true })
+  })
+
+  test('normalizes safe paths and rejects traversal and reserved directories', () => {
+    expect(validateRelativePath(' People\\Veronica Flowers/Hobbies/ ')).toBe('People/Veronica Flowers/Hobbies')
+    expect(validateRelativePath('.agents/research_assistant')).toBe('.agents/research_assistant')
+    expect(isIgnoredMemoryFolderName(AGENT_MEMORY_FOLDER_NAME, true)).toBe(false)
+    expect(() => validateRelativePath('../private')).toThrow()
+    expect(() => validateRelativePath('shared/.private')).toThrow(/reserved/)
+    expect(() => validateRelativePath('Default/Notes')).toThrow(/reserved/)
+  })
+
+  test('discovers directories and atomically creates nested categories', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE memory_folders (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        directory_path TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0,
+        is_uncategorized INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+      );
+      CREATE TABLE memory_file_index (category_id TEXT);
+      CREATE TABLE agent_memory_folders (category_id TEXT);
+    `)
+    const memoryRoot = join(dataDir, 'data', 'memories')
+    mkdirSync(join(memoryRoot, 'Topics', 'AI'), { recursive: true })
+    db.prepare(`INSERT INTO memory_folders
+      (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
+      VALUES ('uncategorized', 'Uncategorized', '', ?, 0, 1, ?)`)
+      .run(memoryRoot, Date.now())
+
+    const discovered = syncMemoryFoldersFromFolders(db)
+    expect(discovered.some(row => row.name === 'AI')).toBe(true)
+
+    const created = ensureMemoryFolderPath(db, 'People/Veronica Flowers/Hobbies')
+    expect(created.name).toBe('Hobbies')
+    expect(existsSync(join(memoryRoot, 'People', 'Veronica Flowers', 'Hobbies'))).toBe(true)
+    const people = db.prepare("SELECT id, name FROM memory_folders WHERE name = 'People'").get() as { id: string; name: string }
+    const peopleScope = expandMemoryFolderScope([{ ...people, categoryPath: 'People' }], db)
+    expect(peopleScope.map(category => category.categoryPath)).toEqual([
+      'People',
+      'People/Veronica Flowers',
+      'People/Veronica Flowers/Hobbies',
+    ])
+    expect(expandMemoryFolderScope([{ id: 'uncategorized', name: 'Uncategorized', categoryPath: '' }], db))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
+
+    mkdirSync(join(memoryRoot, 'Valid'))
+    writeFileSync(join(memoryRoot, 'Valid', 'collision'), 'file')
+    const before = Number(db.prepare('SELECT COUNT(*) FROM memory_folders').pluck().get())
+    expect(() => ensureMemoryFolderPath(db, 'Valid/collision/Child')).toThrow()
+    expect(Number(db.prepare('SELECT COUNT(*) FROM memory_folders').pluck().get())).toBe(before)
+    expect(existsSync(join(memoryRoot, 'Valid'))).toBe(true)
+    db.close()
+  })
+
+  test('removes an empty category branch without removing a non-empty ancestor', () => {
+    const memoryRoot = join(dataDir, 'data', 'memories')
+    const branch = join(memoryRoot, 'Projects', 'Finished', 'Notes')
+    mkdirSync(branch, { recursive: true })
+    writeFileSync(join(memoryRoot, 'Projects', 'keep.md'), 'keep')
+
+    removeEmptyMemoryFolderFolders(branch)
+
+    expect(existsSync(branch)).toBe(false)
+    expect(existsSync(join(memoryRoot, 'Projects', 'Finished'))).toBe(false)
+    expect(existsSync(join(memoryRoot, 'Projects'))).toBe(true)
+  })
+})

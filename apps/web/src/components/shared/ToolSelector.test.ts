@@ -54,7 +54,7 @@ describe('ToolSelector requirements', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[['builtin::schedule_create']]])
   })
 
-  test.each(['memory_create', 'memory_append'])('automatically enables %s with a memory space', async (name) => {
+  test.each(['memory_create', 'memory_append', 'memory_replace_range', 'memory_replace_all', 'memory_remove_all', 'memory_remove_range'])('automatically enables %s with a memory folder', async (name) => {
     const store = useAgentStore()
     store.availableTools = [tool(`builtin:memory::${name}`, name)]
     const wrapper = mount(ToolSelector, {
@@ -74,8 +74,7 @@ describe('ToolSelector requirements', () => {
   })
 
   test.each([
-    'memory_replace_range', 'memory_replace_all',
-    'memory_remove_range', 'memory_remove_all', 'knowledge_assert', 'knowledge_delete',
+    'knowledge_assert', 'knowledge_delete',
     'knowledge_entity_merge',
   ])('allows manual %s selection alongside automatic knowledge tools', async (name) => {
     const store = useAgentStore()

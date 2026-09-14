@@ -49,23 +49,15 @@ describe('ToolRegistry behavior annotations', () => {
       expect.objectContaining({ name: 'second__change_record', annotations: second.annotations }),
     ])
   })
-})
 
-describe('ToolRegistry legacy built-in keys', () => {
-  test('resolves a pre-category key to its unique categorized built-in', () => {
+  test('ignores unregistered composite keys', () => {
     const registry = new ToolRegistry()
     registry.register(makeTool('schedule_create'), {
       id: 'builtin:scheduling',
       label: 'Built-In: Scheduling',
     })
 
-    expect(registry.hasKey('builtin::schedule_create')).toBe(true)
-    expect(registry.resolveForExecution(['builtin::schedule_create'])).toEqual([
-      expect.objectContaining({
-        name: 'schedule_create',
-        registryKey: 'builtin:scheduling::schedule_create',
-        namespaceId: 'builtin:scheduling',
-      }),
-    ])
+    expect(registry.hasKey('builtin::schedule_create')).toBe(false)
+    expect(registry.resolveForExecution(['builtin::schedule_create'])).toEqual([])
   })
 })

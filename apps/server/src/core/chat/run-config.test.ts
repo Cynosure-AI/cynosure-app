@@ -7,7 +7,7 @@ import {
     buildPersistedChatConfig,
     parseExecutionConfig,
     resolveChatRunFlags,
-    resolveMemorySpaceOverrides,
+    resolveMemoryFolderOverrides,
     resolveToolSelection,
 } from './run-config.js'
 
@@ -34,17 +34,17 @@ describe('chat run configuration', () => {
         expect(resolveChatRunFlags({ resolvedAgent: null }).autoMemory).toBe(false)
     })
 
-    test('resolves unique, existing memory spaces while preserving request order', () => {
+    test('resolves unique, existing memory folders while preserving request order', () => {
         const db = new Database(':memory:')
-        db.exec('CREATE TABLE memory_spaces (id TEXT, name TEXT, folder_path TEXT, is_default INTEGER)')
-        db.prepare('INSERT INTO memory_spaces VALUES (?, ?, ?, ?)').run('default', 'Default', '/tmp/default', 1)
-        db.prepare('INSERT INTO memory_spaces VALUES (?, ?, ?, ?)').run('project', 'Project', '/tmp/project', 0)
+        db.exec('CREATE TABLE memory_folders (id TEXT, name TEXT, directory_path TEXT, is_uncategorized INTEGER)')
+        db.prepare('INSERT INTO memory_folders VALUES (?, ?, ?, ?)').run('uncategorized', 'Uncategorized', '/tmp/memory', 1)
+        db.prepare('INSERT INTO memory_folders VALUES (?, ?, ?, ?)').run('project', 'Project', '/tmp/project', 0)
 
-        expect(resolveMemorySpaceOverrides(db, [' project ', '', 'missing', 'default', 'project'])).toEqual([
-            { id: 'project', name: 'Project', relativePath: expect.any(String) },
-            { id: 'default', name: 'Default', relativePath: '' },
+        expect(resolveMemoryFolderOverrides(db, [' project ', '', 'missing', 'uncategorized', 'project'])).toEqual([
+            { id: 'project', name: 'Project', categoryPath: expect.any(String) },
+            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
         ])
-        expect(resolveMemorySpaceOverrides(db)).toBeUndefined()
+        expect(resolveMemoryFolderOverrides(db)).toBeUndefined()
         db.close()
     })
 
@@ -62,7 +62,7 @@ describe('chat run configuration', () => {
         expect(persisted).toMatchObject({
             allowedTools: ['builtin::read'],
             subAgents: [],
-            memorySpaceIds: [],
+            memoryFolderIds: [],
             systemPrompt: '',
             model: 'model',
             providerId: 'provider',
@@ -83,12 +83,12 @@ describe('chat run configuration', () => {
             autoToolRouting: true,
             autoMemory: true,
         } as AgentData
-        const result = buildInitialExecutionConfig({ agent, memorySpaceIds: ['space-a'] })
+        const result = buildInitialExecutionConfig({ agent, memoryFolderIds: ['space-a'] })
 
         expect(result).toEqual({
             allowedTools: ['tool-a'],
             subAgents: [{ agentId: 'sub-agent' }],
-            memorySpaceIds: ['space-a'],
+            memoryFolderIds: ['space-a'],
             systemPrompt: 'Be precise',
             model: 'model-a',
             providerId: 'provider-a',
@@ -105,7 +105,7 @@ describe('chat run configuration', () => {
         const parsed = parseExecutionConfig(JSON.stringify({
             allowedTools: ['tool-a', 1, null],
             subAgents: [{ agentId: 'valid' }, { agentId: 1 }, null],
-            memorySpaceIds: ['space-a', false],
+            memoryFolderIds: ['space-a', false],
             systemPrompt: 12,
             model: null,
             providerId: {},
@@ -118,7 +118,7 @@ describe('chat run configuration', () => {
         expect(parsed).toEqual({
             allowedTools: ['tool-a'],
             subAgents: [{ agentId: 'valid' }],
-            memorySpaceIds: ['space-a'],
+            memoryFolderIds: ['space-a'],
             systemPrompt: '',
             model: '',
             providerId: '',

@@ -25,7 +25,7 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   mcp: { label: 'MCP Servers', icon: 'lucide:plug', description: 'MCP server configurations and connection settings' },
   settings: { label: 'Settings', icon: 'lucide:sliders-horizontal', description: 'Tool approvals, cron jobs, and app settings' },
   channels: { label: 'Channels', icon: 'lucide:radio', description: 'Channel configurations (Telegram, etc.)' },
-  memory: { label: 'Memory Spaces', icon: 'lucide:book-open', description: 'Memory space definitions, agent assignments, and document content (re-embedded on import)' },
+  memory: { label: 'Memory Folders', icon: 'lucide:book-open', description: 'Memory folder definitions, agent assignments, and document content (re-embedded on import)' },
   knowledge: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
   conversations: { label: 'Conversations', icon: 'lucide:message-square', description: 'Chat history and messages linked to agents (only restores for agents present in the DB)' },
   usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and step traces used for usage metrics' }

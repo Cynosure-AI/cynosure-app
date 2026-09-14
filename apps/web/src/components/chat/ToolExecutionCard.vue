@@ -172,7 +172,9 @@ function contextCallKind(call: ToolCall, status: string): ContextSectionKind | n
 
 function toolDisplayName(name = 'Tool'): string {
   if (name === 'Task context') return 'Preparing Context'
-  return isSubAgentSpawnCall(name) ? 'Spawn sub-agent' : name
+  if (name === 'spawn_subagent') return 'Spawn sub-agent'
+  if (name === 'continue_subagent') return 'Continue sub-agent'
+  return name
 }
 
 function memoryFileName(call?: ToolCall | null): string | null {
@@ -273,7 +275,7 @@ function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = [])
 function contextCallKey(call: ToolCall): string {
   const parsed = parseArgs(call.arguments)
   if (parsed?.type === 'memory') {
-    return ['memory', call.name, parsed.sourceFile, parsed.folderPath, parsed.chunkIndex, parsed.content]
+    return ['memory', call.name, parsed.sourceFile, parsed.directoryPath, parsed.chunkIndex, parsed.content]
       .map((value) => String(value ?? ''))
       .join('|')
   }

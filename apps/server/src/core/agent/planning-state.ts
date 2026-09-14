@@ -39,7 +39,6 @@ interface TaskRow {
 }
 
 const STATE_TYPE = 'planning_state'
-const LEGACY_STATE_TYPES = new Set(['orchestrator_state', 'todo_state'])
 const MAX_OBJECTIVE_LENGTH = 300
 const MAX_TASKS = 24
 const MAX_TASK_TITLE_LENGTH = 120
@@ -376,7 +375,7 @@ function fromRow(row: TaskRow): PlanningState | null {
       items?: PlanningTaskItem[]
       currentTaskId?: string
     }
-    if (definition.type !== STATE_TYPE && !LEGACY_STATE_TYPES.has(definition.type || '')) return null
+    if (definition.type !== STATE_TYPE) return null
 
     const result = row.result_json ? JSON.parse(row.result_json) as PlanningState['result'] : undefined
     return {

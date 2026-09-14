@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { LLMGateway } from '../../gateway/gateway.js'
-import { buildTaskContext, inferRequestedToolEffect } from './task-context.js'
+import { buildTaskContext } from './task-context.js'
 
 describe('task context cancellation', () => {
     test('passes the execution signal to the router request and preserves aborts', async () => {
@@ -25,22 +25,31 @@ describe('task context cancellation', () => {
         )
     })
 
-    test('uses a deterministic read-only fast path for clear personal memory lookups', async () => {
-        const gateway = { complete: vi.fn() } as unknown as LLMGateway
+    test('routes memory lookups by model intent instead of fixed-language keywords', async () => {
+        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
+            name: 'set_task_context',
+            arguments: JSON.stringify({
+                toolQuery: 'No external capability needed',
+                requestedToolEffect: 'read',
+                requiresExternalTools: false,
+                memoryQueries: ['亲密朋友的相关信息'],
+                requiresMemory: true,
+            }),
+        } }] })
+        const gateway = { complete } as unknown as LLMGateway
 
         await expect(buildTaskContext({
             conversationId: 'conversation',
             gateway,
-            userQuery: 'Was weißt du über meine beste Freundin?',
+            userQuery: '你还记得我最好的朋友吗？',
             enabledModes: { tools: true, memories: true },
         })).resolves.toMatchObject({
-            memoryQueries: [],
+            memoryQueries: ['亲密朋友的相关信息'],
             requestedToolEffect: 'read',
             skipToolRouting: true,
             skipMemoryRouting: false,
-            fastPath: true,
         })
-        expect(gateway.complete).not.toHaveBeenCalled()
+        expect(complete).toHaveBeenCalledOnce()
     })
 
     test('drops redundant memory expansions before applying the query budget', async () => {
@@ -80,9 +89,20 @@ describe('task context cancellation', () => {
         })
     })
 
-    test('classifies explicit mutations conservatively', () => {
-        expect(inferRequestedToolEffect('Please send the email')).toBe('write')
-        expect(inferRequestedToolEffect('Lösche diesen Eintrag')).toBe('destructive')
-        expect(inferRequestedToolEffect('Read the latest email')).toBe('read')
+    test('uses the model side-effect classification without lexical overrides', async () => {
+        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
+            name: 'set_task_context',
+            arguments: JSON.stringify({
+                toolQuery: 'send a message',
+                requestedToolEffect: 'write',
+                requiresExternalTools: true,
+            }),
+        } }] })
+        const result = await buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'Envía el mensaje', enabledModes: { tools: true, memories: false },
+        })
+
+        expect(result?.requestedToolEffect).toBe('write')
     })
 })

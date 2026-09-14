@@ -3,8 +3,7 @@ import { BUILTIN_TOOL_NAMES, getBuiltInMemoryToolKeys, getBuiltInNamespace, getB
 
 describe('built-in tool categories', () => {
     it.each([
-        'memory_replace_range', 'memory_replace_all',
-        'memory_remove_range', 'memory_remove_all', 'knowledge_assert', 'knowledge_delete',
+        'knowledge_assert', 'knowledge_delete',
         'knowledge_entity_merge',
     ])('keeps %s selectable and routable without automatic memory activation', (name) => {
         expect(BUILTIN_TOOL_NAMES).toContain(name)

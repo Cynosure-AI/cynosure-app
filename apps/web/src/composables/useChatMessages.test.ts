@@ -70,7 +70,7 @@ function setup(initialConversationId: string | null = 'conversation') {
     sessionAutoMemory: ref(true),
     selectedToolNames: ref(['builtin::read']),
     freeChatSubAgentIds: ref(['sub-agent']),
-    freeChatMemorySpaceIds: ref(['memory-space']),
+    freeChatMemoryFolderIds: ref(['memory-space']),
     freeChatMemorySelectionInitialized: ref(true),
   }
   const createConversation = vi.fn(async () => {
@@ -138,7 +138,7 @@ describe('chat message actions', () => {
         allowedTools: ['builtin::read'],
         systemPrompt: 'Session prompt',
         subAgents: [{ agentId: 'sub-agent' }],
-        memorySpaceIds: ['memory-space'],
+        memoryFolderIds: ['memory-space'],
         thinkingEnabled: false,
         reasoningEffort: 'high',
         autoToolRouting: true,

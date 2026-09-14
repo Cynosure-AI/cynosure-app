@@ -320,7 +320,7 @@ onBeforeUnmount(() => {
         :key="conversation.id"
         role="button"
         tabindex="0"
-        class="group relative cursor-pointer mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-theme-800/70"
+        class="group relative cursor-pointer mb-0.5 h-11 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-theme-800/70"
         :class="{
           'bg-theme-800': conversation.id === chatStore.activeConversationId,
           'bg-amber-500/20 hover:bg-amber-500/25': awaitingIds.has(conversation.id),
@@ -330,22 +330,29 @@ onBeforeUnmount(() => {
         @keydown.enter.self.prevent="selectConversation(conversation)"
       >
         <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-theme-500">
-          <Icon
-            v-if="runningIds.has(conversation.id)"
-            icon="lucide:loader-circle"
-            class="h-3.5 w-3.5 animate-spin text-accent-400"
-          />
           <img
-            v-else-if="conversation.agentId && agentDefs.get(conversation.agentId)?.iconUrl"
+            v-if="conversation.agentId && agentDefs.get(conversation.agentId)?.iconUrl"
             :src="agentDefs.get(conversation.agentId)?.iconUrl || ''"
             :alt="`${agentName(conversation)} icon`"
             class="h-full w-full object-cover"
+            :class="{ 'opacity-15': runningIds.has(conversation.id) }"
           >
           <Icon
             v-else
             :icon="conversation.agentId ? 'lucide:bot' : 'lucide:message-square'"
             class="h-3.5 w-3.5"
+            :class="{ 'opacity-15': runningIds.has(conversation.id) }"
           />
+          <span
+            v-if="runningIds.has(conversation.id)"
+            class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
+            aria-label="Chat is running"
+          >
+            <Icon
+              icon="lucide:loader-circle"
+              class="h-3.5 w-3.5 animate-spin text-accent-300 drop-shadow-sm"
+            />
+          </span>
           <span
             v-if="awaitingIds.has(conversation.id)"
             class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-900 animate-pulse"
@@ -442,11 +449,26 @@ onBeforeUnmount(() => {
         </span>
       </div>
 
+      <div
+        v-if="!visibleConversations.length && !loading && !searchQuery"
+        class="mx-2 mt-3 flex flex-col items-center rounded-xl border border-theme-800/80 bg-theme-900/35 px-4 py-7 text-center"
+      >
+        <span class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-theme-700/70 bg-theme-800/70 text-theme-400 shadow-sm">
+          <Icon
+            icon="lucide:message-circle-more"
+            class="h-6 w-6"
+          />
+        </span>
+        <span class="text-sm font-medium text-theme-300">No chats yet</span>
+        <span class="mt-1 max-w-44 text-[11px] leading-relaxed text-theme-600">
+          Start a conversation and it will appear here for quick access.
+        </span>
+      </div>
       <p
-        v-if="!visibleConversations.length && !loading"
+        v-else-if="!visibleConversations.length && !loading"
         class="px-3 py-6 text-center text-xs text-theme-600"
       >
-        {{ searchQuery.trim().length === 1 ? 'Type at least 2 characters' : searchQuery ? 'No matching chats' : 'No recent chats' }}
+        {{ searchQuery.trim().length === 1 ? 'Type at least 2 characters' : 'No matching chats' }}
       </p>
       <p
         v-if="loading && !visibleConversations.length"

@@ -14,7 +14,7 @@ import type { ChatMessage } from '../gateway/providers/base.provider.js'
 import type { PlannedExecution } from '../agent/pre-execution/execution-planner.js'
 import type { ActiveChannelExecutionEntry } from './base.channel.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
-import { getAssignedOrDefaultSpaces } from '../memory/memory-space-scope.js'
+import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 export type ActiveChannelExecutionMap = Map<string, ActiveChannelExecutionEntry>
@@ -183,7 +183,7 @@ export function persistChannelExecutionConfig(
     const config = buildPersistedChatConfig({
         selectedToolKeys: agent.tools || [],
         requestedSubAgents: agent.subAgents || [],
-        requestedMemorySpaceIds: getAssignedOrDefaultSpaces(agent.id).map((space) => space.id),
+        requestedMemoryFolderIds: getAssignedMemoryFolders(agent.id).map((space) => space.id),
         systemPrompt: agent.systemPrompt,
         responseModel: planned.responseModel,
         responseProvider: planned.responseProvider,

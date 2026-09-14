@@ -10,7 +10,7 @@ const chatStore = useChatStore()
 
 const visible = defineModel<boolean>({ required: true })
 
-const hasMemoryScope = computed(() => chatStore.freeChatMemorySpaceIds.length > 0)
+const hasMemoryScope = computed(() => chatStore.freeChatMemoryFolderIds.length > 0)
 const hasConversationAttachment = computed(() => chatStore.messages.some((message) => (message.fileAttachments?.length ?? 0) > 0))
 const hasSelectableExecutionTools = computed(() => chatStore.selectedToolNames.length > 0 || chatStore.sessionAutoToolRouting)
 

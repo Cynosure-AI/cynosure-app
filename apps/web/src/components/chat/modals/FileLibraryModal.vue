@@ -18,7 +18,7 @@ const emit = defineEmits<{
   close: []
   add: [selection: {
     images: { id: string; name: string; url: string }[]
-    files: { id: string; name: string; content: string }[]
+    files: { id: string; name: string; content?: string; existingAttachmentId?: string }[]
     audio: { id: string; name: string; url: string }[]
   }]
 }>()
@@ -131,7 +131,10 @@ async function addSelected(): Promise<void> {
     emit('add', {
       images: artifactsResponse.images,
       audio: artifactsResponse.audio,
-      files: [...uploadsResponse.files, ...artifactsResponse.files],
+      files: [
+        ...uploadsResponse.files,
+        ...artifactsResponse.files,
+      ],
     })
     emit('close')
   } catch (err) {

@@ -34,4 +34,16 @@ describe('MessageBubble', () => {
     expect(time.attributes('datetime')).toBe(new Date(createdAt).toISOString())
     expect(time.classes()).toContain('group-hover/msg:opacity-100')
   })
+
+  test('keeps readonly transcript messages visually user-styled without edit or retry actions', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'user', content: 'Delegated task', readonly: true },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+
+    expect(wrapper.get('.chat-user-message').text()).toContain('Delegated task')
+    expect(wrapper.find('[title="Edit"]').exists()).toBe(false)
+    expect(wrapper.find('[title="Retry"]').exists()).toBe(false)
+  })
 })

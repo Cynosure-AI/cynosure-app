@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
-import type { MemorySpace } from '../../../api/types'
+import type { MemoryFolder } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
@@ -12,22 +12,22 @@ const visible = defineModel<boolean>({ required: true })
 
 const loading = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
-const spaces = computed(() => chatStore.memorySpaces)
+const spaces = computed(() => chatStore.memoryFolders)
 
 watch(visible, async (val) => {
   if (!val) return
   loading.value = true
   try {
-    await chatStore.loadMemorySpaces()
+    await chatStore.loadMemoryFolders()
     collapseFoldersWithChildren(spaces.value)
 
     // Prune any stale IDs that no longer exist
     const validIds = new Set(spaces.value.map((space) => space.id))
-    const nextSelected = chatStore.freeChatMemorySpaceIds.filter((id) => validIds.has(id))
-    if (nextSelected.length !== chatStore.freeChatMemorySpaceIds.length) {
-      chatStore.freeChatMemorySpaceIds.splice(
+    const nextSelected = chatStore.freeChatMemoryFolderIds.filter((id) => validIds.has(id))
+    if (nextSelected.length !== chatStore.freeChatMemoryFolderIds.length) {
+      chatStore.freeChatMemoryFolderIds.splice(
         0,
-        chatStore.freeChatMemorySpaceIds.length,
+        chatStore.freeChatMemoryFolderIds.length,
         ...nextSelected,
       )
       chatStore.markOverridesModified()
@@ -36,13 +36,16 @@ watch(visible, async (val) => {
   loading.value = false
 })
 
-const selected = computed(() => chatStore.freeChatMemorySpaceIds)
-const allSelected = computed(() => spaces.value.length > 0 && spaces.value.every((space) => selected.value.includes(space.id)))
+const selected = computed(() => chatStore.freeChatMemoryFolderIds)
+const rootCategory = computed(() => spaces.value.find(space => space.isUncategorized))
+const rootSelected = computed(() => Boolean(rootCategory.value && selected.value.includes(rootCategory.value.id)))
+const allSelected = computed(() => spaces.value.length > 0 && (rootSelected.value || spaces.value.every((space) => selected.value.includes(space.id))))
+const effectiveSelectedCount = computed(() => rootSelected.value ? spaces.value.length : spaces.value.filter(space => selected.value.includes(space.id)).length)
 
-function collapseFoldersWithChildren(memorySpaces: MemorySpace[]) {
+function collapseFoldersWithChildren(memoryFolders: MemoryFolder[]) {
   const pathsWithChildren = new Set<string>()
-  const paths = memorySpaces
-    .map((space) => space.relativePath || '')
+  const paths = memoryFolders
+    .map((space) => space.categoryPath || '')
     .filter(Boolean)
 
   for (const path of paths) {
@@ -57,8 +60,8 @@ function collapseFoldersWithChildren(memorySpaces: MemorySpace[]) {
 
 const visibleSpaces = computed(() =>
   spaces.value.filter((space) => {
-    if (space.isDefault) return true
-    const parts = (space.relativePath || '').split('/')
+    if (space.isUncategorized) return true
+    const parts = (space.categoryPath || '').split('/')
     for (let i = 1; i < parts.length; i++) {
       if (collapsedFolders.value.has(parts.slice(0, i).join('/'))) return false
     }
@@ -66,22 +69,22 @@ const visibleSpaces = computed(() =>
   })
 )
 
-function hasChildren(space: MemorySpace): boolean {
-  const prefix = space.relativePath ? `${space.relativePath}/` : ''
-  return spaces.value.some((candidate) => space.isDefault ? Boolean(candidate.relativePath) : candidate.relativePath?.startsWith(prefix))
+function hasChildren(space: MemoryFolder): boolean {
+  const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
+  return spaces.value.some((candidate) => space.isUncategorized ? Boolean(candidate.categoryPath) : candidate.categoryPath?.startsWith(prefix))
 }
 
-function isPartiallySelected(space: MemorySpace): boolean {
-  if (space.isDefault || !hasChildren(space)) return false
+function isPartiallySelected(space: MemoryFolder): boolean {
+  if (space.isUncategorized || !hasChildren(space)) return false
   // Show partial icon whenever children are selected but the parent itself is not
   if (selected.value.includes(space.id)) return false
-  const prefix = `${space.relativePath}/`
-  const directChildren = spaces.value.filter(c => c.relativePath?.startsWith(prefix))
+  const prefix = `${space.categoryPath}/`
+  const directChildren = spaces.value.filter(c => c.categoryPath?.startsWith(prefix))
   return directChildren.some(c => selected.value.includes(c.id))
 }
 
-function toggleCollapsed(space: MemorySpace) {
-  const key = space.relativePath || ''
+function toggleCollapsed(space: MemoryFolder) {
+  const key = space.categoryPath || ''
   const next = new Set(collapsedFolders.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
@@ -89,13 +92,14 @@ function toggleCollapsed(space: MemorySpace) {
 }
 
 function selectAll() {
-  chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...spaces.value.map((space) => space.id))
+  const ids = rootCategory.value ? [rootCategory.value.id] : spaces.value.map(space => space.id)
+  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length, ...ids)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 
 function deselectAll() {
-  chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length)
+  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
@@ -104,25 +108,41 @@ function toggle(id: string) {
   const space = spaces.value.find((candidate) => candidate.id === id)
   if (!space) return
 
-  const current = new Set(chatStore.freeChatMemorySpaceIds)
-  const scopedIds = memorySpaceScopeIds(space)
+  const current = new Set(chatStore.freeChatMemoryFolderIds)
+  const scopedIds = memoryFolderScopeIds(space)
 
-  if (current.has(id)) {
+  if (space.isUncategorized) {
+    current.clear()
+    if (!rootSelected.value) current.add(space.id)
+  } else if (rootSelected.value) {
+    // Moving from the root grant to a child means narrowing the scope to that subtree.
+    current.clear()
+    for (const scopedId of scopedIds) current.add(scopedId)
+  } else if (current.has(id)) {
     for (const scopedId of scopedIds) current.delete(scopedId)
   } else {
     for (const scopedId of scopedIds) current.add(scopedId)
   }
 
-  chatStore.freeChatMemorySpaceIds.splice(0, chatStore.freeChatMemorySpaceIds.length, ...current)
+  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length, ...current)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 
-function memorySpaceScopeIds(space: MemorySpace): string[] {
-  if (space.isDefault) return [space.id]
-  const prefix = space.relativePath ? `${space.relativePath}/` : ''
+function isSelected(space: MemoryFolder): boolean {
+  return rootSelected.value || selected.value.includes(space.id)
+}
+
+function categoryDepth(space: MemoryFolder): number {
+  if (space.isUncategorized) return 0
+  return Math.max(1, (space.categoryPath || '').split('/').filter(Boolean).length)
+}
+
+function memoryFolderScopeIds(space: MemoryFolder): string[] {
+  if (space.isUncategorized) return [space.id]
+  const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
   return spaces.value
-    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.relativePath?.startsWith(prefix)))
+    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.categoryPath?.startsWith(prefix)))
     .map((candidate) => candidate.id)
 }
 
@@ -172,7 +192,7 @@ function toggleAutoMemory(enabled: boolean) {
       class="mb-2 flex items-center justify-between text-xs"
     >
       <span class="text-theme-500">
-        {{ allSelected ? 'All folders selected' : `${selected.length}/${spaces.length} folders selected` }}
+        {{ allSelected ? 'All memory selected' : `${effectiveSelectedCount}/${spaces.length} folders selected` }}
       </span>
       <div class="flex items-center gap-4">
         <button
@@ -210,7 +230,8 @@ function toggleAutoMemory(enabled: boolean) {
         v-for="space in visibleSpaces"
         :key="space.id"
         class="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
-        :class="selected.includes(space.id)
+        :data-category-depth="categoryDepth(space)"
+        :class="isSelected(space)
           ? 'bg-accent-600/15 border border-accent-500/30'
           : isPartiallySelected(space)
             ? 'bg-accent-600/8 border border-accent-500/15 hover:bg-accent-600/12'
@@ -218,20 +239,21 @@ function toggleAutoMemory(enabled: boolean) {
       >
         <!-- Indent spacer -->
         <span
-          v-if="(space.depth || 0) > 1"
-          :style="{ width: `${((space.depth || 0) * 12)}px` }"
-          class="shrink-0"
+          v-if="categoryDepth(space) > 0"
+          :style="{ width: `${categoryDepth(space) * 12}px` }"
+          class="shrink-0 self-stretch border-r border-theme-700/60"
+          aria-hidden="true"
         />
         <!-- Chevron: always rendered to keep all rows aligned -->
         <button
           class="p-0.5 shrink-0 text-theme-500 hover:text-theme-200"
-          :class="{ 'invisible pointer-events-none': space.isDefault || !hasChildren(space) }"
+          :class="{ 'invisible pointer-events-none': space.isUncategorized || !hasChildren(space) }"
           @click.stop="toggleCollapsed(space)"
         >
           <Icon
             icon="lucide:chevron-down"
             class="w-3.5 h-3.5 transition-transform"
-            :class="{ '-rotate-90': collapsedFolders.has(space.relativePath || '') }"
+            :class="{ '-rotate-90': collapsedFolders.has(space.categoryPath || '') }"
           />
         </button>
         <!-- Folder name / toggle selection -->
@@ -241,21 +263,21 @@ function toggleAutoMemory(enabled: boolean) {
         >
           <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
             <Icon
-              :icon="space.isDefault ? 'lucide:hard-drive' : 'lucide:folder'"
+              :icon="space.isUncategorized ? 'lucide:hard-drive' : 'lucide:folder'"
               class="w-3.5 h-3.5"
-              :class="selected.includes(space.id) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
+              :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
             />
           </div>
           <div class="flex-1 min-w-0">
             <div class="text-sm text-theme-200 truncate">
-              {{ space.name }}
+              {{ space.isUncategorized ? 'All Memory' : space.name }}
             </div>
             <div class="text-[11px] text-theme-500">
-              {{ space.fileCount }} document{{ space.fileCount !== 1 ? 's' : '' }}
+              {{ space.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${space.fileCount} document${space.fileCount !== 1 ? 's' : ''}` }}
             </div>
           </div>
           <Icon
-            v-if="selected.includes(space.id)"
+            v-if="isSelected(space)"
             icon="mdi:check-circle"
             class="w-4 h-4 text-accent-400 shrink-0"
           />

@@ -86,4 +86,23 @@ describe('title generation', () => {
     expect(buildFallbackTitle('Über München und Köln')).toBe('Über München Und Köln')
     expect(buildFallbackTitle('日本語のタイトル')).toBe('日本語のタイトル')
   })
+
+  test('supports generated titles up to 20 words and requests the same limit', async () => {
+    const title = 'Add More Detail To Chat Titles For Better Context In Project History'
+    complete.mockResolvedValueOnce({ content: title })
+
+    await generateTitle({
+      conversationId: 'conversation-3',
+      userMessage: 'Build a detailed account migration plan',
+      assistantResponse: 'Here is the migration plan.',
+      broadcast: vi.fn(),
+    })
+
+    expect(complete.mock.calls[0][0].messages[0].content).toContain('3-20 words')
+    expect(run).toHaveBeenLastCalledWith(
+      title,
+      expect.any(Number),
+      'conversation-3',
+    )
+  })
 })

@@ -43,20 +43,20 @@ test('chunk keywords participate in BM25 while untagged chunks retain normal ret
       {
         id: 'tagged', text: 'Chantal values having room to make her own decisions.',
         searchText: 'Chantal values having room to make her own decisions.', vector: [1, 0, 0],
-        source: 'memory', sourceFile: 'chantal.md', chunkIndex: 0, spaceId: 'persons',
+        source: 'memory', sourceFile: 'chantal.md', chunkIndex: 0, categoryId: 'persons',
         contentHash: 'chunk-a', createdAt: 1,
       },
       {
         id: 'untagged', text: 'Caroline works at Acme.', searchText: 'Caroline works at Acme.',
         vector: [0, 1, 0], source: 'memory', sourceFile: 'caroline.md', chunkIndex: 0,
-        spaceId: 'persons', contentHash: 'chunk-b', createdAt: 2,
+        categoryId: 'persons', contentHash: 'chunk-b', createdAt: 2,
       },
     ], 3)
     await store.rebuildFtsIndex('memory')
     expect(await store.lexicalSearch('memory', 'autonomy', 5)).toEqual([])
 
     const filter = andLanceDbFilters(
-      lanceDbEqFilter('spaceId', 'persons'),
+      lanceDbEqFilter('categoryId', 'persons'),
       lanceDbEqFilter('sourceFile', 'chantal.md'),
     )!
     await expect(store.updateChunkSearchKeywords('memory', filter, new Map([

@@ -243,7 +243,7 @@ export class ToolRegistry {
   }
 
   hasKey(key: string): boolean {
-    return this.entries.has(key) || Boolean(this.resolveLegacyBuiltInKey(key))
+    return this.entries.has(key)
   }
 
   async execute(name: string, params: unknown): Promise<ToolResult> {
@@ -268,9 +268,8 @@ export class ToolRegistry {
       const key = keyCandidate.trim()
       if (!key) continue
 
-      const resolvedKey = this.entries.has(key) ? key : this.resolveLegacyBuiltInKey(key)
-      const entry = resolvedKey ? this.entries.get(resolvedKey) : undefined
-      if (entry) resolved.push({ key: resolvedKey!, entry })
+      const entry = this.entries.get(key)
+      if (entry) resolved.push({ key, entry })
     }
 
     const result: RegisteredToolDefinition[] = []
@@ -296,15 +295,6 @@ export class ToolRegistry {
     }
 
     return result
-  }
-
-  /** Resolve pre-category persisted keys without weakening namespace matching for MCP tools. */
-  private resolveLegacyBuiltInKey(key: string): string | undefined {
-    if (!key.startsWith('builtin::')) return undefined
-    const toolName = key.slice('builtin::'.length)
-    const matches = [...(this.nameIndex.get(toolName) ?? [])]
-      .filter((candidate) => candidate.startsWith('builtin:'))
-    return matches.length === 1 ? matches[0] : undefined
   }
 }
 

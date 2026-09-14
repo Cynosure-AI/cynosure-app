@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { AgentDefinition, MemorySpace } from '../../api/types'
+import type { AgentDefinition, MemoryFolder } from '../../api/types'
 import AgentMemoryTab from './AgentMemoryTab.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api/client', () => ({
   api: {
-    memorySpaces: {
+    memoryFolders: {
       list: mocks.listSpaces,
     },
   },
@@ -20,15 +20,15 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-const spaces: MemorySpace[] = [
+const spaces: MemoryFolder[] = [
   {
-    id: 'default',
-    name: 'Default',
+    id: 'uncategorized',
+    name: 'Uncategorized',
     description: '',
-    folderPath: '/memory/default',
-    relativePath: '',
+    directoryPath: '/memory/default',
+    categoryPath: '',
     sortOrder: 0,
-    isDefault: true,
+    isUncategorized: true,
     createdAt: 1,
     fileCount: 2,
   },
@@ -36,10 +36,10 @@ const spaces: MemorySpace[] = [
     id: 'research',
     name: 'Research',
     description: '',
-    folderPath: '/memory/research',
-    relativePath: 'research',
+    directoryPath: '/memory/research',
+    categoryPath: 'research',
     sortOrder: 1,
-    isDefault: false,
+    isUncategorized: false,
     createdAt: 1,
     fileCount: 3,
   },
@@ -49,11 +49,22 @@ const agent = {
   id: 'agent-1',
   name: 'Research Agent',
   internalName: 'research_agent',
-  memorySpaces: ['default'],
+  memoryFolders: ['uncategorized'],
   autoMemory: false,
+  dreamingEnabled: true,
 } as AgentDefinition
 
 describe('AgentMemoryTab', () => {
+  test('Dreaming is opt-out per agent', async () => {
+    const wrapper = mount(AgentMemoryTab, { props: { agent } })
+    await flushPromises()
+
+    const dreamingToggle = wrapper.findAll('[role="switch"]')[0]
+    expect(dreamingToggle.attributes('aria-checked')).toBe('true')
+    await dreamingToggle.trigger('click')
+    expect(wrapper.emitted('update')).toContainEqual(['dreamingEnabled', false])
+  })
+
   beforeEach(() => {
     mocks.listSpaces.mockReset().mockResolvedValue(spaces)
     mocks.push.mockReset()
@@ -65,21 +76,29 @@ describe('AgentMemoryTab', () => {
 
     const cardTitles = wrapper.findAll('h3').map(title => title.text())
     expect(cardTitles).toEqual([
+      'Dreaming',
       'Automatic memory retrieval',
       'Memory Folders',
     ])
   })
 
-  test('offers deselect all when only one folder is selected', async () => {
+  test('presents the root grant as All Memory and selects its indented descendants', async () => {
     const wrapper = mount(AgentMemoryTab, { props: { agent } })
     await flushPromises()
 
     const actions = wrapper.findAll('button')
     const deselectAll = actions.find(button => button.text().trim() === 'Deselect all')
-    expect(actions.some(button => button.text().trim() === 'Select all')).toBe(true)
+    expect(wrapper.text()).toContain('All Memory')
+    expect(wrapper.text()).toContain('Includes Uncategorized and every subfolder')
+    expect(wrapper.text()).toContain('All memory selected')
+    expect(actions.some(button => button.text().trim() === 'Select all')).toBe(false)
     expect(deselectAll).toBeDefined()
 
+    const research = wrapper.get('[data-category-depth="1"]')
+    expect(research.classes()).toContain('bg-accent-600/10')
+    expect(research.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
+
     await deselectAll!.trigger('click')
-    expect(wrapper.emitted('update')).toContainEqual(['memorySpaces', []])
+    expect(wrapper.emitted('update')).toContainEqual(['memoryFolders', []])
   })
 })

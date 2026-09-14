@@ -2,7 +2,7 @@
    Dark Theme - graphite depth, cool light, and a crisp electric-blue accent
    ========================================================================== */
 
-[data-theme="dark"] {
+:where([data-theme="dark"], :root:not([data-theme])) {
   --color-theme-950: #0b0d12;
   --color-theme-900: #11141b;
   --color-theme-800: #1a1e28;
@@ -33,7 +33,7 @@
   color-scheme: dark;
 }
 
-[data-theme="dark"] body {
+:where([data-theme="dark"], :root:not([data-theme])) body {
   background:
     radial-gradient(
       circle at 78% -8%,
@@ -48,7 +48,7 @@
     var(--color-theme-950);
 }
 
-[data-theme="dark"] .bg-theme-950 {
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-950 {
   background:
     radial-gradient(
       circle at 78% -8%,
@@ -64,38 +64,38 @@
     var(--color-theme-950);
 }
 
-[data-theme="dark"] .bg-theme-900,
-[data-theme="dark"] .bg-theme-900\/50,
-[data-theme="dark"] .bg-theme-900\/60,
-[data-theme="dark"] .bg-theme-900\/70,
-[data-theme="dark"] .bg-theme-900\/80,
-[data-theme="dark"] .bg-theme-900\/90 {
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/50,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/60,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/70,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/80,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/90 {
   background-color: color-mix(in srgb, var(--color-theme-900) 96%, #2788f5 4%);
 }
 
-[data-theme="dark"] .bg-theme-800,
-[data-theme="dark"] .bg-theme-800\/50,
-[data-theme="dark"] .bg-theme-800\/60,
-[data-theme="dark"] .bg-theme-800\/70,
-[data-theme="dark"] .bg-theme-800\/80 {
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/50,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/60,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/70,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/80 {
   background-color: color-mix(in srgb, var(--color-theme-800) 97%, #4fa8ff 3%);
 }
 
-[data-theme="dark"] .border-theme-700,
-[data-theme="dark"] .border-theme-700\/60,
-[data-theme="dark"] .border-theme-800,
-[data-theme="dark"] .border-theme-800\/60 {
+:where([data-theme="dark"], :root:not([data-theme])) .border-theme-700,
+:where([data-theme="dark"], :root:not([data-theme])) .border-theme-700\/60,
+:where([data-theme="dark"], :root:not([data-theme])) .border-theme-800,
+:where([data-theme="dark"], :root:not([data-theme])) .border-theme-800\/60 {
   border-color: var(--default-line);
 }
 
-[data-theme="dark"] .shadow-xl,
-[data-theme="dark"] .shadow-2xl {
+:where([data-theme="dark"], :root:not([data-theme])) .shadow-xl,
+:where([data-theme="dark"], :root:not([data-theme])) .shadow-2xl {
   box-shadow:
     0 24px 70px rgba(0, 0, 0, 0.48),
     0 1px 0 rgba(255, 255, 255, 0.035) inset;
 }
 
-[data-theme="dark"] #primary-navigation aside {
+:where([data-theme="dark"], :root:not([data-theme])) #primary-navigation aside {
   background:
     radial-gradient(
       circle at 12% 2%,
@@ -107,7 +107,7 @@
   box-shadow: 12px 0 40px rgba(0, 0, 0, 0.14);
 }
 
-[data-theme="dark"] main.bg-theme-900 {
+:where([data-theme="dark"], :root:not([data-theme])) main.bg-theme-900 {
   background:
     radial-gradient(
       circle at 62% -18%,
@@ -117,23 +117,23 @@
     linear-gradient(180deg, #121720, #10141c);
 }
 
-[data-theme="dark"] main > .shrink-0.border-b {
+:where([data-theme="dark"], :root:not([data-theme])) main > .shrink-0.border-b {
   background: rgba(16, 20, 28, 0.72);
   backdrop-filter: blur(14px);
 }
 
-[data-theme="dark"] .chat-input-bar .bg-theme-800.border-theme-700.rounded-xl {
+:where([data-theme="dark"], :root:not([data-theme])) .chat-input-bar .bg-theme-800.border-theme-700.rounded-xl {
   background: linear-gradient(180deg, #1d2330, #191e29);
   box-shadow:
     0 12px 36px rgba(0, 0, 0, 0.22),
     0 1px 0 rgba(255, 255, 255, 0.035) inset;
 }
 
-[data-theme="dark"] :is(button, a):focus-visible {
+:where([data-theme="dark"], :root:not([data-theme])) :is(button, a):focus-visible {
   box-shadow: var(--theme-glow-strong);
 }
 
-[data-theme="dark"] :is(input, textarea, select):focus {
+:where([data-theme="dark"], :root:not([data-theme])) :is(input, textarea, select):focus {
   border-color: rgba(79, 168, 255, 0.52) !important;
   box-shadow:
     0 0 0 3px rgba(39, 136, 245, 0.1),
@@ -141,19 +141,19 @@
   outline: none;
 }
 
-[data-theme="dark"] button.bg-accent-600,
-[data-theme="dark"] button.bg-accent-500,
-[data-theme="dark"] .bg-accent-600,
-[data-theme="dark"] .bg-accent-500 {
+:where([data-theme="dark"], :root:not([data-theme])) button.bg-accent-600,
+:where([data-theme="dark"], :root:not([data-theme])) button.bg-accent-500,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-accent-600,
+:where([data-theme="dark"], :root:not([data-theme])) .bg-accent-500 {
   background-image: linear-gradient(135deg, #4fa8ff, #2788f5 55%, #176de0);
   box-shadow:
     0 4px 8px rgba(23, 109, 224, 0.22),
     0 1px 0 rgba(255, 255, 255, 0.18) inset;
 }
 
-[data-theme="dark"] .nav-item.active,
-[data-theme="dark"] nav a.router-link-active,
-[data-theme="dark"] nav [data-active="true"] {
+:where([data-theme="dark"], :root:not([data-theme])) .nav-item.active,
+:where([data-theme="dark"], :root:not([data-theme])) nav a.router-link-active,
+:where([data-theme="dark"], :root:not([data-theme])) nav [data-active="true"] {
   background: linear-gradient(
     90deg,
     rgba(79, 168, 255, 0.14),
@@ -163,33 +163,33 @@
   box-shadow: inset 5px 0 18px rgba(39, 136, 245, 0.07);
 }
 
-[data-theme="dark"] .msg-markdown a {
+:where([data-theme="dark"], :root:not([data-theme])) .msg-markdown a {
   color: #86c5ff;
   text-decoration-color: rgba(134, 197, 255, 0.35);
 }
 
-[data-theme="dark"] .msg-markdown :not(pre) > code {
+:where([data-theme="dark"], :root:not([data-theme])) .msg-markdown :not(pre) > code {
   background: rgba(79, 168, 255, 0.08);
   border: 1px solid rgba(79, 168, 255, 0.13);
   color: #b8ddff;
 }
 
-[data-theme="dark"] ::selection {
+:where([data-theme="dark"], :root:not([data-theme])) ::selection {
   background: rgba(79, 168, 255, 0.28);
   color: #fff;
 }
-[data-theme="dark"] ::-webkit-scrollbar {
+:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-[data-theme="dark"] ::-webkit-scrollbar-track {
+:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar-track {
   background: #0b0d12;
 }
-[data-theme="dark"] ::-webkit-scrollbar-thumb {
+:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar-thumb {
   background: #343c4c;
   border: 2px solid #0b0d12;
   border-radius: 999px;
 }
-[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar-thumb:hover {
   background: #4b566b;
 }

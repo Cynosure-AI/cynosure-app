@@ -30,7 +30,7 @@ export interface ApplyAutoMemoryRoutingInput {
     providerId?: string
     model?: string
     agentId?: string
-    memorySpaceIds?: string[]
+    memoryFolderIds?: string[]
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
@@ -83,7 +83,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         providerId,
         model,
         agentId,
-        memorySpaceIds,
+        memoryFolderIds,
         eventMeta,
         signal,
         debugContextEnabled,
@@ -124,7 +124,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         let retrievalResults = await Promise.all(
             retrievalQueries.map((query, queryIndex) => aggregator.aggregate(query, {
                 agentId,
-                spaceIds: memorySpaceIds,
+                categoryIds: memoryFolderIds,
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(primaryQuery),
@@ -179,7 +179,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             const correctedStats: MemoryRetrievalStatusDetails = {}
             const corrected = await aggregator.aggregate(correctiveQuery, {
                 agentId,
-                spaceIds: memorySpaceIds,
+                categoryIds: memoryFolderIds,
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(correctiveQuery),
@@ -587,7 +587,7 @@ function formatGraphCandidate(edge: KnowledgeAssertion, id: string): string {
 function formatMemoryCandidate(candidate: RetrievedChunk, id: string): string {
     const score = memoryMatch(candidate).score
     const metadata = [
-        candidate.spaceName ? `space=${candidate.spaceName}` : '',
+        candidate.categoryName ? `space=${candidate.categoryName}` : '',
         candidate.sourceFile ? `source=${candidate.sourceFile}` : '',
         candidate.chunkIndex != null ? `part=${candidate.chunkIndex + 1}${candidate.totalChunks ? `/${candidate.totalChunks}` : ''}` : '',
         typeof score === 'number' && Number.isFinite(score) ? `score=${score.toFixed(4)}` : '',
@@ -621,7 +621,7 @@ function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
     const ranked = new Map<string, RetrievedChunk>()
     for (const result of results) {
         result.permanent.forEach((chunk) => {
-            const key = chunk.id || [chunk.spaceId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
+            const key = chunk.id || [chunk.categoryId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
             const existing = ranked.get(key)
             if (!existing || memoryMatch(chunk).score > memoryMatch(existing).score) ranked.set(key, chunk)
         })
@@ -671,7 +671,7 @@ function sortMemoriesByMatch(candidates: RetrievedChunk[]): RetrievedChunk[] {
 
 function memoryLabel(chunk: RetrievedChunk): string {
     const label = [
-        chunk.spaceName,
+        chunk.categoryName,
         chunk.sourceFile,
         chunk.chunkIndex != null ? `part ${chunk.chunkIndex + 1}${chunk.totalChunks ? `/${chunk.totalChunks}` : ''}` : '',
     ].filter(Boolean).join(' - ')
@@ -746,7 +746,7 @@ function emitMemoryRoutingSelection(
                 selectionMethod,
                 contextPhase,
                 sourceFile: memory.sourceFile,
-                folderPath: memory.spaceName,
+                directoryPath: memory.categoryName,
                 chunkIndex: memory.chunkIndex,
                 content: memory.text,
                 matchScore: visibleMatch.score,

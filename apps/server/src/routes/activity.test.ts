@@ -23,7 +23,7 @@ describe('activity artifact discovery', () => {
 
     test('includes completed tool embedding jobs in activity history', async () => {
         const now = Date.now()
-        getDb().prepare(`INSERT INTO memory_index_jobs (id, kind, space_id, file_name, status, progress_current, progress_total, created_at, updated_at)
+        getDb().prepare(`INSERT INTO memory_index_jobs (id, kind, category_id, file_name, status, progress_current, progress_total, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run('warmup', 'tool-embeddings', 'tool-registry', 'Tool capabilities', 'completed', 12, 12, now, now)
         const app = Fastify()

@@ -1,10 +1,12 @@
+import { listDreamRuns, type DreamChange } from '../core/memory/dream-store.js'
+import { cancelAllDreamRuns } from '../core/memory/dream-worker.js'
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { listActiveInstances } from './instances.js'
 import { stopAllActivity } from '../core/activity/stop-all.js'
 
-type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels'
+type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
 interface ActivityArtifact {
     href: string
@@ -23,6 +25,7 @@ interface ActivityItem {
     agentName: string | null
     agentIconUrl: string | null
     conversationId: string | null
+    conversationTitle?: string | null
     status?: string
     severity?: string
     sourceId?: string
@@ -30,6 +33,9 @@ interface ActivityItem {
     instanceType?: 'chat' | 'multi-agent' | 'cron' | 'channel'
     model?: string | null
     artifacts?: ActivityArtifact[]
+    memoryFolderId?: string
+    memoryFileName?: string
+    dreamChanges?: Array<{ tool: string; output: string; memoryFolderId?: string; memoryFileName?: string }>
 }
 
 type ActivityTotalsByKind = Record<ActivityKind, number>
@@ -108,10 +114,10 @@ function parseTypeFilter(value: string | undefined): Set<ActivityKind> | null {
         .filter((part): part is ActivityKind =>
             part === 'instance' ||
             part === 'artifact' ||
-            part === 'notification' ||
             part === 'cron' ||
             part === 'memory' ||
             part === 'chat' ||
+            part === 'dream' ||
             part === 'channels'
         )
     return kinds.length ? new Set(kinds) : null
@@ -237,6 +243,16 @@ function agentInfo(agentId: string | null): Pick<ActivityItem, 'agentName' | 'ag
     }
 }
 
+function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memoryFolderId' | 'memoryFileName'> {
+    const documentRef = output.match(/documentRef=([^,;)\s]+)/)?.[1]
+    if (!documentRef) return {}
+    const document = getDb().prepare(`
+        SELECT category_id, file_name FROM memory_documents
+        WHERE document_ref = ? AND status = 'active'
+    `).get(documentRef) as { category_id: string; file_name: string } | undefined
+    return document ? { memoryFolderId: document.category_id, memoryFileName: document.file_name } : {}
+}
+
 function activitySearchText(item: ActivityItem): string {
     return [
         item.kind,
@@ -248,6 +264,7 @@ function activitySearchText(item: ActivityItem): string {
         item.severity,
         item.sourceLabel,
         item.sourceId,
+        item.conversationTitle,
         ...(item.artifacts?.flatMap((artifact) => [
             artifact.label,
             artifact.ext,
@@ -261,7 +278,13 @@ function activitySearchText(item: ActivityItem): string {
 
 export async function registerActivityRoutes(app: FastifyInstance): Promise<void> {
     app.post('/stop-all', async () => {
-        return stopAllActivity()
+        const result = stopAllActivity()
+        const counts = { dreamRuns: cancelAllDreamRuns(), ...result.counts }
+        return {
+            success: true,
+            total: Object.values(counts).reduce((sum, count) => sum + count, 0),
+            counts,
+        }
     })
 
     app.get<{ Querystring: { limit?: string; offset?: string; types?: string; search?: string } }>('/', async (req) => {
@@ -306,33 +329,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 sourceLabel: `${typeLabel} instance`,
                 instanceType: instance.type,
                 model: instance.model,
-            })
-        }
-
-        const notificationRows = db.prepare('SELECT id, agent_id, conversation_id, title, body, severity, read, created_at FROM notifications ORDER BY created_at DESC LIMIT ?').all(queryLimit) as {
-            id: string
-            agent_id: string
-            conversation_id: string | null
-            title: string
-            body: string
-            severity: string
-            read: number
-            created_at: number
-        }[]
-        for (const row of notificationRows) {
-            items.push({
-                id: `notification:${row.id}`,
-                kind: 'notification',
-                title: row.title,
-                description: row.body,
-                createdAt: row.created_at,
-                agentId: row.agent_id || null,
-                ...agentInfo(row.agent_id || null),
-                conversationId: row.conversation_id,
-                severity: row.severity,
-                status: row.read === 1 ? 'read' : 'unread',
-                sourceId: row.id,
-                sourceLabel: 'Notification',
             })
         }
 
@@ -437,7 +433,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
 
         // Media attached by the user or returned by a tool is context, not a
         // generated artifact. Remember when those URLs/paths first appeared so
-        // legacy assistant rows that duplicated tool media are filtered too.
+        // assistant rows that duplicated tool media are filtered too.
         const nonGeneratedArtifactFirstSeen = new Map<string, number>()
         const contextMediaRows = db.prepare(
             `SELECT conversation_id, role, content, image_urls_json, video_urls_json, audio_urls_json, created_at
@@ -471,7 +467,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const messageArtifactKeysByConversation = new Map<string, Set<string>>()
-        // Paginate after artifact extraction and deduplication. A bounded window
+        // Paginate after artiDeep Research and deduplication. A bounded window
         // of messages lets ordinary replies push older artifacts out of history
         // and can incorrectly report hasMore=false before they are reached.
         const messageRows = db.prepare(
@@ -540,38 +536,40 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const memoryRows = db.prepare(
-            `SELECT mfi.space_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.knowledge_extracted_at, ms.name AS space_name
+            `SELECT mfi.category_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.deep_researched_at, ms.name AS category_name
              FROM memory_file_index mfi
-             LEFT JOIN memory_spaces ms ON ms.id = mfi.space_id
-             ORDER BY MAX(mfi.last_indexed_at, mfi.knowledge_extracted_at, mfi.created_at) DESC
+             LEFT JOIN memory_folders ms ON ms.id = mfi.category_id
+             ORDER BY MAX(mfi.last_indexed_at, mfi.deep_researched_at, mfi.created_at) DESC
              LIMIT ?`
         ).all(queryLimit) as {
-            space_id: string
+            category_id: string
             file_name: string
             chunk_count: number
             created_at: number
             last_indexed_at: number
-            knowledge_extracted_at: number
-            space_name: string | null
+            deep_researched_at: number
+            category_name: string | null
         }[]
 
         for (const row of memoryRows) {
-            const createdAt = Math.max(row.last_indexed_at || 0, row.knowledge_extracted_at || 0, row.created_at || 0)
+            const createdAt = Math.max(row.last_indexed_at || 0, row.deep_researched_at || 0, row.created_at || 0)
             if (!createdAt) continue
-            const knowledgeExtracted = row.knowledge_extracted_at && row.knowledge_extracted_at >= row.last_indexed_at
+            const deepResearched = row.deep_researched_at && row.deep_researched_at >= row.last_indexed_at
             items.push({
-                id: `memory-file:${row.space_id}:${row.file_name}:${createdAt}`,
+                id: `memory-file:${row.category_id}:${row.file_name}:${createdAt}`,
                 kind: 'memory',
-                title: knowledgeExtracted ? `Updated knowledge graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
-                description: `${row.space_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
+                title: deepResearched ? `Updated knowledge graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
+                description: `${row.category_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
                 createdAt,
                 agentId: null,
                 agentName: null,
                 agentIconUrl: null,
                 conversationId: null,
                 status: 'completed',
-                sourceId: row.space_id,
+                sourceId: row.category_id,
                 sourceLabel: 'Memory',
+                memoryFolderId: row.category_id,
+                memoryFileName: row.file_name,
             })
         }
 
@@ -591,6 +589,37 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         }
 
+        for (const run of listDreamRuns(queryLimit)) {
+            const changes = JSON.parse(run.changes_json) as DreamChange[]
+            const changeSummary = changes.length
+                ? `${changes.length} memory change${changes.length === 1 ? '' : 's'}`
+                : 'No new memories'
+
+            const conversation = db
+                .prepare('SELECT title FROM conversations WHERE id = ?')
+                .get(run.conversation_id) as { title: string | null } | undefined
+
+            const conversationTitle = conversation?.title || 'Untitled conversation'
+
+            items.push({
+                id: `dream:${run.id}`,
+                kind: 'dream',
+                title: `Dream review - ${conversationTitle}`,
+                description: `${run.reviewed_count} message excerpts reviewed · ${changeSummary}${run.error ? ` · ${run.error}` : ''}`,
+                createdAt: run.updated_at,
+                agentId: null,
+                agentName: null,
+                agentIconUrl: null,
+                conversationId: run.conversation_id,
+                conversationTitle,
+                status: run.status,
+                sourceId: run.id,
+                sourceLabel: 'Dream',
+                model: run.model,
+                dreamChanges: changes.map(({ tool, output }) => ({ tool, output, ...memoryLocationFromToolOutput(output) })),
+            })
+        }
+
         const searched = items.filter((item) => !searchQuery || activitySearchText(item).includes(searchQuery))
         const totalsByKind = searched.reduce<ActivityTotalsByKind>((totals, item) => {
             totals[item.kind] += 1
@@ -598,11 +627,11 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }, {
             instance: 0,
             artifact: 0,
-            notification: 0,
             cron: 0,
             memory: 0,
             chat: 0,
             channels: 0,
+            dream: 0,
         })
         const filtered = searched.filter((item) => !typeFilter || typeFilter.has(item.kind))
         const sorted = filtered

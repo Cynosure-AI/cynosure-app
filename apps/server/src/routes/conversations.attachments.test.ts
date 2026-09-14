@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { closeDb, getDb } from '../db/database.js'
 import { materializeAudioArtifacts, materializeImageArtifacts } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments } from '../core/artifacts/file-artifacts.js'
-import { persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import { registerConversationRoutes } from './conversations.js'
 
 describe('conversation message attachment resolution', () => {
@@ -185,9 +185,29 @@ describe('conversation message attachment resolution', () => {
         await app.close()
 
         expect(response.statusCode, response.body).toBe(200)
-        const resolved = response.json().files as { id: string; name: string; content: string }[]
+        const resolved = response.json().files as { id: string; name: string; existingAttachmentId: string }[]
         expect(resolved.map((file) => file.name)).toEqual(['second.txt', 'first.txt'])
-        expect(Buffer.from(resolved[0].content.split(',')[1], 'base64').toString('utf8')).toBe('second contents')
+        expect(resolved.map((file) => file.existingAttachmentId)).toEqual([files[1].id, files[0].id])
+    })
+
+    test('reuses one canonical asset across message attachment references', async () => {
+        const db = getDb()
+        const now = Date.now()
+        db.prepare(`INSERT INTO conversations (id, title, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run('source', 'Source', 'chat', now, now)
+        db.prepare(`INSERT INTO conversations (id, title, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).run('target', 'Target', 'chat', now, now)
+        db.prepare(`INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, 'user', '', ?)`).run('source-message', 'source', now)
+        db.prepare(`INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, 'user', '', ?)`).run('target-message', 'target', now)
+        const [source] = await materializeFileAttachments([{ name: 'shared.txt', content: 'one canonical copy' }], 'source')
+        persistMessageFileAttachments(db, 'source-message', 'source', [source], now)
+
+        const reused = await reuseConversationAttachment('target', source.id)
+        expect(reused).not.toBeNull()
+        persistMessageFileAttachments(db, 'target-message', 'target', [reused!], now)
+
+        expect(db.prepare('SELECT COUNT(*) AS count FROM attachment_assets').get()).toEqual({ count: 1 })
+        expect(db.prepare('SELECT DISTINCT asset_id FROM message_attachments').all()).toEqual([{ asset_id: source.id }])
+        expect(reused?.originalPath).toBe(source.originalPath)
+        expect(reused?.textPath).toBe(source.textPath)
     })
 
     test('resolves generated artifacts into chat context payloads', async () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -109,7 +109,25 @@ const emit = defineEmits<{
 
 const selectedNodeId = ref<string | null>(null);
 const selectedEdgeId = ref<string | null>(null);
-const { getSelectedNodes, removeSelectedElements } = useVueFlow(props.flowId);
+const graphPanel = ref<HTMLElement | null>(null);
+const isFullscreen = ref(false);
+const { fitView, getSelectedNodes, removeSelectedElements } = useVueFlow(props.flowId);
+
+function syncFullscreenState(): void {
+  isFullscreen.value = document.fullscreenElement === graphPanel.value;
+  requestAnimationFrame(() => void fitView({ padding: 0.1 }));
+}
+
+async function toggleFullscreen(): Promise<void> {
+  if (document.fullscreenElement === graphPanel.value) {
+    await document.exitFullscreen();
+    return;
+  }
+  await graphPanel.value?.requestFullscreen();
+}
+
+onMounted(() => document.addEventListener("fullscreenchange", syncFullscreenState));
+onBeforeUnmount(() => document.removeEventListener("fullscreenchange", syncFullscreenState));
 
 const selectedFlowNode = computed(() =>
   props.graphFlowNodes.find((node) => node.id === selectedNodeId.value) || null,
@@ -361,6 +379,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 
       <div
         v-else
+        ref="graphPanel"
         class="knowledge-graph-panel isolate relative h-[calc(100vh-310px)] min-h-[560px] rounded-lg border border-theme-800 bg-theme-950 overflow-hidden"
       >
         <div class="absolute top-2 left-2 z-10 flex flex-wrap items-center justify-start gap-2 bg-theme-900/80 backdrop-blur-sm border border-theme-700/60 rounded-lg px-3 py-1.5">
@@ -444,6 +463,21 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
               class="w-3.5 h-3.5"
             />
             Labels
+          </button>
+          <div class="h-5 w-px bg-theme-700/70" />
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+            :title="isFullscreen ? 'Exit full screen' : 'Enter full screen'"
+            :aria-label="isFullscreen ? 'Exit full screen' : 'Enter full screen'"
+            :aria-pressed="isFullscreen"
+            @click="toggleFullscreen"
+          >
+            <Icon
+              :icon="isFullscreen ? 'lucide:minimize-2' : 'lucide:maximize-2'"
+              class="h-3.5 w-3.5"
+            />
+            {{ isFullscreen ? "Exit full screen" : "Full screen" }}
           </button>
         </div>
         <VueFlow
