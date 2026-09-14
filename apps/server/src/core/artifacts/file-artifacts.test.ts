@@ -19,13 +19,13 @@ describe('file attachments', () => {
         rmSync(rootDir, { recursive: true, force: true })
     })
 
-    test('copies uploaded content and parsed text into the conversation artifact directory', async () => {
+    test('copies uploaded content and parsed text into canonical attachment storage', async () => {
         const attachment = await materializeFileAttachment({
             name: 'notes.txt',
             content: `data:text/plain;base64,${Buffer.from('durable notes').toString('base64')}`,
         }, 'conversation-files')
 
-        expect(attachment.originalPath).toContain(join('artifacts', 'conversations', 'conversation-files', 'files'))
+        expect(attachment.originalPath).toContain(join('artifacts', 'attachment-assets'))
         expect(existsSync(attachment.originalPath)).toBe(true)
         expect(existsSync(attachment.textPath)).toBe(true)
         expect(readFileSync(attachment.originalPath).toString()).toBe('durable notes')

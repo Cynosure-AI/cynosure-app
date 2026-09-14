@@ -1236,14 +1236,14 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             db.prepare(
                                 `INSERT OR REPLACE INTO message_attachments (
                                     id, message_id, conversation_id, kind, name, original_path, text_path,
-                                    size_bytes, text_bytes, chunk_count, metadata_json, created_at
+                                    size_bytes, text_bytes, chunk_count, metadata_json, created_at, asset_id
                                  )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 a.id, a.message_id, a.conversation_id, a.kind || 'file', a.name || '',
                                 a.original_path || null, a.text_path || null,
                                 a.size_bytes ?? null, a.text_bytes ?? null, a.chunk_count ?? null,
-                                a.metadata_json || null, a.created_at || Date.now()
+                                a.metadata_json || null, a.created_at || Date.now(), a.id
                             )
                         } catch (e) {
                             res.errors.push(`Message attachment: ${(e as Error).message}`)
@@ -1389,6 +1389,11 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             chunkCount: row.chunk_count ?? undefined,
                         }
                         const chunkCount = await indexConversationAttachment(row.conversation_id, attachment)
+                        db.prepare(`INSERT OR REPLACE INTO attachment_assets
+                            (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                        ).run(row.id, row.name, originalPath, textPath, row.size_bytes ?? 0, row.text_bytes ?? 0,
+                            chunkCount, JSON.stringify({ ...attachment, chunkCount }), Date.now())
                         db.prepare(`
                             UPDATE message_attachments
                             SET original_path = ?, text_path = ?, chunk_count = ?, metadata_json = ?

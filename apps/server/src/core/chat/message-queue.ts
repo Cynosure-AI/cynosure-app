@@ -209,12 +209,13 @@ function cleanupRowArtifacts(row: QueueRow): void {
   ]
   const paths = [
     ...urls.map(extractFilePathFromFileUrl).filter((path): path is string => Boolean(path)),
-    ...files.flatMap(file => [file.originalPath, file.textPath]),
+    ...files.filter(file => !file.assetId).flatMap(file => [file.originalPath, file.textPath]),
   ]
   for (const path of paths) {
     try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
   }
-  if (files.length) void deleteConversationAttachmentChunks(row.conversation_id, files.map(file => file.id))
+  const ownedAssetIds = files.filter(file => !file.assetId).map(file => file.id)
+  if (ownedAssetIds.length) void deleteConversationAttachmentChunks(row.conversation_id, ownedAssetIds)
 }
 
 export function deleteQueuedChatMessage(conversationId: string, id: string): boolean {

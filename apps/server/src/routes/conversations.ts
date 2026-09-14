@@ -3,8 +3,8 @@ import { getDb } from '../db/database.js'
 import { getLatestPlanningState } from '../core/agent/planning-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'fs'
-import { basename, extname, join, resolve } from 'path'
+import { existsSync, readFileSync, unlinkSync } from 'fs'
+import { basename, extname, resolve } from 'path'
 import {
     cleanupConversationArtifacts,
     artifactFileUrlToDataUrl,
@@ -14,10 +14,9 @@ import {
     toFileUrl,
     type MediaArtifactKind,
 } from '../core/artifacts/image-artifacts.js'
-import { deleteConversationAttachmentIndexes, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
+import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, preserveReferencedAttachmentAssets } from '../core/artifacts/attachment-rag.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
-import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
@@ -52,6 +51,7 @@ async function cloneMediaUrlsJson(
 /** Delete artifact files and attachment vectors referenced by conversations. */
 async function cleanupConversationArtifactsAndIndexes(conversationIds: string[]): Promise<void> {
     const db = getDb()
+    preserveReferencedAttachmentAssets(conversationIds)
     for (const convId of conversationIds) {
         const rows = db.prepare(
             'SELECT image_urls_json FROM messages WHERE conversation_id = ? AND image_urls_json IS NOT NULL'
@@ -73,16 +73,6 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
         cleanupConversationArtifacts(convId)
     }
     await deleteConversationAttachmentIndexes(conversationIds)
-}
-
-function cloneAttachmentFile(sourcePath: string | null, conversationId: string, suffix = ''): string | null {
-    if (!sourcePath || !existsSync(sourcePath)) return sourcePath
-    const dir = join(getConversationArtifactsDir(conversationId), 'files')
-    mkdirSync(dir, { recursive: true })
-    const filename = `${Date.now()}-${nanoid()}-${basename(sourcePath).replace(/[^A-Za-z0-9._-]/g, '_')}${suffix}`
-    const targetPath = join(dir, filename)
-    copyFileSync(sourcePath, targetPath)
-    return targetPath
 }
 
 export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
@@ -241,6 +231,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 text_bytes: number | null
                 chunk_count: number | null
                 metadata_json: string | null
+                asset_id: string | null
                 created_at: number
             }[]
 
@@ -248,7 +239,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 INSERT INTO message_attachments (
                     id, message_id, conversation_id, kind, name, original_path, text_path,
                     size_bytes, text_bytes, chunk_count, metadata_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    , asset_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `)
 
             for (const row of attachmentRows) {
@@ -256,32 +248,20 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 if (!nextMessageId) continue
 
                 const attachmentId = nanoid()
-                const originalPath = cloneAttachmentFile(row.original_path, id)
-                const textPath = cloneAttachmentFile(row.text_path, id, '.parsed.md')
-                const attachment: FileAttachmentArtifact = {
-                    id: attachmentId,
-                    name: row.name,
-                    originalPath: originalPath || '',
-                    textPath: textPath || '',
-                    sizeBytes: row.size_bytes ?? 0,
-                    textBytes: row.text_bytes ?? 0,
-                    chunkCount: row.chunk_count ?? undefined,
-                }
-                attachment.chunkCount = await indexConversationAttachment(id, attachment)
-
                 insertAttachment.run(
                     attachmentId,
                     nextMessageId,
                     id,
                     row.kind,
                     row.name,
-                    originalPath,
-                    textPath,
+                    row.original_path,
+                    row.text_path,
                     row.size_bytes,
                     row.text_bytes,
-                    attachment.chunkCount ?? row.chunk_count,
-                    JSON.stringify(attachment),
+                    row.chunk_count,
+                    row.metadata_json,
                     row.created_at,
+                    row.asset_id || row.id,
                 )
             }
 
@@ -349,7 +329,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '60', 10) || 60))
         const offset = Math.max(0, parseInt(req.query.offset || '0', 10) || 0)
         const search = req.query.search?.trim()
-        const conditions = ["a.kind = 'file'", 'a.original_path IS NOT NULL']
+        const conditions = [
+            "a.kind = 'file'",
+            'a.original_path IS NOT NULL',
+            'a.id = (SELECT MIN(a2.id) FROM message_attachments a2 WHERE a2.asset_id = a.asset_id)',
+        ]
         const params: unknown[] = []
 
         if (search) {
@@ -818,6 +802,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM conversations WHERE id = ?').run(req.params.id)
+        await collectOrphanedAttachmentAssets()
         return { success: true }
     })
 
@@ -838,6 +823,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
             db.prepare(`DELETE FROM conversations WHERE ${filter} AND pinned = 0`).run(...(agentId === '' ? [] : [agentId]))
+            await collectOrphanedAttachmentAssets()
         } else {
             const allIds = db.prepare('SELECT id FROM conversations WHERE pinned = 0').all() as { id: string }[]
             await cleanupConversationArtifactsAndIndexes(allIds.map(r => r.id))
@@ -850,6 +836,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
             db.prepare('DELETE FROM conversations WHERE pinned = 0').run()
+            await collectOrphanedAttachmentAssets()
         }
         return { success: true }
     })
@@ -914,6 +901,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             const result = db
                 .prepare('DELETE FROM messages WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
+            await collectOrphanedAttachmentAssets()
             db.prepare('DELETE FROM execution_steps WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
             db.prepare('DELETE FROM tasks WHERE conversation_id = ? AND created_at >= ?')
