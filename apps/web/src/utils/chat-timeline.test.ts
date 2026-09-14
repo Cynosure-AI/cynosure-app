@@ -61,6 +61,21 @@ describe('chat timeline chronology', () => {
     expect(groups[1]?.continued).toBe(true)
   })
 
+  it('shows the model response before its delegation call and sub-agent card', () => {
+    const timeline = buildChatTimeline(
+      [
+        message('model-response', 2),
+        message('sub-answer', 3, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+      ],
+      [step(1, { toolCalls: [{
+        name: 'spawn_subagent',
+        arguments: JSON.stringify({ internalName: 'worker', instructions: 'Do the task' }),
+      }] })],
+    )
+
+    expect(ids(timeline)).toEqual(['model-response', 1, ['m-sub-answer']])
+  })
+
   it('reconstructs the sub-agent first message from its regular parameters', () => {
     const timeline = buildChatTimeline(
       [message('answer', 2, { maInvocationId: 'worker-1', maCodename: 'worker' })],

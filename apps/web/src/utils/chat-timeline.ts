@@ -334,5 +334,31 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     return result
   }
 
-  return groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(entries))
+  function putDelegationResponseBeforeCall(source: TimelineEntry[]): TimelineEntry[] {
+    const result: TimelineEntry[] = []
+    for (let index = 0; index < source.length; index++) {
+      const call = source[index]
+      const response = source[index + 1]
+      const subAgent = source[index + 2]
+      if (
+        call?.type === 'tool-group' &&
+        delegationsFrom(call).length > 0 &&
+        response?.type === 'message' &&
+        response.msg.role === 'assistant' &&
+        !response.isSubAgent &&
+        subAgent?.type === 'sub-agent-group'
+      ) {
+        // The assistant text and tool call are emitted in that order by the
+        // model, but the completed tool step has an earlier persisted
+        // timestamp. Restore the conversational order for delegation rounds.
+        result.push(response, call, subAgent)
+        index += 2
+        continue
+      }
+      result.push(call)
+    }
+    return result
+  }
+
+  return putDelegationResponseBeforeCall(groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(entries)))
 }
