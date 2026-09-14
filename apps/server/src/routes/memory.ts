@@ -452,7 +452,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     }
     const providerId = body.providerId.trim()
     const model = body.model.trim()
-    if (body.enabled && (!providerId || !model || !getGateway().getProvider(providerId))) {
+    const provider = providerId ? getGateway().getProvider(providerId) : undefined
+    const resolvedModel = model || provider?.config.defaultModel?.trim()
+    if (body.enabled && (!provider || !resolvedModel)) {
       return reply.status(400).send({ error: 'Select an available provider and model before enabling Dream Mode' })
     }
     if (!body.enabled) cancelAllDreamRuns()

@@ -258,9 +258,15 @@ async function sweep(): Promise<void> {
             conversation.id, config.enabledAt, Math.max(config.startSequence, progress.skipped_sequence), progress.last_sequence, progress.last_sequence, progress.message_offset,
         ) as Array<{ sequence: number; id: string; role: 'user' | 'assistant'; content: string }>
         if (!pending && !rows.length) continue
+        // An empty configured model means "use provider default". Resolve it
+        // when creating the run so queued/retried work remains pinned even if
+        // the provider default changes later.
+        const providerId = pending?.provider_id ?? config.providerId
+        const model = pending?.model || getGateway().getProvider(providerId)?.config.defaultModel?.trim()
+        if (!model) continue
         // A conservative fallback is used when a provider does not publish model context metadata.
         let contextWindow = 16_384
-        try { contextWindow = Math.min(32_768, (await getGateway().getModelInfo(pending?.model ?? config.model, pending?.provider_id ?? config.providerId)).contextLength || contextWindow) } catch { /* optional metadata */ }
+        try { contextWindow = Math.min(32_768, (await getGateway().getModelInfo(model, providerId)).contextLength || contextWindow) } catch { /* optional metadata */ }
         if (generation !== sweepGeneration || stopped || !getDreamConfig().enabled || getDreamConfig().windowId !== config.windowId) return
         let run = pending
         if (!run) {
@@ -273,7 +279,7 @@ async function sweep(): Promise<void> {
             const input: DreamInput = { ...batch, context: JSON.stringify(older).slice(-Math.min(2000, maxChars)), snapshotSequence }
             const id = randomUUID()
             db.prepare(`INSERT INTO dream_runs(id, conversation_id, window_id, status, provider_id, model, input_json, created_at, updated_at)
-                VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?)`).run(id, conversation.id, config.windowId, config.providerId, config.model, JSON.stringify(input), Date.now(), Date.now())
+                VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?)`).run(id, conversation.id, config.windowId, providerId, model, JSON.stringify(input), Date.now(), Date.now())
             run = getDreamRun(id)!
         } else {
             // New activity must settle before retrying the frozen batch; it is reviewed separately later.

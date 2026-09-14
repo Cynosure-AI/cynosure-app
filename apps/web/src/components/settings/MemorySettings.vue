@@ -123,6 +123,11 @@ const dreamDirty = computed(() => dreamLoaded.value && (
   dreamProviderId.value !== savedDream.value.providerId ||
   dreamModel.value !== savedDream.value.model
 ))
+const dreamSelectionValid = computed(() => {
+  if (!dreamProviderId.value) return false
+  if (dreamModel.value) return true
+  return Boolean(providerStore.providers.find(provider => provider.id === dreamProviderId.value)?.defaultModel)
+})
 const manualDirty = computed(() => embDirty.value || chunkDirty.value || rerankDirty.value || dreamDirty.value)
 
 watch(manualDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
@@ -667,7 +672,7 @@ function cancelDrop() {
         <ToggleSwitch
           v-model="dreamEnabled"
           label="Enable Dream Mode"
-          :disabled="!dreamLoaded || dreamSaving || (!dreamEnabled && (!dreamProviderId || !dreamModel))"
+          :disabled="!dreamLoaded || dreamSaving || (!dreamEnabled && !dreamSelectionValid)"
         />
       </div>
       <ProviderModelSelect
@@ -691,7 +696,7 @@ function cancelDrop() {
           :state="dreamStatus === 'error' ? 'error' : dreamSaving ? 'saving' : dreamDirty ? 'dirty' : dreamStatus"
         />
         <button
-          :disabled="!dreamLoaded || dreamSaving || !dreamDirty || (dreamEnabled && (!dreamProviderId || !dreamModel))"
+          :disabled="!dreamLoaded || dreamSaving || !dreamDirty || (dreamEnabled && !dreamSelectionValid)"
           class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
           @click="saveDream"
         >

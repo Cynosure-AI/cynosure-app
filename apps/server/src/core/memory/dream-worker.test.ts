@@ -7,9 +7,12 @@ import type { ChatMessage } from '../gateway/providers/base.provider.js'
 
 const mocks = vi.hoisted(() => ({
     run: vi.fn(), tool: vi.fn(), modelInfo: vi.fn(), active: [] as string[],
-    agent: vi.fn(), scopes: [] as unknown[],
+    agent: vi.fn(), scopes: [] as unknown[], defaultModel: 'provider-default',
 }))
-vi.mock('../gateway/gateway.js', () => ({ getGateway: () => ({ getModelInfo: mocks.modelInfo }) }))
+vi.mock('../gateway/gateway.js', () => ({ getGateway: () => ({
+    getModelInfo: mocks.modelInfo,
+    getProvider: (id: string) => id === 'provider' ? { config: { id, defaultModel: mocks.defaultModel } } : undefined,
+}) }))
 vi.mock('../agent/agent-executor.js', () => ({ AgentExecutor: class {
     constructor(private config: AgentExecutorConfig) {}
     run(messages: ChatMessage[]) { return mocks.run(this.config, messages) }
@@ -65,6 +68,7 @@ beforeEach(() => {
     mocks.tool.mockReset().mockResolvedValue({ success: true, output: 'Saved document note#abc123' })
     mocks.modelInfo.mockReset().mockResolvedValue({ contextLength: 16384 })
     mocks.agent.mockReset()
+    mocks.defaultModel = 'provider-default'
     mocks.active = []
     mocks.scopes = []
     broadcast.mockClear()
@@ -119,6 +123,17 @@ describe('Dream worker', () => {
         await vi.advanceTimersByTimeAsync(DREAM_SWEEP_MS)
         expect(mocks.run).toHaveBeenCalledTimes(1)
         expect(broadcast).toHaveBeenCalledWith('memory:dream-updated', expect.objectContaining({ status: 'completed' }))
+    })
+    test('resolves a provider-only selection to its default model when creating a run', async () => {
+        conversation()
+        saveDreamConfig({ enabled: true, providerId: 'provider', model: '' })
+        message()
+        vi.setSystemTime(Date.now() + DREAM_IDLE_MS)
+        stop = startDreamWorker(broadcast)
+        await settleDreamWork()
+
+        expect(listDreamRuns()[0]).toMatchObject({ provider_id: 'provider', model: 'provider-default', status: 'completed' })
+        expect(mocks.run.mock.calls[0][0]).toMatchObject({ providerId: 'provider', model: 'provider-default' })
     })
     test('marks documents changed by Dream', async () => {
         getDb().prepare(`
