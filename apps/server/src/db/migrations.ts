@@ -67,10 +67,11 @@ export function applySchemaMigrations(
         )
     }
 
-    // A database with no recorded version predates schema versioning. The
-    // baseline is idempotent (`CREATE TABLE IF NOT EXISTS`), so adopting it is
-    // safe: existing tables are left alone and the version is stamped below.
-    const adopting = from === 0 && hasUserTables(db)
+    // v1 is the new authoritative baseline. Pre-versioning databases are not
+    // compatible with it, so rebuild their schema instead of stamping a
+    // partially upgraded layout as current.
+    const rebuilding = from === 0 && hasUserObjects(db)
+    if (rebuilding) resetUnversionedSchema(db)
 
     const ordered = [...migrations].sort((a, b) => a.version - b.version)
     const applied: number[] = []
@@ -83,16 +84,36 @@ export function applySchemaMigrations(
         applied.push(migration.version)
     }
 
-    if (adopting) {
-        console.info(`[db] Adopted an unversioned database as schema version ${getUserVersion(db)}`)
+    if (rebuilding) {
+        console.info(`[db] Rebuilt an unversioned database at schema version ${getUserVersion(db)}`)
     }
 
     return { from, to: getUserVersion(db), applied }
 }
 
-function hasUserTables(db: Database.Database): boolean {
+function hasUserObjects(db: Database.Database): boolean {
     const row = db
-        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' LIMIT 1")
+        .prepare("SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' LIMIT 1")
         .get()
     return Boolean(row)
+}
+
+function resetUnversionedSchema(db: Database.Database): void {
+    const foreignKeysEnabled = db.pragma('foreign_keys', { simple: true }) === 1
+    db.pragma('foreign_keys = OFF')
+    try {
+        db.transaction(() => {
+            const objects = db.prepare(`
+                SELECT type, name FROM sqlite_master
+                WHERE type IN ('view', 'table') AND name NOT LIKE 'sqlite_%'
+                ORDER BY CASE type WHEN 'view' THEN 0 ELSE 1 END
+            `).all() as Array<{ type: 'table' | 'view'; name: string }>
+            for (const object of objects) {
+                const name = object.name.replace(/"/g, '""')
+                db.exec(`DROP ${object.type.toUpperCase()} IF EXISTS "${name}"`)
+            }
+        })()
+    } finally {
+        if (foreignKeysEnabled) db.pragma('foreign_keys = ON')
+    }
 }

@@ -75,19 +75,17 @@ describe('schema migrations', () => {
         db.close()
     })
 
-    test('adopts a populated pre-versioning database without dropping its data', () => {
+    test('rebuilds a populated pre-versioning database from the v1 baseline', () => {
         const db = memoryDb()
-        db.exec('CREATE TABLE legacy_thing (id TEXT PRIMARY KEY)')
-        db.exec("INSERT INTO legacy_thing (id) VALUES ('kept')")
+        db.exec('CREATE TABLE obsolete_table (id TEXT PRIMARY KEY)')
+        db.exec("INSERT INTO obsolete_table (id) VALUES ('discarded')")
 
         const result = applySchemaMigrations(db)
 
-        // The baseline is idempotent, so the existing table survives and the
-        // database is stamped with the current version.
         expect(result.applied).toEqual([1])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
-        expect(tableNames(db)).toContain('legacy_thing')
-        expect(db.prepare('SELECT id FROM legacy_thing').get()).toEqual({ id: 'kept' })
+        expect(tableNames(db)).not.toContain('obsolete_table')
+        expect(tableNames(db)).toContain('agents')
         db.close()
     })
 

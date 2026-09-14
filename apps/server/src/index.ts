@@ -336,8 +336,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
 
-  syncMemoryFoldersFromFolders(getDb())
-
   await app.register(fastifyCors)
   await app.register(fastifyWebsocket)
 
