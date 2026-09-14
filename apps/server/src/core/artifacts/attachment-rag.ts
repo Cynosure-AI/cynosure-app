@@ -192,7 +192,7 @@ export async function collectOrphanedAttachmentAssets(): Promise<number> {
     return rows.length
 }
 
-/** Move legacy conversation-owned files into canonical storage before their owner is deleted. */
+/** Move conversation-owned files into canonical storage before their owner is deleted. */
 export function preserveReferencedAttachmentAssets(deletingConversationIds: string[]): void {
     if (!deletingConversationIds.length) return
     const db = getDb()

@@ -94,12 +94,10 @@ export class RAGStore {
   private rerankerPromise: Promise<RRFReranker> | null = null
   // Per-table schema field names — avoids a schema() round-trip on every addDocuments
   private fieldNamesCache = new Map<string, Set<string>>()
-  private legacyCategorySchemaReset = false
 
   async initialize(dbPath?: string, opts: { optimizeOnStartup?: boolean } = {}): Promise<void> {
     const path = dbPath || join(getAppDataDir(), 'lancedb')
     this.db = await lancedb.connect(path)
-    this.legacyCategorySchemaReset = await this.discardLegacyCategoryTables()
     if (opts.optimizeOnStartup) {
       const results = await this.optimizeTables()
       const reclaimed = results.reduce((total, result) => total + (result.prune?.bytesRemoved || 0), 0)
@@ -108,49 +106,6 @@ export class RAGStore {
         console.log(`[rag] LanceDB startup optimize complete: ${versions} old version(s), ${reclaimed} byte(s) reclaimed`)
       }
     }
-  }
-
-  /**
-   * Consume the startup signal indicating that legacy `spaceId` vector tables
-   * were discarded. Callers use this to force a rebuild from the retained
-   * source files even when SQLite still records those files as indexed.
-   */
-  consumeLegacyCategorySchemaReset(): boolean {
-    const reset = this.legacyCategorySchemaReset
-    this.legacyCategorySchemaReset = false
-    return reset
-  }
-
-  /** Vector indexes are derived data, so an incompatible pre-category table is
-   * safer to discard and rebuild than to mutate in place. */
-  private async discardLegacyCategoryTables(): Promise<boolean> {
-    if (!this.db) return false
-
-    let discarded = false
-    const tableNames = await this.db.tableNames()
-    for (const tableName of tableNames) {
-      const isPermanentMemory = /^permanent_memory(?:_v_[a-z0-9_]+)?$/.test(tableName)
-      const isKnowledgeProjection = tableName === 'memory_knowledge_v2'
-      if (!isPermanentMemory && !isKnowledgeProjection) continue
-
-      try {
-        const table = await this.db.openTable(tableName)
-        const schema = await table.schema()
-        const fields = new Set(schema.fields.map((field: { name: string }) => field.name))
-        const isLegacy = isPermanentMemory
-          ? !fields.has('categoryId') && fields.has('spaceId')
-          : !fields.has('categoryId')
-        if (isLegacy) {
-          await this.db.dropTable(tableName)
-          this.clearTableCaches(tableName)
-          discarded = true
-          console.warn(`[rag] Discarded legacy vector table "${tableName}"; retained memory files will be reindexed with category metadata`)
-        }
-      } catch (error) {
-        console.error(`[rag] Failed to inspect legacy schema for table "${tableName}":`, error)
-      }
-    }
-    return discarded
   }
 
   /** Get or create the shared RRF reranker (K=60). */

@@ -2,22 +2,8 @@ import Database from 'better-sqlite3'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import { getAppDataDir, getDefaultMemoryFolderDir } from '../core/data-dir.js'
-import { createStableMemoryDocumentRef } from '../core/memory/memory-reference.js'
 
 let db: Database.Database | null = null
-
-function migrateBuiltInToolKey(key: string): string {
-  if (!key.startsWith('builtin::')) return key
-  const name = key.slice('builtin::'.length)
-  const category = name.startsWith('memory_') || name.startsWith('knowledge_')
-    ? 'memory'
-    : name.startsWith('schedule_')
-      ? 'scheduling'
-      : name === 'create_app_notification' || name === 'notify_user_on_channel'
-        ? 'notifications'
-        : 'utility'
-  return `builtin:${category}::${name}`
-}
 
 function getDbPath(): string {
   const dbDir = join(getAppDataDir(), 'sqlite')
@@ -30,60 +16,13 @@ export function getDb(): Database.Database {
     db = new Database(getDbPath())
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
-    const brainReset = resetLegacyMemoryBrain(db)
-    migrateMemoryFolderTerminology(db)
     createTables(db)
-    if (brainReset) {
-      ensureDefaultMemoryFolder(db)
-      db.prepare("INSERT OR IGNORE INTO agent_memory_folders(agent_id, category_id) SELECT id, 'uncategorized' FROM agents").run()
-      db.prepare("DELETE FROM settings WHERE key = 'dreamMode'").run()
-      db.prepare("INSERT OR REPLACE INTO settings(key, value_json) VALUES ('memory.brain_v1', ?)").run(JSON.stringify({ resetAt: Date.now() }))
-    }
     // All pending HITL are void after a server restart — the executor promises are gone.
     db.prepare('DELETE FROM pending_hitl').run()
     // Queued chat messages survive restarts, but never resume work unexpectedly.
     db.prepare("UPDATE queued_chat_messages SET status = 'paused'").run()
   }
   return db
-}
-
-/** Preserve existing installations while adopting the memory-folder name. */
-function migrateMemoryFolderTerminology(database: Database.Database): void {
-  const hasOldFoldersTable = database.prepare(
-    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_categories'",
-  ).get()
-  const hasNewFoldersTable = database.prepare(
-    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_folders'",
-  ).get()
-  if (hasOldFoldersTable && !hasNewFoldersTable) {
-    database.exec('ALTER TABLE memory_categories RENAME TO memory_folders')
-  }
-
-  const hasOldAssignmentsTable = database.prepare(
-    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_memory_categories'",
-  ).get()
-  const hasNewAssignmentsTable = database.prepare(
-    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'agent_memory_folders'",
-  ).get()
-  if (hasOldAssignmentsTable && !hasNewAssignmentsTable) {
-    database.exec('ALTER TABLE agent_memory_categories RENAME TO agent_memory_folders')
-  }
-}
-
-/** The brain redesign intentionally adopts source files but discards legacy metadata. */
-function resetLegacyMemoryBrain(database: Database.Database): boolean {
-  const legacy = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_spaces'").get()
-  const completed = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'").get()
-    ? database.prepare("SELECT 1 FROM settings WHERE key = 'memory.brain_v1'").get()
-    : undefined
-  if (!legacy || completed) return false
-  database.pragma('foreign_keys = OFF')
-  const tables = database.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND (
-    name LIKE 'memory_%' OR name IN ('agent_memory_spaces', 'agent_memory_categories', 'agent_memory_folders', 'dream_progress', 'dream_runs')
-  )`).all() as Array<{ name: string }>
-  for (const { name } of tables) database.exec(`DROP TABLE IF EXISTS "${name.replace(/"/g, '""')}"`)
-  database.pragma('foreign_keys = ON')
-  return true
 }
 
 export function ensureDefaultMemoryFolder(database: Database.Database = getDb()): void {
@@ -195,6 +134,7 @@ function createTables(db: Database.Database): void {
       text_bytes INTEGER,
       chunk_count INTEGER,
       metadata_json TEXT,
+      asset_id TEXT,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments(message_id);
@@ -268,6 +208,9 @@ function createTables(db: Database.Database): void {
       icon_url TEXT,
       origin TEXT,
       env_hints_json TEXT,
+      description TEXT NOT NULL DEFAULT '',
+      original_name TEXT,
+      custom_name TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -346,8 +289,29 @@ function createTables(db: Database.Database): void {
       temperature REAL,
       icon_url TEXT,
       internal_name TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      sub_agents_json TEXT NOT NULL DEFAULT '[]',
+      auto_approve_tools INTEGER NOT NULL DEFAULT 0,
+      override_sub_agents INTEGER NOT NULL DEFAULT 0,
+      auto_tool_routing INTEGER NOT NULL DEFAULT 0,
+      tool_router_provider_id TEXT NOT NULL DEFAULT '',
+      tool_router_model TEXT NOT NULL DEFAULT '',
+      auto_memory INTEGER NOT NULL DEFAULT 1,
       memory_enabled INTEGER NOT NULL DEFAULT 1,
       dreaming_enabled INTEGER NOT NULL DEFAULT 1,
+      memory_router_provider_id TEXT NOT NULL DEFAULT '',
+      memory_router_model TEXT NOT NULL DEFAULT '',
+      auto_router_provider_id TEXT NOT NULL DEFAULT '',
+      auto_router_model TEXT NOT NULL DEFAULT '',
+      thinking_enabled INTEGER NOT NULL DEFAULT 1,
+      reasoning_effort TEXT NOT NULL DEFAULT 'medium',
+      max_context_tokens INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      favorite INTEGER NOT NULL DEFAULT 0,
+      cron_prompt TEXT NOT NULL DEFAULT '',
+      icon_data BLOB,
+      icon_mime TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -379,6 +343,11 @@ function createTables(db: Database.Database): void {
       model_override TEXT NOT NULL DEFAULT '',
       provider_override TEXT NOT NULL DEFAULT '',
       execution_config_json TEXT NOT NULL DEFAULT '{}',
+      output_channel_id TEXT NOT NULL DEFAULT '',
+      output_target TEXT NOT NULL DEFAULT '',
+      notification_mode TEXT NOT NULL DEFAULT 'always',
+      notification_condition TEXT NOT NULL DEFAULT '',
+      last_run_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -421,6 +390,8 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (category_id, file_name)
     );
     CREATE INDEX IF NOT EXISTS idx_mfi_category ON memory_file_index(category_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_id ON memory_file_index(document_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_ref ON memory_file_index(document_ref) WHERE document_ref != '';
 
     CREATE TABLE IF NOT EXISTS memory_documents (
       document_id TEXT PRIMARY KEY,
@@ -710,20 +681,6 @@ function createTables(db: Database.Database): void {
 
   `)
 
-  // Migrations for existing databases
-  const requiredSubagentSessionColumns = new Set([
-    'invocation_id', 'conversation_id', 'agent_id', 'history_json', 'created_at', 'updated_at',
-  ])
-  const existingSubagentSessionColumns = new Set(
-    (db.prepare("PRAGMA table_info('subagent_sessions')").all() as Array<{ name: string }>).map(({ name }) => name)
-  )
-  if (existingSubagentSessionColumns.size > 0
-    && [...requiredSubagentSessionColumns].some((column) => !existingSubagentSessionColumns.has(column))) {
-    // An early experimental build used this table name with an incompatible,
-    // non-durable schema. It was never consumed by the released continuation
-    // feature, so replace only that legacy table rather than guessing at data.
-    db.exec('DROP TABLE subagent_sessions')
-  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS subagent_sessions (
       invocation_id TEXT PRIMARY KEY,
@@ -737,173 +694,7 @@ function createTables(db: Database.Database): void {
       ON subagent_sessions(conversation_id, updated_at);
   `)
 
-  const addColumnIfMissing = (table: string, column: string, definition: string) => {
-    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`) } catch { /* column already exists */ }
-  }
-  addColumnIfMissing('memory_folders', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_folders', 'is_uncategorized', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_folders', 'directory_path', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('mcp_servers', 'env_hints_json', 'TEXT')
-  addColumnIfMissing('mcp_servers', 'description', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('mcp_servers', 'original_name', 'TEXT')
-  addColumnIfMissing('mcp_servers', 'custom_name', 'TEXT')
-  addColumnIfMissing('messages', 'video_urls_json', 'TEXT')
-  addColumnIfMissing('messages', 'ma_codename', 'TEXT')
-  addColumnIfMissing('messages', 'ma_agent_name', 'TEXT')
-  addColumnIfMissing('messages', 'ma_invocation_id', 'TEXT')
-  addColumnIfMissing('messages', 'structured_content_json', 'TEXT')
-  addColumnIfMissing('messages', 'generated_media', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('message_attachments', 'asset_id', 'TEXT')
-  db.exec(`
-    INSERT OR IGNORE INTO attachment_assets
-      (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
-    SELECT id, name, original_path, text_path, COALESCE(size_bytes, 0), COALESCE(text_bytes, 0), chunk_count, metadata_json, created_at
-    FROM message_attachments WHERE kind = 'file' AND original_path IS NOT NULL AND text_path IS NOT NULL;
-    UPDATE message_attachments SET asset_id = id WHERE kind = 'file' AND asset_id IS NULL;
-  `)
-  addColumnIfMissing('execution_steps', 'ma_invocation_id', 'TEXT')
-  addColumnIfMissing('notifications', 'scheduled_at', 'INTEGER')
-  addColumnIfMissing('notifications', 'delivered_at', 'INTEGER')
-  addColumnIfMissing('dream_progress', 'last_sequence', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('dream_progress', 'message_offset', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('dream_progress', 'skipped_sequence', 'INTEGER NOT NULL DEFAULT 0')
-  db.prepare('UPDATE notifications SET delivered_at = created_at WHERE delivered_at IS NULL AND scheduled_at IS NULL').run()
-  db.prepare("UPDATE mcp_servers SET original_name = name WHERE original_name IS NULL OR original_name = ''").run()
-
-  // Tasks table: reused for durable top-level planning state.
-  addColumnIfMissing('tasks', 'updated_at', 'INTEGER')
-  db.prepare('UPDATE tasks SET updated_at = created_at WHERE updated_at IS NULL').run()
-
-  addColumnIfMissing('memory_file_index', 'deep_researched_at', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_file_index', 'dreamed_at', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('memory_file_index', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
-  addColumnIfMissing('memory_index_jobs', 'progress_current', 'INTEGER')
-  addColumnIfMissing('memory_index_jobs', 'progress_total', 'INTEGER')
-  addColumnIfMissing('memory_file_index', 'document_id', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('memory_knowledge_index_runs', 'search_projection_status', "TEXT NOT NULL DEFAULT 'pending'")
-  addColumnIfMissing('memory_knowledge_index_runs', 'search_projection_error', 'TEXT')
-  addColumnIfMissing('memory_knowledge_entity_mentions', 'note', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('memory_knowledge_assertion_evidence', 'note', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('memory_knowledge_text_units', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
-  // v4 grounds extracted knowledge to complete source chunks. Purge legacy
-  // verbatim quotes and model-authored confidence values during migration.
-  db.prepare("UPDATE memory_knowledge_assertion_evidence SET quote = '', extractor_confidence = 1 WHERE quote != '' OR extractor_confidence != 1").run()
-  db.prepare('UPDATE memory_knowledge_assertion_corrections SET confidence = NULL WHERE confidence IS NOT NULL').run()
-  db.prepare("UPDATE memory_file_index SET document_id = lower(hex(randomblob(16))) WHERE document_id = ''").run()
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_id ON memory_file_index(document_id)')
-  addColumnIfMissing('memory_file_index', 'document_ref', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('memory_documents', 'indexing_status', "TEXT NOT NULL DEFAULT 'pending'")
-  const documentsWithoutStableRefs = db.prepare(`
-    SELECT document_id, file_name, created_at FROM memory_file_index WHERE document_ref = ''
-  `).all() as Array<{ document_id: string; file_name: string; created_at: number }>
-  const documentRefExists = db.prepare('SELECT 1 FROM memory_file_index WHERE document_ref = ?')
-  const saveDocumentRef = db.prepare('UPDATE memory_file_index SET document_ref = ? WHERE document_id = ?')
-  for (const document of documentsWithoutStableRefs) {
-    let collisionAttempt = 0
-    let documentRef: string
-    do {
-      documentRef = createStableMemoryDocumentRef(
-        document.file_name,
-        document.document_id,
-        document.created_at,
-        collisionAttempt++,
-      )
-    } while (documentRefExists.get(documentRef))
-    saveDocumentRef.run(documentRef, document.document_id)
-  }
-  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_mfi_document_ref ON memory_file_index(document_ref) WHERE document_ref != ''")
-
-  // Rewrite persisted selections to the whole-document memory contracts.
-  const agentToolRows = db.prepare('SELECT id, tools_json FROM agents').all() as { id: string; tools_json: string }[]
-  const updateAgentTools = db.prepare('UPDATE agents SET tools_json = ? WHERE id = ?')
-  for (const row of agentToolRows) {
-    try {
-      const current = JSON.parse(row.tools_json || '[]') as unknown[]
-      if (!Array.isArray(current)) continue
-      const migrated = current.flatMap((key) => {
-        if (typeof key !== 'string') return []
-        const normalized = migrateBuiltInToolKey(key)
-        if (/::memory_(append|replace_range|replace_all|update)$/.test(normalized)) {
-          return ['builtin:memory::memory_update']
-        }
-        if (/::memory_(remove|remove_range|remove_all|delete)$/.test(normalized)) {
-          return ['builtin:memory::memory_delete']
-        }
-        return [normalized]
-      })
-      const deduped = Array.from(new Set(migrated))
-      if (JSON.stringify(deduped) !== JSON.stringify(current)) updateAgentTools.run(JSON.stringify(deduped), row.id)
-    } catch { /* keep malformed legacy values untouched */ }
-  }
-
   ensureDefaultMemoryFolder(db)
-
-  // Agent table: add columns for DB-only storage (migrating away from filesystem)
-  addColumnIfMissing('agents', 'category', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'sub_agents_json', "TEXT NOT NULL DEFAULT '[]'")
-  addColumnIfMissing('agents', 'auto_approve_tools', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('agents', 'override_sub_agents', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('agents', 'auto_tool_routing', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('agents', 'tool_router_provider_id', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'tool_router_model', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'auto_memory', 'INTEGER NOT NULL DEFAULT 1')
-  addColumnIfMissing('agents', 'dreaming_enabled', 'INTEGER NOT NULL DEFAULT 1')
-  addColumnIfMissing('agents', 'memory_router_provider_id', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'memory_router_model', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'auto_router_provider_id', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'auto_router_model', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'thinking_enabled', 'INTEGER NOT NULL DEFAULT 1')
-  addColumnIfMissing('agents', 'reasoning_effort', "TEXT NOT NULL DEFAULT 'medium'")
-  addColumnIfMissing('agents', 'max_context_tokens', 'INTEGER')
-  addColumnIfMissing('agents', 'sort_order', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('agents', 'tags_json', "TEXT NOT NULL DEFAULT '[]'")
-  addColumnIfMissing('agents', 'favorite', 'INTEGER NOT NULL DEFAULT 0')
-  addColumnIfMissing('agents', 'cron_prompt', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('agents', 'icon_data', 'BLOB')
-  addColumnIfMissing('agents', 'icon_mime', 'TEXT')
-
-  // Migrate codename → internal_name
-  addColumnIfMissing('agents', 'internal_name', "TEXT NOT NULL DEFAULT ''")
-  try {
-    db.prepare("UPDATE agents SET internal_name = codename WHERE internal_name = '' AND codename != ''").run()
-  } catch { /* codename column may not exist on fresh installs */ }
-
-  // Trigger output channel support
-  addColumnIfMissing('cron_jobs', 'output_channel_id', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('cron_jobs', 'output_target', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('cron_jobs', 'notification_mode', "TEXT NOT NULL DEFAULT 'always'")
-  addColumnIfMissing('cron_jobs', 'notification_condition', "TEXT NOT NULL DEFAULT ''")
-  addColumnIfMissing('cron_jobs', 'last_run_at', 'INTEGER')
-  addColumnIfMissing('cron_jobs', 'execution_config_json', "TEXT NOT NULL DEFAULT '{}'")
-
-  // Conversation unread tracking
-  addColumnIfMissing('conversations', 'last_read_at', 'INTEGER')
-  addColumnIfMissing('conversations', 'execution_config_json', "TEXT NOT NULL DEFAULT '{}'")
-
-  // Keep saved run configurations readable after the public field rename.
-  for (const table of ['conversations', 'cron_jobs']) {
-    db.prepare(`UPDATE ${table} SET execution_config_json = replace(replace(execution_config_json, '"memoryCategoryIds"', '"memoryFolderIds"'), '"memoryCategories"', '"memoryFolders"') WHERE execution_config_json LIKE '%memoryCategor%'`).run()
-  }
-
-  // Split the former single built-in namespace into UI categories while
-  // preserving tool selections stored in conversations and scheduled jobs.
-  for (const table of ['conversations', 'cron_jobs'] as const) {
-    const rows = db.prepare(`SELECT id, execution_config_json FROM ${table}`).all() as Array<{ id: string; execution_config_json: string }>
-    const update = db.prepare(`UPDATE ${table} SET execution_config_json = ? WHERE id = ?`)
-    for (const row of rows) {
-      try {
-        const config = JSON.parse(row.execution_config_json || '{}') as { allowedTools?: unknown }
-        if (!Array.isArray(config.allowedTools)) continue
-        const allowedTools = Array.from(new Set(config.allowedTools
-          .filter((key): key is string => typeof key === 'string')
-          .map(migrateBuiltInToolKey)))
-        if (JSON.stringify(allowedTools) !== JSON.stringify(config.allowedTools)) {
-          update.run(JSON.stringify({ ...config, allowedTools }), row.id)
-        }
-      } catch { /* keep malformed legacy values untouched */ }
-    }
-  }
-  addColumnIfMissing('conversations', 'metadata_json', "TEXT NOT NULL DEFAULT '{}'")
 }
 
 export function closeDb(): void {

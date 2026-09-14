@@ -42,17 +42,6 @@ describe('router onboarding guard', () => {
     expect(router.currentRoute.value.path).toBe('/cron/job-1')
   })
 
-  test('redirects legacy trigger-prefixed URLs to clean URLs', async () => {
-    localStorage.setItem(SK_ONBOARDING_COMPLETE, 'true')
-    const { default: router } = await import('./index')
-
-    await router.push('/triggers/chat/conversation-1')
-    expect(router.currentRoute.value.path).toBe('/chat/conversation-1')
-
-    await router.push('/triggers/cron/job-1')
-    expect(router.currentRoute.value.path).toBe('/cron/job-1')
-  })
-
   test('keeps channel details inside the settings dialog', async () => {
     localStorage.setItem(SK_ONBOARDING_COMPLETE, 'true')
     const { default: router } = await import('./index')

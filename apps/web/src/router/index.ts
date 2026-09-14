@@ -24,18 +24,6 @@ const router = createRouter({
       name: 'conversation',
       component: () => import('@/views/triggers/ChatView.vue')
     },
-    // Legacy trigger-prefixed URLs
-    {
-      path: '/triggers/chat',
-      redirect: { name: 'triggers-chat' }
-    },
-    {
-      path: '/triggers/chat/:conversationId',
-      redirect: (to) => ({
-        name: 'conversation',
-        params: { conversationId: to.params.conversationId }
-      })
-    },
     // Scheduled jobs
     {
       path: '/cron',
@@ -46,32 +34,6 @@ const router = createRouter({
       path: '/cron/:id',
       name: 'cron-detail',
       component: () => import('@/views/triggers/CronDetailView.vue')
-    },
-    {
-      path: '/triggers/cron',
-      redirect: { name: 'triggers-cron' }
-    },
-    {
-      path: '/triggers/cron/:id',
-      redirect: (to) => ({
-        name: 'cron-detail',
-        params: { id: to.params.id }
-      })
-    },
-    {
-      path: '/triggers/channels',
-      redirect: { name: 'settings-channels' }
-    },
-    {
-      path: '/triggers/channels/:id',
-      redirect: (to) => ({
-        name: 'settings-channel-detail',
-        params: { id: to.params.id }
-      })
-    },
-    {
-      path: '/instances',
-      redirect: { name: 'activity' }
     },
     // Activity
     {

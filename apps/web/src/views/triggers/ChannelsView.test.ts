@@ -68,7 +68,7 @@ describe('ChannelsView editing', () => {
     expect(mocks.replace).not.toHaveBeenCalled()
   })
 
-  test('opens a legacy deep-linked channel inside settings', async () => {
+  test('opens a deep-linked channel inside settings', async () => {
     mocks.route.query = { channel: 'channel-1' }
 
     const wrapper = shallowMount(ChannelsView, { props: { embedded: true } })

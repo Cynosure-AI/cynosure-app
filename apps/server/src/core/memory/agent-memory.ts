@@ -551,7 +551,7 @@ export class AgentMemory {
                 return resolveUniqueFileName(directoryPath, sourceFile)
             }
         }
-        // Fallback to LanceDB check (legacy path)
+        // Fallback to a LanceDB lookup when no directory path is known.
         const existing = await this.listSourceFiles(categoryId)
         const existingNames = new Set(existing.map(e => e.sourceFile))
         if (!existingNames.has(sourceFile)) return sourceFile

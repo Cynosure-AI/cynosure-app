@@ -464,25 +464,7 @@ export function useChatAgentConfig(
         return normalizeToolKeys(names, true).filter((name) => selectableKeys.has(name))
     }
 
-    function isEmptyLegacyExecutionConfig(config: ConversationExecutionConfig): boolean {
-        return !config.allowedTools.length &&
-            !config.subAgents.length &&
-            !config.memoryFolderIds.length &&
-            !config.systemPrompt &&
-            !config.model &&
-            !config.providerId &&
-            config.autoToolRouting === false &&
-            config.autoMemory === false
-    }
-
     function restoreConversationConfig(config: ConversationExecutionConfig): void {
-        if (activeAgentId.value && isEmptyLegacyExecutionConfig(config)) {
-            const { preset } = agentPreset(activeAgentId.value)
-            applyPreset(preset)
-            setAgentBaseline(preset)
-            return
-        }
-
         const activeAgent = activeAgentId.value ? useAgentDefinitionsStore().get(activeAgentId.value) : null
         const restoredModel = config.model || null
         const restoredProviderId = config.providerId || null

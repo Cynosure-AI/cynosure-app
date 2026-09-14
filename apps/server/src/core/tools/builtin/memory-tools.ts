@@ -11,7 +11,6 @@ import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
 import { deleteMemoryKnowledgeSource } from '../../memory/memory-deep-research.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
-    memoryDocumentRefMatchesContentHash,
     parseMemoryDocumentRef,
     type ParsedMemoryDocumentRef,
 } from '../../memory/memory-reference.js'
@@ -188,12 +187,12 @@ function resolveKnowledgeEntityIds(values: unknown, categoryIds: string[]): { id
         const rows = readableSuffix
             ? readableHandleRows!.filter((row) => knowledgeHandleSuffix(row.id) === readableSuffix)
             : isShort
-              ? getDb().prepare(`
+                ? getDb().prepare(`
                 SELECT id FROM memory_knowledge_entities
                 WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id LIKE ?
                 ORDER BY updated_at DESC LIMIT 2
               `).all(...categoryIds, `${candidate}%`) as Array<{ id: string }>
-              : getDb().prepare(`
+                : getDb().prepare(`
                 SELECT id FROM memory_knowledge_entities
                 WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id = ?
                 LIMIT 1
@@ -565,15 +564,8 @@ function resolveMemoryDocumentRef(
     if (!parsed) {
         return { error: 'Invalid documentRef. Read or list memories again to get a current reference.' }
     }
-    const matches = parsed.kind === 'stable'
-        ? getDb().prepare('SELECT document_id FROM memory_file_index WHERE document_ref = ? LIMIT 2')
-            .all(parsed.value) as Array<{ document_id: string }>
-        : getDb().prepare(`
-            SELECT document_id FROM memory_file_index
-            WHERE document_id LIKE ?
-            ORDER BY created_at DESC
-            LIMIT 2
-        `).all(`${parsed.documentIdPrefix}%`) as Array<{ document_id: string }>
+    const matches = getDb().prepare('SELECT document_id FROM memory_file_index WHERE document_ref = ? LIMIT 2')
+        .all(parsed.value) as Array<{ document_id: string }>
     if (matches.length > 1) {
         return { error: 'The documentRef is ambiguous. Read or list memories again to get a current reference.' }
     }
@@ -601,9 +593,7 @@ function resolveMemoryDocumentRef(
 
 function verifyDocumentRef(content: string, resolved: ResolvedMemoryDocument): string | undefined {
     const actualHash = createHash('sha256').update(content).digest('hex')
-    const matchesIndexedRevision = resolved.documentRef.kind === 'stable'
-        ? actualHash === resolved.revision.toLowerCase()
-        : memoryDocumentRefMatchesContentHash(resolved.documentRef, actualHash)
+    const matchesIndexedRevision = actualHash === resolved.revision.toLowerCase()
     return matchesIndexedRevision
         ? undefined
         : 'Memory changed outside the index while this update was being prepared. Retrieve it again before retrying.'
@@ -758,16 +748,16 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { sourceFile, minPart, maxPart, minIndex: legacyMinIndex, maxIndex: legacyMaxIndex, category } = params as {
-                sourceFile: string; minPart?: number; maxPart?: number; minIndex?: number; maxIndex?: number; category?: string
+            const { sourceFile, minPart, maxPart, category } = params as {
+                sourceFile: string; minPart?: number; maxPart?: number; category?: string
             }
             const requestedFolder = category
             const resolvedScope = resolveReadableCategoryFilter(assignedCategories, categoryFilter, requestedFolder, getKnownCategories)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
-            const minIndex = minPart !== undefined ? toPartIndex(minPart) : legacyMinIndex
-            const maxIndex = maxPart !== undefined ? toPartIndex(maxPart) : legacyMaxIndex
+            const minIndex = minPart !== undefined ? toPartIndex(minPart) : undefined
+            const maxIndex = maxPart !== undefined ? toPartIndex(maxPart) : undefined
             if (!Number.isInteger(minIndex) || !Number.isInteger(maxIndex)) {
                 return { success: false, output: 'memory_retrieve_chunks requires integer minPart and maxPart values.' }
             }
@@ -1102,7 +1092,7 @@ export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): Tool
                     items: { type: 'string' },
                     minItems: 1,
                     maxItems: 20,
-                    description: 'One or more full or readable node IDs (n:entity_name#xxxxxxxx) from knowledge_search. Legacy short IDs remain accepted. One ID is sufficient when mainName already belongs to another active entity.',
+                    description: 'One or more full or readable node IDs (n:entity_name#xxxxxxxx) from knowledge_search. One ID is sufficient when mainName already belongs to another active entity.',
                 },
                 mainName: { type: 'string', description: 'New canonical display name for the merged entity.' },
             },
