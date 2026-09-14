@@ -188,6 +188,10 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     for (const entry of turnEntries) {
       if (!entry.isSubAgent) {
         result.push(entry)
+        // Main-agent activity is a chronological boundary. A later
+        // continuation of the same invocation gets a new card here instead
+        // of being pulled back into the invocation's original card.
+        groups.clear()
         continue
       }
       const groupId = subAgentGroupIdOf(entry) ?? entry.key

@@ -4,6 +4,29 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import ToolExecutionCard from './ToolExecutionCard.vue'
 
 describe('ToolExecutionCard', () => {
+  test.each([
+    ['spawn_subagent', 'Spawn sub-agent', 'Start here'],
+    ['continue_subagent', 'Continue sub-agent', 'Follow up here'],
+  ])('labels and renders %s content as its message', async (name, label, content) => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'executing',
+          timestamp: Date.now(),
+          toolCalls: [{ name, arguments: JSON.stringify({ content }) }],
+        }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    expect(wrapper.text()).toContain(label)
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain(content)
+    expect(wrapper.text()).not.toContain(`\"content\": \"${content}\"`)
+  })
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())

@@ -35,12 +35,25 @@ describe('chat timeline chronology', () => {
     expect(inner.type === 'tool-group' && inner.group.steps.map(s => s.timestamp)).toEqual([2, 3])
   })
 
-  it('keeps interleaved parallel runs at their first activity', () => {
+  it('keeps interleaved parallel runs grouped until main-agent activity resumes', () => {
     const timeline = buildChatTimeline([
       message('a1', 1, { maInvocationId: 'a' }), message('b1', 2, { maInvocationId: 'b' }),
       message('main', 3), message('b2', 4, { maInvocationId: 'b' }), message('a2', 5, { maInvocationId: 'a' }),
     ], [])
-    expect(ids(timeline)).toEqual([['m-a1', 'm-a2'], ['m-b1', 'm-b2'], 'main'])
+    expect(ids(timeline)).toEqual([['m-a1'], ['m-b1'], 'main', ['m-b2'], ['m-a2']])
+  })
+
+  it('renders a continued invocation in a new chronological card', () => {
+    const timeline = buildChatTimeline([
+      message('first-run', 2, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+      message('main-between', 3),
+      message('continued-run', 5, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+    ], [
+      step(1, { toolCalls: [{ name: 'spawn_subagent', arguments: '{"content":"Initial task"}' }] }),
+      step(4, { toolCalls: [{ name: 'continue_subagent', arguments: '{"invocationId":"worker-1","content":"Follow up"}' }] }),
+    ])
+
+    expect(ids(timeline)).toEqual([1, ['m-first-run'], 'main-between', 4, ['m-continued-run']])
   })
 
   it('keeps fallback tools inside their invocation and separates user turns', () => {
