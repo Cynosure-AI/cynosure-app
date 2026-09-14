@@ -2,9 +2,7 @@ import { createHash } from 'node:crypto'
 
 const STABLE_SUFFIX_LENGTH = 6
 const STABLE_SUFFIX_SPACE = 36n ** BigInt(STABLE_SUFFIX_LENGTH)
-
-export type ParsedMemoryDocumentRef =
-  | { kind: 'stable'; value: string }
+const STABLE_REFERENCE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,47}[a-z0-9])?#[a-z0-9]{6}$/
 
 /**
  * Build the immutable, model-facing reference assigned when a document is
@@ -34,15 +32,9 @@ export function createStableMemoryDocumentRef(
   return `${normalizedName}#${suffix}`
 }
 
-export function parseMemoryDocumentRef(value: unknown): ParsedMemoryDocumentRef | undefined {
+/** Normalize a model-supplied reference, or return `undefined` when it is not a stable ref. */
+export function parseMemoryDocumentRef(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim().toLowerCase()
-  if (/^[a-z0-9](?:[a-z0-9-]{0,47}[a-z0-9])?#[a-z0-9]{6}$/.test(trimmed)) {
-    return { kind: 'stable', value: trimmed }
-  }
-  return undefined
-}
-
-export function memoryDocumentRefMatchesContentHash(ref: ParsedMemoryDocumentRef, contentHash: string): boolean {
-  return ref.kind === 'stable' && Boolean(contentHash)
+  return STABLE_REFERENCE_PATTERN.test(trimmed) ? trimmed : undefined
 }

@@ -13,10 +13,7 @@ describe('model-facing memory references', () => {
   })
 
   test('parses stable refs and rejects other formats', () => {
-    expect(parseMemoryDocumentRef('Project-Notes#A1B2C3')).toEqual({
-      kind: 'stable',
-      value: 'project-notes#a1b2c3',
-    })
+    expect(parseMemoryDocumentRef('Project-Notes#A1B2C3')).toBe('project-notes#a1b2c3')
     expect(parseMemoryDocumentRef('d:0123456789ab')).toBeUndefined()
     expect(parseMemoryDocumentRef('m:0123456789ab.abcdef012345')).toBeUndefined()
     expect(parseMemoryDocumentRef('m:short.short')).toBeUndefined()

@@ -12,7 +12,6 @@ import { deleteMemoryKnowledgeSource } from '../../memory/memory-deep-research.j
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
     parseMemoryDocumentRef,
-    type ParsedMemoryDocumentRef,
 } from '../../memory/memory-reference.js'
 import type { MemoryRevisionContext } from '../../memory/memory-revisions.js'
 
@@ -351,85 +350,6 @@ function buildCategoryMap(...spaceGroups: MemoryFolderRef[][]): Map<string, stri
     return map
 }
 
-function findChunkText(content: string, chunkText: string, fromIndex = 0): { start: number; end: number } | null {
-    const normalizedChunk = chunkText.replace(/\r\n/g, '\n').trim()
-    if (!normalizedChunk) return null
-
-    const normalizedStart = content.indexOf(normalizedChunk, fromIndex)
-    if (normalizedStart < 0) return null
-
-    return { start: normalizedStart, end: normalizedStart + normalizedChunk.length }
-}
-
-function replaceChunkRangeInText(
-    content: string,
-    chunks: { text: string; chunkIndex: number }[],
-    replacement: string,
-): { content: string; startIndex: number; endIndex: number } | { error: string } {
-    const normalizedContent = content.replace(/\r\n/g, '\n')
-    const sorted = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
-    const first = sorted[0]
-    const last = sorted[sorted.length - 1]
-    if (!first || !last) return { error: 'No indexed chunks were found for the requested range.' }
-
-    const firstMatch = findChunkText(normalizedContent, first.text)
-    if (!firstMatch) {
-        return { error: `Could not locate chunk ${first.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
-    }
-
-    const lastMatch = first.chunkIndex === last.chunkIndex
-        ? firstMatch
-        : findChunkText(normalizedContent, last.text, firstMatch.start)
-
-    if (!lastMatch) {
-        return { error: `Could not locate chunk ${last.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
-    }
-
-    const start = firstMatch.start
-    const end = lastMatch.end
-    const before = normalizedContent.slice(0, start).replace(/\s*$/, '\n\n')
-    const after = normalizedContent.slice(end).replace(/^\s*/, '\n\n')
-    return {
-        content: `${before}${replacement.trim()}${after}`.trim() + '\n',
-        startIndex: first.chunkIndex,
-        endIndex: last.chunkIndex,
-    }
-}
-
-function removeChunkRangeFromText(
-    content: string,
-    chunks: { text: string; chunkIndex: number }[],
-): { content: string; startIndex: number; endIndex: number } | { error: string } {
-    const normalizedContent = content.replace(/\r\n/g, '\n')
-    const sorted = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
-    const first = sorted[0]
-    const last = sorted[sorted.length - 1]
-    if (!first || !last) return { error: 'No indexed chunks were found for the requested range.' }
-
-    const firstMatch = findChunkText(normalizedContent, first.text)
-    if (!firstMatch) {
-        return { error: `Could not locate chunk ${first.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
-    }
-
-    const lastMatch = first.chunkIndex === last.chunkIndex
-        ? firstMatch
-        : findChunkText(normalizedContent, last.text, firstMatch.start)
-
-    if (!lastMatch) {
-        return { error: `Could not locate chunk ${last.chunkIndex} in the source file. The file may have changed since indexing; re-index it before retrying.` }
-    }
-
-    const before = normalizedContent.slice(0, firstMatch.start).replace(/\s*$/, '\n\n')
-    const after = normalizedContent.slice(lastMatch.end).replace(/^\s*/, '\n\n')
-    const nextContent = `${before}${after}`.trim()
-
-    return {
-        content: nextContent ? `${nextContent}\n` : '',
-        startIndex: first.chunkIndex,
-        endIndex: last.chunkIndex,
-    }
-}
-
 function resolveReadableCategoryFilter(
     assignedCategories: MemoryFolderRef[],
     baseFilter?: string,
@@ -548,7 +468,7 @@ async function resolveTargetCategory(
 interface ResolvedMemoryDocument {
     documentId: string
     revision: string
-    documentRef: ParsedMemoryDocumentRef
+    documentRef: string
     categoryId: string
     categoryName: string
     fileName: string
@@ -564,14 +484,9 @@ function resolveMemoryDocumentRef(
     if (!parsed) {
         return { error: 'Invalid documentRef. Read or list memories again to get a current reference.' }
     }
-    const matches = getDb().prepare('SELECT document_id FROM memory_file_index WHERE document_ref = ? LIMIT 2')
-        .all(parsed.value) as Array<{ document_id: string }>
-    if (matches.length > 1) {
-        return { error: 'The documentRef is ambiguous. Read or list memories again to get a current reference.' }
-    }
-    const ref = matches.length === 1
-        ? getAgentMemory().getDocumentReferenceById(matches[0].document_id)
-        : undefined
+    const match = getDb().prepare('SELECT document_id FROM memory_file_index WHERE document_ref = ?')
+        .get(parsed) as { document_id: string } | undefined
+    const ref = match ? getAgentMemory().getDocumentReferenceById(match.document_id) : undefined
     if (!ref) return { error: 'No memory document matches this documentRef. Search or list memories again to get a current reference.' }
     if (assignedCategories.length > 0 && !assignedCategories.some((category) => category.id === ref.categoryId)) {
         return { error: 'The referenced memory document is outside the selected memory-folder scope.' }
