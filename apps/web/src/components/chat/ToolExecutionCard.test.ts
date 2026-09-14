@@ -5,9 +5,9 @@ import ToolExecutionCard from './ToolExecutionCard.vue'
 
 describe('ToolExecutionCard', () => {
   test.each([
-    ['spawn_subagent', 'Spawn sub-agent', 'Start here'],
-    ['continue_subagent', 'Continue sub-agent', 'Follow up here'],
-  ])('labels and renders %s content as its message', async (name, label, content) => {
+    ['spawn_subagent', 'Spawn sub-agent'],
+    ['continue_subagent', 'Continue sub-agent'],
+  ])('labels %s distinctly while retaining its regular parameters', async (name, label) => {
     const wrapper = mount(ToolExecutionCard, {
       props: {
         iteration: 1,
@@ -16,7 +16,7 @@ describe('ToolExecutionCard', () => {
           iteration: 1,
           status: 'executing',
           timestamp: Date.now(),
-          toolCalls: [{ name, arguments: JSON.stringify({ content }) }],
+          toolCalls: [{ name, arguments: JSON.stringify({ instructions: 'Follow the task', context: 'Relevant context' }) }],
         }],
       },
       global: { stubs: { Icon: true } },
@@ -24,8 +24,8 @@ describe('ToolExecutionCard', () => {
 
     expect(wrapper.text()).toContain(label)
     await wrapper.get('button').trigger('click')
-    expect(wrapper.text()).toContain(content)
-    expect(wrapper.text()).not.toContain(`\"content\": \"${content}\"`)
+    expect(wrapper.text()).toContain('instructions')
+    expect(wrapper.text()).toContain('context')
   })
   beforeEach(() => {
     localStorage.clear()

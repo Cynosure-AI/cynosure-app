@@ -13,7 +13,7 @@ export type TimelineEntry =
   | { type: 'continuation'; step: ExecutionStep; ts: number; key: string; isSubAgent?: false }
   | { type: 'tool-fallback'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
-  | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
+  | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; openingMessage: string | null; continued: boolean; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
 
 export function buildChatTimeline(messages: DisplayMessage[], executionSteps: ExecutionStep[], mainAgentId?: string | null): TimelineEntry[] {
   const entries: TimelineEntry[] = []
@@ -158,7 +158,42 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     return best?.id ?? null
   }
 
-  function buildSubAgentGroup(groupId: string, innerEntries: TimelineEntry[]): Extract<TimelineEntry, { type: 'sub-agent-group' }> {
+  type Delegation = { invocationId: string | null; codename: string | null; content: string; continued: boolean }
+
+  function delegationsFrom(entry: TimelineEntry): Delegation[] {
+    if (entry.type !== 'tool-group') return []
+    const delegations: Delegation[] = []
+    for (const step of entry.group.steps) {
+      for (const call of step.toolCalls || []) {
+        if (call.name !== 'spawn_subagent' && call.name !== 'continue_subagent') continue
+        try {
+          const args = JSON.parse(call.arguments || '{}') as Record<string, unknown>
+          const directContent = typeof args.content === 'string' ? args.content.trim() : ''
+          const instructions = typeof args.instructions === 'string' ? args.instructions.trim() : ''
+          const context = typeof args.context === 'string' ? args.context.trim() : ''
+          const continued = call.name === 'continue_subagent'
+          const content = directContent || (context
+            ? `${continued ? '## New Context' : '## Context'}\n${context}\n\n${continued ? '## Follow-up Task' : '## Task'}\n${instructions}`
+            : instructions)
+          delegations.push({
+            invocationId: typeof args.invocationId === 'string' ? args.invocationId : null,
+            codename: typeof args.internalName === 'string' ? args.internalName : null,
+            content,
+            continued,
+          })
+        } catch {
+          continue
+        }
+      }
+    }
+    return delegations
+  }
+
+  function buildSubAgentGroup(
+    groupId: string,
+    innerEntries: TimelineEntry[],
+    delegation?: Delegation | null,
+  ): Extract<TimelineEntry, { type: 'sub-agent-group' }> {
     let agentName: string | null = null
     let agentId: string | null = null
     let codename: string | null = null
@@ -176,6 +211,8 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       codename: codename ?? groupId,
       agentName,
       agentId,
+      openingMessage: delegation?.content || null,
+      continued: delegation?.continued ?? false,
       entries: innerEntries,
       ts: innerEntries[0].ts,
       key: `sag-${groupId}-${innerEntries[0].ts}`
@@ -185,6 +222,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
   function groupSubAgentEntriesForTurn(turnEntries: TimelineEntry[]): TimelineEntry[] {
     const groups = new Map<string, Extract<TimelineEntry, { type: 'sub-agent-group' }>>()
     const result: TimelineEntry[] = []
+    const pendingDelegations: Delegation[] = []
     for (const entry of turnEntries) {
       if (!entry.isSubAgent) {
         result.push(entry)
@@ -192,6 +230,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
         // continuation of the same invocation gets a new card here instead
         // of being pulled back into the invocation's original card.
         groups.clear()
+        pendingDelegations.push(...delegationsFrom(entry))
         continue
       }
       const groupId = subAgentGroupIdOf(entry) ?? entry.key
@@ -201,13 +240,27 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       } else {
         // Anchor each invocation at its first activity, immediately after its
         // initiating call, rather than collecting all runs below the last call.
-        const group = buildSubAgentGroup(groupId, [entry])
+        const exactIndex = pendingDelegations.findIndex(candidate =>
+          candidate.invocationId === groupId || candidate.codename === groupId
+        )
+        const fallbackIndex = pendingDelegations.findIndex(candidate => !candidate.invocationId)
+        const matchedIndex = exactIndex >= 0 ? exactIndex : fallbackIndex
+        const delegation = matchedIndex >= 0 ? pendingDelegations.splice(matchedIndex, 1)[0] : null
+        const group = buildSubAgentGroup(groupId, [entry], delegation)
         groups.set(groupId, group)
         result.push(group)
       }
     }
     return result.map(entry => entry.type === 'sub-agent-group'
-      ? { ...buildSubAgentGroup(entry.codename, entry.entries), key: entry.key }
+      ? {
+          ...buildSubAgentGroup(entry.codename, entry.entries, {
+            invocationId: null,
+            codename: entry.codename,
+            content: entry.openingMessage || '',
+            continued: entry.continued,
+          }),
+          key: entry.key,
+        }
       : entry)
   }
 
