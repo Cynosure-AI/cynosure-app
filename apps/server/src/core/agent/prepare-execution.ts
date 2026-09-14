@@ -14,13 +14,16 @@ import { resolveExecutionTools, isToolRoutingEnabled } from './pre-execution/exe
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemoryContext, isAutoMemoryEnabled, hasExplicitEmptyMemoryScope } from './pre-execution/execution-memory.js'
 import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
-import { buildTaskContext, inferRequestedToolEffect } from './pre-execution/task-context.js'
-import { getAssignedOrDefaultSpaces, type MemorySpaceRef } from '../memory/memory-space-scope.js'
+import { buildTaskContext } from './pre-execution/task-context.js'
+import { getAssignedMemoryFolders, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
 import type { ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 import { getUserSettings } from '../user-settings.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
+import { MEMORY_WRITE_TOOL_NAMES } from '../tools/builtin/memory-tools.js'
+
+const MEMORY_STEWARDSHIP_PROMPT = `When maintaining memory, treat it as a categorized, revisional brain. Search before creating and update matching memories instead of duplicating or appending change logs. Use Title Case paths such as People/<Person>, Projects/<Project>, Organizations/<Organization>, or Topics/<Topic>; name memories "Subject - Aspect"; keep one topic per memory and normally 1–3 chunks. Use Uncategorized only when no clear category exists.`
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -72,8 +75,8 @@ export interface PrepareExecutionInput {
 
     // ── Agentless overrides ──
 
-    /** Memory space overrides for agentless chat (bypasses agent's assigned spaces) */
-    memorySpaceOverrides?: MemorySpaceRef[]
+    /** Memory folder overrides for agentless chat (bypasses agent's assigned spaces) */
+    memoryFolderOverrides?: MemoryFolderRef[]
     /** Agent id used during built-in tool hydration. Defaults to agent.id. */
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
@@ -128,7 +131,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         modelOverride,
         systemPromptOverride,
         systemPromptSuffix,
-        memorySpaceOverrides,
+        memoryFolderOverrides,
     } = input
 
     const gateway = getGateway()
@@ -145,7 +148,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         ? {
             allowedTools: [...(input.scheduleSelectedToolKeys ?? preset.tools)],
             subAgents: [...(input.subAgentAssignments ?? preset.subAgents)],
-            memorySpaceIds: memorySpaceOverrides?.map((space) => space.id) ?? [],
+            memoryFolderIds: memoryFolderOverrides?.map((space) => space.id) ?? [],
             systemPrompt: systemPromptOverride ?? preset.systemPrompt ?? '',
             model: providerModel.model,
             providerId: providerModel.providerId,
@@ -159,7 +162,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         : undefined
     const autoModes = {
         tools: isToolRoutingEnabled(preset, input.autoToolRouting),
-        memories: !hasExplicitEmptyMemoryScope(memorySpaceOverrides) && isAutoMemoryEnabled(preset, input.autoMemory),
+        memories: !hasExplicitEmptyMemoryScope(memoryFolderOverrides) && isAutoMemoryEnabled(preset, input.autoMemory),
     }
     const taskContextRouter = resolveTaskContextRouter({
         gateway,
@@ -208,7 +211,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
         userQuery: toolRoutingQuery,
-        requestedToolEffect: taskContext?.requestedToolEffect || inferRequestedToolEffect(input.userQuery || ''),
+        requestedToolEffect: taskContext?.requestedToolEffect,
         suppressAutoTools: taskContext?.skipToolRouting === true,
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,
@@ -219,7 +222,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         subAgentAssignments: input.subAgentAssignments,
         signal: input.signal,
         debugContextEnabled: input.debugContextEnabled,
-        memorySpaceOverrides,
+        memoryFolderOverrides,
         hydrationAgentId: input.hydrationAgentId,
         eventMeta: input.eventMeta,
         scheduleExecutionConfig,
@@ -230,7 +233,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerId: taskContextRouter.providerId,
         model: taskContextRouter.model,
         autoMemory: input.autoMemory,
-        memorySpaceOverrides,
+        memoryFolderOverrides,
         userQuery: input.userQuery,
         retrievalQueries: memoryRoutingQueries,
         recentMessages: routingMessages,
@@ -243,7 +246,9 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     const promptMessages = await resolveSystemPromptMessages({
         basePrompt: preset.systemPrompt,
         overridePrompt: systemPromptOverride,
-        suffix: systemPromptSuffix,
+        suffix: toolLayer.tools.some(tool => MEMORY_WRITE_TOOL_NAMES.includes((tool.originalName ?? tool.name) as never))
+            ? [systemPromptSuffix, MEMORY_STEWARDSHIP_PROMPT].filter(Boolean).join('\n')
+            : systemPromptSuffix,
         subAgents: toolLayer.effectiveSubAgents,
         smartTagContext: {
             userName: getUserSettings().name,
@@ -253,7 +258,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
             providerId: providerModel.providerId,
             model: providerModel.model,
             conversationId,
-            selectedMemFolderNames: resolveSelectedMemoryFolderNames(preset.id, memorySpaceOverrides),
+            selectedMemFolderNames: resolveSelectedMemoryFolderNames(preset.id, memoryFolderOverrides),
         },
     })
 
@@ -281,13 +286,13 @@ function uniqueQueries(values: Array<string | undefined>): string[] {
 
 function resolveSelectedMemoryFolderNames(
     agentId: string,
-    memorySpaceOverrides: MemorySpaceRef[] | undefined,
+    memoryFolderOverrides: MemoryFolderRef[] | undefined,
 ): string[] {
-    if (Array.isArray(memorySpaceOverrides)) {
-        return memorySpaceOverrides.map((space) => space.name)
+    if (Array.isArray(memoryFolderOverrides)) {
+        return memoryFolderOverrides.map((space) => space.name)
     }
 
     if (agentId === '__agentless__') return []
 
-    return getAssignedOrDefaultSpaces(agentId).map((space) => space.name)
+    return getAssignedMemoryFolders(agentId).map((space) => space.name)
 }

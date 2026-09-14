@@ -13,7 +13,7 @@ const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
 const agentStore = useAgentStore()
 
-const hasMemoryScope = computed(() => (props.agent.memorySpaces?.length ?? 0) > 0)
+const hasMemoryScope = computed(() => (props.agent.memoryFolders?.length ?? 0) > 0)
 const hasSelectableExecutionTools = computed(() => props.agent.tools.length > 0 || props.agent.autoToolRouting)
 
 const automaticToolStates = computed(() => ({

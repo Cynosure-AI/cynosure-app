@@ -1,11 +1,12 @@
 import type { RegistryAwareToolDefinition, ToolDefinition } from "../gateway/providers/base.provider.js";
 import type { ConversationExecutionConfig } from "@shared/types";
 import {
-    buildMemorySpaceFilter,
-    getAssignedOrDefaultSpaces,
-    getDefaultMemorySpace,
-    type MemorySpaceRef,
-} from "../memory/memory-space-scope.js";
+    buildMemoryFolderFilter,
+    expandMemoryFolderScope,
+    getAssignedMemoryFolders,
+    getDefaultMemoryFolder,
+    type MemoryFolderRef,
+} from "../memory/memory-folder-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
 import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
@@ -94,8 +95,8 @@ interface BuiltInHydrationContext {
     agentId?: string;
     conversationId: string;
     broadcast: BroadcastFn;
-    assignedSpaces: MemorySpaceRef[];
-    spaceFilter?: string;
+    assignedCategories: MemoryFolderRef[];
+    categoryFilter?: string;
     scheduleExecutionConfig?: ConversationExecutionConfig;
 }
 
@@ -113,39 +114,44 @@ const BUILTIN_TOOL_HYDRATORS = {
     schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[2],
     schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[3],
     memory_list_documents: (ctx: BuiltInHydrationContext) => makeMemoryListDocumentsTool({
-        spaceFilter: ctx.spaceFilter,
-        assignedSpaces: ctx.assignedSpaces,
+        categoryFilter: ctx.categoryFilter,
+        assignedCategories: ctx.assignedCategories,
     }),
     memory_retrieve_chunks: (ctx: BuiltInHydrationContext) => makeMemoryRetrieveChunksTool({
-        spaceFilter: ctx.spaceFilter,
-        assignedSpaces: ctx.assignedSpaces,
+        categoryFilter: ctx.categoryFilter,
+        assignedCategories: ctx.assignedCategories,
     }),
     memory_semantic_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
-        spaceFilter: ctx.spaceFilter,
-        assignedSpaces: ctx.assignedSpaces,
+        categoryFilter: ctx.categoryFilter,
+        assignedCategories: ctx.assignedCategories,
     }),
     memory_create: (ctx: BuiltInHydrationContext) => makeMemoryCreateTool({
-        assignedSpaces: ctx.assignedSpaces,
+        assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
     memory_append: (ctx: BuiltInHydrationContext) => makeMemoryAppendTool({
-        assignedSpaces: ctx.assignedSpaces,
+        assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
     memory_replace_range: (ctx: BuiltInHydrationContext) => makeMemoryReplaceRangeTool({
-        assignedSpaces: ctx.assignedSpaces,
+        assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
     memory_replace_all: (ctx: BuiltInHydrationContext) => makeMemoryReplaceAllTool({
-        assignedSpaces: ctx.assignedSpaces,
+        assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
     memory_remove_all: (ctx: BuiltInHydrationContext) => makeMemoryRemoveAllTool({
-        assignedSpaces: ctx.assignedSpaces,
+        assignedCategories: ctx.assignedCategories,
     }),
     memory_remove_range: (ctx: BuiltInHydrationContext) => makeMemoryRemoveRangeTool({
-        assignedSpaces: ctx.assignedSpaces,
+        assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
-    knowledge_search: (ctx: BuiltInHydrationContext) => makeKnowledgeSearchTool({ assignedSpaces: ctx.assignedSpaces }),
-    knowledge_assert: (ctx: BuiltInHydrationContext) => makeKnowledgeAssertTool({ assignedSpaces: ctx.assignedSpaces }),
-    knowledge_delete: (ctx: BuiltInHydrationContext) => makeKnowledgeDeleteTool({ assignedSpaces: ctx.assignedSpaces }),
-    knowledge_entity_merge: (ctx: BuiltInHydrationContext) => makeKnowledgeEntityMergeTool({ assignedSpaces: ctx.assignedSpaces }),
+    knowledge_search: (ctx: BuiltInHydrationContext) => makeKnowledgeSearchTool({ assignedCategories: ctx.assignedCategories }),
+    knowledge_assert: (ctx: BuiltInHydrationContext) => makeKnowledgeAssertTool({ assignedCategories: ctx.assignedCategories }),
+    knowledge_delete: (ctx: BuiltInHydrationContext) => makeKnowledgeDeleteTool({ assignedCategories: ctx.assignedCategories }),
+    knowledge_entity_merge: (ctx: BuiltInHydrationContext) => makeKnowledgeEntityMergeTool({ assignedCategories: ctx.assignedCategories }),
 } as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
 export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
@@ -171,7 +177,7 @@ function getBuiltInToolSpecs(): BuiltInToolSpec[] {
     const specContext: BuiltInHydrationContext = {
         conversationId: "",
         broadcast: () => undefined,
-        assignedSpaces: [],
+        assignedCategories: [],
     };
 
     return BUILTIN_TOOL_NAMES.map((name) => {
@@ -192,7 +198,6 @@ export function isBuiltInMemoryToolKey(toolKey: string): boolean {
 }
 
 export function getBuiltInMemoryToolKeys(): string[] {
-    // Memory-space access includes reads and additive writes; other mutations require selection or routing.
     return [
         ...getBuiltInMemoryReadToolKeys(),
         getBuiltInToolKey('memory_create'),
@@ -230,11 +235,11 @@ export function registerBuiltInTools(): void {
 // ─── Hydration helpers ─────────────────────────────────────
 
 /**
- * Get the default memory space when no agent context is available.
+ * Get the default memory folder when no agent context is available.
  */
-function getDefaultMemorySpaces(): MemorySpaceRef[] {
-    const defaultSpace = getDefaultMemorySpace();
-    return defaultSpace ? [defaultSpace] : [];
+function getDefaultMemoryFolders(): MemoryFolderRef[] {
+    const uncategorizedCategory = getDefaultMemoryFolder();
+    return uncategorizedCategory ? [uncategorizedCategory] : [];
 }
 
 /**
@@ -247,21 +252,22 @@ export function hydrateBuiltInTools(
         agentId?: string;
         conversationId: string;
         broadcast: BroadcastFn;
-        memorySpaceOverrides?: MemorySpaceRef[];
+        memoryFolderOverrides?: MemoryFolderRef[];
         scheduleExecutionConfig?: ConversationExecutionConfig;
     },
 ): RegistryAwareToolDefinition[] {
-    const assignedSpaces =
-        ctx.memorySpaceOverrides ??
-        (ctx.agentId ? getAssignedOrDefaultSpaces(ctx.agentId) : getDefaultMemorySpaces());
-    const spaceFilter = buildMemorySpaceFilter(assignedSpaces);
+    const selectedCategories =
+        ctx.memoryFolderOverrides ??
+        (ctx.agentId ? getAssignedMemoryFolders(ctx.agentId) : getDefaultMemoryFolders());
+    const assignedCategories = expandMemoryFolderScope(selectedCategories);
+    const categoryFilter = buildMemoryFolderFilter(assignedCategories);
 
     const hydrationContext: BuiltInHydrationContext = {
         agentId: ctx.agentId,
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
-        assignedSpaces,
-        spaceFilter,
+        assignedCategories,
+        categoryFilter,
         scheduleExecutionConfig: ctx.scheduleExecutionConfig,
     };
 

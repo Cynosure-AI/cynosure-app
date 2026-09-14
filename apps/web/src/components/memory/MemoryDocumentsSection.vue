@@ -1,50 +1,54 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
-import type { MemorySpace } from "../../api/types";
+import type { MemoryFolder } from "../../api/types";
 import MemoryDocumentList from "./MemoryDocumentList.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 const COLLAPSED_KEY = "cy-memory-folder-collapsed";
 
 interface DocumentDragPayload {
-  sourceSpaceId?: string;
+  sourceCategoryId?: string;
   sourceFiles?: unknown;
 }
 
 const props = defineProps<{
-  spaces: MemorySpace[];
+  spaces: MemoryFolder[];
   spacesLoading: boolean;
-  selectedSpaceId: string | null;
-  selectedSpace: MemorySpace | null;
+  selectedCategoryId: string | null;
+  selectedCategory: MemoryFolder | null;
+  focusFile?: string;
 }>();
 
 const emit = defineEmits<{
-  "update:selectedSpaceId": [value: string | null];
-  "create-folder": [parent?: MemorySpace];
-  "edit-folder": [space: MemorySpace];
-  "delete-folder": [space: MemorySpace];
+  "update:selectedCategoryId": [value: string | null];
+  "create-folder": [parent?: MemoryFolder];
+  "edit-folder": [space: MemoryFolder];
+  "delete-folder": [space: MemoryFolder];
   "refresh-spaces": [];
+  "category-navigation": [];
 }>();
 
 const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
-const collapsedFolders = ref<Set<string>>(readCollapsedFolders());
+const collapsedFolders = ref<Set<string>>(new Set());
+let folderStateInitialized = false;
 const dragCounter = ref(0);
 const dropTargetSpaceId = ref<string | null>(null);
+const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
 
 const sortedSpaces = computed(() =>
   [...props.spaces].sort((a, b) => {
-    if (a.isDefault) return -1;
-    if (b.isDefault) return 1;
-    return (a.relativePath || "").localeCompare(b.relativePath || "");
+    if (a.isUncategorized) return -1;
+    if (b.isUncategorized) return 1;
+    return (a.categoryPath || "").localeCompare(b.categoryPath || "");
   }),
 );
 
 const visibleSpaces = computed(() =>
   sortedSpaces.value.filter((space) => {
-    if (space.isDefault) return true;
-    const parts = (space.relativePath || "").split("/");
+    if (space.isUncategorized) return true;
+    const parts = (space.categoryPath || "").split("/");
     for (let i = 1; i < parts.length; i++) {
       if (collapsedFolders.value.has(parts.slice(0, i).join("/"))) return false;
     }
@@ -52,29 +56,58 @@ const visibleSpaces = computed(() =>
   }),
 );
 
-function hasChildren(space: MemorySpace): boolean {
-  const prefix = space.relativePath ? `${space.relativePath}/` : "";
+function hasChildren(space: MemoryFolder): boolean {
+  const prefix = space.categoryPath ? `${space.categoryPath}/` : "";
   return props.spaces.some((candidate) =>
-    space.isDefault
-      ? Boolean(candidate.relativePath)
-      : candidate.relativePath?.startsWith(prefix),
+    space.isUncategorized
+      ? Boolean(candidate.categoryPath)
+      : candidate.categoryPath?.startsWith(prefix),
   );
 }
 
-function isCollapsed(space: MemorySpace): boolean {
-  return collapsedFolders.value.has(space.relativePath || "");
+function categoryDepth(space: MemoryFolder): number {
+  if (space.isUncategorized) return 0;
+  return Math.max(1, (space.categoryPath || "").split("/").filter(Boolean).length);
 }
 
-function readCollapsedFolders(): Set<string> {
+function isCollapsed(space: MemoryFolder): boolean {
+  return collapsedFolders.value.has(space.categoryPath || "");
+}
+
+function initializeFolderState(spaces: MemoryFolder[]): void {
+  if (folderStateInitialized) return;
   try {
     const raw = sessionStorage.getItem(COLLAPSED_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed)
-      ? new Set(parsed.filter((value): value is string => typeof value === "string"))
-      : new Set();
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      collapsedFolders.value = Array.isArray(parsed)
+        ? new Set(parsed.filter((value): value is string => typeof value === "string"))
+        : new Set();
+      folderStateInitialized = true;
+      revealFocusedCategory();
+      return;
+    }
   } catch {
-    return new Set();
+    /* fall back to the default collapsed state */
   }
+  if (spaces.length === 0) return;
+  collapsedFolders.value = new Set(spaces
+    .filter(space => hasChildren(space) && !space.isUncategorized)
+    .map(space => space.categoryPath || ""));
+  folderStateInitialized = true;
+  writeCollapsedFolders();
+  revealFocusedCategory();
+}
+
+function revealFocusedCategory(): void {
+  if (!props.focusFile || !props.selectedCategoryId) return;
+  const category = props.spaces.find(space => space.id === props.selectedCategoryId);
+  const parts = (category?.categoryPath || "").split("/").filter(Boolean);
+  if (parts.length < 2) return;
+  const next = new Set(collapsedFolders.value);
+  for (let i = 1; i < parts.length; i++) next.delete(parts.slice(0, i).join("/"));
+  collapsedFolders.value = next;
+  writeCollapsedFolders();
 }
 
 function writeCollapsedFolders(): void {
@@ -85,8 +118,8 @@ function writeCollapsedFolders(): void {
   }
 }
 
-function toggleFolder(space: MemorySpace) {
-  const key = space.relativePath || "";
+function toggleFolder(space: MemoryFolder) {
+  const key = space.categoryPath || "";
   const next = new Set(collapsedFolders.value);
   if (next.has(key)) next.delete(key);
   else next.add(key);
@@ -94,25 +127,29 @@ function toggleFolder(space: MemorySpace) {
   writeCollapsedFolders();
 }
 
-function selectSpace(spaceId: string) {
-  emit("update:selectedSpaceId", spaceId);
+watch(() => props.spaces, initializeFolderState, { immediate: true });
+watch([() => props.focusFile, () => props.selectedCategoryId], revealFocusedCategory);
+
+function selectSpace(categoryId: string) {
+  emit("update:selectedCategoryId", categoryId);
+  emit("category-navigation");
 }
 
 function isDocumentDrag(e: DragEvent): boolean {
-  return e.dataTransfer?.types.includes(DOCUMENT_DRAG_MIME) ?? false;
+  return Boolean(activeDocumentDrag.value) || Array.from(e.dataTransfer?.types || []).includes(DOCUMENT_DRAG_MIME);
 }
 
 function isFileDrag(e: DragEvent): boolean {
   return !isDocumentDrag(e) && (e.dataTransfer?.types.includes("Files") ?? false);
 }
 
-function onDragEnter(e: DragEvent, spaceId?: string) {
-  if (spaceId) {
+function onDragEnter(e: DragEvent, categoryId?: string) {
+  if (categoryId) {
     if (!isDocumentDrag(e)) return;
     e.preventDefault();
     // A document is already in the selected folder, so it cannot be moved there.
-    if (isDocumentDrag(e) && spaceId === props.selectedSpaceId) return;
-    dropTargetSpaceId.value = spaceId;
+    if (isDocumentDrag(e) && categoryId === props.selectedCategoryId) return;
+    dropTargetSpaceId.value = categoryId;
     return;
   }
 
@@ -123,61 +160,75 @@ function onDragEnter(e: DragEvent, spaceId?: string) {
   dragCounter.value++;
 }
 
-function onDragLeave(e: DragEvent, spaceId?: string) {
+function onDragLeave(e: DragEvent, categoryId?: string) {
   e.preventDefault();
-  if (spaceId) {
-    if (dropTargetSpaceId.value === spaceId) dropTargetSpaceId.value = null;
+  if (categoryId) {
+    const current = e.currentTarget as HTMLElement | null;
+    const related = e.relatedTarget as Node | null;
+    if (current && related && current.contains(related)) return;
+    if (dropTargetSpaceId.value === categoryId) dropTargetSpaceId.value = null;
   } else {
     dragCounter.value = Math.max(0, dragCounter.value - 1);
   }
 }
 
-function onDragOver(e: DragEvent, spaceId?: string) {
-  if (spaceId && !isDocumentDrag(e)) return;
-  if (isDocumentDrag(e) && (!spaceId || spaceId === props.selectedSpaceId)) {
+function onDragOver(e: DragEvent, categoryId?: string) {
+  if (categoryId && !isDocumentDrag(e)) return;
+  if (isDocumentDrag(e) && (!categoryId || categoryId === props.selectedCategoryId)) {
     if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
     return;
   }
   if (!isDocumentDrag(e) && !isFileDrag(e)) return;
   e.preventDefault();
+  if (categoryId && categoryId !== props.selectedCategoryId && isDocumentDrag(e)) {
+    dropTargetSpaceId.value = categoryId;
+  }
   if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME) ? "move" : "copy";
+    e.dataTransfer.dropEffect = isDocumentDrag(e) ? "move" : "copy";
   }
 }
 
-async function onFolderDrop(e: DragEvent, targetSpaceId: string) {
-  const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME);
-  if (!documentPayload) return;
+async function onFolderDrop(e: DragEvent, targetCategoryId: string) {
+  const documentPayload = e.dataTransfer?.getData(DOCUMENT_DRAG_MIME)
+    || e.dataTransfer?.getData("text/plain");
+  if (!documentPayload && !activeDocumentDrag.value) return;
   e.preventDefault();
   dropTargetSpaceId.value = null;
   try {
-    const parsed = JSON.parse(documentPayload) as DocumentDragPayload;
-    const sourceSpaceId = typeof parsed.sourceSpaceId === "string" ? parsed.sourceSpaceId : props.selectedSpaceId;
+    const parsed = documentPayload ? JSON.parse(documentPayload) as DocumentDragPayload : activeDocumentDrag.value!;
+    const sourceCategoryId = typeof parsed.sourceCategoryId === "string" ? parsed.sourceCategoryId : props.selectedCategoryId;
     const sourceFiles = Array.isArray(parsed.sourceFiles)
       ? parsed.sourceFiles.filter((value): value is string => typeof value === "string")
       : [];
-    if (!sourceSpaceId || sourceSpaceId === targetSpaceId || sourceFiles.length === 0) return;
-    if (sourceSpaceId === props.selectedSpaceId) {
-      await docList.value?.moveGroupsToSpace(targetSpaceId, sourceFiles);
+    if (!sourceCategoryId || sourceCategoryId === targetCategoryId || sourceFiles.length === 0) return;
+    if (sourceCategoryId === props.selectedCategoryId) {
+      await docList.value?.moveDocumentsToCategory(targetCategoryId, sourceFiles);
     } else {
-      await api.memorySpaces.moveGroups(sourceSpaceId, sourceFiles, targetSpaceId);
+      await api.memoryFolders.moveDocuments(sourceCategoryId, sourceFiles, targetCategoryId);
       emit("refresh-spaces");
     }
   } catch {
     /* ignore malformed drag payload */
+  } finally {
+    activeDocumentDrag.value = null;
   }
 }
 
-async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
+function setDocumentDragState(active: boolean, payload?: DocumentDragPayload) {
+  activeDocumentDrag.value = active && payload ? payload : null;
+  if (!active) dropTargetSpaceId.value = null;
+}
+
+async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
   if (!isFileDrag(e)) return;
   e.preventDefault();
   dragCounter.value = 0;
   dropTargetSpaceId.value = null;
   const files = e.dataTransfer?.files;
   if (!files?.length) return;
-  const spaceId = targetSpaceId || props.selectedSpaceId;
-  if (!spaceId) return;
-  if (spaceId !== props.selectedSpaceId) emit("update:selectedSpaceId", spaceId);
+  const categoryId = targetCategoryId || props.selectedCategoryId;
+  if (!categoryId) return;
+  if (categoryId !== props.selectedCategoryId) emit("update:selectedCategoryId", categoryId);
   await nextTick();
   docList.value?.ingestFiles(Array.from(files));
 }
@@ -188,7 +239,7 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
       <div class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45">
         <div class="flex items-center justify-between px-4 py-3 border-b border-theme-800 bg-theme-900/50">
           <div class="text-xs font-medium uppercase tracking-wide text-theme-400">
-            Folders
+            Categories
           </div>
           <button
             class="p-1.5 text-theme-500 hover:text-theme-200 transition-colors"
@@ -216,9 +267,10 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
             v-for="space in visibleSpaces"
             :key="space.id"
             :data-space-id="space.id"
+            :data-category-depth="categoryDepth(space)"
             class="group flex items-center gap-2 px-3 py-2.5 border-b border-theme-900/70 last:border-b-0 transition-colors"
             :class="[
-              selectedSpaceId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
+              selectedCategoryId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
               dropTargetSpaceId === space.id ? 'ring-1 ring-accent-500/70 ring-inset bg-accent-500/10' : '',
             ]"
             @dragenter.stop="onDragEnter($event, space.id)"
@@ -226,21 +278,22 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
             @dragover.stop="onDragOver($event, space.id)"
             @drop.stop="onFolderDrop($event, space.id)"
           >
-            <!-- Indent spacer, change this to adjust starting padding -->
+            <!-- Uncategorized is the root; every physical category is shown beneath it. -->
             <span
-              v-if="(space.depth || 0) > 1"
-              :style="{ width: `${((space.depth || 0) * 12)}px` }"
-              class="shrink-0"
+              v-if="categoryDepth(space) > 0"
+              :style="{ width: `${categoryDepth(space) * 12}px` }"
+              class="relative shrink-0 self-stretch border-r border-theme-800/60"
+              aria-hidden="true"
             />
             <!-- Chevron: always rendered to keep all rows aligned -->
             <button
               type="button"
               class="p-0.5 shrink-0 text-theme-500 hover:text-theme-200 transition-colors"
               :aria-label="isCollapsed(space) ? `Expand ${space.name}` : `Collapse ${space.name}`"
-              :tabindex="space.isDefault || !hasChildren(space) ? -1 : 0"
-              :aria-hidden="space.isDefault || !hasChildren(space)"
+              :tabindex="space.isUncategorized || !hasChildren(space) ? -1 : 0"
+              :aria-hidden="space.isUncategorized || !hasChildren(space)"
               :class="{
-                'invisible pointer-events-none': space.isDefault || !hasChildren(space),
+                'invisible pointer-events-none': space.isUncategorized || !hasChildren(space),
               }"
               @click.stop="toggleFolder(space)"
             >
@@ -256,11 +309,19 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
               @click="selectSpace(space.id)"
             >
               <Icon
-                :icon="space.isDefault ? 'lucide:hard-drive' : isCollapsed(space) ? 'lucide:folder' : 'lucide:folder-open'"
+                :icon="space.isUncategorized ? 'lucide:hard-drive' : isCollapsed(space) ? 'lucide:folder' : 'lucide:folder-open'"
                 class="w-4 h-4 shrink-0"
-                :class="space.isDefault ? 'text-accent-400' : 'text-amber-400'"
+                :class="space.isUncategorized ? 'text-accent-400' : 'text-amber-400'"
               />
-              <span class="truncate text-sm font-medium">{{ space.name }}</span>
+              <span
+                class="truncate text-sm font-medium"
+                :title="space.isUncategorized ? 'Memory root — granting this folder includes every descendant folder' : space.categoryPath"
+              >{{ space.name }}</span>
+              <span
+                v-if="space.isUncategorized"
+                class="rounded bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-400"
+                title="Folder grants made at the root include all current and future descendants"
+              >Root</span>
               <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
             </button>
             <!-- Action buttons -->
@@ -285,7 +346,7 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
               />
             </button>
             <button
-              :disabled="space.isDefault"
+              :disabled="space.isUncategorized"
               class="p-1 text-theme-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors disabled:opacity-20 disabled:hover:text-theme-600"
               title="Remove folder"
               @click.stop="emit('delete-folder', space)"
@@ -300,7 +361,7 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
       </div>
 
       <div
-        v-if="selectedSpaceId"
+        v-if="selectedCategoryId"
         data-testid="memory-document-drop-zone"
         class="relative min-w-0"
         @dragenter="onDragEnter($event)"
@@ -318,18 +379,20 @@ async function onFileDrop(e: DragEvent, targetSpaceId?: string) {
               class="w-12 h-12 text-accent-400 mx-auto mb-2"
             />
             <p class="text-accent-300 font-medium">
-              Drop files into {{ selectedSpace?.name || "selected folder" }}
+              Drop files into {{ selectedCategory?.name || "selected folder" }}
             </p>
           </div>
         </div>
 
         <MemoryDocumentList
           ref="docList"
-          :space-id="selectedSpaceId"
+          :category-id="selectedCategoryId"
           :spaces="spaces"
-          @edit-space="selectedSpace && emit('edit-folder', selectedSpace)"
-          @delete-space="selectedSpace && emit('delete-folder', selectedSpace)"
+          :focus-file="focusFile"
+          @edit-space="selectedCategory && emit('edit-folder', selectedCategory)"
+          @delete-space="selectedCategory && emit('delete-folder', selectedCategory)"
           @spaces-changed="emit('refresh-spaces')"
+          @document-drag-state="setDocumentDragState"
         />
       </div>
     </div>

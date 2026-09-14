@@ -4,6 +4,29 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import ToolExecutionCard from './ToolExecutionCard.vue'
 
 describe('ToolExecutionCard', () => {
+  test.each([
+    ['spawn_subagent', 'Spawn sub-agent'],
+    ['continue_subagent', 'Continue sub-agent'],
+  ])('labels %s distinctly while retaining its regular parameters', async (name, label) => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'executing',
+          timestamp: Date.now(),
+          toolCalls: [{ name, arguments: JSON.stringify({ instructions: 'Follow the task', context: 'Relevant context' }) }],
+        }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    expect(wrapper.text()).toContain(label)
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('instructions')
+    expect(wrapper.text()).toContain('context')
+  })
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
@@ -14,7 +37,7 @@ describe('ToolExecutionCard', () => {
       type: 'memory',
       contextPhase: 'gathered-context',
       sourceFile: 'Communication Personality Analysis.md',
-      folderPath: 'Default',
+      directoryPath: 'Default',
       chunkIndex,
       content: `Memory chunk ${chunkIndex}`,
     })
@@ -50,7 +73,7 @@ describe('ToolExecutionCard', () => {
       type: 'memory',
       contextPhase: 'gathered-results',
       sourceFile,
-      folderPath: 'Product Research',
+      directoryPath: 'Product Research',
       chunkIndex,
       content: `Memory chunk ${chunkIndex}`,
     })

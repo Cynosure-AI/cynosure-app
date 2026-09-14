@@ -32,6 +32,46 @@ function showAnySection(ids: string[]): boolean {
   return ids.some(showSection)
 }
 
+const dreamEnabled = ref(false)
+const dreamProviderId = ref('')
+const dreamModel = ref('')
+const dreamSaving = ref(false)
+const dreamLoaded = ref(false)
+const dreamError = ref('')
+const savedDream = ref({ enabled: false, providerId: '', model: '' })
+const dreamStatus = ref<SettingsPersistenceState>('idle')
+
+async function loadDreamConfig() {
+  try {
+    const config = await api.memory.getDreamConfig()
+    dreamEnabled.value = config.enabled
+    dreamProviderId.value = config.providerId
+    dreamModel.value = config.model
+    savedDream.value = { enabled: config.enabled, providerId: config.providerId, model: config.model }
+    dreamLoaded.value = true
+  } catch (error) {
+    dreamError.value = error instanceof Error ? error.message : 'Could not load Dream settings.'
+  }
+}
+async function saveDream() {
+  dreamSaving.value = true
+  dreamStatus.value = 'saving'
+  dreamError.value = ''
+  try {
+    const config = await api.memory.configureDream({ enabled: dreamEnabled.value, providerId: dreamProviderId.value, model: dreamModel.value })
+    dreamEnabled.value = config.enabled
+    dreamProviderId.value = config.providerId
+    dreamModel.value = config.model
+    savedDream.value = { enabled: config.enabled, providerId: config.providerId, model: config.model }
+    dreamStatus.value = 'saved'
+  } catch (error) {
+    dreamError.value = error instanceof Error ? error.message : 'Could not save Dream settings.'
+    dreamStatus.value = 'error'
+  } finally {
+    dreamSaving.value = false
+  }
+}
+
 // Embedding state
 const embProviderId = ref('')
 const embModel = ref('')
@@ -60,11 +100,11 @@ const rerankSaving = ref(false)
 const savedReranker = ref({ enabled: false, providerId: '', model: '', candidateCount: 50 })
 const rerankStatus = ref<SettingsPersistenceState>('idle')
 
-// Entity extraction state
-const entityExtractionProviderId = ref('')
-const entityExtractionModel = ref('')
-const entityExtractionSaving = ref(false)
-const entityExtractionStatus = ref<SettingsPersistenceState>('idle')
+// Deep Research state
+const deepResearchProviderId = ref('')
+const deepResearchModel = ref('')
+const deepResearchSaving = ref(false)
+const deepResearchStatus = ref<SettingsPersistenceState>('idle')
 
 const embDirty = computed(() =>
   embProviderId.value !== savedEmbedding.value.providerId || embModel.value !== savedEmbedding.value.model
@@ -78,7 +118,17 @@ const rerankDirty = computed(() =>
   rerankModel.value !== savedReranker.value.model ||
   rerankCandidateCount.value !== savedReranker.value.candidateCount
 )
-const manualDirty = computed(() => embDirty.value || chunkDirty.value || rerankDirty.value)
+const dreamDirty = computed(() => dreamLoaded.value && (
+  dreamEnabled.value !== savedDream.value.enabled ||
+  dreamProviderId.value !== savedDream.value.providerId ||
+  dreamModel.value !== savedDream.value.model
+))
+const dreamSelectionValid = computed(() => {
+  if (!dreamProviderId.value) return false
+  if (dreamModel.value) return true
+  return Boolean(providerStore.providers.find(provider => provider.id === dreamProviderId.value)?.defaultModel)
+})
+const manualDirty = computed(() => embDirty.value || chunkDirty.value || rerankDirty.value || dreamDirty.value)
 
 watch(manualDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
@@ -116,8 +166,9 @@ onUnmounted(() => {
 
 onMounted(async () => {
   await providerStore.loadProviders()
+  await loadDreamConfig()
   await loadEmbeddingConfig()
-  await loadEntityExtractionConfig()
+  await loadDeepResearchConfig()
   await loadChunkingConfig()
   await loadRerankerConfig()
 })
@@ -191,53 +242,53 @@ async function loadRerankerConfig() {
   }
 }
 
-async function loadEntityExtractionConfig() {
+async function loadDeepResearchConfig() {
   try {
-    const config = await api.memory.getEntityExtractionConfig()
-    entityExtractionProviderId.value = config.providerId || ''
-    entityExtractionModel.value = config.model || ''
+    const config = await api.memory.getDeepResearchConfig()
+    deepResearchProviderId.value = config.providerId || ''
+    deepResearchModel.value = config.model || ''
 
-    if (!entityExtractionProviderId.value && !entityExtractionModel.value && (prefs.knowledgeProviderId || prefs.knowledgeModel)) {
-      await saveEntityExtractionSelection({
+    if (!deepResearchProviderId.value && !deepResearchModel.value && (prefs.knowledgeProviderId || prefs.knowledgeModel)) {
+      await saveDeepResearchSelection({
         providerId: prefs.knowledgeProviderId,
         model: prefs.knowledgeModel,
       })
     }
   } catch {
-    entityExtractionProviderId.value = prefs.knowledgeProviderId || ''
-    entityExtractionModel.value = prefs.knowledgeModel || ''
+    deepResearchProviderId.value = prefs.knowledgeProviderId || ''
+    deepResearchModel.value = prefs.knowledgeModel || ''
   }
 }
 
-async function saveEntityExtractionSelection(selection: { providerId: string; model: string }) {
+async function saveDeepResearchSelection(selection: { providerId: string; model: string }) {
   const previous = {
-    providerId: entityExtractionProviderId.value,
-    model: entityExtractionModel.value,
+    providerId: deepResearchProviderId.value,
+    model: deepResearchModel.value,
   }
-  entityExtractionProviderId.value = selection.providerId
-  entityExtractionModel.value = selection.model
+  deepResearchProviderId.value = selection.providerId
+  deepResearchModel.value = selection.model
   prefs.knowledgeProviderId = selection.providerId
   prefs.knowledgeModel = selection.model
-  entityExtractionSaving.value = true
-  entityExtractionStatus.value = 'saving'
+  deepResearchSaving.value = true
+  deepResearchStatus.value = 'saving'
   try {
-    const res = await api.memory.configureEntityExtraction({
+    const res = await api.memory.configureDeepResearch({
       providerId: selection.providerId || undefined,
       model: selection.model || undefined,
     })
-    entityExtractionProviderId.value = res.providerId || ''
-    entityExtractionModel.value = res.model || ''
-    prefs.knowledgeProviderId = entityExtractionProviderId.value
-    prefs.knowledgeModel = entityExtractionModel.value
-    entityExtractionStatus.value = 'saved'
+    deepResearchProviderId.value = res.providerId || ''
+    deepResearchModel.value = res.model || ''
+    prefs.knowledgeProviderId = deepResearchProviderId.value
+    prefs.knowledgeModel = deepResearchModel.value
+    deepResearchStatus.value = 'saved'
   } catch {
-    entityExtractionProviderId.value = previous.providerId
-    entityExtractionModel.value = previous.model
+    deepResearchProviderId.value = previous.providerId
+    deepResearchModel.value = previous.model
     prefs.knowledgeProviderId = previous.providerId
     prefs.knowledgeModel = previous.model
-    entityExtractionStatus.value = 'error'
+    deepResearchStatus.value = 'error'
   }
-  entityExtractionSaving.value = false
+  deepResearchSaving.value = false
 }
 
 async function saveReranker() {
@@ -358,7 +409,7 @@ function cancelDrop() {
 <template>
   <div class="space-y-4">
     <SettingsSubheading
-      v-if="showAnySection(['embedding-model', 'knowledge-extraction', 'reranker'])"
+      v-if="showAnySection(['embedding-model', 'reranker'])"
       label="Retrieval"
     />
 
@@ -538,9 +589,14 @@ function cancelDrop() {
       </div>
     </BaseCard>
 
-    <!-- Knowledge Extraction Model -->
+    <SettingsSubheading
+      v-if="showAnySection(['deep-research', 'dream-mode'])"
+      label="Building Knowledge"
+    />
+
+    <!-- Deep Research Model -->
     <BaseCard
-      v-if="showSection('knowledge-extraction')"
+      v-if="showSection('deep-research')"
       class="p-5 space-y-4"
     >
       <div class="flex items-start gap-3">
@@ -552,44 +608,100 @@ function cancelDrop() {
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
-            Knowledge Extraction Model
+            Deep Research Model
           </h3>
           <p class="text-xs text-theme-500 mt-0.5">
-            Provider and model used when documents are analysed into facts for the local knowledge graph.
+            Provider and model used when documents undergo Deep Research into facts for the local knowledge graph.
           </p>
         </div>
       </div>
 
       <div
         class="pt-1 border-t border-theme-700"
-        :class="{ 'opacity-60': entityExtractionSaving }"
-        :inert="entityExtractionSaving || undefined"
-        :aria-busy="entityExtractionSaving"
+        :class="{ 'opacity-60': deepResearchSaving }"
+        :inert="deepResearchSaving || undefined"
+        :aria-busy="deepResearchSaving"
       >
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <label class="block text-xs text-theme-400">Provider / Model</label>
         </div>
         <ProviderModelSelect
-          :provider-id="entityExtractionProviderId"
-          :model-value="entityExtractionModel"
+          :provider-id="deepResearchProviderId"
+          :model-value="deepResearchModel"
           :providers="providerStore.providers"
           include-default
           default-label="Use active provider default"
           placeholder="Use active provider default"
-          @change="saveEntityExtractionSelection"
+          @change="saveDeepResearchSelection"
         />
         <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
-          This setting is used for explicit knowledge extraction. Leaving it on the default uses the server's active provider and that provider's default model.
+          This setting is used for Deep Research. Leaving it on the default uses the server's active provider and that provider's default model.
         </p>
       </div>
       <div
-        v-if="entityExtractionStatus === 'saving' || entityExtractionStatus === 'error'"
+        v-if="deepResearchStatus === 'saving' || deepResearchStatus === 'error'"
         class="flex justify-end"
       >
         <SettingsPersistenceStatus
           mode="auto"
-          :state="entityExtractionStatus"
+          :state="deepResearchStatus"
         />
+      </div>
+    </BaseCard>
+
+    <!-- Dream Mode -->
+    <BaseCard
+      v-if="showSection('dream-mode')"
+      class="p-6 space-y-4 bg-dream-card"
+    >
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-medium text-gray-200 flex items-center gap-2">
+            <Icon
+              icon="lucide:moon-star"
+              class="w-5 h-5"
+            />
+            Dream Mode
+          </h3>
+          <p class="text-xs text-gray-500 mt-1">
+            Automatically reviews new Free Chat activity and conversations from agents that explicitly allow Dreaming to learn useful facts and update memory.
+            Checks every minute after a conversation has been inactive for 5 minutes, while the server is running.
+            Uses model requests and may incur provider costs. Existing history is used only as context.
+          </p>
+        </div>
+        <ToggleSwitch
+          v-model="dreamEnabled"
+          label="Enable Dream Mode"
+          :disabled="!dreamLoaded || dreamSaving || (!dreamEnabled && !dreamSelectionValid)"
+        />
+      </div>
+      <ProviderModelSelect
+        :provider-id="dreamProviderId"
+        :model-value="dreamModel"
+        :providers="providerStore.providers"
+        placeholder="Select Dream provider and model"
+        dropdown-width="min-w-full"
+        @change="(selection) => { dreamProviderId = selection.providerId; dreamModel = selection.model }"
+      />
+      <p
+        v-if="dreamError"
+        role="alert"
+        class="text-xs text-red-400"
+      >
+        {{ dreamError }}
+      </p>
+      <div class="flex items-center justify-between gap-3">
+        <SettingsPersistenceStatus
+          mode="manual"
+          :state="dreamStatus === 'error' ? 'error' : dreamSaving ? 'saving' : dreamDirty ? 'dirty' : dreamStatus"
+        />
+        <button
+          :disabled="!dreamLoaded || dreamSaving || !dreamDirty || (dreamEnabled && !dreamSelectionValid)"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
+          @click="saveDream"
+        >
+          {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
+        </button>
       </div>
     </BaseCard>
     
@@ -720,3 +832,11 @@ function cancelDrop() {
     </ModalDialog>
   </div>
 </template>
+
+<style scoped>
+.bg-dream-card
+{
+  background: url("../../assets/img/settings/bg-dream.png") no-repeat center center;
+  background-size: cover;
+}
+</style>

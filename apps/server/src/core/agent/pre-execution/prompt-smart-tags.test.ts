@@ -22,7 +22,7 @@ describe('prompt smart tags', () => {
         )
 
         expect(result).toBe(
-            'Ada + Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Spaces are: Project, Shared',
+            'Ada + Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Folders are: Project, Shared',
         )
     })
 

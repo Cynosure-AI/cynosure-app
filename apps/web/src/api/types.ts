@@ -258,6 +258,7 @@ export interface AgentDefinition {
     autoApproveTools: boolean
     autoToolRouting: boolean
     autoMemory: boolean
+    dreamingEnabled: boolean
     autoRouterProviderId: string
     autoRouterModel: string
     generateTitle: boolean
@@ -267,7 +268,7 @@ export interface AgentDefinition {
     sortOrder: number
     tags: string[]
     favorite: boolean
-    memorySpaces: string[]
+    memoryFolders: string[]
     createdAt: number
     updatedAt: number
 }
@@ -291,7 +292,7 @@ export interface AppNotification {
 
 // ── Activity ────────────────────────────────────────────────────────────────
 
-export type ActivityKind = 'instance' | 'artifact' | 'notification' | 'cron' | 'memory' | 'chat' | 'channels'
+export type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
 export interface ActivityArtifact {
     href: string
@@ -324,6 +325,7 @@ export interface ActivityItem {
     agentName: string | null
     agentIconUrl: string | null
     conversationId: string | null
+    conversationTitle?: string | null
     status?: string
     severity?: string
     sourceId?: string
@@ -331,22 +333,25 @@ export interface ActivityItem {
     instanceType?: AgentInstance['type']
     model?: string | null
     artifacts?: ActivityArtifact[]
+    memoryFolderId?: string
+    memoryFileName?: string
+    dreamChanges?: Array<{ tool: string; output: string; memoryFolderId?: string; memoryFileName?: string }>
 }
 
 export type ActivityTotalsByKind = Record<ActivityKind, number>
 
 // ── Memory ──────────────────────────────────────────────────────────────────
 
-export interface MemorySpace {
+export interface MemoryFolder {
     id: string
     name: string
     description: string
-    folderPath: string
-    relativePath: string
+    directoryPath: string
+    categoryPath: string
     depth?: number
-    parentRelativePath?: string | null
+    parentCategoryPath?: string | null
     sortOrder: number
-    isDefault: boolean
+    isUncategorized: boolean
     createdAt: number
     fileCount: number
 }
@@ -364,9 +369,26 @@ export interface MemoryFileStatus {
     /** Approximate count based on file size and the active chunking settings. */
     estimatedChunkCount?: number
     lastIndexedAt?: number
-    knowledgeExtracted: boolean
-    knowledgeExtractedAt?: number
+    deepResearched: boolean
+    deepResearchedAt?: number
+    dreamedAt?: number
     tags: string[]
+}
+
+export interface MemoryRevisionSummary {
+    id: string
+    revisionNumber: number
+    contentHash: string
+    source: 'ai' | 'dream' | 'user' | 'filesystem' | 'import' | 'restore'
+    conversationId?: string
+    agentId?: string
+    messageIds: string[]
+    createdAt: number
+}
+
+export interface MemoryDiffSegment {
+    type: 'unchanged' | 'added' | 'removed'
+    text: string
 }
 
 export interface MemoryDocumentKnowledgePreview {
@@ -379,8 +401,8 @@ export interface MemoryDocumentKnowledgePreview {
 
 export interface MemoryIndexJob<T = unknown> {
     id: string
-    kind: 'reindex' | 'knowledge-extraction' | 'tool-embeddings'
-    spaceId: string
+    kind: 'reindex' | 'deep-research' | 'tool-embeddings'
+    categoryId: string
     fileName: string
     status: 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
     createdAt: number
@@ -556,6 +578,7 @@ export interface StopAllActivityResult {
         cronRuns: number
         channelRuns: number
         memoryJobs: number
+        dreamRuns: number
         memoryReembedding: number
         postActions: number
     }
@@ -614,6 +637,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
         chatEstimatedCost: number | null
         auxiliaryEstimatedCost: number | null
+        dreamingEstimatedCost: number | null
     }
     modelUsage: {
         provider: string
@@ -624,7 +648,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
     }[]
     auxiliaryModelUsage: {
-        kind: 'embedding' | 'reranker' | 'knowledge-extraction' | 'memory-router' | 'tool-router'
+        kind: 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
         provider: string
         model: string
         requestCount: number
@@ -654,4 +678,13 @@ export interface MetricsSummary {
         origin: string
         count: number
     }[]
+}
+
+export interface DreamConfig {
+    enabled: boolean
+    providerId: string
+    model: string
+    windowId: string
+    enabledAt: number
+    startSequence: number
 }

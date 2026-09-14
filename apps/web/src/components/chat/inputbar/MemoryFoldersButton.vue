@@ -3,20 +3,21 @@ import { ref, computed, onMounted } from 'vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
-import MemorySpaceSelectorModal from '../modals/MemorySpaceSelectorModal.vue'
+import MemoryFolderSelectorModal from '../modals/MemoryFolderSelectorModal.vue'
 
 const chatStore = useChatStore()
 
 const showModal = ref(false)
 
-onMounted(() => chatStore.loadMemorySpaces())
+onMounted(() => chatStore.loadMemoryFolders())
 
-const selectedMemorySpaces = computed(() => {
-  const ids = chatStore.freeChatMemorySpaceIds
-  return chatStore.memorySpaces.filter(s => ids.includes(s.id))
+const selectedMemoryFolders = computed(() => {
+  const ids = chatStore.freeChatMemoryFolderIds
+  return chatStore.memoryFolders.filter(s => ids.includes(s.id))
 })
 
-const memorySpaceCount = computed(() => selectedMemorySpaces.value.length)
+const rootSelected = computed(() => selectedMemoryFolders.value.some(category => category.isUncategorized))
+const memoryFolderCount = computed(() => rootSelected.value ? chatStore.memoryFolders.length : selectedMemoryFolders.value.length)
 const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
 </script>
 
@@ -33,23 +34,23 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         :class="{ 'text-emerald-600': chatStore.sessionAutoMemory === true }"
       />
       <span
-        v-if="autoMemoryEnabled || memorySpaceCount > 0"
+        v-if="autoMemoryEnabled || memoryFolderCount > 0"
         class="absolute -top-0.5 -right-0.5 min-w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white px-1 leading-none"
         :class="autoMemoryEnabled ? 'bg-emerald-600' : 'bg-accent-600'"
       >
         <Icon
-          v-if="autoMemoryEnabled && memorySpaceCount === 1 && selectedMemorySpaces[0].isDefault"
-          icon="lucide:sparkles"
+          v-if="rootSelected"
+          icon="lucide:layers-3"
           class="w-2.5 h-2.5"
         />
         <template v-else>
-          {{ memorySpaceCount }}
+          {{ memoryFolderCount }}
         </template>
       </span>
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
-        Memory Folders ({{ memorySpaceCount }} selected)
+        {{ rootSelected ? 'All Memory selected' : `Memory Folders (${memoryFolderCount} selected)` }}
       </div>
       <div
         v-if="autoMemoryEnabled"
@@ -67,9 +68,9 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
         />
         Automatic retrieval off
       </div>
-      <template v-if="selectedMemorySpaces.length">
+      <template v-if="selectedMemoryFolders.length">
         <div
-          v-for="s in selectedMemorySpaces.slice(0, 6)"
+          v-for="s in selectedMemoryFolders.slice(0, 6)"
           :key="s.id"
           class="flex items-start gap-1.5 mb-1 last:mb-0"
         >
@@ -79,18 +80,18 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
           />
           <div class="min-w-0">
             <div class="text-theme-300 text-[11px] truncate">
-              {{ s.name }}
+              {{ s.isUncategorized ? 'All Memory' : s.name }}
             </div>
             <div class="text-theme-500 text-[10px]">
-              {{ s.fileCount }} docs
+              {{ s.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${s.fileCount} docs` }}
             </div>
           </div>
         </div>
         <div
-          v-if="selectedMemorySpaces.length > 6"
+          v-if="selectedMemoryFolders.length > 6"
           class="text-theme-500 text-[10px] mt-1"
         >
-          +{{ selectedMemorySpaces.length - 6 }} more
+          +{{ selectedMemoryFolders.length - 6 }} more
         </div>
       </template>
       <div
@@ -105,5 +106,5 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
     </template>
   </HoverTooltip>
 
-  <MemorySpaceSelectorModal v-model="showModal" />
+  <MemoryFolderSelectorModal v-model="showModal" />
 </template>

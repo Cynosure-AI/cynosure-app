@@ -9,6 +9,7 @@ import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
 import PreTurnContextTimeline from '../chat/PreTurnContextTimeline.vue'
 import PreResponseActionsCard from '../chat/PreResponseActionsCard.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
+import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
@@ -625,6 +626,17 @@ onMounted(() => {
               class="border-t border-indigo-500/15 py-2 overflow-y-auto"
               :class="fullHeightSubAgentGroups.has(entry.key) ? '' : 'max-h-80'"
             >
+              <div
+                v-if="entry.openingMessage"
+                data-subagent-opening-message
+              >
+                <MessageBubble
+                  role="user"
+                  :content="entry.openingMessage"
+                  readonly
+                  fork-disabled
+                />
+              </div>
               <template
                 v-for="inner in entry.entries"
                 :key="inner.key"
@@ -767,6 +779,11 @@ onMounted(() => {
           :iteration="entry.group.iteration"
           :steps="entry.group.steps"
           :is-active="agentStore.isExecuting && entry.key === lastToolGroupKey"
+        />
+
+        <ContinuationRoundMarker
+          v-else-if="entry.type === 'continuation'"
+          :message="entry.step.message"
         />
 
         <!-- Context compact event card -->

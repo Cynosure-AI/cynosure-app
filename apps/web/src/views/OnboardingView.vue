@@ -1,7 +1,24 @@
 <template>
-  <div class="h-full flex flex-col overflow-hidden">
+  <div class="onboarding-shell h-full flex flex-col overflow-hidden">
+    <div
+      class="onboarding-orbit onboarding-orbit--top"
+      aria-hidden="true"
+    />
+    <div
+      class="onboarding-orbit onboarding-orbit--bottom"
+      aria-hidden="true"
+    />
+    <div
+      class="onboarding-dots onboarding-dots--top"
+      aria-hidden="true"
+    />
+    <div
+      class="onboarding-dots onboarding-dots--bottom"
+      aria-hidden="true"
+    />
+
     <!-- ── Header / breadcrumb ─────────────────────────────────────── -->
-    <div class="shrink-0 px-6 pt-5 pb-4 border-b border-theme-800/60">
+    <div class="onboarding-bar relative z-20 shrink-0 px-6 pt-5 pb-4 border-b border-theme-800/60">
       <div class="max-w-2xl mx-auto flex items-center justify-between">
         <!-- Step breadcrumbs (hidden on welcome/done) -->
         <div
@@ -71,7 +88,7 @@
     </div>
 
     <!-- ── Step content ────────────────────────────────────────────── -->
-    <div class="flex-1 overflow-hidden relative">
+    <div class="relative z-10 flex-1 overflow-hidden">
       <div
         v-if="!serverReady"
         class="absolute inset-0 flex items-center justify-center px-6"
@@ -148,7 +165,7 @@
     </div>
 
     <!-- ── Footer / navigation ────────────────────────────────────── -->
-    <div class="shrink-0 px-6 py-4 border-t border-theme-800/60">
+    <div class="onboarding-bar relative z-20 shrink-0 px-6 py-4 border-t border-theme-800/60">
       <div class="max-w-2xl mx-auto flex items-center justify-between gap-3">
         <!-- Back -->
         <button
@@ -438,6 +455,81 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.onboarding-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 4% 3%, color-mix(in srgb, var(--color-accent-600) 14%, transparent), transparent 25rem),
+    radial-gradient(circle at 97% 96%, color-mix(in srgb, var(--color-accent-600) 13%, transparent), transparent 28rem),
+    linear-gradient(145deg, color-mix(in srgb, var(--color-theme-900) 90%, transparent), color-mix(in srgb, var(--color-theme-950) 97%, transparent));
+}
+
+.onboarding-shell::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--color-theme-100) 2%, transparent) 10px 11px);
+  mask-image: linear-gradient(to bottom, transparent 22%, #000 100%);
+  pointer-events: none;
+  content: '';
+}
+
+.onboarding-bar {
+  background: color-mix(in srgb, var(--color-theme-950) 68%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.onboarding-orbit {
+  position: absolute;
+  z-index: 0;
+  width: 28rem;
+  height: 28rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 34%, transparent);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.onboarding-orbit::after {
+  position: absolute;
+  inset: 6rem;
+  border: 1px solid color-mix(in srgb, var(--color-theme-300) 12%, transparent);
+  border-radius: inherit;
+  content: '';
+}
+
+.onboarding-orbit--top {
+  top: -19rem;
+  left: -10rem;
+}
+
+.onboarding-orbit--bottom {
+  right: -11rem;
+  bottom: -20rem;
+}
+
+.onboarding-dots {
+  position: absolute;
+  z-index: 0;
+  width: 10rem;
+  height: 6rem;
+  opacity: .45;
+  background-image: radial-gradient(circle, var(--color-accent-400) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+  pointer-events: none;
+}
+
+.onboarding-dots--top {
+  top: 5.5rem;
+  right: 3rem;
+  mask-image: linear-gradient(135deg, transparent, #000);
+}
+
+.onboarding-dots--bottom {
+  bottom: 5.5rem;
+  left: 3rem;
+  mask-image: linear-gradient(315deg, transparent, #000);
+}
+
 /* Forward transition: enter from right, exit to left */
 .slide-forward-enter-from {
   opacity: 0;
@@ -468,5 +560,41 @@ onUnmounted(() => {
 .slide-backward-leave-to {
   opacity: 0;
   transform: translateX(32px);
+}
+
+@media (max-width: 639px) {
+  .onboarding-orbit {
+    width: 21rem;
+    height: 21rem;
+    opacity: .6;
+  }
+
+  .onboarding-orbit::after {
+    inset: 4.5rem;
+  }
+
+  .onboarding-orbit--top {
+    top: -14rem;
+    left: -9rem;
+  }
+
+  .onboarding-orbit--bottom {
+    right: -10rem;
+    bottom: -15rem;
+  }
+
+  .onboarding-dots {
+    opacity: .32;
+  }
+
+  .onboarding-dots--top {
+    top: 4.5rem;
+    right: -2rem;
+  }
+
+  .onboarding-dots--bottom {
+    bottom: 4.5rem;
+    left: -2rem;
+  }
 }
 </style>

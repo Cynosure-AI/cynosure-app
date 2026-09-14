@@ -296,6 +296,13 @@ export class AgentExecutor {
 
         if (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
             openPlanRecoveryAttempts++
+            this.emit('step:status', {
+                taskId,
+                conversationId,
+                iteration: 1,
+                status: 'continuing',
+                message: `Open tasks remain — starting continuation round ${openPlanRecoveryAttempts}.`,
+            })
             currentMessages = this.withOpenPlanRecoveryPrompt(currentMessages, fullContent)
             let recoveryResult: Awaited<ReturnType<AgentExecutor['streamLLMRound']>>
             try {
@@ -461,6 +468,13 @@ export class AgentExecutor {
                         throw new IncompletePlanningRunError()
                     }
                     openPlanRecoveryAttempts++
+                    this.emit('step:status', {
+                        taskId,
+                        conversationId,
+                        iteration: round + 2,
+                        status: 'continuing',
+                        message: `Open tasks remain — starting continuation round ${openPlanRecoveryAttempts}.`,
+                    })
                     currentMessages = this.withOpenPlanRecoveryPrompt(currentMessages, fullContent)
 
                     const recoveryResult = await this.streamLLMRound(currentMessages, activeStreamId)

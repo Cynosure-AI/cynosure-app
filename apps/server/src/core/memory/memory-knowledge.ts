@@ -22,10 +22,10 @@ import { MemoryKnowledgeGraphStore, type DocumentKnowledgePreview } from './memo
 export type { DocumentKnowledgePreview, DocumentKnowledgePreviewItem } from './memory-knowledge-graph.js'
 
 export const MEMORY_KNOWLEDGE_PIPELINE_VERSION = 'knowledge-v4.1.0'
-export const MEMORY_KNOWLEDGE_PROMPT_VERSION = 'knowledge-extraction-v5'
+export const MEMORY_KNOWLEDGE_PROMPT_VERSION = 'deep-research-v5'
 export const MEMORY_KNOWLEDGE_VECTOR_TABLE = 'memory_knowledge_v2'
 
-export interface KnowledgeExtractedEntity {
+export interface DeepResearchExtractedEntity {
   name: string
   type?: KnowledgeEntityType
   aliases?: string[]
@@ -33,11 +33,11 @@ export interface KnowledgeExtractedEntity {
   description?: string
 }
 
-export interface KnowledgeExtractedRelation {
+export interface DeepResearchExtractedRelation {
   action?: 'assert' | 'delete'
-  from: KnowledgeExtractedEntity
+  from: DeepResearchExtractedEntity
   relation: string
-  to?: KnowledgeExtractedEntity
+  to?: DeepResearchExtractedEntity
   objectValue?: unknown
   importance?: ImportanceLevel
   note?: string
@@ -47,13 +47,13 @@ export interface KnowledgeExtractedRelation {
   sourceChunkIndex?: number
 }
 
-export interface KnowledgeExtractedMention {
-  entity: KnowledgeExtractedEntity
+export interface DeepResearchExtractedMention {
+  entity: DeepResearchExtractedEntity
   sourceChunkIndex: number
   note?: string
 }
 
-export interface KnowledgeExtractedChunkTags {
+export interface DeepResearchExtractedChunkTags {
   sourceChunkIndex: number
   tags: string[]
 }
@@ -285,7 +285,7 @@ export class MemoryKnowledgeStore {
     runId: string
     namespaceId: string
     documentId: string
-    entity: KnowledgeExtractedEntity
+    entity: DeepResearchExtractedEntity
     now: number
   }): { id: string; confidence: number; created: boolean } | null {
     const db = getDb()
@@ -391,13 +391,13 @@ export class MemoryKnowledgeStore {
   publishDocument(opts: {
     documentId: string
     contentHash: string
-    spaceId: string
+    categoryId: string
     fileName: string
     sourceId: string
     chunks: PreparedMemoryChunk[]
-    relations: KnowledgeExtractedRelation[]
-    mentions?: KnowledgeExtractedMention[]
-    chunkTags?: KnowledgeExtractedChunkTags[]
+    relations: DeepResearchExtractedRelation[]
+    mentions?: DeepResearchExtractedMention[]
+    chunkTags?: DeepResearchExtractedChunkTags[]
     reusableChunks?: ReusableKnowledgeChunk[]
     extractorProviderId?: string
     extractorModel?: string
@@ -439,10 +439,10 @@ export class MemoryKnowledgeStore {
     db.transaction(() => {
       db.prepare(`
         INSERT INTO memory_knowledge_index_runs
-          (id, document_id, content_hash, space_id, file_name, source_id, pipeline_version,
-           prompt_version, extractor_provider_id, extractor_model, status, started_at)
+          (id, document_id, content_hash, category_id, file_name, source_id, pipeline_version,
+           prompt_version, deep_research_provider_id, deep_research_model, status, started_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'staging', ?)
-      `).run(runId, opts.documentId, opts.contentHash, opts.spaceId, opts.fileName, opts.sourceId,
+      `).run(runId, opts.documentId, opts.contentHash, opts.categoryId, opts.fileName, opts.sourceId,
         MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION,
         opts.extractorProviderId || '', opts.extractorModel || '', now)
 
@@ -450,14 +450,14 @@ export class MemoryKnowledgeStore {
       const chunksByIndex = new Map(opts.chunks.map((chunk) => [chunk.chunkIndex, chunk]))
       const insertTextUnit = db.prepare(`
         INSERT INTO memory_knowledge_text_units
-          (id, run_id, document_id, content_hash, space_id, file_name, chunk_index,
+          (id, run_id, document_id, content_hash, category_id, file_name, chunk_index,
            text, text_hash, document_title, section_path, tags_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       for (const chunk of opts.chunks) {
         const id = nanoid()
         textUnitIds.set(chunk.chunkIndex, id)
-        insertTextUnit.run(id, runId, opts.documentId, opts.contentHash, opts.spaceId, opts.fileName,
+        insertTextUnit.run(id, runId, opts.documentId, opts.contentHash, opts.categoryId, opts.fileName,
           chunk.chunkIndex, chunk.text, chunk.contentHash || createHash('sha256').update(chunk.text).digest('hex'),
           chunk.documentTitle, chunk.sectionPath, JSON.stringify(tagsByChunk.get(chunk.chunkIndex) || []), now)
       }
@@ -521,7 +521,7 @@ export class MemoryKnowledgeStore {
       const addEntityMentions = (
         chunk: PreparedMemoryChunk,
         textUnitId: string,
-        entity: KnowledgeExtractedEntity,
+        entity: DeepResearchExtractedEntity,
         resolvedId: string,
         resolutionConfidence: number,
         contextText: string,
@@ -549,7 +549,7 @@ export class MemoryKnowledgeStore {
           rejectedClaims++
           continue
         }
-        const entity = this.resolveEntity({ runId, namespaceId: opts.spaceId, documentId: opts.documentId, entity: mention.entity, now })
+        const entity = this.resolveEntity({ runId, namespaceId: opts.categoryId, documentId: opts.documentId, entity: mention.entity, now })
         if (!entity) {
           rejectedClaims++
           continue
@@ -578,9 +578,9 @@ export class MemoryKnowledgeStore {
           continue
         }
 
-        const subject = this.resolveEntity({ runId, namespaceId: opts.spaceId, documentId: opts.documentId, entity: relation.from, now })
+        const subject = this.resolveEntity({ runId, namespaceId: opts.categoryId, documentId: opts.documentId, entity: relation.from, now })
         const object = relation.to
-          ? this.resolveEntity({ runId, namespaceId: opts.spaceId, documentId: opts.documentId, entity: relation.to, now })
+          ? this.resolveEntity({ runId, namespaceId: opts.categoryId, documentId: opts.documentId, entity: relation.to, now })
           : null
         if (!subject || (relation.to && !object)) {
           rejectedClaims++
@@ -596,7 +596,7 @@ export class MemoryKnowledgeStore {
           WHERE namespace_id = ? AND subject_entity_id = ? AND predicate_id = ?
             AND normalized_object_key = ? AND status IN ('active', 'staging', 'disputed', 'retired')
           ORDER BY updated_at DESC LIMIT 1
-        `).get(opts.spaceId, subject.id, predicateId, objectKey) as { id: string } | undefined
+        `).get(opts.categoryId, subject.id, predicateId, objectKey) as { id: string } | undefined
         const assertionId = existingAssertion?.id || nanoid()
         if (!existingAssertion) {
           db.prepare(`
@@ -605,7 +605,7 @@ export class MemoryKnowledgeStore {
                object_value_json, normalized_object_key, status, importance, valid_from,
                valid_to, observed_at, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'staging', ?, ?, ?, ?, ?, ?)
-          `).run(assertionId, opts.spaceId, subject.id, predicateId, object?.id || null, objectJson,
+          `).run(assertionId, opts.categoryId, subject.id, predicateId, object?.id || null, objectJson,
             objectKey, relation.importance ?? 1, parseTime(relation.validFrom), parseTime(relation.validTo),
             parseTime(relation.observedAt) || now, now, now)
           assertionCount++
@@ -713,7 +713,7 @@ export class MemoryKnowledgeStore {
         JOIN memory_knowledge_index_runs r ON r.id = ev.run_id AND r.status = 'active'
         WHERE a.namespace_id = ? AND a.status = 'active' AND p.cardinality = 'one_per_subject'
         GROUP BY a.id
-      `).all(opts.spaceId) as Array<Record<string, unknown>>
+      `).all(opts.categoryId) as Array<Record<string, unknown>>
       const groups = new Map<string, Array<Record<string, unknown>>>()
       for (const assertion of functionalAssertions) {
         const key = `${assertion.subject_entity_id}\u0000${assertion.predicate_id}`
@@ -831,12 +831,12 @@ export class MemoryKnowledgeStore {
     return this.graph.getEdge(id)
   }
 
-  graphStats(spaceIds: string[] = []): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
-    return this.graph.graphStats(spaceIds)
+  graphStats(categoryIds: string[] = []): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
+    return this.graph.graphStats(categoryIds)
   }
 
-  documentExtractionPreview(spaceId: string, fileName: string, limit = 15): DocumentKnowledgePreview {
-    return this.graph.documentExtractionPreview(spaceId, fileName, limit)
+  documentDeepResearchPreview(categoryId: string, fileName: string, limit = 15): DocumentKnowledgePreview {
+    return this.graph.documentDeepResearchPreview(categoryId, fileName, limit)
   }
 
   browseGraph(opts: {
@@ -845,20 +845,20 @@ export class MemoryKnowledgeStore {
     nodeIds?: string[]
     limit?: number
     minImportance?: ImportanceLevel
-    spaceIds?: string[]
+    categoryIds?: string[]
     depth?: number
   } = {}): KnowledgeGraphProjection {
     return this.graph.browseGraph(opts)
   }
 
-  suggestNodes(query: string, limit = 8, spaceIds: string[] = []): KnowledgeEntity[] {
-    return this.graph.suggestNodes(query, limit, spaceIds)
+  suggestNodes(query: string, limit = 8, categoryIds: string[] = []): KnowledgeEntity[] {
+    return this.graph.suggestNodes(query, limit, categoryIds)
   }
 
   async mergeEntities(opts: {
     entityIds: string[]
     canonicalName: string
-    spaceIds?: string[]
+    categoryIds?: string[]
   }): Promise<KnowledgeEntityMergeResult> {
     let entityIds = Array.from(new Set(opts.entityIds.map((id) => id.trim()).filter(Boolean))).slice(0, 20)
     if (entityIds.length < 1) throw new Error('ENTITY_MERGE_REQUIRES_MULTIPLE')
@@ -874,8 +874,8 @@ export class MemoryKnowledgeStore {
     if (rows.length !== entityIds.length) throw new Error('ENTITY_MERGE_ENTITY_NOT_FOUND')
     const rowsById = new Map(rows.map((row) => [String(row.id), row]))
     const primary = rowsById.get(entityIds[0])!
-    const allowedSpaces = new Set((opts.spaceIds || []).filter(Boolean))
-    if (allowedSpaces.size > 0 && rows.some((row) => !allowedSpaces.has(String(row.namespace_id)))) {
+    const allowedCategories = new Set((opts.categoryIds || []).filter(Boolean))
+    if (allowedCategories.size > 0 && rows.some((row) => !allowedCategories.has(String(row.namespace_id)))) {
       throw new Error('ENTITY_MERGE_OUT_OF_SCOPE')
     }
 
@@ -884,17 +884,17 @@ export class MemoryKnowledgeStore {
     const suppliedCanonical = rows.find((row) =>
       String(row.normalized_name) === normalizedName && String(row.entity_type) === primaryType)
     if (suppliedCanonical) primaryId = String(suppliedCanonical.id)
-    const conflictSpaces = allowedSpaces.size > 0
-      ? [...allowedSpaces]
+    const conflictCategories = allowedCategories.size > 0
+      ? [...allowedCategories]
       : Array.from(new Set(rows.map((row) => String(row.namespace_id))))
-    const conflictSpacePlaceholders = conflictSpaces.map(() => '?').join(', ')
+    const conflictCategoryPlaceholders = conflictCategories.map(() => '?').join(', ')
     const conflict = suppliedCanonical ? undefined : getDb().prepare(`
       SELECT * FROM memory_knowledge_entities
-      WHERE namespace_id IN (${conflictSpacePlaceholders}) AND normalized_name = ? AND entity_type = ?
+      WHERE namespace_id IN (${conflictCategoryPlaceholders}) AND normalized_name = ? AND entity_type = ?
         AND status = 'active' AND id NOT IN (${placeholders})
       ORDER BY updated_at DESC
       LIMIT 1
-    `).get(...conflictSpaces, normalizedName, primaryType, ...entityIds) as Record<string, unknown> | undefined
+    `).get(...conflictCategories, normalizedName, primaryType, ...entityIds) as Record<string, unknown> | undefined
     if (conflict) {
       primaryId = String(conflict.id)
       entityIds = [primaryId, ...entityIds]
@@ -1037,7 +1037,7 @@ export class MemoryKnowledgeStore {
 
       // Preserve aliases on merged rows as namespace-local redirects so later
       // indexing resolves to the shared canonical entity instead of recreating
-      // the duplicate in its original memory space.
+      // the duplicate in its original memory folder.
       getDb().prepare('DELETE FROM memory_knowledge_entity_aliases WHERE entity_id = ?').run(primaryId)
       const insertAlias = getDb().prepare(`
         INSERT INTO memory_knowledge_entity_aliases
@@ -1173,12 +1173,12 @@ export class MemoryKnowledgeStore {
     return this.getEdge(id)
   }
 
-  deleteEdge(id: string, spaceIds: string[] = []): DeleteKnowledgeAssertionResult {
-    const deleted = this.deleteEdgesByIds([id], spaceIds)
+  deleteEdge(id: string, categoryIds: string[] = []): DeleteKnowledgeAssertionResult {
+    const deleted = this.deleteEdgesByIds([id], categoryIds)
     return { edgeDeleted: deleted === 1, orphanedNodeIds: [] }
   }
 
-  deleteEdgesByIds(values: string[], spaceIds: string[] = []): number {
+  deleteEdgesByIds(values: string[], categoryIds: string[] = []): number {
     const ids = Array.from(new Set(values.map((id) => id.trim()).filter(Boolean))).slice(0, 1000)
     if (!ids.length) return 0
     const db = getDb()
@@ -1188,14 +1188,14 @@ export class MemoryKnowledgeStore {
       WHERE id IN (${placeholders}) AND status IN ('active', 'disputed')
     `).all(...ids) as Array<{ id: string; predicate_id: string }>
     if (assertions.length !== ids.length) return 0
-    if (spaceIds.length) {
-      const scopePlaceholders = spaceIds.map(() => '?').join(', ')
+    if (categoryIds.length) {
+      const scopePlaceholders = categoryIds.map(() => '?').join(', ')
       const allowed = Number((db.prepare(`
         SELECT COUNT(DISTINCT ev.assertion_id) AS count
         FROM memory_knowledge_assertion_evidence ev
         JOIN memory_knowledge_index_runs r ON r.id = ev.run_id AND r.status = 'active'
-        WHERE ev.assertion_id IN (${placeholders}) AND r.space_id IN (${scopePlaceholders})
-      `).get(...ids, ...spaceIds) as { count: number }).count)
+        WHERE ev.assertion_id IN (${placeholders}) AND r.category_id IN (${scopePlaceholders})
+      `).get(...ids, ...categoryIds) as { count: number }).count)
       if (allowed !== ids.length) return 0
     }
     const activeRuns = db.prepare(`
@@ -1224,26 +1224,26 @@ export class MemoryKnowledgeStore {
     return ids.length
   }
 
-  deleteMatchingEdge(fromName: string, relation: string, toName: string, spaceIds: string[]): DeleteKnowledgeAssertionResult {
+  deleteMatchingEdge(fromName: string, relation: string, toName: string, categoryIds: string[]): DeleteKnowledgeAssertionResult {
     const normalizedRelation = this.resolvePredicate(relation)
-    const row = this.graph.graphRows(spaceIds, 5000).find((candidate) => normalize(candidate.subject_name) === normalize(fromName) && normalize(candidate.object_name) === normalize(toName) && String(candidate.canonical_name) === normalizedRelation)
-    return row ? this.deleteEdge(String(row.id), spaceIds) : { edgeDeleted: false, orphanedNodeIds: [] }
+    const row = this.graph.graphRows(categoryIds, 5000).find((candidate) => normalize(candidate.subject_name) === normalize(fromName) && normalize(candidate.object_name) === normalize(toName) && String(candidate.canonical_name) === normalizedRelation)
+    return row ? this.deleteEdge(String(row.id), categoryIds) : { edgeDeleted: false, orphanedNodeIds: [] }
   }
 
   assertRelationship(opts: {
-    spaceId: string
-    from: KnowledgeExtractedEntity
+    categoryId: string
+    from: DeepResearchExtractedEntity
     relation: string
-    to: KnowledgeExtractedEntity
+    to: DeepResearchExtractedEntity
     importance?: ImportanceLevel
     note?: string
   }): KnowledgeAssertion {
     this.ensurePredicateRegistry()
     const db = getDb()
     const now = Date.now()
-    const runId = `manual-knowledge:${opts.spaceId}`
-    const documentId = `manual-relationships:${opts.spaceId}`
-    const sourceId = `manual:${opts.spaceId}:relationship-assertions`
+    const runId = `manual-knowledge:${opts.categoryId}`
+    const documentId = `manual-relationships:${opts.categoryId}`
+    const sourceId = `manual:${opts.categoryId}:relationship-assertions`
     const contentHash = 'manual-knowledge-v1'
     const relation = this.resolvePredicate(opts.relation)
     const note = cleanDisplay(opts.note, 600) || `${opts.from.name} ${relation.replace(/_/g, ' ')} ${opts.to.name}.`
@@ -1252,17 +1252,17 @@ export class MemoryKnowledgeStore {
     db.transaction(() => {
       db.prepare(`
         INSERT INTO memory_knowledge_index_runs
-          (id, document_id, content_hash, space_id, file_name, source_id, pipeline_version,
-           prompt_version, extractor_provider_id, extractor_model, status, started_at,
+          (id, document_id, content_hash, category_id, file_name, source_id, pipeline_version,
+           prompt_version, deep_research_provider_id, deep_research_model, status, started_at,
            completed_at, activated_at, search_projection_status)
         VALUES (?, ?, ?, ?, 'Manual relationships', ?, ?, ?, '', '', 'active', ?, ?, ?, 'pending')
         ON CONFLICT(id) DO UPDATE SET status = 'active', activated_at = excluded.activated_at,
           search_projection_status = 'pending'
-      `).run(runId, documentId, contentHash, opts.spaceId, sourceId,
+      `).run(runId, documentId, contentHash, opts.categoryId, sourceId,
         MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION, now, now, now)
 
-      const subject = this.resolveEntity({ runId, namespaceId: opts.spaceId, documentId, entity: opts.from, now })
-      const object = this.resolveEntity({ runId, namespaceId: opts.spaceId, documentId, entity: opts.to, now })
+      const subject = this.resolveEntity({ runId, namespaceId: opts.categoryId, documentId, entity: opts.from, now })
+      const object = this.resolveEntity({ runId, namespaceId: opts.categoryId, documentId, entity: opts.to, now })
       if (!subject || !object) throw new Error('KNOWLEDGE_ENTITY_INVALID')
       const objectKey = `entity:${object.id}`
       const existing = db.prepare(`
@@ -1270,7 +1270,7 @@ export class MemoryKnowledgeStore {
         WHERE namespace_id = ? AND subject_entity_id = ? AND predicate_id = ?
           AND normalized_object_key = ? AND status IN ('active', 'disputed', 'retired', 'retracted')
         ORDER BY updated_at DESC LIMIT 1
-      `).get(opts.spaceId, subject.id, relation, objectKey) as { id: string } | undefined
+      `).get(opts.categoryId, subject.id, relation, objectKey) as { id: string } | undefined
       assertionId = existing?.id || nanoid()
       if (existing) {
         db.prepare(`UPDATE memory_knowledge_assertions SET status = 'active', importance = MAX(importance, ?), updated_at = ? WHERE id = ?`)
@@ -1281,17 +1281,17 @@ export class MemoryKnowledgeStore {
             (id, namespace_id, subject_entity_id, predicate_id, object_entity_id, object_value_json,
              normalized_object_key, status, importance, observed_at, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, NULL, ?, 'active', ?, ?, ?, ?)
-        `).run(assertionId, opts.spaceId, subject.id, relation, object.id, objectKey, opts.importance ?? 2, now, now, now)
+        `).run(assertionId, opts.categoryId, subject.id, relation, object.id, objectKey, opts.importance ?? 2, now, now, now)
       }
 
       const chunkIndex = Number((db.prepare(`SELECT COALESCE(MAX(chunk_index), -1) + 1 AS next FROM memory_knowledge_text_units WHERE run_id = ?`).get(runId) as { next: number }).next)
       const textUnitId = nanoid()
       db.prepare(`
         INSERT INTO memory_knowledge_text_units
-          (id, run_id, document_id, content_hash, space_id, file_name, chunk_index, text,
+          (id, run_id, document_id, content_hash, category_id, file_name, chunk_index, text,
            text_hash, document_title, section_path, created_at)
         VALUES (?, ?, ?, ?, ?, 'Manual relationships', ?, ?, ?, 'Manual relationships', 'Assertions', ?)
-      `).run(textUnitId, runId, documentId, contentHash, opts.spaceId, chunkIndex, note,
+      `).run(textUnitId, runId, documentId, contentHash, opts.categoryId, chunkIndex, note,
         createHash('sha256').update(note).digest('hex'), now)
       db.prepare(`
         INSERT INTO memory_knowledge_assertion_evidence
@@ -1324,7 +1324,7 @@ export class MemoryKnowledgeStore {
   async reset(): Promise<{ nodesDeleted: number; edgesDeleted: number }> {
     const before = this.graphStats()
     this.resetGeneration++
-    cancelMemoryIndexJobsByKind('knowledge-extraction')
+    cancelMemoryIndexJobsByKind('deep-research')
     const db = getDb()
     db.transaction(() => {
       db.prepare(`DELETE FROM memory_knowledge_assertion_corrections`).run()
@@ -1336,8 +1336,8 @@ export class MemoryKnowledgeStore {
       db.prepare(`DELETE FROM memory_knowledge_entities`).run()
       db.prepare(`DELETE FROM memory_knowledge_text_units`).run()
       db.prepare(`DELETE FROM memory_knowledge_index_runs`).run()
-      db.prepare(`DELETE FROM memory_index_jobs WHERE kind = 'knowledge-extraction'`).run()
-      db.prepare(`UPDATE memory_file_index SET knowledge_extracted_at = 0, tags_json = '[]'`).run()
+      db.prepare(`DELETE FROM memory_index_jobs WHERE kind = 'deep-research'`).run()
+      db.prepare(`UPDATE memory_file_index SET deep_researched_at = 0, tags_json = '[]'`).run()
     })()
     getEventBus().emit('memory:knowledge-reset', { resetAt: Date.now() })
     await getRAGStore().deleteTable(MEMORY_KNOWLEDGE_VECTOR_TABLE)
@@ -1426,10 +1426,10 @@ export class MemoryKnowledgeStore {
 
   private resolveQuerySeedNodes(
     query: string,
-    spaceIds: string[],
+    categoryIds: string[],
     opts: { allowAmbiguousExactMatches?: boolean } = {},
   ): KnowledgeEntity[] {
-    const scopes = Array.from(new Set(spaceIds.filter(Boolean)))
+    const scopes = Array.from(new Set(categoryIds.filter(Boolean)))
     if (!scopes.length) return []
     const rows = getDb().prepare(`
       SELECT e.*, GROUP_CONCAT(DISTINCT a.normalized_alias) AS normalized_aliases
@@ -1437,7 +1437,7 @@ export class MemoryKnowledgeStore {
       JOIN memory_knowledge_entity_mentions m ON m.entity_id = e.id
       JOIN memory_knowledge_index_runs r ON r.id = m.run_id AND r.status = 'active'
       LEFT JOIN memory_knowledge_entity_aliases a ON a.entity_id = e.id
-      WHERE e.status = 'active' AND r.space_id IN (${scopes.map(() => '?').join(', ')})
+      WHERE e.status = 'active' AND r.category_id IN (${scopes.map(() => '?').join(', ')})
       GROUP BY e.id
       ORDER BY e.updated_at DESC
     `).all(...scopes) as Array<Record<string, unknown>>
@@ -1493,7 +1493,7 @@ export class MemoryKnowledgeStore {
       const candidateCount = Math.min(100, Math.max(24, reranker.getCandidateCount(limit * 4)))
       const embedding = await getEmbeddingProvider().embed(query)
       const rag = getRAGStore()
-      const filter = lanceDbInFilter('spaceId', scopes)
+      const filter = lanceDbInFilter('categoryId', scopes)
       const [dense, lexical] = await Promise.all([
         rag.search(MEMORY_KNOWLEDGE_VECTOR_TABLE, embedding.vector, candidateCount, filter),
         rag.lexicalSearch(MEMORY_KNOWLEDGE_VECTOR_TABLE, query, candidateCount, filter),
@@ -1519,12 +1519,12 @@ export class MemoryKnowledgeStore {
 
   async search(
     query: string,
-    spaceIds: string[],
+    categoryIds: string[],
     limit = 8,
     opts: { depth?: number; allowAmbiguousExactMatches?: boolean } = {},
   ): Promise<KnowledgeSearchResult> {
     const terms = queryTerms(query)
-    const scopes = Array.from(new Set(spaceIds.filter(Boolean)))
+    const scopes = Array.from(new Set(categoryIds.filter(Boolean)))
     if (!terms.length || !scopes.length) return { sourceChunks: [] }
     const depth = Math.max(1, Math.min(3, Math.floor(opts.depth || 1)))
     const exactSeedNodes = this.resolveQuerySeedNodes(query, scopes, {
@@ -1600,7 +1600,7 @@ export class MemoryKnowledgeStore {
         ev.note AS extraction_note, ev.extractor_confidence, ev.entity_resolution_confidence, ev.source_trust,
         ev.entailment_score, c.evidence_text AS correction_evidence, c.confidence AS manual_confidence,
         ev.text_unit_id, tu.text AS source_text, tu.chunk_index,
-        tu.document_title, tu.section_path, tu.text_hash, r.space_id, r.file_name,
+        tu.document_title, tu.section_path, tu.text_hash, r.category_id, r.file_name,
         r.document_id, r.content_hash, r.source_id, r.activated_at
       FROM memory_knowledge_assertions a
       JOIN memory_knowledge_predicates p ON p.id = a.predicate_id
@@ -1613,7 +1613,7 @@ export class MemoryKnowledgeStore {
         WHERE correction.assertion_id = a.id ORDER BY correction.created_at DESC LIMIT 1
       )
       JOIN memory_knowledge_index_runs r ON r.id = ev.run_id AND r.status = 'active'
-      WHERE a.status IN ('active', 'disputed') AND r.space_id IN (${scopePlaceholders})
+      WHERE a.status IN ('active', 'disputed') AND r.category_id IN (${scopePlaceholders})
         ${validityClause}
         AND ${relevanceClause}
       ORDER BY a.importance DESC, ev.source_trust DESC, ev.extractor_confidence DESC, r.activated_at DESC
@@ -1659,7 +1659,7 @@ export class MemoryKnowledgeStore {
           ev.note AS extraction_note, ev.extractor_confidence, ev.entity_resolution_confidence, ev.source_trust,
           ev.entailment_score, c.evidence_text AS correction_evidence, c.confidence AS manual_confidence,
           ev.text_unit_id, tu.text AS source_text, tu.chunk_index,
-          tu.document_title, tu.section_path, tu.text_hash, r.space_id, r.file_name,
+          tu.document_title, tu.section_path, tu.text_hash, r.category_id, r.file_name,
           r.document_id, r.content_hash, r.source_id, r.activated_at
         FROM memory_knowledge_assertions a
         JOIN memory_knowledge_predicates p ON p.id = a.predicate_id
@@ -1672,7 +1672,7 @@ export class MemoryKnowledgeStore {
           WHERE correction.assertion_id = a.id ORDER BY correction.created_at DESC LIMIT 1
         )
         JOIN memory_knowledge_index_runs r ON r.id = ev.run_id AND r.status = 'active'
-        WHERE a.status IN ('active', 'disputed') AND r.space_id IN (${scopePlaceholders})
+        WHERE a.status IN ('active', 'disputed') AND r.category_id IN (${scopePlaceholders})
           ${validityClause}
         ORDER BY a.importance DESC, r.activated_at DESC
         LIMIT 3000
@@ -1742,12 +1742,12 @@ export class MemoryKnowledgeStore {
       SELECT DISTINCT e.id, e.canonical_name, e.normalized_name, e.entity_type,
         e.created_at, e.updated_at, m.resolution_confidence, m.text_unit_id,
         tu.text AS source_text, tu.text_hash, tu.chunk_index, tu.document_title,
-        tu.section_path, r.space_id, r.file_name, r.document_id, r.content_hash
+        tu.section_path, r.category_id, r.file_name, r.document_id, r.content_hash
       FROM memory_knowledge_entity_mentions m
       JOIN memory_knowledge_entities e ON e.id = m.entity_id AND e.status = 'active'
       JOIN memory_knowledge_text_units tu ON tu.id = m.text_unit_id
       JOIN memory_knowledge_index_runs r ON r.id = m.run_id AND r.status = 'active'
-      WHERE r.space_id IN (${scopePlaceholders}) AND ((${mentionLikeClause}) ${entityVectorClause})
+      WHERE r.category_id IN (${scopePlaceholders}) AND ((${mentionLikeClause}) ${entityVectorClause})
         AND NOT EXISTS (
           SELECT 1 FROM memory_knowledge_assertion_evidence corrected_ev
           JOIN memory_knowledge_assertion_corrections correction ON correction.assertion_id = corrected_ev.assertion_id
@@ -1766,7 +1766,7 @@ export class MemoryKnowledgeStore {
       if (!sourceChunks.has(chunkKey)) sourceChunks.set(chunkKey, {
         id: chunkKey, text: String(row.source_text), source: 'memory', score: Number(row.resolution_confidence),
         scoreType: 'entity-resolution', sourceFile: String(row.file_name), chunkIndex: Number(row.chunk_index),
-        spaceId: String(row.space_id), documentTitle: String(row.document_title), sectionPath: String(row.section_path),
+        categoryId: String(row.category_id), documentTitle: String(row.document_title), sectionPath: String(row.section_path),
         contentHash: String(row.text_hash), documentId: String(row.document_id), revision: String(row.content_hash),
       })
     }
@@ -1822,7 +1822,7 @@ export class MemoryKnowledgeStore {
       if (!row.correction_evidence && !sourceChunks.has(chunkKey)) sourceChunks.set(chunkKey, {
         id: chunkKey, text: String(row.source_text), source: 'memory', score: chosenScores.get(String(row.id)) || 0,
         scoreType: 'fusion', sourceFile: String(row.file_name), chunkIndex: Number(row.chunk_index),
-        spaceId: String(row.space_id), documentTitle: String(row.document_title), sectionPath: String(row.section_path),
+        categoryId: String(row.category_id), documentTitle: String(row.document_title), sectionPath: String(row.section_path),
         contentHash: String(row.text_hash), documentId: String(row.document_id), revision: String(row.content_hash),
       })
     }
@@ -1830,13 +1830,13 @@ export class MemoryKnowledgeStore {
     if (assertionIds.length) {
       const evidenceRows = getDb().prepare(`
         SELECT ev.assertion_id, ev.text_unit_id, tu.text AS source_text, tu.chunk_index, tu.document_title,
-          tu.section_path, tu.text_hash, r.space_id, r.file_name, r.document_id,
+          tu.section_path, tu.text_hash, r.category_id, r.file_name, r.document_id,
           r.content_hash, r.source_id
         FROM memory_knowledge_assertion_evidence ev
         JOIN memory_knowledge_text_units tu ON tu.id = ev.text_unit_id
         JOIN memory_knowledge_index_runs r ON r.id = ev.run_id AND r.status = 'active'
         WHERE ev.assertion_id IN (${assertionIds.map(() => '?').join(', ')})
-          AND ev.quote_verified = 1 AND r.space_id IN (${scopePlaceholders})
+          AND ev.quote_verified = 1 AND r.category_id IN (${scopePlaceholders})
           AND NOT EXISTS (SELECT 1 FROM memory_knowledge_assertion_corrections c WHERE c.assertion_id = ev.assertion_id)
         ORDER BY r.activated_at DESC, tu.chunk_index
       `).all(...assertionIds, ...scopes) as Array<Record<string, unknown>>
@@ -1847,7 +1847,7 @@ export class MemoryKnowledgeStore {
         sourceChunks.set(chunkKey, {
           id: chunkKey, text: String(row.source_text), source: 'memory', score: assertionRelevance,
           scoreType: 'fusion', sourceFile: String(row.file_name), chunkIndex: Number(row.chunk_index),
-          spaceId: String(row.space_id), documentTitle: String(row.document_title), sectionPath: String(row.section_path),
+          categoryId: String(row.category_id), documentTitle: String(row.document_title), sectionPath: String(row.section_path),
           contentHash: String(row.text_hash), documentId: String(row.document_id), revision: String(row.content_hash),
         })
       }

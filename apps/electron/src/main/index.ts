@@ -127,7 +127,7 @@ if (!hasSingleInstanceLock) {
 // ── Path resolution ────────────────────────────────────────────────────────────
 
 function resolveServerEntry(): string {
-    if (is.dev) return join(__dirname, '../../../server/dist/index.js')
+    if (is.dev) return join(__dirname, '../../../server/src/index.ts')
     return join(process.resourcesPath, 'server/dist/index.js')
 }
 

@@ -24,7 +24,8 @@ import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
-import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
+import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
@@ -36,7 +37,7 @@ import {
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
-import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemorySpaceOverrides, resolveToolSelection } from '../core/chat/run-config.js'
+import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 import type { ChatQueueRequest } from '@shared/types'
@@ -270,7 +271,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         systemPrompt,
         generateTitle: generateTitlePref,
         subAgents: reqSubAgents,
-        memorySpaceIds: reqMemorySpaceIds,
+        memoryFolderIds: reqMemoryFolderIds,
         thinkingEnabled: reqThinkingEnabled,
         reasoningEffort: reqReasoningEffort,
         contextStrategy: reqContextStrategy,
@@ -324,14 +325,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
       }
 
+      const stagedIds = files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || []
+      const preprocessedAttachments = request.stagedFileArtifacts || takeStagedChatAttachments(conversationId, stagedIds)
+      const reusedAttachments = request.stagedFileArtifacts ? [] : (await Promise.all(
+        (files || []).flatMap(file => file.existingAttachmentId ? [reuseConversationAttachment(conversationId, file.existingAttachmentId)] : []),
+      )).filter((file): file is NonNullable<typeof file> => Boolean(file))
+      const unstagedFiles = files?.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string')
+        .map(file => ({ name: file.name, content: file.content! })) || []
       const storedFileAttachments = request.stagedFileArtifacts
         ? request.stagedFileArtifacts
-        : files?.length
-          ? await materializeFileAttachments(files, conversationId)
-          : []
+        : [...preprocessedAttachments, ...reusedAttachments, ...(unstagedFiles.length ? await materializeFileAttachments(unstagedFiles, conversationId) : [])]
       abortController.signal.throwIfAborted()
       if (!request.stagedFileArtifacts) {
-        for (const attachment of storedFileAttachments) {
+        for (const attachment of storedFileAttachments.slice(preprocessedAttachments.length + reusedAttachments.length)) {
           attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
           abortController.signal.throwIfAborted()
         }
@@ -387,6 +393,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
            VALUES (?, ?, ?, ?, ?, ?, ?)`
         ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, storedAudioUrls?.length ? JSON.stringify(storedAudioUrls) : null, now)
         persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
+        releaseStagedChatAttachments(conversationId, stagedIds, false)
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
         if (request.fromQueue) markQueuedMessagePromoted(conversationId, userMsgId)
       })()
@@ -464,8 +471,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         autoMemory: reqAutoMemory,
       })
 
-      // Resolve memory space overrides (request body ids -> { id, name } objects)
-      const memorySpaceOverrides = resolveMemorySpaceOverrides(db, reqMemorySpaceIds)
+      // Resolve memory folder overrides (request body ids -> { id, name } objects)
+      const memoryFolderOverrides = resolveMemoryFolderOverrides(db, reqMemoryFolderIds)
 
       const usedToolNames = new Set<string>()
 
@@ -496,7 +503,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             modelOverride: model || undefined,
             systemPrompt: systemPrompt || undefined,
             requestedSubAgents: reqSubAgents,
-            memorySpaceOverrides,
+            memoryFolderOverrides,
             autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
             autoMemory: effectiveRunFlags.autoMemory,
             autoRouterProviderId: reqAutoRouterProviderId || undefined,
@@ -569,7 +576,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         executionConfig = buildPersistedChatConfig({
           selectedToolKeys,
           requestedSubAgents: reqSubAgents,
-          requestedMemorySpaceIds: reqMemorySpaceIds,
+          requestedMemoryFolderIds: reqMemoryFolderIds,
           systemPrompt,
           responseModel,
           responseProvider,
@@ -940,6 +947,22 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     else pauseChatQueue(req.params.id)
     return { success: true }
   })
+
+  app.post<{ Params: { id: string }; Body: { name: string; content: string } }>(
+    '/conversations/:id/attachments/stage',
+    async (req, reply) => {
+      const artifact = await stageChatAttachment(req.params.id, req.body)
+      return reply.status(201).send({ id: artifact.id, name: artifact.name, chunkCount: artifact.chunkCount || 0 })
+    },
+  )
+
+  app.delete<{ Params: { id: string; attachmentId: string } }>(
+    '/conversations/:id/attachments/stage/:attachmentId',
+    async (req) => {
+      releaseStagedChatAttachments(req.params.id, [req.params.attachmentId])
+      return { success: true }
+    },
+  )
 
   app.get<{ Params: { id: string } }>('/conversations/:id/queue', async (req) => {
     return getChatQueueState(req.params.id)

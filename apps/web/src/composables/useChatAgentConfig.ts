@@ -10,7 +10,7 @@ import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/int
 interface ChatPreset {
     tools: string[]
     subAgentIds: string[]
-    memorySpaceIds: string[]
+    memoryFolderIds: string[]
     systemPrompt: string
     thinkingEnabled: boolean
     reasoningEffort: ReasoningEffort
@@ -32,10 +32,10 @@ export interface ChatAgentConfigApi {
     selectedToolNames: Ref<string[]>
     agentOriginalSystemPrompt: Ref<string>
     freeChatSubAgentIds: Ref<string[]>
-    freeChatMemorySpaceIds: Ref<string[]>
+    freeChatMemoryFolderIds: Ref<string[]>
     agentOriginalTools: Ref<string[]>
     agentOriginalSubAgentIds: Ref<string[]>
-    agentOriginalMemorySpaceIds: Ref<string[]>
+    agentOriginalMemoryFolderIds: Ref<string[]>
     freeChatMemorySelectionInitialized: Ref<boolean>
     hasAgentOverrides: ComputedRef<boolean>
     agentOverrideFields: ComputedRef<string[]>
@@ -51,7 +51,7 @@ export interface ChatAgentConfigApi {
     setSessionModel(model: string | null, providerId?: string | null): void
     setSessionReasoningEffort(effort: ReasoningEffort | 'off'): void
     syncAgentBaseline(): void
-    setFreeChatDefaultMemorySpaceIds(ids: string[]): void
+    setFreeChatDefaultMemoryFolderIds(ids: string[]): void
     ensureFreeChatPreset(): void
     captureFreeChatPreset(): void
 }
@@ -68,7 +68,7 @@ function clonePreset(preset: ChatPreset): ChatPreset {
         ...preset,
         tools: [...preset.tools],
         subAgentIds: [...preset.subAgentIds],
-        memorySpaceIds: [...preset.memorySpaceIds],
+        memoryFolderIds: [...preset.memoryFolderIds],
     }
 }
 
@@ -76,7 +76,7 @@ function presetsEqualWithoutProviderModel(a: ChatPreset, b: ChatPreset): boolean
     return (
         arraysEqual(a.tools, b.tools) &&
         arraysEqual(a.subAgentIds, b.subAgentIds) &&
-        arraysEqual(a.memorySpaceIds, b.memorySpaceIds) &&
+        arraysEqual(a.memoryFolderIds, b.memoryFolderIds) &&
         a.systemPrompt === b.systemPrompt &&
         a.thinkingEnabled === b.thinkingEnabled &&
         a.reasoningEffort === b.reasoningEffort &&
@@ -134,12 +134,12 @@ export function useChatAgentConfig(
     const agentOriginalModelOverride = ref<string | null>(null)
     const agentOriginalProviderOverride = ref<string | null>(null)
     const freeChatSubAgentIds = ref<string[]>([])
-    const freeChatMemorySpaceIds = ref<string[]>([])
+    const freeChatMemoryFolderIds = ref<string[]>([])
     const freeChatMemorySelectionInitialized = ref<boolean>(false)
     const agentOriginalTools = ref<string[]>([])
     const agentOriginalSubAgentIds = ref<string[]>([])
-    const agentOriginalMemorySpaceIds = ref<string[]>([])
-    const freeChatDefaultMemorySpaceIds = ref<string[]>([])
+    const agentOriginalMemoryFolderIds = ref<string[]>([])
+    const freeChatDefaultMemoryFolderIds = ref<string[]>([])
     const freeChatPreset = ref<ChatPreset | null>(null)
 
     function filterToolsForChatContext(names: string[], _hasAgent = Boolean(activeAgentId.value)): string[] {
@@ -170,7 +170,7 @@ export function useChatAgentConfig(
         return {
             tools: [],
             subAgentIds: [],
-            memorySpaceIds: [...freeChatDefaultMemorySpaceIds.value],
+            memoryFolderIds: [...freeChatDefaultMemoryFolderIds.value],
             systemPrompt: '',
             thinkingEnabled: true,
             reasoningEffort: 'medium',
@@ -185,7 +185,7 @@ export function useChatAgentConfig(
         return {
             tools: [...selectedToolNames.value],
             subAgentIds: [...freeChatSubAgentIds.value],
-            memorySpaceIds: [...freeChatMemorySpaceIds.value],
+            memoryFolderIds: [...freeChatMemoryFolderIds.value],
             systemPrompt: sessionSystemPrompt.value,
             thinkingEnabled: sessionThinkingEnabled.value,
             reasoningEffort: sessionReasoningEffort.value,
@@ -199,7 +199,7 @@ export function useChatAgentConfig(
     function applyPreset(preset: ChatPreset): void {
         selectedToolNames.value = filterToolsForChatContext(preset.tools)
         freeChatSubAgentIds.value = [...preset.subAgentIds]
-        freeChatMemorySpaceIds.value = [...preset.memorySpaceIds]
+        freeChatMemoryFolderIds.value = [...preset.memoryFolderIds]
         freeChatMemorySelectionInitialized.value = true
         sessionSystemPrompt.value = preset.systemPrompt
         sessionThinkingEnabled.value = preset.thinkingEnabled
@@ -218,7 +218,7 @@ export function useChatAgentConfig(
     function setAgentBaseline(preset: ChatPreset): void {
         agentOriginalTools.value = [...preset.tools]
         agentOriginalSubAgentIds.value = [...preset.subAgentIds]
-        agentOriginalMemorySpaceIds.value = [...preset.memorySpaceIds]
+        agentOriginalMemoryFolderIds.value = [...preset.memoryFolderIds]
         agentOriginalSystemPrompt.value = preset.systemPrompt
         agentOriginalThinkingEnabled.value = preset.thinkingEnabled
         agentOriginalReasoningEffort.value = preset.reasoningEffort
@@ -235,7 +235,7 @@ export function useChatAgentConfig(
             preset: {
                 tools: agent?.tools?.length ? comparableAgentTools(agent.tools) : [],
                 subAgentIds: agent?.subAgents?.map(s => s.agentId) ?? [],
-                memorySpaceIds: agent?.memorySpaces?.length ? [...agent.memorySpaces] : [],
+                memoryFolderIds: agent?.memoryFolders?.length ? [...agent.memoryFolders] : [],
                 systemPrompt: agent?.systemPrompt || '',
                 thinkingEnabled: agent?.thinkingEnabled !== false,
                 reasoningEffort: agent?.reasoningEffort || 'medium',
@@ -274,10 +274,10 @@ export function useChatAgentConfig(
         captureFreeChatPreset()
     }
 
-    function setFreeChatDefaultMemorySpaceIds(ids: string[]): void {
+    function setFreeChatDefaultMemoryFolderIds(ids: string[]): void {
         const nextIds = [...ids]
         const previousDefault = regularFreeChatPreset()
-        freeChatDefaultMemorySpaceIds.value = nextIds
+        freeChatDefaultMemoryFolderIds.value = nextIds
         const nextDefault = regularFreeChatPreset()
         if (!freeChatPreset.value) {
             freeChatPreset.value = clonePreset(nextDefault)
@@ -305,7 +305,7 @@ export function useChatAgentConfig(
         const fields: string[] = []
         if (!arraysEqual(selectedToolNames.value, preset.tools)) fields.push('Tools')
         if (!arraysEqual(freeChatSubAgentIds.value, preset.subAgentIds)) fields.push('Sub-agents')
-        if (!arraysEqual(freeChatMemorySpaceIds.value, preset.memorySpaceIds)) fields.push('Memory folders')
+        if (!arraysEqual(freeChatMemoryFolderIds.value, preset.memoryFolderIds)) fields.push('Memory folders')
         if (sessionSystemPrompt.value !== preset.systemPrompt) fields.push('System prompt')
         if (sessionThinkingEnabled.value !== preset.thinkingEnabled) fields.push('Thinking mode')
         if (sessionReasoningEffort.value !== preset.reasoningEffort) fields.push('Reasoning effort')
@@ -364,8 +364,8 @@ export function useChatAgentConfig(
         if (!arraysEqual(freeChatSubAgentIds.value, actualPreset.subAgentIds)) {
             updates.subAgents = freeChatSubAgentIds.value.map(id => ({ agentId: id }))
         }
-        if (!arraysEqual(freeChatMemorySpaceIds.value, actualPreset.memorySpaceIds)) {
-            updates.memorySpaces = [...freeChatMemorySpaceIds.value]
+        if (!arraysEqual(freeChatMemoryFolderIds.value, actualPreset.memoryFolderIds)) {
+            updates.memoryFolders = [...freeChatMemoryFolderIds.value]
         }
         if (sessionSystemPrompt.value !== actualPreset.systemPrompt) updates.systemPrompt = sessionSystemPrompt.value
         if (sessionThinkingEnabled.value !== actualPreset.thinkingEnabled) updates.thinkingEnabled = sessionThinkingEnabled.value
@@ -464,25 +464,7 @@ export function useChatAgentConfig(
         return normalizeToolKeys(names, true).filter((name) => selectableKeys.has(name))
     }
 
-    function isEmptyLegacyExecutionConfig(config: ConversationExecutionConfig): boolean {
-        return !config.allowedTools.length &&
-            !config.subAgents.length &&
-            !config.memorySpaceIds.length &&
-            !config.systemPrompt &&
-            !config.model &&
-            !config.providerId &&
-            config.autoToolRouting === false &&
-            config.autoMemory === false
-    }
-
     function restoreConversationConfig(config: ConversationExecutionConfig): void {
-        if (activeAgentId.value && isEmptyLegacyExecutionConfig(config)) {
-            const { preset } = agentPreset(activeAgentId.value)
-            applyPreset(preset)
-            setAgentBaseline(preset)
-            return
-        }
-
         const activeAgent = activeAgentId.value ? useAgentDefinitionsStore().get(activeAgentId.value) : null
         const restoredModel = config.model || null
         const restoredProviderId = config.providerId || null
@@ -492,7 +474,7 @@ export function useChatAgentConfig(
         const preset: ChatPreset = {
             tools: normalizeToolKeys(config.allowedTools),
             subAgentIds: config.subAgents.map((subAgent) => subAgent.agentId),
-            memorySpaceIds: [...config.memorySpaceIds],
+            memoryFolderIds: [...config.memoryFolderIds],
             systemPrompt: config.systemPrompt,
             thinkingEnabled: config.thinkingEnabled,
             reasoningEffort: config.reasoningEffort || 'medium',
@@ -566,11 +548,11 @@ export function useChatAgentConfig(
         selectedToolNames,
         agentOriginalSystemPrompt,
         freeChatSubAgentIds,
-        freeChatMemorySpaceIds,
+        freeChatMemoryFolderIds,
         freeChatMemorySelectionInitialized,
         agentOriginalTools,
         agentOriginalSubAgentIds,
-        agentOriginalMemorySpaceIds,
+        agentOriginalMemoryFolderIds,
         hasAgentOverrides,
         agentOverrideFields,
         hasFreeChatOverrides,
@@ -585,7 +567,7 @@ export function useChatAgentConfig(
         setSessionModel,
         setSessionReasoningEffort,
         syncAgentBaseline,
-        setFreeChatDefaultMemorySpaceIds,
+        setFreeChatDefaultMemoryFolderIds,
         ensureFreeChatPreset,
         captureFreeChatPreset,
     }

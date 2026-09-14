@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import {
     MEMORY_TOOL_NAMES,
-    makeMemoryAppendTool,
     makeMemoryCreateTool,
     makeMemoryListDocumentsTool,
+    makeMemoryAppendTool,
     makeMemoryRemoveAllTool,
     makeMemoryRemoveRangeTool,
     makeMemoryReplaceAllTool,
@@ -18,35 +18,27 @@ import {
 } from './memory-tools.js'
 
 describe('memory mutation tool contracts', () => {
-    test('does not expose the ambiguous memory_update tool', () => {
-        expect(MEMORY_TOOL_NAMES).not.toContain('memory_update')
-        expect(MEMORY_TOOL_NAMES).not.toContain('memory_remove')
+    test('exposes focused memory mutations', () => {
         expect(MEMORY_TOOL_NAMES).toEqual(expect.arrayContaining([
-            'memory_append',
-            'memory_replace_range',
-            'memory_replace_all',
-            'memory_remove_all',
-            'memory_remove_range',
+            'memory_create',
+            'memory_append', 'memory_replace_range', 'memory_replace_all',
+            'memory_remove_range', 'memory_remove_all',
         ]))
+        expect(MEMORY_TOOL_NAMES).not.toContain('memory_update')
+        expect(MEMORY_TOOL_NAMES).not.toContain('memory_delete')
     })
 
-    test('keeps range fields out of append and whole-document replacement', () => {
-        for (const tool of [makeMemoryAppendTool({}), makeMemoryReplaceAllTool({})]) {
-            const properties = tool.parameters.properties as Record<string, unknown>
-            expect(properties).not.toHaveProperty('partStart')
-            expect(properties).not.toHaveProperty('partEnd')
-            expect(tool.parameters.additionalProperties).toBe(false)
-        }
+    test('keeps range fields out of whole-document replacement', () => {
+        const tool = makeMemoryReplaceAllTool({})
+        const properties = tool.parameters.properties as Record<string, unknown>
+        expect(properties).not.toHaveProperty('partStart')
+        expect(properties).not.toHaveProperty('partEnd')
+        expect(tool.parameters.required).toEqual(['documentRef', 'content'])
+        expect(tool.parameters.additionalProperties).toBe(false)
     })
 
-    test('requires one opaque document reference and both range boundaries', () => {
-        const tool = makeMemoryReplaceRangeTool({})
-        expect(tool.parameters.required).toEqual([
-            'documentRef',
-            'content',
-            'partStart',
-            'partEnd',
-        ])
+    test('requires range boundaries for range replacement', () => {
+        expect(makeMemoryReplaceRangeTool({}).parameters.required).toEqual(['documentRef', 'content', 'partStart', 'partEnd'])
     })
 
     test('exposes an explicit entity merge contract', () => {

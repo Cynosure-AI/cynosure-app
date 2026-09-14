@@ -9,12 +9,13 @@ describe('PreResponseActionsCard', () => {
       global: { stubs: { Icon: true } },
     })
 
-    expect(wrapper.text()).toContain('Preparing response')
-    expect(wrapper.text()).toContain('Pre-response actions')
-    expect(wrapper.text()).toContain('Generating conversation title')
+    expect(wrapper.text()).toContain('Conversation title')
+    expect(wrapper.text()).toContain('Generating title')
+    expect(wrapper.text()).not.toContain('Preparing response')
+    expect(wrapper.text()).not.toContain('Pre-response actions')
     expect(wrapper.text()).not.toContain('Post-turn')
 
-    await wrapper.get('[aria-label="Cancel pre-response actions"]').trigger('click')
+    await wrapper.get('[aria-label="Cancel title generation"]').trigger('click')
     expect(wrapper.emitted('cancel')).toHaveLength(1)
   })
 })

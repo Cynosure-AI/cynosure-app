@@ -13,7 +13,7 @@ import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
 import SplitButton from "../../shared/SplitButton.vue";
 import ToolsButton from "./ToolsButton.vue";
 import SubAgentsButton from "./SubAgentsButton.vue";
-import MemorySpacesButton from "./MemorySpacesButton.vue";
+import MemoryFoldersButton from "./MemoryFoldersButton.vue";
 import SystemPromptButton from "./SystemPromptButton.vue";
 import ThinkingModeButton from "./ThinkingModeButton.vue";
 import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
@@ -218,7 +218,7 @@ async function toggleMic(): Promise<void> {
     >
       <ToolsButton />
       <SubAgentsButton />
-      <MemorySpacesButton />
+      <MemoryFoldersButton />
       <SystemPromptButton />
       <ThinkingModeButton />
     </div>
@@ -306,7 +306,7 @@ async function toggleMic(): Promise<void> {
     <span class="hidden lg:contents">
       <ToolsButton />
       <SubAgentsButton />
-      <MemorySpacesButton />
+      <MemoryFoldersButton />
       <SystemPromptButton />
       <ThinkingModeButton />
     </span>

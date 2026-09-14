@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify'
 import multipart from '@fastify/multipart'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
-import { ensureDefaultMemorySpace, getDb } from '../db/database.js'
-import { getAppDataDir, getDefaultMemorySpaceDir, getMemorySpacesRootDir } from '../core/data-dir.js'
+import { ensureDefaultMemoryFolder, getDb } from '../db/database.js'
+import { getAppDataDir, getDefaultMemoryFolderDir, getMemoryFoldersRootDir } from '../core/data-dir.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import { loadSavedProviders } from './providers.js'
 import { loadSavedMcpServers } from './mcp/index.js'
@@ -21,13 +21,14 @@ import {
 } from 'fs'
 import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
 import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
-import { folderPathForRelative, relativePathForFolder, validateRelativePath } from '../core/memory/memory-space-folders.js'
-import { stopAllMemorySpaceWatchers, watchMemorySpace } from '../core/memory/memory-space-watcher.js'
+import { directoryPathForRelative, categoryPathForDirectory, validateRelativePath } from '../core/memory/memory-folder-directories.js'
+import { stopAllMemoryFolderWatchers, watchMemoryFolder } from '../core/memory/memory-folder-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import { DEFAULT_PERMANENT_MEMORY_TABLE, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { getMemoryKnowledgeStore } from '../core/memory/memory-knowledge.js'
+import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import {
     createMemoryKnowledgeBackup,
     memoryKnowledgeBackupCount,
@@ -79,7 +80,7 @@ interface BackupManifest {
 }
 
 interface MemoryFileBackup {
-    spaceId: string
+    categoryId: string
     fileName: string
     archiveName: string
 }
@@ -87,18 +88,21 @@ interface MemoryFileBackup {
 interface MemoryFileIdentityBackup {
     document_id: string
     document_ref: string
-    space_id: string
+    category_id: string
     file_name: string
+    dreamed_at?: number
     created_at: number
 }
 
-interface MemorySpaceBackupRow extends Record<string, unknown> {
+type MemoryDocumentBackup = Record<string, string | number | null>
+type MemoryRevisionBackup = Record<string, string | number | null>
+
+interface MemoryFolderBackupRow extends Record<string, unknown> {
     id?: unknown
     name?: unknown
-    folder_path?: unknown
-    relative_path?: unknown
-    relativePath?: unknown
-    is_default?: unknown
+    directory_path?: unknown
+    categoryPath?: unknown
+    is_uncategorized?: unknown
     sort_order?: unknown
     created_at?: unknown
 }
@@ -168,32 +172,13 @@ function getMemoryKnowledgeBackup(zip: AdmZip): MemoryKnowledgeBackup | null {
     return JSON.parse(entry.getData().toString('utf-8')) as MemoryKnowledgeBackup
 }
 
-function normalizeBackupRelativePath(value: string): string {
-    let next = value
-    while (next.startsWith('folder:')) next = next.slice('folder:'.length)
-    return validateRelativePath(next)
+function relativePathFromBackupCategory(category: MemoryFolderBackupRow): string {
+    if (typeof category.categoryPath !== 'string') throw new Error('Memory folder path is missing from backup.')
+    return validateRelativePath(category.categoryPath)
 }
 
-function relativePathFromBackupSpace(space: MemorySpaceBackupRow): string {
-    const explicit = typeof space.relative_path === 'string'
-        ? space.relative_path
-        : typeof space.relativePath === 'string'
-            ? space.relativePath
-            : ''
-    if (explicit) return normalizeBackupRelativePath(explicit)
-
-    const id = typeof space.id === 'string' ? space.id : ''
-    if (id.startsWith('folder:')) {
-        const fromId = id.slice('folder:'.length)
-        if (fromId) return normalizeBackupRelativePath(fromId)
-    }
-
-    const name = typeof space.name === 'string' ? space.name : ''
-    return validateRelativePath(name || id || 'Imported')
-}
-
-function portableRelativePathForFolder(folderPath: string): string {
-    return normalizeBackupRelativePath(relativePathForFolder(folderPath))
+function portableRelativePathForFolder(directoryPath: string): string {
+    return validateRelativePath(categoryPathForDirectory(directoryPath))
 }
 
 async function resetVectorIndexes(): Promise<void> {
@@ -209,20 +194,22 @@ async function resetVectorIndexes(): Promise<void> {
     try { getDb().prepare('DELETE FROM memory_file_index').run() } catch { /* ignore */ }
 }
 
-async function resetMemorySpaces(db = getDb()): Promise<void> {
-    await stopAllMemorySpaceWatchers()
+async function resetMemoryFolders(db = getDb()): Promise<void> {
+    await stopAllMemoryFolderWatchers()
     await resetVectorIndexes()
     await getMemoryKnowledgeStore().reset()
-    db.prepare('DELETE FROM agent_memory_spaces').run()
-    db.prepare('DELETE FROM memory_spaces').run()
+    db.prepare('DELETE FROM memory_document_revisions').run()
+    db.prepare('DELETE FROM memory_documents').run()
+    db.prepare('DELETE FROM agent_memory_folders').run()
+    db.prepare('DELETE FROM memory_folders').run()
 
-    const memoryRoot = getMemorySpacesRootDir()
+    const memoryRoot = getMemoryFoldersRootDir()
     if (existsSync(memoryRoot)) {
         rmSync(memoryRoot, { recursive: true, force: true })
     }
 
-    ensureDefaultMemorySpace(db)
-    watchMemorySpace('default', getDefaultMemorySpaceDir())
+    ensureDefaultMemoryFolder(db)
+    watchMemoryFolder('uncategorized', getDefaultMemoryFolderDir())
 }
 
 async function resetKnowledge(): Promise<void> {
@@ -230,10 +217,13 @@ async function resetKnowledge(): Promise<void> {
 }
 
 async function resetConversations(db = getDb()): Promise<void> {
+    const conversationIds = db.prepare('SELECT id FROM conversations').all() as Array<{ id: string }>
+    for (const { id } of conversationIds) await invalidateDreamConversation(id)
     db.prepare('DELETE FROM pending_hitl').run()
     db.prepare('DELETE FROM session_tool_approvals').run()
     db.prepare('DELETE FROM tasks').run()
     db.prepare('DELETE FROM execution_steps').run()
+    db.prepare('DELETE FROM dream_runs').run()
     db.prepare('DELETE FROM messages').run()
     db.prepare('DELETE FROM conversations').run()
     await dropConversationAttachmentIndex()
@@ -292,7 +282,7 @@ function resetAgents(db = getDb()): void {
     db.prepare('DELETE FROM session_tool_approvals').run()
     db.prepare('DELETE FROM cron_jobs').run()
     db.prepare('DELETE FROM channels').run()
-    db.prepare('DELETE FROM agent_memory_spaces').run()
+    db.prepare('DELETE FROM agent_memory_folders').run()
     db.prepare('DELETE FROM agents').run()
 }
 
@@ -321,7 +311,7 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     await run('conversations', () => resetConversations(db))
     await run('notifications', () => resetNotifications(db))
     await run('usage', () => resetUsage(db))
-    await run('memory', () => resetMemorySpaces(db))
+    await run('memory', () => resetMemoryFolders(db))
     await run('vectors', resetVectorIndexes)
     await run('knowledge', resetKnowledge)
     await run('settings', () => resetSettings(db))
@@ -331,15 +321,15 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     await run('mcp', () => resetMcpServers(db))
 
     if (selected.has('memory')) {
-        // resetMemorySpaces already restarted the default watcher.
+        // resetMemoryFolders already restarted the default watcher.
     } else {
         try {
-            const spaces = db.prepare('SELECT id, folder_path FROM memory_spaces WHERE folder_path != ?').all('') as {
+            const categories = db.prepare('SELECT id, directory_path FROM memory_folders WHERE directory_path != ?').all('') as {
                 id: string
-                folder_path: string
+                directory_path: string
             }[]
-            for (const space of spaces) {
-                watchMemorySpace(space.id, space.folder_path)
+            for (const category of categories) {
+                watchMemoryFolder(category.id, category.directory_path)
             }
         } catch { /* ignore watcher refresh failures */ }
     }
@@ -361,10 +351,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             return row.count
         }
 
-        const memorySpaces = db.prepare('SELECT folder_path FROM memory_spaces').all() as { folder_path: string }[]
-        const memoryDocuments = memorySpaces.reduce((total, space) => {
-            if (!space.folder_path) return total
-            return total + listFilesInFolder(space.folder_path).filter((file) => file.supported).length
+        const memoryFolders = db.prepare('SELECT directory_path FROM memory_folders').all() as { directory_path: string }[]
+        const memoryDocuments = memoryFolders.reduce((total, category) => {
+            if (!category.directory_path) return total
+            return total + listFilesInFolder(category.directory_path).filter((file) => file.supported).length
         }, 0)
         const settings = count('settings')
         const approvals = count('tool_approvals')
@@ -391,7 +381,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             channels: { count: count('channels') },
             memory: {
                 count: memoryDocuments,
-                details: { spaces: memorySpaces.length, documents: memoryDocuments }
+                details: { categories: memoryFolders.length, documents: memoryDocuments }
             },
             knowledge: {
                 count: knowledgeRows,
@@ -513,38 +503,40 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 manifest.modules.channels = { count: channels.length }
             }
 
-            // --- Memory spaces ---
+            // --- Categorized, revisional memory ---
             if (requested.includes('memory')) {
                 const db = getDb()
-                const spaces: MemorySpaceBackupRow[] = (db.prepare('SELECT * FROM memory_spaces ORDER BY created_at').all() as MemorySpaceBackupRow[])
-                    .map((space) => {
-                        const folderPath = typeof space.folder_path === 'string' ? space.folder_path : ''
-                        const isDefault = space.is_default === 1 || space.is_default === true
+                const categories: MemoryFolderBackupRow[] = (db.prepare('SELECT * FROM memory_folders ORDER BY created_at').all() as MemoryFolderBackupRow[])
+                    .map((category) => {
+                        const directoryPath = typeof category.directory_path === 'string' ? category.directory_path : ''
+                        const isUncategorized = category.is_uncategorized === 1 || category.is_uncategorized === true
                         return {
-                            ...space,
-                            relative_path: isDefault || !folderPath ? '' : portableRelativePathForFolder(folderPath),
+                            ...category,
+                            categoryPath: isUncategorized || !directoryPath ? '' : portableRelativePathForFolder(directoryPath),
                         }
                     })
-                const assignments = db.prepare('SELECT * FROM agent_memory_spaces').all()
+                const assignments = db.prepare('SELECT * FROM agent_memory_folders').all()
                 const fileIndex = db.prepare(`
-                    SELECT document_id, document_ref, space_id, file_name, created_at
+                    SELECT document_id, document_ref, category_id, file_name, dreamed_at, created_at
                     FROM memory_file_index ORDER BY created_at
                 `).all() as MemoryFileIdentityBackup[]
+                const documents = db.prepare('SELECT * FROM memory_documents ORDER BY created_at').all() as MemoryDocumentBackup[]
+                const revisions = db.prepare('SELECT * FROM memory_document_revisions ORDER BY document_id, revision_number').all() as MemoryRevisionBackup[]
                 const files: MemoryFileBackup[] = []
 
-                for (const space of spaces) {
-                    const spaceId = String(space.id || '')
-                    const folderPath = typeof space.folder_path === 'string' ? space.folder_path : ''
-                    if (!spaceId || !folderPath) continue
+                for (const category of categories) {
+                    const categoryId = String(category.id || '')
+                    const directoryPath = typeof category.directory_path === 'string' ? category.directory_path : ''
+                    if (!categoryId || !directoryPath) continue
 
-                    for (const file of listFilesInFolder(folderPath).filter(f => f.supported)) {
-                        const archiveName = `memory/files/${encodeURIComponent(spaceId)}/${encodeURIComponent(file.fileName)}`
+                    for (const file of listFilesInFolder(directoryPath).filter(f => f.supported)) {
+                        const archiveName = `memory/files/${encodeURIComponent(categoryId)}/${encodeURIComponent(file.fileName)}`
                         archive.file(file.filePath, { name: archiveName })
-                        files.push({ spaceId, fileName: file.fileName, archiveName })
+                        files.push({ categoryId, fileName: file.fileName, archiveName })
                     }
                 }
 
-                archive.append(JSON.stringify({ spaces, assignments, fileIndex }, null, 2), { name: 'memory/spaces.json' })
+                archive.append(JSON.stringify({ categories, assignments, fileIndex, documents, revisions }, null, 2), { name: 'memory/categories.json' })
                 archive.append(JSON.stringify({ files }, null, 2), { name: 'memory/files.json' })
                 manifest.modules.memory = { count: files.length }
             }
@@ -976,15 +968,15 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             emitRestoreProgress('channels', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
-        // --- Restore Memory spaces ---
+        // --- Restore categorized, revisional memory ---
         if (requestedModules.includes('memory') && manifest.modules.memory) {
             const res = { restored: 0, errors: [] as string[] }
             emitRestoreProgress('memory', 'started')
             try {
-                await stopAllMemorySpaceWatchers()
+                await stopAllMemoryFolderWatchers()
 
                 // Memory replacement must not leave facts from the previous
-                // workspace addressable under reused space IDs such as default.
+                // workspace addressable under reused category IDs such as default.
                 await getMemoryKnowledgeStore().reset()
 
                 // Reset LanceDB to avoid stale index references from previous state
@@ -997,64 +989,82 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 await ragStore.initialize()
 
                 db.prepare('DELETE FROM memory_file_index').run()
-                db.prepare('DELETE FROM agent_memory_spaces').run()
-                db.prepare('DELETE FROM memory_spaces').run()
+                db.prepare('DELETE FROM agent_memory_folders').run()
+                db.prepare('DELETE FROM memory_folders').run()
 
-                const memoryRoot = getMemorySpacesRootDir()
+                const memoryRoot = getMemoryFoldersRootDir()
                 if (existsSync(memoryRoot)) {
                     rmSync(memoryRoot, { recursive: true, force: true })
                 }
                 ensureFolder(memoryRoot)
 
-                // Restore space metadata and assignments. Imported spaces are
-                // placed under the local app data memory root so backups are portable.
-                const spacesEntry = zip.getEntry('memory/spaces.json')
-                const spaceIdMap = new Map<string, string>()
-                if (spacesEntry) {
-                    const { spaces, assignments, fileIndex } = JSON.parse(spacesEntry.getData().toString('utf-8')) as {
-                        spaces: MemorySpaceBackupRow[]
+                // Restore category metadata, document identities, revisions, and assignments.
+                const categoriesEntry = zip.getEntry('memory/categories.json')
+                const categoryIdMap = new Map<string, string>()
+                if (categoriesEntry) {
+                    const { categories, assignments, fileIndex, documents, revisions } = JSON.parse(categoriesEntry.getData().toString('utf-8')) as {
+                        categories: MemoryFolderBackupRow[]
                         assignments: Record<string, unknown>[]
                         fileIndex?: MemoryFileIdentityBackup[]
+                        documents?: MemoryDocumentBackup[]
+                        revisions?: MemoryRevisionBackup[]
                     }
-                    for (const sp of spaces) {
+                    for (const sp of categories) {
                         const importedId = String(sp.id || '')
                         if (!importedId) continue
-                        const isDefault = sp.is_default === 1 || sp.is_default === true || importedId === 'default'
-                        const id = isDefault ? 'default' : importedId
-                        spaceIdMap.set(importedId, id)
-                        const folderPath = id === 'default' ? getDefaultMemorySpaceDir() : folderPathForRelative(relativePathFromBackupSpace(sp))
-                        ensureFolder(folderPath)
+                        const isUncategorized = sp.is_uncategorized === 1 || sp.is_uncategorized === true || importedId === 'uncategorized'
+                        const id = isUncategorized ? 'uncategorized' : importedId
+                        categoryIdMap.set(importedId, id)
+                        const directoryPath = id === 'uncategorized' ? getDefaultMemoryFolderDir() : directoryPathForRelative(relativePathFromBackupCategory(sp))
+                        ensureFolder(directoryPath)
                         db.prepare(`
-                            INSERT OR REPLACE INTO memory_spaces
-                                (id, name, description, folder_path, sort_order, is_default, created_at)
+                            INSERT OR REPLACE INTO memory_folders
+                                (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?)
                         `).run(
                             id,
                             sp.name || '',
                             sp.description || '',
-                            folderPath,
+                            directoryPath,
                             sp.sort_order ?? 0,
-                            id === 'default' ? 1 : 0,
+                            id === 'uncategorized' ? 1 : 0,
                             sp.created_at || Date.now()
                         )
                     }
-                    ensureDefaultMemorySpace(db)
+                    ensureDefaultMemoryFolder(db)
                     for (const asg of assignments) {
-                        const mappedSpaceId = spaceIdMap.get(String(asg.space_id || '')) || asg.space_id
-                        db.prepare('INSERT OR IGNORE INTO agent_memory_spaces (agent_id, space_id) VALUES (?, ?)')
-                            .run(asg.agent_id, mappedSpaceId)
+                        const mappedCategoryId = categoryIdMap.get(String(asg.category_id || '')) || asg.category_id
+                        db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
+                            .run(asg.agent_id, mappedCategoryId)
                     }
                     for (const file of fileIndex || []) {
-                        const mappedSpaceId = spaceIdMap.get(file.space_id) || file.space_id
+                        const mappedCategoryId = categoryIdMap.get(file.category_id) || file.category_id
                         db.prepare(`
                             INSERT OR REPLACE INTO memory_file_index
-                                (document_id, document_ref, space_id, file_name, content_hash,
-                                 chunk_count, last_indexed_at, knowledge_extracted_at, tags_json, created_at)
-                            VALUES (?, ?, ?, ?, '', 0, 0, 0, '[]', ?)
-                        `).run(file.document_id, file.document_ref, mappedSpaceId, file.file_name, file.created_at || Date.now())
+                                (document_id, document_ref, category_id, file_name, content_hash,
+                                 chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json, created_at)
+                            VALUES (?, ?, ?, ?, '', 0, 0, 0, ?, '[]', ?)
+                        `).run(file.document_id, file.document_ref, mappedCategoryId, file.file_name, file.dreamed_at || 0, file.created_at || Date.now())
+                    }
+                    for (const document of documents || []) {
+                        const categoryId = categoryIdMap.get(String(document.category_id || '')) || String(document.category_id || '')
+                        db.prepare(`INSERT OR REPLACE INTO memory_documents
+                            (document_id, document_ref, category_id, file_name, current_hash, status, indexing_status, created_at, updated_at, deleted_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                            .run(document.document_id, document.document_ref, categoryId, document.file_name,
+                                document.current_hash || '', document.status || 'active', document.indexing_status || 'pending', document.created_at || Date.now(),
+                                document.updated_at || Date.now(), document.deleted_at || null)
+                    }
+                    for (const revision of revisions || []) {
+                        db.prepare(`INSERT OR REPLACE INTO memory_document_revisions
+                            (id, document_id, revision_number, content_hash, content, source, conversation_id, agent_id, message_ids_json, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                            .run(revision.id, revision.document_id, revision.revision_number, revision.content_hash,
+                                revision.content, revision.source, revision.conversation_id || null, revision.agent_id || null,
+                                revision.message_ids_json || '[]', revision.created_at || Date.now())
                     }
                 } else {
-                    ensureDefaultMemorySpace(db)
+                    throw new Error('Backup does not contain categorized memory metadata.')
                 }
 
                 // Restore source files only. Files are the source of truth for
@@ -1066,20 +1076,20 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     for (const file of files || []) {
                         try {
                             const safeFileName = basename(file.fileName)
-                            if (!file.spaceId || !safeFileName || safeFileName !== file.fileName) {
+                            if (!file.categoryId || !safeFileName || safeFileName !== file.fileName) {
                                 throw new Error('Invalid memory file name')
                             }
-                            const targetSpaceId = spaceIdMap.get(file.spaceId) || file.spaceId
+                            const targetCategoryId = categoryIdMap.get(file.categoryId) || file.categoryId
 
-                            const space = db.prepare('SELECT folder_path FROM memory_spaces WHERE id = ?')
-                                .get(targetSpaceId) as { folder_path: string } | undefined
-                            if (!space?.folder_path) throw new Error(`Memory space "${targetSpaceId}" not found`)
+                            const category = db.prepare('SELECT directory_path FROM memory_folders WHERE id = ?')
+                                .get(targetCategoryId) as { directory_path: string } | undefined
+                            if (!category?.directory_path) throw new Error(`Memory folder "${targetCategoryId}" not found`)
 
                             const entry = zip.getEntry(file.archiveName)
                             if (!entry || entry.isDirectory) throw new Error('File content missing from backup')
 
-                            ensureFolder(space.folder_path)
-                            writeFileSync(join(space.folder_path, safeFileName), entry.getData())
+                            ensureFolder(category.directory_path)
+                            writeFileSync(join(category.directory_path, safeFileName), entry.getData())
                             res.restored++
                         } catch (e) {
                             res.errors.push(`File "${file.fileName}": ${(e as Error).message}`)
@@ -1087,12 +1097,12 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     }
                 }
 
-                const restoredSpaces = db.prepare('SELECT id, folder_path FROM memory_spaces WHERE folder_path != ?').all('') as {
+                const restoredCategories = db.prepare('SELECT id, directory_path FROM memory_folders WHERE directory_path != ?').all('') as {
                     id: string
-                    folder_path: string
+                    directory_path: string
                 }[]
-                for (const space of restoredSpaces) {
-                    watchMemorySpace(space.id, space.folder_path)
+                for (const category of restoredCategories) {
+                    watchMemoryFolder(category.id, category.directory_path)
                 }
             } catch (e) {
                 res.errors.push((e as Error).message)
@@ -1226,14 +1236,14 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             db.prepare(
                                 `INSERT OR REPLACE INTO message_attachments (
                                     id, message_id, conversation_id, kind, name, original_path, text_path,
-                                    size_bytes, text_bytes, chunk_count, metadata_json, created_at
+                                    size_bytes, text_bytes, chunk_count, metadata_json, created_at, asset_id
                                  )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 a.id, a.message_id, a.conversation_id, a.kind || 'file', a.name || '',
                                 a.original_path || null, a.text_path || null,
                                 a.size_bytes ?? null, a.text_bytes ?? null, a.chunk_count ?? null,
-                                a.metadata_json || null, a.created_at || Date.now()
+                                a.metadata_json || null, a.created_at || Date.now(), a.id
                             )
                         } catch (e) {
                             res.errors.push(`Message attachment: ${(e as Error).message}`)
@@ -1379,6 +1389,11 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             chunkCount: row.chunk_count ?? undefined,
                         }
                         const chunkCount = await indexConversationAttachment(row.conversation_id, attachment)
+                        db.prepare(`INSERT OR REPLACE INTO attachment_assets
+                            (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                        ).run(row.id, row.name, originalPath, textPath, row.size_bytes ?? 0, row.text_bytes ?? 0,
+                            chunkCount, JSON.stringify({ ...attachment, chunkCount }), Date.now())
                         db.prepare(`
                             UPDATE message_attachments
                             SET original_path = ?, text_path = ?, chunk_count = ?, metadata_json = ?

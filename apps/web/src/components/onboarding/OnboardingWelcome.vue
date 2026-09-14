@@ -1,60 +1,67 @@
 <template>
-  <div class="flex min-h-full w-full items-center justify-center px-5 py-10 sm:px-8">
-    <div class="w-full max-w-5xl text-center">
-      <div class="logo-wrap mx-auto mb-7 flex h-20 w-20 items-center justify-center rounded-2xl">
-        <img
-          :src="logoIconUrl"
-          alt="Cynosure"
-          class="h-14 w-14 object-contain"
-        >
-      </div>
-
-      <h1 class="mb-4 text-3xl font-semibold tracking-tight text-theme-100 sm:text-4xl">
-        Welcome to <span class="text-accent-400">Cynosure</span>
-      </h1>
-      <p class="mx-auto max-w-xl text-sm leading-6 text-theme-400 sm:text-base">
-        Your personal AI workspace. Build agents, connect tools, add memory,
-        and let them work for you.
-      </p>
-
-      <div
-        class="mx-auto my-10 flex max-w-xs items-center gap-2"
-        aria-hidden="true"
-      >
-        <span class="h-px flex-1 bg-gradient-to-r from-transparent to-theme-700" />
-        <span class="h-1.5 w-1.5 rounded-full bg-accent-400" />
-        <span class="h-px flex-1 bg-gradient-to-l from-transparent to-theme-700" />
-      </div>
-
-      <div class="grid grid-cols-2 gap-y-8 sm:grid-cols-4 sm:gap-y-0">
-        <div
-          v-for="feature in features"
-          :key="feature.title"
-          class="feature-item px-3 sm:px-6"
-        >
-          <div
-            class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border"
-            :class="[feature.iconBg, feature.iconBorder]"
-          >
-            <Icon
-              :icon="feature.icon"
-              class="h-5 w-5"
-              :class="feature.iconColor"
-            />
+  <div class="flex min-h-full w-full items-center justify-center px-4 py-5 sm:px-7 sm:py-8">
+    <section
+      class="w-full max-w-6xl"
+      aria-labelledby="welcome-title"
+    >
+      <div class="mx-auto flex max-w-5xl flex-col items-center text-center">
+        <div class="welcome-logo-wrap mb-5">
+          <span class="welcome-logo-ring welcome-logo-ring--outer" />
+          <span class="welcome-logo-ring welcome-logo-ring--inner" />
+          <div class="welcome-logo">
+            <img
+              :src="logoIconUrl"
+              alt=""
+              class="h-14 w-14 object-contain"
+            >
           </div>
-          <h2 class="mb-1.5 text-sm font-semibold text-theme-200">
-            {{ feature.title }}
-          </h2>
-          <p class="mx-auto max-w-44 text-xs leading-5 text-theme-500">
-            {{ feature.description }}
-          </p>
+        </div>
+
+        <p class="welcome-eyebrow mb-3">
+          Your personal AI workspace
+        </p>
+        <h1
+          id="welcome-title"
+          class="text-3xl font-semibold tracking-tight text-theme-100 sm:text-4xl"
+        >
+          Welcome to <span class="text-accent-400">Cynosure</span>
+        </h1>
+        <p class="mt-3 max-w-2xl text-sm leading-6 text-theme-400 sm:text-base">
+          Bring your models, tools, and knowledge together. Build capable agents that remember context and work the way you do.
+        </p>
+
+        <div class="mt-8 grid w-full gap-3 text-left sm:grid-cols-2 lg:grid-cols-4">
+          <article
+            v-for="feature in features"
+            :key="feature.title"
+            class="welcome-feature"
+          >
+            <div class="welcome-feature-icon">
+              <Icon
+                :icon="feature.icon"
+                class="h-5 w-5"
+              />
+            </div>
+            <div>
+              <h2 class="text-sm font-semibold text-theme-100">
+                {{ feature.title }}
+              </h2>
+              <p class="mt-1.5 text-xs leading-5 text-theme-500">
+                {{ feature.description }}
+              </p>
+            </div>
+          </article>
+        </div>
+
+        <div class="welcome-next-hint mt-7 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-theme-500">
+          <Icon
+            icon="lucide:sparkles"
+            class="h-3.5 w-3.5 text-accent-400"
+          />
+          A quick guided setup — you can change everything later
         </div>
       </div>
-
-      <p class="mt-9 text-xs text-theme-600">
-        You can change any of these settings later.
-      </p>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -67,49 +74,104 @@ const { logoIconUrl } = useAppBranding()
 const features = [
   {
     title: 'Chat & Assist',
-    description: 'Chat with any AI model and get things done.',
+    description: 'Work with your preferred AI models in one focused space.',
     icon: 'lucide:messages-square',
-    iconBg: 'bg-cyan-500/10',
-    iconBorder: 'border-cyan-500/25',
-    iconColor: 'text-cyan-400',
   },
   {
     title: 'Build Agents',
-    description: 'Create specialized agents with tools and memory.',
+    description: 'Create specialists with their own roles, tools, and behaviour.',
     icon: 'lucide:bot',
-    iconBg: 'bg-purple-500/10',
-    iconBorder: 'border-purple-500/25',
-    iconColor: 'text-purple-400',
   },
   {
     title: 'Connect Tools',
-    description: 'Add files, search, services, and more.',
+    description: 'Connect search, files, services, and the apps you rely on.',
     icon: 'lucide:wrench',
-    iconBg: 'bg-amber-500/10',
-    iconBorder: 'border-amber-500/25',
-    iconColor: 'text-amber-400',
   },
   {
     title: 'Add Memory',
-    description: 'Give agents knowledge and long-term context.',
+    description: 'Give agents durable knowledge and useful long-term context.',
     icon: 'lucide:brain',
-    iconBg: 'bg-emerald-500/10',
-    iconBorder: 'border-emerald-500/25',
-    iconColor: 'text-emerald-400',
   },
 ]
 </script>
 
 <style scoped>
-.logo-wrap {
-  background: color-mix(in srgb, var(--color-theme-900) 88%, var(--color-accent-500));
-  border: 1px solid color-mix(in srgb, var(--color-accent-500) 32%, transparent);
-  box-shadow: 0 0 36px color-mix(in srgb, var(--color-accent-500) 18%, transparent);
+.welcome-logo-wrap {
+  position: relative;
+  display: grid;
+  width: 7rem;
+  height: 7rem;
+  place-items: center;
 }
 
-@media (min-width: 640px) {
-  .feature-item + .feature-item {
-    border-left: 1px solid color-mix(in srgb, var(--color-theme-700) 55%, transparent);
+.welcome-logo-ring {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 33%, transparent);
+  border-radius: 9999px;
+}
+
+.welcome-logo-ring--outer {
+  inset: 0;
+  box-shadow: inset 0 0 28px color-mix(in srgb, var(--color-accent-500) 5%, transparent);
+}
+
+.welcome-logo-ring--inner {
+  inset: .5rem;
+  border-color: color-mix(in srgb, var(--color-accent-400) 24%, transparent);
+}
+
+.welcome-logo {
+  display: grid;
+  width: 4.25rem;
+  height: 4.25rem;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-accent-400) 40%, transparent);
+  border-radius: 1.25rem;
+  background: radial-gradient(circle at 35% 25%, color-mix(in srgb, var(--color-accent-400) 24%, transparent), color-mix(in srgb, var(--color-theme-900) 93%, transparent));
+  box-shadow: 0 0 30px color-mix(in srgb, var(--color-accent-500) 20%, transparent), inset 0 1px 0 color-mix(in srgb, var(--color-theme-100) 12%, transparent);
+}
+
+.welcome-eyebrow {
+  color: var(--color-accent-300);
+  font-size: .6875rem;
+  font-weight: 650;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.welcome-feature {
+  display: flex;
+  min-width: 0;
+  gap: .875rem;
+  padding: 1.125rem;
+  border: 1px solid color-mix(in srgb, var(--color-theme-600) 38%, transparent);
+  border-radius: .875rem;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-theme-800) 58%, transparent), color-mix(in srgb, var(--color-theme-900) 52%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-theme-100) 4%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.welcome-feature-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+  color: var(--color-accent-300);
+}
+
+.welcome-next-hint {
+  border: 1px solid color-mix(in srgb, var(--color-theme-600) 28%, transparent);
+  background: color-mix(in srgb, var(--color-theme-900) 45%, transparent);
+}
+
+@media (max-width: 639px) {
+  .welcome-feature {
+    padding: 1rem;
   }
 }
 </style>

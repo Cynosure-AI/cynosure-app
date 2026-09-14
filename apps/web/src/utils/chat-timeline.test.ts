@@ -35,12 +35,57 @@ describe('chat timeline chronology', () => {
     expect(inner.type === 'tool-group' && inner.group.steps.map(s => s.timestamp)).toEqual([2, 3])
   })
 
-  it('keeps interleaved parallel runs at their first activity', () => {
+  it('keeps interleaved parallel runs grouped until main-agent activity resumes', () => {
     const timeline = buildChatTimeline([
       message('a1', 1, { maInvocationId: 'a' }), message('b1', 2, { maInvocationId: 'b' }),
       message('main', 3), message('b2', 4, { maInvocationId: 'b' }), message('a2', 5, { maInvocationId: 'a' }),
     ], [])
-    expect(ids(timeline)).toEqual([['m-a1', 'm-a2'], ['m-b1', 'm-b2'], 'main'])
+    expect(ids(timeline)).toEqual([['m-a1'], ['m-b1'], 'main', ['m-b2'], ['m-a2']])
+  })
+
+  it('renders a continued invocation in a new chronological card', () => {
+    const timeline = buildChatTimeline([
+      message('first-run', 2, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+      message('main-between', 3),
+      message('continued-run', 5, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+    ], [
+      step(1, { toolCalls: [{ name: 'spawn_subagent', arguments: '{"content":"Initial task"}' }] }),
+      step(4, { toolCalls: [{ name: 'continue_subagent', arguments: '{"invocationId":"worker-1","content":"Follow up"}' }] }),
+    ])
+
+    expect(ids(timeline)).toEqual([1, ['m-first-run'], 'main-between', 4, ['m-continued-run']])
+    const groups = timeline.filter(entry => entry.type === 'sub-agent-group')
+    expect(groups[0]?.openingMessage).toBe('Initial task')
+    expect(groups[0]?.continued).toBe(false)
+    expect(groups[1]?.openingMessage).toBe('Follow up')
+    expect(groups[1]?.continued).toBe(true)
+  })
+
+  it('shows the model response before its delegation call and sub-agent card', () => {
+    const timeline = buildChatTimeline(
+      [
+        message('model-response', 2),
+        message('sub-answer', 3, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+      ],
+      [step(1, { toolCalls: [{
+        name: 'spawn_subagent',
+        arguments: JSON.stringify({ internalName: 'worker', instructions: 'Do the task' }),
+      }] })],
+    )
+
+    expect(ids(timeline)).toEqual(['model-response', 1, ['m-sub-answer']])
+  })
+
+  it('reconstructs the sub-agent first message from its regular parameters', () => {
+    const timeline = buildChatTimeline(
+      [message('answer', 2, { maInvocationId: 'worker-1', maCodename: 'worker' })],
+      [step(1, { toolCalls: [{
+        name: 'spawn_subagent',
+        arguments: JSON.stringify({ internalName: 'worker', context: 'Background', instructions: 'Do the task' }),
+      }] })],
+    )
+    const group = timeline.find(entry => entry.type === 'sub-agent-group')
+    expect(group?.openingMessage).toBe('## Context\nBackground\n\n## Task\nDo the task')
   })
 
   it('keeps fallback tools inside their invocation and separates user turns', () => {
@@ -60,5 +105,16 @@ describe('chat timeline chronology', () => {
     const before = JSON.stringify({ messages, steps })
     expect(ids(buildChatTimeline(messages, steps))).toEqual(['a', 'b', 2, 3, 'answer'])
     expect(JSON.stringify({ messages, steps })).toBe(before)
+  })
+
+  it('keeps continuation rounds as permanent standalone timeline markers', () => {
+    const timeline = buildChatTimeline(
+      [message('first-answer', 1), message('continued-answer', 4)],
+      [step(2, { taskId: 'task', status: 'continuing', message: 'Open tasks remain.' }), step(3, { taskId: 'task', status: 'executing' })],
+    )
+
+    expect(timeline.map(entry => entry.type)).toEqual(['message', 'continuation', 'tool-group', 'message'])
+    const marker = timeline[1]
+    expect(marker.type === 'continuation' && marker.step.message).toBe('Open tasks remain.')
   })
 })

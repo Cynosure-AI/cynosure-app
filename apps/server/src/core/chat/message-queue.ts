@@ -14,7 +14,8 @@ import {
   readFileAttachmentText,
   type FileAttachmentArtifact,
 } from '../artifacts/file-artifacts.js'
-import { deleteConversationAttachmentChunks, indexConversationAttachment, persistMessageFileAttachments } from '../artifacts/attachment-rag.js'
+import { deleteConversationAttachmentChunks, indexConversationAttachment, persistMessageFileAttachments, reuseConversationAttachment } from '../artifacts/attachment-rag.js'
+import { releaseStagedChatAttachments, takeStagedChatAttachments } from '../artifacts/staged-attachments.js'
 import type {
   ChatQueueRequest,
   ChatQueueStateDto,
@@ -126,9 +127,15 @@ async function stageRequest(conversationId: string, request: ChatQueueRequest): 
     ? (await materializeAudioArtifacts(request.audioDataUrls, conversationId)).map(item => item.url)
     : []
   const files = request.files?.length
-    ? await materializeFileAttachments(request.files, conversationId)
+    ? [
+        ...takeStagedChatAttachments(conversationId, request.files.flatMap(file => file.stagedId ? [file.stagedId] : [])),
+        ...(await Promise.all(request.files.flatMap(file => file.existingAttachmentId ? [reuseConversationAttachment(conversationId, file.existingAttachmentId)] : [])))
+          .filter((file): file is NonNullable<typeof file> => Boolean(file)),
+        ...await materializeFileAttachments(request.files.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string').map(file => ({ name: file.name, content: file.content! })), conversationId),
+      ]
     : []
-  for (const file of files) file.chunkCount = await indexConversationAttachment(conversationId, file)
+  for (const file of files) if (file.chunkCount === undefined) file.chunkCount = await indexConversationAttachment(conversationId, file)
+  releaseStagedChatAttachments(conversationId, request.files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || [], false)
   return { images, audio, files }
 }
 
@@ -202,12 +209,13 @@ function cleanupRowArtifacts(row: QueueRow): void {
   ]
   const paths = [
     ...urls.map(extractFilePathFromFileUrl).filter((path): path is string => Boolean(path)),
-    ...files.flatMap(file => [file.originalPath, file.textPath]),
+    ...files.filter(file => !file.assetId).flatMap(file => [file.originalPath, file.textPath]),
   ]
   for (const path of paths) {
     try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
   }
-  if (files.length) void deleteConversationAttachmentChunks(row.conversation_id, files.map(file => file.id))
+  const ownedAssetIds = files.filter(file => !file.assetId).map(file => file.id)
+  if (ownedAssetIds.length) void deleteConversationAttachmentChunks(row.conversation_id, ownedAssetIds)
 }
 
 export function deleteQueuedChatMessage(conversationId: string, id: string): boolean {

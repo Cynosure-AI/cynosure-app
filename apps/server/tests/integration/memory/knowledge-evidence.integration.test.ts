@@ -10,7 +10,7 @@ test('an assertion survives until its final active evidence source is retired', 
   const { MemoryKnowledgeStore } = await import('../../../src/core/memory/memory-knowledge.js')
   try {
     const db = getDb()
-    db.prepare(`INSERT INTO memory_spaces (id, name, description, folder_path, created_at) VALUES ('space-a', 'A', '', ?, ?)`)
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, created_at) VALUES ('space-a', 'A', '', ?, ?)`)
       .run(directory, Date.now())
     const store = new MemoryKnowledgeStore()
     const relation = [{
@@ -19,17 +19,17 @@ test('an assertion survives until its final active evidence source is retired', 
       note: 'Cynosure uses LanceDB.', importance: 2 as const,
     }]
     for (const documentId of ['doc-a', 'doc-b']) {
-      db.prepare(`INSERT INTO memory_file_index (document_id, document_ref, space_id, file_name, content_hash, created_at) VALUES (?, ?, 'space-a', ?, 'revision-1', ?)`)
+      db.prepare(`INSERT INTO memory_file_index (document_id, document_ref, category_id, file_name, content_hash, created_at) VALUES (?, ?, 'space-a', ?, 'revision-1', ?)`)
         .run(documentId, `ref-${documentId}`, `${documentId}.md`, Date.now())
       store.publishDocument({
-        documentId, contentHash: 'revision-1', spaceId: 'space-a', fileName: `${documentId}.md`,
+        documentId, contentHash: 'revision-1', categoryId: 'space-a', fileName: `${documentId}.md`,
         sourceId: `memory:space-a:${documentId}.md`,
         chunks: [{ text: 'Cynosure uses LanceDB.', searchText: 'Cynosure uses LanceDB.', chunkIndex: 0, documentTitle: 'Architecture', sectionPath: 'Architecture', contentHash: `${documentId}-chunk` }],
         relations: relation,
       })
     }
 
-    const edge = store.browseGraph({ spaceIds: ['space-a'] }).edges[0]
+    const edge = store.browseGraph({ categoryIds: ['space-a'] }).edges[0]
     expect((db.prepare(`SELECT COUNT(*) AS count FROM memory_knowledge_assertion_evidence WHERE assertion_id = ?`).get(edge.id) as { count: number }).count).toBe(2)
     store.retireDocument('doc-b')
     expect(store.getEdge(edge.id)).not.toBeNull()

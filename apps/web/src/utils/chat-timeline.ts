@@ -10,9 +10,10 @@ interface ToolGroup {
 export type TimelineEntry =
   | { type: 'message'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'tool-group'; group: ToolGroup; ts: number; key: string; isSubAgent?: boolean }
+  | { type: 'continuation'; step: ExecutionStep; ts: number; key: string; isSubAgent?: false }
   | { type: 'tool-fallback'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
-  | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
+  | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; openingMessage: string | null; continued: boolean; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
 
 export function buildChatTimeline(messages: DisplayMessage[], executionSteps: ExecutionStep[], mainAgentId?: string | null): TimelineEntry[] {
   const entries: TimelineEntry[] = []
@@ -84,6 +85,15 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     // Group steps by taskId + iteration to keep outer and inner executor steps separate
     const grouped = new Map<string, ExecutionStep[]>()
     for (const step of executionSteps) {
+      if (step.status === 'continuing') {
+        entries.push({
+          type: 'continuation',
+          step,
+          ts: step.timestamp,
+          key: `continuation-${step.taskId ?? 'task'}-${step.timestamp}`,
+        })
+        continue
+      }
       const groupKey = JSON.stringify([step.maInvocationId ?? step.maCodename ?? '', step.taskId ?? '', step.iteration])
       if (!grouped.has(groupKey)) grouped.set(groupKey, [])
       grouped.get(groupKey)!.push(step)
@@ -148,7 +158,42 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     return best?.id ?? null
   }
 
-  function buildSubAgentGroup(groupId: string, innerEntries: TimelineEntry[]): Extract<TimelineEntry, { type: 'sub-agent-group' }> {
+  type Delegation = { invocationId: string | null; codename: string | null; content: string; continued: boolean }
+
+  function delegationsFrom(entry: TimelineEntry): Delegation[] {
+    if (entry.type !== 'tool-group') return []
+    const delegations: Delegation[] = []
+    for (const step of entry.group.steps) {
+      for (const call of step.toolCalls || []) {
+        if (call.name !== 'spawn_subagent' && call.name !== 'continue_subagent') continue
+        try {
+          const args = JSON.parse(call.arguments || '{}') as Record<string, unknown>
+          const directContent = typeof args.content === 'string' ? args.content.trim() : ''
+          const instructions = typeof args.instructions === 'string' ? args.instructions.trim() : ''
+          const context = typeof args.context === 'string' ? args.context.trim() : ''
+          const continued = call.name === 'continue_subagent'
+          const content = directContent || (context
+            ? `${continued ? '## New Context' : '## Context'}\n${context}\n\n${continued ? '## Follow-up Task' : '## Task'}\n${instructions}`
+            : instructions)
+          delegations.push({
+            invocationId: typeof args.invocationId === 'string' ? args.invocationId : null,
+            codename: typeof args.internalName === 'string' ? args.internalName : null,
+            content,
+            continued,
+          })
+        } catch {
+          continue
+        }
+      }
+    }
+    return delegations
+  }
+
+  function buildSubAgentGroup(
+    groupId: string,
+    innerEntries: TimelineEntry[],
+    delegation?: Delegation | null,
+  ): Extract<TimelineEntry, { type: 'sub-agent-group' }> {
     let agentName: string | null = null
     let agentId: string | null = null
     let codename: string | null = null
@@ -166,6 +211,8 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       codename: codename ?? groupId,
       agentName,
       agentId,
+      openingMessage: delegation?.content || null,
+      continued: delegation?.continued ?? false,
       entries: innerEntries,
       ts: innerEntries[0].ts,
       key: `sag-${groupId}-${innerEntries[0].ts}`
@@ -175,9 +222,15 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
   function groupSubAgentEntriesForTurn(turnEntries: TimelineEntry[]): TimelineEntry[] {
     const groups = new Map<string, Extract<TimelineEntry, { type: 'sub-agent-group' }>>()
     const result: TimelineEntry[] = []
+    const pendingDelegations: Delegation[] = []
     for (const entry of turnEntries) {
       if (!entry.isSubAgent) {
         result.push(entry)
+        // Main-agent activity is a chronological boundary. A later
+        // continuation of the same invocation gets a new card here instead
+        // of being pulled back into the invocation's original card.
+        groups.clear()
+        pendingDelegations.push(...delegationsFrom(entry))
         continue
       }
       const groupId = subAgentGroupIdOf(entry) ?? entry.key
@@ -187,13 +240,27 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       } else {
         // Anchor each invocation at its first activity, immediately after its
         // initiating call, rather than collecting all runs below the last call.
-        const group = buildSubAgentGroup(groupId, [entry])
+        const exactIndex = pendingDelegations.findIndex(candidate =>
+          candidate.invocationId === groupId || candidate.codename === groupId
+        )
+        const fallbackIndex = pendingDelegations.findIndex(candidate => !candidate.invocationId)
+        const matchedIndex = exactIndex >= 0 ? exactIndex : fallbackIndex
+        const delegation = matchedIndex >= 0 ? pendingDelegations.splice(matchedIndex, 1)[0] : null
+        const group = buildSubAgentGroup(groupId, [entry], delegation)
         groups.set(groupId, group)
         result.push(group)
       }
     }
     return result.map(entry => entry.type === 'sub-agent-group'
-      ? { ...buildSubAgentGroup(entry.codename, entry.entries), key: entry.key }
+      ? {
+          ...buildSubAgentGroup(entry.codename, entry.entries, {
+            invocationId: null,
+            codename: entry.codename,
+            content: entry.openingMessage || '',
+            continued: entry.continued,
+          }),
+          key: entry.key,
+        }
       : entry)
   }
 
@@ -267,5 +334,31 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     return result
   }
 
-  return groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(entries))
+  function putDelegationResponseBeforeCall(source: TimelineEntry[]): TimelineEntry[] {
+    const result: TimelineEntry[] = []
+    for (let index = 0; index < source.length; index++) {
+      const call = source[index]
+      const response = source[index + 1]
+      const subAgent = source[index + 2]
+      if (
+        call?.type === 'tool-group' &&
+        delegationsFrom(call).length > 0 &&
+        response?.type === 'message' &&
+        response.msg.role === 'assistant' &&
+        !response.isSubAgent &&
+        subAgent?.type === 'sub-agent-group'
+      ) {
+        // The assistant text and tool call are emitted in that order by the
+        // model, but the completed tool step has an earlier persisted
+        // timestamp. Restore the conversational order for delegation rounds.
+        result.push(response, call, subAgent)
+        index += 2
+        continue
+      }
+      result.push(call)
+    }
+    return result
+  }
+
+  return putDelegationResponseBeforeCall(groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(entries)))
 }

@@ -7,6 +7,7 @@ import InputToolbar from './inputbar/InputToolbar.vue'
 import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
+import { api } from '../../api/client'
 
 const chatStore = useChatStore()
 
@@ -47,7 +48,8 @@ const inputText = ref(readDraft(draftStorageKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([])
-const attachedFiles = ref<{ name: string; content: string; sourceId?: string }[]>([])
+type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; error?: string }
+const attachedFiles = ref<DraftFile[]>([])
 const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([])
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
@@ -65,13 +67,19 @@ const transcriptionOutputSelected = computed(() =>
 const audioInputUnsupported = computed(() =>
   !transcriptionOutputSelected.value && modelHasInputModality('audio') === false
 )
-const canSend = computed(() => !!inputText.value.trim() || attachedAudio.value.length > 0)
+const attachmentsProcessing = computed(() => attachedFiles.value.some(file => file.status === 'processing'))
+const hasAttachmentError = computed(() => attachedFiles.value.some(file => file.status === 'error'))
+const canSend = computed(() => !attachmentsProcessing.value && !hasAttachmentError.value && (!!inputText.value.trim() || attachedAudio.value.length > 0))
 
 async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
   const content = inputText.value.trim()
   if (!content && !attachedAudio.value.length) return
   const images = attachedImages.value.map((i) => i.url)
-  const files = attachedFiles.value.map((f) => ({ name: f.name, content: f.content }))
+  if (attachmentsProcessing.value || hasAttachmentError.value) return
+  const files = attachedFiles.value.filter(f => f.status === 'ready').map((f) => {
+    const stagedId = f.stagedConversationId === chatStore.activeConversationId ? f.stagedId : undefined
+    return { name: f.name, content: stagedId ? undefined : f.content, stagedId, existingAttachmentId: f.existingAttachmentId }
+  })
   const audio = attachedAudio.value.map((a) => a.url)
   inputText.value = ''
   persistDraft(draftStorageKey.value, '')
@@ -107,7 +115,7 @@ function openFilePicker(): void {
 
 function addLibrarySelection(selection: {
   images: { id: string; name: string; url: string }[]
-  files: { id: string; name: string; content: string }[]
+  files: { id: string; name: string; content?: string; existingAttachmentId?: string }[]
   audio: { id: string; name: string; url: string }[]
 }): void {
   const existing = new Set([
@@ -119,7 +127,9 @@ function addLibrarySelection(selection: {
     if (!existing.has(image.id)) attachedImages.value.push({ url: image.url, name: image.name, sourceId: image.id })
   }
   for (const file of selection.files) {
-    if (!existing.has(file.id)) attachedFiles.value.push({ name: file.name, content: file.content, sourceId: file.id })
+    // Library files already belong to a persisted message and are re-materialized
+    // by the normal resend path; only new local uploads need draft staging.
+    if (!existing.has(file.id)) attachedFiles.value.push({ clientId: crypto.randomUUID(), name: file.name, content: file.content, existingAttachmentId: file.existingAttachmentId, sourceId: file.id, status: 'ready' })
   }
   for (const audio of selection.audio) {
     if (!existing.has(audio.id)) attachedAudio.value.push({ url: audio.url, name: audio.name, sourceId: audio.id })
@@ -144,6 +154,28 @@ const PARSEABLE_DOC_EXTENSIONS = new Set([
 function isParseableDoc(filename: string): boolean {
   const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase()
   return PARSEABLE_DOC_EXTENSIONS.has(ext)
+}
+
+async function stageFile(name: string, content: string, sourceId?: string): Promise<void> {
+  const draft: DraftFile = { clientId: crypto.randomUUID(), name, content, sourceId, status: 'processing' }
+  attachedFiles.value.push(draft)
+  try {
+    const conversationId = chatStore.activeConversationId || await chatStore.createConversation()
+    const staged = await api.chat.stageAttachment(conversationId, { name, content })
+    const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
+    if (!current) {
+      await api.chat.removeStagedAttachment(conversationId, staged.id)
+      return
+    }
+    current.stagedId = staged.id
+    current.stagedConversationId = conversationId
+    current.status = 'ready'
+  } catch (err) {
+    const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
+    if (!current) return
+    current.status = 'error'
+    current.error = (err as Error).message || 'Attachment processing failed'
+  }
 }
 
 function processFiles(files: File[]): void {
@@ -172,19 +204,13 @@ function processFiles(files: File[]): void {
       // Read document files as base64 for server-side parsing (officeparser)
       const reader = new FileReader()
       reader.onload = () => {
-        attachedFiles.value.push({
-          name: file.name,
-          content: reader.result as string
-        })
+        void stageFile(file.name, reader.result as string)
       }
       reader.readAsDataURL(file)
     } else {
       const reader = new FileReader()
       reader.onload = () => {
-        attachedFiles.value.push({
-          name: file.name,
-          content: reader.result as string
-        })
+        void stageFile(file.name, reader.result as string)
       }
       reader.readAsText(file)
     }
@@ -196,7 +222,12 @@ function removeImage(idx: number): void {
 }
 
 function removeFile(idx: number): void {
+  const file = attachedFiles.value[idx]
+  if (!file) return
   attachedFiles.value.splice(idx, 1)
+  if (file.stagedId && file.stagedConversationId) {
+    void api.chat.removeStagedAttachment(file.stagedConversationId, file.stagedId)
+  }
 }
 
 function removeAudio(idx: number): void {
@@ -381,10 +412,13 @@ defineExpose({ processFiles, focus })
           class="relative group flex items-center gap-1.5 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-1.5"
         >
           <Icon
-            icon="mdi:file-document-outline"
-            class="h-4 w-4 text-theme-400 shrink-0"
+            :icon="file.status === 'processing' ? 'lucide:loader-2' : file.status === 'error' ? 'lucide:circle-alert' : 'mdi:file-document-outline'"
+            class="h-4 w-4 shrink-0"
+            :class="file.status === 'processing' ? 'animate-spin text-accent-400' : file.status === 'error' ? 'text-red-400' : 'text-theme-400'"
           />
           <span class="text-xs text-theme-300 max-w-32 truncate">{{ file.name }}</span>
+          <span v-if="file.status === 'processing'" class="text-[10px] text-theme-500">Preparing…</span>
+          <span v-else-if="file.status === 'error'" class="text-[10px] text-red-400" :title="file.error">Failed</span>
           <button
             class="ml-1 h-4 w-4 rounded-full bg-red-600 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             aria-label="Remove file"

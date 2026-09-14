@@ -31,8 +31,8 @@ vi.mock('../gateway/gateway.js', () => ({
         modelSupportsToolCalls: vi.fn().mockResolvedValue(true),
     }),
 }))
-vi.mock('../memory/memory-space-scope.js', () => ({
-    getAssignedOrDefaultSpaces: () => [],
+vi.mock('../memory/memory-folder-scope.js', () => ({
+    getAssignedMemoryFolders: () => [],
 }))
 vi.mock('../../db/database.js', () => ({
     getDb: () => ({

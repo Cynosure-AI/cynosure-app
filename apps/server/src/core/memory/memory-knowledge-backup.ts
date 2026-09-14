@@ -88,7 +88,7 @@ export async function restoreMemoryKnowledgeBackup(
     db.prepare(`UPDATE memory_knowledge_index_runs SET search_projection_status = 'pending', search_projection_error = NULL`).run()
     db.prepare(`
       UPDATE memory_file_index
-      SET knowledge_extracted_at = COALESCE((
+      SET deep_researched_at = COALESCE((
         SELECT MAX(r.activated_at) FROM memory_knowledge_index_runs r
         WHERE r.document_id = memory_file_index.document_id
           AND r.content_hash = memory_file_index.content_hash

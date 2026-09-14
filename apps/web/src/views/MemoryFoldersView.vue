@@ -4,11 +4,12 @@ import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
-import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemorySpace } from "../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder, MemoryDiffSegment, MemoryRevisionSummary } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
+import MemoryInlineDiff from "../components/memory/MemoryInlineDiff.vue";
 import KnowledgeFactsSection from "../components/memory/KnowledgeFactsSection.vue";
 import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vue";
 import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
@@ -43,21 +44,21 @@ const ENTITY_NODE_TYPES: KnowledgeGraphNodeType[] = [
 const memorySections = [
   {
     id: "documents",
-    path: "/memory-spaces/documents",
+    path: "/memory-folders/documents",
     label: "Documents",
     description: "Browse folders, upload files, and manage indexed memory documents.",
     icon: "lucide:file-text",
   },
   {
     id: "relationships",
-    path: "/memory-spaces/relationships",
+    path: "/memory-folders/relationships",
     label: "Knowledge",
     description: "Inspect, correct, and manage facts extracted from memory.",
     icon: "lucide:git-branch",
   },
   {
     id: "visual",
-    path: "/memory-spaces/visual-graph",
+    path: "/memory-folders/visual-graph",
     label: "Knowledge Graph",
     description: "Explore extracted knowledge as a spatial graph with more room to breathe.",
     icon: "lucide:network",
@@ -70,18 +71,28 @@ const memoryTabs: TabDef<MemoryPanel>[] = memorySections.map((section) => ({
   icon: section.icon,
 }));
 
-const spaces = ref<MemorySpace[]>([]);
+const spaces = ref<MemoryFolder[]>([]);
 const spacesLoading = ref(false);
-const selectedSpaceId = ref<string | null>(null);
-const graphSelectedSpaceIds = ref<string[]>([]);
-const graphSpaceSelectionInitialized = ref(false);
+const selectedCategoryId = ref<string | null>(null);
+const graphSelectedCategoryIds = ref<string[]>([]);
+const graphCategorySelectionInitialized = ref(false);
 const showCreateDialog = ref(false);
-const editingSpace = ref<MemorySpace | null>(null);
-const parentForCreate = ref<MemorySpace | null>(null);
+const editingCategory = ref<MemoryFolder | null>(null);
+const parentForCreate = ref<MemoryFolder | null>(null);
 const folderName = ref("");
 const folderDescription = ref("");
 const showDeleteConfirm = ref(false);
-const pendingDeleteSpace = ref<MemorySpace | null>(null);
+const pendingDeleteCategory = ref<MemoryFolder | null>(null);
+type DeletedMemory = { documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number };
+const showDeletedMemories = ref(false);
+const deletedMemories = ref<DeletedMemory[]>([]);
+const deletedLoading = ref(false);
+const deletedError = ref("");
+const restoringDocumentRef = ref("");
+const deletedHistoryRef = ref("");
+const deletedRevisions = ref<MemoryRevisionSummary[]>([]);
+const deletedSelectedRevisionId = ref("");
+const deletedRevisionDiff = ref<MemoryDiffSegment[]>([]);
 const activePanel = ref<MemoryPanel>("documents");
 
 const graph = ref<KnowledgeGraph | null>(null);
@@ -112,10 +123,72 @@ const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_KNOWLEDGE_GRAPH_
 
 const route = useRoute();
 const router = useRouter();
+const linkedCategoryId = computed(() => typeof route.query.category === "string" ? route.query.category : "");
+const linkedFileName = computed(() => typeof route.query.file === "string" ? route.query.file : "");
 let graphSuggestionTimer: number | null = null;
 let graphSuggestionRequest = 0;
 let graphRequest = 0;
 let inFlightGraphKey = "";
+
+async function openDeletedMemories() {
+  showDeletedMemories.value = true;
+  deletedLoading.value = true;
+  deletedError.value = "";
+  try {
+    deletedMemories.value = await api.memoryFolders.listDeleted();
+  } catch (error) {
+    deletedError.value = (error as Error).message || "Failed to load deleted memories";
+  } finally {
+    deletedLoading.value = false;
+  }
+}
+
+async function openDeletedHistory(memory: DeletedMemory) {
+  deletedHistoryRef.value = memory.documentRef;
+  deletedSelectedRevisionId.value = "";
+  deletedRevisionDiff.value = [];
+  deletedLoading.value = true;
+  try {
+    deletedRevisions.value = await api.memoryFolders.listRevisions(memory.documentRef);
+    if (deletedRevisions.value[0]) await selectDeletedRevision(deletedRevisions.value[0].id);
+  } catch (error) {
+    deletedError.value = (error as Error).message || "Failed to load revision history";
+  } finally {
+    deletedLoading.value = false;
+  }
+}
+
+async function selectDeletedRevision(revisionId: string) {
+  deletedSelectedRevisionId.value = revisionId;
+  const index = deletedRevisions.value.findIndex(revision => revision.id === revisionId);
+  const selected = deletedRevisions.value[index];
+  const previous = deletedRevisions.value[index + 1];
+  if (!selected) return;
+  if (previous) {
+    deletedRevisionDiff.value = (await api.memoryFolders.getRevisionDiff(deletedHistoryRef.value, previous.id, selected.id)).segments;
+  } else {
+    const revision = await api.memoryFolders.getRevision(deletedHistoryRef.value, selected.id);
+    deletedRevisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
+  }
+}
+
+async function restoreDeletedMemory(memory: DeletedMemory) {
+  restoringDocumentRef.value = memory.documentRef;
+  deletedError.value = "";
+  try {
+    const revisions = deletedHistoryRef.value === memory.documentRef ? deletedRevisions.value : await api.memoryFolders.listRevisions(memory.documentRef);
+    const selected = revisions.find(revision => revision.id === deletedSelectedRevisionId.value) || revisions[0];
+    if (!selected) throw new Error("This memory has no restorable revision.");
+    await api.memoryFolders.restoreRevision(memory.documentRef, selected.id, "");
+    deletedMemories.value = deletedMemories.value.filter(item => item.documentRef !== memory.documentRef);
+    deletedHistoryRef.value = "";
+    await loadCategories();
+  } catch (error) {
+    deletedError.value = (error as Error).message || "Failed to restore memory";
+  } finally {
+    restoringDocumentRef.value = "";
+  }
+}
 
 const panelByRouteSegment: Record<string, MemoryPanel> = {
   documents: "documents",
@@ -137,10 +210,10 @@ const activeGraph = computed(() =>
   activeGraphView.value && graphView.value === activeGraphView.value ? graph.value : null,
 );
 
-const selectedSpace = computed(() =>
-  spaces.value.find((s) => s.id === selectedSpaceId.value) || null,
+const selectedCategory = computed(() =>
+  spaces.value.find((s) => s.id === selectedCategoryId.value) || null,
 );
-const graphSpaceOptions = computed<MultiSelectOption[]>(() => spaces.value.map((space) => ({
+const graphCategoryOptions = computed<MultiSelectOption[]>(() => spaces.value.map((space) => ({
   value: space.id,
   label: space.name,
 })));
@@ -163,25 +236,28 @@ watch([nodeSpacing, showGraphEdgeLabels, graphEdgePathType], () => {
   syncPrefsToElectron();
 });
 
-async function loadSpaces() {
+async function loadCategories() {
   spacesLoading.value = true;
   try {
     const previousSpaceIds = spaces.value.map((space) => space.id);
-    const previouslySelectedAll = !graphSpaceSelectionInitialized.value
-      || (previousSpaceIds.length > 0 && previousSpaceIds.every((id) => graphSelectedSpaceIds.value.includes(id)));
-    const loaded = await api.memorySpaces.list();
+    const previouslySelectedAll = !graphCategorySelectionInitialized.value
+      || (previousSpaceIds.length > 0 && previousSpaceIds.every((id) => graphSelectedCategoryIds.value.includes(id)));
+    const loaded = await api.memoryFolders.list();
     spaces.value = [...loaded].sort((a, b) => {
-      if (a.isDefault) return -1;
-      if (b.isDefault) return 1;
-      return (a.relativePath || "").localeCompare(b.relativePath || "");
+      if (a.isUncategorized) return -1;
+      if (b.isUncategorized) return 1;
+      return (a.categoryPath || "").localeCompare(b.categoryPath || "");
     });
-    graphSelectedSpaceIds.value = previouslySelectedAll
+    if (linkedCategoryId.value && spaces.value.some(space => space.id === linkedCategoryId.value)) {
+      selectedCategoryId.value = linkedCategoryId.value;
+    }
+    graphSelectedCategoryIds.value = previouslySelectedAll
       ? spaces.value.map((space) => space.id)
-      : graphSelectedSpaceIds.value.filter((id) => spaces.value.some((space) => space.id === id));
-    graphSpaceSelectionInitialized.value = true;
-    if (!selectedSpaceId.value && spaces.value.length > 0) selectedSpaceId.value = spaces.value[0].id;
-    if (selectedSpaceId.value && !spaces.value.some((s) => s.id === selectedSpaceId.value)) {
-      selectedSpaceId.value = spaces.value[0]?.id || null;
+      : graphSelectedCategoryIds.value.filter((id) => spaces.value.some((space) => space.id === id));
+    graphCategorySelectionInitialized.value = true;
+    if (!selectedCategoryId.value && spaces.value.length > 0) selectedCategoryId.value = spaces.value[0].id;
+    if (selectedCategoryId.value && !spaces.value.some((s) => s.id === selectedCategoryId.value)) {
+      selectedCategoryId.value = spaces.value[0]?.id || null;
     }
     if (activeGraphView.value) await loadGraph();
   } catch {
@@ -190,26 +266,26 @@ async function loadSpaces() {
   spacesLoading.value = false;
 }
 
-function openCreateDialog(parent?: MemorySpace) {
-  editingSpace.value = null;
-  parentForCreate.value = parent || selectedSpace.value;
+function openCreateDialog(parent?: MemoryFolder) {
+  editingCategory.value = null;
+  parentForCreate.value = parent || selectedCategory.value;
   folderName.value = "";
   folderDescription.value = "";
   showCreateDialog.value = true;
 }
 
-function openEditDialog(space: MemorySpace) {
-  editingSpace.value = space;
+function openEditDialog(space: MemoryFolder) {
+  editingCategory.value = space;
   parentForCreate.value = null;
   folderName.value = space.name;
   folderDescription.value = space.description;
   showCreateDialog.value = true;
 }
 
-function relativePathForName(space: MemorySpace, name: string): string {
+function relativePathForName(space: MemoryFolder, name: string): string {
   const trimmed = name.trim();
-  if (space.isDefault) return "";
-  const current = space.relativePath || "";
+  if (space.isUncategorized) return "";
+  const current = space.categoryPath || "";
   const slash = current.lastIndexOf("/");
   return slash >= 0 ? `${current.slice(0, slash)}/${trimmed}` : trimmed;
 }
@@ -217,40 +293,46 @@ function relativePathForName(space: MemorySpace, name: string): string {
 async function saveFolder() {
   if (!folderName.value.trim()) return;
   try {
-    if (editingSpace.value) {
-      const data: { name?: string; description?: string; relativePath?: string } = {
+    if (editingCategory.value) {
+      const data: { name?: string; description?: string; categoryPath?: string } = {
         name: folderName.value.trim(),
         description: folderDescription.value,
       };
-      if (!editingSpace.value.isDefault) data.relativePath = relativePathForName(editingSpace.value, folderName.value);
-      const updated = await api.memorySpaces.update(editingSpace.value.id, data);
-      selectedSpaceId.value = updated.id;
+      if (!editingCategory.value.isUncategorized) data.categoryPath = relativePathForName(editingCategory.value, folderName.value);
+      const updated = await api.memoryFolders.update(editingCategory.value.id, data);
+      selectedCategoryId.value = updated.id;
     } else {
-      const created = await api.memorySpaces.create(
+      const created = await api.memoryFolders.create(
         folderName.value.trim(),
         folderDescription.value,
-        parentForCreate.value?.relativePath || "",
+        parentForCreate.value?.categoryPath || "",
       );
-      selectedSpaceId.value = created.id;
+      selectedCategoryId.value = created.id;
     }
-    await loadSpaces();
+    await loadCategories();
   } catch {
     /* surface errors later with shared notifications */
   }
   showCreateDialog.value = false;
 }
 
-function confirmDeleteSpace(space: MemorySpace) {
-  pendingDeleteSpace.value = space;
+function confirmDeleteSpace(space: MemoryFolder) {
+  const prefix = space.categoryPath ? `${space.categoryPath}/` : "";
+  const hasSubfolders = Boolean(prefix && spaces.value.some(candidate => candidate.categoryPath?.startsWith(prefix)));
+  if (space.fileCount === 0 && !hasSubfolders) {
+    void deleteSpace(space);
+    return;
+  }
+  pendingDeleteCategory.value = space;
   showDeleteConfirm.value = true;
 }
 
-async function deleteSpace(space: MemorySpace) {
+async function deleteSpace(space: MemoryFolder) {
   showDeleteConfirm.value = false;
-  pendingDeleteSpace.value = null;
+  pendingDeleteCategory.value = null;
   try {
-    await api.memorySpaces.remove(space.id);
-    await loadSpaces();
+    await api.memoryFolders.remove(space.id);
+    await loadCategories();
   } catch {
     /* ignore */
   }
@@ -270,7 +352,7 @@ function capVisualGraph(nextGraph: KnowledgeGraph, view: GraphViewMode): Knowled
 async function loadGraph(
   query = graphQuery.value,
   nodeIds = graphSelectedNodes.value.map((node) => node.id),
-  spaceIds = graphSelectedSpaceIds.value,
+  categoryIds = graphSelectedCategoryIds.value,
 ) {
   const trimmedQuery = query.trim();
   const limit = activePanel.value === "relationships"
@@ -280,7 +362,7 @@ async function loadGraph(
       : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
   const view = activeGraphView.value || "visual";
   const minImportance = view === "visual" ? graphFactLevel.value : null;
-  const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${[...spaceIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
+  const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${[...categoryIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
   if (graphLoading.value && inFlightGraphKey === requestKey) return;
   const requestId = ++graphRequest;
   inFlightGraphKey = requestKey;
@@ -293,7 +375,7 @@ async function loadGraph(
       view,
       nodeIds,
       minImportance,
-      graphSpaceSelectionInitialized.value ? spaceIds : undefined,
+      graphCategorySelectionInitialized.value ? categoryIds : undefined,
     );
     if (requestId !== graphRequest) return;
     focusedGraphNodeId.value = null;
@@ -314,10 +396,10 @@ async function loadGraph(
   }
 }
 
-async function updateGraphSpaceSelection(spaceIds: string[]) {
-  graphSelectedSpaceIds.value = spaceIds;
+async function updateGraphSpaceSelection(categoryIds: string[]) {
+  graphSelectedCategoryIds.value = categoryIds;
   graphSelectedNodes.value = [];
-  await loadGraph(graphQuery.value, [], spaceIds);
+  await loadGraph(graphQuery.value, [], categoryIds);
 }
 
 async function clearGraphWalk() {
@@ -346,7 +428,7 @@ async function loadGraphSuggestions(query = graphQuery.value) {
     const result = await api.memory.getGraphSuggestions(
       trimmed,
       8,
-      graphSpaceSelectionInitialized.value ? graphSelectedSpaceIds.value : undefined,
+      graphCategorySelectionInitialized.value ? graphSelectedCategoryIds.value : undefined,
     );
     if (requestId !== graphSuggestionRequest) return;
     graphSuggestions.value = result.suggestions;
@@ -488,6 +570,14 @@ function selectPanel(panel: MemoryPanel) {
   if (section && route.path !== section.path) void router.push(section.path);
 }
 
+function clearDocumentLink(): void {
+  if (!linkedCategoryId.value && !linkedFileName.value) return;
+  const query = { ...route.query };
+  delete query.category;
+  delete query.file;
+  void router.replace({ path: route.path, query });
+}
+
 watch(
   () => route.params.section,
   async (sectionParam) => {
@@ -507,7 +597,11 @@ watch(
   { immediate: true },
 );
 
-onMounted(() => loadSpaces());
+watch(linkedCategoryId, (categoryId) => {
+  if (categoryId && spaces.value.some(space => space.id === categoryId)) selectedCategoryId.value = categoryId;
+});
+
+onMounted(() => loadCategories());
 </script>
 
 <template>
@@ -527,14 +621,22 @@ onMounted(() => loadSpaces());
             <div class="flex shrink-0 items-center gap-2 self-start">
               <MultiSelect
                 v-if="activePanel === 'relationships' || activePanel === 'visual'"
-                :model-value="graphSelectedSpaceIds"
-                :options="graphSpaceOptions"
+                :model-value="graphSelectedCategoryIds"
+                :options="graphCategoryOptions"
                 placeholder="No memory folders"
                 all-selected-label="All memory folders"
                 show-bulk-actions
                 class="min-w-64"
                 @update:model-value="updateGraphSpaceSelection"
               />
+              <button
+                v-if="activePanel === 'documents'"
+                class="flex items-center gap-2 rounded-lg border border-theme-700 px-3 py-2 text-sm font-medium text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"
+                @click="openDeletedMemories"
+              >
+                <Icon icon="lucide:archive-restore" class="h-4 w-4" />
+                Deleted
+              </button>
               <button
                 v-if="activePanel === 'documents'"
                 class="flex items-center gap-2 rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500"
@@ -600,14 +702,16 @@ onMounted(() => loadSpaces());
 
         <MemoryDocumentsSection
           v-else-if="activePanel === 'documents'"
-          v-model:selected-space-id="selectedSpaceId"
+          v-model:selected-category-id="selectedCategoryId"
           :spaces="spaces"
           :spaces-loading="spacesLoading"
-          :selected-space="selectedSpace"
+          :selected-category="selectedCategory"
+          :focus-file="linkedFileName"
           @create-folder="openCreateDialog"
           @edit-folder="openEditDialog"
           @delete-folder="confirmDeleteSpace"
-          @refresh-spaces="loadSpaces"
+          @refresh-spaces="loadCategories"
+          @category-navigation="clearDocumentLink"
         />
 
         <KnowledgeFactsSection
@@ -665,14 +769,14 @@ onMounted(() => loadSpaces());
         >
           <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl">
             <h3 class="text-base font-medium text-theme-200 mb-4">
-              {{ editingSpace ? "Edit Folder" : "New Memory Folder" }}
+              {{ editingCategory ? "Edit Folder" : "New Memory Folder" }}
             </h3>
             <div class="space-y-3">
               <div
-                v-if="!editingSpace"
+                v-if="!editingCategory"
                 class="text-xs text-theme-500"
               >
-                Parent: <span class="text-theme-300">{{ parentForCreate?.name || "Default" }}</span>
+                Parent: <span class="text-theme-300">{{ parentForCreate?.name || "Uncategorized" }}</span>
               </div>
               <div>
                 <label class="block text-xs text-theme-400 mb-1">Name</label>
@@ -705,12 +809,66 @@ onMounted(() => loadSpaces());
                 class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
                 @click="saveFolder"
               >
-                {{ editingSpace ? "Save" : "Create" }}
+                {{ editingCategory ? "Save" : "Create" }}
               </button>
             </div>
           </div>
         </div>
       </Teleport>
+
+      <ModalDialog
+        :show="showDeletedMemories"
+        title="Deleted Memories"
+        icon="lucide:archive-restore"
+        @close="showDeletedMemories = false"
+      >
+        <div class="max-h-96 space-y-2 overflow-y-auto">
+          <p v-if="deletedError" class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{{ deletedError }}</p>
+          <div v-if="deletedLoading" class="flex items-center gap-2 py-6 text-theme-500">
+            <Icon icon="lucide:loader-2" class="h-4 w-4 animate-spin" /> Loading deleted memories…
+          </div>
+          <p v-else-if="deletedMemories.length === 0" class="py-6 text-sm text-theme-500">No deleted memories.</p>
+          <template v-else-if="deletedHistoryRef">
+            <button class="text-xs text-theme-400 hover:text-theme-200" @click="deletedHistoryRef = ''">← All deleted memories</button>
+            <div class="grid gap-3 sm:grid-cols-[14rem_minmax(0,1fr)]">
+              <div class="space-y-1">
+                <button
+                  v-for="revision in deletedRevisions"
+                  :key="revision.id"
+                  class="w-full rounded-lg border px-3 py-2 text-left text-xs"
+                  :class="deletedSelectedRevisionId === revision.id ? 'border-accent-500 bg-accent-500/10 text-theme-100' : 'border-theme-800 text-theme-400'"
+                  @click="selectDeletedRevision(revision.id)"
+                >
+                  <div>Revision {{ revision.revisionNumber }} · {{ revision.source }}</div>
+                  <div class="mt-1 text-theme-600">{{ new Date(revision.createdAt).toLocaleString() }}</div>
+                </button>
+              </div>
+              <MemoryInlineDiff :segments="deletedRevisionDiff" class="max-h-72" />
+            </div>
+            <button
+              class="rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:opacity-50"
+              :disabled="!deletedSelectedRevisionId || Boolean(restoringDocumentRef)"
+              @click="restoreDeletedMemory(deletedMemories.find(item => item.documentRef === deletedHistoryRef)!)"
+            >Restore selected revision</button>
+          </template>
+          <div v-for="memory in (deletedHistoryRef ? [] : deletedMemories)" :key="memory.documentRef" class="flex items-center justify-between gap-3 rounded-lg border border-theme-800 px-3 py-2">
+            <div class="min-w-0">
+              <div class="truncate text-sm text-theme-200">{{ memory.fileName }}</div>
+              <div class="text-xs text-theme-500">Deleted {{ new Date(memory.deletedAt).toLocaleString() }}</div>
+            </div>
+            <div class="flex gap-2">
+            <button class="rounded-lg border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800" @click="openDeletedHistory(memory)">History</button>
+            <button
+              :disabled="restoringDocumentRef === memory.documentRef"
+              class="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-50"
+              @click="restoreDeletedMemory(memory)"
+            >
+              {{ restoringDocumentRef === memory.documentRef ? "Restoring…" : "Restore" }}
+            </button>
+            </div>
+          </div>
+        </div>
+      </ModalDialog>
 
       <ModalDialog
         :show="showDeleteConfirm"
@@ -720,12 +878,12 @@ onMounted(() => loadSpaces());
         @close="showDeleteConfirm = false"
       >
         <p class="text-theme-400 leading-relaxed">
-          Remove <strong class="text-theme-200">{{ pendingDeleteSpace?.name }}</strong>? Its folder will be moved to the memory trash and its indexes will be removed.
+          Remove <strong class="text-theme-200">{{ pendingDeleteCategory?.name }}</strong>? Its folder will be moved to the memory trash and its indexes will be removed.
         </p>
         <template #actions>
           <button
             class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
-            @click="deleteSpace(pendingDeleteSpace!)"
+            @click="deleteSpace(pendingDeleteCategory!)"
           >
             Remove Folder
           </button>

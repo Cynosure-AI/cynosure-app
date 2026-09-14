@@ -53,7 +53,7 @@ function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartT
 function formatSelectedMemoryFolderNames(names: string[] | undefined): string {
     const uniqueNames = Array.from(new Set((names ?? []).map((name) => name.trim()).filter(Boolean)))
     return uniqueNames.length
-        ? `Provided Memory Spaces are: ${uniqueNames.join(', ')}`
+        ? `Provided Memory Folders are: ${uniqueNames.join(', ')}`
         : ''
 }
 

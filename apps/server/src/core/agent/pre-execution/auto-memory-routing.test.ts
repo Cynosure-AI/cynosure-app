@@ -78,7 +78,7 @@ describe('automatic memory routing visibility', () => {
             text: 'Deployment uses the blue environment.',
             source: 'memory',
             sourceFile: 'deployment.md',
-            spaceName: 'Default',
+            categoryName: 'Uncategorized',
             chunkIndex: 0,
             score: 0.02,
             denseScore: 0.81,

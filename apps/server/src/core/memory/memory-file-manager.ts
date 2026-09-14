@@ -1,7 +1,7 @@
 /**
  * Memory File Manager
  *
- * Handles file I/O for memory spaces. Each memory space is backed by a folder
+ * Handles file I/O for memory folders. Each memory folder is backed by a folder
  * on disk. Markdown files in the folder are the source-of-truth for content.
  * SQLite + LanceDB serve only as the retrieval index.
  */
@@ -49,18 +49,18 @@ export interface MemoryFileInfo {
 // Folder helpers
 // ---------------------------------------------------------------------------
 
-export function ensureFolder(folderPath: string): void {
-    mkdirSync(folderPath, { recursive: true })
+export function ensureFolder(directoryPath: string): void {
+    mkdirSync(directoryPath, { recursive: true })
 }
 
-export function listFilesInFolder(folderPath: string): MemoryFileInfo[] {
-    if (!existsSync(folderPath)) return []
+export function listFilesInFolder(directoryPath: string): MemoryFileInfo[] {
+    if (!existsSync(directoryPath)) return []
     try {
-        const entries = readdirSync(folderPath, { withFileTypes: true })
+        const entries = readdirSync(directoryPath, { withFileTypes: true })
         return entries
             .filter(e => e.isFile())
             .map(e => {
-                const filePath = join(folderPath, e.name)
+                const filePath = join(directoryPath, e.name)
                 const stat = statSync(filePath)
                 const ext = extname(e.name).toLowerCase()
                 return {
@@ -93,10 +93,10 @@ export function computeFileHash(filePath: string): string {
 }
 
 /** Write UTF-8 text to a file in the given folder, creating the folder if needed. */
-export function writeTextFile(folderPath: string, fileName: string, content: string): string {
-    ensureFolder(folderPath)
-    const filePath = join(folderPath, fileName)
-    const temporaryPath = join(folderPath, `.${basename(fileName)}.${randomUUID()}.tmp`)
+export function writeTextFile(directoryPath: string, fileName: string, content: string): string {
+    ensureFolder(directoryPath)
+    const filePath = join(directoryPath, fileName)
+    const temporaryPath = join(directoryPath, `.${basename(fileName)}.${randomUUID()}.tmp`)
     try {
         writeFileSync(temporaryPath, content, 'utf-8')
         renameSync(temporaryPath, filePath)
@@ -108,13 +108,13 @@ export function writeTextFile(folderPath: string, fileName: string, content: str
 }
 
 /** Read a text file from a folder. Throws if not found. */
-export function readTextFile(folderPath: string, fileName: string): string {
-    return readFileSync(join(folderPath, fileName), 'utf-8')
+export function readTextFile(directoryPath: string, fileName: string): string {
+    return readFileSync(join(directoryPath, fileName), 'utf-8')
 }
 
 /** Delete a file from a folder. Returns true if the file existed. */
-export function deleteFile(folderPath: string, fileName: string): boolean {
-    const filePath = join(folderPath, fileName)
+export function deleteFile(directoryPath: string, fileName: string): boolean {
+    const filePath = join(directoryPath, fileName)
     if (!existsSync(filePath)) return false
     unlinkSync(filePath)
     return true
@@ -129,13 +129,13 @@ export function copyFileToFolder(sourcePath: string, targetFolder: string, targe
 }
 
 /** Move a removed source file into the space's hidden trash folder. */
-export function archiveFile(folderPath: string, fileName: string): string | undefined {
+export function archiveFile(directoryPath: string, fileName: string): string | undefined {
     const cleanName = basename(fileName)
     if (!cleanName || cleanName !== fileName) throw new Error('Invalid memory file name')
-    const sourcePath = join(folderPath, cleanName)
+    const sourcePath = join(directoryPath, cleanName)
     if (!existsSync(sourcePath)) return undefined
 
-    const trashFolder = join(folderPath, '.trash')
+    const trashFolder = join(directoryPath, '.trash')
     ensureFolder(trashFolder)
     const dotIdx = cleanName.lastIndexOf('.')
     const base = dotIdx > 0 ? cleanName.slice(0, dotIdx) : cleanName
@@ -158,22 +158,22 @@ export function toMarkdownFileName(fileName: string): string {
     return `${base}.md`
 }
 
-export function fileExists(folderPath: string, fileName: string): boolean {
-    return existsSync(join(folderPath, fileName))
+export function fileExists(directoryPath: string, fileName: string): boolean {
+    return existsSync(join(directoryPath, fileName))
 }
 
 /**
  * Return a file name that does not yet exist in the folder.
  * If the name is taken, append (2), (3), … until a free slot is found.
  */
-export function resolveUniqueFileName(folderPath: string, fileName: string): string {
-    if (!fileExists(folderPath, fileName)) return fileName
+export function resolveUniqueFileName(directoryPath: string, fileName: string): string {
+    if (!fileExists(directoryPath, fileName)) return fileName
     const dotIdx = fileName.lastIndexOf('.')
     const base = dotIdx > 0 ? fileName.slice(0, dotIdx) : fileName
     const ext = dotIdx > 0 ? fileName.slice(dotIdx) : ''
     let counter = 2
     let candidate = `${base} (${counter})${ext}`
-    while (fileExists(folderPath, candidate)) {
+    while (fileExists(directoryPath, candidate)) {
         counter++
         candidate = `${base} (${counter})${ext}`
     }

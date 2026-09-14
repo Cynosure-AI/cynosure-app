@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { Marked } from "marked";
 import TurndownService from "turndown";
@@ -11,12 +11,14 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
+import type { MemoryDiffSegment, MemoryRevisionSummary } from "../../api/types";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
+import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
   show: boolean;
-  spaceId: string;
+  categoryId: string;
   sourceFile: string;
 }>();
 
@@ -28,6 +30,7 @@ const memoryJobs = useMemoryJobsStore();
 
 const markdownParser = new Marked({ breaks: true });
 const headingLevels = [1, 2, 3] as const;
+const LARGE_DOCUMENT_THRESHOLD = 250_000;
 
 type HeadingLevel = (typeof headingLevels)[number];
 
@@ -67,11 +70,21 @@ turndown.addRule("table", {
 const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
-const loadedMarkdown = ref("");
 const loadedRevision = ref("");
 const editableTitle = ref("");
 const currentFileName = ref("");
-const editorTick = ref(0);
+const documentRef = ref("");
+const showHistory = ref(false);
+const revisions = ref<MemoryRevisionSummary[]>([]);
+const selectedRevisionId = ref("");
+const revisionDiff = ref<MemoryDiffSegment[]>([]);
+const historyLoading = ref(false);
+const editorDirty = ref(false);
+const largeDocumentMode = ref(false);
+const largeDocumentDirty = ref(false);
+const largeDocumentEditor = ref<HTMLTextAreaElement | null>(null);
+let contentLoadSequence = 0;
+let historyLoadSequence = 0;
 
 const editor = useEditor({
   extensions: [
@@ -100,15 +113,11 @@ const editor = useEditor({
     },
   },
   onUpdate: () => {
-    editorTick.value++;
+    editorDirty.value = true;
   },
 });
 
-const hasChanges = computed(() => {
-  void editorTick.value;
-  const current = editor.value ? editorToMarkdown() : "";
-  return normalizeMarkdown(current) !== normalizeMarkdown(loadedMarkdown.value);
-});
+const hasChanges = computed(() => largeDocumentMode.value ? largeDocumentDirty.value : editorDirty.value);
 
 const hasNameChange = computed(() => titleToFileName(editableTitle.value) !== currentFileName.value);
 const canSave = computed(() => Boolean(titleToFileName(editableTitle.value)) && (hasChanges.value || hasNameChange.value));
@@ -134,10 +143,6 @@ function titleToFileName(title: string): string {
   return stem ? `${stem}${ext}` : "";
 }
 
-function normalizeMarkdown(value: string): string {
-  return value.replace(/\r\n/g, "\n").trim();
-}
-
 function markdownToHtml(markdown: string): string {
   return markdownParser.parse(markdown) as string;
 }
@@ -148,29 +153,110 @@ function editorToMarkdown(): string {
 }
 
 async function loadContent() {
-  if (!props.show || !props.spaceId || !props.sourceFile || !editor.value) return;
+  if (!props.show || !props.categoryId || !props.sourceFile || !editor.value) return;
+  const sequence = ++contentLoadSequence;
+  ++historyLoadSequence;
   loading.value = true;
   error.value = "";
+  showHistory.value = false;
+  revisions.value = [];
+  selectedRevisionId.value = "";
+  revisionDiff.value = [];
+  historyLoading.value = false;
+  largeDocumentMode.value = false;
+  largeDocumentDirty.value = false;
+  editorDirty.value = false;
   currentFileName.value = props.sourceFile;
   editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
-    const res = await api.memorySpaces.getFileContent(props.spaceId, props.sourceFile);
-    loadedMarkdown.value = res.content;
+    const res = await api.memoryFolders.getFileContent(props.categoryId, props.sourceFile);
+    if (sequence !== contentLoadSequence) return;
     loadedRevision.value = res.revision;
-    editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
-    editorTick.value++;
+    documentRef.value = res.documentRef || "";
+    largeDocumentMode.value = res.content.length >= LARGE_DOCUMENT_THRESHOLD;
+    if (largeDocumentMode.value) {
+      editor.value.commands.clearContent(false);
+      await nextTick();
+      if (largeDocumentEditor.value) largeDocumentEditor.value.value = res.content;
+    } else {
+      editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
+    }
+    editorDirty.value = false;
+    largeDocumentDirty.value = false;
   } catch (err) {
+    if (sequence !== contentLoadSequence) return;
     error.value = (err as Error).message || "Failed to load memory";
     editor.value.commands.clearContent(false);
   } finally {
-    loading.value = false;
+    if (sequence === contentLoadSequence) loading.value = false;
+  }
+}
+
+async function loadHistory() {
+  if (!documentRef.value) return;
+  const sequence = ++historyLoadSequence;
+  const targetDocumentRef = documentRef.value;
+  historyLoading.value = true;
+  try {
+    const nextRevisions = await api.memoryFolders.listRevisions(targetDocumentRef);
+    if (sequence !== historyLoadSequence || targetDocumentRef !== documentRef.value) return;
+    revisions.value = nextRevisions;
+    if (revisions.value.length) await selectRevision(revisions.value[0].id);
+  } catch (err) {
+    if (sequence !== historyLoadSequence) return;
+    error.value = (err as Error).message || "Failed to load revision history";
+  } finally {
+    if (sequence === historyLoadSequence) historyLoading.value = false;
+  }
+}
+
+async function selectRevision(id: string) {
+  const sequence = historyLoadSequence;
+  const targetDocumentRef = documentRef.value;
+  selectedRevisionId.value = id;
+  const index = revisions.value.findIndex(item => item.id === id);
+  const selected = revisions.value[index];
+  const previous = revisions.value[index + 1];
+  if (!selected) return;
+  if (!previous) {
+    const revision = await api.memoryFolders.getRevision(documentRef.value, id);
+    if (sequence !== historyLoadSequence || targetDocumentRef !== documentRef.value) return;
+    revisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
+    return;
+  }
+  const diff = await api.memoryFolders.getRevisionDiff(targetDocumentRef, previous.id, selected.id);
+  if (sequence !== historyLoadSequence || targetDocumentRef !== documentRef.value) return;
+  revisionDiff.value = diff.segments;
+}
+
+async function toggleHistory() {
+  showHistory.value = !showHistory.value;
+  if (showHistory.value) await loadHistory();
+  else {
+    ++historyLoadSequence;
+    historyLoading.value = false;
+  }
+}
+
+async function restoreSelectedRevision() {
+  if (!selectedRevisionId.value || !window.confirm("Restore this revision as the current memory?")) return;
+  saving.value = true;
+  try {
+    await api.memoryFolders.restoreRevision(documentRef.value, selectedRevisionId.value, loadedRevision.value);
+    showHistory.value = false;
+    await loadContent();
+    emit("saved", { fileName: currentFileName.value, chunksStored: 0 });
+  } catch (err) {
+    error.value = (err as Error).message || "Failed to restore revision";
+  } finally {
+    saving.value = false;
   }
 }
 
 async function applyRename() {
   const nextFileName = titleToFileName(editableTitle.value);
   if (!nextFileName || nextFileName === currentFileName.value) return currentFileName.value;
-  const res = await api.memorySpaces.renameFile(props.spaceId, currentFileName.value, nextFileName);
+  const res = await api.memoryFolders.renameFile(props.categoryId, currentFileName.value, nextFileName);
   currentFileName.value = res.fileName;
   editableTitle.value = splitFileName(res.fileName).stem;
   return res.fileName;
@@ -181,20 +267,23 @@ async function saveContent() {
   saving.value = true;
   error.value = "";
   try {
-    const markdown = editorToMarkdown();
-    let chunksStored = 0;
+    const markdown = largeDocumentMode.value
+      ? largeDocumentEditor.value?.value || ""
+      : editorToMarkdown();
+    const chunksStored = 0;
     const fileName = await applyRename();
     if (hasChanges.value) {
-      const res = await api.memorySpaces.updateFileContent(
-        props.spaceId,
+      const res = await api.memoryFolders.updateFileContent(
+        props.categoryId,
         fileName,
         markdown,
         loadedRevision.value,
       );
-      loadedMarkdown.value = markdown;
       loadedRevision.value = res.revision;
       currentFileName.value = res.fileName;
       memoryJobs.upsertJob(res.job);
+      editorDirty.value = false;
+      largeDocumentDirty.value = false;
     }
     editableTitle.value = splitFileName(fileName).stem;
     emit("saved", { fileName, chunksStored });
@@ -225,10 +314,11 @@ function close() {
 }
 
 watch(
-  () => [props.show, props.spaceId, props.sourceFile, editor.value] as const,
+  () => [props.show, props.categoryId, props.sourceFile, editor.value] as const,
   () => {
     if (props.show) void loadContent();
   },
+  { immediate: true },
 );
 
 onBeforeUnmount(() => {
@@ -244,6 +334,7 @@ onBeforeUnmount(() => {
     icon-color="accent"
     max-width="max-w-5xl"
     max-height="h-[88vh]"
+    body-overflow-hidden
     @close="close"
   >
     <div class="flex h-full min-h-0 flex-col rounded-2xl overflow-hidden">
@@ -260,6 +351,16 @@ onBeforeUnmount(() => {
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
         <button
+          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
+          :class="{ 'bg-accent-500/15 text-accent-300': showHistory }"
+          :disabled="!documentRef || loading || largeDocumentMode"
+          :title="largeDocumentMode ? 'Revision diffs are disabled in large document mode' : 'Revision history'"
+          @click="toggleHistory"
+        >
+          <Icon icon="lucide:history" class="h-4 w-4" />
+          History
+        </button>
+        <button
           v-for="button in [
             { icon: 'lucide:bold', title: 'Bold', action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive('bold') },
             { icon: 'lucide:italic', title: 'Italic', action: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive('italic') },
@@ -270,7 +371,7 @@ onBeforeUnmount(() => {
           :title="button.title"
           :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading"
+          :disabled="!editor || loading || largeDocumentMode"
           @click="button.action"
         >
           <Icon
@@ -287,7 +388,7 @@ onBeforeUnmount(() => {
           :title="`Heading ${level}`"
           :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="px-2.5 py-2 rounded-lg transition-colors text-xs font-semibold shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading"
+          :disabled="!editor || loading || largeDocumentMode"
           @click="toggleHeading(level)"
         >
           H{{ level }}
@@ -307,7 +408,7 @@ onBeforeUnmount(() => {
           :title="button.title"
           :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading"
+          :disabled="!editor || loading || largeDocumentMode"
           @click="button.action"
         >
           <Icon
@@ -324,7 +425,35 @@ onBeforeUnmount(() => {
         {{ error }}
       </div>
 
-      <div class="relative flex-1 min-h-0 overflow-y-auto bg-theme-950/45">
+      <div
+        v-if="largeDocumentMode && !showHistory"
+        class="flex items-center gap-2 border-b border-theme-800 bg-amber-500/5 px-5 py-2 text-xs text-amber-300/90 shrink-0"
+      >
+        <Icon icon="lucide:gauge" class="h-3.5 w-3.5" />
+        Large document mode uses a lightweight plain-text editor for responsive loading and typing.
+      </div>
+
+      <div v-if="showHistory" class="grid min-h-0 flex-1 grid-cols-[220px_1fr] bg-theme-950/45">
+        <div class="overflow-y-auto border-r border-theme-800 p-2">
+          <div v-if="historyLoading" class="p-3 text-xs text-theme-500">Loading history…</div>
+          <button
+            v-for="revision in revisions"
+            :key="revision.id"
+            class="mb-1 block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-theme-800"
+            :class="selectedRevisionId === revision.id ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400'"
+            @click="selectRevision(revision.id)"
+          >
+            <span class="block font-medium">Revision {{ revision.revisionNumber }}</span>
+            <span class="block text-[10px] opacity-75">{{ revision.source }} · {{ new Date(revision.createdAt).toLocaleString() }}</span>
+          </button>
+        </div>
+        <MemoryInlineDiff :segments="revisionDiff" class="m-3" />
+      </div>
+      <div
+        v-else
+        class="relative flex min-h-0 flex-1 bg-theme-950/45"
+        :class="largeDocumentMode ? 'overflow-hidden' : 'overflow-y-auto'"
+      >
         <div
           v-if="loading"
           class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-theme-950/65 text-theme-500 text-sm"
@@ -335,7 +464,18 @@ onBeforeUnmount(() => {
           />
           Loading…
         </div>
+        <textarea
+          v-if="largeDocumentMode"
+          ref="largeDocumentEditor"
+          class="memory-large-editor min-h-0 flex-1 resize-none overflow-auto bg-transparent p-5 font-mono text-sm leading-6 text-theme-200 outline-none"
+          aria-label="Large memory document content"
+          :disabled="loading || saving"
+          :spellcheck="false"
+          wrap="off"
+          @input="largeDocumentDirty = true"
+        />
         <EditorContent
+          v-else
           :editor="editor"
           class="memory-editor-shell"
         />
@@ -344,6 +484,14 @@ onBeforeUnmount(() => {
 
     <template #actions>
       <div class="flex justify-end gap-2">
+        <button
+          v-if="showHistory && selectedRevisionId"
+          class="px-3 py-1.5 text-amber-300 hover:bg-amber-500/10 rounded-lg text-sm transition-colors"
+          :disabled="saving"
+          @click="restoreSelectedRevision"
+        >
+          Restore revision
+        </button>
         <button
           class="px-3 py-1.5 text-theme-400 hover:text-theme-100 rounded-lg text-sm transition-colors"
           :disabled="saving"

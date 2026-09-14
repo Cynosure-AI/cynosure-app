@@ -20,7 +20,7 @@ describe('context router model selection', () => {
         {},
         { autoRouterProviderId: '', autoRouterModel: '' },
         { autoRouterProviderId: '__agent_provider__', autoRouterModel: '__agent_model__' },
-    ])('uses the selected model for default or legacy configuration %j', config => {
+    ])('uses the selected model for default configuration %j', config => {
         expect(resolveTaskContextRouter({ ...base, preset: { ...base.preset, ...config } })).toEqual({ providerId: 'selected-provider', model: 'selected-model' })
     })
     test('preserves an explicit agent router override', () => {

@@ -33,6 +33,7 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let unsubNotification: (() => void) | undefined;
+let unsubDreamUpdate: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
 let unsubHITLRequest: (() => void) | undefined;
 let unsubExecutionUpdate: (() => void) | undefined;
@@ -47,15 +48,12 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Active", icon: "lucide:square-activity" },
   { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
-  { value: "channels", label: "Channels", icon: "lucide:radio" },
-  { value: "notification", label: "Notifications", icon: "lucide:bell" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
+  { value: "dream", label: "Dream", icon: "lucide:moon-star" },
   { value: "memory", label: "Memory", icon: "lucide:brain" },
 ];
 
 const defaultSelectedKinds: ActivityKind[] = filterOptions.map((option) => option.value);
-const legacyDefaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "notification", "cron", "memory"];
-const previousDefaultSelectedKinds: ActivityKind[] = ["instance", ...legacyDefaultSelectedKinds];
 const selectableKinds = new Set<ActivityKind>(filterOptions.map((option) => option.value));
 const selectedKinds = ref<ActivityKind[]>(readSelectedKinds());
 
@@ -68,11 +66,7 @@ function readSelectedKinds(): ActivityKind[] {
     const validKinds = parsed.filter((value): value is ActivityKind =>
       typeof value === "string" && selectableKinds.has(value as ActivityKind),
     );
-    const uniqueKinds = [...new Set(validKinds)];
-    const matchesPriorDefault = [legacyDefaultSelectedKinds, previousDefaultSelectedKinds].some((defaults) =>
-      uniqueKinds.length === defaults.length && defaults.every((kind) => uniqueKinds.includes(kind)),
-    );
-    return matchesPriorDefault ? [...defaultSelectedKinds] : uniqueKinds;
+    return [...new Set(validKinds)];
   } catch {
     return [...defaultSelectedKinds];
   }
@@ -90,11 +84,11 @@ function emptyTotalsByKind(): ActivityTotalsByKind {
   return {
     instance: 0,
     artifact: 0,
-    notification: 0,
     cron: 0,
     memory: 0,
     chat: 0,
     channels: 0,
+    dream: 0,
   };
 }
 
@@ -128,7 +122,7 @@ function instanceActivityItem(instance: AgentInstance): ActivityItem {
 }
 
 function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
-  const knowledgeJob = job.kind === "knowledge-extraction";
+  const knowledgeJob = job.kind === "deep-research";
   const toolJob = job.kind === "tool-embeddings";
   const batchProgress = knowledgeJob && job.progressCurrent && job.progressTotal
     ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
@@ -136,8 +130,8 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
   return {
     id: `live-memory:${job.id}`,
     kind: "memory",
-    title: toolJob ? "Indexing tool capabilities" : `${knowledgeJob ? `Extracting knowledge${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
-    description: toolJob ? `${job.progressCurrent ?? 0}/${job.progressTotal ?? 0} embeddings` : knowledgeJob && batchProgress ? `Extraction batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
+    title: toolJob ? "Indexing tool capabilities" : `${knowledgeJob ? `Running Deep Research${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
+    description: toolJob ? `${job.progressCurrent ?? 0}/${job.progressTotal ?? 0} embeddings` : knowledgeJob && batchProgress ? `Deep Research batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
     createdAt: job.createdAt,
     agentId: null,
     agentName: null,
@@ -145,7 +139,9 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     conversationId: null,
     status: job.status,
     sourceId: job.id,
-    sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Knowledge extraction" : "Search indexing",
+    sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Deep Research" : "Search indexing",
+    memoryFolderId: toolJob ? undefined : job.categoryId,
+    memoryFileName: toolJob ? undefined : job.fileName,
   };
 }
 
@@ -363,6 +359,10 @@ function formatClock(ts: number): string {
   });
 }
 
+function formatTimestamp(ts: number): string {
+  return `${formatDateLabel(ts)}, ${formatClock(ts)}`;
+}
+
 type ActivityGroupKind = "attention" | "active" | "queued" | "history";
 
 const groupedItems = computed(() => {
@@ -385,13 +385,12 @@ const groupedItems = computed(() => {
 });
 
 function kindIcon(kind: ActivityKind): string {
+  if (kind === "dream") return "lucide:moon-star";
   switch (kind) {
     case "instance":
       return "lucide:square-activity";
     case "artifact":
       return "lucide:file-output";
-    case "notification":
-      return "lucide:bell";
     case "cron":
       return "lucide:clock-check";
     case "memory":
@@ -407,7 +406,7 @@ function kindIcon(kind: ActivityKind): string {
 
 function kindClass(item: ActivityItem): string {
   if (item.kind === "instance") return "activity-instance";
-  if (item.kind === "notification") return "activity-notification";
+  if (item.kind === "dream") return "activity-dream";
   if (item.kind === "artifact") return "activity-artifact";
   if (item.kind === "cron") return "activity-cron";
   if (item.kind === "memory") return "activity-memory";
@@ -437,8 +436,8 @@ async function openItem(item: ActivityItem) {
     router.push("/tools-policy");
     return;
   }
-  if (isActiveMemoryJob(item)) {
-    router.push("/memory-spaces/documents");
+  if (item.memoryFolderId && item.memoryFileName) {
+    router.push({ path: "/memory-folders/documents", query: { category: item.memoryFolderId, file: item.memoryFileName } });
     return;
   }
   if (item.conversationId) {
@@ -446,6 +445,11 @@ async function openItem(item: ActivityItem) {
   } else if (item.agentId) {
     router.push(`/agents/${item.agentId}`);
   }
+}
+
+function openMemoryLocation(categoryId: string | undefined, fileName: string | undefined) {
+  if (!categoryId || !fileName) return;
+  router.push({ path: "/memory-folders/documents", query: { category: categoryId, file: fileName } });
 }
 
 function isActiveInstance(item: ActivityItem): boolean {
@@ -457,11 +461,16 @@ function isActiveMemoryJob(item: ActivityItem): boolean {
     && (item.status === "running" || item.status === "retrying" || item.status === "queued");
 }
 
+function isActiveDream(item: ActivityItem): boolean {
+  return item.kind === "dream" && item.status === "running";
+}
+
 function isActiveWork(item: ActivityItem): boolean {
+  if (isActiveDream(item)) return true;
   return isActiveInstance(item) || isActiveMemoryJob(item);
 }
 
-const knownActiveWorkCount = computed(() => activeInstances.value.length + memoryJobsStore.activeJobs.length);
+const knownActiveWorkCount = computed(() => activeInstances.value.length + memoryJobsStore.activeJobs.length + items.value.filter(isActiveDream).length);
 
 function openStopAllConfirm(): void {
   stopAllError.value = "";
@@ -515,7 +524,8 @@ async function cancelMemoryJob(item: ActivityItem, event: Event): Promise<void> 
   if (!item.sourceId || cancellingJobIds.value.has(item.sourceId)) return;
   cancellingJobIds.value.add(item.sourceId);
   try {
-    await memoryJobsStore.cancelJob(item.sourceId);
+    if (item.kind === "dream") await api.memory.cancelDreamRun(item.sourceId);
+    else await memoryJobsStore.cancelJob(item.sourceId);
   } finally {
     cancellingJobIds.value.delete(item.sourceId);
     await loadActivity();
@@ -547,7 +557,8 @@ onMounted(() => {
     now.value = Date.now();
   }, 30_000);
   unsubNotification = api.notifications.onCreated(() => void loadActivity());
-  unsubMemoryJobUpdate = api.memorySpaces.onJobUpdated(() => void loadActivity());
+  unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadActivity());
+  unsubMemoryJobUpdate = api.memoryFolders.onJobUpdated(() => void loadActivity());
   unsubHITLRequest = api.agent.onHITLRequest(() => void loadActivity());
   unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
     const payload = data as { event?: string };
@@ -566,6 +577,7 @@ onUnmounted(() => {
   clearTimeout(searchTimer);
   clearTimeout(stopAllMessageTimer);
   unsubNotification?.();
+  unsubDreamUpdate?.();
   unsubMemoryJobUpdate?.();
   unsubHITLRequest?.();
   unsubExecutionUpdate?.();
@@ -807,7 +819,7 @@ watch(searchQuery, () => {
             :key="item.id"
             class="activity-row grid grid-cols-[1.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[3.35rem_1.5rem_minmax(0,1fr)]"
             :class="[kindClass(item), {
-              'cursor-pointer': item.conversationId || item.agentId || isActiveMemoryJob(item),
+              'cursor-pointer': item.conversationId || item.agentId || item.memoryFileName,
               'activity-requires-attention': item.status === 'awaiting-approval',
             }]"
             @click="openItem(item)"
@@ -865,7 +877,7 @@ watch(searchQuery, () => {
                     Stop
                   </button>
                   <button
-                    v-else-if="isActiveMemoryJob(item)"
+                    v-else-if="isActiveMemoryJob(item) || isActiveDream(item)"
                     type="button"
                     class="inline-flex items-center gap-1 rounded-md border border-purple-400/35 bg-purple-400/10 px-2 py-1 text-[10px] font-semibold text-purple-300 transition hover:border-purple-300/50 hover:bg-purple-400/20 hover:text-purple-200 disabled:cursor-wait disabled:opacity-60"
                     :disabled="Boolean(item.sourceId && cancellingJobIds.has(item.sourceId))"
@@ -894,6 +906,50 @@ watch(searchQuery, () => {
               >
                 {{ item.description }}
               </p>
+
+              <p
+                v-if="item.kind === 'dream'"
+                class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-theme-500"
+              >
+                <time
+                  :datetime="new Date(item.createdAt).toISOString()"
+                  class="shrink-0 tabular-nums"
+                >
+                  {{ formatTimestamp(item.createdAt) }}
+                </time>
+                <span
+                  v-if="item.conversationTitle"
+                  class="truncate"
+                >
+                  · {{ item.conversationTitle }}
+                </span>
+              </p>
+
+              <details
+                v-if="item.dreamChanges?.length"
+                class="mt-2 text-xs text-theme-400"
+                @click.stop
+              >
+                <summary class="cursor-pointer">
+                  Memory changes
+                </summary>
+                <ul class="mt-1 space-y-1">
+                  <li
+                    v-for="(change, index) in item.dreamChanges"
+                    :key="index"
+                  >
+                    <button
+                      v-if="change.memoryFolderId && change.memoryFileName"
+                      type="button"
+                      class="text-left text-accent-300 hover:text-accent-200 hover:underline"
+                      @click="openMemoryLocation(change.memoryFolderId, change.memoryFileName)"
+                    >
+                      {{ change.output }}
+                    </button>
+                    <span v-else>{{ change.output }}</span>
+                  </li>
+                </ul>
+              </details>
 
               <div
                 v-if="item.artifacts?.length"
@@ -991,7 +1047,7 @@ watch(searchQuery, () => {
   >
     <p class="text-sm leading-6 text-theme-300">
       This cancels all work currently running on the server, including chats, cron runs, channel agents,
-      search indexing and knowledge extraction, vector re-embedding, and auxiliary chat actions.
+      search indexing and Deep Research, vector re-embedding, and auxiliary chat actions.
     </p>
     <p class="mt-3 text-xs leading-5 text-theme-500">
       {{ knownActiveWorkCount > 0 ? `${knownActiveWorkCount} active operation${knownActiveWorkCount === 1 ? '' : 's'} currently visible.` : 'The server will also check for background work not currently visible in this view.' }}
@@ -1102,7 +1158,6 @@ article.cursor-pointer:hover .activity-card {
 .activity-info,
 .activity-instance,
 .activity-artifact,
-.activity-notification,
 .activity-cron,
 .activity-chat,
 .activity-channels,
@@ -1114,6 +1169,7 @@ article.cursor-pointer:hover .activity-card {
   --activity-border: color-mix(in srgb, var(--color-accent-500) 35%, var(--color-theme-800));
 }
 
+/* Coral red */
 .activity-instance {
   --activity-color: #f87171;
   --activity-bg: color-mix(in srgb, #f87171 15%, var(--color-theme-950));
@@ -1124,42 +1180,49 @@ article.cursor-pointer:hover .activity-card {
   background:
     linear-gradient(90deg, color-mix(in srgb, #f87171 12%, transparent), transparent 42%),
     var(--color-theme-950);
+
   box-shadow: 0 0 0 1px color-mix(in srgb, #f87171 12%, transparent);
 }
 
+/* Indigo */
 .activity-cron {
-  --activity-color: #f472b6;
-  --activity-bg: color-mix(in srgb, #f472b6 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f472b6 35%, var(--color-theme-800));
+  --activity-color: #818cf8;
+  --activity-bg: color-mix(in srgb, #818cf8 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #818cf8 35%, var(--color-theme-800));
 }
 
+/* Emerald */
 .activity-artifact {
-  --activity-color: #22c55e;
-  --activity-bg: color-mix(in srgb, #22c55e 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #22c55e 35%, var(--color-theme-800));
+  --activity-color: #34d399;
+  --activity-bg: color-mix(in srgb, #34d399 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #34d399 35%, var(--color-theme-800));
 }
 
-.activity-notification {
-  --activity-color: #f59e0b;
-  --activity-bg: color-mix(in srgb, #f59e0b 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #f59e0b 38%, var(--color-theme-800));
-}
-
+/* Violet */
 .activity-memory {
   --activity-color: #a78bfa;
   --activity-bg: color-mix(in srgb, #a78bfa 12%, var(--color-theme-950));
   --activity-border: color-mix(in srgb, #a78bfa 35%, var(--color-theme-800));
 }
 
-.activity-chat {
-  --activity-color: #60a5fa;
-  --activity-bg: color-mix(in srgb, #60a5fa 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #60a5fa 35%, var(--color-theme-800));
+/* Pink */
+.activity-dream {
+  --activity-color: #f4c072;
+  --activity-bg: color-mix(in srgb, #f4c072 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #f4c772 38%, var(--color-theme-800));
 }
 
+/* Sky blue */
+.activity-chat {
+  --activity-color: #38bdf8;
+  --activity-bg: color-mix(in srgb, #38bdf8 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #38bdf8 35%, var(--color-theme-800));
+}
+
+/* Cyan */
 .activity-channels {
-  --activity-color: #2dd4bf;
-  --activity-bg: color-mix(in srgb, #2dd4bf 12%, var(--color-theme-950));
-  --activity-border: color-mix(in srgb, #2dd4bf 35%, var(--color-theme-800));
+  --activity-color: #22d3ee;
+  --activity-bg: color-mix(in srgb, #22d3ee 12%, var(--color-theme-950));
+  --activity-border: color-mix(in srgb, #22d3ee 35%, var(--color-theme-800));
 }
 </style>

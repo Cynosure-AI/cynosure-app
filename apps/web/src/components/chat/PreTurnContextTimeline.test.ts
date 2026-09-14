@@ -218,7 +218,7 @@ describe('PreTurnContextTimeline', () => {
           {
             iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 120,
             toolCalls: [
-              { name: 'memory_replace_all', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', selectionMethod: 'lexical', namespaceId: 'builtin:memory', namespaceLabel: 'Built-In: Memory' }) },
+              { name: 'memory_replace_range', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', selectionMethod: 'lexical', namespaceId: 'builtin:memory', namespaceLabel: 'Built-In: Memory' }) },
               { name: 'get_weather_forecast', arguments: JSON.stringify({ type: 'tool-router', contextPhase: 'gathered-context', selectionMethod: 'lexical', namespaceId: 'mcp:weather', namespaceLabel: 'Weather Fetcher' }) },
             ],
           },
@@ -239,7 +239,7 @@ describe('PreTurnContextTimeline', () => {
 
     expect(wrapper.findAll('.toolset-card')).toHaveLength(0)
     const includedTools = wrapper.get('[aria-label="All tools included this round"]')
-    expect(includedTools.text()).toContain('memory_replace_all')
+    expect(includedTools.text()).toContain('memory_replace_range')
     expect(includedTools.text()).toContain('get_weather_forecast')
   })
 

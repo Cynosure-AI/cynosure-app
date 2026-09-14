@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
 import { nanoid } from 'nanoid'
-import { getConversationArtifactsDir } from './image-artifacts.js'
+import { getAppDataDir } from '../data-dir.js'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 
 export interface FileAttachmentInput {
@@ -17,10 +17,12 @@ export interface FileAttachmentArtifact {
     sizeBytes: number
     textBytes: number
     chunkCount?: number
+    assetId?: string
 }
 
 function getConversationFilesDir(conversationId: string): string {
-    const dir = join(getConversationArtifactsDir(conversationId), 'files')
+    void conversationId
+    const dir = join(getAppDataDir(), 'artifacts', 'attachment-assets')
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     return dir
 }

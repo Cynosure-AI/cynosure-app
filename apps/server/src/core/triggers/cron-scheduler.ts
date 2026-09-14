@@ -80,7 +80,7 @@ function rowToData(row: CronJobRow): CronJobData {
             const parsed = parseExecutionConfig(row.execution_config_json)
             if (parsed.providerId && parsed.model) executionConfig = parsed
         } catch {
-            // Invalid legacy/backup data is treated as an unavailable snapshot.
+            // Invalid or partial data is treated as an unavailable snapshot.
         }
     }
     return {

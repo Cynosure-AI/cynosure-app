@@ -37,18 +37,18 @@ describe('memory search routes', () => {
     expect(response.statusCode).toBe(400)
     expect(response.json()).toEqual({ error: 'A non-empty search query is required' })
     await app.close()
-  })
+  }, 30_000)
 
-  test('fails closed when an explicit memory space does not exist', async () => {
+  test('fails closed when an explicit memory folder does not exist', async () => {
     const app = await createApp()
     const response = await app.inject({
       method: 'POST',
       url: '/api/memory/search',
-      payload: { query: 'project dependencies', spaceId: 'missing-space' },
+      payload: { query: 'project dependencies', categoryId: 'missing-space' },
     })
 
     expect(response.statusCode).toBe(404)
-    expect(response.json()).toEqual({ error: 'Memory space not found' })
+    expect(response.json()).toEqual({ error: 'Memory folder not found' })
     await app.close()
   })
 

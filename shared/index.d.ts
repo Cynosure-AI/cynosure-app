@@ -30,7 +30,7 @@ export interface ChatRunConfig {
   systemPrompt?: string
   generateTitle?: boolean
   subAgents?: SubAgentAssignmentDto[]
-  memorySpaceIds?: string[]
+  memoryFolderIds?: string[]
   thinkingEnabled?: boolean
   reasoningEffort?: ReasoningEffort
   contextStrategy?: ContextStrategy
@@ -108,7 +108,11 @@ export interface DebugContextSnapshot {
 
 export interface ChatAttachmentInput {
   name: string
-  content: string
+  content?: string
+  /** Server-side preprocessed draft attachment. Content is omitted when this is set. */
+  stagedId?: string
+  /** Persisted attachment selected from the library; its parsed text and vectors are reused. */
+  existingAttachmentId?: string
 }
 
 export interface ChatResendAttachments {
@@ -162,7 +166,7 @@ export interface ChatQueueRequest extends ChatSendRequest {
 export interface ConversationExecutionConfig {
   allowedTools: string[]
   subAgents: SubAgentAssignmentDto[]
-  memorySpaceIds: string[]
+  memoryFolderIds: string[]
   systemPrompt: string
   model: string
   providerId: string
