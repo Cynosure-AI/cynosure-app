@@ -35,6 +35,8 @@ const props = defineProps<{
   isStreaming?: boolean
   isError?: boolean
   forkDisabled?: boolean
+  /** Render a normal message without mutation actions (for derived transcript entries). */
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -193,7 +195,7 @@ const imageGridClass = computed(() => {
         class="absolute -top-2 right-1 flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity"
       >
         <button
-          v-if="isUser && !isEditing"
+          v-if="isUser && !isEditing && !readonly"
           class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
           title="Edit"
           @click="startEditing"
@@ -204,7 +206,7 @@ const imageGridClass = computed(() => {
           />
         </button>
         <button
-          v-if="isUser"
+          v-if="isUser && !readonly"
           class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
           title="Retry"
           @click="$emit('retry')"
