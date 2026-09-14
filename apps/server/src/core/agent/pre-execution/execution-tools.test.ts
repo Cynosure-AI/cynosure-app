@@ -36,7 +36,7 @@ describe('agent-required execution tools', () => {
         expect(filterToolsForExecutionPreset(preset('agent-1'), tools)).toEqual(tools)
     })
 
-    test('includes whole-document writes by default while keeping read recovery read-only', () => {
+    test('includes additive writes by default while keeping destructive mutations routed', () => {
         expect(getBuiltInMemoryReadToolKeys()).toEqual([
             'builtin:memory::memory_list_documents',
             'builtin:memory::memory_retrieve_chunks',
@@ -46,8 +46,7 @@ describe('agent-required execution tools', () => {
         expect(getBuiltInMemoryToolKeys()).toEqual([
             ...getBuiltInMemoryReadToolKeys(),
             'builtin:memory::memory_create',
-            'builtin:memory::memory_update',
-            'builtin:memory::memory_delete',
+            'builtin:memory::memory_append',
         ])
     })
 })

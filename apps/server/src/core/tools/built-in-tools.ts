@@ -16,8 +16,11 @@ import {
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryUpdateTool,
-    makeMemoryDeleteTool,
+    makeMemoryAppendTool,
+    makeMemoryReplaceRangeTool,
+    makeMemoryReplaceAllTool,
+    makeMemoryRemoveAllTool,
+    makeMemoryRemoveRangeTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -33,8 +36,11 @@ export {
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryUpdateTool,
-    makeMemoryDeleteTool,
+    makeMemoryAppendTool,
+    makeMemoryReplaceRangeTool,
+    makeMemoryReplaceAllTool,
+    makeMemoryRemoveAllTool,
+    makeMemoryRemoveRangeTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -123,12 +129,24 @@ const BUILTIN_TOOL_HYDRATORS = {
         assignedCategories: ctx.assignedCategories,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
-    memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
+    memory_append: (ctx: BuiltInHydrationContext) => makeMemoryAppendTool({
         assignedCategories: ctx.assignedCategories,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
-    memory_delete: (ctx: BuiltInHydrationContext) => makeMemoryDeleteTool({
+    memory_replace_range: (ctx: BuiltInHydrationContext) => makeMemoryReplaceRangeTool({
         assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
+    }),
+    memory_replace_all: (ctx: BuiltInHydrationContext) => makeMemoryReplaceAllTool({
+        assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
+    }),
+    memory_remove_all: (ctx: BuiltInHydrationContext) => makeMemoryRemoveAllTool({
+        assignedCategories: ctx.assignedCategories,
+    }),
+    memory_remove_range: (ctx: BuiltInHydrationContext) => makeMemoryRemoveRangeTool({
+        assignedCategories: ctx.assignedCategories,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
     knowledge_search: (ctx: BuiltInHydrationContext) => makeKnowledgeSearchTool({ assignedCategories: ctx.assignedCategories }),
     knowledge_assert: (ctx: BuiltInHydrationContext) => makeKnowledgeAssertTool({ assignedCategories: ctx.assignedCategories }),
@@ -183,8 +201,7 @@ export function getBuiltInMemoryToolKeys(): string[] {
     return [
         ...getBuiltInMemoryReadToolKeys(),
         getBuiltInToolKey('memory_create'),
-        getBuiltInToolKey('memory_update'),
-        getBuiltInToolKey('memory_delete'),
+        getBuiltInToolKey('memory_append'),
     ];
 }
 

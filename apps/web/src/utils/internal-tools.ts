@@ -9,8 +9,11 @@ export const AUTO_MEMORY_TOOL_NAMES = [
   'memory_retrieve_chunks',
   'memory_semantic_search',
   'memory_create',
-  'memory_update',
-  'memory_delete',
+  'memory_append',
+  'memory_replace_range',
+  'memory_replace_all',
+  'memory_remove_all',
+  'memory_remove_range',
 ] as const
 
 export const AGENT_REQUIRED_TOOL_NAMES = [
