@@ -677,7 +677,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
             class="h-3.5 w-3.5"
             :class="{ 'animate-spin': forgettingMemories }"
           />
-          Forget Memories
+          Drop Index
         </button>
         <button
           :disabled="deleting"
