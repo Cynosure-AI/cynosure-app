@@ -83,6 +83,8 @@ const editorDirty = ref(false);
 const largeDocumentMode = ref(false);
 const largeDocumentDirty = ref(false);
 const largeDocumentEditor = ref<HTMLTextAreaElement | null>(null);
+let contentLoadSequence = 0;
+let historyLoadSequence = 0;
 
 const editor = useEditor({
   extensions: [
@@ -152,8 +154,15 @@ function editorToMarkdown(): string {
 
 async function loadContent() {
   if (!props.show || !props.categoryId || !props.sourceFile || !editor.value) return;
+  const sequence = ++contentLoadSequence;
+  ++historyLoadSequence;
   loading.value = true;
   error.value = "";
+  showHistory.value = false;
+  revisions.value = [];
+  selectedRevisionId.value = "";
+  revisionDiff.value = [];
+  historyLoading.value = false;
   largeDocumentMode.value = false;
   largeDocumentDirty.value = false;
   editorDirty.value = false;
@@ -161,6 +170,7 @@ async function loadContent() {
   editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
     const res = await api.memoryFolders.getFileContent(props.categoryId, props.sourceFile);
+    if (sequence !== contentLoadSequence) return;
     loadedRevision.value = res.revision;
     documentRef.value = res.documentRef || "";
     largeDocumentMode.value = res.content.length >= LARGE_DOCUMENT_THRESHOLD;
@@ -174,27 +184,35 @@ async function loadContent() {
     editorDirty.value = false;
     largeDocumentDirty.value = false;
   } catch (err) {
+    if (sequence !== contentLoadSequence) return;
     error.value = (err as Error).message || "Failed to load memory";
     editor.value.commands.clearContent(false);
   } finally {
-    loading.value = false;
+    if (sequence === contentLoadSequence) loading.value = false;
   }
 }
 
 async function loadHistory() {
   if (!documentRef.value) return;
+  const sequence = ++historyLoadSequence;
+  const targetDocumentRef = documentRef.value;
   historyLoading.value = true;
   try {
-    revisions.value = await api.memoryFolders.listRevisions(documentRef.value);
+    const nextRevisions = await api.memoryFolders.listRevisions(targetDocumentRef);
+    if (sequence !== historyLoadSequence || targetDocumentRef !== documentRef.value) return;
+    revisions.value = nextRevisions;
     if (revisions.value.length) await selectRevision(revisions.value[0].id);
   } catch (err) {
+    if (sequence !== historyLoadSequence) return;
     error.value = (err as Error).message || "Failed to load revision history";
   } finally {
-    historyLoading.value = false;
+    if (sequence === historyLoadSequence) historyLoading.value = false;
   }
 }
 
 async function selectRevision(id: string) {
+  const sequence = historyLoadSequence;
+  const targetDocumentRef = documentRef.value;
   selectedRevisionId.value = id;
   const index = revisions.value.findIndex(item => item.id === id);
   const selected = revisions.value[index];
@@ -202,15 +220,22 @@ async function selectRevision(id: string) {
   if (!selected) return;
   if (!previous) {
     const revision = await api.memoryFolders.getRevision(documentRef.value, id);
+    if (sequence !== historyLoadSequence || targetDocumentRef !== documentRef.value) return;
     revisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
     return;
   }
-  revisionDiff.value = (await api.memoryFolders.getRevisionDiff(documentRef.value, previous.id, selected.id)).segments;
+  const diff = await api.memoryFolders.getRevisionDiff(targetDocumentRef, previous.id, selected.id);
+  if (sequence !== historyLoadSequence || targetDocumentRef !== documentRef.value) return;
+  revisionDiff.value = diff.segments;
 }
 
 async function toggleHistory() {
   showHistory.value = !showHistory.value;
   if (showHistory.value) await loadHistory();
+  else {
+    ++historyLoadSequence;
+    historyLoading.value = false;
+  }
 }
 
 async function restoreSelectedRevision() {

@@ -15,6 +15,7 @@ import {
   type FileAttachmentArtifact,
 } from '../artifacts/file-artifacts.js'
 import { deleteConversationAttachmentChunks, indexConversationAttachment, persistMessageFileAttachments } from '../artifacts/attachment-rag.js'
+import { releaseStagedChatAttachments, takeStagedChatAttachments } from '../artifacts/staged-attachments.js'
 import type {
   ChatQueueRequest,
   ChatQueueStateDto,
@@ -126,9 +127,13 @@ async function stageRequest(conversationId: string, request: ChatQueueRequest): 
     ? (await materializeAudioArtifacts(request.audioDataUrls, conversationId)).map(item => item.url)
     : []
   const files = request.files?.length
-    ? await materializeFileAttachments(request.files, conversationId)
+    ? [
+        ...takeStagedChatAttachments(conversationId, request.files.flatMap(file => file.stagedId ? [file.stagedId] : [])),
+        ...await materializeFileAttachments(request.files.filter(file => !file.stagedId), conversationId),
+      ]
     : []
-  for (const file of files) file.chunkCount = await indexConversationAttachment(conversationId, file)
+  for (const file of files) if (file.chunkCount === undefined) file.chunkCount = await indexConversationAttachment(conversationId, file)
+  releaseStagedChatAttachments(conversationId, request.files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || [], false)
   return { images, audio, files }
 }
 

@@ -200,6 +200,14 @@ function createTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments(message_id);
     CREATE INDEX IF NOT EXISTS idx_message_attachments_conversation ON message_attachments(conversation_id);
 
+    CREATE TABLE IF NOT EXISTS staged_chat_attachments (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      artifact_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_staged_chat_attachments_conversation ON staged_chat_attachments(conversation_id);
+
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       conversation_id TEXT REFERENCES conversations(id),

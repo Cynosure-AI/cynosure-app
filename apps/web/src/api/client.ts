@@ -129,6 +129,10 @@ export const api = {
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`),
     send: (conversationId: string, request: ChatSendRequest) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, request),
+    stageAttachment: (conversationId: string, file: { name: string; content: string }) =>
+      post<{ id: string; name: string; chunkCount: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`, file),
+    removeStagedAttachment: (conversationId: string, attachmentId: string) =>
+      del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage/${encodeURIComponent(attachmentId)}`),
     getQueue: (conversationId: string) =>
       get<ChatQueueStateDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue`),
     enqueue: (conversationId: string, request: ChatQueueRequest) =>

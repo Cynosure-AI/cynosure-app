@@ -722,13 +722,13 @@ export const useChatStore = defineStore('chat', () => {
 
     // Messages (delegated)
     sendMessage,
-    async queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void> {
+    async queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: import('@shared/types').ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void> {
       if (!memoryFolders.value.length) await loadMemoryFolders()
       agentConfig.ensureFreeChatPreset()
       await chatMessages.queueMessage(content, delivery, imageDataUrls, files, audioDataUrls)
       await loadQueue()
     },
-    async updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void> {
+    async updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: import('@shared/types').ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void> {
       await chatMessages.updateQueuedMessage(id, content, imageDataUrls, files, audioDataUrls)
       await loadQueue()
     },

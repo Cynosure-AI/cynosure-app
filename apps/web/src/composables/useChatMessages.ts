@@ -6,12 +6,12 @@ import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
-import type { ChatQueueDelivery, ChatQueueRequest, ChatSendRequest, ReasoningEffort } from '@shared/types'
+import type { ChatAttachmentInput, ChatQueueDelivery, ChatQueueRequest, ChatSendRequest, ReasoningEffort } from '@shared/types'
 
 export interface ChatMessagesApi {
-    sendMessage(content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
-    queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
-    updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: { name: string; content: string }[], audioDataUrls?: string[]): Promise<void>
+    sendMessage(content: string, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void>
+    queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void>
+    updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void>
     retryFromMessage(messageId: string): Promise<void>
     editMessage(messageId: string, newContent: string): Promise<void>
     cancelStream(): Promise<void>
@@ -93,7 +93,7 @@ export function useChatMessages(
         content: string,
         msgId: string,
         imageDataUrls?: string[],
-        files?: { name: string; content: string }[],
+        files?: ChatAttachmentInput[],
         audioDataUrls?: string[],
     ): ChatSendRequest {
         const agentDefs = useAgentDefinitionsStore()
@@ -134,7 +134,7 @@ export function useChatMessages(
         content: string,
         delivery: ChatQueueDelivery,
         imageDataUrls?: string[],
-        files?: { name: string; content: string }[],
+        files?: ChatAttachmentInput[],
         audioDataUrls?: string[],
     ): Promise<void> {
         if (!activeConversationId.value) await createConversation()
@@ -149,7 +149,7 @@ export function useChatMessages(
         id: string,
         content: string,
         imageDataUrls?: string[],
-        files?: { name: string; content: string }[],
+        files?: ChatAttachmentInput[],
         audioDataUrls?: string[],
     ): Promise<void> {
         if (!activeConversationId.value) return
@@ -163,7 +163,7 @@ export function useChatMessages(
     async function sendMessage(
         content: string,
         imageDataUrls?: string[],
-        files?: { name: string; content: string }[],
+        files?: ChatAttachmentInput[],
         audioDataUrls?: string[]
     ): Promise<void> {
         if (!activeConversationId.value) {
