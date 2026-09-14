@@ -28,7 +28,9 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
     return {
         makeMemoryListDocumentsTool: make('memory_list_documents'), makeMemoryRetrieveChunksTool: make('memory_retrieve_chunks'),
         makeMemorySearchTool: make('memory_semantic_search'), makeMemoryCreateTool: make('memory_create'),
-        makeMemoryUpdateTool: make('memory_update'), makeMemoryDeleteTool: make('memory_delete'),
+        makeMemoryAppendTool: make('memory_append'), makeMemoryReplaceRangeTool: make('memory_replace_range'),
+        makeMemoryReplaceAllTool: make('memory_replace_all'), makeMemoryRemoveAllTool: make('memory_remove_all'),
+        makeMemoryRemoveRangeTool: make('memory_remove_range'),
     }
 })
 import { closeDb, getDb } from '../../db/database.js'

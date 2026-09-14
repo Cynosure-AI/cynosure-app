@@ -1,10 +1,10 @@
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
 import { createHash } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { basename } from 'node:path'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
 import { buildMemoryFolderFilter as buildScopeFilter, getDefaultMemoryFolder, getMemoryFolderDirectoryPath, type MemoryFolderRef } from '../../memory/memory-folder-scope.js'
-import { ensureMemoryFolderPath, categoryPathForDirectory, removeEmptyMemoryFolderFolders, syncMemoryFoldersFromFolders } from '../../memory/memory-folder-directories.js'
+import { ensureMemoryFolderPath, categoryPathForDirectory } from '../../memory/memory-folder-directories.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
@@ -62,8 +62,11 @@ export const MEMORY_READ_TOOL_NAMES = [
 
 export const MEMORY_WRITE_TOOL_NAMES = [
     'memory_create',
-    'memory_update',
-    'memory_delete',
+    'memory_append',
+    'memory_replace_range',
+    'memory_replace_all',
+    'memory_remove_all',
+    'memory_remove_range',
 ] as const
 
 export const MEMORY_TOOL_NAMES = [
@@ -512,6 +515,59 @@ function verifyDocumentRef(content: string, resolved: ResolvedMemoryDocument): s
     return matchesIndexedRevision
         ? undefined
         : 'Memory changed outside the index while this update was being prepared. Retrieve it again before retrying.'
+}
+
+function findChunkText(content: string, chunkText: string, fromIndex = 0): { start: number; end: number } | null {
+    const normalizedChunk = chunkText.replace(/\r\n/g, '\n').trim()
+    if (!normalizedChunk) return null
+    const start = content.indexOf(normalizedChunk, fromIndex)
+    return start < 0 ? null : { start, end: start + normalizedChunk.length }
+}
+
+function replaceChunkRangeInText(
+    content: string,
+    chunks: { text: string; chunkIndex: number }[],
+    replacement: string,
+): { content: string; startIndex: number; endIndex: number } | { error: string } {
+    const normalizedContent = content.replace(/\r\n/g, '\n')
+    const sorted = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
+    const first = sorted[0]
+    const last = sorted.at(-1)
+    if (!first || !last) return { error: 'No indexed chunks were found for the requested range.' }
+    const firstMatch = findChunkText(normalizedContent, first.text)
+    if (!firstMatch) return { error: `Could not locate Part ${first.chunkIndex + 1} in the source file. Re-index it before retrying.` }
+    const lastMatch = first.chunkIndex === last.chunkIndex
+        ? firstMatch
+        : findChunkText(normalizedContent, last.text, firstMatch.start)
+    if (!lastMatch) return { error: `Could not locate Part ${last.chunkIndex + 1} in the source file. Re-index it before retrying.` }
+    const before = normalizedContent.slice(0, firstMatch.start).replace(/\s*$/, '\n\n')
+    const after = normalizedContent.slice(lastMatch.end).replace(/^\s*/, '\n\n')
+    return {
+        content: `${before}${replacement.trim()}${after}`.trim() + '\n',
+        startIndex: first.chunkIndex,
+        endIndex: last.chunkIndex,
+    }
+}
+
+function removeChunkRangeFromText(
+    content: string,
+    chunks: { text: string; chunkIndex: number }[],
+): { content: string; startIndex: number; endIndex: number } | { error: string } {
+    const normalizedContent = content.replace(/\r\n/g, '\n')
+    const sorted = [...chunks].sort((a, b) => a.chunkIndex - b.chunkIndex)
+    const first = sorted[0]
+    const last = sorted.at(-1)
+    if (!first || !last) return { error: 'No indexed chunks were found for the requested range.' }
+    const firstMatch = findChunkText(normalizedContent, first.text)
+    if (!firstMatch) return { error: `Could not locate Part ${first.chunkIndex + 1} in the source file. Re-index it before retrying.` }
+    const lastMatch = first.chunkIndex === last.chunkIndex
+        ? firstMatch
+        : findChunkText(normalizedContent, last.text, firstMatch.start)
+    if (!lastMatch) return { error: `Could not locate Part ${last.chunkIndex + 1} in the source file. Re-index it before retrying.` }
+    const before = normalizedContent.slice(0, firstMatch.start).replace(/\s*$/, '\n\n')
+    const after = normalizedContent.slice(lastMatch.end).replace(/^\s*/, '\n\n')
+    const nextContent = `${before}${after}`.trim()
+    return { content: nextContent ? `${nextContent}\n` : '', startIndex: first.chunkIndex, endIndex: last.chunkIndex }
 }
 
 async function commitMemoryMutation(
@@ -1192,21 +1248,16 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
     }
 }
 
-function memoryMutationSchema(extra: Record<string, unknown> = {}): Record<string, unknown> {
+function memoryMutationSchema(extra: Record<string, unknown> = {}, extraRequired: string[] = []): Record<string, unknown> {
     return {
         type: 'object',
         additionalProperties: false,
         properties: {
             documentRef: { type: 'string', description: 'Stable document reference returned by memory reads (for example project-notes#4k8z2q). It remains unchanged after updates.' },
-            content: { type: 'string', description: 'Optional complete replacement content. Omit it when only renaming or recategorizing the memory.' },
+            content: { type: 'string', description: 'Content to write.' },
             ...extra,
         },
-        required: ['documentRef'],
-        anyOf: [
-            { required: ['content'] },
-            { required: ['title'] },
-            { required: ['category'] },
-        ],
+        required: ['documentRef', 'content', ...extraRequired],
     }
 }
 
@@ -1241,91 +1292,142 @@ async function runPreparedMemoryMutation(
     })
 }
 
-export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
+export function makeMemoryAppendTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedCategories = [] } = opts
     const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
-        name: 'memory_update',
+        name: 'memory_append',
         execution: { readOnly: false },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-        description: 'Update one topical memory using its stable documentRef. Provide content for a complete topical replacement, or omit content to rename or recategorize the existing memory without rewriting it. Search and read before changing facts. Newer supported facts replace obsolete statements; do not append a change log.',
-        parameters: memoryMutationSchema({
-            title: { type: 'string', description: 'Optional new Subject - Aspect title.' },
-            category: { type: 'string', description: 'Optional existing or new category path inside a granted category tree.' },
-        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+        description: 'Append content to an existing memory document without modifying its current text. Use its stable documentRef from a prior memory result.',
+        parameters: memoryMutationSchema(),
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = params as { documentRef: string; content?: string; title?: string; category?: string }
-            if (input.content === undefined && !input.title?.trim() && !input.category?.trim()) {
-                return { success: false, output: 'memory_update requires at least one of content, title, or category.' }
-            }
+            const input = params as { documentRef: string; content: string }
             return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
-                const target = input.category
-                    ? await resolveTargetCategory(assignedCategories, input.category, undefined, getKnownCategories)
-                    : { categoryId: resolved.categoryId, categoryName: resolved.categoryName }
-                if ('error' in target) return { success: false, output: target.error }
-                const finalName = input.title ? (input.title.endsWith('.md') ? input.title : `${input.title}.md`) : resolved.fileName
-                if (basename(finalName) !== finalName || finalName.startsWith('.') || !finalName.trim()) {
-                    return { success: false, output: 'The memory title must be a plain, visible file name without path separators.' }
-                }
-                const targetDirectory = getMemoryFolderDirectoryPath(target.categoryId)
-                if (!targetDirectory) return { success: false, output: 'Target memory folder is unavailable.' }
-                const relocating = target.categoryId !== resolved.categoryId || finalName !== resolved.fileName
-                if (relocating && fileExists(targetDirectory, finalName)) {
-                    return { success: false, output: `Memory "${finalName}" already exists in "${target.categoryName}".` }
-                }
-
-                let indexed: Awaited<ReturnType<typeof reindexMemoryFile>> | undefined
-                if (input.content !== undefined) {
-                    indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal, opts.revisionContext)
-                }
-                if (relocating) {
-                    const { renameSync } = await import('node:fs')
-                    renameSync(join(resolved.directoryPath, resolved.fileName), join(targetDirectory, finalName))
-                    await getAgentMemory().remapMovedFileByHash(target.categoryId, finalName, targetDirectory)
-                    indexed = await reindexMemoryFile(target.categoryId, finalName, signal, opts.revisionContext)
-                    if (target.categoryId !== resolved.categoryId) {
-                        removeEmptyMemoryFolderFolders(resolved.directoryPath)
-                        syncMemoryFoldersFromFolders(getDb())
-                    }
-                }
-                if (!indexed) {
-                    return { success: false, output: 'The requested title and category already match the current memory.' }
-                }
+                const indexed = await commitMemoryMutation(resolved, fileContent, `${fileContent.trimEnd()}\n\n${input.content.trim()}\n`, signal, opts.revisionContext)
                 opts.onDocumentMutated?.(indexed.documentId)
-                const action = input.content === undefined ? 'moved without changing its content' : 'replaced'
-                return { success: true, output: `Memory "${finalName}" ${action} in "${target.categoryName}" (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).${indexed.chunkCount > 3 ? ' Warning: this memory exceeds the 1–3 chunk topical target.' : ''}` }
+                return { success: true, output: `Content appended to "${resolved.fileName}" in "${resolved.categoryName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             }, opts.beforeDocumentMutation)
         },
     }
 }
 
-function memoryRemovalSchema(): Record<string, unknown> {
+export function makeMemoryReplaceAllTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryFoldersLoader()
+    return {
+        name: 'memory_replace_all',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+        description: 'Replace an entire existing memory document using its stable documentRef. Retrieve it first when the replacement depends on its current contents.',
+        parameters: memoryMutationSchema(),
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentRef: string; content: string }
+            return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
+                const indexed = await commitMemoryMutation(resolved, fileContent, input.content, signal, opts.revisionContext)
+                opts.onDocumentMutated?.(indexed.documentId)
+                return { success: true, output: `Memory "${resolved.fileName}" fully replaced in "${resolved.categoryName}" and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
+            }, opts.beforeDocumentMutation)
+        },
+    }
+}
+
+export function makeMemoryReplaceRangeTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryFoldersLoader()
+    return {
+        name: 'memory_replace_range',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+        description: 'Replace a contiguous Part range in an existing memory document. First retrieve the current parts and pass the returned documentRef unchanged.',
+        parameters: memoryMutationSchema({
+            partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to replace.' },
+            partEnd: { type: 'integer', minimum: 1, description: 'Last 1-based Part number to replace, inclusive.' },
+        }, ['partStart', 'partEnd']),
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentRef: string; content: string; partStart: number; partEnd: number }
+            if (!Number.isInteger(input.partStart) || !Number.isInteger(input.partEnd) || input.partStart < 1 || input.partEnd < input.partStart) return { success: false, output: 'partStart and partEnd must be valid 1-based integers with partEnd greater than or equal to partStart.' }
+            return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
+                const startIndex = toPartIndex(input.partStart)!
+                const endIndex = toPartIndex(input.partEnd)!
+                const chunks = await getAgentMemory().getChunksByRange(resolved.fileName, startIndex, endIndex, buildScopeFilter([{ id: resolved.categoryId }]))
+                if (chunks.length !== endIndex - startIndex + 1) return { success: false, output: `The requested Part range is stale or incomplete. Retrieve "${resolved.fileName}" again and retry.` }
+                const replaced = replaceChunkRangeInText(fileContent, chunks, input.content)
+                if ('error' in replaced) return { success: false, output: replaced.error }
+                const indexed = await commitMemoryMutation(resolved, fileContent, replaced.content, signal, opts.revisionContext)
+                opts.onDocumentMutated?.(indexed.documentId)
+                return { success: true, output: `Parts ${replaced.startIndex + 1}-${replaced.endIndex + 1} in "${resolved.fileName}" replaced and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
+            }, opts.beforeDocumentMutation)
+        },
+    }
+}
+
+function memoryRemovalSchema(withRange: boolean): Record<string, unknown> {
     return {
         type: 'object',
         additionalProperties: false,
         properties: {
             documentRef: { type: 'string', description: 'Stable document reference returned by memory reads (for example project-notes#4k8z2q). It remains unchanged after updates.' },
+            ...(withRange ? {
+                partStart: { type: 'integer', minimum: 1, description: 'First 1-based Part number to remove.' },
+                partEnd: { type: 'integer', minimum: 1, description: 'Last 1-based Part number to remove, inclusive.' },
+            } : {}),
         },
-        required: ['documentRef'],
+        required: withRange ? ['documentRef', 'partStart', 'partEnd'] : ['documentRef'],
     }
 }
 
-export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
+export function makeMemoryRemoveAllTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedCategories = [] } = opts
     const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
-        name: 'memory_delete',
+        name: 'memory_remove_all',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
         description: 'Forget an entire memory document using its stable documentRef. This archives the source in hidden trash and removes its retrieval and graph indexes.',
-        parameters: memoryRemovalSchema(),
+        parameters: memoryRemovalSchema(false),
         timeout: 30_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
             const input = params as { documentRef: string }
             return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
                 const removed = await commitMemoryRemoval(resolved, fileContent)
                 return { success: true, output: `Memory "${resolved.fileName}" forgotten from "${resolved.categoryName}" (documentRef=${resolved.documentRef}; ${removed.deletedChunks} indexed chunks and ${removed.deletedEdges} graph edges removed).` }
+            }, opts.beforeDocumentMutation)
+        },
+    }
+}
+
+export function makeMemoryRemoveRangeTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryFoldersLoader()
+    return {
+        name: 'memory_remove_range',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+        description: 'Forget a contiguous Part range from a memory document. Retrieve the current parts first and pass the returned documentRef unchanged.',
+        parameters: memoryRemovalSchema(true),
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = params as { documentRef: string; partStart: number; partEnd: number }
+            if (!Number.isInteger(input.partStart) || !Number.isInteger(input.partEnd) || input.partStart < 1 || input.partEnd < input.partStart) return { success: false, output: 'partStart and partEnd must be valid 1-based integers with partEnd greater than or equal to partStart.' }
+            return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
+                const startIndex = toPartIndex(input.partStart)!
+                const endIndex = toPartIndex(input.partEnd)!
+                const chunks = await getAgentMemory().getChunksByRange(resolved.fileName, startIndex, endIndex, buildScopeFilter([{ id: resolved.categoryId }]))
+                if (chunks.length !== endIndex - startIndex + 1) return { success: false, output: `The requested Part range is stale or incomplete. Retrieve "${resolved.fileName}" again and retry.` }
+                const removed = removeChunkRangeFromText(fileContent, chunks)
+                if ('error' in removed) return { success: false, output: removed.error }
+                if (!removed.content.trim()) {
+                    const deleted = await commitMemoryRemoval(resolved, fileContent)
+                    opts.onDocumentMutated?.(resolved.documentId)
+                    return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed; the empty memory was forgotten (${deleted.deletedChunks} indexed chunks and ${deleted.deletedEdges} graph edges removed).` }
+                }
+                const indexed = await commitMemoryMutation(resolved, fileContent, removed.content, signal, opts.revisionContext)
+                opts.onDocumentMutated?.(indexed.documentId)
+                return { success: true, output: `Parts ${input.partStart}-${input.partEnd} removed and indexed (documentRef=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
             }, opts.beforeDocumentMutation)
         },
     }
