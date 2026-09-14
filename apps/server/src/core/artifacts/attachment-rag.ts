@@ -6,6 +6,10 @@ import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from '../memory/l
 import { readFileAttachmentText, type FileAttachmentArtifact } from './file-artifacts.js'
 import { getDb } from '../../db/database.js'
 import type { ContextEvidence } from '@shared/types'
+import { copyFileSync, existsSync, mkdirSync } from 'fs'
+import { basename, join } from 'path'
+import { nanoid } from 'nanoid'
+import { getConversationArtifactsDir } from './image-artifacts.js'
 
 export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'
 
@@ -38,6 +42,57 @@ export async function indexConversationAttachment(
         console.warn('[attachment-rag] Failed to index attachment:', err instanceof Error ? err.message : err)
         return 0
     }
+}
+
+export async function reuseConversationAttachment(
+    targetConversationId: string,
+    sourceAttachmentId: string,
+): Promise<FileAttachmentArtifact | null> {
+    const row = getDb().prepare(`
+        SELECT id, name, conversation_id, original_path, text_path, size_bytes, text_bytes, chunk_count
+        FROM message_attachments WHERE id = ? AND kind = 'file'
+    `).get(sourceAttachmentId) as {
+        id: string; name: string; conversation_id: string; original_path: string | null; text_path: string | null;
+        size_bytes: number | null; text_bytes: number | null; chunk_count: number | null;
+    } | undefined
+    if (!row?.original_path || !row.text_path || !existsSync(row.original_path) || !existsSync(row.text_path)) return null
+
+    const id = nanoid()
+    const directory = join(getConversationArtifactsDir(targetConversationId), 'files')
+    mkdirSync(directory, { recursive: true })
+    const stem = `${Date.now()}-${id}-${basename(row.name).replace(/[^A-Za-z0-9._-]/g, '_')}`
+    const originalPath = join(directory, stem)
+    const textPath = join(directory, `${stem}.parsed.md`)
+    copyFileSync(row.original_path, originalPath)
+    copyFileSync(row.text_path, textPath)
+
+    let chunkCount = await getRAGStore().cloneDocuments(
+        CONVERSATION_ATTACHMENTS_TABLE,
+        buildAttachmentFilter(row.conversation_id, [row.id])!,
+        document => ({
+            ...document,
+            id: nanoid(),
+            sourceFile: id,
+            categoryId: conversationAttachmentSpaceId(targetConversationId),
+            createdAt: Date.now(),
+        }),
+    )
+    const artifact: FileAttachmentArtifact = {
+        id,
+        name: row.name,
+        originalPath,
+        textPath,
+        sizeBytes: row.size_bytes ?? 0,
+        textBytes: row.text_bytes ?? 0,
+        chunkCount,
+    }
+    // Legacy/unindexed library entries have no vectors to clone. Preserve the
+    // old behavior as a fallback so the attachment remains searchable.
+    if (!chunkCount && row.text_bytes) {
+        chunkCount = await indexConversationAttachment(targetConversationId, artifact)
+        artifact.chunkCount = chunkCount
+    }
+    return artifact
 }
 
 function updateConversationAttachmentChunkCount(attachmentId: string, chunkCount: number): void {
