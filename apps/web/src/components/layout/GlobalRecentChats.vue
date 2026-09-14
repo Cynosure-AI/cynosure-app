@@ -84,6 +84,48 @@ const visibleConversations = computed(() => {
 })
 const hasMore = computed(() => conversations.value.length < total.value)
 
+const emptyState = computed(() => {
+  if (loadError.value) {
+    return {
+      icon: 'lucide:loader-circle',
+      spinning: true,
+      title: 'Connecting to chats…',
+      subtitle: 'Reconnecting to your chat history.',
+    }
+  }
+  if (loading.value) {
+    return {
+      icon: 'lucide:loader-circle',
+      spinning: true,
+      title: 'Loading chats…',
+      subtitle: 'Fetching your recent conversations.',
+    }
+  }
+  const trimmed = searchQuery.value.trim()
+  if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LENGTH) {
+    return {
+      icon: 'lucide:search-x',
+      spinning: false,
+      title: 'Type at least 2 characters',
+      subtitle: 'Keep typing to search your chats.',
+    }
+  }
+  if (trimmed.length > 0) {
+    return {
+      icon: 'lucide:search-x',
+      spinning: false,
+      title: 'No matching chats',
+      subtitle: 'Try a different search term.',
+    }
+  }
+  return {
+    icon: 'lucide:message-circle-more',
+    spinning: false,
+    title: 'No chats yet',
+    subtitle: 'Start a conversation and it will appear here for quick access.',
+  }
+})
+
 function mapRow(row: {
   id: string
   title: string
@@ -450,42 +492,21 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-if="!visibleConversations.length && !loading && !searchQuery"
+        v-if="!visibleConversations.length"
         class="mx-2 mt-3 flex flex-col items-center rounded-xl border border-theme-800/80 bg-theme-900/35 px-4 py-7 text-center"
       >
         <span class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-theme-700/70 bg-theme-800/70 text-theme-400 shadow-sm">
           <Icon
-            icon="lucide:message-circle-more"
+            :icon="emptyState.icon"
             class="h-6 w-6"
+            :class="{ 'animate-spin': emptyState.spinning }"
           />
         </span>
-        <span class="text-sm font-medium text-theme-300">No chats yet</span>
+        <span class="text-sm font-medium text-theme-300">{{ emptyState.title }}</span>
         <span class="mt-1 max-w-44 text-[11px] leading-relaxed text-theme-600">
-          Start a conversation and it will appear here for quick access.
+          {{ emptyState.subtitle }}
         </span>
       </div>
-      <p
-        v-else-if="!visibleConversations.length && !loading"
-        class="px-3 py-6 text-center text-xs text-theme-600"
-      >
-        {{ searchQuery.trim().length === 1 ? 'Type at least 2 characters' : 'No matching chats' }}
-      </p>
-      <p
-        v-if="loading && !visibleConversations.length"
-        class="px-3 py-2 text-center text-[10px] text-theme-600"
-      >
-        Loading chats…
-      </p>
-      <p
-        v-if="loadError"
-        class="flex items-center justify-center gap-1.5 px-3 py-2 text-center text-xs text-theme-500"
-      >
-        <Icon
-          icon="lucide:loader-circle"
-          class="h-3.5 w-3.5 animate-spin"
-        />
-        Connecting to chats…
-      </p>
     </div>
   </div>
 </template>
