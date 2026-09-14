@@ -16,7 +16,7 @@ vi.mock('../utils/electron-prefs', () => ({
 }))
 
 import { usePreferencesStore } from './preferences.store'
-import { SK_RECENT_CHAT_FILTER } from '../utils/storage-keys'
+import { SK_RECENT_CHAT_FILTER, SK_THEME } from '../utils/storage-keys'
 
 describe('preferences profile', () => {
   beforeEach(() => {
@@ -58,5 +58,16 @@ describe('preferences profile', () => {
     store.recentChatFilter = 'all'
     await nextTick()
     expect(localStorage.getItem(SK_RECENT_CHAT_FILTER)).toBe('all')
+  })
+
+  test('replaces an unsupported persisted theme with the dark fallback', async () => {
+    localStorage.setItem(SK_THEME, 'obsidian')
+
+    const store = usePreferencesStore()
+    await nextTick()
+
+    expect(store.theme).toBe('dark')
+    expect(localStorage.getItem(SK_THEME)).toBe('dark')
+    expect(document.documentElement.dataset.theme).toBe('dark')
   })
 })
