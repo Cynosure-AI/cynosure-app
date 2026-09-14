@@ -64,8 +64,8 @@ function removeMissing() {
 </script>
 
 <template>
-  <div class="flex flex-col h-[75vh]">
-    <BaseCard class="mb-3 shrink-0 px-5 py-4">
+  <div class="flex flex-col gap-3">
+    <BaseCard class="shrink-0 px-5 py-4">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
@@ -94,7 +94,7 @@ function removeMissing() {
     <!-- Missing tools warning -->
     <div
       v-if="missingTools.length"
-      class="mb-3 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
+      class="shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
     >
       <div class="flex items-start gap-2">
         <Icon
@@ -136,7 +136,7 @@ function removeMissing() {
     </div>
 
     <ToolSelector
-      class="flex-1 min-h-0"
+      class="h-[clamp(28rem,65dvh,52rem)] shrink-0"
       :model-value="agent.tools"
       :show-approvals="true"
       :automatic-tool-states="automaticToolStates"
