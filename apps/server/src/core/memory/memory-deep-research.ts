@@ -70,7 +70,7 @@ export function planReusableKnowledgeChunks(documentId: string, chunks: Prepared
     try {
       const parsed = JSON.parse(prior.tags_json) as unknown
       if (Array.isArray(parsed)) tags = parsed.filter((tag): tag is string => typeof tag === 'string')
-    } catch { /* malformed legacy tags are treated as empty */ }
+    } catch { /* malformed tags are treated as empty */ }
     const bucket = byHash.get(prior.text_hash)
     if (bucket) bucket.push({ id: prior.id, tags })
     else byHash.set(prior.text_hash, [{ id: prior.id, tags }])
@@ -289,23 +289,23 @@ export async function deepResearchMemoryContent(opts: {
   let checkpointStep = 0
   const extracted = remainingChunks.length > 0
     ? await deepResearchContent({
-        segments: buildDeepResearchSegments(remainingChunks),
-        providerId: opts.providerId || configuredTarget.providerId,
-        model: opts.model || configuredTarget.model,
-        signal: opts.signal,
-        initialResult: resumable,
-        onCheckpoint: (partial) => {
-          const completedChunk = remainingChunks[checkpointStep++]
-          if (completedChunk) completedIndexes.add(completedChunk.chunkIndex)
-          const checkpoint: DeepResearchCheckpoint = {
-            contentHash,
-            completedChunkIndexes: [...completedIndexes].sort((a, b) => a - b),
-            ...partial,
-          }
-          opts.onDeepResearchCheckpoint?.(checkpoint, completedIndexes.size, reusePlan.chunksToExtract.length)
-        },
-        onProgress: (_current, _total) => opts.onDeepResearchProgress?.(completedIndexes.size, reusePlan.chunksToExtract.length),
-      })
+      segments: buildDeepResearchSegments(remainingChunks),
+      providerId: opts.providerId || configuredTarget.providerId,
+      model: opts.model || configuredTarget.model,
+      signal: opts.signal,
+      initialResult: resumable,
+      onCheckpoint: (partial) => {
+        const completedChunk = remainingChunks[checkpointStep++]
+        if (completedChunk) completedIndexes.add(completedChunk.chunkIndex)
+        const checkpoint: DeepResearchCheckpoint = {
+          contentHash,
+          completedChunkIndexes: [...completedIndexes].sort((a, b) => a - b),
+          ...partial,
+        }
+        opts.onDeepResearchCheckpoint?.(checkpoint, completedIndexes.size, reusePlan.chunksToExtract.length)
+      },
+      onProgress: (_current, _total) => opts.onDeepResearchProgress?.(completedIndexes.size, reusePlan.chunksToExtract.length),
+    })
     : resumable || { relations: [], mentions: [], chunkTags: [] }
   const chunkTags = [...reusePlan.chunkTags, ...extracted.chunkTags]
   opts.signal?.throwIfAborted()

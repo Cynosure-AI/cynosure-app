@@ -433,7 +433,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
 
         // Media attached by the user or returned by a tool is context, not a
         // generated artifact. Remember when those URLs/paths first appeared so
-        // legacy assistant rows that duplicated tool media are filtered too.
+        // assistant rows that duplicated tool media are filtered too.
         const nonGeneratedArtifactFirstSeen = new Map<string, number>()
         const contextMediaRows = db.prepare(
             `SELECT conversation_id, role, content, image_urls_json, video_urls_json, audio_urls_json, created_at

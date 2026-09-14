@@ -37,7 +37,7 @@ import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
 import { registerMemoryFoldersRoutes } from './routes/memory-folders.js'
 import { watchMemoryFolder, stopAllMemoryFolderWatchers } from './core/memory/memory-folder-watcher.js'
-import { runCategoryModelCleanupOnce, syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
+import { syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
@@ -312,12 +312,12 @@ function startMemoryFolderWatchers(): void {
   }
 }
 
-function adoptUnindexedMemoryFiles(forceReindex = false): void {
+function adoptUnindexedMemoryFiles(): void {
   const db = getDb()
   const rows = db.prepare('SELECT id, directory_path FROM memory_folders').all() as Array<{ id: string; directory_path: string }>
   for (const category of rows) {
     const indexed = getAgentMemory().getFileIndex(category.id)
-    for (const file of listFilesInFolder(category.directory_path).filter(item => item.supported && (forceReindex || !indexed.has(item.fileName)))) {
+    for (const file of listFilesInFolder(category.directory_path).filter(item => item.supported && !indexed.has(item.fileName))) {
       startMemoryIndexJob({
         kind: 'reindex', categoryId: category.id, fileName: file.fileName,
         run: async signal => {
@@ -342,7 +342,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
 
-  await runCategoryModelCleanupOnce(getDb())
   syncMemoryFoldersFromFolders(getDb())
 
   await app.register(fastifyCors)
@@ -540,9 +539,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   getEmbeddingProvider().loadFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
-  const legacySchemaReset = ragStore.consumeLegacyCategorySchemaReset()
-  if (legacySchemaReset) getMemoryKnowledgeStore().markSearchProjectionsPending()
-  adoptUnindexedMemoryFiles(legacySchemaReset)
+  adoptUnindexedMemoryFiles()
   registerBuiltInTools()
 
   // Start filesystem watchers for all existing memory folders

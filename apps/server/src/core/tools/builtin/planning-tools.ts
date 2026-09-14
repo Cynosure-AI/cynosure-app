@@ -6,8 +6,6 @@ import {
 
 const PLANNING_TOOL_NAMES = new Set([
   'todo_write',
-  // Legacy alias kept for backwards compatibility with persisted tool policies.
-  'todo_upsert',
 ])
 
 export const PLANNING_SYSTEM_PROMPT = [

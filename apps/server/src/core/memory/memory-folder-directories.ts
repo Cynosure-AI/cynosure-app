@@ -3,14 +3,9 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, ty
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import { nanoid } from 'nanoid'
 import { getMemoryFoldersRootDir } from '../data-dir.js'
-import { lanceDbEqFilter } from './lancedb-filter.js'
-import { getRAGStore } from './rag.js'
-import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 import { stopWatchingMemoryFolder, watchMemoryFolder } from './memory-folder-watcher.js'
 
 export const UNCATEGORIZED_MEMORY_FOLDER_ID = 'uncategorized'
-const FOLDER_MODEL_MIGRATION_KEY = 'memory.folder_model_v1'
-const AGENT_FOLDER_MIGRATION_KEY = 'memory.agent_folder_v2'
 export const AGENT_MEMORY_FOLDER_NAME = '.agents'
 const IGNORED_FOLDER_NAMES = new Set(['default', '.trash', '.revisions', 'revisions', '.cynosure'])
 
@@ -143,73 +138,6 @@ function idForRelativePath(categoryPath: string): string {
 
 function nameForRelativePath(categoryPath: string): string {
     return basename(categoryPath)
-}
-
-function markMigrationComplete(db: Database.Database, key: string): void {
-    db.prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(key, JSON.stringify({ completedAt: Date.now() }))
-}
-
-function hasMigrationRun(db: Database.Database, key: string): boolean {
-    const row = db.prepare('SELECT value_json FROM settings WHERE key = ?').get(key) as { value_json: string } | undefined
-    return Boolean(row)
-}
-
-export async function runCategoryModelCleanupOnce(db: Database.Database): Promise<void> {
-    const root = ensureMemoryRoot()
-    if (!hasMigrationRun(db, FOLDER_MODEL_MIGRATION_KEY)) {
-        const legacyDefaultFolder = join(root, 'default')
-        if (existsSync(legacyDefaultFolder)) {
-            try {
-                const entries = readdirSync(legacyDefaultFolder, { withFileTypes: true })
-                for (const entry of entries) {
-                    if (!entry.isFile()) continue
-                    const source = join(legacyDefaultFolder, entry.name)
-                    let target = join(root, entry.name)
-                    if (existsSync(target)) {
-                        const dotIdx = entry.name.lastIndexOf('.')
-                        const base = dotIdx > 0 ? entry.name.slice(0, dotIdx) : entry.name
-                        const ext = dotIdx > 0 ? entry.name.slice(dotIdx) : ''
-                        let counter = 2
-                        do {
-                            target = join(root, `${base} (${counter})${ext}`)
-                            counter++
-                        } while (existsSync(target))
-                    }
-                    renameSync(source, target)
-                }
-                removeFolderIfEmpty(legacyDefaultFolder)
-            } catch {
-                /* keep legacy files in place if the move fails */
-            }
-        }
-
-        db.transaction(() => {
-            db.prepare('UPDATE memory_folders SET name = ?, description = ?, directory_path = ?, sort_order = ?, is_uncategorized = ? WHERE id = ?')
-                .run('Uncategorized', 'Memories that do not yet have a category', memoryRootDir(), 0, 1, UNCATEGORIZED_MEMORY_FOLDER_ID)
-            markMigrationComplete(db, FOLDER_MODEL_MIGRATION_KEY)
-        })()
-    }
-
-    if (!hasMigrationRun(db, AGENT_FOLDER_MIGRATION_KEY)) {
-        const legacyAgentFolder = join(root, 'agents')
-        const agentFolder = join(root, AGENT_MEMORY_FOLDER_NAME)
-        if (existsSync(legacyAgentFolder) && !existsSync(agentFolder)) {
-            renameSync(legacyAgentFolder, agentFolder)
-            const rows = db.prepare('SELECT id, directory_path FROM memory_folders').all() as Array<{ id: string; directory_path: string }>
-            const legacyPrefix = `${legacyAgentFolder}${sep}`
-            const updateFolder = db.prepare('UPDATE memory_folders SET directory_path = ? WHERE id = ?')
-            const updatePaths = db.transaction(() => {
-                for (const row of rows) {
-                    if (row.directory_path === legacyAgentFolder) updateFolder.run(agentFolder, row.id)
-                    else if (row.directory_path.startsWith(legacyPrefix)) {
-                        updateFolder.run(`${agentFolder}${row.directory_path.slice(legacyAgentFolder.length)}`, row.id)
-                    }
-                }
-            })
-            updatePaths()
-        }
-        markMigrationComplete(db, AGENT_FOLDER_MIGRATION_KEY)
-    }
 }
 
 export function syncMemoryFoldersFromFolders(db: Database.Database): MemoryFolderDirectoryRow[] {

@@ -54,8 +54,6 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
 ];
 
 const defaultSelectedKinds: ActivityKind[] = filterOptions.map((option) => option.value);
-const legacyDefaultSelectedKinds: ActivityKind[] = ["artifact", "channels", "cron", "memory"];
-const previousDefaultSelectedKinds: ActivityKind[] = ["instance", ...legacyDefaultSelectedKinds];
 const selectableKinds = new Set<ActivityKind>(filterOptions.map((option) => option.value));
 const selectedKinds = ref<ActivityKind[]>(readSelectedKinds());
 
@@ -68,11 +66,7 @@ function readSelectedKinds(): ActivityKind[] {
     const validKinds = parsed.filter((value): value is ActivityKind =>
       typeof value === "string" && selectableKinds.has(value as ActivityKind),
     );
-    const uniqueKinds = [...new Set(validKinds)];
-    const matchesPriorDefault = [legacyDefaultSelectedKinds, previousDefaultSelectedKinds, defaultSelectedKinds.filter(kind => kind !== "dream")].some((defaults) =>
-      uniqueKinds.length === defaults.length && defaults.every((kind) => uniqueKinds.includes(kind)),
-    );
-    return matchesPriorDefault ? [...defaultSelectedKinds] : uniqueKinds;
+    return [...new Set(validKinds)];
   } catch {
     return [...defaultSelectedKinds];
   }
@@ -923,7 +917,10 @@ watch(searchQuery, () => {
                 >
                   {{ formatTimestamp(item.createdAt) }}
                 </time>
-                <span v-if="item.conversationTitle" class="truncate">
+                <span
+                  v-if="item.conversationTitle"
+                  class="truncate"
+                >
                   · {{ item.conversationTitle }}
                 </span>
               </p>

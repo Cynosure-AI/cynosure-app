@@ -15,7 +15,7 @@ export type RequestedToolEffect = 'read' | 'write' | 'destructive'
 
 export interface TaskContext {
     toolQuery?: string
-    /** Backwards-compatible primary expansion. The original request is always searched separately. */
+    /** Primary expansion, mirroring the first entry of `memoryQueries` for event consumers. */
     memoryQuery?: string
     memoryQueries: string[]
     requestedToolEffect: RequestedToolEffect
@@ -165,16 +165,14 @@ function parseTaskContextArguments(
     try {
         const parsed = JSON.parse(raw) as {
             toolQuery?: unknown
-            memoryQuery?: unknown
             memoryQueries?: unknown
             requestedToolEffect?: unknown
             requiresExternalTools?: unknown
             requiresMemory?: unknown
         }
         const toolQuery = enabledModes.tools && typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
-        const legacyMemoryQuery = typeof parsed.memoryQuery === 'string' ? parsed.memoryQuery.trim() : ''
         const memoryQueries = enabledModes.memories
-            ? normalizeMemoryQueries(Array.isArray(parsed.memoryQueries) ? parsed.memoryQueries : [legacyMemoryQuery], originalRequest)
+            ? normalizeMemoryQueries(Array.isArray(parsed.memoryQueries) ? parsed.memoryQueries : [], originalRequest)
             : []
 
         if (enabledModes.tools && !toolQuery) return null
@@ -289,7 +287,7 @@ function emitTaskContextSelection(
             name: 'Task context',
             arguments: JSON.stringify(stripUndefined({
                 type: 'task-context',
-            selectionMethod: 'llm',
+                selectionMethod: 'llm',
                 toolQuery: context?.toolQuery,
                 memoryQuery: context?.memoryQuery,
                 memoryQueries: context?.memoryQueries,

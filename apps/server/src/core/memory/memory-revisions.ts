@@ -155,7 +155,7 @@ export function inlineMemoryDiff(documentRef: string, fromId: string, toId: stri
 
 function rowToSummary(row: RevisionRow): MemoryRevisionSummary {
   let messageIds: string[] = []
-  try { messageIds = JSON.parse(row.message_ids_json) as string[] } catch { /* malformed legacy metadata */ }
+  try { messageIds = JSON.parse(row.message_ids_json) as string[] } catch { /* malformed metadata */ }
   return {
     id: row.id,
     revisionNumber: row.revision_number,

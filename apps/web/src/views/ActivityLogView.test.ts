@@ -1,7 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import ActivityLogView from './ActivityLogView.vue'
-import { SK_ACTIVITY_LOG_FILTERS } from '../utils/storage-keys'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), cancel: vi.fn(), push: vi.fn(), onDream: vi.fn(), unsubscribe: vi.fn() }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }))
@@ -52,16 +51,6 @@ test('a live Dream update immediately appears under Active Now and can be cancel
   wrapper.unmount()
   expect(mocks.unsubscribe).toHaveBeenCalledOnce()
 })
-test('the previous default filters include Dream after upgrading', async () => {
-  sessionStorage.setItem(SK_ACTIVITY_LOG_FILTERS, JSON.stringify(['instance', 'artifact', 'chat', 'channels', 'cron', 'memory']))
-  mocks.list.mockResolvedValue({ items: [running], total: 1 })
-  const wrapper = mount(ActivityLogView, { global: { stubs: { Icon: true, HoverMenu: true, ModalDialog: true } } })
-  await flushPromises()
-  expect(mocks.list.mock.calls[0][0].types).toContain('dream')
-  expect(wrapper.text()).toContain('Active Now')
-  wrapper.unmount()
-})
-
 test('memory and Dream change links open the changed document with a pagination-safe filter', async () => {
   mocks.list.mockResolvedValue({
     items: [{

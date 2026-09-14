@@ -16,7 +16,7 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true })
 })
 
-test('new and legacy agents default to the agent model', () => {
+test('new and unconfigured agents default to the agent model', () => {
     const agent = createAgent({ name: 'Default' })
     expect(agent).toMatchObject({ autoRouterProviderId: '__agent_provider__', autoRouterModel: '__agent_model__', dreamingEnabled: true })
     getDb().prepare("UPDATE agents SET auto_router_provider_id = '', auto_router_model = '' WHERE id = ?").run(agent.id)
