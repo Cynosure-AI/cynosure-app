@@ -54,6 +54,23 @@ describe('chat timeline chronology', () => {
     ])
 
     expect(ids(timeline)).toEqual([1, ['m-first-run'], 'main-between', 4, ['m-continued-run']])
+    const groups = timeline.filter(entry => entry.type === 'sub-agent-group')
+    expect(groups[0]?.openingMessage).toBe('Initial task')
+    expect(groups[0]?.continued).toBe(false)
+    expect(groups[1]?.openingMessage).toBe('Follow up')
+    expect(groups[1]?.continued).toBe(true)
+  })
+
+  it('reconstructs the sub-agent first message from its regular parameters', () => {
+    const timeline = buildChatTimeline(
+      [message('answer', 2, { maInvocationId: 'worker-1', maCodename: 'worker' })],
+      [step(1, { toolCalls: [{
+        name: 'spawn_subagent',
+        arguments: JSON.stringify({ internalName: 'worker', context: 'Background', instructions: 'Do the task' }),
+      }] })],
+    )
+    const group = timeline.find(entry => entry.type === 'sub-agent-group')
+    expect(group?.openingMessage).toBe('## Context\nBackground\n\n## Task\nDo the task')
   })
 
   it('keeps fallback tools inside their invocation and separates user turns', () => {

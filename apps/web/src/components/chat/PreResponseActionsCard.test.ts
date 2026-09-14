@@ -9,7 +9,8 @@ describe('PreResponseActionsCard', () => {
       global: { stubs: { Icon: true } },
     })
 
-    expect(wrapper.text()).toContain('Generating conversation title')
+    expect(wrapper.text()).toContain('Conversation title')
+    expect(wrapper.text()).toContain('Generating title')
     expect(wrapper.text()).not.toContain('Preparing response')
     expect(wrapper.text()).not.toContain('Pre-response actions')
     expect(wrapper.text()).not.toContain('Post-turn')

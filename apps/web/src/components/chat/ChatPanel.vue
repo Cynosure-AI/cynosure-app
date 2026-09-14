@@ -626,6 +626,15 @@ onMounted(() => {
               class="border-t border-indigo-500/15 py-2 overflow-y-auto"
               :class="fullHeightSubAgentGroups.has(entry.key) ? '' : 'max-h-80'"
             >
+              <div
+                v-if="entry.openingMessage"
+                class="px-4 py-1.5"
+                data-subagent-opening-message
+              >
+                <div class="ml-auto max-w-[80%] rounded-2xl rounded-br-md border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-2.5 text-[12px] leading-relaxed text-theme-200 whitespace-pre-wrap wrap-break-word">
+                  {{ entry.openingMessage }}
+                </div>
+              </div>
               <template
                 v-for="inner in entry.entries"
                 :key="inner.key"
