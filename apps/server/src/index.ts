@@ -36,7 +36,7 @@ import { registerCronJobRoutes } from './routes/cron-jobs.js'
 import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
 import { registerMemoryFoldersRoutes } from './routes/memory-folders.js'
-import { watchMemoryFolder, stopAllMemoryFolderWatchers } from './core/memory/memory-folder-watcher.js'
+import { stopAllMemoryFolderWatchers } from './core/memory/memory-folder-watcher.js'
 import { syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
@@ -301,15 +301,9 @@ async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<v
   })
 }
 
+/** Start filesystem watchers for all existing memory folders (sync also watches each row). */
 function startMemoryFolderWatchers(): void {
-  const db = getDb()
-  syncMemoryFoldersFromFolders(db)
-  const rows = db
-    .prepare("SELECT id, directory_path FROM memory_folders WHERE directory_path IS NOT NULL AND directory_path != ''")
-    .all() as { id: string; directory_path: string }[]
-  for (const row of rows) {
-    watchMemoryFolder(row.id, row.directory_path)
-  }
+  syncMemoryFoldersFromFolders(getDb())
 }
 
 function adoptUnindexedMemoryFiles(): void {
