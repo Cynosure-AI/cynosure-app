@@ -200,6 +200,12 @@ function createTables(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments(message_id);
     CREATE INDEX IF NOT EXISTS idx_message_attachments_conversation ON message_attachments(conversation_id);
 
+    CREATE TABLE IF NOT EXISTS attachment_assets (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, original_path TEXT NOT NULL, text_path TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL, text_bytes INTEGER NOT NULL, chunk_count INTEGER,
+      metadata_json TEXT, created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS staged_chat_attachments (
       id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -747,6 +753,14 @@ function createTables(db: Database.Database): void {
   addColumnIfMissing('messages', 'ma_invocation_id', 'TEXT')
   addColumnIfMissing('messages', 'structured_content_json', 'TEXT')
   addColumnIfMissing('messages', 'generated_media', 'INTEGER NOT NULL DEFAULT 0')
+  addColumnIfMissing('message_attachments', 'asset_id', 'TEXT')
+  db.exec(`
+    INSERT OR IGNORE INTO attachment_assets
+      (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
+    SELECT id, name, original_path, text_path, COALESCE(size_bytes, 0), COALESCE(text_bytes, 0), chunk_count, metadata_json, created_at
+    FROM message_attachments WHERE kind = 'file' AND original_path IS NOT NULL AND text_path IS NOT NULL;
+    UPDATE message_attachments SET asset_id = id WHERE kind = 'file' AND asset_id IS NULL;
+  `)
   addColumnIfMissing('execution_steps', 'ma_invocation_id', 'TEXT')
   addColumnIfMissing('notifications', 'scheduled_at', 'INTEGER')
   addColumnIfMissing('notifications', 'delivered_at', 'INTEGER')

@@ -2,25 +2,28 @@ import type { Database } from 'better-sqlite3'
 import type { ToolDefinition } from '../gateway/providers/base.provider.js'
 import { getMemoryParser, type RetrievedChunk } from '../memory/parser.js'
 import { getRAGStore } from '../memory/rag.js'
-import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from '../memory/lancedb-filter.js'
+import { lanceDbEqFilter, lanceDbInFilter } from '../memory/lancedb-filter.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from './file-artifacts.js'
 import { getDb } from '../../db/database.js'
 import type { ContextEvidence } from '@shared/types'
-import { copyFileSync, existsSync, mkdirSync } from 'fs'
-import { basename, join } from 'path'
+import { copyFileSync, existsSync, mkdirSync, rmSync } from 'fs'
+import { basename, join, sep } from 'path'
+import { getAppDataDir } from '../data-dir.js'
 import { nanoid } from 'nanoid'
-import { getConversationArtifactsDir } from './image-artifacts.js'
 
 export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'
+const ATTACHMENT_ASSET_SPACE_ID = 'attachment-assets'
 
 export function conversationAttachmentSpaceId(conversationId: string): string {
     return `conversation:${conversationId}`
 }
 
 export function buildAttachmentFilter(conversationId: string, attachmentIds?: string[]): string | undefined {
-    const scope = lanceDbEqFilter('categoryId', conversationAttachmentSpaceId(conversationId))
-    const ids = attachmentIds?.length ? lanceDbInFilter('sourceFile', attachmentIds) : undefined
-    return andLanceDbFilters(scope, ids)
+    const requested = attachmentIds?.length ? new Set(attachmentIds) : null
+    const ids = listConversationFileAttachments(getDb(), conversationId)
+        .filter(item => !requested || requested.has(item.id) || requested.has(item.assetId || item.id))
+        .map(item => item.assetId || item.id)
+    return lanceDbInFilter('sourceFile', [...new Set(ids)])
 }
 
 export async function indexConversationAttachment(
@@ -33,10 +36,10 @@ export async function indexConversationAttachment(
     try {
         const chunkCount = await getMemoryParser().ingest(CONVERSATION_ATTACHMENTS_TABLE, text, {
             source: 'conversation_attachment',
-            sourceFile: attachment.id,
-            categoryId: conversationAttachmentSpaceId(conversationId),
+            sourceFile: attachment.assetId || attachment.id,
+            categoryId: ATTACHMENT_ASSET_SPACE_ID,
         })
-        updateConversationAttachmentChunkCount(attachment.id, chunkCount)
+        updateConversationAttachmentChunkCount(attachment.assetId || attachment.id, chunkCount)
         return chunkCount
     } catch (err) {
         console.warn('[attachment-rag] Failed to index attachment:', err instanceof Error ? err.message : err)
@@ -48,56 +51,31 @@ export async function reuseConversationAttachment(
     targetConversationId: string,
     sourceAttachmentId: string,
 ): Promise<FileAttachmentArtifact | null> {
+    void targetConversationId
     const row = getDb().prepare(`
-        SELECT id, name, conversation_id, original_path, text_path, size_bytes, text_bytes, chunk_count
-        FROM message_attachments WHERE id = ? AND kind = 'file'
+        SELECT a.id, a.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
+        FROM message_attachments ma JOIN attachment_assets a ON a.id = ma.asset_id
+        WHERE ma.id = ? AND ma.kind = 'file'
     `).get(sourceAttachmentId) as {
-        id: string; name: string; conversation_id: string; original_path: string | null; text_path: string | null;
+        id: string; name: string; original_path: string | null; text_path: string | null;
         size_bytes: number | null; text_bytes: number | null; chunk_count: number | null;
     } | undefined
     if (!row?.original_path || !row.text_path || !existsSync(row.original_path) || !existsSync(row.text_path)) return null
-
-    const id = nanoid()
-    const directory = join(getConversationArtifactsDir(targetConversationId), 'files')
-    mkdirSync(directory, { recursive: true })
-    const stem = `${Date.now()}-${id}-${basename(row.name).replace(/[^A-Za-z0-9._-]/g, '_')}`
-    const originalPath = join(directory, stem)
-    const textPath = join(directory, `${stem}.parsed.md`)
-    copyFileSync(row.original_path, originalPath)
-    copyFileSync(row.text_path, textPath)
-
-    let chunkCount = await getRAGStore().cloneDocuments(
-        CONVERSATION_ATTACHMENTS_TABLE,
-        buildAttachmentFilter(row.conversation_id, [row.id])!,
-        document => ({
-            ...document,
-            id: nanoid(),
-            sourceFile: id,
-            categoryId: conversationAttachmentSpaceId(targetConversationId),
-            createdAt: Date.now(),
-        }),
-    )
-    const artifact: FileAttachmentArtifact = {
-        id,
+    return {
+        id: nanoid(),
+        assetId: row.id,
         name: row.name,
-        originalPath,
-        textPath,
+        originalPath: row.original_path,
+        textPath: row.text_path,
         sizeBytes: row.size_bytes ?? 0,
         textBytes: row.text_bytes ?? 0,
-        chunkCount,
+        chunkCount: row.chunk_count ?? 0,
     }
-    // Legacy/unindexed library entries have no vectors to clone. Preserve the
-    // old behavior as a fallback so the attachment remains searchable.
-    if (!chunkCount && row.text_bytes) {
-        chunkCount = await indexConversationAttachment(targetConversationId, artifact)
-        artifact.chunkCount = chunkCount
-    }
-    return artifact
 }
 
 function updateConversationAttachmentChunkCount(attachmentId: string, chunkCount: number): void {
     try {
-        getDb().prepare('UPDATE message_attachments SET chunk_count = ? WHERE id = ?').run(chunkCount, attachmentId)
+        getDb().prepare('UPDATE attachment_assets SET chunk_count = ? WHERE id = ?').run(chunkCount, attachmentId)
     } catch {
         // Best-effort; the caller still receives the current count.
     }
@@ -114,11 +92,11 @@ async function ensureConversationAttachmentsIndexed(
     attachmentIds?: string[],
 ): Promise<FileAttachmentArtifact[]> {
     const wanted = attachmentIds?.length ? new Set(attachmentIds) : null
-    const candidates = wanted ? attachments.filter((attachment) => wanted.has(attachment.id)) : attachments
+    const candidates = wanted ? attachments.filter((attachment) => wanted.has(attachment.id) || wanted.has(attachment.assetId || attachment.id)) : attachments
     const indexed: FileAttachmentArtifact[] = []
 
     for (const attachment of candidates) {
-        let chunkCount = await countConversationAttachmentChunks(conversationId, attachment.id)
+        let chunkCount = await countConversationAttachmentChunks(conversationId, attachment.assetId || attachment.id)
         if (chunkCount <= 0) {
             chunkCount = await indexConversationAttachment(conversationId, attachment)
         }
@@ -177,7 +155,8 @@ export async function getConversationAttachmentChunks(
     const attachments = listConversationFileAttachments(getDb(), conversationId)
     await ensureConversationAttachmentsIndexed(conversationId, attachments, [attachmentId])
     const filter = buildAttachmentFilter(conversationId)
-    return getRAGStore().getChunksByRange(CONVERSATION_ATTACHMENTS_TABLE, attachmentId, minIndex, maxIndex, filter)
+    const attachment = attachments.find(item => item.id === attachmentId || item.assetId === attachmentId)
+    return getRAGStore().getChunksByRange(CONVERSATION_ATTACHMENTS_TABLE, attachment?.assetId || attachmentId, minIndex, maxIndex, filter)
 }
 
 export async function countConversationAttachmentChunks(conversationId: string, attachmentId: string): Promise<number> {
@@ -185,22 +164,54 @@ export async function countConversationAttachmentChunks(conversationId: string, 
 }
 
 export async function deleteConversationAttachmentIndex(conversationId: string): Promise<void> {
-    const filter = buildAttachmentFilter(conversationId)
-    if (!filter) return
-    await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
+    void conversationId
+    await collectOrphanedAttachmentAssets()
 }
 
 export async function deleteConversationAttachmentChunks(conversationId: string, attachmentIds: string[]): Promise<void> {
-    const filter = buildAttachmentFilter(conversationId, attachmentIds)
+    void conversationId
+    const filter = lanceDbInFilter('sourceFile', attachmentIds)
     if (!filter) return
     await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
 }
 
 export async function deleteConversationAttachmentIndexes(conversationIds: string[]): Promise<void> {
-    const categoryIds = Array.from(new Set(conversationIds.map(conversationAttachmentSpaceId)))
-    const filter = lanceDbInFilter('categoryId', categoryIds)
-    if (!filter) return
-    await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, filter)
+    void conversationIds
+    await collectOrphanedAttachmentAssets()
+}
+
+export async function collectOrphanedAttachmentAssets(): Promise<number> {
+    const db = getDb()
+    const rows = db.prepare(`SELECT a.id, a.original_path, a.text_path FROM attachment_assets a
+        LEFT JOIN message_attachments ma ON ma.asset_id = a.id WHERE ma.id IS NULL`).all() as Array<{ id: string; original_path: string; text_path: string }>
+    for (const row of rows) {
+        await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, lanceDbEqFilter('sourceFile', row.id))
+        for (const path of [row.original_path, row.text_path]) try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
+        db.prepare('DELETE FROM attachment_assets WHERE id = ?').run(row.id)
+    }
+    return rows.length
+}
+
+/** Move legacy conversation-owned files into canonical storage before their owner is deleted. */
+export function preserveReferencedAttachmentAssets(deletingConversationIds: string[]): void {
+    if (!deletingConversationIds.length) return
+    const db = getDb()
+    const placeholders = deletingConversationIds.map(() => '?').join(',')
+    const rows = db.prepare(`SELECT DISTINCT a.id, a.original_path, a.text_path FROM attachment_assets a
+        JOIN message_attachments owner ON owner.asset_id = a.id AND owner.conversation_id IN (${placeholders})
+        JOIN message_attachments keep ON keep.asset_id = a.id AND keep.conversation_id NOT IN (${placeholders})`
+    ).all(...deletingConversationIds, ...deletingConversationIds) as Array<{ id: string; original_path: string; text_path: string }>
+    const directory = join(getAppDataDir(), 'artifacts', 'attachment-assets')
+    mkdirSync(directory, { recursive: true })
+    for (const row of rows) {
+        if (row.original_path.startsWith(`${directory}${sep}`) && row.text_path.startsWith(`${directory}${sep}`)) continue
+        const originalPath = join(directory, `${row.id}-${basename(row.original_path)}`)
+        const textPath = join(directory, `${row.id}-${basename(row.text_path)}`)
+        if (row.original_path !== originalPath && existsSync(row.original_path)) copyFileSync(row.original_path, originalPath)
+        if (row.text_path !== textPath && existsSync(row.text_path)) copyFileSync(row.text_path, textPath)
+        db.prepare('UPDATE attachment_assets SET original_path = ?, text_path = ? WHERE id = ?').run(originalPath, textPath, row.id)
+        db.prepare('UPDATE message_attachments SET original_path = ?, text_path = ? WHERE asset_id = ?').run(originalPath, textPath, row.id)
+    }
 }
 
 export function persistMessageFileAttachments(
@@ -214,10 +225,16 @@ export function persistMessageFileAttachments(
     const stmt = db.prepare(`
         INSERT OR REPLACE INTO message_attachments (
             id, message_id, conversation_id, kind, name, original_path, text_path,
-            size_bytes, text_bytes, chunk_count, metadata_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            size_bytes, text_bytes, chunk_count, metadata_json, created_at, asset_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const attachment of attachments) {
+        const assetId = attachment.assetId || attachment.id
+        db.prepare(`INSERT OR IGNORE INTO attachment_assets
+            (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(assetId, attachment.name, attachment.originalPath, attachment.textPath, attachment.sizeBytes,
+            attachment.textBytes, attachment.chunkCount ?? null, JSON.stringify({ ...attachment, assetId }), createdAt)
         stmt.run(
             attachment.id,
             messageId,
@@ -231,18 +248,19 @@ export function persistMessageFileAttachments(
             attachment.chunkCount ?? null,
             JSON.stringify(attachment),
             createdAt,
+            assetId,
         )
     }
 }
 
 export function listConversationFileAttachments(db: Database, conversationId: string): FileAttachmentArtifact[] {
     const rows = db.prepare(`
-        SELECT id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
-        FROM message_attachments
-        WHERE conversation_id = ? AND kind = 'file'
-        ORDER BY created_at ASC
+        SELECT ma.id, ma.asset_id, a.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
+        FROM message_attachments ma JOIN attachment_assets a ON a.id = ma.asset_id
+        WHERE ma.conversation_id = ? AND ma.kind = 'file' ORDER BY ma.created_at ASC
     `).all(conversationId) as {
         id: string
+        asset_id: string
         name: string
         original_path: string | null
         text_path: string | null
@@ -251,18 +269,23 @@ export function listConversationFileAttachments(db: Database, conversationId: st
         chunk_count: number | null
     }[]
 
-    return rows.map(rowToFileAttachment).filter((attachment): attachment is FileAttachmentArtifact => Boolean(attachment))
+    const unique = new Map<string, FileAttachmentArtifact>()
+    for (const row of rows) {
+        const attachment = rowToFileAttachment(row)
+        if (attachment) unique.set(attachment.assetId || attachment.id, attachment)
+    }
+    return [...unique.values()]
 }
 
 export function listConversationFileAttachmentsByMessage(db: Database, conversationId: string): Map<string, FileAttachmentArtifact[]> {
     const rows = db.prepare(`
-        SELECT message_id, id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
-        FROM message_attachments
-        WHERE conversation_id = ? AND kind = 'file'
-        ORDER BY created_at ASC
+        SELECT ma.message_id, ma.id, ma.asset_id, a.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
+        FROM message_attachments ma JOIN attachment_assets a ON a.id = ma.asset_id
+        WHERE ma.conversation_id = ? AND ma.kind = 'file' ORDER BY ma.created_at ASC
     `).all(conversationId) as {
         message_id: string
         id: string
+        asset_id: string
         name: string
         original_path: string | null
         text_path: string | null
@@ -284,6 +307,7 @@ export function listConversationFileAttachmentsByMessage(db: Database, conversat
 
 function rowToFileAttachment(row: {
     id: string
+    asset_id?: string
     name: string
     original_path: string | null
     text_path: string | null
@@ -294,6 +318,7 @@ function rowToFileAttachment(row: {
     if (!row.original_path || !row.text_path) return null
     return {
         id: row.id,
+        assetId: row.asset_id || row.id,
         name: row.name,
         originalPath: row.original_path,
         textPath: row.text_path,
@@ -313,8 +338,8 @@ function formatAttachmentList(attachments: FileAttachmentArtifact[]): string {
 
 async function enrichChunkCounts(conversationId: string, attachments: FileAttachmentArtifact[]): Promise<Map<string, number>> {
     const entries = await Promise.all(attachments.map(async (attachment) => [
-        attachment.id,
-        attachment.chunkCount || await countConversationAttachmentChunks(conversationId, attachment.id),
+        attachment.assetId || attachment.id,
+        attachment.chunkCount || await countConversationAttachmentChunks(conversationId, attachment.assetId || attachment.id),
     ] as const))
     return new Map(entries)
 }
@@ -331,7 +356,7 @@ function formatSearchResults(
         const part = result.chunkIndex != null && total
             ? ` · Part ${result.chunkIndex + 1}/${total}`
             : ''
-        const id = result.sourceFile ? ` · attachmentId: ${result.sourceFile}` : ''
+        const id = attachment ? ` · attachmentId: ${attachment.id}` : ''
         const score = ` · score: ${(result.score * 100).toFixed(1)}%`
         return `[${label}${part}${id}${score}]\n${result.text}`
     }).join('\n\n---\n\n')
@@ -376,7 +401,7 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
                 const results = await searchConversationAttachments(conversationId, searchQuery, Math.min(topK ?? 5, 10), ids)
                 if (!results.length) return { success: false, output: `No relevant attachment chunks found for "${searchQuery}".` }
 
-                const byId = new Map(attachments.map((attachment) => [attachment.id, attachment]))
+                const byId = new Map(attachments.map((attachment) => [attachment.assetId || attachment.id, attachment]))
                 const chunkCounts = await enrichChunkCounts(conversationId, attachments)
                 return { success: true, output: formatSearchResults(results, byId, chunkCounts) }
             },
@@ -407,7 +432,7 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
                 const chunks = await getConversationAttachmentChunks(conversationId, attachmentId, start, end)
                 if (!chunks.length) return { success: false, output: `No chunks found for "${attachment.name}" in range ${start}-${end}.` }
 
-                const total = attachment.chunkCount || await countConversationAttachmentChunks(conversationId, attachmentId)
+                const total = attachment.chunkCount || await countConversationAttachmentChunks(conversationId, attachment.assetId || attachmentId)
                 const formatted = chunks.map((chunk) => `[${attachment.name} · Part ${chunk.chunkIndex + 1}/${total} · attachmentId: ${attachmentId}]\n${chunk.text}`).join('\n\n---\n\n')
                 return { success: true, output: formatted }
             },
@@ -437,7 +462,7 @@ export async function buildAttachmentContextBundle(conversationId: string, query
     if (!indexed.length) return null
 
     const chunkCounts = await enrichChunkCounts(conversationId, indexed)
-    const byId = new Map(indexed.map((attachment) => [attachment.id, attachment]))
+    const byId = new Map(indexed.map((attachment) => [attachment.assetId || attachment.id, attachment]))
     const results = await searchConversationAttachments(conversationId, query, 6)
 
     const lines = [
