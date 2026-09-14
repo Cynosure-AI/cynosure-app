@@ -41,8 +41,8 @@
   --accent-button-foreground: #ffffff;
 }
 
-/* Custom dark variant based on data-theme attribute */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="virtualboy"], [data-theme="virtualboy"] *, [data-theme="crimson"], [data-theme="crimson"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="emerald"], [data-theme="emerald"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
+/* No theme attribute is the complete default dark presentation. */
+@custom-variant dark (&:where(:root:not([data-theme]), :root:not([data-theme]) *, [data-theme="dark"], [data-theme="dark"] *, [data-theme="virtualboy"], [data-theme="virtualboy"] *, [data-theme="crimson"], [data-theme="crimson"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="emerald"], [data-theme="emerald"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
 
 /* ── Global defaults ── */
 body {
