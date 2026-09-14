@@ -48,7 +48,7 @@ const inputText = ref(readDraft(draftStorageKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([])
-type DraftFile = { clientId: string; name: string; content: string; sourceId?: string; stagedId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; error?: string }
+type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; error?: string }
 const attachedFiles = ref<DraftFile[]>([])
 const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([])
 const editingQueueId = ref<string | null>(null)
@@ -78,7 +78,7 @@ async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
   if (attachmentsProcessing.value || hasAttachmentError.value) return
   const files = attachedFiles.value.filter(f => f.status === 'ready').map((f) => {
     const stagedId = f.stagedConversationId === chatStore.activeConversationId ? f.stagedId : undefined
-    return { name: f.name, content: stagedId ? '' : f.content, stagedId }
+    return { name: f.name, content: stagedId ? undefined : f.content, stagedId, existingAttachmentId: f.existingAttachmentId }
   })
   const audio = attachedAudio.value.map((a) => a.url)
   inputText.value = ''
@@ -115,7 +115,7 @@ function openFilePicker(): void {
 
 function addLibrarySelection(selection: {
   images: { id: string; name: string; url: string }[]
-  files: { id: string; name: string; content: string }[]
+  files: { id: string; name: string; content?: string; existingAttachmentId?: string }[]
   audio: { id: string; name: string; url: string }[]
 }): void {
   const existing = new Set([
@@ -129,7 +129,7 @@ function addLibrarySelection(selection: {
   for (const file of selection.files) {
     // Library files already belong to a persisted message and are re-materialized
     // by the normal resend path; only new local uploads need draft staging.
-    if (!existing.has(file.id)) attachedFiles.value.push({ clientId: crypto.randomUUID(), name: file.name, content: file.content, sourceId: file.id, status: 'ready' })
+    if (!existing.has(file.id)) attachedFiles.value.push({ clientId: crypto.randomUUID(), name: file.name, content: file.content, existingAttachmentId: file.existingAttachmentId, sourceId: file.id, status: 'ready' })
   }
   for (const audio of selection.audio) {
     if (!existing.has(audio.id)) attachedAudio.value.push({ url: audio.url, name: audio.name, sourceId: audio.id })

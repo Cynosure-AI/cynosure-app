@@ -403,9 +403,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
     })
 
-    // Resolve library selections back to the same provider-safe payload used by
-    // a freshly selected file. The new message will materialize its own durable
-    // copy, so deleting the source conversation cannot break the reused file.
+    // Resolve library selections to stable server-side references. The send
+    // path clones the durable artifact and its existing vectors without
+    // transferring or parsing the file again in the browser.
     app.post<{ Body: { ids?: string[] } }>('/uploads/resolve', async (req, reply) => {
         const ids = Array.isArray(req.body?.ids)
             ? [...new Set(req.body.ids.filter((id): id is string => typeof id === 'string' && id.length > 0))]
@@ -416,18 +416,17 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const db = getDb()
         const placeholders = ids.map(() => '?').join(', ')
         const rows = db.prepare(
-            `SELECT id, name, original_path
+            `SELECT id, name, original_path, text_path
              FROM message_attachments
              WHERE kind = 'file' AND id IN (${placeholders})`,
-        ).all(...ids) as { id: string; name: string; original_path: string | null }[]
+        ).all(...ids) as { id: string; name: string; original_path: string | null; text_path: string | null }[]
         const byId = new Map(rows.map((row) => [row.id, row]))
         const files = ids.map((id) => {
             const row = byId.get(id)
-            if (!row || !row.original_path || !existsSync(row.original_path)) {
+            if (!row || !row.original_path || !row.text_path || !existsSync(row.original_path) || !existsSync(row.text_path)) {
                 return null
             }
-            const encoded = readFileSync(row.original_path).toString('base64')
-            return { id: row.id, name: row.name, content: `data:application/octet-stream;base64,${encoded}` }
+            return { id: row.id, name: row.name, existingAttachmentId: row.id }
         })
         const missing = ids.filter((id, index) => !files[index])
         if (missing.length) {

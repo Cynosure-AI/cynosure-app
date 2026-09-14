@@ -108,9 +108,11 @@ export interface DebugContextSnapshot {
 
 export interface ChatAttachmentInput {
   name: string
-  content: string
+  content?: string
   /** Server-side preprocessed draft attachment. Content is omitted when this is set. */
   stagedId?: string
+  /** Persisted attachment selected from the library; its parsed text and vectors are reused. */
+  existingAttachmentId?: string
 }
 
 export interface ChatResendAttachments {

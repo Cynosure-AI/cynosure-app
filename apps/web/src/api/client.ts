@@ -92,7 +92,7 @@ export const api = {
       return get<{ items: ConversationUpload[]; total: number }>(`/api/chat/uploads?${params}`)
     },
     resolveUploads: (ids: string[]) =>
-      post<{ files: { id: string; name: string; content: string }[] }>('/api/chat/uploads/resolve', { ids }),
+      post<{ files: { id: string; name: string; existingAttachmentId: string }[] }>('/api/chat/uploads/resolve', { ids }),
     resolveArtifacts: (artifacts: { id: string; href: string; label: string; kind: 'file' | 'image' | 'video' | 'audio' }[]) =>
       post<{
         images: { id: string; name: string; url: string }[]

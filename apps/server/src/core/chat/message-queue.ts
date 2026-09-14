@@ -14,7 +14,7 @@ import {
   readFileAttachmentText,
   type FileAttachmentArtifact,
 } from '../artifacts/file-artifacts.js'
-import { deleteConversationAttachmentChunks, indexConversationAttachment, persistMessageFileAttachments } from '../artifacts/attachment-rag.js'
+import { deleteConversationAttachmentChunks, indexConversationAttachment, persistMessageFileAttachments, reuseConversationAttachment } from '../artifacts/attachment-rag.js'
 import { releaseStagedChatAttachments, takeStagedChatAttachments } from '../artifacts/staged-attachments.js'
 import type {
   ChatQueueRequest,
@@ -129,7 +129,9 @@ async function stageRequest(conversationId: string, request: ChatQueueRequest): 
   const files = request.files?.length
     ? [
         ...takeStagedChatAttachments(conversationId, request.files.flatMap(file => file.stagedId ? [file.stagedId] : [])),
-        ...await materializeFileAttachments(request.files.filter(file => !file.stagedId), conversationId),
+        ...(await Promise.all(request.files.flatMap(file => file.existingAttachmentId ? [reuseConversationAttachment(conversationId, file.existingAttachmentId)] : [])))
+          .filter((file): file is NonNullable<typeof file> => Boolean(file)),
+        ...await materializeFileAttachments(request.files.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string').map(file => ({ name: file.name, content: file.content! })), conversationId),
       ]
     : []
   for (const file of files) if (file.chunkCount === undefined) file.chunkCount = await indexConversationAttachment(conversationId, file)

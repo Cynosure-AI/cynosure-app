@@ -25,7 +25,7 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
 import { releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
-import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments } from '../core/artifacts/attachment-rag.js'
+import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
@@ -327,13 +327,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       const stagedIds = files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || []
       const preprocessedAttachments = request.stagedFileArtifacts || takeStagedChatAttachments(conversationId, stagedIds)
-      const unstagedFiles = files?.filter(file => !file.stagedId) || []
+      const reusedAttachments = request.stagedFileArtifacts ? [] : (await Promise.all(
+        (files || []).flatMap(file => file.existingAttachmentId ? [reuseConversationAttachment(conversationId, file.existingAttachmentId)] : []),
+      )).filter((file): file is NonNullable<typeof file> => Boolean(file))
+      const unstagedFiles = files?.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string')
+        .map(file => ({ name: file.name, content: file.content! })) || []
       const storedFileAttachments = request.stagedFileArtifacts
         ? request.stagedFileArtifacts
-        : [...preprocessedAttachments, ...(unstagedFiles.length ? await materializeFileAttachments(unstagedFiles, conversationId) : [])]
+        : [...preprocessedAttachments, ...reusedAttachments, ...(unstagedFiles.length ? await materializeFileAttachments(unstagedFiles, conversationId) : [])]
       abortController.signal.throwIfAborted()
       if (!request.stagedFileArtifacts) {
-        for (const attachment of storedFileAttachments.slice(preprocessedAttachments.length)) {
+        for (const attachment of storedFileAttachments.slice(preprocessedAttachments.length + reusedAttachments.length)) {
           attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
           abortController.signal.throwIfAborted()
         }

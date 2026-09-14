@@ -185,9 +185,9 @@ describe('conversation message attachment resolution', () => {
         await app.close()
 
         expect(response.statusCode, response.body).toBe(200)
-        const resolved = response.json().files as { id: string; name: string; content: string }[]
+        const resolved = response.json().files as { id: string; name: string; existingAttachmentId: string }[]
         expect(resolved.map((file) => file.name)).toEqual(['second.txt', 'first.txt'])
-        expect(Buffer.from(resolved[0].content.split(',')[1], 'base64').toString('utf8')).toBe('second contents')
+        expect(resolved.map((file) => file.existingAttachmentId)).toEqual([files[1].id, files[0].id])
     })
 
     test('resolves generated artifacts into chat context payloads', async () => {

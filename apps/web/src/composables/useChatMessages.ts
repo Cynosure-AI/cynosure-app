@@ -180,7 +180,7 @@ export function useChatMessages(
             imageDataUrls,
             audioDataUrls,
             fileAttachments: files?.map((file) => {
-                const href = createFilePreviewUrl(file.content)
+                const href = file.content ? createFilePreviewUrl(file.content) : undefined
                 return href ? { name: file.name, href } : { name: file.name }
             }),
             createdAt: Date.now()

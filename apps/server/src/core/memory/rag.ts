@@ -385,6 +385,24 @@ export class RAGStore {
     await this.ensureCategoryIdIndex(table, tableName)
   }
 
+  /** Copy already-embedded documents while changing their ownership metadata. */
+  async cloneDocuments(
+    tableName: string,
+    filter: string,
+    transform: (doc: VectorDocument) => VectorDocument,
+  ): Promise<number> {
+    if (!this.db) return 0
+    const table = await this.openExistingTable(tableName)
+    if (!table) return 0
+    const rows = await table.query().where(filter).toArray() as unknown as VectorDocument[]
+    const documents = rows
+      .filter(row => row.id !== '__seed__' && row.vector)
+      .map(row => transform({ ...row, vector: Array.from(row.vector) }))
+    if (!documents.length) return 0
+    await this.addDocuments(tableName, documents, documents[0].vector.length)
+    return documents.length
+  }
+
   // -----------------------------------------------------------------------
   // Search
   // -----------------------------------------------------------------------
