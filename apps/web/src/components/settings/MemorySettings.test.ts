@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import MemorySettings from './MemorySettings.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const mocks = vi.hoisted(() => ({
   getEmbeddingConfig: vi.fn(),
@@ -111,6 +112,22 @@ describe('Dream settings', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Save Dream Config')!.trigger('click')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toBe('Provider unavailable')
+    wrapper.unmount()
+  })
+  test('allows Dream Mode with a provider default and no explicit model', async () => {
+    const wrapper = createDreamSettings()
+    await flushPromises()
+
+    const toggle = wrapper.get('[role="switch"]')
+    wrapper.getComponent(ProviderModelSelect).vm.$emit('change', { providerId: 'provider-1', model: '' })
+    await flushPromises()
+    expect(toggle.attributes('disabled')).toBeUndefined()
+
+    wrapper.getComponent(ToggleSwitch).vm.$emit('update:modelValue', true)
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'Save Dream Config')!.trigger('click')
+    await flushPromises()
+    expect(mocks.configureDream).toHaveBeenCalledWith({ enabled: true, providerId: 'provider-1', model: '' })
     wrapper.unmount()
   })
   test('does not overwrite settings when loading failed', async () => {
