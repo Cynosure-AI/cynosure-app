@@ -26,16 +26,20 @@ describe('task context cancellation', () => {
     })
 
     test('routes memory lookups by model intent instead of fixed-language keywords', async () => {
-        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
-            name: 'set_task_context',
-            arguments: JSON.stringify({
-                toolQuery: 'No external capability needed',
-                requestedToolEffect: 'read',
-                requiresExternalTools: false,
-                memoryQueries: ['information about a close friend'],
-                requiresMemory: true,
-            }),
-        } }] })
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{
+                function: {
+                    name: 'set_task_context',
+                    arguments: JSON.stringify({
+                        toolQuery: 'No external capability needed',
+                        requestedToolEffect: 'read',
+                        requiresExternalTools: false,
+                        memoryQueries: ['information about a close friend'],
+                        requiresMemory: true,
+                    }),
+                }
+            }]
+        })
         const gateway = { complete } as unknown as LLMGateway
 
         await expect(buildTaskContext({
@@ -53,13 +57,17 @@ describe('task context cancellation', () => {
     })
 
     test('drops redundant memory expansions before applying the query budget', async () => {
-        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
-            name: 'set_task_context',
-            arguments: JSON.stringify({
-                memoryQueries: ['project details', 'specific preference', 'related decision'],
-                requiresMemory: true,
-            }),
-        } }] })
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{
+                function: {
+                    name: 'set_task_context',
+                    arguments: JSON.stringify({
+                        memoryQueries: ['project details', 'specific preference', 'related decision'],
+                        requiresMemory: true,
+                    }),
+                }
+            }]
+        })
         const result = await buildTaskContext({
             conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
             userQuery: 'project details', enabledModes: { tools: false, memories: true },
@@ -68,16 +76,20 @@ describe('task context cancellation', () => {
     })
 
     test('can independently skip both automatic tools and automatic memory', async () => {
-        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
-            name: 'set_task_context',
-            arguments: JSON.stringify({
-                toolQuery: 'No external capability needed',
-                requestedToolEffect: 'read',
-                requiresExternalTools: false,
-                memoryQueries: [],
-                requiresMemory: false,
-            }),
-        } }] })
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{
+                function: {
+                    name: 'set_task_context',
+                    arguments: JSON.stringify({
+                        toolQuery: 'No external capability needed',
+                        requestedToolEffect: 'read',
+                        requiresExternalTools: false,
+                        memoryQueries: [],
+                        requiresMemory: false,
+                    }),
+                }
+            }]
+        })
         const result = await buildTaskContext({
             conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
             userQuery: 'Explain recursion', enabledModes: { tools: true, memories: true },
@@ -90,14 +102,18 @@ describe('task context cancellation', () => {
     })
 
     test('uses the model side-effect classification without lexical overrides', async () => {
-        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
-            name: 'set_task_context',
-            arguments: JSON.stringify({
-                toolQuery: 'send a message',
-                requestedToolEffect: 'write',
-                requiresExternalTools: true,
-            }),
-        } }] })
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{
+                function: {
+                    name: 'set_task_context',
+                    arguments: JSON.stringify({
+                        toolQuery: 'send a message',
+                        requestedToolEffect: 'write',
+                        requiresExternalTools: true,
+                    }),
+                }
+            }]
+        })
         const result = await buildTaskContext({
             conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
             userQuery: 'Envía el mensaje', enabledModes: { tools: true, memories: false },
