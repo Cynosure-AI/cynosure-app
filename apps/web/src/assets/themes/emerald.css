@@ -50,12 +50,12 @@
 [data-theme="emerald"] button.bg-accent-500,
 [data-theme="emerald"] .bg-accent-600,
 [data-theme="emerald"] .bg-accent-500 {
-  background: linear-gradient(135deg, #a3e635, #34d399 48%, #2dd4bf); color: #03130d;
-  box-shadow: 0 10px 28px rgba(16,185,129,.2);
+  background: linear-gradient(135deg, rgba(163,230,53,.86), rgba(52,211,153,.86) 48%, rgba(45,212,191,.86)); color: #03130d;
+  box-shadow: 0 8px 24px rgba(16,185,129,.16);
 }
 [data-theme="emerald"] :is(.bg-accent-600, .bg-accent-500) .text-white,
 [data-theme="emerald"] :is(.text-white.bg-accent-600, .text-white.bg-accent-500) { color: #03130d; }
-[data-theme="emerald"] button:is(.bg-accent-600, .bg-accent-500):hover { filter: brightness(1.06) saturate(1.05); box-shadow: 0 12px 34px rgba(16,185,129,.28); }
+[data-theme="emerald"] button:is(.bg-accent-600, .bg-accent-500):hover { filter: brightness(1.04) saturate(1.03); box-shadow: 0 10px 28px rgba(16,185,129,.22); }
 [data-theme="emerald"] .chat-user-message.text-white,
 [data-theme="emerald"] .chat-user-message.text-white:hover {
   background: #0d7047;

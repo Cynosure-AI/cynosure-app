@@ -298,7 +298,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
       <div class="space-y-4">
         <!-- Identity: Name + Agent -->
-        <BaseCard class="p-5 space-y-4">
+        <BaseCard class="relative z-10 p-5 space-y-4">
           <div class="flex items-center gap-2">
             <Icon
               icon="lucide:tag"

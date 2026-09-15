@@ -9,6 +9,7 @@ import { useMemoryJobsStore } from "../stores/memory-jobs.store";
 import { SK_ACTIVITY_LOG_FILTERS } from "../utils/storage-keys";
 import HoverMenu from "../components/shared/HoverMenu.vue";
 import ModalDialog from "../components/shared/ModalDialog.vue";
+import MemoryInlineDiff from "../components/memory/MemoryInlineDiff.vue";
 
 const router = useRouter();
 const agentDefs = useAgentDefinitionsStore();
@@ -933,20 +934,35 @@ watch(searchQuery, () => {
                 <summary class="cursor-pointer">
                   Memory changes
                 </summary>
-                <ul class="mt-1 space-y-1">
+                <ul class="mt-2 space-y-2">
                   <li
                     v-for="(change, index) in item.dreamChanges"
                     :key="index"
+                    class="overflow-hidden rounded-lg border border-emerald-500/20 bg-emerald-500/5"
                   >
-                    <button
-                      v-if="change.memoryFolderId && change.memoryFileName"
-                      type="button"
-                      class="text-left text-accent-300 hover:text-accent-200 hover:underline"
-                      @click="openMemoryLocation(change.memoryFolderId, change.memoryFileName)"
-                    >
-                      {{ change.output }}
-                    </button>
-                    <span v-else>{{ change.output }}</span>
+                    <div class="flex items-center gap-2 px-3 py-2 text-emerald-300">
+                      <Icon
+                        icon="lucide:circle-check"
+                        class="h-3.5 w-3.5 shrink-0"
+                      />
+                      <button
+                        v-if="change.memoryFolderId && change.memoryFileName"
+                        type="button"
+                        class="min-w-0 truncate text-left font-medium hover:text-emerald-200 hover:underline"
+                        @click="openMemoryLocation(change.memoryFolderId, change.memoryFileName)"
+                      >
+                        {{ change.summary }}
+                      </button>
+                      <span
+                        v-else
+                        class="font-medium"
+                      >{{ change.summary }}</span>
+                    </div>
+                    <MemoryInlineDiff
+                      v-if="change.diffSegments"
+                      :segments="change.diffSegments"
+                      class="m-2 mt-0 max-h-72"
+                    />
                   </li>
                 </ul>
               </details>

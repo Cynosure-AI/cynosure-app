@@ -67,3 +67,31 @@ test('memory and Dream change links open the changed document with a pagination-
     path: '/memory-folders/documents', query: { category: 'category', file: 'notes.md' },
   })
 })
+
+test('completed Dream changes render a success summary and inline diff instead of raw tool JSON', async () => {
+  const rawOutput = JSON.stringify({ status: 'success', fileRef: 'preferences#abc', previousRevision: 1, revision: 2 })
+  mocks.list.mockResolvedValue({
+    items: [{
+      ...running,
+      status: 'completed',
+      dreamChanges: [{
+        tool: 'memory_patch', output: rawOutput, status: 'success',
+        summary: 'Updated preferences.md · revision 1 → 2',
+        memoryFolderId: 'uncategorized', memoryFileName: 'preferences.md',
+        diffSegments: [
+          { type: 'unchanged', text: 'Favorite color: ' },
+          { type: 'removed', text: 'blue' },
+          { type: 'added', text: 'green' },
+        ],
+      }],
+    }],
+    total: 1,
+  })
+  const wrapper = mount(ActivityLogView, { global: { stubs: { Icon: true, HoverMenu: true, ModalDialog: true } } })
+  await flushPromises()
+  await wrapper.get('summary').trigger('click')
+  expect(wrapper.text()).toContain('Updated preferences.md · revision 1 → 2')
+  expect(wrapper.text()).toContain('Favorite color: bluegreen')
+  expect(wrapper.text()).not.toContain(rawOutput)
+  expect(wrapper.find('.border-emerald-500\\/20').exists()).toBe(true)
+})

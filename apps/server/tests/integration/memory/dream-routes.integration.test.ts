@@ -46,15 +46,33 @@ async function seedRun(status = 'completed') {
         (document_id, document_ref, category_id, file_name, current_hash, status, indexing_status, created_at, updated_at)
         VALUES ('doc', 'preferences#abc', 'uncategorized', 'preferences.md', 'hash', 'active', 'indexed', ?, ?)`)
         .run(now, now)
+    getDb().prepare(`INSERT INTO memory_document_revisions
+        (id, document_id, revision_number, content_hash, content, source, conversation_id, agent_id, message_ids_json, created_at)
+        VALUES (?, 'doc', ?, ?, ?, 'dream', 'chat', NULL, '[]', ?)`)
+        .run('revision-1', 1, 'hash-1', 'Favorite color: blue\n', now - 1)
+    getDb().prepare(`INSERT INTO memory_document_revisions
+        (id, document_id, revision_number, content_hash, content, source, conversation_id, agent_id, message_ids_json, created_at)
+        VALUES (?, 'doc', ?, ?, ?, 'dream', 'chat', NULL, '[]', ?)`)
+        .run('revision-2', 2, 'hash-2', 'Favorite color: green\n', now)
     getDb().prepare(`INSERT INTO dream_runs(id, conversation_id, window_id, status, provider_id, model, input_json, reviewed_count, changes_json, created_at, updated_at)
         VALUES ('run', 'chat', ?, ?, 'dream-test', 'model', '{}', 2, ?, ?, ?)`)
-        .run(getDreamConfig().windowId, status, JSON.stringify([{ key: 'change', tool: 'memory_patch', output: JSON.stringify({ status: 'success', fileRef: 'preferences#abc', revision: 2 }) }]), now, now)
+        .run(getDreamConfig().windowId, status, JSON.stringify([{ key: 'change', tool: 'memory_patch', output: JSON.stringify({ status: 'success', fileRef: 'preferences#abc', previousRevision: 1, revision: 2 }) }]), now, now)
 }
 test('activity exposes a single filterable Dream entry with memory changes and a conversation link', async () => {
     await seedRun()
     const response = await app.inject('/api/activity?types=dream&search=Dream')
     expect(response.statusCode).toBe(200)
     expect(response.json()).toMatchObject({ total: 1, totalsByKind: { dream: 1 }, items: [{ id: 'dream:run', kind: 'dream', sourceId: 'run', conversationId: 'chat', conversationTitle: 'My preferences', status: 'completed', dreamChanges: [{ tool: 'memory_patch', memoryFolderId: 'uncategorized', memoryFileName: 'preferences.md' }] }] })
+    expect(response.json().items[0].dreamChanges[0]).toMatchObject({
+        status: 'success',
+        summary: 'Updated preferences.md · revision 1 → 2',
+        diffSegments: [
+            { type: 'unchanged', text: 'Favorite color: ' },
+            { type: 'removed', text: 'blue' },
+            { type: 'added', text: 'green' },
+            { type: 'unchanged', text: '\n' },
+        ],
+    })
     expect(response.json().items[0].description).toContain('2 message excerpts reviewed')
     expect((await app.inject('/api/activity?types=memory')).json().items).toEqual([])
 })
