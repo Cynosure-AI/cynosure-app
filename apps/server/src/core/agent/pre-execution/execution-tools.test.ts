@@ -39,6 +39,7 @@ describe('agent-required execution tools', () => {
     test('includes the unified memory mutation tool by default', () => {
         expect(getBuiltInMemoryReadToolKeys()).toEqual([
             'builtin:memory::memory_search',
+            'builtin:memory::memory_read',
             'builtin:memory::knowledge_search',
         ])
         expect(getBuiltInMemoryToolKeys()).toEqual([

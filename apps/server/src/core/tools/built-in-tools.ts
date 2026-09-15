@@ -13,6 +13,7 @@ import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
 import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import {
     makeMemorySearchTool,
+    makeMemoryReadTool,
     makeMemoryCreateTool,
     makeMemoryPatchTool,
     makeKnowledgeSearchTool,
@@ -27,6 +28,7 @@ export {
     makeNotificationTool,
     makeChannelNotificationTool,
     makeMemorySearchTool,
+    makeMemoryReadTool,
     makeMemoryCreateTool,
     makeMemoryPatchTool,
     makeKnowledgeSearchTool,
@@ -103,6 +105,9 @@ const BUILTIN_TOOL_HYDRATORS = {
     schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[3],
     memory_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
         categoryFilter: ctx.categoryFilter,
+        assignedCategories: ctx.assignedCategories,
+    }),
+    memory_read: (ctx: BuiltInHydrationContext) => makeMemoryReadTool({
         assignedCategories: ctx.assignedCategories,
     }),
     memory_create: (ctx: BuiltInHydrationContext) => makeMemoryCreateTool({

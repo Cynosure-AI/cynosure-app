@@ -7,7 +7,7 @@ import { closeDb, getDb } from '../../../src/db/database.js'
 import { getAgentMemory } from '../../../src/core/memory/agent-memory.js'
 import { recordMemoryRevision } from '../../../src/core/memory/memory-revisions.js'
 import { getMemoryFolderDirectoryPath } from '../../../src/core/memory/memory-folder-scope.js'
-import { makeMemoryPatchTool, makeMemorySearchTool } from '../../../src/core/tools/builtin/memory-tools.js'
+import { makeMemoryPatchTool, makeMemoryReadTool, makeMemorySearchTool } from '../../../src/core/tools/builtin/memory-tools.js'
 
 let directory: string
 let file: string
@@ -66,6 +66,44 @@ test('memory_search returns canonical context and a monotonic revision without c
         fileRef: 'notes#abc123', fileName: 'notes.md', revision: 1, content: 'Unrelated fact.',
     })] })
     expect(result.output).not.toContain('chunkIndex')
+})
+test('memory_read targets canonical sections, anchors, and line windows', async () => {
+    setContent([
+        '# Profile',
+        '',
+        'Introduction.',
+        '',
+        '## Development',
+        'Uses Vue 3.',
+        '### Tools',
+        'Uses Electron.',
+        '## Current Projects',
+        'Builds Cynosure.',
+    ].join('\n'))
+    const tool = makeMemoryReadTool(options)
+
+    const section = await tool.execute({ fileRef: 'notes#abc123', section: 'Development' })
+    expect(section.structuredContent).toMatchObject({
+        status: 'success', revision: 2,
+        content: '## Development\nUses Vue 3.\n### Tools\nUses Electron.\n',
+        range: { startLine: 5, endLine: 8, hasMoreBefore: true, hasMoreAfter: true },
+    })
+
+    const anchor = await tool.execute({ fileRef: 'notes#abc123', anchor: 'Uses Vue 3.', beforeLines: 1, afterLines: 1 })
+    expect(anchor.structuredContent).toMatchObject({
+        content: '## Development\nUses Vue 3.\n### Tools\n',
+        range: { startLine: 5, endLine: 7 },
+    })
+
+    const lines = await tool.execute({ fileRef: 'notes#abc123', startLine: 9, lineCount: 2 })
+    expect(lines.structuredContent).toMatchObject({ content: '## Current Projects\nBuilds Cynosure.', range: { startLine: 9, endLine: 10 } })
+})
+test('memory_read rejects missing and ambiguous canonical locators', async () => {
+    setContent('## Repeated\nOne\n## Repeated\nTwo')
+    const tool = makeMemoryReadTool(options)
+    expect((await tool.execute({ fileRef: 'notes#abc123', section: 'Missing' })).structuredContent).toMatchObject({ reason: 'section_not_found' })
+    expect((await tool.execute({ fileRef: 'notes#abc123', section: 'Repeated' })).structuredContent).toMatchObject({ reason: 'ambiguous_context' })
+    expect((await tool.execute({ fileRef: 'notes#abc123', section: 'Repeated', startLine: 1 })).structuredContent).toMatchObject({ reason: 'invalid_request' })
 })
 test('Dream can replace a topical memory while preserving unrelated supported content', async () => {
     expect((await read()).success).toBe(true)

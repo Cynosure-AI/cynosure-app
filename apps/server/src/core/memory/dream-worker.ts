@@ -8,7 +8,7 @@ import type { BroadcastFn } from '../agent/pre-execution/execution-input.js'
 import type { ToolDefinition } from '../gateway/providers/base.provider.js'
 import { buildMemoryFolderFilter, expandMemoryFolderScope, getAssignedMemoryFolders, getDefaultMemoryFolder, type MemoryFolderRef } from './memory-folder-scope.js'
 import { resolveMemoryFolderOverrides } from '../chat/run-config.js'
-import { makeMemorySearchTool, makeMemoryCreateTool, makeMemoryPatchTool } from '../tools/builtin/memory-tools.js'
+import { makeMemorySearchTool, makeMemoryReadTool, makeMemoryCreateTool, makeMemoryPatchTool } from '../tools/builtin/memory-tools.js'
 import { buildDreamBatch, getDreamConfig, getDreamRun, type DreamInput, type DreamRun, type DreamChange } from './dream-store.js'
 import { recordAuxiliaryModelUsage } from '../usage-metering.js'
 import { getAgent } from '../agents/agent-store.js'
@@ -146,7 +146,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, categori
             getDb().prepare('UPDATE memory_file_index SET dreamed_at = ? WHERE document_id = ?').run(Date.now(), id)
         },
     }
-    const tools = [makeMemorySearchTool(scope), makeMemoryCreateTool(scope), makeMemoryPatchTool(scope)]
+    const tools = [makeMemorySearchTool(scope), makeMemoryReadTool(scope), makeMemoryCreateTool(scope), makeMemoryPatchTool(scope)]
     const guard = () => {
         controller.signal.throwIfAborted()
         const config = getDreamConfig()
@@ -160,7 +160,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, categori
         ...tool, execute: (params, signal) => {
             const operation = (async () => {
                 guard()
-                const mutation = tool.name !== 'memory_search'
+                const mutation = !['memory_search', 'memory_read'].includes(tool.name)
                 const key = createHash('sha256').update(tool.name + canonical(params)).digest('hex')
                 if (mutation) {
                     const previous = changes.find(change => change.key === key)
@@ -271,7 +271,7 @@ async function sweep(): Promise<void> {
         let run = pending
         if (!run) {
             const scope = { assignedCategories: categories, categoryFilter: buildMemoryFolderFilter(categories) }
-            const toolTokens = estimateToolDefinitionTokens([makeMemorySearchTool(scope), makeMemoryCreateTool(scope), makeMemoryPatchTool(scope)])
+            const toolTokens = estimateToolDefinitionTokens([makeMemorySearchTool(scope), makeMemoryReadTool(scope), makeMemoryCreateTool(scope), makeMemoryPatchTool(scope)])
             // Budget characters conservatively (one per token) and reserve room for tool results.
             const maxChars = Math.max(256, Math.floor((contextWindow - toolTokens - 4096) / 3))
             const batch = buildDreamBatch(rows, rows[0].sequence === progress.last_sequence ? progress.message_offset : 0, maxChars)
