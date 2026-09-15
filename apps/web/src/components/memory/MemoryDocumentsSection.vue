@@ -359,8 +359,17 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
               <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
             </button>
             <span class="relative shrink-0">
-              <button type="button" class="rounded-md p-1 text-theme-500 opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover:opacity-100 focus-visible:opacity-100" :class="{ 'bg-theme-700 text-theme-200 opacity-100': openFolderMenuId === space.id }" aria-label="Folder options" @click.stop="toggleFolderMenu(space, $event)">
-                <Icon icon="lucide:ellipsis" class="h-3.5 w-3.5" />
+              <button
+                type="button"
+                class="rounded-md p-1 text-theme-500 opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover:opacity-100 focus-visible:opacity-100"
+                :class="{ 'bg-theme-700 text-theme-200 opacity-100': openFolderMenuId === space.id }"
+                aria-label="Folder options"
+                @click.stop="toggleFolderMenu(space, $event)"
+              >
+                <Icon
+                  icon="lucide:ellipsis"
+                  class="h-3.5 w-3.5"
+                />
               </button>
             </span>
           </div>
@@ -413,9 +422,40 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
         :style="folderMenuStyle"
         @click.stop
       >
-        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800" @click="openFolderMenuId = null; emit('create-folder', openFolderMenuSpace)"><Icon icon="lucide:plus" class="h-3.5 w-3.5 text-accent-400" /> Add subfolder</button>
-        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800" @click="openFolderMenuId = null; emit('edit-folder', openFolderMenuSpace)"><Icon icon="lucide:pencil" class="h-3.5 w-3.5" /> Rename</button>
-        <button type="button" :disabled="openFolderMenuSpace.isUncategorized" class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40" @click="openFolderMenuId = null; emit('delete-folder', openFolderMenuSpace)"><Icon icon="lucide:trash-2" class="h-3.5 w-3.5" /> Delete</button>
+        <button
+          type="button"
+          class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+          @click="openFolderMenuId = null; emit('create-folder', openFolderMenuSpace)"
+        >
+          <Icon
+            icon="lucide:plus"
+            class="h-3.5 w-3.5 text-accent-400"
+          />
+          Add subfolder
+        </button>
+        <button
+          type="button"
+          class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+          @click="openFolderMenuId = null; emit('edit-folder', openFolderMenuSpace)"
+        >
+          <Icon
+            icon="lucide:pencil"
+            class="h-3.5 w-3.5"
+          />
+          Rename
+        </button>
+        <button
+          type="button"
+          :disabled="openFolderMenuSpace.isUncategorized"
+          class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+          @click="openFolderMenuId = null; emit('delete-folder', openFolderMenuSpace)"
+        >
+          <Icon
+            icon="lucide:trash-2"
+            class="h-3.5 w-3.5"
+          />
+          Delete
+        </button>
       </div>
     </Teleport>
   </div>
