@@ -34,6 +34,7 @@ import {
     deleteMemoryKnowledgeSource,
     deleteMemoryKnowledgeCategory,
     deepResearchMemoryFile,
+    MAX_DEEP_RESEARCH_CHUNKS,
     moveMemoryKnowledgeSource,
     type DeepResearchCheckpoint,
 } from '../core/memory/memory-deep-research.js'
@@ -50,7 +51,7 @@ import {
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
-import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, markMemoryCategoriesDeleted, recordMemoryRevision, setMemoryDocumentIndexingStatus, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
+import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, markMemoryCategoriesDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -523,6 +524,11 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 skipped.push({ fileName, reason: status })
                 continue
             }
+            const chunkCount = mem.getFileIndexEntry(row.id, fileName)?.chunkCount || 0
+            if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
+                skipped.push({ fileName, reason: `analysis_limit_${MAX_DEEP_RESEARCH_CHUNKS}_chunks` })
+                continue
+            }
             jobs.push(startMemoryIndexJob({
                 kind: 'deep-research',
                 categoryId: row.id,
@@ -564,6 +570,10 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
     app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/analysis', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        const chunkCount = getAgentMemory().getFileIndexEntry(row.id, req.params.fileName)?.chunkCount || 0
+        if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
+            return { status: 'too_large' as const, chunkCount, maxChunks: MAX_DEEP_RESEARCH_CHUNKS, chunks: [], items: [], itemTotal: 0 }
+        }
         const analysis = getMemoryKnowledgeStore().documentAnalysis(row.id, req.params.fileName)
         if (!analysis) return { status: 'not_analyzed' as const, chunks: [], items: [], itemTotal: 0 }
         const filePath = join(row.directory_path, req.params.fileName)
@@ -629,6 +639,10 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         if (status !== 'current') {
             return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before Deep Research.' : 'File must be re-indexed before Deep Research.' })
         }
+        const chunkCount = mem.getFileIndexEntry(row.id, req.params.fileName)?.chunkCount || 0
+        if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
+            return reply.status(422).send({ error: `Analysis supports at most ${MAX_DEEP_RESEARCH_CHUNKS} chunks; this document has ${chunkCount}.` })
+        }
 
         try {
             return {
@@ -655,6 +669,10 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const status = mem.checkFileStatus(row.id, req.params.fileName, row.directory_path)
         if (status !== 'current') {
             return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before Deep Research.' : 'File must be re-indexed before Deep Research.' })
+        }
+        const chunkCount = mem.getFileIndexEntry(row.id, req.params.fileName)?.chunkCount || 0
+        if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
+            return reply.status(422).send({ error: `Analysis supports at most ${MAX_DEEP_RESEARCH_CHUNKS} chunks; this document has ${chunkCount}.` })
         }
 
         const resumableJob = latestResumableMemoryIndexJob(row.id, req.params.fileName)
@@ -756,25 +774,10 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                     indexingStatus: 'pending',
                 })
             }
-            const job = startMemoryIndexJob({
-                kind: 'reindex',
-                categoryId: row.id,
-                fileName,
-                run: async (signal) => {
-                    try {
-                        const result = await getAgentMemory().reindexFile(row.directory_path, fileName, row.id, { signal, revisionContext: { source: 'user' } })
-                        return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
-                    } catch (error) {
-                        if (identity) setMemoryDocumentIndexingStatus(identity.documentId, 'error')
-                        throw error
-                    }
-                },
-            })
             return {
                 success: true,
                 fileName,
                 revision,
-                job,
             }
         } catch (err) {
             return reply.status(500).send({ error: (err as Error).message || 'Failed to update file' })
@@ -855,18 +858,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 writeTextFile(row.directory_path, uniqueName, content)
             }
 
-            const mem = getAgentMemory()
-            const job = startMemoryIndexJob({
-                kind: 'reindex',
-                categoryId: row.id,
-                fileName: uniqueName,
-                run: async (signal) => {
-                    const result = await mem.reindexFile(row.directory_path, uniqueName, row.id, { signal, revisionContext: { source: 'import' } })
-                    return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
-                },
-            })
-
-            return { success: true, chunksStored: 0, fileName: uniqueName, job }
+            return { success: true, chunksStored: 0, fileName: uniqueName }
         } catch (err) {
             return reply.status(500).send({ error: (err as Error).message || 'Failed to ingest file' })
         }

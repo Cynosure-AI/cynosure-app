@@ -36,6 +36,11 @@ const emit = defineEmits<{
 
 // --- Constants ---
 const FILES_PAGE_SIZE = 30;
+const MAX_ANALYSIS_CHUNKS = 10;
+
+function supportsAnalysis(file: MemoryFileStatus): boolean {
+  return file.status === "indexed" && (file.chunkCount || 0) <= MAX_ANALYSIS_CHUNKS;
+}
 
 // --- State ---
 const files = ref<MemoryFileStatus[]>([]);
@@ -131,7 +136,7 @@ const needsAttentionCount = computed(
   () => supportedFiles.value.filter((f) => f.status === "needs_reindex" || f.status === "not_indexed").length,
 );
 const selectedDeepResearchFiles = computed(() =>
-  files.value.filter((f) => f.supported && f.status === "indexed" && selectedFiles.value.has(f.fileName)),
+  files.value.filter((f) => f.supported && supportsAnalysis(f) && selectedFiles.value.has(f.fileName)),
 );
 const selectedRememberedFiles = computed(() =>
   files.value.filter((f) =>
@@ -597,7 +602,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
         <span
           v-if="!r.error"
           class="text-theme-500"
-        >Uploaded, queued for indexing</span>
+        >Uploaded — indexing is manual</span>
         <span
           v-else
           class="text-red-400"
@@ -1024,6 +1029,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
                 Deep Research
               </span>
               <button
+                v-if="supportsAnalysis(file)"
                 type="button"
                 class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
                 title="Run Deep Research again"
@@ -1089,7 +1095,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             </template>
           </HoverTooltip>
           <SplitButton
-            v-if="!isJobRunning('deep-research', file.fileName) && file.status === 'indexed' && resumableJob(file.fileName)"
+            v-if="!isJobRunning('deep-research', file.fileName) && supportsAnalysis(file) && resumableJob(file.fileName)"
             :primary-label="`Resume Deep Research of ${file.fileName}`"
             :menu-label="`Deep Research options for ${file.fileName}`"
             title="Continue running Deep Research on the remaining document parts"
@@ -1132,7 +1138,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             Not researched
           </span>
           <button
-            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && !file.deepResearched && file.status === 'indexed'"
+            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && !file.deepResearched && supportsAnalysis(file)"
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/15 bg-accent-500/10 px-2 py-1 text-[11px] text-accent-300 transition-colors hover:bg-accent-500/20"
             title="Extract and classify facts from this document"
@@ -1144,6 +1150,14 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             />
             {{ file.analysisStatus === 'needs_refresh' ? 'Refresh analysis' : 'Run Deep Research' }}
           </button>
+          <span
+            v-if="!isJobRunning('deep-research', file.fileName) && file.status === 'indexed' && (file.chunkCount || 0) > MAX_ANALYSIS_CHUNKS"
+            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
+            :title="`Analysis is limited to ${MAX_ANALYSIS_CHUNKS} chunks; this document has ${file.chunkCount}.`"
+          >
+            <Icon icon="lucide:ban" class="h-3.5 w-3.5" />
+            Too large to analyze
+          </span>
         </div>
       </template>
 

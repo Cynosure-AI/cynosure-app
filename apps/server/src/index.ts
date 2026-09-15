@@ -47,8 +47,6 @@ import { getEmbeddingProvider } from './core/memory/embedding.js'
 import { startToolEmbeddingWarmup } from './core/agent/tool-embedding-warmup.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
-import { listFilesInFolder } from './core/memory/memory-file-manager.js'
-import { startMemoryIndexJob } from './core/memory/memory-index-jobs.js'
 import { getAgentMemory } from './core/memory/agent-memory.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 
@@ -306,23 +304,6 @@ function startMemoryFolderWatchers(): void {
   syncMemoryFoldersFromFolders(getDb())
 }
 
-function adoptUnindexedMemoryFiles(): void {
-  const db = getDb()
-  const rows = db.prepare('SELECT id, directory_path FROM memory_folders').all() as Array<{ id: string; directory_path: string }>
-  for (const category of rows) {
-    const indexed = getAgentMemory().getFileIndex(category.id)
-    for (const file of listFilesInFolder(category.directory_path).filter(item => item.supported && !indexed.has(item.fileName))) {
-      startMemoryIndexJob({
-        kind: 'reindex', categoryId: category.id, fileName: file.fileName,
-        run: async signal => {
-          const result = await getAgentMemory().reindexFile(category.directory_path, file.fileName, category.id, { signal, revisionContext: { source: 'filesystem' } })
-          return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
-        },
-      })
-    }
-  }
-}
-
 async function startServer(options: StartServerOptions): Promise<RunningServer> {
   if (options.dataDir) {
     process.env.CYNOSURE_DATA_DIR = options.dataDir
@@ -531,7 +512,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   getEmbeddingProvider().loadFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
-  adoptUnindexedMemoryFiles()
   registerBuiltInTools()
 
   // Start filesystem watchers for all existing memory folders
