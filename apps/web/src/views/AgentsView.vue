@@ -265,7 +265,10 @@ function formatDate(timestamp: number): string {
         </button>
       </div>
 
-      <div class="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center">
+      <div
+        v-if="hasAnyAgents"
+        class="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center"
+      >
         <div class="relative min-w-0 flex-1">
           <Icon
             icon="lucide:search"
@@ -610,19 +613,6 @@ function formatDate(timestamp: number): string {
         />
 
         <div class="relative z-10 mx-auto flex max-w-6xl flex-col items-center">
-          <div class="agents-empty-icon-wrap mb-5">
-            <span class="agents-empty-icon-ring agents-empty-icon-ring--outer" />
-            <span class="agents-empty-icon-ring agents-empty-icon-ring--inner" />
-            <span class="agents-empty-spark agents-empty-spark--left">+</span>
-            <span class="agents-empty-spark agents-empty-spark--right">+</span>
-            <div class="agents-empty-icon">
-              <Icon
-                icon="lucide:bot"
-                class="h-9 w-9"
-              />
-            </div>
-          </div>
-
           <h2
             id="agents-empty-title"
             class="text-center text-2xl font-semibold tracking-tight text-theme-100 sm:text-3xl"
@@ -696,9 +686,6 @@ function formatDate(timestamp: number): string {
             />
             Create Your First Agent
           </button>
-          <p class="mt-3 text-xs text-theme-500 sm:text-sm">
-            It only takes a minute. You can adjust everything later.
-          </p>
         </div>
       </section>
       <div
