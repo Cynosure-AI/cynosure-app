@@ -220,8 +220,9 @@ async function onReorderDrop(event: DragEvent, targetId: string): Promise<void> 
   const targetIndex = list.findIndex(agent => agent.id === targetId)
   if (fromIndex < 0 || targetIndex < 0) return
   const [moved] = list.splice(fromIndex, 1)
-  const toIndex = list.findIndex(agent => agent.id === targetId)
-  list.splice(toIndex, 0, moved)
+  // Keep the target's original numeric position. This makes dropping onto an
+  // adjacent row exchange their positions in either direction.
+  list.splice(targetIndex, 0, moved)
   await Promise.all(list.map((agent, index) => agent.sortOrder === index ? Promise.resolve() : agentDefs.update(agent.id, { sortOrder: index })))
 }
 function onReorderDragEnd(): void {
