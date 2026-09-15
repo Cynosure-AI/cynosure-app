@@ -21,6 +21,7 @@ export interface DocumentKnowledgePreview {
 
 export interface DocumentAnalysisChunk {
   chunkIndex: number
+  text: string
   sectionPath: string
   summary: string
   tags: string[]
@@ -344,10 +345,10 @@ export class MemoryKnowledgeGraphStore {
     if (!run) return null
 
     const chunkRows = getDb().prepare(`
-      SELECT chunk_index, section_path, summary, tags_json
+      SELECT chunk_index, text, section_path, summary, tags_json
       FROM memory_knowledge_text_units
       WHERE run_id = ? ORDER BY chunk_index
-    `).all(run.id) as Array<{ chunk_index: number; section_path: string; summary: string; tags_json: string }>
+    `).all(run.id) as Array<{ chunk_index: number; text: string; section_path: string; summary: string; tags_json: string }>
     const chunks = chunkRows.map((row) => {
       let tags: string[] = []
       try {
@@ -356,6 +357,7 @@ export class MemoryKnowledgeGraphStore {
       } catch { /* malformed derived metadata is omitted */ }
       return {
         chunkIndex: row.chunk_index,
+        text: row.text,
         sectionPath: row.section_path,
         summary: row.summary,
         tags,

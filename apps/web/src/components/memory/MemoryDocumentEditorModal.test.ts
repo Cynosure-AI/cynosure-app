@@ -20,6 +20,15 @@ vi.mock('@tiptap/vue-3', async () => {
       commands: { setContent: mocks.setContent, clearContent: mocks.clearContent },
       getHTML: () => '', getAttributes: () => ({}), isActive: () => false,
       chain: () => chain, destroy: () => undefined,
+      state: {
+        doc: {
+          descendants: (callback: (node: { isText: boolean; text: string }, pos: number) => void) =>
+            callback({ isText: true, text: 'Memory First chunk Second chunk' }, 1),
+        },
+      },
+      view: { coordsAtPos: (pos: number) => ({ top: pos * 2 }) },
+      on: () => undefined,
+      off: () => undefined,
     }),
   }
 })
@@ -72,8 +81,8 @@ describe('MemoryDocumentEditorModal', () => {
     mocks.getDocumentAnalysis.mockResolvedValue({
       status: 'current',
       chunks: [
-        { chunkIndex: 0, sectionPath: 'First', summary: 'The first summary.', tags: ['alpha'] },
-        { chunkIndex: 1, sectionPath: 'Second', summary: 'The second summary.', tags: ['beta'] },
+        { chunkIndex: 0, text: 'First chunk', sectionPath: 'First', summary: 'The first summary.', tags: ['alpha'] },
+        { chunkIndex: 1, text: 'Second chunk', sectionPath: 'Second', summary: 'The second summary.', tags: ['beta'] },
       ],
       items: [{ kind: 'relationship', label: 'Atlas uses TypeScript', chunkIndex: 1, importance: 2 }],
       itemTotal: 1,
@@ -93,5 +102,11 @@ describe('MemoryDocumentEditorModal', () => {
     expect(wrapper.text()).toContain('The second summary.')
     expect(wrapper.text()).toContain('alpha')
     expect(wrapper.text()).toContain('Atlas uses TypeScript')
+    const boundary = wrapper.get('[aria-label="Chunk 2 boundary"]')
+    expect(boundary.exists()).toBe(true)
+    boundary.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
+    await flushPromises()
+    expect(document.body.querySelector('[aria-label="Summary for chunk 2"]')?.textContent).toContain('The second summary.')
+    expect(document.body.querySelector('[aria-label="Summary for chunk 2"]')?.textContent).toContain('beta')
   })
 })

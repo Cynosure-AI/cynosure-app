@@ -13,6 +13,7 @@ import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
 import type { MemoryDiffSegment, MemoryDocumentAnalysis, MemoryRevisionSummary } from "../../api/types";
 import MemoryInlineDiff from "./MemoryInlineDiff.vue";
+import MemoryChunkMarkers from "./MemoryChunkMarkers.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
@@ -617,10 +618,17 @@ onBeforeUnmount(() => {
           </div>
         </aside>
         <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <EditorContent
-            :editor="editor"
-            class="memory-editor-shell"
-          />
+          <div class="relative min-h-full">
+            <EditorContent
+              :editor="editor"
+              class="memory-editor-shell"
+            />
+            <MemoryChunkMarkers
+              v-if="analysis?.status === 'current' || analysis?.status === 'needs_refresh'"
+              :editor="editor"
+              :chunks="analysis.chunks"
+            />
+          </div>
         </div>
       </div>
     </div>
