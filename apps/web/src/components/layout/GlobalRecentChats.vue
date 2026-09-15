@@ -87,22 +87,7 @@ const visibleConversations = computed(() => {
 const hasMore = computed(() => conversations.value.length < total.value)
 
 const emptyState = computed(() => {
-  if (loadError.value) {
-    return {
-      icon: 'lucide:loader-circle',
-      spinning: true,
-      title: 'Connecting to chats…',
-      subtitle: 'Reconnecting to your chat history.',
-    }
-  }
-  if (loading.value) {
-    return {
-      icon: 'lucide:loader-circle',
-      spinning: true,
-      title: 'Loading chats…',
-      subtitle: 'Fetching your recent conversations.',
-    }
-  }
+
   const trimmed = searchQuery.value.trim()
   if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LENGTH) {
     return {
@@ -494,18 +479,58 @@ onBeforeUnmount(() => {
         </span>
       </div>
 
+      <!-- Loading / reconnecting skeleton -->
       <div
-        v-if="!visibleConversations.length"
+        v-if="!visibleConversations.length && (loading || loadError)"
+        class="mx-2 mt-2 space-y-1"
+        aria-label="Loading chats"
+      >
+        <div
+          v-for="index in 5"
+          :key="index"
+          class="flex h-11 animate-pulse items-center gap-2 rounded-lg px-2 py-2"
+        >
+          <!-- Agent icon -->
+          <div class="h-7 w-7 shrink-0 rounded-lg bg-theme-800" />
+
+          <!-- Conversation info -->
+          <div class="min-w-0 flex-1 space-y-1.5">
+            <div
+              class="h-2.5 rounded bg-theme-800"
+              :class="[
+                index % 3 === 0
+                  ? 'w-2/3'
+                  : index % 2 === 0
+                    ? 'w-4/5'
+                    : 'w-1/2'
+              ]"
+            />
+
+            <div
+              class="h-1.5 rounded bg-theme-800/60"
+              :class="index % 2 === 0 ? 'w-1/3' : 'w-1/4'"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Actual empty / search state -->
+      <div
+        v-else-if="!visibleConversations.length"
         class="mx-2 mt-3 flex flex-col items-center rounded-xl px-4 py-7 text-center"
       >
-        <span class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-theme-700/70 bg-theme-800/70 text-theme-400 shadow-sm">
+        <span class="mb-3 flex h-6 w-6 items-center justify-center rounded-2xl border border-theme-700/70 bg-theme-800/70 text-theme-400 shadow-sm">
           <Icon
             :icon="emptyState.icon"
             class="h-6 w-6"
             :class="{ 'animate-spin': emptyState.spinning }"
           />
         </span>
-        <span class="text-sm font-medium text-theme-300">{{ emptyState.title }}</span>
+
+        <span class="text-sm font-medium text-theme-300">
+          {{ emptyState.title }}
+        </span>
+
         <span class="mt-1 max-w-44 text-[11px] leading-relaxed text-theme-600">
           {{ emptyState.subtitle }}
         </span>
