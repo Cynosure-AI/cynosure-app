@@ -493,7 +493,7 @@ onBeforeUnmount(() => {
 
       <div
         v-if="!visibleConversations.length"
-        class="mx-2 mt-3 flex flex-col items-center rounded-xl border border-theme-800/80 bg-theme-900/35 px-4 py-7 text-center"
+        class="mx-2 mt-3 flex flex-col items-center rounded-xl px-4 py-7 text-center"
       >
         <span class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-theme-700/70 bg-theme-800/70 text-theme-400 shadow-sm">
           <Icon
