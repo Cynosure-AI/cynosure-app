@@ -6,7 +6,7 @@ import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { deepResearchContent, mergeDeepResearchChunkTags } from './deep-research-extractor.js'
 import type { DeepResearchResult as DeepResearchedKnowledge } from './deep-research-extractor.js'
 
-export const MAX_DEEP_RESEARCH_CHUNKS = 20
+export const MAX_DEEP_RESEARCH_CHUNKS = 20 //Should stay in-sync with MAX_ANALYSIS_CHUNKS
 import {
   getMemoryKnowledgeStore,
   MEMORY_KNOWLEDGE_PIPELINE_VERSION,
