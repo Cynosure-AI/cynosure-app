@@ -11,7 +11,8 @@ export default defineConfig({
   plugins: [tailwindcss(), vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': resolve(__dirname, 'src'),
+      '@shared/runtime-limits': resolve(__dirname, '../server/src/core/runtime-limits.ts')
     }
   },
   server: {

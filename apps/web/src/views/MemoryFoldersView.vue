@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
-import { useRuntimeLimits } from "../api/limits";
+import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder, MemoryDiffSegment, MemoryRevisionSummary } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
@@ -19,13 +19,12 @@ import { selectConnectedGraph } from "../utils/knowledge-graph-selection";
 import { KNOWLEDGE_GRAPH_FLOW_ID as KNOWLEDGE_FLOW_ID, useKnowledgeGraphLayout } from "../composables/useKnowledgeGraphLayout";
 import { SK_KNOWLEDGE_GRAPH_EDGE_LABELS, SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE, SK_KNOWLEDGE_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
-const { limits } = useRuntimeLimits();
 /** Purely presentational cap on how many relationships are drawn visually. */
 const VISUAL_GRAPH_RELATION_LIMIT = 500;
 /** Server-enforced ceiling from GET /api/memory/limits; requesting more would
  * silently clamp, so the client asks for exactly what the server serves. */
-const ALL_GRAPH_LIMIT = computed(() => limits.value.graph.maxNodes);
-const RELATIONSHIPS_GRAPH_LIMIT = computed(() => limits.value.graph.maxNodes);
+const ALL_GRAPH_LIMIT = RUNTIME_LIMITS.graph.maxNodes;
+const RELATIONSHIPS_GRAPH_LIMIT = RUNTIME_LIMITS.graph.maxNodes;
 
 type MemoryPanel = "documents" | "relationships" | "visual";
 type GraphViewMode = "relationships" | "visual";
@@ -361,9 +360,9 @@ async function loadGraph(
 ) {
   const trimmedQuery = query.trim();
   const limit = activePanel.value === "relationships"
-    ? RELATIONSHIPS_GRAPH_LIMIT.value
+    ? RELATIONSHIPS_GRAPH_LIMIT
     : graphEntityLimit.value === null
-      ? ALL_GRAPH_LIMIT.value
+      ? ALL_GRAPH_LIMIT
       : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
   const view = activeGraphView.value || "visual";
   const minImportance = view === "visual" ? graphFactLevel.value : null;
@@ -592,9 +591,9 @@ watch(
     activePanel.value = panel;
     if (enteringVisual) requestGraphFit();
     const expectedGraphLimit = panel === "relationships"
-      ? RELATIONSHIPS_GRAPH_LIMIT.value
+      ? RELATIONSHIPS_GRAPH_LIMIT
       : graphEntityLimit.value === null
-        ? ALL_GRAPH_LIMIT.value
+        ? ALL_GRAPH_LIMIT
         : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
     const expectedGraphView: GraphViewMode = panel === "relationships" ? "relationships" : "visual";
     if ((panel === "relationships" || panel === "visual") && (!graph.value || graphLimit.value !== expectedGraphLimit || graphView.value !== expectedGraphView)) await loadGraph();

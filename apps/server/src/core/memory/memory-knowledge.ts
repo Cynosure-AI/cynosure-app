@@ -8,6 +8,7 @@ import { getEmbeddingProvider } from './embedding.js'
 import { lanceDbInFilter } from './lancedb-filter.js'
 import { getRAGStore, type SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
+import { GRAPH_LIMITS, RERANKER_LIMITS } from '../runtime-limits.js'
 import { cancelMemoryIndexJobsByKind } from './memory-index-jobs.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import {
@@ -1238,7 +1239,7 @@ export class MemoryKnowledgeStore {
 
   deleteMatchingEdge(fromName: string, relation: string, toName: string, categoryIds: string[]): DeleteKnowledgeAssertionResult {
     const normalizedRelation = this.resolvePredicate(relation)
-    const row = this.graph.graphRows(categoryIds, 5000).find((candidate) => normalize(candidate.subject_name) === normalize(fromName) && normalize(candidate.object_name) === normalize(toName) && String(candidate.canonical_name) === normalizedRelation)
+    const row = this.graph.graphRows(categoryIds, GRAPH_LIMITS.maxNodes).find((candidate) => normalize(candidate.subject_name) === normalize(fromName) && normalize(candidate.object_name) === normalize(toName) && String(candidate.canonical_name) === normalizedRelation)
     return row ? this.deleteEdge(String(row.id), categoryIds) : { edgeDeleted: false, orphanedNodeIds: [] }
   }
 
@@ -1502,7 +1503,7 @@ export class MemoryKnowledgeStore {
   private async retrieveKnowledgeCandidates(query: string, scopes: string[], limit: number): Promise<SearchResult[]> {
     try {
       const reranker = getMemoryReranker()
-      const candidateCount = Math.min(100, Math.max(24, reranker.getCandidateCount(limit * 4)))
+      const candidateCount = Math.min(RERANKER_LIMITS.maxCandidateCount, Math.max(24, reranker.getCandidateCount(limit * 4)))
       const embedding = await getEmbeddingProvider().embed(query)
       const rag = getRAGStore()
       const filter = lanceDbInFilter('categoryId', scopes)
