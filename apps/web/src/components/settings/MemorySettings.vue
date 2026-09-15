@@ -598,7 +598,7 @@ function cancelDrop() {
     <!-- Deep Research Model -->
     <BaseCard
       v-if="showSection('deep-research')"
-      class="p-5 space-y-4"
+      class="p-5 space-y-4 bg-knowledge-card"
     >
       <div class="flex items-start gap-3">
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
@@ -839,5 +839,15 @@ function cancelDrop() {
 {
   background: url("../../assets/img/settings/bg-dream.png") no-repeat center center;
   background-size: cover;
+  background-position: center center;
 }
+
+/*
+.bg-knowledge-card
+{
+  background: url("../../assets/img/settings/bg-knowledge.png") no-repeat center center;
+  background-size: cover;
+  background-position: top center;
+}
+  */
 </style>
