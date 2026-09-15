@@ -5,6 +5,7 @@ import { useChatAgentConfig } from './useChatAgentConfig'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore, type ToolInfo } from '../stores/agent-runtime.store'
 import { SK_ACTIVE_AGENT } from '../utils/storage-keys'
+import { DEFAULT_FREE_CHAT_SYSTEM_PROMPT } from '../utils/default-system-prompts'
 import type { AgentDefinition } from '../api/types'
 
 describe('chat agent provider defaults', () => {
@@ -52,6 +53,27 @@ describe('chat agent provider defaults', () => {
     config.setSelectedToolNames(['builtin::schedule_create', 'builtin::read_file'])
 
     expect(config.selectedToolNames.value).toEqual(['builtin::schedule_create', 'builtin::read_file'])
+  })
+
+  test('uses the Cyno system prompt for new Free Chats', () => {
+    const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
+
+    config.ensureFreeChatPreset()
+
+    expect(config.sessionSystemPrompt.value).toBe(DEFAULT_FREE_CHAT_SYSTEM_PROMPT)
+    expect(config.hasFreeChatOverrides.value).toBe(false)
+  })
+
+  test('restores the Cyno system prompt when Free Chat defaults are reset', () => {
+    const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
+    config.ensureFreeChatPreset()
+    config.sessionSystemPrompt.value = 'Temporary override'
+    config.markOverridesModified()
+
+    config.resetToDefaults()
+
+    expect(config.sessionSystemPrompt.value).toBe(DEFAULT_FREE_CHAT_SYSTEM_PROMPT)
+    expect(config.hasFreeChatOverrides.value).toBe(false)
   })
 
   test('allows scheduling tools when a saved agent is active', () => {
