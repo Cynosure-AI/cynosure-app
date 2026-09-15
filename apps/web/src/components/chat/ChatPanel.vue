@@ -15,6 +15,7 @@ import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import { Icon } from '@iconify/vue'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
+import { useAppBranding } from '../../composables/useAppBranding'
 
 const props = withDefaults(defineProps<{
   searchOpen?: boolean
@@ -27,6 +28,7 @@ const emit = defineEmits<{ closeSearch: [] }>()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
+const { logoIconUrl } = useAppBranding()
 const forkError = ref('')
 async function forkMessage(messageId: string): Promise<void> {
   forkError.value = ''
@@ -497,10 +499,12 @@ onMounted(() => {
       v-else-if="chatStore.messages.length === 0"
       class="flex flex-col items-center justify-center h-full text-theme-400"
     >
-      <div class="relative flex items-center justify-center w-26 h-26 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
+      <div
+        v-if="activeAgentIconUrl"
+        class="relative flex items-center justify-center w-26 h-26 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden"
+      >
         <!--Icon Wrapped into a Routerlink to the agents config-->
         <RouterLink
-          v-if="activeAgentIconUrl"
           :to="`/agents/${chatStore.activeAgentId}`"
           class="absolute inset-0 w-full h-full"
         >
@@ -510,12 +514,13 @@ onMounted(() => {
             alt=""
           >
         </RouterLink>
-        <Icon
-          v-else
-          icon="lucide:bot-message-square"
-          class="w-10 h-10 text-accent-400"
-        />
       </div>
+      <img
+        v-else
+        :src="logoIconUrl"
+        class="w-28 h-28 object-cover shadow-xl rounded-3xl"
+        alt="Cynosure"
+      >
       <template v-if="!wsConnected">
         <Icon
           icon="lucide:loader-2"

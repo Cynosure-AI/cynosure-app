@@ -40,7 +40,6 @@ const editTagOperation = ref<'add' | 'remove' | 'replace'>('add')
 const editSaving = ref(false)
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
-const dropPosition = ref<'before' | 'after'>('before')
 
 onMounted(() => agentDefs.load())
 
@@ -203,8 +202,6 @@ function onReorderDragOver(event: DragEvent, targetId: string): void {
     dropTargetId.value = null
     return
   }
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  dropPosition.value = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
   dropTargetId.value = targetId
 }
 function onReorderDragLeave(event: DragEvent, targetId: string): void {
@@ -220,11 +217,10 @@ async function onReorderDrop(event: DragEvent, targetId: string): Promise<void> 
   if (!draggedId || draggedId === targetId) return
   const list = [...tableAgents.value]
   const fromIndex = list.findIndex(agent => agent.id === draggedId)
-  let toIndex = list.findIndex(agent => agent.id === targetId)
-  if (fromIndex < 0 || toIndex < 0) return
+  const targetIndex = list.findIndex(agent => agent.id === targetId)
+  if (fromIndex < 0 || targetIndex < 0) return
   const [moved] = list.splice(fromIndex, 1)
-  if (fromIndex < toIndex) toIndex--
-  if (dropPosition.value === 'after') toIndex++
+  const toIndex = list.findIndex(agent => agent.id === targetId)
   list.splice(toIndex, 0, moved)
   await Promise.all(list.map((agent, index) => agent.sortOrder === index ? Promise.resolve() : agentDefs.update(agent.id, { sortOrder: index })))
 }
