@@ -429,6 +429,10 @@ export interface MemoryDocumentAnalysis {
         label: string
         chunkIndex: number
         importance?: number
+        relation: string
+        entity: string
+        subject?: string
+        reasoning: string
     }>
     itemTotal: number
 }
