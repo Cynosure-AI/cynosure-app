@@ -133,9 +133,27 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(archive.text()).not.toContain('Add subfolder')
 
     await archive.get('[aria-label="Folder options"]').trigger('click')
-    expect(archive.text()).toContain('Add subfolder')
-    expect(archive.text()).toContain('Rename')
-    expect(archive.text()).toContain('Delete')
+    const menu = document.body.querySelector('[data-testid="memory-folder-menu"]')
+    expect(menu?.textContent).toContain('Add subfolder')
+    expect(menu?.textContent).toContain('Rename')
+    expect(menu?.textContent).toContain('Delete')
+  })
+
+  test('opens a bottom folder menu above its trigger and outside the clipped sidebar', async () => {
+    const wrapper = mountSection()
+    const button = wrapper.get('[data-space-id="archive"] [aria-label="Folder options"]')
+    button.element.getBoundingClientRect = () => ({
+      top: 740, bottom: 764, left: 280, right: 304, width: 24, height: 24, x: 280, y: 740,
+      toJSON: () => undefined,
+    })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 })
+
+    await button.trigger('click')
+
+    const menu = document.body.querySelector('[data-testid="memory-folder-menu"]') as HTMLElement | null
+    expect(menu?.parentElement).toBe(document.body)
+    expect(menu?.style.bottom).toBe('32px')
+    expect(menu?.style.top).toBe('')
   })
 
   test('shows the upload treatment only for file drags over the document pane', async () => {
