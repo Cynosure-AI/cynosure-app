@@ -486,7 +486,7 @@ onBeforeUnmount(() => {
         aria-label="Loading chats"
       >
         <div
-          v-for="index in 5"
+          v-for="index in 8"
           :key="index"
           class="flex h-11 animate-pulse items-center gap-2 rounded-lg px-2 py-2"
         >
