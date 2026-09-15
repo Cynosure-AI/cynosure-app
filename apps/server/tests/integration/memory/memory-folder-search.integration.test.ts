@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -18,6 +18,8 @@ describe('global memory file search', () => {
   })
 
   afterEach(async () => {
+    const { stopAllMemoryFolderWatchers } = await import('../../../src/core/memory/memory-folder-watcher.js')
+    await stopAllMemoryFolderWatchers()
     const { closeDb } = await import('../../../src/db/database.js')
     closeDb()
     delete process.env.CYNOSURE_DATA_DIR
@@ -57,6 +59,23 @@ describe('global memory file search', () => {
 
     const filenameResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap' })
     expect(filenameResponse.json()).toEqual([expect.objectContaining({ fileName: 'roadmap.md', categoryId: 'folder-b' })])
+
+    const scopedMiss = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap&categoryId=folder-a' })
+    expect(scopedMiss.json()).toEqual([])
+    const scopedMatch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap&categoryId=folder-b' })
+    expect(scopedMatch.json()).toEqual([expect.objectContaining({ fileName: 'roadmap.md', categoryId: 'folder-b' })])
+
+    const { getAgentMemory } = await import('../../../src/core/memory/agent-memory.js')
+    const recall = vi.spyOn(getAgentMemory(), 'recall').mockResolvedValue([{
+      id: 'chunk-alpha', text: 'Plain source wording.', source: 'permanent', score: 0.9,
+      sourceFile: 'alpha.md', categoryId: 'folder-a', chunkIndex: 0,
+    }])
+    const semanticResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=architecture&categoryId=folder-a&semantic=true' })
+    expect(semanticResponse.json()).toEqual([expect.objectContaining({
+      fileName: 'alpha.md', categoryId: 'folder-a', matchedFields: ['content'],
+    })])
+    expect(recall).toHaveBeenCalledWith('architecture', 100, expect.any(String))
+    recall.mockRestore()
 
     const analysisResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-a/files/alpha.md/analysis' })
     expect(analysisResponse.json()).toEqual(expect.objectContaining({
