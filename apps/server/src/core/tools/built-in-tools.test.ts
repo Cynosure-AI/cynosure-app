@@ -11,7 +11,8 @@ describe('built-in tool categories', () => {
         expect(getBuiltInMemoryToolKeys()).not.toContain(getBuiltInToolKey(name))
     })
     it.each([
-        ['memory_semantic_search', 'builtin:memory', 'Built-In: Memory'],
+        ['memory_search', 'builtin:memory', 'Built-In: Memory'],
+        ['memory_read', 'builtin:memory', 'Built-In: Memory'],
         ['knowledge_assert', 'builtin:memory', 'Built-In: Memory'],
         ['schedule_create', 'builtin:scheduling', 'Built-In: Scheduling'],
         ['create_app_notification', 'builtin:notifications', 'Built-In: Notifications'],

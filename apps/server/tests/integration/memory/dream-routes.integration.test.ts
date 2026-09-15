@@ -28,9 +28,11 @@ afterEach(async () => {
 })
 test('Dream config defaults off and validates opt-in model selection', async () => {
     expect((await app.inject('/api/memory/dream/config')).json()).toMatchObject({ enabled: false })
-    for (const payload of [{}, { enabled: 'true', providerId: 'dream-test', model: 'model' }, { enabled: true, providerId: 'missing', model: 'model' }, { enabled: true, providerId: 'dream-test', model: ' ' }]) {
+    for (const payload of [{}, { enabled: 'true', providerId: 'dream-test', model: 'model' }, { enabled: true, providerId: 'missing', model: 'model' }]) {
         expect((await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload })).statusCode).toBe(400)
     }
+    const defaultModel = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { enabled: true, providerId: 'dream-test', model: ' ' } })
+    expect(defaultModel.json()).toMatchObject({ enabled: true, providerId: 'dream-test', model: '' })
     const response = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { enabled: true, providerId: ' dream-test ', model: ' model ' } })
     expect(response.statusCode).toBe(200)
     expect(response.json()).toMatchObject({ enabled: true, providerId: 'dream-test', model: 'model' })
@@ -46,13 +48,13 @@ async function seedRun(status = 'completed') {
         .run(now, now)
     getDb().prepare(`INSERT INTO dream_runs(id, conversation_id, window_id, status, provider_id, model, input_json, reviewed_count, changes_json, created_at, updated_at)
         VALUES ('run', 'chat', ?, ?, 'dream-test', 'model', '{}', 2, ?, ?, ?)`)
-        .run(getDreamConfig().windowId, status, JSON.stringify([{ key: 'change', tool: 'memory_update', output: 'Updated preferences.md (documentRef=preferences#abc, chunks=1).' }]), now, now)
+        .run(getDreamConfig().windowId, status, JSON.stringify([{ key: 'change', tool: 'memory_patch', output: JSON.stringify({ status: 'success', fileRef: 'preferences#abc', revision: 2 }) }]), now, now)
 }
 test('activity exposes a single filterable Dream entry with memory changes and a conversation link', async () => {
     await seedRun()
     const response = await app.inject('/api/activity?types=dream&search=Dream')
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toMatchObject({ total: 1, totalsByKind: { dream: 1 }, items: [{ id: 'dream:run', kind: 'dream', sourceId: 'run', conversationId: 'chat', conversationTitle: 'My preferences', status: 'completed', dreamChanges: [{ tool: 'memory_update', memoryFolderId: 'uncategorized', memoryFileName: 'preferences.md' }] }] })
+    expect(response.json()).toMatchObject({ total: 1, totalsByKind: { dream: 1 }, items: [{ id: 'dream:run', kind: 'dream', sourceId: 'run', conversationId: 'chat', conversationTitle: 'My preferences', status: 'completed', dreamChanges: [{ tool: 'memory_patch', memoryFolderId: 'uncategorized', memoryFileName: 'preferences.md' }] }] })
     expect(response.json().items[0].description).toContain('2 message excerpts reviewed')
     expect((await app.inject('/api/activity?types=memory')).json().items).toEqual([])
 })

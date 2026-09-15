@@ -6,7 +6,7 @@ describe('execution planner memory tool selection', () => {
     test('strips all automatically managed memory tools', () => {
         const selected = [
             getBuiltInToolKey('memory_create'),
-            getBuiltInToolKey('memory_update'),
+            getBuiltInToolKey('memory_patch'),
             'mcp:files::read_file',
         ]
 

@@ -23,7 +23,7 @@ import { getUserSettings } from '../user-settings.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { MEMORY_WRITE_TOOL_NAMES } from '../tools/builtin/memory-tools.js'
 
-const MEMORY_STEWARDSHIP_PROMPT = `When maintaining memory, treat it as a categorized, revisional brain. Search before creating and update matching memories instead of duplicating or appending change logs. Use Title Case paths such as People/<Person>, Projects/<Project>, Organizations/<Organization>, or Topics/<Topic>; name memories "Subject - Aspect"; keep one topic per memory and normally 1–3 chunks. Use Uncategorized only when no clear category exists.`
+const MEMORY_STEWARDSHIP_PROMPT = `When maintaining memory, treat canonical files as the source of truth and retrieval chunks as search-only indexes. Search before creating, patch matching files instead of duplicating facts or appending change logs, and include enough unchanged context for every patch hunk to resolve uniquely. Use Title Case paths such as People/<Person>, Projects/<Project>, Organizations/<Organization>, or Topics/<Topic>. Keep related information together in coherent files; chunk boundaries are not editing boundaries. Use Uncategorized only when no clear category exists.`
 
 type BroadcastFn = (event: string, data: unknown) => void
 
