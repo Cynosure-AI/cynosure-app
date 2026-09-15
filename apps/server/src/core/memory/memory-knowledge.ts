@@ -8,7 +8,7 @@ import { getEmbeddingProvider } from './embedding.js'
 import { lanceDbInFilter } from './lancedb-filter.js'
 import { getRAGStore, type SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
-import { GRAPH_LIMITS, RERANKER_LIMITS } from '@cynosure/runtime-config'
+import { GRAPH_LIMITS, RERANKER_LIMITS } from '../runtime-limits.js'
 import { cancelMemoryIndexJobsByKind } from './memory-index-jobs.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import {

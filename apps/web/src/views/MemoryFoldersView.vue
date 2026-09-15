@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
-import { RUNTIME_LIMITS } from "@cynosure/runtime-config";
+import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder, MemoryDiffSegment, MemoryRevisionSummary } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
-import { RUNTIME_LIMITS } from "@cynosure/runtime-config";
+import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";

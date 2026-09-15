@@ -23,7 +23,6 @@
     "memory:evaluate": "tsx src/scripts/evaluate-memory.ts"
   },
   "dependencies": {
-    "@cynosure/runtime-config": "workspace:*",
     "@anthropic-ai/sdk": "^0.78.0",
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^9.4.0",

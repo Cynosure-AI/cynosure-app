@@ -9,7 +9,7 @@ import type { ContextEvidence } from '@shared/types'
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'fs'
 import { basename, join, sep } from 'path'
 import { getAppDataDir } from '../data-dir.js'
-import { MAX_CHUNK_READ } from '@cynosure/runtime-config'
+import { MAX_CHUNK_READ } from '../runtime-limits.js'
 import { nanoid } from 'nanoid'
 
 export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'

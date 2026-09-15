@@ -19,6 +19,9 @@
             ],
             "@shared/types": [
                 "../../shared/index.d.ts"
+            ],
+            "@shared/runtime-limits": [
+                "../server/src/core/runtime-limits.ts"
             ]
         },
         "types": [

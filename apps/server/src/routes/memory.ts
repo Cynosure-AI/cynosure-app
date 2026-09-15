@@ -17,7 +17,7 @@ import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOW
 import { activatePermanentMemoryIndex, DEFAULT_PERMANENT_MEMORY_TABLE, getActivePermanentMemoryTableName, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { beginMemoryReembedding, finishMemoryReembedding } from '../core/memory/reembedding-operation.js'
 import { getGateway } from '../core/gateway/gateway.js'
-import { CHUNKING_LIMITS, GRAPH_LIMITS, MEMORY_LIMITS } from '@cynosure/runtime-config'
+import { CHUNKING_LIMITS, GRAPH_LIMITS, MEMORY_LIMITS } from '../core/runtime-limits.js'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 

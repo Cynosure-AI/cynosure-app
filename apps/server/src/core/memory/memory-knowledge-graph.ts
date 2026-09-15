@@ -1,5 +1,5 @@
 import { getDb } from '../../db/database.js'
-import { GRAPH_LIMITS } from '@cynosure/runtime-config'
+import { GRAPH_LIMITS } from '../runtime-limits.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEvidence, KnowledgeGraphProjection, ImportanceLevel, KnowledgeSourceChunk } from './knowledge-types.js'
 import {
   cleanKnowledgeDisplay as cleanDisplay,

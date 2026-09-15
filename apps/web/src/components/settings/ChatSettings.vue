@@ -7,7 +7,7 @@ import {
 } from "../../stores/preferences.store";
 import { useProviderStore } from "../../stores/provider.store";
 import { api } from "../../api/client";
-import { RUNTIME_LIMITS } from "@cynosure/runtime-config";
+import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import BaseCard from "../shared/BaseCard.vue";

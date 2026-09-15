@@ -1,5 +1,5 @@
 import { getDb } from '../../db/database.js'
-import { ATTACHMENT_TEXT_LIMITS } from '@cynosure/runtime-config'
+import { ATTACHMENT_TEXT_LIMITS } from '../runtime-limits.js'
 import type Database from 'better-sqlite3'
 
 const DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT = ATTACHMENT_TEXT_LIMITS.defaultInlineTextLimit

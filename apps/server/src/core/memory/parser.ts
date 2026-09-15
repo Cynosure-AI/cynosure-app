@@ -6,7 +6,7 @@ import { getRAGStore, type VectorDocument } from './rag.js'
 import type { SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
 import { getDb } from '../../db/database.js'
-import { CHUNKING_LIMITS } from '@cynosure/runtime-config'
+import { CHUNKING_LIMITS } from '../runtime-limits.js'
 
 export interface DocumentMeta {
   source: string

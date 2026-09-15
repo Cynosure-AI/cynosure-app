@@ -378,7 +378,7 @@ export interface MemoryFileStatus {
     tags: string[]
 }
 
-export type { RuntimeLimits } from '@cynosure/runtime-config'
+export type { RuntimeLimits } from '@shared/runtime-limits'
 
 export interface MemoryFileSearchResult extends MemoryFileStatus {
     categoryId: string
