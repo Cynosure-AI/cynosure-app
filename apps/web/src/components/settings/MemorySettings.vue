@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { api } from '../../api/client'
-import { useRuntimeLimits } from '../../api/limits'
+import { RUNTIME_LIMITS } from '@cynosure/runtime-config'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
 import ProviderSelect from '../shared/ProviderSelect.vue'
@@ -18,9 +18,6 @@ import {
 
 const providerStore = useProviderStore()
 const prefs = usePreferencesStore()
-// Bounds are server-authoritative so the inputs can never offer a value the
-// server will reject. See api/limits.ts.
-const { limits } = useRuntimeLimits()
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -89,19 +86,19 @@ const embProbing = ref(false)
 const loadingEmbeddingConfig = ref(true)
 
 // Chunking state
-const chunkSize = ref(limits.value.chunking.defaultChunkSize)
-const chunkOverlap = ref(limits.value.chunking.defaultChunkOverlap)
+const chunkSize = ref(RUNTIME_LIMITS.chunking.defaultChunkSize)
+const chunkOverlap = ref(RUNTIME_LIMITS.chunking.defaultChunkOverlap)
 const chunkSaving = ref(false)
-const savedChunking = ref({ chunkSize: limits.value.chunking.defaultChunkSize, chunkOverlap: limits.value.chunking.defaultChunkOverlap })
+const savedChunking = ref({ chunkSize: RUNTIME_LIMITS.chunking.defaultChunkSize, chunkOverlap: RUNTIME_LIMITS.chunking.defaultChunkOverlap })
 const chunkStatus = ref<SettingsPersistenceState>('idle')
 
 // Reranker state
 const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
 const rerankModel = ref('')
-const rerankCandidateCount = ref(limits.value.reranker.defaultCandidateCount)
+const rerankCandidateCount = ref(RUNTIME_LIMITS.reranker.defaultCandidateCount)
 const rerankSaving = ref(false)
-const savedReranker = ref({ enabled: false, providerId: '', model: '', candidateCount: limits.value.reranker.defaultCandidateCount })
+const savedReranker = ref({ enabled: false, providerId: '', model: '', candidateCount: RUNTIME_LIMITS.reranker.defaultCandidateCount })
 const rerankStatus = ref<SettingsPersistenceState>('idle')
 
 // Deep Research state
@@ -566,8 +563,8 @@ function cancelDrop() {
           <input
             v-model.number="rerankCandidateCount"
             type="number"
-            :min="limits.reranker.minCandidateCount"
-            :max="limits.reranker.maxCandidateCount"
+            :min="RUNTIME_LIMITS.reranker.minCandidateCount"
+            :max="RUNTIME_LIMITS.reranker.maxCandidateCount"
             step="1"
             class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
@@ -743,8 +740,8 @@ function cancelDrop() {
           <input
             v-model.number="chunkSize"
             type="number"
-            :min="limits.chunking.minChunkSize"
-            :max="limits.chunking.maxChunkSize"
+            :min="RUNTIME_LIMITS.chunking.minChunkSize"
+            :max="RUNTIME_LIMITS.chunking.maxChunkSize"
             step="64"
             class="w-40 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >

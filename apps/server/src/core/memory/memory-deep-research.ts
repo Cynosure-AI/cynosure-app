@@ -5,7 +5,7 @@ import { getDb } from '../../db/database.js'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { deepResearchContent, mergeDeepResearchChunkTags } from './deep-research-extractor.js'
 import type { DeepResearchResult as DeepResearchedKnowledge } from './deep-research-extractor.js'
-import { MAX_ANALYSIS_CHUNKS } from '../runtime-limits.js'
+import { MAX_ANALYSIS_CHUNKS } from '@cynosure/runtime-config'
 
 import {
   getMemoryKnowledgeStore,

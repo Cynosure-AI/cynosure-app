@@ -10,7 +10,7 @@ import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '.
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
 import { deleteMemoryKnowledgeSource } from '../../memory/memory-deep-research.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
-import { MAX_CHUNK_READ } from '../../runtime-limits.js'
+import { MAX_CHUNK_READ } from '@cynosure/runtime-config'
 import {
     parseMemoryDocumentRef,
 } from '../../memory/memory-reference.js'

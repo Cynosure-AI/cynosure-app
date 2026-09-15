@@ -1,7 +1,7 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { estimateTextTokens, estimateTextsTokens, recordAuxiliaryModelUsage } from '../usage-metering.js'
-import { RERANKER_LIMITS } from '../runtime-limits.js'
+import { RERANKER_LIMITS } from '@cynosure/runtime-config'
 import type { SearchResult } from './rag.js'
 
 export interface MemoryRerankerConfig {

@@ -1,4 +1,5 @@
 import { getDb } from '../../db/database.js'
+import { GRAPH_LIMITS } from '@cynosure/runtime-config'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEvidence, KnowledgeGraphProjection, ImportanceLevel, KnowledgeSourceChunk } from './knowledge-types.js'
 import {
   cleanKnowledgeDisplay as cleanDisplay,
@@ -46,7 +47,7 @@ export interface DocumentAnalysisRecord {
  * literal nodes, and scoped edges must be assembled by the same rules.
  */
 export class MemoryKnowledgeGraphStore {
-  graphRows(categoryIds: string[] = [], limit = 5000, assertionId?: string): Array<Record<string, unknown>> {
+  graphRows(categoryIds: string[] = [], limit = GRAPH_LIMITS.maxNodes, assertionId?: string): Array<Record<string, unknown>> {
     const scopes = Array.from(new Set(categoryIds.filter(Boolean)))
     const scopeClause = scopes.length ? `AND r.category_id IN (${scopes.map(() => '?').join(', ')})` : ''
     const assertionClause = assertionId ? 'AND a.id = ?' : ''

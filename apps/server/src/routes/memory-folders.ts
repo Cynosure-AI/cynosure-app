@@ -37,7 +37,7 @@ import {
     moveMemoryKnowledgeSource,
     type DeepResearchCheckpoint,
 } from '../core/memory/memory-deep-research.js'
-import { MAX_ANALYSIS_CHUNKS } from '../core/runtime-limits.js'
+import { MAX_ANALYSIS_CHUNKS } from '@cynosure/runtime-config'
 import {
     cancelMemoryIndexJob,
     discardMemoryIndexJob,
