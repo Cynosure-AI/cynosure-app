@@ -349,7 +349,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
               documentTitle: doc.documentTitle || '',
               sectionPath: doc.sectionPath || '',
               contentHash: doc.contentHash || '',
-              embeddingModel: embeddings[j].model
+              embeddingModel: embeddings[j].model,
+              representationType: doc.representationType || 'raw',
+              sourceChunkId: doc.sourceChunkId || doc.id,
             }))
             await rag.addDocuments(stagingTable, docs, newDimensions)
             signal.throwIfAborted()

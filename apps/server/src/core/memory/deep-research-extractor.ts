@@ -1,6 +1,6 @@
 import { getGateway } from '../gateway/gateway.js'
 import { recordAuxiliaryModelUsage } from '../usage-metering.js'
-import type { DeepResearchExtractedChunkTags, DeepResearchExtractedEntity, DeepResearchExtractedMention, DeepResearchExtractedRelation } from './memory-knowledge.js'
+import type { DeepResearchExtractedChunkSummary, DeepResearchExtractedChunkTags, DeepResearchExtractedEntity, DeepResearchExtractedMention, DeepResearchExtractedRelation } from './memory-knowledge.js'
 import type { KnowledgeEntityType, ImportanceLevel } from './knowledge-types.js'
 
 export interface DeepResearchSegment {
@@ -13,6 +13,7 @@ export interface DeepResearchResult {
   relations: DeepResearchExtractedRelation[]
   mentions: DeepResearchExtractedMention[]
   chunkTags: DeepResearchExtractedChunkTags[]
+  chunkSummaries: DeepResearchExtractedChunkSummary[]
 }
 
 const ENTITY_TYPES = new Set<KnowledgeEntityType>(['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'])
@@ -114,7 +115,7 @@ export async function deepResearchContent(opts: {
   model?: string
   signal?: AbortSignal
   onProgress?: (current: number, total: number) => void
-  initialResult?: DeepResearchResult
+  initialResult?: Omit<DeepResearchResult, 'chunkSummaries'> & { chunkSummaries?: DeepResearchExtractedChunkSummary[] }
   onCheckpoint?: (result: DeepResearchResult) => void
 }): Promise<DeepResearchResult> {
   const gateway = getGateway()
@@ -124,7 +125,9 @@ export async function deepResearchContent(opts: {
   const systemContent = [
     'Extract durable named entities and explicit relationships from this saved memory document.',
     'Return strict JSON only: an array of objects. Relationship objects use keys action, from, relation, to, object_value, importance, note, source_chunk_index, valid_from, valid_to, observed_at.',
-    'action is "assert" for supported facts, "delete" for facts explicitly corrected or no longer true, "mention" for a durable named entity without a relationship, or "tags" for chunk keywords.',
+    'action is "assert" for supported facts, "delete" for facts explicitly corrected or no longer true, "mention" for a durable named entity without a relationship, "tags" for chunk keywords, or "summary" for the chunk summary.',
+    'A summary object uses keys action="summary", summary, and source_chunk_index.',
+    'For every source chunk, return exactly one summary object containing a faithful 1-3 sentence summary in the source language.',
     'A mention object uses keys action, entity, note, and source_chunk_index.',
     'For every source chunk, return exactly one tags object with keys action="tags", tags, and source_chunk_index.',
     'tags must contain 3-8 concise, specific keywords or short keyphrases that describe the chunk for document discovery. Use the source language, lowercase text, no # prefix, and avoid generic words such as document, information, notes, relationship, or person.',
@@ -138,12 +141,13 @@ export async function deepResearchContent(opts: {
     'Importance: 0 throwaway, 1 minor, 2 useful durable fact, 3 core identity, project, preference, goal, or long-running context.',
     'Prefer: works_at, belongs_to, located_in, uses, depends_on, owns, created, prefers, knows, parent_of, child_of, partner_of, reports_to, manages, participated_in, occurred_on, has_goal, has_role, related_to.',
     'Use ISO-8601 valid_from/valid_to/observed_at only when explicitly stated.',
-    'Always return the tags object for the source chunk; omit relationship and mention objects when nothing durable and grounded is present.',
+    'Always return the tags and summary objects for the source chunk; omit relationship and mention objects when nothing durable and grounded is present.',
   ].join('\n')
 
   const relations: DeepResearchExtractedRelation[] = [...(opts.initialResult?.relations || [])]
   const mentions: DeepResearchExtractedMention[] = [...(opts.initialResult?.mentions || [])]
   const tagsByChunk = new Map<number, string[]>((opts.initialResult?.chunkTags || []).map((item) => [item.sourceChunkIndex, item.tags]))
+  const summariesByChunk = new Map<number, string>((opts.initialResult?.chunkSummaries || []).map((item) => [item.sourceChunkIndex, item.summary]))
   const totalSegments = opts.segments.length
   for (let segmentIndex = 0; segmentIndex < totalSegments; segmentIndex++) {
     const segment = opts.segments[segmentIndex]
@@ -187,6 +191,12 @@ export async function deepResearchContent(opts: {
         tagsByChunk.set(sourceChunkIndex, combined)
         continue
       }
+      if (raw.action === 'summary') {
+        if (sourceChunkIndex === undefined) continue
+        const summary = cleanDisplay(raw.summary, 1200)
+        if (summary) summariesByChunk.set(sourceChunkIndex, summary)
+        continue
+      }
       const note = cleanDisplay(raw.note, 600)
       if (sourceChunkIndex === undefined || !note) continue
       if (raw.action === 'mention') {
@@ -217,6 +227,9 @@ export async function deepResearchContent(opts: {
       chunkTags: [...tagsByChunk.entries()]
         .sort(([a], [b]) => a - b)
         .map(([sourceChunkIndex, tags]) => ({ sourceChunkIndex, tags })),
+      chunkSummaries: [...summariesByChunk.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([sourceChunkIndex, summary]) => ({ sourceChunkIndex, summary })),
     }
     opts.onCheckpoint?.(checkpoint)
     opts.onProgress?.(segmentIndex + 1, totalSegments)
@@ -227,5 +240,8 @@ export async function deepResearchContent(opts: {
     chunkTags: [...tagsByChunk.entries()]
       .sort(([a], [b]) => a - b)
       .map(([sourceChunkIndex, tags]) => ({ sourceChunkIndex, tags })),
+    chunkSummaries: [...summariesByChunk.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([sourceChunkIndex, summary]) => ({ sourceChunkIndex, summary })),
   }
 }

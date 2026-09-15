@@ -9,6 +9,7 @@ import {
   getMemoryKnowledgeStore,
   MEMORY_KNOWLEDGE_PIPELINE_VERSION,
   MEMORY_KNOWLEDGE_PROMPT_VERSION,
+  type DeepResearchExtractedChunkSummary,
   type DeepResearchExtractedChunkTags,
   type ReusableKnowledgeChunk,
 } from './memory-knowledge.js'
@@ -46,6 +47,7 @@ const DEEP_RESEARCH_SETTINGS_KEY = 'memoryDeepResearch'
 interface ReusableChunkPlan {
   reusableChunks: ReusableKnowledgeChunk[]
   chunkTags: DeepResearchExtractedChunkTags[]
+  chunkSummaries: DeepResearchExtractedChunkSummary[]
   chunksToExtract: PreparedMemoryChunk[]
 }
 
@@ -58,13 +60,13 @@ export function planReusableKnowledgeChunks(documentId: string, chunks: Prepared
     WHERE document_id = ? AND pipeline_version = ? AND prompt_version = ? AND status = 'active'
     ORDER BY activated_at DESC LIMIT 1
   `).get(documentId, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as { id: string } | undefined
-  if (!priorRun) return { reusableChunks: [], chunkTags: [], chunksToExtract: chunks }
+  if (!priorRun) return { reusableChunks: [], chunkTags: [], chunkSummaries: [], chunksToExtract: chunks }
 
   const priorChunks = getDb().prepare(`
-    SELECT id, text_hash, tags_json FROM memory_knowledge_text_units
+    SELECT id, text_hash, tags_json, summary FROM memory_knowledge_text_units
     WHERE run_id = ? ORDER BY chunk_index
-  `).all(priorRun.id) as Array<{ id: string; text_hash: string; tags_json: string }>
-  const byHash = new Map<string, Array<{ id: string; tags: string[] }>>()
+  `).all(priorRun.id) as Array<{ id: string; text_hash: string; tags_json: string; summary: string }>
+  const byHash = new Map<string, Array<{ id: string; tags: string[]; summary: string }>>()
   for (const prior of priorChunks) {
     let tags: string[] = []
     try {
@@ -72,12 +74,13 @@ export function planReusableKnowledgeChunks(documentId: string, chunks: Prepared
       if (Array.isArray(parsed)) tags = parsed.filter((tag): tag is string => typeof tag === 'string')
     } catch { /* malformed tags are treated as empty */ }
     const bucket = byHash.get(prior.text_hash)
-    if (bucket) bucket.push({ id: prior.id, tags })
-    else byHash.set(prior.text_hash, [{ id: prior.id, tags }])
+    if (bucket) bucket.push({ id: prior.id, tags, summary: prior.summary })
+    else byHash.set(prior.text_hash, [{ id: prior.id, tags, summary: prior.summary }])
   }
 
   const reusableChunks: ReusableKnowledgeChunk[] = []
   const chunkTags: DeepResearchExtractedChunkTags[] = []
+  const chunkSummaries: DeepResearchExtractedChunkSummary[] = []
   const chunksToExtract: PreparedMemoryChunk[] = []
   for (const chunk of chunks) {
     const matches = byHash.get(chunk.contentHash)
@@ -88,8 +91,9 @@ export function planReusableKnowledgeChunks(documentId: string, chunks: Prepared
     }
     reusableChunks.push({ sourceChunkIndex: chunk.chunkIndex, priorTextUnitId: match.id })
     chunkTags.push({ sourceChunkIndex: chunk.chunkIndex, tags: match.tags })
+    if (match.summary) chunkSummaries.push({ sourceChunkIndex: chunk.chunkIndex, summary: match.summary })
   }
-  return { reusableChunks, chunkTags, chunksToExtract }
+  return { reusableChunks, chunkTags, chunkSummaries, chunksToExtract }
 }
 /** Extract each canonical RAG chunk independently. Entity-rich documents can
  * produce much more JSON than source text, so combining chunks risks hitting
@@ -284,7 +288,14 @@ export async function deepResearchMemoryContent(opts: {
   const reusePlan = planReusableKnowledgeChunks(indexedDocument.document_id, chunks)
   const resumable = opts.resumeCheckpoint?.contentHash === contentHash ? opts.resumeCheckpoint : undefined
   const extractableIndexes = new Set(reusePlan.chunksToExtract.map((chunk) => chunk.chunkIndex))
-  const completedIndexes = new Set((resumable?.completedChunkIndexes || []).filter((index) => extractableIndexes.has(index)))
+  const resumableSummaryIndexes = new Set((resumable?.chunkSummaries || []).filter((item) => item.summary.trim()).map((item) => item.sourceChunkIndex))
+  const completedIndexes = new Set((resumable?.completedChunkIndexes || []).filter((index) => extractableIndexes.has(index) && resumableSummaryIndexes.has(index)))
+  const resumableResult = resumable ? {
+    relations: resumable.relations.filter((item) => item.sourceChunkIndex !== undefined && completedIndexes.has(item.sourceChunkIndex)),
+    mentions: resumable.mentions.filter((item) => completedIndexes.has(item.sourceChunkIndex)),
+    chunkTags: resumable.chunkTags.filter((item) => completedIndexes.has(item.sourceChunkIndex)),
+    chunkSummaries: (resumable.chunkSummaries || []).filter((item) => completedIndexes.has(item.sourceChunkIndex)),
+  } : undefined
   const remainingChunks = reusePlan.chunksToExtract.filter((chunk) => !completedIndexes.has(chunk.chunkIndex))
   let checkpointStep = 0
   const extracted = remainingChunks.length > 0
@@ -293,10 +304,12 @@ export async function deepResearchMemoryContent(opts: {
       providerId: opts.providerId || configuredTarget.providerId,
       model: opts.model || configuredTarget.model,
       signal: opts.signal,
-      initialResult: resumable,
+      initialResult: resumableResult,
       onCheckpoint: (partial) => {
         const completedChunk = remainingChunks[checkpointStep++]
-        if (completedChunk) completedIndexes.add(completedChunk.chunkIndex)
+        if (completedChunk && partial.chunkSummaries.some((item) => item.sourceChunkIndex === completedChunk.chunkIndex && item.summary.trim())) {
+          completedIndexes.add(completedChunk.chunkIndex)
+        }
         const checkpoint: DeepResearchCheckpoint = {
           contentHash,
           completedChunkIndexes: [...completedIndexes].sort((a, b) => a - b),
@@ -306,8 +319,13 @@ export async function deepResearchMemoryContent(opts: {
       },
       onProgress: (_current, _total) => opts.onDeepResearchProgress?.(completedIndexes.size, reusePlan.chunksToExtract.length),
     })
-    : resumable || { relations: [], mentions: [], chunkTags: [] }
+    : resumableResult || { relations: [], mentions: [], chunkTags: [], chunkSummaries: [] }
   const chunkTags = [...reusePlan.chunkTags, ...extracted.chunkTags]
+  const chunkSummaries = [...reusePlan.chunkSummaries, ...(extracted.chunkSummaries || [])]
+  const summarizedIndexes = new Set(chunkSummaries.filter((item) => item.summary.trim()).map((item) => item.sourceChunkIndex))
+  if (chunks.some((chunk) => !summarizedIndexes.has(chunk.chunkIndex))) {
+    throw new Error('MEMORY_ANALYSIS_SUMMARY_MISSING')
+  }
   opts.signal?.throwIfAborted()
   if (knowledge.getResetGeneration() !== resetGeneration) {
     throw new DOMException('Knowledge was reset during extraction', 'AbortError')
@@ -322,6 +340,7 @@ export async function deepResearchMemoryContent(opts: {
     relations: extracted.relations,
     mentions: extracted.mentions,
     chunkTags,
+    chunkSummaries,
     reusableChunks: reusePlan.reusableChunks,
     extractorProviderId: opts.providerId || configuredTarget.providerId,
     extractorModel: opts.model || configuredTarget.model,
@@ -340,19 +359,50 @@ export async function deepResearchMemoryContent(opts: {
   }
   const tags = mergeDeepResearchChunkTags(chunkTags)
   const extractedTagsByChunk = new Map(chunkTags.map((item) => [item.sourceChunkIndex, item.tags]))
+  const extractedSummariesByChunk = new Map(chunkSummaries.map((item) => [item.sourceChunkIndex, item.summary]))
+  const factRows = getDb().prepare(`
+    SELECT tu.chunk_index, se.canonical_name AS subject_name, p.canonical_name AS predicate_name,
+      oe.canonical_name AS object_name, a.object_value_json, ev.note
+    FROM memory_knowledge_assertion_evidence ev
+    JOIN memory_knowledge_text_units tu ON tu.id = ev.text_unit_id
+    JOIN memory_knowledge_assertions a ON a.id = ev.assertion_id
+    JOIN memory_knowledge_predicates p ON p.id = a.predicate_id
+    JOIN memory_knowledge_entities se ON se.id = a.subject_entity_id
+    LEFT JOIN memory_knowledge_entities oe ON oe.id = a.object_entity_id
+    WHERE ev.run_id = ? AND ev.quote_verified = 1 AND a.status IN ('active', 'disputed')
+    ORDER BY tu.chunk_index, a.importance DESC
+  `).all(knowledgeResult.runId) as Array<{
+    chunk_index: number; subject_name: string; predicate_name: string; object_name: string | null; object_value_json: string | null; note: string
+  }>
+  const factsByChunk = new Map<number, string[]>()
+  for (const fact of factRows) {
+    let object = fact.object_name || ''
+    if (!object && fact.object_value_json) {
+      try { object = String(JSON.parse(fact.object_value_json)) } catch { object = fact.object_value_json }
+    }
+    const statement = [fact.subject_name, fact.predicate_name.replace(/_/g, ' '), object].filter(Boolean).join(' ')
+    const searchableFact = fact.note?.trim() ? `${statement}. ${fact.note.trim()}` : statement
+    if (!searchableFact) continue
+    const current = factsByChunk.get(fact.chunk_index) || []
+    current.push(searchableFact)
+    factsByChunk.set(fact.chunk_index, current)
+  }
   const chunkSearchKeywords = new Map(chunks.map((chunk) => [chunk.chunkIndex, {
     contentHash: chunk.contentHash,
     keywords: extractedTagsByChunk.get(chunk.chunkIndex) || [],
+    summary: extractedSummariesByChunk.get(chunk.chunkIndex) || '',
+    facts: factsByChunk.get(chunk.chunkIndex) || [],
   }]))
   const chunkFilter = andLanceDbFilters(
     lanceDbEqFilter('categoryId', opts.categoryId),
     lanceDbEqFilter('sourceFile', opts.fileName),
   )
   if (chunkFilter) {
-    await getRAGStore().updateChunkSearchKeywords(
+    await getRAGStore().updateChunkSearchAnalysis(
       getActivePermanentMemoryTableName(),
       chunkFilter,
       chunkSearchKeywords,
+      opts.signal,
     )
   }
   opts.signal?.throwIfAborted()

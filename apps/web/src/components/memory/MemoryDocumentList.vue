@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
-import type { MemoryFolder, MemoryFileStatus, MemoryDocumentKnowledgePreview } from "../../api/types";
+import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import DataTable, { type Column } from "../shared/DataTable.vue";
@@ -18,6 +18,7 @@ interface DocumentDragPayload {
 }
 
 type DocumentRow = MemoryFileStatus & { id: string };
+type GlobalDocumentRow = MemoryFileSearchResult & { id: string };
 
 const props = defineProps<{
   categoryId: string;
@@ -30,6 +31,7 @@ const emit = defineEmits<{
   deleteSpace: [];
   spacesChanged: [];
   documentDragState: [active: boolean, payload?: DocumentDragPayload];
+  openGlobalDocument: [categoryId: string, fileName: string];
 }>();
 
 // --- Constants ---
@@ -49,6 +51,7 @@ const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   files.value = files.value.map((file) => ({
     ...file,
     deepResearched: false,
+    analysisStatus: "not_analyzed",
     deepResearchedAt: undefined,
   }));
   void loadFiles();
@@ -74,6 +77,10 @@ const uploadResults = ref<{ fileName: string; chunks: number; error?: string }[]
 const searchQuery = ref("");
 const page = ref(0);
 const visibleDocumentRows = ref<DocumentRow[]>([]);
+const globalSearchResults = ref<MemoryFileSearchResult[]>([]);
+const globalSearchLoading = ref(false);
+let globalSearchTimer: number | null = null;
+let globalSearchSequence = 0;
 
 const currentSpace = computed(() => props.spaces.find((s) => s.id === props.categoryId));
 
@@ -86,6 +93,10 @@ const filteredFiles = computed(() => {
 });
 
 const documentRows = computed<DocumentRow[]>(() => filteredFiles.value.map((file) => ({ ...file, id: file.fileName })));
+const globalDocumentRows = computed<GlobalDocumentRow[]>(() => globalSearchResults.value.map((file) => ({
+  ...file,
+  id: `${file.categoryId}\0${file.fileName}`,
+})));
 
 const selectedFileIds = computed({
   get: () => Array.from(selectedFiles.value),
@@ -100,6 +111,13 @@ const columns: Column<DocumentRow>[] = [
   { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.status === "indexed" ? (file.chunkCount || 0) : (file.estimatedChunkCount || 0) },
   { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (file) => file.deepResearched },
   { key: "status", label: "Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
+];
+
+const globalColumns: Column<GlobalDocumentRow>[] = [
+  { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
+  { key: "categoryName", label: "Folder", minWidth: "150px", grow: 1.5, sortable: true, sortValue: (file) => file.categoryPath || file.categoryName },
+  { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
+  { key: "status", label: "Searchable", minWidth: "150px", grow: 1, sortable: true, sortValue: (file) => file.status },
 ];
 
 const allFilteredSelected = computed(
@@ -154,6 +172,9 @@ const {
   isJobActive,
   isJobRunning,
   resumableJob,
+  failedJobs,
+  dismissFailure,
+  dismissAllFailures,
   upsertJob,
   loadJobs,
   reindexFile,
@@ -170,6 +191,12 @@ const {
   reloadFiles: loadFiles,
   onCompleted: () => emit("spacesChanged"),
 });
+
+function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
+  if (kind === "deep-research") return "Deep Research";
+  if (kind === "tool-embeddings") return "Tool indexing";
+  return "Search indexing";
+}
 
 async function deepResearchSelected(): Promise<void> {
   for (const file of selectedDeepResearchFiles.value) {
@@ -340,6 +367,16 @@ function openEditorModal(fileName: string) {
   showEditorModal.value = true;
 }
 
+function openDocument(fileName: string) {
+  editorFileName.value = fileName;
+  showEditorModal.value = true;
+}
+
+function openGlobalResult(file: GlobalDocumentRow) {
+  if (!file.textDirect) return;
+  emit("openGlobalDocument", file.categoryId, file.fileName);
+}
+
 async function handleEditorSaved() {
   showEditorModal.value = false;
   await loadFiles();
@@ -411,13 +448,38 @@ watch(() => props.focusFile, (fileName, previousFileName) => {
   page.value = 0;
 });
 
+watch(searchQuery, (query) => {
+  page.value = 0;
+  if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
+  const trimmed = query.trim();
+  const sequence = ++globalSearchSequence;
+  if (!trimmed) {
+    globalSearchResults.value = [];
+    globalSearchLoading.value = false;
+    return;
+  }
+  selectedFiles.value = new Set();
+  globalSearchLoading.value = true;
+  globalSearchTimer = window.setTimeout(async () => {
+    try {
+      const results = await api.memoryFolders.searchFiles(trimmed);
+      if (sequence === globalSearchSequence) globalSearchResults.value = results;
+    } catch {
+      if (sequence === globalSearchSequence) globalSearchResults.value = [];
+    } finally {
+      if (sequence === globalSearchSequence) globalSearchLoading.value = false;
+    }
+  }, 200);
+});
+
 onUnmounted(() => {
+  if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   window.clearInterval(dreamIndicatorTimer);
   unsubscribeGraphReset();
   unsubscribeDreamUpdate();
 });
 
-defineExpose({ ingestFiles, moveDocumentsToCategory });
+defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
 </script>
 
 <template>
@@ -549,16 +611,67 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
       </button>
     </div>
 
+    <!-- Background job failures. Jobs run server-side, so a failure would
+         otherwise be invisible once the job stops being "active". -->
+    <div
+      v-if="failedJobs.length > 0"
+      class="mb-4 space-y-1"
+    >
+      <div
+        v-for="job in failedJobs"
+        :key="job.id"
+        class="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+      >
+        <Icon
+          icon="lucide:circle-alert"
+          class="mt-0.5 h-3.5 w-3.5 shrink-0"
+        />
+        <div class="min-w-0 flex-1">
+          <div class="font-medium">
+            {{ jobKindLabel(job.kind) }} failed for {{ job.fileName }}
+          </div>
+          <div class="mt-0.5 break-words text-red-400/80">
+            {{ job.error || "Unknown error" }}
+          </div>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded px-1.5 py-0.5 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-200"
+          title="Dismiss"
+          aria-label="Dismiss failure"
+          @click="dismissFailure(job.id)"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+      </div>
+      <button
+        v-if="failedJobs.length > 1"
+        type="button"
+        class="px-1 text-xs text-theme-500 transition-colors hover:text-theme-300"
+        @click="dismissAllFailures"
+      >
+        Clear all
+      </button>
+    </div>
+
     <!-- Toolbar -->
     <div class="flex items-center justify-between mb-2">
       <div class="text-xs text-theme-500">
-        {{ filteredFiles.length }} file{{ filteredFiles.length !== 1 ? "s" : "" }}
+        <template v-if="searchQuery.trim()">
+          {{ globalSearchResults.length }} result{{ globalSearchResults.length !== 1 ? "s" : "" }} across all folders
+        </template>
+        <template v-else>
+          {{ files.length }} file{{ files.length !== 1 ? "s" : "" }}
+        </template>
         <template v-if="runningJobs.length > 0">
           · {{ runningJobs.length }} job{{ runningJobs.length !== 1 ? "s" : "" }} active
         </template>
       </div>
       <div class="flex items-center gap-2">
-        <template v-if="selectedFiles.size === 0 && files.length > 0">
+        <template v-if="!searchQuery.trim() && selectedFiles.size === 0 && files.length > 0">
           <button
             class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
             @click="selectAllOnPage"
@@ -589,10 +702,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
     </div>
 
     <!-- Search -->
-    <div
-      v-if="files.length > 0"
-      class="mb-3"
-    >
+    <div class="mb-3">
       <div class="relative">
         <Icon
           icon="lucide:search"
@@ -602,15 +712,20 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
           v-model="searchQuery"
           type="text"
           placeholder="Search files…"
-          class="w-full pl-9 pr-3 py-2 text-sm bg-theme-900/60 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-600 transition-colors"
+          class="w-full py-2 pl-9 pr-9 text-sm bg-theme-900/60 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-600 transition-colors"
           @input="page = 0"
         >
+        <Icon
+          v-if="globalSearchLoading"
+          icon="lucide:loader-2"
+          class="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
+        />
       </div>
     </div>
 
     <!-- Floating bulk actions: pinned inside the document area while scrolling. -->
     <div
-      v-if="selectedFiles.size > 0"
+      v-if="!searchQuery.trim() && selectedFiles.size > 0"
       class="pointer-events-none sticky top-[calc(100vh_-_8rem)] z-30 h-0 sm:top-[calc(100vh_-_5.5rem)]"
     >
       <div class="pointer-events-auto mx-auto flex w-fit max-w-full items-center overflow-x-auto rounded-xl border border-theme-700/80 bg-theme-950/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
@@ -706,20 +821,78 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
       </div>
     </div>
 
+    <!-- Global cross-folder search results -->
+    <DataTable
+      v-if="searchQuery.trim()"
+      v-model:page="page"
+      :items="globalDocumentRows"
+      :columns="globalColumns"
+      :selectable="false"
+      :row-clickable="true"
+      :row-class="(file) => !file.textDirect ? 'opacity-60' : 'cursor-pointer'"
+      :pagination="true"
+      :page-size="FILES_PAGE_SIZE"
+      pagination-position="both"
+      :empty-message="globalSearchLoading ? 'Searching all folders…' : `No files matching '${searchQuery.trim()}'`"
+      @row-click="openGlobalResult"
+    >
+      <template #col-fileName="{ item: file }">
+        <div class="flex min-w-0 items-center gap-3">
+          <Icon
+            :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+            class="h-4 w-4 shrink-0 text-theme-400"
+          />
+          <div class="min-w-0">
+            <div class="truncate text-sm text-theme-200">
+              {{ file.fileName }}
+            </div>
+            <div class="mt-0.5 flex flex-wrap gap-1">
+              <span
+                v-for="field in file.matchedFields"
+                :key="field"
+                class="rounded border border-theme-700/80 bg-theme-900/70 px-1.5 py-0.5 text-[10px] text-theme-500"
+              >{{ field }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template #col-categoryName="{ item: file }">
+        <div class="min-w-0 text-xs text-theme-400">
+          <div class="truncate">
+            {{ file.categoryName }}
+          </div>
+          <div
+            v-if="file.categoryPath"
+            class="truncate text-[10px] text-theme-600"
+          >
+            {{ file.categoryPath }}
+          </div>
+        </div>
+      </template>
+      <template #col-modifiedAt="{ item: file }">
+        <span class="text-xs text-theme-500">{{ new Date(file.modifiedAt).toLocaleDateString() }}</span>
+      </template>
+      <template #col-status="{ item: file }">
+        <span
+          class="inline-flex items-center gap-1.5 text-xs"
+          :class="file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        >
+          <Icon
+            :icon="statusIcon(file.status)"
+            class="h-3.5 w-3.5"
+          />
+          {{ statusLabel(file.status) }}
+        </span>
+      </template>
+    </DataTable>
+
     <!-- Empty states -->
     <div
-      v-if="files.length === 0 && !filesLoading"
+      v-else-if="files.length === 0 && !filesLoading"
       class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
     >
       No files in this folder yet. Upload files to get started.
     </div>
-    <div
-      v-else-if="filteredFiles.length === 0 && searchQuery.trim()"
-      class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
-    >
-      No files matching "{{ searchQuery.trim() }}"
-    </div>
-
     <!-- File rows -->
     <DataTable
       v-else
@@ -737,7 +910,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
       pagination-position="both"
       initial-sort-key="modifiedAt"
       initial-sort-direction="desc"
-      :empty-message="searchQuery.trim() ? `No files matching '${searchQuery.trim()}'` : 'No files in this folder yet.'"
+      empty-message="No files in this folder yet."
       @row-click="(file) => openEditorModal(file.fileName)"
       @row-dragstart="(file, event) => startDocumentDrag(event, file.fileName)"
       @row-dragend="endDocumentDrag"
@@ -813,7 +986,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
         <div
           v-if="file.supported"
           class="flex items-center gap-1.5"
-          :title="!isJobRunning('deep-research', file.fileName) && !file.deepResearched ? (file.status === 'indexed' ? 'Facts not extracted' : 'Deep Research requires a search index first') : undefined"
+          :title="!isJobRunning('deep-research', file.fileName) && !file.deepResearched ? (file.status === 'indexed' ? (file.analysisStatus === 'needs_refresh' ? 'Analysis needs to be refreshed' : 'Facts not extracted') : 'Deep Research requires a search index first') : undefined"
         >
           <button
             v-if="isJobRunning('deep-research', file.fileName)"
@@ -966,10 +1139,10 @@ defineExpose({ ingestFiles, moveDocumentsToCategory });
             @click.stop="extractKnowledgeFromFile(file.fileName)"
           >
             <Icon
-              icon="lucide:network"
+              :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:refresh-cw' : 'lucide:network'"
               class="h-3.5 w-3.5"
             />
-            Run Deep Research
+            {{ file.analysisStatus === 'needs_refresh' ? 'Refresh analysis' : 'Run Deep Research' }}
           </button>
         </div>
       </template>

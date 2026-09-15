@@ -32,6 +32,11 @@ describe('Deep Research notes', () => {
           note: 'Selene is named as the keynote speaker.',
           source_chunk_index: 4,
         },
+        {
+          action: 'summary',
+          summary: 'Nora uses TypeScript for the project. Selene is its keynote speaker.',
+          source_chunk_index: 4,
+        },
       ]),
     })
 
@@ -48,6 +53,10 @@ describe('Deep Research notes', () => {
       note: 'Selene is named as the keynote speaker.',
     })
     expect(result.chunkTags).toEqual([])
+    expect(result.chunkSummaries).toEqual([{
+      sourceChunkIndex: 4,
+      summary: 'Nora uses TypeScript for the project. Selene is its keynote speaker.',
+    }])
   })
 
   test('normalizes per-chunk tags and merges document keywords in chunk order', async () => {

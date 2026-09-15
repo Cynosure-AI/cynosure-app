@@ -48,11 +48,12 @@ const inputText = ref(readDraft(draftStorageKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([])
-type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; error?: string }
+type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; progressCurrent?: number; progressTotal?: number; controller?: AbortController; error?: string }
 const attachedFiles = ref<DraftFile[]>([])
 const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([])
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
+const liveCleanups: Array<() => void> = []
 
 function modelHasInputModality(modality: string): boolean | null {
   const inputModalities = chatStore.modelModalities?.input
@@ -157,11 +158,12 @@ function isParseableDoc(filename: string): boolean {
 }
 
 async function stageFile(name: string, content: string, sourceId?: string): Promise<void> {
-  const draft: DraftFile = { clientId: crypto.randomUUID(), name, content, sourceId, status: 'processing' }
+  const controller = new AbortController()
+  const draft: DraftFile = { clientId: crypto.randomUUID(), name, content, sourceId, status: 'processing', progressCurrent: 0, progressTotal: 0, controller }
   attachedFiles.value.push(draft)
   try {
     const conversationId = chatStore.activeConversationId || await chatStore.createConversation()
-    const staged = await api.chat.stageAttachment(conversationId, { name, content })
+    const staged = await api.chat.stageAttachment(conversationId, { name, content, clientId: draft.clientId }, controller.signal)
     const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
     if (!current) {
       await api.chat.removeStagedAttachment(conversationId, staged.id)
@@ -171,6 +173,7 @@ async function stageFile(name: string, content: string, sourceId?: string): Prom
     current.stagedConversationId = conversationId
     current.status = 'ready'
   } catch (err) {
+    if (controller.signal.aborted) return
     const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
     if (!current) return
     current.status = 'error'
@@ -225,6 +228,7 @@ function removeFile(idx: number): void {
   const file = attachedFiles.value[idx]
   if (!file) return
   attachedFiles.value.splice(idx, 1)
+  file.controller?.abort()
   if (file.stagedId && file.stagedConversationId) {
     void api.chat.removeStagedAttachment(file.stagedConversationId, file.stagedId)
   }
@@ -276,10 +280,20 @@ onMounted(() => {
   // The initial draft is read before the textarea exists, so its watcher does
   // not run on mount. Size the now-mounted composer to the restored content.
   autoResize()
+  const unsubscribe = api.chat.onAttachmentStageProgress((progress) => {
+    const file = attachedFiles.value.find(item => item.clientId === progress.clientId && item.stagedConversationId === progress.conversationId)
+      || attachedFiles.value.find(item => item.clientId === progress.clientId)
+    if (!file) return
+    file.progressCurrent = progress.current
+    file.progressTotal = progress.total
+  })
+  liveCleanups.push(unsubscribe)
 })
 
 onBeforeUnmount(() => {
   persistDraft(draftStorageKey.value, inputText.value)
+  for (const cleanup of liveCleanups) cleanup()
+  for (const file of attachedFiles.value) file.controller?.abort()
 })
 
 function onTranscription(text: string): void {
@@ -417,11 +431,12 @@ defineExpose({ processFiles, focus })
             :class="file.status === 'processing' ? 'animate-spin text-accent-400' : file.status === 'error' ? 'text-red-400' : 'text-theme-400'"
           />
           <span class="text-xs text-theme-300 max-w-32 truncate">{{ file.name }}</span>
-          <span v-if="file.status === 'processing'" class="text-[10px] text-theme-500">Preparing…</span>
+          <span v-if="file.status === 'processing'" class="text-[10px] text-theme-500 group-hover:hidden">{{ file.progressCurrent || 0 }} / {{ file.progressTotal || '?' }} chunks</span>
+          <span v-if="file.status === 'processing'" class="hidden text-[10px] text-red-300 group-hover:inline">Cancel</span>
           <span v-else-if="file.status === 'error'" class="text-[10px] text-red-400" :title="file.error">Failed</span>
           <button
             class="ml-1 h-4 w-4 rounded-full bg-red-600 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-            aria-label="Remove file"
+            :aria-label="file.status === 'processing' ? `Cancel upload of ${file.name}` : `Remove ${file.name}`"
             @click="removeFile(idx)"
           >
             <Icon

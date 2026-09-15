@@ -2,8 +2,22 @@ import * as lancedb from '@lancedb/lancedb'
 import { join } from 'path'
 import { getAppDataDir } from '../data-dir.js'
 import { lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
+import { getEmbeddingProvider } from './embedding.js'
 
 type RRFReranker = lancedb.rerankers.RRFReranker
+
+/** Metadata columns added to older tables by `openExistingTable`. LanceDB
+ * rejects an append when the incoming batch omits a column the table has, so
+ * every batch is backfilled with the same default used for the column. */
+const METADATA_DEFAULT_COLUMNS: Array<{ name: string; defaultValue: (row: Record<string, unknown>) => unknown }> = [
+  { name: 'representationType', defaultValue: () => 'raw' },
+  { name: 'sourceChunkId', defaultValue: (row) => String(row.id ?? '') },
+  { name: 'searchText', defaultValue: (row) => String(row.text ?? '') },
+  { name: 'documentTitle', defaultValue: () => '' },
+  { name: 'sectionPath', defaultValue: () => '' },
+  { name: 'contentHash', defaultValue: () => '' },
+  { name: 'embeddingModel', defaultValue: () => '' },
+]
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +37,10 @@ export interface VectorDocument {
   sectionPath?: string
   contentHash?: string
   embeddingModel?: string
+  /** Search-only view of an authoritative source chunk. */
+  representationType?: 'raw' | 'summary' | 'keywords' | 'fact'
+  /** ID of the raw chunk returned as evidence for every representation. */
+  sourceChunkId?: string
 }
 
 export interface SearchResult {
@@ -45,6 +63,15 @@ export interface SearchResult {
   documentTitle?: string
   sectionPath?: string
   contentHash?: string
+  representationType?: 'raw' | 'summary' | 'keywords' | 'fact'
+  sourceChunkId?: string
+  /** Search text for the matched projection. Internal retrieval provenance;
+   * the authoritative `text` remains the raw source chunk. */
+  matchedSearchText?: string
+  /** All representation kinds that independently surfaced this chunk. */
+  matchedRepresentations?: Array<'raw' | 'summary' | 'keywords' | 'fact'>
+  /** Exact generated fact projections that led retrieval to this chunk. */
+  matchedFacts?: string[]
 }
 
 export interface RAGOptimizeResult {
@@ -65,13 +92,27 @@ export interface RAGOptimizeResult {
 
 const SEARCH_KEYWORDS_MARKER = '\n\uE000'
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError')
+}
+
 /** Attach derived keywords to the lexical search surface without changing the
  * text that was embedded for semantic retrieval. Reapplying replaces the old
  * keyword block, and an empty list restores the original search text. */
 export function withSearchKeywords(searchText: string, keywords: string[]): string {
+  return withSearchAnalysis(searchText, '', keywords)
+}
+
+/** Add derived analysis to the retrieval surface while keeping the source text
+ * and its stable metadata separate for evidence display. */
+export function withSearchAnalysis(searchText: string, summary: string, keywords: string[]): string {
   const markerIndex = searchText.indexOf(SEARCH_KEYWORDS_MARKER)
   const base = markerIndex >= 0 ? searchText.slice(0, markerIndex) : searchText
-  return keywords.length ? `${base}${SEARCH_KEYWORDS_MARKER}${keywords.join(' · ')}` : base
+  const analysis = [
+    summary.trim() ? `Summary: ${summary.trim()}` : '',
+    keywords.length ? `Keywords: ${keywords.join(' · ')}` : '',
+  ].filter(Boolean).join('\n')
+  return analysis ? `${base}${SEARCH_KEYWORDS_MARKER}${analysis}` : base
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +176,8 @@ export class RAGStore {
         { name: 'sectionPath', valueSql: "''" },
         { name: 'contentHash', valueSql: "''" },
         { name: 'embeddingModel', valueSql: "''" },
+        { name: 'representationType', valueSql: "'raw'" },
+        { name: 'sourceChunkId', valueSql: 'id' },
       ].filter((column) => !existingFields.has(column.name))
       if (metadataColumns.length > 0) {
         await table.addColumns(metadataColumns)
@@ -178,7 +221,9 @@ export class RAGStore {
         documentTitle: '',
         sectionPath: '',
         contentHash: '',
-        embeddingModel: ''
+        embeddingModel: '',
+        representationType: 'raw',
+        sourceChunkId: '__seed__',
       }
       const table = await this.db!.createTable(tableName, [{ ...seed }])
 
@@ -326,6 +371,13 @@ export class RAGStore {
       for (const [k, v] of Object.entries(d)) {
         if (fieldNames.has(k)) clean[k] = v
       }
+      // Stripping a column that exists in the table makes LanceDB reject the
+      // whole append, so backfill the metadata columns with their defaults.
+      for (const column of METADATA_DEFAULT_COLUMNS) {
+        if (fieldNames.has(column.name) && clean[column.name] === undefined) {
+          clean[column.name] = column.defaultValue(clean)
+        }
+      }
       return clean
     })
 
@@ -354,8 +406,9 @@ export class RAGStore {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
     await this.ensureCategoryIdIndex(table, tableName)
     const fieldNames = await this.getFieldNames(table, tableName)
-    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt', '_distance', 'documentTitle', 'sectionPath', 'contentHash']
+    const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', '_distance', 'documentTitle', 'sectionPath', 'contentHash']
     if (fieldNames.has('categoryId')) cols.push('categoryId')
+    if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
 
     let query = (table.search(queryVector) as lancedb.VectorQuery)
       .distanceType('cosine')
@@ -381,6 +434,9 @@ export class RAGStore {
         documentTitle: (r.documentTitle as string | undefined) || undefined,
         sectionPath: (r.sectionPath as string | undefined) || undefined,
         contentHash: (r.contentHash as string | undefined) || undefined,
+        representationType: (r.representationType as SearchResult['representationType']) || 'raw',
+        sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
+        matchedSearchText: (r.searchText as string | undefined) || undefined,
         createdAt: r.createdAt as number
       }))
 
@@ -397,8 +453,9 @@ export class RAGStore {
     const table = await this.openExistingTable(tableName)
     if (!table || !queryText.trim()) return []
     const fieldNames = await this.getFieldNames(table, tableName)
-    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', '_score']
+    const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', '_score']
     if (fieldNames.has('categoryId')) cols.push('categoryId')
+    if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
 
     if (!this.ftsIndexCurrent.has(tableName)) await this.rebuildFtsIndex(tableName)
     await this.ensureCategoryIdIndex(table, tableName)
@@ -429,6 +486,9 @@ export class RAGStore {
             documentTitle: (r.documentTitle as string | undefined) || undefined,
             sectionPath: (r.sectionPath as string | undefined) || undefined,
             contentHash: (r.contentHash as string | undefined) || undefined,
+            representationType: (r.representationType as SearchResult['representationType']) || 'raw',
+            sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
+            matchedSearchText: (r.searchText as string | undefined) || undefined,
             createdAt: r.createdAt as number
           }
         })
@@ -453,8 +513,9 @@ export class RAGStore {
   ): Promise<SearchResult[]> {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
     const fieldNames = await this.getFieldNames(table, tableName)
-    const cols = ['id', 'text', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash']
+    const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash']
     if (fieldNames.has('categoryId')) cols.push('categoryId')
+    if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
 
     // Safety fallback: rebuild FTS if callers didn't trigger it eagerly
     if (!this.ftsIndexCurrent.has(tableName)) {
@@ -499,6 +560,9 @@ export class RAGStore {
             documentTitle: (r.documentTitle as string | undefined) || undefined,
             sectionPath: (r.sectionPath as string | undefined) || undefined,
             contentHash: (r.contentHash as string | undefined) || undefined,
+            representationType: (r.representationType as SearchResult['representationType']) || 'raw',
+            sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
+            matchedSearchText: (r.searchText as string | undefined) || undefined,
             createdAt: r.createdAt as number
           }
         })
@@ -544,6 +608,7 @@ export class RAGStore {
 
       let whereClause = `${lanceDbEqFilter('sourceFile', sourceFile)} AND chunkIndex >= ${minIndex} AND chunkIndex <= ${maxIndex}`
       if (filter) whereClause += ` AND ${filter}`
+      if (fieldNames.has('representationType')) whereClause += ` AND representationType = 'raw'`
 
       const results = await table.query().select(cols).where(whereClause).toArray()
       return results
@@ -570,9 +635,11 @@ export class RAGStore {
     try {
       const table = await this.openExistingTable(tableName)
       if (!table) return 0
+      const fieldNames = await this.getFieldNames(table, tableName)
 
       let whereClause = `${lanceDbEqFilter('sourceFile', sourceFile)} AND id != '__seed__'`
       if (filter) whereClause += ` AND ${filter}`
+      if (fieldNames.has('representationType')) whereClause += ` AND representationType = 'raw'`
 
       return await table.countRows(whereClause)
     } catch {
@@ -609,7 +676,7 @@ export class RAGStore {
       const table = await this.openExistingTable(tableName)
       if (!table) return []
 
-      const fullCols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'categoryId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', 'embeddingModel']
+      const fullCols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'categoryId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', 'embeddingModel', 'representationType', 'sourceChunkId']
       const safeCols = ['id', 'text', 'source', 'createdAt']
 
       let results: Record<string, unknown>[]
@@ -637,7 +704,9 @@ export class RAGStore {
           documentTitle: (r.documentTitle as string | undefined) || undefined,
           sectionPath: (r.sectionPath as string | undefined) || undefined,
           contentHash: (r.contentHash as string | undefined) || undefined,
-          embeddingModel: (r.embeddingModel as string | undefined) || undefined
+          embeddingModel: (r.embeddingModel as string | undefined) || undefined,
+          representationType: (r.representationType as VectorDocument['representationType']) || 'raw',
+          sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
         }))
     } catch (err) {
       console.error('[rag] listDocuments error:', (err as Error).message)
@@ -656,13 +725,17 @@ export class RAGStore {
       const table = await this.openExistingTable(tableName)
       if (!table) return []
 
-      let q = table.query().select(['id', 'sourceFile', 'createdAt'])
+      const fieldNames = await this.getFieldNames(table, tableName)
+      const groupCols = ['id', 'sourceFile', 'createdAt']
+      if (fieldNames.has('representationType')) groupCols.push('representationType')
+      let q = table.query().select(groupCols)
       if (filter) q = q.where(filter)
       const results = await q.toArray()
 
       const groupMap = new Map<string, { count: number; latestCreatedAt: number }>()
       for (const r of results) {
         if (r.id === '__seed__') continue
+        if (fieldNames.has('representationType') && r.representationType !== 'raw') continue
         const key = (r.sourceFile as string) || ''
         const ts = (r.createdAt as number) || 0
         const existing = groupMap.get(key)
@@ -715,7 +788,10 @@ export class RAGStore {
       let whereClause = lanceDbInFilter('sourceFile', sourceFiles)
       if (!whereClause) return 0
       if (filter) whereClause += ` AND ${filter}`
-      const deletedCount = await table.countRows(whereClause)
+      const fieldNames = await this.getFieldNames(table, tableName)
+      const deletedCount = await table.countRows(fieldNames.has('representationType')
+        ? `(${whereClause}) AND representationType = 'raw'`
+        : whereClause)
       await table.delete(whereClause)
       this.ftsIndexCurrent.delete(tableName)
       if (opts.rebuildFts !== false) {
@@ -790,9 +866,76 @@ export class RAGStore {
     }
   }
 
-  /** Update chunk keyword surfaces used by FTS/BM25. Rows whose content hash
-   * no longer matches the analyzed chunk are skipped to avoid applying stale
-   * analysis after a concurrent document edit. */
+  /** Replace search-only representations for analyzed chunks. The raw row is
+   * never enriched or returned from generated metadata; every projection keeps
+   * the raw text and sourceChunkId so retrieval can collapse back to evidence. */
+  async updateChunkSearchAnalysis(
+    tableName: string,
+    filter: string,
+    chunks: Map<number, { contentHash: string; keywords: string[]; summary: string; facts?: string[] }>,
+    signal?: AbortSignal,
+  ): Promise<number> {
+    if (!this.db || !filter || chunks.size === 0) return 0
+    const table = await this.openExistingTable(tableName)
+    if (!table) return 0
+    const rows = await table.query()
+      .select(['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'categoryId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash'])
+      .where(`(${filter}) AND representationType = 'raw'`)
+      .toArray()
+    const pending: Array<Omit<VectorDocument, 'vector' | 'embeddingModel'> & { id: string; searchText: string }> = []
+    for (const row of rows) {
+      throwIfAborted(signal)
+      if (row.id === '__seed__' || row.chunkIndex == null) continue
+      const analyzed = chunks.get(Number(row.chunkIndex))
+      if (!analyzed || String(row.contentHash || '') !== analyzed.contentHash) continue
+      const rawSearchText = String(row.searchText || row.text || '').split(SEARCH_KEYWORDS_MARKER, 1)[0]
+      const common = {
+        text: String(row.text || ''), source: String(row.source || ''), sourceFile: String(row.sourceFile || ''),
+        chunkIndex: Number(row.chunkIndex), categoryId: String(row.categoryId || ''), createdAt: Number(row.createdAt || Date.now()),
+        documentTitle: String(row.documentTitle || ''), sectionPath: String(row.sectionPath || ''),
+        contentHash: String(row.contentHash || ''), sourceChunkId: String(row.id),
+      }
+      if (String(row.searchText || '') !== rawSearchText) {
+        pending.push({ ...common, id: String(row.id), searchText: rawSearchText, representationType: 'raw' })
+      }
+      if (analyzed.summary.trim()) pending.push({
+        ...common, id: `${row.id}:summary`, searchText: analyzed.summary.trim(), representationType: 'summary',
+      })
+      if (analyzed.keywords.length) pending.push({
+        ...common, id: `${row.id}:keywords`, searchText: analyzed.keywords.join(' · '), representationType: 'keywords',
+      })
+      for (const [factIndex, fact] of (analyzed.facts || []).map((value) => value.trim()).filter(Boolean).entries()) {
+        pending.push({ ...common, id: `${row.id}:fact:${factIndex}`, searchText: fact, representationType: 'fact' })
+      }
+    }
+    await table.delete(`(${filter}) AND representationType != 'raw'`)
+    if (!pending.length) return 0
+    const embeddings = await getEmbeddingProvider().embedBatch(pending.map((item) => item.searchText))
+    throwIfAborted(signal)
+    const projections: VectorDocument[] = []
+    let updated = 0
+    for (let index = 0; index < pending.length; index++) {
+      throwIfAborted(signal)
+      if (pending[index].representationType === 'raw') {
+        await table.update({
+          where: lanceDbEqFilter('id', pending[index].id), values: {
+            searchText: pending[index].searchText, vector: embeddings[index].vector, embeddingModel: embeddings[index].model,
+          }
+        })
+      } else {
+        projections.push({ ...pending[index], vector: embeddings[index].vector, embeddingModel: embeddings[index].model })
+      }
+      updated++
+    }
+    if (projections.length) await this.addDocuments(tableName, projections, embeddings[0].dimensions)
+    if (updated > 0) {
+      this.ftsIndexCurrent.delete(tableName)
+      this.scheduleFtsRebuild(tableName)
+    }
+    return updated
+  }
+
+  /** Compatibility wrapper for callers that only have keywords. */
   async updateChunkSearchKeywords(
     tableName: string,
     filter: string,

@@ -23,6 +23,7 @@ vi.mock('./rag.js', () => ({
 import { closeDb, getDb } from '../../db/database.js'
 import { MemoryKnowledgeStore } from './memory-knowledge.js'
 import { planReusableKnowledgeChunks } from './memory-deep-research.js'
+import { upsertMemoryFileIndex } from './agent-memory.js'
 import { createMemoryKnowledgeBackup, restoreMemoryKnowledgeBackup } from './memory-knowledge-backup.js'
 import type { PreparedMemoryChunk } from './parser.js'
 import { getEventBus } from '../telemetry/event-bus.js'
@@ -85,6 +86,10 @@ describe('memory knowledge v3', () => {
                 { sourceChunkIndex: 0, tags: ['ada', 'typescript'] },
                 { sourceChunkIndex: 1, tags: ['bob', 'python'] },
             ],
+            chunkSummaries: [
+                { sourceChunkIndex: 0, summary: 'Ada uses TypeScript.' },
+                { sourceChunkIndex: 1, summary: 'Bob uses Python.' },
+            ],
         })
 
         const revisedChunks = [
@@ -95,6 +100,7 @@ describe('memory knowledge v3', () => {
         expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([0])
         expect(plan.reusableChunks).toEqual([{ sourceChunkIndex: 1, priorTextUnitId: expect.any(String) }])
         expect(plan.chunkTags).toEqual([{ sourceChunkIndex: 1, tags: ['ada', 'typescript'] }])
+        expect(plan.chunkSummaries).toEqual([{ sourceChunkIndex: 1, summary: 'Ada uses TypeScript.' }])
 
         getDb().prepare(`UPDATE memory_file_index SET content_hash = 'revision-2' WHERE document_id = 'doc-incremental'`).run()
         store.publishDocument({
@@ -106,6 +112,7 @@ describe('memory knowledge v3', () => {
                 note: 'Cynosure has new project context.',
             }],
             chunkTags: [...plan.chunkTags, { sourceChunkIndex: 0, tags: ['project context'] }],
+            chunkSummaries: [...plan.chunkSummaries, { sourceChunkIndex: 0, summary: 'New project context is recorded.' }],
             reusableChunks: plan.reusableChunks,
         })
 
@@ -114,13 +121,52 @@ describe('memory knowledge v3', () => {
         expect(edges.some((edge) => edge.fromName === 'Cynosure' && edge.toName === 'New project context')).toBe(true)
         expect(edges.some((edge) => edge.fromName === 'Bob' || edge.toName === 'Python')).toBe(false)
         expect(getDb().prepare(`
-            SELECT chunk_index, tags_json FROM memory_knowledge_text_units
+            SELECT chunk_index, tags_json, summary FROM memory_knowledge_text_units
             WHERE run_id = (SELECT id FROM memory_knowledge_index_runs WHERE document_id = 'doc-incremental' AND status = 'active')
             ORDER BY chunk_index
         `).all()).toEqual([
-            { chunk_index: 0, tags_json: '["project context"]' },
-            { chunk_index: 1, tags_json: '["ada","typescript"]' },
+            { chunk_index: 0, tags_json: '["project context"]', summary: 'New project context is recorded.' },
+            { chunk_index: 1, tags_json: '["ada","typescript"]', summary: 'Ada uses TypeScript.' },
         ])
+    })
+
+    test('keeps the active knowledge revision available after a file reindex', () => {
+        addDocument('doc-reindexed', 'reindexed.md', 'revision-1')
+        const originalChunks = [
+            { ...chunk('Ada uses TypeScript.', 0), contentHash: 'stable-ada' },
+            { ...chunk('Bob uses Python.', 1), contentHash: 'stable-bob' },
+        ]
+        store.publishDocument({
+            documentId: 'doc-reindexed', contentHash: 'revision-1', categoryId: 'test-space',
+            fileName: 'reindexed.md', sourceId: 'memory:test-space:reindexed.md', chunks: originalChunks,
+            relations: [{
+                from: { name: 'Ada', type: 'person' }, relation: 'uses',
+                to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0,
+                note: 'Ada uses TypeScript.',
+            }],
+            chunkTags: [{ sourceChunkIndex: 0, tags: ['ada', 'typescript'] }],
+            chunkSummaries: [{ sourceChunkIndex: 0, summary: 'Ada uses TypeScript.' }],
+        })
+        getDb().prepare(`UPDATE memory_file_index SET deep_researched_at = 123, tags_json = '["people"]' WHERE document_id = 'doc-reindexed'`).run()
+
+        upsertMemoryFileIndex('test-space', 'reindexed.md', 'revision-2', 2)
+
+        const index = getDb().prepare(`
+            SELECT deep_researched_at, tags_json FROM memory_file_index WHERE document_id = 'doc-reindexed'
+        `).get() as { deep_researched_at: number; tags_json: string }
+        expect(index).toEqual({ deep_researched_at: 0, tags_json: '["people"]' })
+        expect(getDb().prepare(`
+            SELECT status FROM memory_knowledge_index_runs WHERE document_id = 'doc-reindexed'
+        `).get()).toEqual({ status: 'active' })
+
+        const revisedChunks = [
+            { ...chunk('Ada uses TypeScript.', 0), contentHash: 'stable-ada' },
+            { ...chunk('Bob now uses Rust.', 1), contentHash: 'changed-bob' },
+        ]
+        const plan = planReusableKnowledgeChunks('doc-reindexed', revisedChunks)
+        expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([1])
+        expect(plan.reusableChunks).toEqual([{ sourceChunkIndex: 0, priorTextUnitId: expect.any(String) }])
+        expect(plan.chunkSummaries).toEqual([{ sourceChunkIndex: 0, summary: 'Ada uses TypeScript.' }])
     })
 
     test('backs up and restores manual knowledge corrections', async () => {
@@ -133,6 +179,7 @@ describe('memory knowledge v3', () => {
                 to: { name: 'Project Atlas', type: 'project' }, sourceChunkIndex: 0,
                 note: 'Ada leads Project Atlas.',
             }],
+            chunkSummaries: [{ sourceChunkIndex: 0, summary: 'Ada leads Project Atlas.' }],
         })
         const edge = store.browseGraph({ categoryIds: ['test-space'] }).edges[0]
         store.updateEdge(edge.id, { note: 'Manually verified leadership relationship.' })
@@ -143,6 +190,7 @@ describe('memory knowledge v3', () => {
         const restored = await restoreMemoryKnowledgeBackup(backup)
 
         expect(restored.restored).toBeGreaterThan(0)
+        expect((getDb().prepare(`SELECT summary FROM memory_knowledge_text_units WHERE document_id = 'doc-backup' LIMIT 1`).get() as { summary: string }).summary).toBe('Ada leads Project Atlas.')
         expect(store.getEdge(edge.id)?.note).toBe('Manually verified leadership relationship.')
         expect((getDb().prepare(`SELECT COUNT(*) AS count FROM memory_knowledge_assertion_corrections`).get() as { count: number }).count).toBe(1)
     })

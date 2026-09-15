@@ -11,7 +11,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
-import type { MemoryDiffSegment, MemoryRevisionSummary } from "../../api/types";
+import type { MemoryDiffSegment, MemoryDocumentAnalysis, MemoryRevisionSummary } from "../../api/types";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
@@ -80,11 +80,16 @@ const selectedRevisionId = ref("");
 const revisionDiff = ref<MemoryDiffSegment[]>([]);
 const historyLoading = ref(false);
 const editorDirty = ref(false);
+const analysis = ref<MemoryDocumentAnalysis | null>(null);
+const analysisLoading = ref(false);
+const analysisError = ref("");
+const analysisExpanded = ref(false);
 const largeDocumentMode = ref(false);
 const largeDocumentDirty = ref(false);
 const largeDocumentEditor = ref<HTMLTextAreaElement | null>(null);
 let contentLoadSequence = 0;
 let historyLoadSequence = 0;
+let analysisLoadSequence = 0;
 
 const editor = useEditor({
   extensions: [
@@ -189,6 +194,22 @@ async function loadContent() {
     editor.value.commands.clearContent(false);
   } finally {
     if (sequence === contentLoadSequence) loading.value = false;
+  }
+}
+
+async function loadAnalysis() {
+  if (!props.show || !props.categoryId || !props.sourceFile) return;
+  const sequence = ++analysisLoadSequence;
+  analysisLoading.value = true;
+  analysisError.value = "";
+  analysis.value = null;
+  try {
+    const result = await api.memoryFolders.getDocumentAnalysis(props.categoryId, props.sourceFile);
+    if (sequence === analysisLoadSequence) analysis.value = result;
+  } catch (err) {
+    if (sequence === analysisLoadSequence) analysisError.value = (err as Error).message || "Failed to load analysis";
+  } finally {
+    if (sequence === analysisLoadSequence) analysisLoading.value = false;
   }
 }
 
@@ -316,7 +337,10 @@ function close() {
 watch(
   () => [props.show, props.categoryId, props.sourceFile, editor.value] as const,
   () => {
-    if (props.show) void loadContent();
+    if (props.show) {
+      void loadContent();
+      void loadAnalysis();
+    }
   },
   { immediate: true },
 );
@@ -332,7 +356,7 @@ onBeforeUnmount(() => {
     :title="titleToFileName(editableTitle) || sourceFile"
     icon="lucide:edit-3"
     icon-color="accent"
-    max-width="max-w-5xl"
+    max-width="max-w-7xl"
     max-height="h-[88vh]"
     body-overflow-hidden
     @close="close"
@@ -351,13 +375,28 @@ onBeforeUnmount(() => {
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
         <button
+          class="mr-1 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100 lg:hidden"
+          :class="{ 'bg-accent-500/15 text-accent-300': analysisExpanded }"
+          title="Document analysis"
+          @click="analysisExpanded = !analysisExpanded"
+        >
+          <Icon
+            icon="lucide:panel-left"
+            class="h-4 w-4"
+          />
+          Analysis
+        </button>
+        <button
           class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
           :class="{ 'bg-accent-500/15 text-accent-300': showHistory }"
           :disabled="!documentRef || loading || largeDocumentMode"
           :title="largeDocumentMode ? 'Revision diffs are disabled in large document mode' : 'Revision history'"
           @click="toggleHistory"
         >
-          <Icon icon="lucide:history" class="h-4 w-4" />
+          <Icon
+            icon="lucide:history"
+            class="h-4 w-4"
+          />
           History
         </button>
         <button
@@ -429,13 +468,24 @@ onBeforeUnmount(() => {
         v-if="largeDocumentMode && !showHistory"
         class="flex items-center gap-2 border-b border-theme-800 bg-amber-500/5 px-5 py-2 text-xs text-amber-300/90 shrink-0"
       >
-        <Icon icon="lucide:gauge" class="h-3.5 w-3.5" />
+        <Icon
+          icon="lucide:gauge"
+          class="h-3.5 w-3.5"
+        />
         Large document mode uses a lightweight plain-text editor for responsive loading and typing.
       </div>
 
-      <div v-if="showHistory" class="grid min-h-0 flex-1 grid-cols-[220px_1fr] bg-theme-950/45">
+      <div
+        v-if="showHistory"
+        class="grid min-h-0 flex-1 grid-cols-[220px_1fr] bg-theme-950/45"
+      >
         <div class="overflow-y-auto border-r border-theme-800 p-2">
-          <div v-if="historyLoading" class="p-3 text-xs text-theme-500">Loading history…</div>
+          <div
+            v-if="historyLoading"
+            class="p-3 text-xs text-theme-500"
+          >
+            Loading history…
+          </div>
           <button
             v-for="revision in revisions"
             :key="revision.id"
@@ -447,12 +497,15 @@ onBeforeUnmount(() => {
             <span class="block text-[10px] opacity-75">{{ revision.source }} · {{ new Date(revision.createdAt).toLocaleString() }}</span>
           </button>
         </div>
-        <MemoryInlineDiff :segments="revisionDiff" class="m-3" />
+        <MemoryInlineDiff
+          :segments="revisionDiff"
+          class="m-3"
+        />
       </div>
       <div
         v-else
         class="relative flex min-h-0 flex-1 bg-theme-950/45"
-        :class="largeDocumentMode ? 'overflow-hidden' : 'overflow-y-auto'"
+        :class="largeDocumentMode ? 'overflow-hidden' : ''"
       >
         <div
           v-if="loading"
@@ -464,21 +517,146 @@ onBeforeUnmount(() => {
           />
           Loading…
         </div>
-        <textarea
-          v-if="largeDocumentMode"
-          ref="largeDocumentEditor"
-          class="memory-large-editor min-h-0 flex-1 resize-none overflow-auto bg-transparent p-5 font-mono text-sm leading-6 text-theme-200 outline-none"
-          aria-label="Large memory document content"
-          :disabled="loading || saving"
-          :spellcheck="false"
-          wrap="off"
-          @input="largeDocumentDirty = true"
-        />
-        <EditorContent
-          v-else
-          :editor="editor"
-          class="memory-editor-shell"
-        />
+        <aside
+          class="absolute inset-0 z-20 min-h-0 flex-col border-r border-theme-800 bg-theme-950 lg:static lg:flex lg:w-80 lg:shrink-0"
+          :class="analysisExpanded ? 'flex' : 'hidden'"
+          aria-label="Document analysis"
+        >
+          <div class="flex min-h-0 basis-1/2 flex-col border-b border-theme-800">
+            <div class="flex shrink-0 items-center justify-between px-3 py-2">
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-theme-400">Summary</span>
+              <button
+                class="p-1 text-theme-500 hover:text-theme-200 lg:hidden"
+                title="Close analysis"
+                @click="analysisExpanded = false"
+              >
+                <Icon
+                  icon="lucide:x"
+                  class="h-4 w-4"
+                />
+              </button>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+              <div
+                v-if="analysisLoading"
+                class="flex items-center gap-2 py-4 text-xs text-theme-500"
+              >
+                <Icon
+                  icon="lucide:loader-2"
+                  class="h-3.5 w-3.5 animate-spin"
+                /> Loading analysis…
+              </div>
+              <div
+                v-else-if="analysisError"
+                class="py-3 text-xs text-red-400"
+              >
+                {{ analysisError }}
+              </div>
+              <div
+                v-else-if="analysis?.status === 'not_analyzed'"
+                class="py-3 text-xs leading-5 text-theme-500"
+              >
+                Run Extract facts to generate chunk summaries.
+              </div>
+              <template v-else>
+                <div
+                  v-if="analysis?.status === 'needs_refresh'"
+                  class="mb-3 rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-300"
+                >
+                  This analysis is from an older document or analysis version. Run Extract facts to refresh it.
+                </div>
+                <div
+                  v-if="analysis?.chunks.length"
+                  class="space-y-3"
+                >
+                  <div
+                    v-for="chunk in analysis.chunks"
+                    :key="chunk.chunkIndex"
+                    class="text-xs leading-5 text-theme-300"
+                  >
+                    <div
+                      v-if="chunk.sectionPath"
+                      class="mb-0.5 truncate text-[10px] font-medium uppercase tracking-wide text-theme-600"
+                    >
+                      {{ chunk.sectionPath }}
+                    </div>
+                    <p :class="{ 'italic text-theme-600': !chunk.summary }">
+                      {{ chunk.summary || 'Summary unavailable for this chunk.' }}
+                    </p>
+                    <div
+                      v-if="chunk.tags.length"
+                      class="mt-1 flex flex-wrap gap-1"
+                    >
+                      <span
+                        v-for="tag in chunk.tags"
+                        :key="tag"
+                        class="rounded border border-theme-800 bg-theme-900 px-1.5 py-0.5 text-[10px] text-theme-500"
+                      >{{ tag }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="py-3 text-xs text-theme-500"
+                >
+                  No chunk summaries are available.
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="flex min-h-0 basis-1/2 flex-col">
+            <div class="shrink-0 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-theme-400">
+              Extracted knowledge
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+              <div
+                v-if="analysisLoading"
+                class="py-3 text-xs text-theme-500"
+              >
+                Loading…
+              </div>
+              <div
+                v-else-if="analysis?.items.length"
+                class="space-y-1.5"
+              >
+                <div
+                  v-for="(item, index) in analysis.items"
+                  :key="`${item.kind}-${item.chunkIndex}-${index}`"
+                  class="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs leading-4 text-theme-300 hover:bg-theme-900/70"
+                >
+                  <Icon
+                    :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:circle-dot'"
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0 text-theme-500"
+                  />
+                  <span>{{ item.label }}</span>
+                </div>
+              </div>
+              <div
+                v-else-if="!analysisLoading"
+                class="py-3 text-xs text-theme-500"
+              >
+                No durable facts or entities were extracted.
+              </div>
+            </div>
+          </div>
+        </aside>
+        <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <textarea
+            v-if="largeDocumentMode"
+            ref="largeDocumentEditor"
+            class="memory-large-editor h-full min-h-0 w-full resize-none overflow-auto bg-transparent p-5 font-mono text-sm leading-6 text-theme-200 outline-none"
+            aria-label="Large memory document content"
+            :disabled="loading || saving"
+            :spellcheck="false"
+            wrap="off"
+            @input="largeDocumentDirty = true"
+          />
+          <EditorContent
+            v-else
+            :editor="editor"
+            class="memory-editor-shell"
+          />
+        </div>
       </div>
     </div>
 

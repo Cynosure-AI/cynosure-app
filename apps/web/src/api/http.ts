@@ -52,8 +52,8 @@ export function get<T>(path: string, signal?: AbortSignal): Promise<T> {
     return request<T>('GET', path, undefined, signal)
 }
 
-export function post<T>(path: string, body?: unknown): Promise<T> {
-    return request<T>('POST', path, body)
+export function post<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    return request<T>('POST', path, body, signal)
 }
 
 export function put<T>(path: string, body?: unknown): Promise<T> {

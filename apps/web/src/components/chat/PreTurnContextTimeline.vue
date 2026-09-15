@@ -14,6 +14,7 @@ type Detail = {
   namespaceId?: string
   namespaceLabel?: string
   memoryKind?: string
+  matchedRepresentations?: string[]
   empty?: boolean
 }
 type PipelineItem = {
@@ -43,6 +44,7 @@ type MemoryPipelineStats = {
     content: string
     matchScore: number
     scoreType?: string
+    matchedRepresentations?: string[]
   }>
 }
 type ContextCard = {
@@ -62,7 +64,7 @@ const expandedSteps = reactive(new Set<string>())
 
 const STATUS: Record<string, { channel: Channel; label: string; summary: string; icon: string }> = {
   'routing-memory': { channel: 'memory', label: 'Preparing memory retrieval', summary: 'Building the memory search', icon: 'lucide:brain-circuit' },
-  'searching-memory': { channel: 'memory', label: 'Searching memory', summary: 'Hybrid semantic and keyword retrieval', icon: 'lucide:search' },
+  'searching-memory': { channel: 'memory', label: 'Searching memory representations', summary: 'Searching raw chunks plus available summaries, keywords, and facts', icon: 'lucide:search' },
   'reranking-memory': { channel: 'memory', label: 'Reranking memory matches', summary: 'Reranker relevance scoring', icon: 'lucide:arrow-down-wide-narrow' },
   'filtering-memory': { channel: 'memory', label: 'Filtering memory matches', summary: 'Deduplicates repeated chunks and removes matches scoring below 65% of the strongest match', icon: 'lucide:list-filter' },
   'selecting-memory': { channel: 'memory', label: 'Selecting reranked memories', summary: 'Using the highest-ranked evidence', icon: 'lucide:badge-check' },
@@ -111,7 +113,7 @@ function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label:
   if (status === 'searching-memory') {
     return {
       label: `Hybrid search found ${plural(stats.searchCandidateCount, 'candidate')}`,
-      summary: `Semantic and keyword search across ${plural(stats.queryCount, 'query', 'queries')}`,
+      summary: `Raw chunks and analyzed summary, keyword, and fact views across ${plural(stats.queryCount, 'query', 'queries')}`,
     }
   }
   if (status === 'reranking-memory' && stats.rerankerInputCount > 0) {
@@ -142,6 +144,7 @@ function details(calls: ToolCall[]): Detail[] {
       namespaceId: stringValue(parsed.namespaceId),
       namespaceLabel: stringValue(parsed.namespaceLabel),
       memoryKind: stringValue(parsed.memoryKind),
+      matchedRepresentations: stringValues(parsed.matchedRepresentations),
       empty: Boolean(stringValue(parsed.emptyReason)),
     }
   }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
@@ -155,6 +158,7 @@ function searchMatchDetails(stats?: MemoryPipelineStats): Detail[] {
       content: match.content,
       score: score === undefined ? undefined : `${Math.round(score * 100)}%`,
       scoreValue: score,
+      matchedRepresentations: stringValues(match.matchedRepresentations),
     }
   }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
 }
@@ -439,6 +443,10 @@ function formatTimestamp(timestamp: number): string {
                     v-if="detail.score"
                     class="ml-2 context-score-text"
                   >{{ detail.score }}</span>
+                  <span
+                    v-if="detail.matchedRepresentations?.length"
+                    class="ml-2 text-theme-500"
+                  >via {{ detail.matchedRepresentations.join(' + ') }}</span>
                   <p
                     v-if="detail.content && item.key.includes('searching-memory')"
                     class="mt-0.5 line-clamp-2 leading-relaxed text-theme-500"
@@ -475,6 +483,10 @@ function formatTimestamp(timestamp: number): string {
                     class="score-chip"
                   >{{ memory.score }}</span>
                 </div>
+                <div
+                  v-if="memory.matchedRepresentations?.length"
+                  class="mt-1 text-[9px] text-theme-500"
+                >Matched via {{ memory.matchedRepresentations.join(' + ') }}</div>
                 <p
                   v-if="memory.content"
                   class="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-theme-400"

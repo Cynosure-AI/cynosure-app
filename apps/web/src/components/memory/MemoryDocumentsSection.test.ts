@@ -126,6 +126,18 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(wrapper.emitted('category-navigation')).toHaveLength(1)
   })
 
+  test('groups folder actions behind an ellipsis menu', async () => {
+    const wrapper = mountSection()
+    const archive = wrapper.get('[data-space-id="archive"]')
+    expect(archive.find('[aria-label="Folder options"]').exists()).toBe(true)
+    expect(archive.text()).not.toContain('Add subfolder')
+
+    await archive.get('[aria-label="Folder options"]').trigger('click')
+    expect(archive.text()).toContain('Add subfolder')
+    expect(archive.text()).toContain('Rename')
+    expect(archive.text()).toContain('Delete')
+  })
+
   test('shows the upload treatment only for file drags over the document pane', async () => {
     const wrapper = mountSection()
     const dropZone = wrapper.get('[data-testid="memory-document-drop-zone"]')

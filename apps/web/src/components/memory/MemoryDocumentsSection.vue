@@ -36,6 +36,7 @@ let folderStateInitialized = false;
 const dragCounter = ref(0);
 const dropTargetSpaceId = ref<string | null>(null);
 const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
+const openFolderMenuId = ref<string | null>(null);
 
 const sortedSpaces = computed(() =>
   [...props.spaces].sort((a, b) => {
@@ -131,6 +132,7 @@ watch(() => props.spaces, initializeFolderState, { immediate: true });
 watch([() => props.focusFile, () => props.selectedCategoryId], revealFocusedCategory);
 
 function selectSpace(categoryId: string) {
+  openFolderMenuId.value = null;
   emit("update:selectedCategoryId", categoryId);
   emit("category-navigation");
 }
@@ -217,6 +219,12 @@ async function onFolderDrop(e: DragEvent, targetCategoryId: string) {
 function setDocumentDragState(active: boolean, payload?: DocumentDragPayload) {
   activeDocumentDrag.value = active && payload ? payload : null;
   if (!active) dropTargetSpaceId.value = null;
+}
+
+async function openGlobalDocument(categoryId: string, fileName: string) {
+  if (categoryId !== props.selectedCategoryId) emit("update:selectedCategoryId", categoryId);
+  await nextTick();
+  docList.value?.openDocument(fileName);
 }
 
 async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
@@ -324,38 +332,16 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
               >Root</span>
               <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
             </button>
-            <!-- Action buttons -->
-            <button
-              class="p-1 text-theme-600 hover:text-accent-400 opacity-0 group-hover:opacity-100 transition-colors"
-              title="New subfolder"
-              @click.stop="emit('create-folder', space)"
-            >
-              <Icon
-                icon="lucide:plus"
-                class="w-3.5 h-3.5"
-              />
-            </button>
-            <button
-              class="p-1 text-theme-600 hover:text-theme-200 opacity-0 group-hover:opacity-100 transition-colors"
-              title="Rename folder"
-              @click.stop="emit('edit-folder', space)"
-            >
-              <Icon
-                icon="lucide:pencil"
-                class="w-3.5 h-3.5"
-              />
-            </button>
-            <button
-              :disabled="space.isUncategorized"
-              class="p-1 text-theme-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-colors disabled:opacity-20 disabled:hover:text-theme-600"
-              title="Remove folder"
-              @click.stop="emit('delete-folder', space)"
-            >
-              <Icon
-                icon="lucide:trash-2"
-                class="w-3.5 h-3.5"
-              />
-            </button>
+            <span class="relative shrink-0">
+              <button type="button" class="rounded-md p-1 text-theme-500 opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover:opacity-100 focus-visible:opacity-100" :class="{ 'bg-theme-700 text-theme-200 opacity-100': openFolderMenuId === space.id }" aria-label="Folder options" @click.stop="openFolderMenuId = openFolderMenuId === space.id ? null : space.id">
+                <Icon icon="lucide:ellipsis" class="h-3.5 w-3.5" />
+              </button>
+              <span v-if="openFolderMenuId === space.id" class="absolute right-0 top-7 z-30 w-40 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl" @click.stop>
+                <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800" @click="openFolderMenuId = null; emit('create-folder', space)"><Icon icon="lucide:plus" class="h-3.5 w-3.5 text-accent-400" /> Add subfolder</button>
+                <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800" @click="openFolderMenuId = null; emit('edit-folder', space)"><Icon icon="lucide:pencil" class="h-3.5 w-3.5" /> Rename</button>
+                <button type="button" :disabled="space.isUncategorized" class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40" @click="openFolderMenuId = null; emit('delete-folder', space)"><Icon icon="lucide:trash-2" class="h-3.5 w-3.5" /> Delete</button>
+              </span>
+            </span>
           </div>
         </div>
       </div>
@@ -393,6 +379,7 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
           @delete-space="selectedCategory && emit('delete-folder', selectedCategory)"
           @spaces-changed="emit('refresh-spaces')"
           @document-drag-state="setDocumentDragState"
+          @open-global-document="openGlobalDocument"
         />
       </div>
     </div>

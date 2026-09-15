@@ -4,7 +4,7 @@ import { formatKnowledgeLiteral } from './memory-knowledge-format.js'
 import { getRAGStore, type VectorDocument } from './rag.js'
 
 export class MemoryKnowledgeProjectionStore {
-  constructor(private readonly tableName: string) {}
+  constructor(private readonly tableName: string) { }
 
   async indexRun(runId: string, signal?: AbortSignal): Promise<number> {
     const db = getDb()
@@ -83,6 +83,12 @@ export class MemoryKnowledgeProjectionStore {
         sectionPath: projection.source === 'knowledge_assertion' ? 'Knowledge assertions' : 'Entities',
         contentHash: String(run.content_hash),
         embeddingModel: embeddings[index].model,
+        // Knowledge projections are their own authoritative rows rather than a
+        // search-only view of an indexed source chunk, so they are marked as
+        // raw. These fields must be present: LanceDB rejects an append when a
+        // table column is omitted from the incoming batch.
+        representationType: 'raw',
+        sourceChunkId: projection.id,
       }))
       const rag = getRAGStore()
       // addDocuments invalidates FTS and schedules one debounced rebuild. An

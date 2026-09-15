@@ -34,6 +34,11 @@ export interface RetrievedChunk {
   documentId?: string
   documentRef?: string
   revision?: string
+  sourceChunkId?: string
+  matchedRepresentations?: Array<'raw' | 'summary' | 'keywords' | 'fact'>
+  /** Stable public alias for representation provenance. */
+  matchedBy?: Array<'raw' | 'summary' | 'keyword' | 'fact'>
+  matchedFacts?: string[]
 }
 
 export interface MemoryRetrievalStatusDetails {
@@ -129,12 +134,13 @@ export class MemoryParser {
     tableName: string,
     text: string,
     meta: DocumentMeta,
-    opts?: { signal?: AbortSignal }
+    opts?: { signal?: AbortSignal; onProgress?: (current: number, total: number) => void }
   ): Promise<number> {
     throwIfAborted(opts?.signal)
     const chunks = await this.prepareChunks(text, meta.sourceFile)
     throwIfAborted(opts?.signal)
     if (chunks.length === 0) return 0
+    opts?.onProgress?.(0, chunks.length)
 
     const embedder = getEmbeddingProvider()
     const ragStore = getRAGStore()
@@ -164,6 +170,7 @@ export class MemoryParser {
         if (completedWrite) {
           totalStored += completedWrite.ids.length
           storedIds.push(...completedWrite.ids)
+          opts?.onProgress?.(totalStored, chunks.length)
           pendingWrite = null
         }
 
@@ -187,8 +194,10 @@ export class MemoryParser {
           documentTitle,
           sectionPath: item.sectionPath,
           contentHash: item.contentHash,
-          embeddingModel: embeddings[j].model
+          embeddingModel: embeddings[j].model,
+          representationType: 'raw',
         }))
+        for (const doc of docs) doc.sourceChunkId = doc.id
 
         pendingWrite = {
           promise: MemoryParser.withRetry(() => ragStore.addDocuments(tableName, docs, dims)),
@@ -202,6 +211,7 @@ export class MemoryParser {
         throwIfAborted(opts?.signal)
         totalStored += pendingWrite.ids.length
         storedIds.push(...pendingWrite.ids)
+        opts?.onProgress?.(totalStored, chunks.length)
       }
     } catch (err) {
       // Settle the in-flight write, then remove every row belonging to this
@@ -257,13 +267,17 @@ export class MemoryParser {
 
     onStatus?.('rag')
     const { vector } = await embedder.embed(query)
+    // Search a wider pool because analyzed chunks may have several independent
+    // representations. They are collapsed to authoritative chunks below.
     const candidateCount = reranker.getCandidateCount(topK)
+    const representationCandidateCount = candidateCount * 4
     const [denseCandidates, lexicalCandidates] = await Promise.all([
-      ragStore.search(tableName, vector, candidateCount, filter),
-      ragStore.lexicalSearch(tableName, query, candidateCount, filter),
+      ragStore.search(tableName, vector, representationCandidateCount, filter),
+      ragStore.lexicalSearch(tableName, query, representationCandidateCount, filter),
     ])
-    const results = fuseRetrievalChannels([denseCandidates, lexicalCandidates], candidateCount)
+    const representationResults = fuseRetrievalChannels([denseCandidates, lexicalCandidates], representationCandidateCount)
       .filter((result) => isRetrievableChunk(result.text))
+    const results = collapseChunkRepresentations(representationResults, candidateCount)
     onStatus?.('rag', { candidateCount: results.length, candidates: results })
     const reranking = reranker.getConfig().enabled && results.length > 1
     if (reranking) onStatus?.('reranking', { candidateCount: results.length })
@@ -287,7 +301,12 @@ export class MemoryParser {
       contentHash: r.contentHash,
       sourceFile: r.sourceFile,
       chunkIndex: r.chunkIndex,
-      categoryId: r.categoryId
+      categoryId: r.categoryId,
+      sourceChunkId: r.sourceChunkId || r.id,
+      matchedRepresentations: r.matchedRepresentations,
+      matchedBy: r.matchedRepresentations?.map((representation) =>
+        representation === 'keywords' ? 'keyword' as const : representation),
+      matchedFacts: r.matchedFacts,
     }))
   }
 
@@ -374,6 +393,50 @@ export class MemoryParser {
 
     return result
   }
+}
+
+/** Collapse search-only summary/keyword/fact hits to their authoritative raw
+ * chunk. Reciprocal rank contributions reward chunks found through several
+ * independent representations without comparing dense and BM25 scales. */
+export function collapseChunkRepresentations(results: SearchResult[], limit: number, rankConstant = 60): SearchResult[] {
+  const grouped = new Map<string, {
+    best: SearchResult
+    score: number
+    representations: Set<NonNullable<SearchResult['representationType']>>
+    facts: Set<string>
+  }>()
+  results.forEach((result, index) => {
+    const sourceChunkId = result.sourceChunkId || result.id
+    const representation = result.representationType || 'raw'
+    const matchedFact = representation === 'fact' ? result.matchedSearchText?.trim() : undefined
+    const contribution = 1 / (rankConstant + index + 1)
+    const current = grouped.get(sourceChunkId)
+    if (current) {
+      current.score += contribution
+      current.representations.add(representation)
+      if (matchedFact) current.facts.add(matchedFact)
+      if (representation === 'raw' && current.best.representationType !== 'raw') current.best = result
+    } else {
+      grouped.set(sourceChunkId, {
+        best: result,
+        score: contribution,
+        representations: new Set([representation]),
+        facts: new Set(matchedFact ? [matchedFact] : []),
+      })
+    }
+  })
+  return [...grouped.entries()]
+    .map(([sourceChunkId, group]) => ({
+      ...group.best,
+      id: sourceChunkId,
+      sourceChunkId,
+      matchedRepresentations: [...group.representations],
+      matchedFacts: [...group.facts],
+      representationFusionScore: group.score,
+    }))
+    .sort((a, b) => b.representationFusionScore - a.representationFusionScore)
+    .slice(0, limit)
+    .map(({ representationFusionScore: _score, ...result }) => result)
 }
 
 /**

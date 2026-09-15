@@ -60,6 +60,8 @@ interface MemoryPipelineStats {
         content: string
         matchScore: number
         scoreType?: string
+        matchedRepresentations?: RetrievedChunk['matchedRepresentations']
+        matchedFacts?: RetrievedChunk['matchedFacts']
     }>
 }
 
@@ -326,6 +328,8 @@ function buildMemoryPipelineStats(
                 content: memory.text,
                 matchScore: visibleMatch.score,
                 scoreType: visibleMatch.scoreType,
+                matchedRepresentations: memory.matchedRepresentations,
+                matchedFacts: memory.matchedFacts,
             }
         }),
     }
@@ -623,7 +627,16 @@ function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
         result.permanent.forEach((chunk) => {
             const key = chunk.id || [chunk.categoryId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
             const existing = ranked.get(key)
-            if (!existing || memoryMatch(chunk).score > memoryMatch(existing).score) ranked.set(key, chunk)
+            if (!existing) {
+                ranked.set(key, chunk)
+                return
+            }
+            const matchedRepresentations = Array.from(new Set([
+                ...(existing.matchedRepresentations || []),
+                ...(chunk.matchedRepresentations || []),
+            ]))
+            if (memoryMatch(chunk).score > memoryMatch(existing).score) ranked.set(key, { ...chunk, matchedRepresentations })
+            else existing.matchedRepresentations = matchedRepresentations
         })
     }
     const permanent = sortMemoriesByMatch([...ranked.values()])
@@ -751,6 +764,10 @@ function emitMemoryRoutingSelection(
                 content: memory.text,
                 matchScore: visibleMatch.score,
                 scoreType: visibleMatch.scoreType,
+                matchedRepresentations: memory.matchedRepresentations,
+                matchedBy: memory.matchedBy,
+                matchedFacts: memory.matchedFacts,
+                sourceChunkId: memory.sourceChunkId || memory.id,
                 pipelineStats: visiblePipelineStats,
             }),
         }

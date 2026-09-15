@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest'
-import { fuseRetrievalChannels, inferDocumentTitle, inferSectionPath, isRetrievableChunk } from './parser.js'
+import { collapseChunkRepresentations, fuseRetrievalChannels, inferDocumentTitle, inferSectionPath, isRetrievableChunk } from './parser.js'
 import { hasExactMemoryFolderScope } from './memory-aggregator.js'
 import type { SearchResult } from './rag.js'
-import { withSearchKeywords } from './rag.js'
+import { withSearchAnalysis, withSearchKeywords } from './rag.js'
 
 function result(overrides: Partial<SearchResult>): SearchResult {
   return {
@@ -49,6 +49,25 @@ describe('memory retrieval policy', () => {
     expect(fused[2]?.lexicalScore).toBe(9.2)
   })
 
+  test('collapses analyzed representations to authoritative chunks and records discovery paths', () => {
+    const summary = result({ id: 'summary-1', sourceChunkId: 'raw-1', representationType: 'summary', text: 'Original evidence' })
+    const fact = result({
+      id: 'fact-1', sourceChunkId: 'raw-1', representationType: 'fact',
+      text: 'Original evidence', matchedSearchText: 'Atlas uses LanceDB',
+    })
+    const raw = result({ id: 'raw-2', sourceChunkId: 'raw-2', representationType: 'raw', text: 'Other evidence' })
+
+    const collapsed = collapseChunkRepresentations([summary, raw, fact], 2)
+
+    expect(collapsed[0]).toMatchObject({
+      id: 'raw-1',
+      text: 'Original evidence',
+      matchedRepresentations: ['summary', 'fact'],
+      matchedFacts: ['Atlas uses LanceDB'],
+    })
+    expect(collapsed[1]).toMatchObject({ id: 'raw-2', matchedRepresentations: ['raw'] })
+  })
+
   test('adds and replaces lexical chunk keywords without changing base search text', () => {
     const base = 'Document: Chantal\nRelationship details'
     const tagged = withSearchKeywords(base, ['autonomy', 'communication'])
@@ -56,5 +75,16 @@ describe('memory retrieval policy', () => {
     expect(tagged).toContain('autonomy · communication')
     expect(withSearchKeywords(tagged, ['house renovation'])).toBe(withSearchKeywords(base, ['house renovation']))
     expect(withSearchKeywords(tagged, [])).toBe(base)
+  })
+
+  test('adds summaries and keywords to one replaceable retrieval surface', () => {
+    const base = 'Document: Atlas\nThe source evidence remains exact.'
+    const analyzed = withSearchAnalysis(base, 'Atlas describes a semantic memory index.', ['semantic search'])
+
+    expect(analyzed).toContain('Summary: Atlas describes a semantic memory index.')
+    expect(analyzed).toContain('Keywords: semantic search')
+    expect(withSearchAnalysis(analyzed, 'Replacement summary.', ['replacement'])).toBe(
+      withSearchAnalysis(base, 'Replacement summary.', ['replacement']),
+    )
   })
 })
