@@ -50,14 +50,14 @@ describe('preferences profile', () => {
   })
 
   test('restores and persists the recent chat filter', async () => {
-    localStorage.setItem(SK_RECENT_CHAT_FILTER, 'agent')
+    localStorage.setItem(SK_RECENT_CHAT_FILTER, JSON.stringify(['agents', 'cron']))
     const store = usePreferencesStore()
 
-    expect(store.recentChatFilter).toBe('agent')
+    expect(store.recentChatFilter).toEqual(['agents', 'cron'])
 
-    store.recentChatFilter = 'all'
+    store.recentChatFilter = ['all']
     await nextTick()
-    expect(localStorage.getItem(SK_RECENT_CHAT_FILTER)).toBe('all')
+    expect(localStorage.getItem(SK_RECENT_CHAT_FILTER)).toBe(JSON.stringify(['all']))
   })
 
   test('replaces an unsupported persisted theme with the dark fallback', async () => {

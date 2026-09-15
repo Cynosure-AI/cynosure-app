@@ -8,6 +8,7 @@ import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { usePreferencesStore } from "../../stores/preferences.store";
+import type { RecentChatFilter } from "../../stores/preferences.store";
 import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
 import type { ActivityItem, AgentInstance } from "../../api/types";
@@ -166,9 +167,26 @@ function closeRecentFilterMenu(): void {
   recentFilterMenuOpen.value = false;
 }
 
-function setRecentChatFilter(filter: "all" | "agent"): void {
-  recentChatFilter.value = filter;
-  recentFilterMenuOpen.value = false;
+const recentChatFilterOptions: Array<{ value: RecentChatFilter; label: string; icon: string }> = [
+  { value: "all", label: "All", icon: "lucide:messages-square" },
+  { value: "free", label: "Free Chats", icon: "lucide:message-square" },
+  { value: "agents", label: "Agents", icon: "lucide:bot" },
+  { value: "cron", label: "Cron", icon: "lucide:calendar-clock" },
+  { value: "channel", label: "Channel", icon: "lucide:radio" },
+];
+
+function toggleRecentChatFilter(filter: RecentChatFilter): void {
+  if (filter === "all") {
+    recentChatFilter.value = ["all"];
+    return;
+  }
+
+  const selected = recentChatFilter.value.filter((value) => value !== "all");
+  recentChatFilter.value = selected.includes(filter)
+    ? (selected.filter((value) => value !== filter).length
+      ? selected.filter((value) => value !== filter)
+      : ["all"])
+    : [...selected, filter];
 }
 
 function formatTimeAgo(ts: number): string {
@@ -574,43 +592,25 @@ const chatRoute = computed(() =>
             <div
               class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-theme-500"
             >
-              Sort By
+              Filter by
             </div>
 
             <button
+              v-for="option in recentChatFilterOptions"
+              :key="option.value"
               type="button"
-              role="menuitemradio"
-              :aria-checked="recentChatFilter === 'all'"
+              role="menuitemcheckbox"
+              :aria-checked="recentChatFilter.includes(option.value)"
               class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-              @click="setRecentChatFilter('all')"
+              @click="toggleRecentChatFilter(option.value)"
             >
               <Icon
-                icon="lucide:messages-square"
+                :icon="option.icon"
                 class="h-3.5 w-3.5 text-theme-500"
               />
-              <span class="flex-1">All Recent</span>
+              <span class="flex-1">{{ option.label }}</span>
               <Icon
-                v-if="recentChatFilter === 'all'"
-                icon="lucide:check"
-                class="h-3.5 w-3.5 text-accent-400"
-              />
-            </button>
-
-            <button
-              type="button"
-              role="menuitemradio"
-              :aria-checked="recentChatFilter === 'agent'"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-              :title="chatStore.activeAgentId ? 'Show chats for the active agent' : 'Show Free Chat conversations'"
-              @click="setRecentChatFilter('agent')"
-            >
-              <Icon
-                :icon="chatStore.activeAgentId ? 'lucide:bot' : 'lucide:message-square'"
-                class="h-3.5 w-3.5 text-theme-500"
-              />
-              <span class="flex-1">Selected Agent</span>
-              <Icon
-                v-if="recentChatFilter === 'agent'"
+                v-if="recentChatFilter.includes(option.value)"
                 icon="lucide:check"
                 class="h-3.5 w-3.5 text-accent-400"
               />
@@ -621,7 +621,7 @@ const chatRoute = computed(() =>
           v-if="recentChatsOpen && !sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
           :active-conversation-ids="runningConversationIds"
-          :agent-id="recentChatFilter === 'agent' ? chatStore.activeAgentId : undefined"
+          :filters="recentChatFilter"
         />
       </section>
     </nav>

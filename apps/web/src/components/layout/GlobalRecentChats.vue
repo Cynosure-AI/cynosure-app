@@ -12,10 +12,12 @@ const props = withDefaults(defineProps<{
   awaitingConversationIds?: string[]
   activeConversationIds?: string[]
   agentId?: string | null
+  filters?: string[]
 }>(), {
   awaitingConversationIds: () => [],
   activeConversationIds: () => [],
   agentId: undefined,
+  filters: () => ['all'],
 })
 
 const router = useRouter()
@@ -169,6 +171,7 @@ async function load(reset = false, clearExisting = false): Promise<void> {
       'sidebar',
       activeQuery.value || undefined,
       props.agentId,
+      props.filters,
     )
     if (token !== requestToken.value) return
     const rows = response.items.map(mapRow)
@@ -291,9 +294,9 @@ watch(searchQuery, (query) => {
   }, 250)
 })
 
-watch(() => props.agentId, () => {
+watch([() => props.agentId, () => props.filters], () => {
   void load(true, true)
-})
+}, { deep: true })
 
 watch(() => chatStore.activeConversationId, (conversationId) => {
   if (conversationId) scheduleRefresh()
