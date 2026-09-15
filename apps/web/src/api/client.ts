@@ -456,7 +456,7 @@ export const api = {
         `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`
       ),
     updateFileContent: (categoryId: string, fileName: string, content: string, expectedRevision?: string) =>
-      put<{ success: boolean; fileName: string; revision: string; job: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
+      put<{ success: boolean; fileName: string; revision: string }>(
         `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`,
         { content, expectedRevision }
       ),

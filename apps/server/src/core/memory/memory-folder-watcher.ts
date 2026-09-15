@@ -23,7 +23,6 @@ interface PendingDelete {
 }
 
 const pendingDeletes = new Map<string, PendingDelete>()
-const pendingChanges = new Map<string, ReturnType<typeof setTimeout>>()
 
 function isExpectedWatchError(err: unknown): boolean {
     const code = typeof err === 'object' && err !== null && 'code' in err
@@ -129,21 +128,6 @@ export function watchMemoryFolder(categoryId: string, directoryPath: string): vo
         scheduleDelete(categoryId, fileName)
     })
 
-    watcher.on('change', (filePath) => {
-        if (!ready) return
-        const fileName = basename(filePath)
-        const key = pendingDeleteKey(categoryId, fileName)
-        const existing = pendingChanges.get(key)
-        if (existing) clearTimeout(existing)
-        pendingChanges.set(key, setTimeout(() => {
-            pendingChanges.delete(key)
-            const memory = getAgentMemory()
-            if (memory.checkFileStatus(categoryId, fileName, directoryPath) === 'current') return
-            memory.reindexFile(directoryPath, fileName, categoryId, { revisionContext: { source: 'filesystem' } })
-                .catch(err => console.warn(`[memory-watcher] reindex failed for ${fileName} in category ${categoryId}:`, err))
-        }, 500))
-    })
-
     watcher.on('unlinkDir', (deletedPath) => {
         if (resolve(deletedPath) !== watchedRoot) return
         console.warn(`[memory-watcher] watched folder for space ${categoryId} was removed: ${directoryPath}`)
@@ -173,11 +157,6 @@ export function stopWatchingMemoryFolder(categoryId: string): void {
         clearTimeout(pending.timer)
         pendingDeletes.delete(key)
     }
-    for (const [key, timer] of pendingChanges.entries()) {
-        if (!key.startsWith(`${categoryId}\0`)) continue
-        clearTimeout(timer)
-        pendingChanges.delete(key)
-    }
 }
 
 /** Stop all active watchers (called on server shutdown). */
@@ -186,6 +165,4 @@ export async function stopAllMemoryFolderWatchers(): Promise<void> {
     activeWatchers.clear()
     for (const pending of pendingDeletes.values()) clearTimeout(pending.timer)
     pendingDeletes.clear()
-    for (const timer of pendingChanges.values()) clearTimeout(timer)
-    pendingChanges.clear()
 }

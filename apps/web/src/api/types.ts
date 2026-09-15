@@ -408,7 +408,9 @@ export interface MemoryDocumentKnowledgePreview {
 }
 
 export interface MemoryDocumentAnalysis {
-    status: 'not_analyzed' | 'current' | 'needs_refresh'
+    status: 'not_analyzed' | 'current' | 'needs_refresh' | 'too_large'
+    chunkCount?: number
+    maxChunks?: number
     pipelineVersion?: string
     promptVersion?: string
     chunks: Array<{

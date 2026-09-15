@@ -36,18 +36,18 @@ vi.mock('../../api/client', () => ({
   },
 }))
 
-describe('MemoryDocumentEditorModal large document mode', () => {
+describe('MemoryDocumentEditorModal', () => {
   beforeEach(() => {
     mocks.getFileContent.mockReset()
     mocks.updateFileContent.mockReset().mockResolvedValue({
-      fileName: 'large.md', revision: 'next', job: { id: 'job' },
+      fileName: 'large.md', revision: 'next',
     })
     mocks.setContent.mockReset()
     mocks.clearContent.mockReset()
     mocks.getDocumentAnalysis.mockReset().mockResolvedValue({ status: 'not_analyzed', chunks: [], items: [], itemTotal: 0 })
   })
 
-  test('loads and edits large content without constructing a rich-text document', async () => {
+  test('loads large content into the rich-text editor', async () => {
     const content = `# Large\n${'memory line\n'.repeat(25_000)}`
     mocks.getFileContent.mockResolvedValue({ content, revision: 'current', documentRef: 'large#ref' })
     const wrapper = mount(MemoryDocumentEditorModal, {
@@ -61,16 +61,10 @@ describe('MemoryDocumentEditorModal large document mode', () => {
       },
     })
     await flushPromises()
+    await vi.waitFor(() => expect(mocks.setContent).toHaveBeenCalledOnce())
 
-    const textarea = wrapper.get('textarea[aria-label="Large memory document content"]')
-    expect((textarea.element as HTMLTextAreaElement).value).toBe(content)
-    expect(wrapper.text()).toContain('Large document mode')
-    expect(mocks.setContent).not.toHaveBeenCalled()
-
-    await textarea.setValue(`${content}changed`)
-    await wrapper.findAll('button').find(button => button.text() === 'Save')!.trigger('click')
-    await flushPromises()
-    expect(mocks.updateFileContent).toHaveBeenCalledWith('category', 'large.md', `${content}changed`, 'current')
+    expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(true)
+    expect(wrapper.find('textarea[aria-label="Large memory document content"]').exists()).toBe(false)
   })
 
   test('renders ordered summaries, tags, and extracted knowledge in the analysis rail', async () => {
@@ -91,6 +85,8 @@ describe('MemoryDocumentEditorModal large document mode', () => {
         stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
       },
     })
+    await flushPromises()
+    await vi.waitFor(() => expect(mocks.getDocumentAnalysis).toHaveBeenCalledOnce())
     await flushPromises()
 
     expect(wrapper.text()).toContain('The first summary.')

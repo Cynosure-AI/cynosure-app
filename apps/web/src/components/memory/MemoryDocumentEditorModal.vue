@@ -12,7 +12,6 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
 import type { MemoryDiffSegment, MemoryDocumentAnalysis, MemoryRevisionSummary } from "../../api/types";
-import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 
@@ -26,11 +25,9 @@ const emit = defineEmits<{
   close: [];
   saved: [payload: { fileName: string; chunksStored: number }];
 }>();
-const memoryJobs = useMemoryJobsStore();
 
 const markdownParser = new Marked({ breaks: true });
 const headingLevels = [1, 2, 3] as const;
-const LARGE_DOCUMENT_THRESHOLD = 250_000;
 
 type HeadingLevel = (typeof headingLevels)[number];
 
@@ -84,9 +81,6 @@ const analysis = ref<MemoryDocumentAnalysis | null>(null);
 const analysisLoading = ref(false);
 const analysisError = ref("");
 const analysisExpanded = ref(false);
-const largeDocumentMode = ref(false);
-const largeDocumentDirty = ref(false);
-const largeDocumentEditor = ref<HTMLTextAreaElement | null>(null);
 let contentLoadSequence = 0;
 let historyLoadSequence = 0;
 let analysisLoadSequence = 0;
@@ -122,7 +116,7 @@ const editor = useEditor({
   },
 });
 
-const hasChanges = computed(() => largeDocumentMode.value ? largeDocumentDirty.value : editorDirty.value);
+const hasChanges = computed(() => editorDirty.value);
 
 const hasNameChange = computed(() => titleToFileName(editableTitle.value) !== currentFileName.value);
 const canSave = computed(() => Boolean(titleToFileName(editableTitle.value)) && (hasChanges.value || hasNameChange.value));
@@ -168,8 +162,6 @@ async function loadContent() {
   selectedRevisionId.value = "";
   revisionDiff.value = [];
   historyLoading.value = false;
-  largeDocumentMode.value = false;
-  largeDocumentDirty.value = false;
   editorDirty.value = false;
   currentFileName.value = props.sourceFile;
   editableTitle.value = splitFileName(props.sourceFile).stem;
@@ -178,16 +170,11 @@ async function loadContent() {
     if (sequence !== contentLoadSequence) return;
     loadedRevision.value = res.revision;
     documentRef.value = res.documentRef || "";
-    largeDocumentMode.value = res.content.length >= LARGE_DOCUMENT_THRESHOLD;
-    if (largeDocumentMode.value) {
-      editor.value.commands.clearContent(false);
-      await nextTick();
-      if (largeDocumentEditor.value) largeDocumentEditor.value.value = res.content;
-    } else {
-      editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
-    }
+    await nextTick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (sequence !== contentLoadSequence) return;
+    editor.value.commands.setContent(markdownToHtml(res.content), { emitUpdate: false });
     editorDirty.value = false;
-    largeDocumentDirty.value = false;
   } catch (err) {
     if (sequence !== contentLoadSequence) return;
     error.value = (err as Error).message || "Failed to load memory";
@@ -288,9 +275,7 @@ async function saveContent() {
   saving.value = true;
   error.value = "";
   try {
-    const markdown = largeDocumentMode.value
-      ? largeDocumentEditor.value?.value || ""
-      : editorToMarkdown();
+    const markdown = editorToMarkdown();
     const chunksStored = 0;
     const fileName = await applyRename();
     if (hasChanges.value) {
@@ -302,9 +287,7 @@ async function saveContent() {
       );
       loadedRevision.value = res.revision;
       currentFileName.value = res.fileName;
-      memoryJobs.upsertJob(res.job);
       editorDirty.value = false;
-      largeDocumentDirty.value = false;
     }
     editableTitle.value = splitFileName(fileName).stem;
     emit("saved", { fileName, chunksStored });
@@ -338,8 +321,7 @@ watch(
   () => [props.show, props.categoryId, props.sourceFile, editor.value] as const,
   () => {
     if (props.show) {
-      void loadContent();
-      void loadAnalysis();
+      void loadContent().then(() => loadAnalysis());
     }
   },
   { immediate: true },
@@ -389,8 +371,8 @@ onBeforeUnmount(() => {
         <button
           class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
           :class="{ 'bg-accent-500/15 text-accent-300': showHistory }"
-          :disabled="!documentRef || loading || largeDocumentMode"
-          :title="largeDocumentMode ? 'Revision diffs are disabled in large document mode' : 'Revision history'"
+          :disabled="!documentRef || loading"
+          title="Revision history"
           @click="toggleHistory"
         >
           <Icon
@@ -410,7 +392,7 @@ onBeforeUnmount(() => {
           :title="button.title"
           :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading || largeDocumentMode"
+          :disabled="!editor || loading"
           @click="button.action"
         >
           <Icon
@@ -427,7 +409,7 @@ onBeforeUnmount(() => {
           :title="`Heading ${level}`"
           :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="px-2.5 py-2 rounded-lg transition-colors text-xs font-semibold shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading || largeDocumentMode"
+          :disabled="!editor || loading"
           @click="toggleHeading(level)"
         >
           H{{ level }}
@@ -447,7 +429,7 @@ onBeforeUnmount(() => {
           :title="button.title"
           :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
-          :disabled="!editor || loading || largeDocumentMode"
+          :disabled="!editor || loading"
           @click="button.action"
         >
           <Icon
@@ -462,17 +444,6 @@ onBeforeUnmount(() => {
         class="px-5 py-2 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300 shrink-0"
       >
         {{ error }}
-      </div>
-
-      <div
-        v-if="largeDocumentMode && !showHistory"
-        class="flex items-center gap-2 border-b border-theme-800 bg-amber-500/5 px-5 py-2 text-xs text-amber-300/90 shrink-0"
-      >
-        <Icon
-          icon="lucide:gauge"
-          class="h-3.5 w-3.5"
-        />
-        Large document mode uses a lightweight plain-text editor for responsive loading and typing.
       </div>
 
       <div
@@ -505,7 +476,6 @@ onBeforeUnmount(() => {
       <div
         v-else
         class="relative flex min-h-0 flex-1 bg-theme-950/45"
-        :class="largeDocumentMode ? 'overflow-hidden' : ''"
       >
         <div
           v-if="loading"
@@ -557,6 +527,12 @@ onBeforeUnmount(() => {
                 class="py-3 text-xs leading-5 text-theme-500"
               >
                 Run Extract facts to generate chunk summaries.
+              </div>
+              <div
+                v-else-if="analysis?.status === 'too_large'"
+                class="py-3 text-xs leading-5 text-theme-500"
+              >
+                Analysis supports up to {{ analysis.maxChunks }} chunks. This document has {{ analysis.chunkCount }}.
               </div>
               <template v-else>
                 <div
@@ -641,18 +617,7 @@ onBeforeUnmount(() => {
           </div>
         </aside>
         <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <textarea
-            v-if="largeDocumentMode"
-            ref="largeDocumentEditor"
-            class="memory-large-editor h-full min-h-0 w-full resize-none overflow-auto bg-transparent p-5 font-mono text-sm leading-6 text-theme-200 outline-none"
-            aria-label="Large memory document content"
-            :disabled="loading || saving"
-            :spellcheck="false"
-            wrap="off"
-            @input="largeDocumentDirty = true"
-          />
           <EditorContent
-            v-else
             :editor="editor"
             class="memory-editor-shell"
           />
