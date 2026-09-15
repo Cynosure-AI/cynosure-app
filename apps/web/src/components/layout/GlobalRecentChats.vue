@@ -7,6 +7,7 @@ import { wsConnected } from '../../api/http'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
+import { useAppBranding } from '../../composables/useAppBranding'
 
 const props = withDefaults(defineProps<{
   awaitingConversationIds?: string[]
@@ -24,6 +25,7 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
+const { logoIconUrl } = useAppBranding()
 const conversations = ref<Conversation[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -382,9 +384,16 @@ onBeforeUnmount(() => {
             class="h-full w-full object-cover"
             :class="{ 'opacity-15': runningIds.has(conversation.id) }"
           >
+          <img
+            v-else-if="!conversation.agentId"
+            :src="logoIconUrl"
+            alt="Cynosure"
+            class="h-full w-full object-cover"
+            :class="{ 'opacity-15': runningIds.has(conversation.id) }"
+          >
           <Icon
             v-else
-            :icon="conversation.agentId ? 'lucide:bot' : 'lucide:message-square'"
+            icon="lucide:bot"
             class="h-3.5 w-3.5"
             :class="{ 'opacity-15': runningIds.has(conversation.id) }"
           />
