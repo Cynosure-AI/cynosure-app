@@ -717,8 +717,8 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
     </div>
 
     <!-- Search -->
-    <div class="mb-3 space-y-2">
-      <div class="relative">
+    <div class="mb-3 flex items-center gap-2">
+      <div class="relative min-w-0 flex-1">
         <Icon
           icon="lucide:search"
           class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-theme-500"
@@ -736,7 +736,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
           class="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
         />
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="flex shrink-0 items-center gap-2">
         <button
           type="button"
           class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
