@@ -31,7 +31,7 @@ const props = defineProps<{
 }>();
 
 const layerRef = ref<HTMLElement | null>(null);
-const markers = ref<Array<{ chunk: MemoryDocumentAnalysis["chunks"][number]; top: number }>>([]);
+const markers = ref<Array<{ chunk: MemoryDocumentAnalysis["chunks"][number]; top: number; first: boolean }>>([]);
 let resizeObserver: ResizeObserver | null = null;
 let boundaryElements = new Set<HTMLElement>();
 const markdownParser = new Marked({ breaks: true });
@@ -135,7 +135,7 @@ async function updateMarkers() {
   await nextTick();
   const editor = props.editor;
   const layer = layerRef.value;
-  if (!editor || !layer || props.chunks.length < 2) {
+  if (!editor || !layer || props.chunks.length < 1) {
     updateBoundarySpacing(new Set());
     markers.value = [];
     return;
@@ -156,7 +156,6 @@ async function updateMarkers() {
     const match = markerPosition(text, positions, chunk.text, previousOffset);
     if (!match) continue;
     previousOffset = match.textOffset;
-    if (chunk.chunkIndex === 0) continue;
     const element = boundaryElement(editor, match.documentPosition);
     if (element) nextBoundaryElements.add(element);
     matchedChunks.push({ chunk, documentPosition: match.documentPosition, spaced: Boolean(element) });
@@ -168,6 +167,7 @@ async function updateMarkers() {
     nextMarkers.push({
       chunk: match.chunk,
       top: Math.max(0, coords.top - layerTop - (match.spaced ? 22 : 6)),
+      first: match.chunk.chunkIndex === 0,
     });
   }
   markers.value = nextMarkers;
@@ -220,7 +220,7 @@ onBeforeUnmount(() => {
       >
         <div
           class="group flex w-full items-center gap-2"
-          :aria-label="`Chunk ${marker.chunk.chunkIndex + 1} boundary`"
+          :aria-label="marker.first ? 'Chunk 1 start' : `Chunk ${marker.chunk.chunkIndex + 1} boundary`"
         >
           <div class="h-px flex-1 border-t-2 border-accent-500/55 shadow-[0_0_8px_color-mix(in_srgb,var(--color-accent-500)_25%,transparent)] transition-colors group-hover:border-accent-300" />
           <span class="rounded-full border border-accent-400/60 bg-accent-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-accent-300 shadow-md shadow-black/30 transition-colors group-hover:bg-accent-500/25">

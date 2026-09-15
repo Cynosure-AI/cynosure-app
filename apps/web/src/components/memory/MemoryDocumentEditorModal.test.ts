@@ -84,7 +84,10 @@ describe('MemoryDocumentEditorModal', () => {
         { chunkIndex: 0, text: 'First chunk', sectionPath: 'First', summary: 'The first summary.', tags: ['alpha'] },
         { chunkIndex: 1, text: 'Second chunk', sectionPath: 'Second', summary: 'The second summary.', tags: ['beta'] },
       ],
-      items: [{ kind: 'relationship', label: 'Atlas uses TypeScript', chunkIndex: 1, importance: 2 }],
+      items: [{
+        kind: 'relationship', label: 'uses -> TypeScript', relation: 'uses', entity: 'TypeScript', subject: 'Atlas',
+        reasoning: 'The document explicitly says Atlas uses TypeScript.', chunkIndex: 1, importance: 2,
+      }],
       itemTotal: 1,
     })
     const wrapper = mount(MemoryDocumentEditorModal, {
@@ -98,12 +101,23 @@ describe('MemoryDocumentEditorModal', () => {
     await vi.waitFor(() => expect(mocks.getDocumentAnalysis).toHaveBeenCalledOnce())
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Atlas uses TypeScript')
+    expect(wrapper.text()).toContain('uses')
+    expect(wrapper.text()).toContain('TypeScript')
     expect(wrapper.text()).not.toContain('The first summary.')
+    const firstChunk = wrapper.get('[aria-label="Chunk 1 start"]')
+    firstChunk.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
+    await flushPromises()
+    expect(document.body.querySelector('[aria-label="Summary for chunk 1"]')?.textContent).toContain('The first summary.')
     const boundary = wrapper.get('[aria-label="Chunk 2 boundary"]')
     boundary.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
     await flushPromises()
     expect(document.body.querySelector('[aria-label="Summary for chunk 2"]')?.textContent).toContain('The second summary.')
     expect(document.body.querySelector('[aria-label="Summary for chunk 2"]')?.textContent).toContain('beta')
+
+    const knowledge = wrapper.get('[aria-label="Document analysis"] span.font-mono')
+    knowledge.element.closest('div.flex')?.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
+    await flushPromises()
+    expect(document.body.querySelector('[aria-label="Reasoning for uses -> TypeScript"]')?.textContent)
+      .toContain('The document explicitly says Atlas uses TypeScript.')
   })
 })

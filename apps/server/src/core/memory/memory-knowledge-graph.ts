@@ -30,6 +30,10 @@ export interface DocumentAnalysisChunk {
 export interface DocumentAnalysisItem extends DocumentKnowledgePreviewItem {
   chunkIndex: number
   importance?: ImportanceLevel
+  relation: string
+  entity: string
+  subject?: string
+  reasoning: string
 }
 
 export interface DocumentAnalysisRecord {
@@ -367,7 +371,7 @@ export class MemoryKnowledgeGraphStore {
     const relationshipRows = getDb().prepare(`
       SELECT DISTINCT a.id, a.object_value_json, p.canonical_name,
         subject.canonical_name AS subject_name, object.canonical_name AS object_name,
-        a.importance, tu.chunk_index
+        a.importance, tu.chunk_index, ev.note AS reasoning
       FROM memory_knowledge_assertion_evidence ev
       JOIN memory_knowledge_assertions a ON a.id = ev.assertion_id
       JOIN memory_knowledge_predicates p ON p.id = a.predicate_id
@@ -378,7 +382,8 @@ export class MemoryKnowledgeGraphStore {
       ORDER BY tu.chunk_index, a.importance DESC, a.updated_at DESC
     `).all(run.id) as Array<Record<string, unknown>>
     const entityRows = getDb().prepare(`
-      SELECT e.id, e.canonical_name, e.entity_type, MIN(tu.chunk_index) AS chunk_index
+      SELECT e.id, e.canonical_name, e.entity_type, MIN(tu.chunk_index) AS chunk_index,
+        mention.note AS reasoning
       FROM memory_knowledge_entity_mentions mention
       JOIN memory_knowledge_entities e ON e.id = mention.entity_id AND e.status = 'active'
       JOIN memory_knowledge_text_units tu ON tu.id = mention.text_unit_id
@@ -402,13 +407,20 @@ export class MemoryKnowledgeGraphStore {
       items: [
         ...relationshipRows.map((row) => ({
           kind: 'relationship' as const,
-          label: `${row.subject_name} ${String(row.canonical_name).replace(/_/g, ' ')} ${row.object_name || formatLiteral(row.object_value_json)}`,
+          label: `${row.canonical_name} -> ${row.object_name || formatLiteral(row.object_value_json)}`,
+          relation: String(row.canonical_name),
+          entity: String(row.object_name || formatLiteral(row.object_value_json)),
+          subject: String(row.subject_name),
+          reasoning: String(row.reasoning || ''),
           chunkIndex: Number(row.chunk_index),
           importance: Math.min(3, Math.max(0, Number(row.importance))) as ImportanceLevel,
         })),
         ...entityRows.map((row) => ({
           kind: 'entity' as const,
-          label: `${row.canonical_name} (${String(row.entity_type).replace(/_/g, ' ')})`,
+          label: `entity -> ${row.canonical_name}`,
+          relation: 'entity',
+          entity: String(row.canonical_name),
+          reasoning: String(row.reasoning || ''),
           chunkIndex: Number(row.chunk_index),
         })),
       ].sort((a, b) => a.chunkIndex - b.chunkIndex),

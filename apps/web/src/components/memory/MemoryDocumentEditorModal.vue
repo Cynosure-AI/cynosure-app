@@ -14,6 +14,7 @@ import { api } from "../../api/client";
 import type { MemoryDiffSegment, MemoryDocumentAnalysis, MemoryRevisionSummary } from "../../api/types";
 import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 import MemoryChunkMarkers from "./MemoryChunkMarkers.vue";
+import HoverTooltip from "../shared/HoverTooltip.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
@@ -546,17 +547,44 @@ onBeforeUnmount(() => {
                   v-if="analysis?.items.length"
                   class="space-y-1.5"
                 >
-                  <div
+                  <HoverTooltip
                     v-for="(item, index) in analysis.items"
                     :key="`${item.kind}-${item.chunkIndex}-${index}`"
-                    class="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs leading-4 text-theme-300 hover:bg-theme-900/70"
+                    placement="mouse"
+                    :max-width="420"
+                    :disabled="!item.reasoning"
+                    block
                   >
-                    <Icon
-                      :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:circle-dot'"
-                      class="mt-0.5 h-3.5 w-3.5 shrink-0 text-theme-500"
-                    />
-                    <span>{{ item.label }}</span>
-                  </div>
+                    <div class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-xs leading-4 text-theme-300 hover:bg-theme-900/70">
+                      <Icon
+                        :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:circle-dot'"
+                        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-theme-500"
+                      />
+                      <span
+                        v-if="item.relation && item.entity"
+                        class="min-w-0"
+                      >
+                        <span class="font-mono text-accent-400">{{ item.relation }}</span>
+                        <span class="mx-1.5 text-theme-600">→</span>
+                        <span>{{ item.entity }}</span>
+                      </span>
+                      <span v-else>{{ item.label }}</span>
+                    </div>
+                    <template #content>
+                      <div
+                        class="min-w-64 text-[12px] leading-5 text-theme-200"
+                        :aria-label="`Reasoning for ${item.label}`"
+                      >
+                        <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent-400">
+                          Why this was extracted
+                        </div>
+                        <p>{{ item.reasoning }}</p>
+                        <div class="mt-2 text-[10px] text-theme-500">
+                          <span v-if="item.subject">Subject: {{ item.subject }} · </span>Chunk {{ item.chunkIndex + 1 }}
+                        </div>
+                      </div>
+                    </template>
+                  </HoverTooltip>
                 </div>
                 <div
                   v-else
