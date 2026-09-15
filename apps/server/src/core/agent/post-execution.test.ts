@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 const { complete, run, prepare, gateway } = vi.hoisted(() => {
   const complete = vi.fn()
   const run = vi.fn()
-  const prepare = vi.fn(() => ({ run }))
+  const prepare = vi.fn((_sql?: string) => ({ run, get: vi.fn() }))
   const gateway = {
     complete,
     getProvider: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock('../gateway/gateway.js', () => ({
   getGateway: () => gateway,
 }))
 
-import { buildFallbackTitle, generateTitle } from './post-execution.js'
+import { buildFallbackTitle, generateQuickResponses, generateTitle, parseQuickResponses } from './post-execution.js'
 
 describe('title generation', () => {
   beforeEach(() => {
@@ -104,5 +104,65 @@ describe('title generation', () => {
       expect.any(Number),
       'conversation-3',
     )
+  })
+})
+
+describe('quick response parsing', () => {
+  beforeEach(() => {
+    complete.mockReset()
+    run.mockReset()
+    prepare.mockReset()
+    prepare.mockImplementation((sql?: string) => ({
+      run,
+      get: vi.fn(() => sql?.includes("role = 'assistant'") ? { id: 'assistant-1' } : undefined),
+    }))
+  })
+
+  test('accepts JSON, removes duplicates, and caps suggestions at three', () => {
+    expect(parseQuickResponses(JSON.stringify([
+      'Show me an example',
+      'Explain the tradeoffs',
+      'show me an example',
+      'What should I do next?',
+      'A fourth unique option',
+    ]))).toEqual([
+      'Show me an example',
+      'Explain the tradeoffs',
+      'What should I do next?',
+    ])
+  })
+
+  test('tolerates fenced objects and simple list output', () => {
+    expect(parseQuickResponses('```json\n{"suggestions":["One", "Two"]}\n```')).toEqual(['One', 'Two'])
+    expect(parseQuickResponses('- First\n2. Second')).toEqual(['First', 'Second'])
+  })
+
+  test('persists and broadcasts suggestions for the latest assistant message', async () => {
+    complete.mockResolvedValueOnce({ content: '["Show an example", "Explain the tradeoffs"]' })
+    const broadcast = vi.fn()
+
+    await generateQuickResponses({
+      conversationId: 'conversation-1',
+      messageId: 'assistant-1',
+      userMessage: 'How does this work?',
+      assistantResponse: 'It works in two stages.',
+      broadcast,
+    })
+
+    expect(broadcast).toHaveBeenCalledWith('chat:post-action', {
+      conversationId: 'conversation-1',
+      action: 'generating-quick-responses',
+      status: 'started',
+    })
+    expect(run).toHaveBeenCalledWith(
+      '["Show an example","Explain the tradeoffs"]',
+      'assistant-1',
+      'conversation-1',
+    )
+    expect(broadcast).toHaveBeenCalledWith('chat:quick-responses', {
+      conversationId: 'conversation-1',
+      messageId: 'assistant-1',
+      suggestions: ['Show an example', 'Explain the tradeoffs'],
+    })
   })
 })

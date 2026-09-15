@@ -59,7 +59,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'chat',
     label: 'Chat',
-    description: 'Control automatic tool and memory modes, generated titles, and context handling for conversations.',
+    description: 'Control generated titles, quick responses, and context handling for conversations.',
     icon: 'lucide:message-square',
     component: ChatSettings
   },
@@ -171,6 +171,13 @@ const sections: SettingsSection[] = [
     label: 'Generate Chat Titles',
     description: 'Generate a descriptive title as a pre-response action on the first turn.',
     terms: ['generate chat titles', 'titles', 'chat titles', 'conversation titles', 'title model', 'pre-response action']
+  },
+  {
+    id: 'quick-responses',
+    categoryId: 'chat',
+    label: 'Quick Responses',
+    description: 'Suggest relevant follow-up messages after each assistant turn.',
+    terms: ['quick responses', 'suggestions', 'follow-up', 'follow up', 'post-turn action', 'experimental']
   },
   {
     id: 'dream-mode',

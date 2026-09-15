@@ -111,6 +111,7 @@ export function useChatMessages(
                 allowedTools: agentConfig.selectedToolNames.value,
                 systemPrompt: agentConfig.sessionSystemPrompt.value || activeAgent?.systemPrompt || undefined,
                 generateTitle: prefs.generateTitle,
+                generateQuickResponses: prefs.quickResponses,
                 subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
                 memoryFolderIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemoryFolderIds.value] : undefined,
                 thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
