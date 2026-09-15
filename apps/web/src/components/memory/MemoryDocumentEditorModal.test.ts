@@ -98,12 +98,9 @@ describe('MemoryDocumentEditorModal', () => {
     await vi.waitFor(() => expect(mocks.getDocumentAnalysis).toHaveBeenCalledOnce())
     await flushPromises()
 
-    expect(wrapper.text()).toContain('The first summary.')
-    expect(wrapper.text()).toContain('The second summary.')
-    expect(wrapper.text()).toContain('alpha')
     expect(wrapper.text()).toContain('Atlas uses TypeScript')
+    expect(wrapper.text()).not.toContain('The first summary.')
     const boundary = wrapper.get('[aria-label="Chunk 2 boundary"]')
-    expect(boundary.exists()).toBe(true)
     boundary.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
     await flushPromises()
     expect(document.body.querySelector('[aria-label="Summary for chunk 2"]')?.textContent).toContain('The second summary.')
