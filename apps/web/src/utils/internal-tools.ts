@@ -6,7 +6,6 @@ const INTERNAL_TOOL_PREFIXES = [
 
 export const AUTO_MEMORY_TOOL_NAMES = [
   'memory_search',
-  'memory_read',
   'memory_create',
   'memory_patch',
 ] as const

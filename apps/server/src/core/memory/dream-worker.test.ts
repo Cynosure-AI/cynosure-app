@@ -26,7 +26,7 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
             execute: (params: unknown) => mocks.tool(name, params, opts) }
     }
     return {
-        makeMemorySearchTool: make('memory_search'), makeMemoryReadTool: make('memory_read'), makeMemoryCreateTool: make('memory_create'),
+        makeMemorySearchTool: make('memory_search'), makeMemoryCreateTool: make('memory_create'),
         makeMemoryPatchTool: make('memory_patch'),
     }
 })
@@ -288,7 +288,7 @@ describe('Dream worker', () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
             const result = await config.tools.find(tool => tool.name === 'memory_create')!.execute({})
             expect(result.success).toBe(false)
-            expect(config.tools).toHaveLength(5)
+            expect(config.tools).toHaveLength(4)
             expect(config.tools.some(tool => /append|replace_range|remove_range|shell|knowledge/.test(tool.name))).toBe(false)
         })
         await ready()
