@@ -412,7 +412,7 @@ export interface MemoryDocumentKnowledgePreview {
 }
 
 export interface MemoryDocumentAnalysis {
-    status: 'not_analyzed' | 'current' | 'needs_refresh' | 'too_large'
+    status: 'not_analyzed' | 'searchable' | 'current' | 'needs_refresh' | 'too_large'
     chunkCount?: number
     maxChunks?: number
     pipelineVersion?: string
@@ -674,7 +674,8 @@ export interface MetricsSummary {
         avgLatencyMs: number
         estimatedCost: number | null
         chatEstimatedCost: number | null
-        auxiliaryEstimatedCost: number | null
+        memoryEstimatedCost: number | null
+        autoRoutingEstimatedCost: number | null
         dreamingEstimatedCost: number | null
     }
     modelUsage: {

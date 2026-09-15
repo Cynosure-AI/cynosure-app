@@ -27,6 +27,7 @@ interface MarkerEditor {
 const props = defineProps<{
   editor: MarkerEditor | null | undefined;
   chunks: MemoryDocumentAnalysis["chunks"];
+  showDetails?: boolean;
 }>();
 
 /** Minimum vertical distance between two badges so boundaries never stack up. */
@@ -218,6 +219,7 @@ onBeforeUnmount(() => {
       <HoverTooltip
         placement="mouse"
         :max-width="460"
+        :disabled="showDetails === false"
         block
       >
         <div

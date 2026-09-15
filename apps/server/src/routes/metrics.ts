@@ -47,7 +47,8 @@ interface MetricsSummary {
         avgLatencyMs: number
         estimatedCost: number | null
         chatEstimatedCost: number | null
-        auxiliaryEstimatedCost: number | null
+        memoryEstimatedCost: number | null
+        autoRoutingEstimatedCost: number | null
         dreamingEstimatedCost: number | null
     }
     modelUsage: ModelUsage[]
@@ -367,14 +368,20 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
         // ── Origin breakdown ────────────────────────────────────────────────
 
         const originBreakdown = db.prepare(`
-            SELECT
-                COALESCE(origin, 'chat') as origin,
-                COUNT(*) as count
-            FROM conversations
-            WHERE created_at >= ?
+            SELECT origin, SUM(count) AS count FROM (
+                SELECT COALESCE(origin, 'chat') as origin, COUNT(*) as count
+                FROM conversations
+                WHERE created_at >= ?
+                GROUP BY origin
+                UNION ALL
+                SELECT 'dreaming' as origin, COUNT(*) as count
+                FROM dream_runs
+                WHERE created_at >= ?
+                HAVING COUNT(*) > 0
+            )
             GROUP BY origin
             ORDER BY count DESC
-        `).all(sinceMs) as { origin: string; count: number }[]
+        `).all(sinceMs, sinceMs) as { origin: string; count: number }[]
 
         // ── Assemble response ───────────────────────────────────────────────
 
@@ -419,16 +426,20 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             if (m.estimatedCost === null) return sum
             return (sum ?? 0) + m.estimatedCost
         }, null)
-        const auxiliaryEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {
-            if (m.kind === 'dreaming' || m.estimatedCost === null) return sum
+        const memoryEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {
+            if (!['embedding', 'reranker', 'deep-research'].includes(m.kind) || m.estimatedCost === null) return sum
+            return (sum ?? 0) + m.estimatedCost
+        }, null)
+        const autoRoutingEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {
+            if (!['memory-router', 'tool-router'].includes(m.kind) || m.estimatedCost === null) return sum
             return (sum ?? 0) + m.estimatedCost
         }, null)
         const dreamingEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {
             if (m.kind !== 'dreaming' || m.estimatedCost === null) return sum
             return (sum ?? 0) + m.estimatedCost
         }, null)
-        const totalEstimatedCost = chatEstimatedCost !== null || auxiliaryEstimatedCost !== null || dreamingEstimatedCost !== null
-            ? (chatEstimatedCost ?? 0) + (auxiliaryEstimatedCost ?? 0) + (dreamingEstimatedCost ?? 0)
+        const totalEstimatedCost = chatEstimatedCost !== null || memoryEstimatedCost !== null || autoRoutingEstimatedCost !== null || dreamingEstimatedCost !== null
+            ? (chatEstimatedCost ?? 0) + (memoryEstimatedCost ?? 0) + (autoRoutingEstimatedCost ?? 0) + (dreamingEstimatedCost ?? 0)
             : null
 
         const response: MetricsSummary = {
@@ -441,7 +452,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 avgLatencyMs: Math.round(totals.avg_latency),
                 estimatedCost: totalEstimatedCost,
                 chatEstimatedCost,
-                auxiliaryEstimatedCost,
+                memoryEstimatedCost,
+                autoRoutingEstimatedCost,
                 dreamingEstimatedCost,
             },
             modelUsage: modelUsageWithCost.slice(0, 20),
