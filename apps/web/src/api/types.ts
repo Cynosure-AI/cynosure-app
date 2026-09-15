@@ -380,7 +380,7 @@ export interface MemoryFileSearchResult extends MemoryFileStatus {
     categoryId: string
     categoryName: string
     categoryPath: string
-    matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary'>
+    matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary' | 'content'>
 }
 
 export interface MemoryRevisionSummary {

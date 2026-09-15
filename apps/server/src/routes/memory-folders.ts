@@ -51,6 +51,7 @@ import {
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
+import { buildMemoryFolderFilter } from '../core/memory/memory-folder-scope.js'
 import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, markMemoryCategoriesDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
@@ -106,7 +107,7 @@ export interface MemoryFileSearchResult extends MemoryFileStatus {
     categoryId: string
     categoryName: string
     categoryPath: string
-    matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary'>
+    matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary' | 'content'>
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +212,44 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
 
 export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise<void> {
 
-    app.get<{ Querystring: { query?: string } }>('/file-search', async (req) => {
+    app.get<{ Querystring: { query?: string; categoryId?: string; semantic?: string } }>('/file-search', async (req, reply) => {
         const query = (req.query.query || '').normalize('NFKC').trim().toLocaleLowerCase().slice(0, 200)
         if (!query) return []
         const terms = query.split(/\s+/).filter(Boolean)
         syncMemoryFoldersFromFolders(getDb())
-        const rows = getDb().prepare('SELECT * FROM memory_folders ORDER BY sort_order, name').all() as MemoryFolderRow[]
+        const allRows = getDb().prepare('SELECT * FROM memory_folders ORDER BY sort_order, name').all() as MemoryFolderRow[]
+        const requestedCategoryId = req.query.categoryId ? decodeCategoryIdParam(req.query.categoryId) : ''
+        const rows = requestedCategoryId ? allRows.filter((row) => row.id === requestedCategoryId) : allRows
+        if (requestedCategoryId && rows.length === 0) return reply.status(404).send({ error: 'Memory folder not found' })
+
+        if (req.query.semantic === 'true') {
+            const filter = buildMemoryFolderFilter(rows)
+            const chunks = await getAgentMemory().recall(query, 100, filter)
+            const rankByFile = new Map<string, number>()
+            for (const chunk of chunks) {
+                if (!chunk.categoryId || !chunk.sourceFile) continue
+                const key = `${chunk.categoryId}\0${chunk.sourceFile}`
+                if (!rankByFile.has(key)) rankByFile.set(key, rankByFile.size)
+            }
+            const results: Array<MemoryFileSearchResult & { rank: number }> = []
+            for (const row of rows) {
+                const folderData = memoryFolderDirectoryData(row)
+                const candidateNames = new Set([...rankByFile.keys()]
+                    .filter((key) => key.startsWith(`${row.id}\0`))
+                    .map((key) => key.slice(row.id.length + 1)))
+                for (const file of listMemoryFiles(row, candidateNames)) {
+                    results.push({
+                        ...file,
+                        categoryId: row.id,
+                        categoryName: row.name,
+                        categoryPath: folderData.categoryPath,
+                        matchedFields: ['content'],
+                        rank: rankByFile.get(`${row.id}\0${file.fileName}`) ?? Number.MAX_SAFE_INTEGER,
+                    })
+                }
+            }
+            return results.sort((a, b) => a.rank - b.rank).map(({ rank: _rank, ...result }) => result)
+        }
         const summaries = getDb().prepare(`
             SELECT r.category_id, r.file_name, GROUP_CONCAT(tu.summary, ' ') AS summaries
             FROM memory_knowledge_index_runs r

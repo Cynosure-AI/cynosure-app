@@ -84,6 +84,8 @@ const page = ref(0);
 const visibleDocumentRows = ref<DocumentRow[]>([]);
 const globalSearchResults = ref<MemoryFileSearchResult[]>([]);
 const globalSearchLoading = ref(false);
+const searchAllFolders = ref(false);
+const semanticSearch = ref(false);
 let globalSearchTimer: number | null = null;
 let globalSearchSequence = 0;
 
@@ -124,6 +126,9 @@ const globalColumns: Column<GlobalDocumentRow>[] = [
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "status", label: "Searchable", minWidth: "150px", grow: 1, sortable: true, sortValue: (file) => file.status },
 ];
+const searchColumns = computed(() => searchAllFolders.value
+  ? globalColumns
+  : globalColumns.filter((column) => column.key !== "categoryName"));
 
 const allFilteredSelected = computed(
   () =>
@@ -453,7 +458,7 @@ watch(() => props.focusFile, (fileName, previousFileName) => {
   page.value = 0;
 });
 
-watch(searchQuery, (query) => {
+watch([searchQuery, searchAllFolders, semanticSearch, () => props.categoryId], ([query]) => {
   page.value = 0;
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   const trimmed = query.trim();
@@ -467,14 +472,17 @@ watch(searchQuery, (query) => {
   globalSearchLoading.value = true;
   globalSearchTimer = window.setTimeout(async () => {
     try {
-      const results = await api.memoryFolders.searchFiles(trimmed);
+      const results = await api.memoryFolders.searchFiles(trimmed, {
+        categoryId: searchAllFolders.value ? undefined : props.categoryId,
+        semantic: semanticSearch.value,
+      });
       if (sequence === globalSearchSequence) globalSearchResults.value = results;
     } catch {
       if (sequence === globalSearchSequence) globalSearchResults.value = [];
     } finally {
       if (sequence === globalSearchSequence) globalSearchLoading.value = false;
     }
-  }, 200);
+  }, semanticSearch.value ? 400 : 200);
 });
 
 onUnmounted(() => {
@@ -666,7 +674,9 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
     <div class="flex items-center justify-between mb-2">
       <div class="text-xs text-theme-500">
         <template v-if="searchQuery.trim()">
-          {{ globalSearchResults.length }} result{{ globalSearchResults.length !== 1 ? "s" : "" }} across all folders
+          {{ globalSearchResults.length }} result{{ globalSearchResults.length !== 1 ? "s" : "" }}
+          {{ searchAllFolders ? "across all folders" : `in ${currentSpace?.name || "this folder"}` }}
+          <span v-if="semanticSearch"> · semantic</span>
         </template>
         <template v-else>
           {{ files.length }} file{{ files.length !== 1 ? "s" : "" }}
@@ -707,7 +717,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
     </div>
 
     <!-- Search -->
-    <div class="mb-3">
+    <div class="mb-3 space-y-2">
       <div class="relative">
         <Icon
           icon="lucide:search"
@@ -725,6 +735,29 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
           icon="lucide:loader-2"
           class="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
         />
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
+          :class="searchAllFolders ? 'border-accent-500/30 bg-accent-500/10 text-accent-300' : 'border-theme-800 text-theme-500 hover:text-theme-300'"
+          :aria-pressed="searchAllFolders"
+          @click="searchAllFolders = !searchAllFolders"
+        >
+          <Icon :icon="searchAllFolders ? 'lucide:folders' : 'lucide:folder'" class="h-3.5 w-3.5" />
+          All folders
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
+          :class="semanticSearch ? 'border-accent-500/30 bg-accent-500/10 text-accent-300' : 'border-theme-800 text-theme-500 hover:text-theme-300'"
+          :aria-pressed="semanticSearch"
+          title="Vectorize the query and match indexed document content"
+          @click="semanticSearch = !semanticSearch"
+        >
+          <Icon icon="lucide:sparkles" class="h-3.5 w-3.5" />
+          Semantic
+        </button>
       </div>
     </div>
 
@@ -826,19 +859,19 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
       </div>
     </div>
 
-    <!-- Global cross-folder search results -->
+    <!-- Scoped or global search results -->
     <DataTable
       v-if="searchQuery.trim()"
       v-model:page="page"
       :items="globalDocumentRows"
-      :columns="globalColumns"
+      :columns="searchColumns"
       :selectable="false"
       :row-clickable="true"
       :row-class="(file) => !file.textDirect ? 'opacity-60' : 'cursor-pointer'"
       :pagination="true"
       :page-size="FILES_PAGE_SIZE"
       pagination-position="both"
-      :empty-message="globalSearchLoading ? 'Searching all folders…' : `No files matching '${searchQuery.trim()}'`"
+      :empty-message="globalSearchLoading ? (semanticSearch ? 'Searching semantically…' : 'Searching…') : `No files matching '${searchQuery.trim()}'`"
       @row-click="openGlobalResult"
     >
       <template #col-fileName="{ item: file }">
