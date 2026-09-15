@@ -30,6 +30,14 @@ vi.mock('../../api/client', () => ({
     },
     memory: {
       onReembedProgress: vi.fn(() => () => undefined),
+      getLimits: vi.fn().mockResolvedValue({
+        analysisChunkLimit: 20,
+        chunking: { minChunkSize: 64, maxChunkSize: 4096, defaultChunkSize: 512, defaultChunkOverlap: 64 },
+        reranker: { minCandidateCount: 3, maxCandidateCount: 100, defaultCandidateCount: 50 },
+        attachments: { minInlineTextLimit: 2_000, maxInlineTextLimit: 500_000, defaultInlineTextLimit: 24_000 },
+        chunkReadLimit: 20,
+        graph: { maxNodes: 5000, defaultNodes: 80, maxSuggestions: 20, defaultSuggestions: 8, maxSeedNodes: 50, maxCategories: 100 },
+      }),
       getDreamConfig: mocks.getDreamConfig,
       configureDream: mocks.configureDream,
       getEmbeddingConfig: mocks.getEmbeddingConfig,

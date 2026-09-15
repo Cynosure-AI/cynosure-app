@@ -9,6 +9,7 @@ import type { ContextEvidence } from '@shared/types'
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'fs'
 import { basename, join, sep } from 'path'
 import { getAppDataDir } from '../data-dir.js'
+import { MAX_CHUNK_READ } from '../runtime-limits.js'
 import { nanoid } from 'nanoid'
 
 export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'
@@ -417,7 +418,7 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
                 properties: {
                     attachmentId: { type: 'string', description: 'The attachmentId shown by attachment_search.' },
                     minIndex: { type: 'number', description: 'Minimum zero-based chunk index.' },
-                    maxIndex: { type: 'number', description: 'Maximum zero-based chunk index, inclusive. Capped to 20 chunks per call.' },
+                    maxIndex: { type: 'number', description: `Maximum zero-based chunk index, inclusive. Capped to ${MAX_CHUNK_READ} chunks per call.` },
                 },
                 required: ['attachmentId', 'minIndex', 'maxIndex'],
             },
@@ -429,7 +430,7 @@ export function makeAttachmentTools(conversationId: string): ToolDefinition[] {
                 if (!attachment) return { success: false, output: `No attachment found with id "${attachmentId}".\n${formatAttachmentList(attachments)}` }
 
                 const start = Math.max(0, Math.floor(minIndex))
-                const end = Math.min(Math.max(start, Math.floor(maxIndex)), start + 19)
+                const end = Math.min(Math.max(start, Math.floor(maxIndex)), start + MAX_CHUNK_READ - 1)
                 const chunks = await getConversationAttachmentChunks(conversationId, attachmentId, start, end)
                 if (!chunks.length) return { success: false, output: `No chunks found for "${attachment.name}" in range ${start}-${end}.` }
 

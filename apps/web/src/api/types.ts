@@ -371,9 +371,41 @@ export interface MemoryFileStatus {
     lastIndexedAt?: number
     deepResearched: boolean
     analysisStatus: 'not_analyzed' | 'current' | 'needs_refresh'
+    /** Server-enforced maximum chunk count for Deep Research eligibility. */
+    analysisChunkLimit: number
     deepResearchedAt?: number
     dreamedAt?: number
     tags: string[]
+}
+
+/** Canonical cross-boundary limits served by `GET /api/memory/limits`. */
+export interface RuntimeLimits {
+    analysisChunkLimit: number
+    chunking: {
+        minChunkSize: number
+        maxChunkSize: number
+        defaultChunkSize: number
+        defaultChunkOverlap: number
+    }
+    reranker: {
+        minCandidateCount: number
+        maxCandidateCount: number
+        defaultCandidateCount: number
+    }
+    attachments: {
+        minInlineTextLimit: number
+        maxInlineTextLimit: number
+        defaultInlineTextLimit: number
+    }
+    chunkReadLimit: number
+    graph: {
+        maxNodes: number
+        defaultNodes: number
+        maxSuggestions: number
+        defaultSuggestions: number
+        maxSeedNodes: number
+        maxCategories: number
+    }
 }
 
 export interface MemoryFileSearchResult extends MemoryFileStatus {

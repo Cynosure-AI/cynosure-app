@@ -5,8 +5,8 @@ import { getDb } from '../../db/database.js'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { deepResearchContent, mergeDeepResearchChunkTags } from './deep-research-extractor.js'
 import type { DeepResearchResult as DeepResearchedKnowledge } from './deep-research-extractor.js'
+import { MAX_ANALYSIS_CHUNKS } from '../runtime-limits.js'
 
-export const MAX_DEEP_RESEARCH_CHUNKS = 20 //Should stay in-sync with MAX_ANALYSIS_CHUNKS
 import {
   getMemoryKnowledgeStore,
   MEMORY_KNOWLEDGE_PIPELINE_VERSION,
@@ -269,8 +269,8 @@ export async function deepResearchMemoryContent(opts: {
   const sourceId = memoryKnowledgeSourceId(opts.categoryId, opts.fileName)
   const configuredTarget = getDeepResearchConfig()
   const chunks = await getMemoryParser().prepareChunks(opts.content, opts.fileName)
-  if (chunks.length > MAX_DEEP_RESEARCH_CHUNKS) {
-    throw new Error(`Analysis supports at most ${MAX_DEEP_RESEARCH_CHUNKS} chunks; this document has ${chunks.length}.`)
+  if (chunks.length > MAX_ANALYSIS_CHUNKS) {
+    throw new Error(`Analysis supports at most ${MAX_ANALYSIS_CHUNKS} chunks; this document has ${chunks.length}.`)
   }
   if (chunks.length === 0) {
     if (opts.replaceExisting !== false) deleteMemoryKnowledgeSource(opts.categoryId, opts.fileName)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
+import { useRuntimeLimits } from "../../api/limits";
 import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
@@ -36,10 +37,23 @@ const emit = defineEmits<{
 
 // --- Constants ---
 const FILES_PAGE_SIZE = 30;
-const MAX_ANALYSIS_CHUNKS = 20; //Should stay in-sync with MAX_DEEP_RESEARCH_CHUNKS
+
+const { limits } = useRuntimeLimits();
+
+/** Deep Research eligibility is decided by the limit the server attaches to
+ * each file row, so the button can never be offered for a document the server
+ * would reject. See api/limits.ts for the rationale. The served limits value is
+ * only a fallback for a file row from an older server. */
+function analysisChunkLimit(file: MemoryFileStatus): number {
+  return file.analysisChunkLimit ?? limits.value.analysisChunkLimit;
+}
 
 function supportsAnalysis(file: MemoryFileStatus): boolean {
-  return file.status === "indexed" && (file.chunkCount || 0) <= MAX_ANALYSIS_CHUNKS;
+  return file.status === "indexed" && (file.chunkCount || 0) <= analysisChunkLimit(file);
+}
+
+function exceedsAnalysisLimit(file: MemoryFileStatus): boolean {
+  return file.status === "indexed" && (file.chunkCount || 0) > analysisChunkLimit(file);
 }
 
 // --- State ---
@@ -900,7 +914,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             {{ file.categoryName }}
           </div>
           <div
-            v-if="file.categoryPath"
+            v-if="file.categoryPath && file.categoryPath !== file.categoryName"
             class="truncate text-[10px] text-theme-600"
           >
             {{ file.categoryPath }}
@@ -1184,9 +1198,9 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             {{ file.analysisStatus === 'needs_refresh' ? 'Refresh analysis' : 'Run Deep Research' }}
           </button>
           <span
-            v-if="!isJobRunning('deep-research', file.fileName) && file.status === 'indexed' && (file.chunkCount || 0) > MAX_ANALYSIS_CHUNKS"
+            v-if="!isJobRunning('deep-research', file.fileName) && exceedsAnalysisLimit(file)"
             class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
-            :title="`Analysis is limited to ${MAX_ANALYSIS_CHUNKS} chunks; this document has ${file.chunkCount}.`"
+            :title="`Analysis is limited to ${analysisChunkLimit(file)} chunks; this document has ${file.chunkCount}.`"
           >
             <Icon icon="lucide:ban" class="h-3.5 w-3.5" />
             Too large to analyze

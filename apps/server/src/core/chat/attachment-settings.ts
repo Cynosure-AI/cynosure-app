@@ -1,9 +1,10 @@
 import { getDb } from '../../db/database.js'
+import { ATTACHMENT_TEXT_LIMITS } from '../runtime-limits.js'
 import type Database from 'better-sqlite3'
 
-const DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT = 24_000
-const MIN_INLINE_ATTACHMENT_TEXT_LIMIT = 2_000
-const MAX_INLINE_ATTACHMENT_TEXT_LIMIT = 500_000
+const DEFAULT_INLINE_ATTACHMENT_TEXT_LIMIT = ATTACHMENT_TEXT_LIMITS.defaultInlineTextLimit
+const MIN_INLINE_ATTACHMENT_TEXT_LIMIT = ATTACHMENT_TEXT_LIMITS.minInlineTextLimit
+const MAX_INLINE_ATTACHMENT_TEXT_LIMIT = ATTACHMENT_TEXT_LIMITS.maxInlineTextLimit
 
 export interface ChatAttachmentConfig {
     inlineAttachmentTextLimit: number

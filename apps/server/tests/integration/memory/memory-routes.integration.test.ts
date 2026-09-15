@@ -68,4 +68,38 @@ describe('memory search routes', () => {
     expect(markPending).toHaveBeenCalledOnce()
     await app.close()
   })
+
+  test('serves the canonical cross-boundary limits the web client renders', async () => {
+    const { MEMORY_LIMITS } = await import('../../../src/core/runtime-limits.js')
+    const app = await createApp()
+
+    const response = await app.inject({ method: 'GET', url: '/api/memory/limits' })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual(MEMORY_LIMITS)
+    // The analysis limit is the one that previously drifted between the web
+    // MAX_ANALYSIS_CHUNKS literal and the server MAX_DEEP_RESEARCH_CHUNKS one.
+    expect(response.json().analysisChunkLimit).toBe(MEMORY_LIMITS.analysisChunkLimit)
+    await app.close()
+  })
+
+  test('rejects chunk sizes outside the canonical bounds', async () => {
+    const { CHUNKING_LIMITS } = await import('../../../src/core/runtime-limits.js')
+    const app = await createApp()
+
+    const tooSmall = await app.inject({
+      method: 'POST',
+      url: '/api/memory/chunking/configure',
+      payload: { chunkSize: CHUNKING_LIMITS.minChunkSize - 1, chunkOverlap: 0 },
+    })
+    const tooLarge = await app.inject({
+      method: 'POST',
+      url: '/api/memory/chunking/configure',
+      payload: { chunkSize: CHUNKING_LIMITS.maxChunkSize + 1, chunkOverlap: 0 },
+    })
+
+    expect(tooSmall.statusCode).toBe(400)
+    expect(tooLarge.statusCode).toBe(400)
+    await app.close()
+  })
 })

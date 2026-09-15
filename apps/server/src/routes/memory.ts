@@ -17,6 +17,7 @@ import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOW
 import { activatePermanentMemoryIndex, DEFAULT_PERMANENT_MEMORY_TABLE, getActivePermanentMemoryTableName, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { beginMemoryReembedding, finishMemoryReembedding } from '../core/memory/reembedding-operation.js'
 import { getGateway } from '../core/gateway/gateway.js'
+import { CHUNKING_LIMITS, GRAPH_LIMITS, MEMORY_LIMITS } from '../core/runtime-limits.js'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 
@@ -60,6 +61,11 @@ async function detectEmbeddingDimensions(providerId: string | undefined, model: 
 }
 
 export async function registerMemoryRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
+  // GET /api/memory/limits — canonical cross-boundary limits.
+  // The web client renders these instead of hardcoding its own copies so the
+  // two sides cannot drift out of sync. See core/runtime-limits.ts.
+  app.get('/limits', async () => MEMORY_LIMITS)
+
   // POST /api/memory/search — search permanent memory
   app.post<{ Body: { query: string; topK?: number; categoryId?: string } }>('/search', async (req, reply) => {
     const { query, topK, categoryId } = req.body
@@ -126,13 +132,13 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   // GET /api/memory/knowledge/graph — inspect the authoritative knowledge graph projection.
   app.get<{ Querystring: { query?: string; nodeId?: string; nodeIds?: string; limit?: string; view?: string; minImportance?: string; categoryIds?: string } }>('/knowledge/graph', async (req, reply) => {
     const knowledge = getMemoryKnowledgeStore()
-    const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 5000)
+    const limit = Math.min(Math.max(Number(req.query.limit) || GRAPH_LIMITS.defaultNodes, 1), GRAPH_LIMITS.maxNodes)
     const minImportance = Math.min(Math.max(Number(req.query.minImportance) || 0, 0), 3) as ImportanceLevel
-    const nodeIds = (req.query.nodeIds || '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, 50)
+    const nodeIds = (req.query.nodeIds || '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, GRAPH_LIMITS.maxSeedNodes)
     const explicitlyEmpty = req.query.categoryIds === '__none__'
     const categoryIds = explicitlyEmpty
       ? []
-      : Array.from(new Set((req.query.categoryIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
+      : Array.from(new Set((req.query.categoryIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, GRAPH_LIMITS.maxCategories)
     if (categoryIds.length) {
       const known = getDb().prepare(`SELECT id FROM memory_folders WHERE id IN (${categoryIds.map(() => '?').join(', ')})`).all(...categoryIds) as Array<{ id: string }>
       if (known.length !== categoryIds.length) return reply.status(404).send({ error: 'Memory folder not found' })
@@ -166,9 +172,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // GET /api/memory/knowledge/graph/suggestions — autocomplete entity names
   app.get<{ Querystring: { query?: string; limit?: string; categoryIds?: string } }>('/knowledge/graph/suggestions', async (req) => {
-    const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20)
+    const limit = Math.min(Math.max(Number(req.query.limit) || GRAPH_LIMITS.defaultSuggestions, 1), GRAPH_LIMITS.maxSuggestions)
     if (req.query.categoryIds === '__none__') return { suggestions: [] }
-    const categoryIds = Array.from(new Set((req.query.categoryIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, 100)
+    const categoryIds = Array.from(new Set((req.query.categoryIds || '').split(',').map((id) => id.trim()).filter(Boolean))).slice(0, GRAPH_LIMITS.maxCategories)
     return {
       suggestions: getMemoryKnowledgeStore().suggestNodes(req.query.query?.trim() || '', limit, categoryIds)
     }
@@ -511,8 +517,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     Body: { chunkSize: number; chunkOverlap: number }
   }>('/chunking/configure', async (req, reply) => {
     const { chunkSize, chunkOverlap } = req.body
-    if (!chunkSize || chunkSize < 64 || chunkSize > 4096) {
-      return reply.status(400).send({ error: 'chunkSize must be between 64 and 4096 tokens' })
+    if (!chunkSize || chunkSize < CHUNKING_LIMITS.minChunkSize || chunkSize > CHUNKING_LIMITS.maxChunkSize) {
+      return reply.status(400).send({ error: `chunkSize must be between ${CHUNKING_LIMITS.minChunkSize} and ${CHUNKING_LIMITS.maxChunkSize} tokens` })
     }
     if (chunkOverlap === undefined || chunkOverlap < 0 || chunkOverlap >= chunkSize) {
       return reply.status(400).send({ error: 'chunkOverlap must be >= 0 and < chunkSize' })
