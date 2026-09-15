@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
-import { useRuntimeLimits } from "../../api/limits";
+import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
@@ -38,14 +38,12 @@ const emit = defineEmits<{
 // --- Constants ---
 const FILES_PAGE_SIZE = 30;
 
-const { limits } = useRuntimeLimits();
-
 /** Deep Research eligibility is decided by the limit the server attaches to
  * each file row, so the button can never be offered for a document the server
  * would reject. See api/limits.ts for the rationale. The served limits value is
  * only a fallback for a file row from an older server. */
 function analysisChunkLimit(file: MemoryFileStatus): number {
-  return file.analysisChunkLimit ?? limits.value.analysisChunkLimit;
+  return file.analysisChunkLimit ?? RUNTIME_LIMITS.analysisChunkLimit;
 }
 
 function supportsAnalysis(file: MemoryFileStatus): boolean {
