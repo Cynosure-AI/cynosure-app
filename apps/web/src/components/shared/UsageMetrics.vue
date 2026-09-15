@@ -58,10 +58,21 @@ const maxToolCalls = computed(() => {
   return metrics.value.toolUsage[0].callCount
 })
 
-const maxAuxiliaryRequests = computed(() => {
-  if (!metrics.value?.auxiliaryModelUsage.length) return 1
-  return metrics.value.auxiliaryModelUsage[0].requestCount
-})
+const memoryModelUsage = computed(() => metrics.value?.auxiliaryModelUsage
+  .filter(item => ['embedding', 'reranker', 'deep-research'].includes(item.kind)) ?? [])
+const autoRoutingUsage = computed(() => metrics.value?.auxiliaryModelUsage
+  .filter(item => item.kind === 'memory-router' || item.kind === 'tool-router') ?? [])
+const maxMemoryRequests = computed(() => Math.max(1, ...memoryModelUsage.value.map(item => item.requestCount)))
+const maxAutoRoutingRequests = computed(() => Math.max(1, ...autoRoutingUsage.value.map(item => item.requestCount)))
+
+function auxiliaryKindLabel(kind: MetricsSummary['auxiliaryModelUsage'][number]['kind']): string {
+  if (kind === 'embedding') return 'Embedding'
+  if (kind === 'reranker') return 'Reranker'
+  if (kind === 'deep-research') return 'Deep Research'
+  if (kind === 'memory-router') return 'Memory routing'
+  if (kind === 'tool-router') return 'Tool routing'
+  return 'Dreaming'
+}
 
 function formatCost(cost: number | null): string {
   if (cost === null) return '—'
@@ -264,7 +275,10 @@ async function confirmReset(): Promise<void> {
             <span>Chat models</span><span class="text-theme-300">{{ formatCost(metrics.totals.chatEstimatedCost) }}</span>
           </div>
           <div class="flex justify-between text-theme-400 mb-0.5">
-            <span>Auxiliary models</span><span class="text-theme-300">{{ formatCost(metrics.totals.auxiliaryEstimatedCost) }}</span>
+            <span>Memory</span><span class="text-theme-300">{{ formatCost(metrics.totals.memoryEstimatedCost) }}</span>
+          </div>
+          <div class="flex justify-between text-theme-400 mb-0.5">
+            <span>Auto routing</span><span class="text-theme-300">{{ formatCost(metrics.totals.autoRoutingEstimatedCost) }}</span>
           </div>
           <div class="flex justify-between text-theme-400 mb-0.5">
             <span>Dreaming</span><span class="text-theme-300">{{ formatCost(metrics.totals.dreamingEstimatedCost) }}</span>
@@ -302,11 +316,11 @@ async function confirmReset(): Promise<void> {
     />
 
     <!-- Usage breakdown -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
       <!-- Model Usage -->
       <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-theme-400 mb-3">
-          Model Usage
+          Agent Models
         </h3>
         <div
           v-if="!metrics.modelUsage.length"
@@ -343,23 +357,23 @@ async function confirmReset(): Promise<void> {
         </div>
       </BaseCard>
 
-      <!-- Embedding / Reranker / Deep Research Usage -->
+      <!-- Memory model usage -->
       <BaseCard class="p-4">
         <h3 class="text-xs font-medium text-theme-400 mb-3">
-          Auxiliary Models
+          Memory
         </h3>
         <div
-          v-if="!metrics.auxiliaryModelUsage.length"
+          v-if="!memoryModelUsage.length"
           class="text-xs text-theme-600 py-4 text-center"
         >
-          No auxiliary model data
+          No memory model data
         </div>
         <div
           v-else
           class="space-y-2"
         >
           <div
-            v-for="m in metrics.auxiliaryModelUsage.slice(0, 8)"
+            v-for="m in memoryModelUsage.slice(0, 8)"
             :key="m.kind + m.provider + m.model"
           >
             <div class="flex items-center justify-between text-xs mb-0.5">
@@ -369,11 +383,51 @@ async function confirmReset(): Promise<void> {
             <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
               <div
                 class="h-full bg-sky-500/70 rounded-full"
-                :style="{ width: (m.requestCount / maxAuxiliaryRequests * 100) + '%' }"
+                :style="{ width: (m.requestCount / maxMemoryRequests * 100) + '%' }"
               />
             </div>
             <div class="text-[10px] text-theme-600 mt-0.5">
-              {{ m.kind === 'embedding' ? 'Embedding' : m.kind === 'reranker' ? 'Reranker' : m.kind === 'deep-research' ? 'Deep Research' : m.kind === 'memory-router' ? 'Memory router' : m.kind === 'dreaming' ? 'Dreaming' : 'Tool router' }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
+              {{ auxiliaryKindLabel(m.kind) }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
+              <span
+                v-if="m.estimatedCost !== null"
+                class="text-amber-500/80 ml-1"
+              >· {{ formatCost(m.estimatedCost) }}</span>
+            </div>
+          </div>
+        </div>
+      </BaseCard>
+
+      <!-- Pre-agent auto-routing usage -->
+      <BaseCard class="p-4">
+        <h3 class="text-xs font-medium text-theme-400 mb-3">
+          Auto Routing
+        </h3>
+        <div
+          v-if="!autoRoutingUsage.length"
+          class="text-xs text-theme-600 py-4 text-center"
+        >
+          No auto-routing data
+        </div>
+        <div
+          v-else
+          class="space-y-2"
+        >
+          <div
+            v-for="m in autoRoutingUsage.slice(0, 8)"
+            :key="m.kind + m.provider + m.model"
+          >
+            <div class="flex items-center justify-between text-xs mb-0.5">
+              <span class="text-theme-300 truncate mr-2">{{ m.model }}</span>
+              <span class="text-theme-500 shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
+            </div>
+            <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
+              <div
+                class="h-full bg-cyan-500/70 rounded-full"
+                :style="{ width: (m.requestCount / maxAutoRoutingRequests * 100) + '%' }"
+              />
+            </div>
+            <div class="text-[10px] text-theme-600 mt-0.5">
+              {{ auxiliaryKindLabel(m.kind) }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
                 class="text-amber-500/80 ml-1"
@@ -474,9 +528,10 @@ async function confirmReset(): Promise<void> {
                   : o.origin === 'heartbeat' ? 'lucide:heart-pulse'
                     : o.origin === 'webhook' ? 'lucide:webhook'
                       : o.origin === 'cron' ? 'lucide:clock'
-                        : o.origin === 'discord' ? 'simple-icons:discord'
-                          : o.origin === 'slack' ? 'simple-icons:slack'
-                            : 'lucide:zap'"
+                        : o.origin === 'dreaming' ? 'lucide:moon-star'
+                          : o.origin === 'discord' ? 'simple-icons:discord'
+                            : o.origin === 'slack' ? 'simple-icons:slack'
+                              : 'lucide:zap'"
                 class="w-3.5 h-3.5 text-theme-500"
               />
               <span class="text-xs text-theme-300 capitalize">{{ o.origin }}</span>

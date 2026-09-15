@@ -613,7 +613,28 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             return { status: 'too_large' as const, chunkCount, maxChunks: MAX_ANALYSIS_CHUNKS, chunks: [], items: [], itemTotal: 0 }
         }
         const analysis = getMemoryKnowledgeStore().documentAnalysis(row.id, req.params.fileName)
-        if (!analysis) return { status: 'not_analyzed' as const, chunks: [], items: [], itemTotal: 0 }
+        if (!analysis) {
+            const indexed = getAgentMemory().getFileIndexEntry(row.id, req.params.fileName)
+            if (!indexed) return { status: 'not_analyzed' as const, chunks: [], items: [], itemTotal: 0 }
+            const chunks = await getAgentMemory().getChunksByRange(
+                req.params.fileName,
+                0,
+                Math.max(0, indexed.chunkCount - 1),
+                lanceDbEqFilter('categoryId', row.id),
+            )
+            return {
+                status: 'searchable' as const,
+                chunks: chunks.map(chunk => ({
+                    chunkIndex: chunk.chunkIndex,
+                    text: chunk.text,
+                    sectionPath: '',
+                    summary: '',
+                    tags: [],
+                })),
+                items: [],
+                itemTotal: 0,
+            }
+        }
         const filePath = join(row.directory_path, req.params.fileName)
         const currentHash = existsSync(filePath) ? computeFileHash(filePath) : ''
         const indexed = getAgentMemory().getFileIndexEntry(row.id, req.params.fileName)

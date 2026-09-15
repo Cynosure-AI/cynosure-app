@@ -8,8 +8,14 @@ import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { customAlphabet, nanoid } from 'nanoid'
 import type { ChatMessage, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 
-/** Timeout in milliseconds for a single sub-agent tool call. */
-const SUB_AGENT_TIMEOUT_MS = 300_000 // 5 minutes 
+/** Maximum execution time for delegated work before the sub-agent is aborted. */
+const SUB_AGENT_EXECUTION_TIMEOUT_MS = 300_000 // 5 minutes
+/**
+ * The outer tool timeout is only a final safety net. Keeping it slightly above
+ * the execution timeout lets the inner executor observe cancellation and shut
+ * down before the orchestrator receives a result.
+ */
+const SUB_AGENT_TOOL_TIMEOUT_MS = SUB_AGENT_EXECUTION_TIMEOUT_MS + 10_000
 /** Maximum tool-use rounds for a sub-agent per delegation call. */
 const SUB_AGENT_MAX_ROUNDS = 30
 /** Short, readable suffix without visually ambiguous characters (0/O, 1/I/l). */
@@ -85,6 +91,10 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
         activeSignal?: AbortSignal
     }): Promise<ToolResult> => {
         const { agentData, invocationId, history, activeSignal } = input
+        const executionTimeoutSignal = AbortSignal.timeout(SUB_AGENT_EXECUTION_TIMEOUT_MS)
+        const subAgentSignal = activeSignal
+            ? AbortSignal.any([activeSignal, executionTimeoutSignal])
+            : executionTimeoutSignal
         const latestUserMessage = history.at(-1)?.content
         const eventMeta = {
             ...rootEventMeta,
@@ -103,13 +113,13 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             autoMemory: agentData.autoMemory === true,
             memoryFolderOverrides: getAssignedMemoryFolders(agentData.id),
             eventMeta,
-            signal: activeSignal,
+            signal: subAgentSignal,
         })
-        activeSignal?.throwIfAborted()
+        subAgentSignal.throwIfAborted()
         const gateway = getGateway()
         const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
         const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
-        activeSignal?.throwIfAborted()
+        subAgentSignal.throwIfAborted()
         const responseTools = responseSupportsToolCalls ? prepared.tools : []
         const executor = new AgentExecutor({
             gateway,
@@ -122,7 +132,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             maxRounds: SUB_AGENT_MAX_ROUNDS,
             thinkingEnabled: agentData.thinkingEnabled !== false,
             reasoningEffort: agentData.reasoningEffort,
-            signal: activeSignal,
+            signal: subAgentSignal,
             streamMode: 'per-round',
             streamEventPrefix: 'chat:subagent-stream',
             saveMessages: true,
@@ -135,10 +145,10 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
 
         try {
             const result = await executor.run([...prepared.systemMessages, ...history])
-            activeSignal?.throwIfAborted()
+            subAgentSignal.throwIfAborted()
 
             if (result.content || result.images.length) {
-                activeSignal?.throwIfAborted()
+                subAgentSignal.throwIfAborted()
                 const db = getDb()
                 const messageId = nanoid()
                 const createdAt = Date.now()
@@ -213,7 +223,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             },
             required: ['internalName', 'instructions']
         },
-        timeout: SUB_AGENT_TIMEOUT_MS,
+        timeout: SUB_AGENT_TOOL_TIMEOUT_MS,
         execute: async (params: unknown, executionSignal?: AbortSignal): Promise<ToolResult> => {
             const activeSignal = executionSignal ?? signal
             activeSignal?.throwIfAborted()
@@ -255,7 +265,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             },
             required: ['invocationId', 'instructions'],
         },
-        timeout: SUB_AGENT_TIMEOUT_MS,
+        timeout: SUB_AGENT_TOOL_TIMEOUT_MS,
         execute: async (params: unknown, executionSignal?: AbortSignal): Promise<ToolResult> => {
             const activeSignal = executionSignal ?? signal
             activeSignal?.throwIfAborted()

@@ -121,4 +121,33 @@ describe('MemoryDocumentEditorModal', () => {
     expect(document.body.querySelector('[aria-label="Reasoning for Atlas -> uses -> TypeScript"]')?.textContent)
       .toContain('The document explicitly says Atlas uses TypeScript.')
   })
+
+  test('renders chunk markers without hover details when the document is only searchable', async () => {
+    mocks.getFileContent.mockResolvedValue({ content: '# Memory\nFirst chunk\n\nSecond chunk', revision: 'current', documentRef: 'memory#ref' })
+    mocks.getDocumentAnalysis.mockResolvedValue({
+      status: 'searchable',
+      chunks: [
+        { chunkIndex: 0, text: 'First chunk', sectionPath: '', summary: '', tags: [] },
+        { chunkIndex: 1, text: 'Second chunk', sectionPath: '', summary: '', tags: [] },
+      ],
+      items: [],
+      itemTotal: 0,
+    })
+    const wrapper = mount(MemoryDocumentEditorModal, {
+      props: { show: true, categoryId: 'category', sourceFile: 'memory.md' },
+      global: {
+        plugins: [createPinia()],
+        stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
+      },
+    })
+    await flushPromises()
+    await vi.waitFor(() => expect(mocks.getDocumentAnalysis).toHaveBeenCalledOnce())
+    await flushPromises()
+
+    expect(wrapper.get('[aria-label="Chunk 1 start"]').text()).toContain('Chunk 1')
+    const marker = wrapper.get('[aria-label="Chunk 1 start"]')
+    marker.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
+    await flushPromises()
+    expect(document.body.querySelector('[aria-label="Summary for chunk 1"]')).toBeNull()
+  })
 })

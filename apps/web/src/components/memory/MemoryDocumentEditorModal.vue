@@ -613,9 +613,10 @@ onBeforeUnmount(() => {
               class="memory-editor-shell"
             />
             <MemoryChunkMarkers
-              v-if="analysis?.status === 'current' || analysis?.status === 'needs_refresh'"
+              v-if="analysis?.status === 'searchable' || analysis?.status === 'current' || analysis?.status === 'needs_refresh'"
               :editor="editor"
               :chunks="analysis.chunks"
+              :show-details="analysis.status !== 'searchable'"
             />
           </div>
         </div>

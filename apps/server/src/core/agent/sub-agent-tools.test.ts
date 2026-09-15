@@ -71,7 +71,7 @@ describe('sub-agent execution', () => {
         })
     })
 
-    test('passes the tool-scoped timeout signal into preparation and execution', async () => {
+    test('combines the tool-scoped signal with the sub-agent execution timeout', async () => {
         const parent = new AbortController()
         const toolScope = new AbortController()
         const [tool] = buildSubAgentTools({
@@ -83,10 +83,23 @@ describe('sub-agent execution', () => {
 
         await tool.execute({ internalName: 'worker', instructions: 'Do it' }, toolScope.signal)
 
-        expect(mocks.prepareAgentExecution).toHaveBeenCalledWith(
-            expect.objectContaining({ signal: toolScope.signal }),
-        )
-        expect(mocks.executorConfig).toEqual(expect.objectContaining({ signal: toolScope.signal }))
+        const subAgentSignal = mocks.prepareAgentExecution.mock.calls[0][0].signal as AbortSignal
+        expect(subAgentSignal).not.toBe(toolScope.signal)
+        expect(mocks.executorConfig).toEqual(expect.objectContaining({ signal: subAgentSignal }))
+        expect(subAgentSignal.aborted).toBe(false)
+        toolScope.abort(new DOMException('Timed out', 'AbortError'))
+        expect(subAgentSignal.aborted).toBe(true)
+    })
+
+    test('allows five minutes for delegated work plus a shutdown grace period', () => {
+        const [tool, continueTool] = buildSubAgentTools({
+            subAgents: [{ agentId: 'worker' }],
+            conversationId: 'conversation',
+            broadcast: vi.fn(),
+        })
+
+        expect(tool.timeout).toBe(310_000)
+        expect(continueTool.timeout).toBe(310_000)
     })
 
     test('declares conservative behavior hints for delegated execution', () => {

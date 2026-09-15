@@ -87,6 +87,27 @@ describe('global memory file search', () => {
       })],
     }))
 
+    const roadmapHash = computeFileHash(join(secondFolder, 'roadmap.md'))
+    db.prepare(`INSERT INTO memory_file_index (document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, created_at) VALUES (?, ?, ?, ?, ?, 2, ?, ?)`).run(
+      'doc-roadmap', 'ref-roadmap', 'folder-b', 'roadmap.md', roadmapHash, now, now,
+    )
+    const chunksByRange = vi.spyOn(getAgentMemory(), 'getChunksByRange').mockResolvedValue([
+      { text: '# Roadmap\nMilestones.', chunkIndex: 0, sourceFile: 'roadmap.md', categoryId: 'folder-b' },
+      { text: 'Delivery dates.', chunkIndex: 1, sourceFile: 'roadmap.md', categoryId: 'folder-b' },
+    ])
+    const searchableResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-b/files/roadmap.md/analysis' })
+    expect(searchableResponse.json()).toEqual({
+      status: 'searchable',
+      chunks: [
+        { chunkIndex: 0, text: '# Roadmap\nMilestones.', sectionPath: '', summary: '', tags: [] },
+        { chunkIndex: 1, text: 'Delivery dates.', sectionPath: '', summary: '', tags: [] },
+      ],
+      items: [],
+      itemTotal: 0,
+    })
+    expect(chunksByRange).toHaveBeenCalledWith('roadmap.md', 0, 1, expect.stringContaining('folder-b'))
+    chunksByRange.mockRestore()
+
     await writeFile(join(firstFolder, 'alpha.md'), '# Alpha\nChanged source wording.')
     const staleAnalysis = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-a/files/alpha.md/analysis' })
     expect(staleAnalysis.json()).toEqual(expect.objectContaining({ status: 'needs_refresh' }))
