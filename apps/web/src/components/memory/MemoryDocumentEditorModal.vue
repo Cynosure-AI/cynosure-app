@@ -561,11 +561,21 @@ onBeforeUnmount(() => {
                         class="mt-0.5 h-3.5 w-3.5 shrink-0 text-theme-500"
                       />
                       <span
-                        v-if="item.relation && item.entity"
+                        v-if="item.kind === 'relationship' && item.relation && item.entity"
                         class="min-w-0"
                       >
+                        <span class="font-medium text-theme-200">{{ item.subject || 'Unknown subject' }}</span>
+                        <span class="mx-1.5 text-theme-600">·</span>
                         <span class="font-mono text-accent-400">{{ item.relation }}</span>
                         <span class="mx-1.5 text-theme-600">→</span>
+                        <span>{{ item.entity }}</span>
+                      </span>
+                      <span
+                        v-else-if="item.kind === 'entity' && item.entity"
+                        class="min-w-0"
+                      >
+                        <span class="text-theme-500">Mentioned entity</span>
+                        <span class="mx-1.5 text-theme-600">·</span>
                         <span>{{ item.entity }}</span>
                       </span>
                       <span v-else>{{ item.label }}</span>

@@ -407,7 +407,7 @@ export class MemoryKnowledgeGraphStore {
       items: [
         ...relationshipRows.map((row) => ({
           kind: 'relationship' as const,
-          label: `${row.canonical_name} -> ${row.object_name || formatLiteral(row.object_value_json)}`,
+          label: `${row.subject_name} -> ${row.canonical_name} -> ${row.object_name || formatLiteral(row.object_value_json)}`,
           relation: String(row.canonical_name),
           entity: String(row.object_name || formatLiteral(row.object_value_json)),
           subject: String(row.subject_name),
@@ -417,7 +417,7 @@ export class MemoryKnowledgeGraphStore {
         })),
         ...entityRows.map((row) => ({
           kind: 'entity' as const,
-          label: `entity -> ${row.canonical_name}`,
+          label: `Mentioned entity: ${row.canonical_name}`,
           relation: 'entity',
           entity: String(row.canonical_name),
           reasoning: String(row.reasoning || ''),
