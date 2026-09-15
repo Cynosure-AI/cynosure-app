@@ -9,7 +9,8 @@ import { ensureMemoryFolderPath, categoryPathForDirectory } from '../../memory/m
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
-import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
+import { cancelMemoryIndexJobsForFile, startMemoryIndexJob } from '../../memory/memory-index-jobs.js'
+import { deepResearchMemoryContent } from '../../memory/memory-deep-research.js'
 import {
     parseMemoryDocumentRef,
 } from '../../memory/memory-reference.js'
@@ -511,6 +512,40 @@ async function commitMemoryMutation(
         throw new Error(`Memory update failed and the previous content was restored: ${(err as Error).message}`)
     }
     return indexed
+}
+
+function hasActiveMemoryAnalysis(documentId: string): boolean {
+    return Boolean(getDb().prepare(`
+        SELECT 1 FROM memory_knowledge_index_runs
+        WHERE document_id = ? AND status = 'active'
+        LIMIT 1
+    `).get(documentId))
+}
+
+function startIncrementalMemoryAnalysis(
+    resolved: ResolvedMemoryDocument,
+    content: string,
+    affectedRanges: Array<{ start: number; newEnd: number }>,
+): string {
+    const job = startMemoryIndexJob({
+        kind: 'deep-research',
+        categoryId: resolved.categoryId,
+        fileName: resolved.fileName,
+        replaceExisting: true,
+        run: async (signal, reportProgress) => ({
+            success: true,
+            ...(await deepResearchMemoryContent({
+                content,
+                categoryId: resolved.categoryId,
+                fileName: resolved.fileName,
+                replaceExisting: true,
+                signal,
+                affectedRanges: affectedRanges.map((range) => ({ start: range.start, end: range.newEnd })),
+                onDeepResearchCheckpoint: (checkpoint, current, total) => reportProgress(current, total, checkpoint),
+            })),
+        }),
+    })
+    return job.id
 }
 
 const CANONICAL_EXCERPT_CHARS = 8_000
@@ -1134,6 +1169,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 currentRevision: { type: 'integer' },
                 reason: { type: 'string' },
                 affectedRanges: { type: 'array' },
+                analysisJobId: { type: 'string' },
                 message: { type: 'string' },
             },
         },
@@ -1156,6 +1192,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                     return patchConflict('file_not_found', resolved.revisionNumber, 'The canonical memory file could not be read.')
                 }
                 opts.beforeDocumentMutation?.(resolved.documentId, current)
+                const wasAnalyzed = hasActiveMemoryAnalysis(resolved.documentId)
                 let applied = applyMemoryPatch(current, input.patch)
                 if (applied.status === 'conflict') return patchConflict(applied.reason, resolved.revisionNumber, applied.message)
                 if (applied.content === current) {
@@ -1173,7 +1210,25 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 try {
                     const indexed = await commitMemoryMutation(resolved, current, applied.content, signal, opts.revisionContext)
                     opts.onDocumentMutated?.(indexed.documentId)
-                    const result = { status: 'success' as const, fileRef: indexed.documentRef, previousRevision: resolved.revisionNumber, revision: indexed.revision, affectedRanges: applied.affectedRanges }
+                    let analysisJobId: string | undefined
+                    if (wasAnalyzed) {
+                        try {
+                            analysisJobId = startIncrementalMemoryAnalysis(resolved, applied.content, applied.affectedRanges)
+                        } catch (error) {
+                            // The canonical edit and retrieval index are already
+                            // committed. A queueing failure must not be reported
+                            // as a patch conflict for bytes that did change.
+                            console.warn('[memory-patch] Failed to queue incremental analysis:', error)
+                        }
+                    }
+                    const result = {
+                        status: 'success' as const,
+                        fileRef: indexed.documentRef,
+                        previousRevision: resolved.revisionNumber,
+                        revision: indexed.revision,
+                        affectedRanges: applied.affectedRanges,
+                        ...(analysisJobId ? { analysisJobId } : {}),
+                    }
                     return { success: true, output: JSON.stringify(result), structuredContent: result }
                 } catch (error) {
                     return patchConflict('patch_application_failed', resolved.revisionNumber, (error as Error).message)
