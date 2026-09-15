@@ -4,7 +4,6 @@ import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from './tool-p
 describe('tool approval policy', () => {
     test('auto-approves memory and graph reads, but not writes', () => {
         expect(isSystemAutoApprovedTool('memory_search')).toBe(true)
-        expect(isSystemAutoApprovedTool('memory_read')).toBe(true)
         expect(isSystemAutoApprovedTool('knowledge_search')).toBe(true)
         expect(isSystemAutoApprovedTool('memory_patch')).toBe(false)
         expect(isSystemAutoApprovedTool('knowledge_assert')).toBe(false)

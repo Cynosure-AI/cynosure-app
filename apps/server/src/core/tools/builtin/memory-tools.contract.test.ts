@@ -5,7 +5,6 @@ import {
     makeMemoryPatchTool,
     applyMemoryPatch,
     makeMemorySearchTool,
-    makeMemoryReadTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
     makeKnowledgeSearchTool,
@@ -16,7 +15,7 @@ import {
 describe('memory mutation tool contracts', () => {
     test('exposes focused memory mutations', () => {
         expect(MEMORY_TOOL_NAMES).toEqual([
-            'memory_search', 'memory_read', 'memory_create', 'memory_patch',
+            'memory_search', 'memory_create', 'memory_patch',
         ])
     })
 
@@ -64,7 +63,6 @@ describe('memory mutation tool contracts', () => {
     test('declares complete behavior annotations for every memory and relationship tool', () => {
         const tools = [
             makeMemorySearchTool({}),
-            makeMemoryReadTool({}),
             makeMemoryCreateTool({}),
             makeMemoryPatchTool({}),
             makeKnowledgeSearchTool({}),
