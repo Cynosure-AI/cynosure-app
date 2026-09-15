@@ -20,8 +20,8 @@ type BroadcastFn = (event: string, data: unknown) => void
 
 // ─── In-flight registry ────────────────────────────────────
 
-/** conversationId → Set of action names currently in progress */
-const activeActions = new Map<string, Set<string>>()
+/** conversationId → action name → number of in-flight generations. */
+const activeActions = new Map<string, Map<string, number>>()
 
 /** conversationId → AbortController shared by all post-actions for that conversation */
 const abortControllers = new Map<string, AbortController>()
@@ -36,21 +36,26 @@ function getOrCreateAbortController(conversationId: string): AbortController {
 }
 
 export function startAction(conversationId: string, action: string, broadcast: BroadcastFn): AbortSignal {
-    let set = activeActions.get(conversationId)
-    if (!set) {
-        set = new Set()
-        activeActions.set(conversationId, set)
+    let actions = activeActions.get(conversationId)
+    if (!actions) {
+        actions = new Map()
+        activeActions.set(conversationId, actions)
     }
-    set.add(action)
+    actions.set(action, (actions.get(action) || 0) + 1)
     broadcast('chat:post-action', { conversationId, action, status: 'started' })
     return getOrCreateAbortController(conversationId).signal
 }
 
 export function completeAction(conversationId: string, action: string, broadcast: BroadcastFn): void {
-    const set = activeActions.get(conversationId)
-    if (set) {
-        set.delete(action)
-        if (set.size === 0) {
+    const actions = activeActions.get(conversationId)
+    if (actions) {
+        const remaining = (actions.get(action) || 0) - 1
+        if (remaining > 0) {
+            actions.set(action, remaining)
+            return
+        }
+        actions.delete(action)
+        if (actions.size === 0) {
             activeActions.delete(conversationId)
             abortControllers.delete(conversationId)
         }
@@ -70,16 +75,153 @@ export function cancelPostActions(conversationId: string): boolean {
 
 /** Return the active actions for a single conversation. */
 export function getActiveActions(conversationId: string): string[] {
-    return Array.from(activeActions.get(conversationId) ?? [])
+    return Array.from(activeActions.get(conversationId)?.keys() ?? [])
 }
 
 /** Return all active actions keyed by conversationId. */
 export function getAllActiveActions(): Record<string, string[]> {
     const out: Record<string, string[]> = {}
-    for (const [cid, set] of activeActions) {
-        out[cid] = Array.from(set)
+    for (const [cid, actions] of activeActions) {
+        out[cid] = Array.from(actions.keys())
     }
     return out
+}
+
+export interface QuickResponsesState {
+    messageId: string | null
+    suggestions: string[]
+}
+
+/** Return the latest durable suggestions for a conversation, if any. */
+export function getQuickResponses(conversationId: string): QuickResponsesState {
+    const row = getDb().prepare(
+        `SELECT json_extract(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END, '$.quickResponsesMessageId') AS message_id,
+                json_extract(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END, '$.quickResponses') AS suggestions_json
+         FROM conversations WHERE id = ?`
+    ).get(conversationId) as { message_id: string | null; suggestions_json: string | null } | undefined
+
+    if (!row?.suggestions_json) return { messageId: null, suggestions: [] }
+    try {
+        const parsed = JSON.parse(row.suggestions_json)
+        const latestAssistant = getDb().prepare(
+            `SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant'
+             ORDER BY created_at DESC, rowid DESC LIMIT 1`
+        ).get(conversationId) as { id: string } | undefined
+        if (!row.message_id || latestAssistant?.id !== row.message_id) {
+            return { messageId: null, suggestions: [] }
+        }
+        return {
+            messageId: row.message_id,
+            suggestions: normalizeQuickResponses(parsed),
+        }
+    } catch {
+        return { messageId: null, suggestions: [] }
+    }
+}
+
+/** Remove stale suggestions as soon as a new turn begins. */
+export function clearQuickResponses(conversationId: string, broadcast: BroadcastFn): void {
+    getDb().prepare(
+        `UPDATE conversations
+         SET metadata_json = json_remove(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END, '$.quickResponses', '$.quickResponsesMessageId')
+         WHERE id = ?`
+    ).run(conversationId)
+    broadcast('chat:quick-responses', { conversationId, messageId: null, suggestions: [] })
+}
+
+export interface GenerateQuickResponsesOpts {
+    conversationId: string
+    messageId: string
+    userMessage: string
+    assistantResponse: string
+    broadcast: BroadcastFn
+    providerId?: string
+    model?: string
+}
+
+const QUICK_RESPONSES_TIMEOUT_MS = 20_000
+const QUICK_RESPONSES_MAX_TOKENS = 512
+
+/** Generate short user-authored follow-ups without delaying the main response. */
+export async function generateQuickResponses(opts: GenerateQuickResponsesOpts): Promise<void> {
+    const { conversationId, messageId, userMessage, assistantResponse, broadcast, providerId, model } = opts
+    const signal = startAction(conversationId, 'generating-quick-responses', broadcast)
+    try {
+        const gateway = getGateway()
+        const target = resolveTitleTarget(gateway, providerId, model)
+        const result = await gateway.complete({
+            messages: [
+                {
+                    role: 'system' as const,
+                    content: 'Suggest up to 3 concise, distinct messages the user could send next. Match the conversation and write each suggestion in the user\'s voice. Return only a JSON array of strings. Return [] when no useful follow-up exists.',
+                },
+                {
+                    role: 'user' as const,
+                    content: `User:\n${limitForQuickResponsePrompt(userMessage)}\n\nAssistant:\n${limitForQuickResponsePrompt(assistantResponse)}`,
+                },
+            ],
+            model: target.model,
+            signal: withTimeout(signal, QUICK_RESPONSES_TIMEOUT_MS),
+            maxTokens: QUICK_RESPONSES_MAX_TOKENS,
+            thinkingEnabled: false,
+        }, target.providerId)
+        signal.throwIfAborted()
+
+        const suggestions = parseQuickResponses(result.content)
+        // A newer turn may have started while this model call was finishing.
+        const latestAssistant = getDb().prepare(
+            `SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant'
+             ORDER BY created_at DESC, rowid DESC LIMIT 1`
+        ).get(conversationId) as { id: string } | undefined
+        if (latestAssistant?.id !== messageId) return
+
+        getDb().prepare(
+            `UPDATE conversations
+             SET metadata_json = json_set(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+                 '$.quickResponses', json(?), '$.quickResponsesMessageId', ?)
+             WHERE id = ?`
+        ).run(JSON.stringify(suggestions), messageId, conversationId)
+        broadcast('chat:quick-responses', { conversationId, messageId, suggestions })
+    } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+            console.warn('[quick-responses] Generation failed:', err)
+        }
+    } finally {
+        completeAction(conversationId, 'generating-quick-responses', broadcast)
+    }
+}
+
+function limitForQuickResponsePrompt(value: string): string {
+    const normalized = value.replace(/\s+/g, ' ').trim()
+    return normalized.length <= 4_000 ? normalized : `${normalized.slice(0, 3_997)}…`
+}
+
+export function parseQuickResponses(rawContent: unknown): string[] {
+    if (Array.isArray(rawContent)) return normalizeQuickResponses(rawContent)
+    if (typeof rawContent !== 'string') return []
+    const raw = rawContent.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+    try {
+        const parsed = JSON.parse(raw)
+        return normalizeQuickResponses(Array.isArray(parsed) ? parsed : parsed?.suggestions)
+    } catch {
+        return normalizeQuickResponses(raw.split(/\r?\n/).map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '')))
+    }
+}
+
+function normalizeQuickResponses(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+    const seen = new Set<string>()
+    const suggestions: string[] = []
+    for (const item of value) {
+        if (typeof item !== 'string') continue
+        const suggestion = item.replace(/\s+/g, ' ').trim().slice(0, 240).trim()
+        const key = suggestion.toLocaleLowerCase()
+        if (!suggestion || seen.has(key)) continue
+        seen.add(key)
+        suggestions.push(suggestion)
+        if (suggestions.length === 3) break
+    }
+    return suggestions
 }
 
 // ─── Title generation ──────────────────────────────────────

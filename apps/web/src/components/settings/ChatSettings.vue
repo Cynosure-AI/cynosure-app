@@ -140,7 +140,7 @@ onMounted(async () => {
 <template>
   <div class="space-y-4">
     <SettingsSubheading
-      v-if="showAnySection(['generated-titles'])"
+      v-if="showAnySection(['generated-titles', 'quick-responses'])"
       label="Automation"
     />
 
@@ -189,6 +189,38 @@ onMounted(async () => {
           @change="onTitleSelection"
         />
       </div>
+    </BaseCard>
+
+    <!-- Experimental Quick Responses -->
+    <BaseCard
+      v-if="showSection('quick-responses')"
+      class="p-5 space-y-4"
+    >
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
+            <Icon
+              icon="lucide:message-circle-more"
+              class="w-5 h-5 text-accent-400"
+            />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-theme-200">
+              Quick Responses <span class="ml-1 text-xs text-amber-400">• Experimental</span>
+            </h3>
+            <p class="text-xs text-theme-500 mt-0.5">
+              Generate up to three relevant follow-up suggestions after each assistant turn
+            </p>
+          </div>
+        </div>
+        <ToggleSwitch
+          v-model="prefs.quickResponses"
+          label="Enable quick responses"
+        />
+      </div>
+      <p class="pt-3 border-t border-theme-700 text-[11px] leading-relaxed text-theme-500">
+        Selecting a suggestion fills the chat input so you can review or edit it before sending.
+      </p>
     </BaseCard>
 
     <SettingsSubheading

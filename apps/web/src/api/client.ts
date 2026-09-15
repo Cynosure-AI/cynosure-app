@@ -241,6 +241,9 @@ export const api = {
     onPostAction: (
       cb: (data: { conversationId: string; action: string; status: 'started' | 'completed' }) => void
     ) => onWsEvent('chat:post-action', cb as WsHandler),
+    onQuickResponses: (
+      cb: (data: { conversationId: string; messageId: string | null; suggestions: string[] }) => void
+    ) => onWsEvent('chat:quick-responses', cb as WsHandler),
     onCompactEvent: (
       cb: (data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }) => void
     ) => onWsEvent('chat:compact-event', cb as WsHandler),
@@ -251,7 +254,7 @@ export const api = {
       cb: (data: { conversationId: string; error: string }) => void
     ) => onWsEvent('chat:compact-error', cb as WsHandler),
     getPostActions: (conversationId: string) =>
-      get<{ actions: string[] }>(`/api/chat/post-actions?conversationId=${encodeURIComponent(conversationId)}`),
+      get<{ actions: string[]; quickResponses: { messageId: string | null; suggestions: string[] } }>(`/api/chat/post-actions?conversationId=${encodeURIComponent(conversationId)}`),
     cancelPostActions: (conversationId: string) =>
       post<{ success: boolean }>('/api/chat/post-actions/cancel', { conversationId })
   },

@@ -304,7 +304,17 @@ function focus(): void {
   textareaRef.value?.focus()
 }
 
-defineExpose({ processFiles, focus })
+function fillSuggestion(suggestion: string): void {
+  inputText.value = suggestion
+  persistDraft(draftStorageKey.value, suggestion)
+  nextTick(() => {
+    autoResize()
+    textareaRef.value?.focus()
+    textareaRef.value?.setSelectionRange(suggestion.length, suggestion.length)
+  })
+}
+
+defineExpose({ processFiles, focus, fillSuggestion })
 </script>
 
 <template>

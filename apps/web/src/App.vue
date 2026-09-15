@@ -144,6 +144,7 @@ onMounted(async () => {
     api.chat.onCompactStart((data) => chatStore.handleCompactStart(data)),
     api.chat.onCompactError((data) => chatStore.handleCompactError(data)),
     api.chat.onPostAction((data) => chatStore.handlePostAction(data)),
+    api.chat.onQuickResponses((data) => chatStore.handleQuickResponses(data)),
     // Agent event listeners
     api.agent.onHITLRequest((data) => {
       if (isHITLRequestPayload(data)) agentStore.handleHITLRequest(data)

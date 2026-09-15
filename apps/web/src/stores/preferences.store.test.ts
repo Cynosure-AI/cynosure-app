@@ -16,7 +16,7 @@ vi.mock('../utils/electron-prefs', () => ({
 }))
 
 import { usePreferencesStore } from './preferences.store'
-import { SK_RECENT_CHAT_FILTER, SK_THEME } from '../utils/storage-keys'
+import { SK_QUICK_RESPONSES, SK_RECENT_CHAT_FILTER, SK_THEME } from '../utils/storage-keys'
 
 describe('preferences profile', () => {
   beforeEach(() => {
@@ -69,5 +69,15 @@ describe('preferences profile', () => {
     expect(store.theme).toBe('dark')
     expect(localStorage.getItem(SK_THEME)).toBe('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
+  })
+
+  test('keeps experimental quick responses off by default and persists opt-in', async () => {
+    const store = usePreferencesStore()
+    expect(store.quickResponses).toBe(false)
+
+    store.quickResponses = true
+    await nextTick()
+
+    expect(localStorage.getItem(SK_QUICK_RESPONSES)).toBe('true')
   })
 })
