@@ -32,7 +32,7 @@ describe('task context cancellation', () => {
                 toolQuery: 'No external capability needed',
                 requestedToolEffect: 'read',
                 requiresExternalTools: false,
-                memoryQueries: ['亲密朋友的相关信息'],
+                memoryQueries: ['information about a close friend'],
                 requiresMemory: true,
             }),
         } }] })
@@ -41,10 +41,10 @@ describe('task context cancellation', () => {
         await expect(buildTaskContext({
             conversationId: 'conversation',
             gateway,
-            userQuery: '你还记得我最好的朋友吗？',
+            userQuery: 'Do you remember my best friend?',
             enabledModes: { tools: true, memories: true },
         })).resolves.toMatchObject({
-            memoryQueries: ['亲密朋友的相关信息'],
+            memoryQueries: ['information about a close friend'],
             requestedToolEffect: 'read',
             skipToolRouting: true,
             skipMemoryRouting: false,
