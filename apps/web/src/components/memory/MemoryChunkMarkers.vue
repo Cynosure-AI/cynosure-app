@@ -13,11 +13,10 @@ interface MarkerEditor {
   state: {
     doc: {
       descendants: (callback: (node: TextNodeLike, pos: number) => void) => void;
-      resolve?: (pos: number) => { parentOffset: number };
     };
   };
   view: {
-    coordsAtPos: (pos: number) => { top: number };
+    coordsAtPos: (pos: number) => { top: number; bottom?: number };
     dom?: HTMLElement;
     domAtPos?: (pos: number) => { node: Node };
   };
@@ -30,10 +29,12 @@ const props = defineProps<{
   chunks: MemoryDocumentAnalysis["chunks"];
 }>();
 
+/** Minimum vertical distance between two badges so boundaries never stack up. */
+const MARKER_SPACING = 22;
+
 const layerRef = ref<HTMLElement | null>(null);
 const markers = ref<Array<{ chunk: MemoryDocumentAnalysis["chunks"][number]; top: number; first: boolean }>>([]);
 let resizeObserver: ResizeObserver | null = null;
-let boundaryElements = new Set<HTMLElement>();
 const markdownParser = new Marked({ breaks: true });
 const separatingElements = new Set([
   "ADDRESS", "BLOCKQUOTE", "BR", "DIV", "H1", "H2", "H3", "H4", "H5", "H6",
@@ -114,29 +115,18 @@ function markerPosition(
 }
 
 function boundaryElement(editor: MarkerEditor, position: number): HTMLElement | null {
-  if (editor.state.doc.resolve?.(position).parentOffset !== 0 || !editor.view.domAtPos || !editor.view.dom) return null;
+  if (!editor.view.domAtPos || !editor.view.dom) return null;
   const domPosition = editor.view.domAtPos(position).node;
   const element = domPosition instanceof HTMLElement ? domPosition : domPosition.parentElement;
   const block = element?.closest<HTMLElement>("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table");
   return block && editor.view.dom.contains(block) ? block : null;
 }
 
-function updateBoundarySpacing(nextElements: Set<HTMLElement>) {
-  for (const element of boundaryElements) {
-    if (!nextElements.has(element)) element.classList.remove("memory-chunk-boundary-block");
-  }
-  for (const element of nextElements) {
-    if (!boundaryElements.has(element)) element.classList.add("memory-chunk-boundary-block");
-  }
-  boundaryElements = nextElements;
-}
-
 async function updateMarkers() {
   await nextTick();
   const editor = props.editor;
   const layer = layerRef.value;
-  if (!editor || !layer || props.chunks.length < 1) {
-    updateBoundarySpacing(new Set());
+  if (!editor || !layer || !props.chunks.length) {
     markers.value = [];
     return;
   }
@@ -145,30 +135,30 @@ async function updateMarkers() {
   const layerTop = layer.getBoundingClientRect().top;
   let previousOffset = -1;
   const nextMarkers: typeof markers.value = [];
-  const nextBoundaryElements = new Set<HTMLElement>();
-  const matchedChunks: Array<{
-    chunk: MemoryDocumentAnalysis["chunks"][number];
-    documentPosition: number;
-    spaced: boolean;
-  }> = [];
 
   for (const chunk of props.chunks) {
     const match = markerPosition(text, positions, chunk.text, previousOffset);
     if (!match) continue;
     previousOffset = match.textOffset;
+    // Anchor the marker on the first line of the chunk's opening block so the
+    // label aligns with the heading/paragraph instead of floating between blocks.
     const element = boundaryElement(editor, match.documentPosition);
-    if (element) nextBoundaryElements.add(element);
-    matchedChunks.push({ chunk, documentPosition: match.documentPosition, spaced: Boolean(element) });
+    const anchorTop = element
+      ? element.getBoundingClientRect().top
+      : editor.view.coordsAtPos(match.documentPosition).top;
+    nextMarkers.push({
+      chunk,
+      top: Math.max(MARKER_SPACING / 2, anchorTop - layerTop),
+      first: chunk.chunkIndex === 0,
+    });
   }
 
-  updateBoundarySpacing(nextBoundaryElements);
-  for (const match of matchedChunks) {
-    const coords = editor.view.coordsAtPos(match.documentPosition);
-    nextMarkers.push({
-      chunk: match.chunk,
-      top: Math.max(0, coords.top - layerTop - (match.spaced ? 22 : 6)),
-      first: match.chunk.chunkIndex === 0,
-    });
+  // Keep badges legible when consecutive boundaries land on the same line.
+  nextMarkers.sort((a, b) => a.top - b.top);
+  let lastTop = Number.NEGATIVE_INFINITY;
+  for (const marker of nextMarkers) {
+    marker.top = Math.max(marker.top, lastTop + MARKER_SPACING);
+    lastTop = marker.top;
   }
   markers.value = nextMarkers;
 }
@@ -195,7 +185,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   props.editor?.off("update", onEditorUpdate);
-  updateBoundarySpacing(new Set());
   resizeObserver?.disconnect();
   window.removeEventListener("resize", onEditorUpdate);
 });
@@ -204,13 +193,13 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="layerRef"
-    class="pointer-events-none absolute inset-0 z-[2]"
+    class="pointer-events-none absolute inset-0 z-2"
     aria-hidden="false"
   >
     <div
       v-for="marker in markers"
       :key="marker.chunk.chunkIndex"
-      class="pointer-events-auto absolute left-2 right-2"
+      class="pointer-events-auto absolute right-0 flex -translate-y-1/2 items-center gap-1.5"
       :style="{ top: `${marker.top}px` }"
     >
       <HoverTooltip
@@ -219,11 +208,11 @@ onBeforeUnmount(() => {
         block
       >
         <div
-          class="group flex w-full items-center gap-2"
+          class="group flex items-center"
           :aria-label="marker.first ? 'Chunk 1 start' : `Chunk ${marker.chunk.chunkIndex + 1} boundary`"
         >
-          <div class="h-px flex-1 border-t-2 border-accent-500/55 shadow-[0_0_8px_color-mix(in_srgb,var(--color-accent-500)_25%,transparent)] transition-colors group-hover:border-accent-300" />
-          <span class="rounded-full border border-accent-400/60 bg-accent-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-accent-300 shadow-md shadow-black/30 transition-colors group-hover:bg-accent-500/25">
+          <div class="h-px w-5 bg-linear-to-r from-transparent to-accent-500/60 transition-colors group-hover:to-accent-300" />
+          <span class="rounded-l-full border border-r-0 border-accent-400/50 bg-accent-500/15 py-1 pl-2.5 pr-3 text-[10px] font-bold uppercase tracking-wide text-accent-300 shadow-md shadow-black/30 backdrop-blur-sm transition-colors group-hover:bg-accent-500/25">
             Chunk {{ marker.chunk.chunkIndex + 1 }}
           </span>
         </div>

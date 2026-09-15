@@ -664,6 +664,8 @@ onBeforeUnmount(() => {
 :deep(.memory-editor-content) {
   min-height: calc(88vh - 132px);
   padding: 1.25rem;
+  /* Reserve a right gutter so chunk markers never overlap the text. */
+  padding-right: 7rem;
   color: var(--color-theme-200);
   outline: none;
   line-height: 1.65;
@@ -671,10 +673,6 @@ onBeforeUnmount(() => {
 
 :deep(.memory-editor-content > *:first-child) {
   margin-top: 0;
-}
-
-:deep(.memory-editor-content .memory-chunk-boundary-block) {
-  margin-top: 3rem;
 }
 
 :deep(.memory-editor-content p) {
