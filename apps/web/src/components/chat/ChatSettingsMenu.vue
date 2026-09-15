@@ -28,7 +28,7 @@ const canSaveAsAgent = computed(() => (
   chatStore.sessionSystemPrompt.trim().length > 0
 ))
 const hasCustomConfig = computed(() => hasOverrides.value || (
-  !chatStore.activeAgentId && (chatStore.hasFreeChatOverrides || canSaveAsAgent.value)
+  !chatStore.activeAgentId && chatStore.hasFreeChatOverrides
 ))
 const canShowSaveAction = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && canSaveAsAgent.value
