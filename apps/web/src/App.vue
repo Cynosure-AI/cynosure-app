@@ -205,7 +205,7 @@ onUnmounted(() => {
 
     <div
       class="flex flex-col flex-1 min-w-0 bg-theme-950"
-      :class="isOnboardingRoute ? '' : 'p-2 pl-0 md:pl-0'"
+      :class="isOnboardingRoute ? '' : 'p-2 pl-0 md:pl-2'"
     >
       <!-- Mobile header with hamburger -->
       <div
