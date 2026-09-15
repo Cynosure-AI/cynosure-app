@@ -36,7 +36,7 @@ const emit = defineEmits<{
 
 // --- Constants ---
 const FILES_PAGE_SIZE = 30;
-const MAX_ANALYSIS_CHUNKS = 10;
+const MAX_ANALYSIS_CHUNKS = 20;
 
 function supportsAnalysis(file: MemoryFileStatus): boolean {
   return file.status === "indexed" && (file.chunkCount || 0) <= MAX_ANALYSIS_CHUNKS;
