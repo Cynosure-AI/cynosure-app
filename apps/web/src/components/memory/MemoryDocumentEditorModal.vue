@@ -493,9 +493,9 @@ onBeforeUnmount(() => {
           :class="analysisExpanded ? 'flex' : 'hidden'"
           aria-label="Document analysis"
         >
-          <div class="flex min-h-0 basis-1/2 flex-col border-b border-theme-800">
+          <div class="flex min-h-0 flex-1 flex-col">
             <div class="flex shrink-0 items-center justify-between px-3 py-2">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-theme-400">Summary</span>
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-theme-400">Extracted knowledge</span>
               <button
                 class="p-1 text-theme-500 hover:text-theme-200 lg:hidden"
                 title="Close analysis"
@@ -527,7 +527,7 @@ onBeforeUnmount(() => {
                 v-else-if="analysis?.status === 'not_analyzed'"
                 class="py-3 text-xs leading-5 text-theme-500"
               >
-                Run Extract facts to generate chunk summaries.
+                Run Extract facts to generate durable facts and entities.
               </div>
               <div
                 v-else-if="analysis?.status === 'too_large'"
@@ -543,77 +543,28 @@ onBeforeUnmount(() => {
                   This analysis is from an older document or analysis version. Run Extract facts to refresh it.
                 </div>
                 <div
-                  v-if="analysis?.chunks.length"
-                  class="space-y-3"
+                  v-if="analysis?.items.length"
+                  class="space-y-1.5"
                 >
                   <div
-                    v-for="chunk in analysis.chunks"
-                    :key="chunk.chunkIndex"
-                    class="text-xs leading-5 text-theme-300"
+                    v-for="(item, index) in analysis.items"
+                    :key="`${item.kind}-${item.chunkIndex}-${index}`"
+                    class="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs leading-4 text-theme-300 hover:bg-theme-900/70"
                   >
-                    <div
-                      v-if="chunk.sectionPath"
-                      class="mb-0.5 truncate text-[10px] font-medium uppercase tracking-wide text-theme-600"
-                    >
-                      {{ chunk.sectionPath }}
-                    </div>
-                    <p :class="{ 'italic text-theme-600': !chunk.summary }">
-                      {{ chunk.summary || 'Summary unavailable for this chunk.' }}
-                    </p>
-                    <div
-                      v-if="chunk.tags.length"
-                      class="mt-1 flex flex-wrap gap-1"
-                    >
-                      <span
-                        v-for="tag in chunk.tags"
-                        :key="tag"
-                        class="rounded border border-theme-800 bg-theme-900 px-1.5 py-0.5 text-[10px] text-theme-500"
-                      >{{ tag }}</span>
-                    </div>
+                    <Icon
+                      :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:circle-dot'"
+                      class="mt-0.5 h-3.5 w-3.5 shrink-0 text-theme-500"
+                    />
+                    <span>{{ item.label }}</span>
                   </div>
                 </div>
                 <div
                   v-else
                   class="py-3 text-xs text-theme-500"
                 >
-                  No chunk summaries are available.
+                  No durable facts or entities were extracted.
                 </div>
               </template>
-            </div>
-          </div>
-          <div class="flex min-h-0 basis-1/2 flex-col">
-            <div class="shrink-0 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-theme-400">
-              Extracted knowledge
-            </div>
-            <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-              <div
-                v-if="analysisLoading"
-                class="py-3 text-xs text-theme-500"
-              >
-                Loading…
-              </div>
-              <div
-                v-else-if="analysis?.items.length"
-                class="space-y-1.5"
-              >
-                <div
-                  v-for="(item, index) in analysis.items"
-                  :key="`${item.kind}-${item.chunkIndex}-${index}`"
-                  class="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs leading-4 text-theme-300 hover:bg-theme-900/70"
-                >
-                  <Icon
-                    :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:circle-dot'"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0 text-theme-500"
-                  />
-                  <span>{{ item.label }}</span>
-                </div>
-              </div>
-              <div
-                v-else-if="!analysisLoading"
-                class="py-3 text-xs text-theme-500"
-              >
-                No durable facts or entities were extracted.
-              </div>
             </div>
           </div>
         </aside>
@@ -682,6 +633,10 @@ onBeforeUnmount(() => {
 
 :deep(.memory-editor-content > *:first-child) {
   margin-top: 0;
+}
+
+:deep(.memory-editor-content .memory-chunk-boundary-block) {
+  margin-top: 3rem;
 }
 
 :deep(.memory-editor-content p) {

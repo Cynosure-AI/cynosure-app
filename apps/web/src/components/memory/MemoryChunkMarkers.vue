@@ -13,10 +13,13 @@ interface MarkerEditor {
   state: {
     doc: {
       descendants: (callback: (node: TextNodeLike, pos: number) => void) => void;
+      resolve?: (pos: number) => { parentOffset: number };
     };
   };
   view: {
     coordsAtPos: (pos: number) => { top: number };
+    dom?: HTMLElement;
+    domAtPos?: (pos: number) => { node: Node };
   };
   on: (event: "update", callback: () => void) => void;
   off: (event: "update", callback: () => void) => void;
@@ -30,6 +33,7 @@ const props = defineProps<{
 const layerRef = ref<HTMLElement | null>(null);
 const markers = ref<Array<{ chunk: MemoryDocumentAnalysis["chunks"][number]; top: number }>>([]);
 let resizeObserver: ResizeObserver | null = null;
+let boundaryElements = new Set<HTMLElement>();
 const markdownParser = new Marked({ breaks: true });
 const separatingElements = new Set([
   "ADDRESS", "BLOCKQUOTE", "BR", "DIV", "H1", "H2", "H3", "H4", "H5", "H6",
@@ -109,11 +113,30 @@ function markerPosition(
   return { documentPosition: positions[offset], textOffset: offset };
 }
 
+function boundaryElement(editor: MarkerEditor, position: number): HTMLElement | null {
+  if (editor.state.doc.resolve?.(position).parentOffset !== 0 || !editor.view.domAtPos || !editor.view.dom) return null;
+  const domPosition = editor.view.domAtPos(position).node;
+  const element = domPosition instanceof HTMLElement ? domPosition : domPosition.parentElement;
+  const block = element?.closest<HTMLElement>("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, table");
+  return block && editor.view.dom.contains(block) ? block : null;
+}
+
+function updateBoundarySpacing(nextElements: Set<HTMLElement>) {
+  for (const element of boundaryElements) {
+    if (!nextElements.has(element)) element.classList.remove("memory-chunk-boundary-block");
+  }
+  for (const element of nextElements) {
+    if (!boundaryElements.has(element)) element.classList.add("memory-chunk-boundary-block");
+  }
+  boundaryElements = nextElements;
+}
+
 async function updateMarkers() {
   await nextTick();
   const editor = props.editor;
   const layer = layerRef.value;
   if (!editor || !layer || props.chunks.length < 2) {
+    updateBoundarySpacing(new Set());
     markers.value = [];
     return;
   }
@@ -122,14 +145,30 @@ async function updateMarkers() {
   const layerTop = layer.getBoundingClientRect().top;
   let previousOffset = -1;
   const nextMarkers: typeof markers.value = [];
+  const nextBoundaryElements = new Set<HTMLElement>();
+  const matchedChunks: Array<{
+    chunk: MemoryDocumentAnalysis["chunks"][number];
+    documentPosition: number;
+    spaced: boolean;
+  }> = [];
 
   for (const chunk of props.chunks) {
     const match = markerPosition(text, positions, chunk.text, previousOffset);
     if (!match) continue;
     previousOffset = match.textOffset;
     if (chunk.chunkIndex === 0) continue;
+    const element = boundaryElement(editor, match.documentPosition);
+    if (element) nextBoundaryElements.add(element);
+    matchedChunks.push({ chunk, documentPosition: match.documentPosition, spaced: Boolean(element) });
+  }
+
+  updateBoundarySpacing(nextBoundaryElements);
+  for (const match of matchedChunks) {
     const coords = editor.view.coordsAtPos(match.documentPosition);
-    nextMarkers.push({ chunk, top: Math.max(0, coords.top - layerTop - 4) });
+    nextMarkers.push({
+      chunk: match.chunk,
+      top: Math.max(0, coords.top - layerTop - (match.spaced ? 22 : 6)),
+    });
   }
   markers.value = nextMarkers;
 }
@@ -156,6 +195,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   props.editor?.off("update", onEditorUpdate);
+  updateBoundarySpacing(new Set());
   resizeObserver?.disconnect();
   window.removeEventListener("resize", onEditorUpdate);
 });
@@ -175,24 +215,24 @@ onBeforeUnmount(() => {
     >
       <HoverTooltip
         placement="mouse"
-        :max-width="380"
+        :max-width="460"
         block
       >
         <div
           class="group flex w-full items-center gap-2"
           :aria-label="`Chunk ${marker.chunk.chunkIndex + 1} boundary`"
         >
-          <div class="h-px flex-1 border-t border-dashed border-accent-500/35 group-hover:border-accent-400/70" />
-          <span class="rounded-full border border-accent-500/30 bg-theme-950/95 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-400/80 shadow-sm">
+          <div class="h-px flex-1 border-t-2 border-accent-500/55 shadow-[0_0_8px_color-mix(in_srgb,var(--color-accent-500)_25%,transparent)] transition-colors group-hover:border-accent-300" />
+          <span class="rounded-full border border-accent-400/60 bg-accent-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-accent-300 shadow-md shadow-black/30 transition-colors group-hover:bg-accent-500/25">
             Chunk {{ marker.chunk.chunkIndex + 1 }}
           </span>
         </div>
         <template #content>
           <div
-            class="min-w-52 text-theme-200"
+            class="min-w-64 text-[13px] leading-5 text-theme-200"
             :aria-label="`Summary for chunk ${marker.chunk.chunkIndex + 1}`"
           >
-            <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent-400">
+            <div class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-400">
               Chunk {{ marker.chunk.chunkIndex + 1 }}<span v-if="marker.chunk.sectionPath"> · {{ marker.chunk.sectionPath }}</span>
             </div>
             <p :class="{ 'italic text-theme-500': !marker.chunk.summary }">
@@ -205,7 +245,7 @@ onBeforeUnmount(() => {
               <span
                 v-for="tag in marker.chunk.tags"
                 :key="tag"
-                class="rounded border border-theme-700 bg-theme-950 px-1.5 py-0.5 text-[10px] text-theme-400"
+                class="rounded border border-theme-700 bg-theme-950 px-1.5 py-0.5 text-[11px] text-theme-400"
               >{{ tag }}</span>
             </div>
           </div>
