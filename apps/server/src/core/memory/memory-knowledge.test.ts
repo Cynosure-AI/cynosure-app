@@ -584,10 +584,10 @@ describe('memory knowledge v3', () => {
         expect(store.documentAnalysis('test-space', 'preview.md')?.items).toEqual([
             expect.objectContaining({
                 kind: 'relationship', relation: 'uses', entity: 'TypeScript', subject: 'Nora',
-                label: 'uses -> TypeScript', reasoning: 'Nora uses TypeScript.', chunkIndex: 0,
+                label: 'Nora -> uses -> TypeScript', reasoning: 'Nora uses TypeScript.', chunkIndex: 0,
             }),
             expect.objectContaining({
-                kind: 'entity', relation: 'entity', entity: 'Selene', label: 'entity -> Selene',
+                kind: 'entity', relation: 'entity', entity: 'Selene', label: 'Mentioned entity: Selene',
                 reasoning: 'Selene is mentioned in this source chunk.', chunkIndex: 0,
             }),
         ])
