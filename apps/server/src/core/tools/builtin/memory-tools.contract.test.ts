@@ -3,11 +3,8 @@ import {
     MEMORY_TOOL_NAMES,
     makeMemoryCreateTool,
     makeMemoryListDocumentsTool,
-    makeMemoryAppendTool,
-    makeMemoryRemoveAllTool,
-    makeMemoryRemoveRangeTool,
-    makeMemoryReplaceAllTool,
-    makeMemoryReplaceRangeTool,
+    makeMemoryUpdateTool,
+    applyExactMemoryEdits,
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeKnowledgeAssertTool,
@@ -19,26 +16,26 @@ import {
 
 describe('memory mutation tool contracts', () => {
     test('exposes focused memory mutations', () => {
-        expect(MEMORY_TOOL_NAMES).toEqual(expect.arrayContaining([
-            'memory_create',
-            'memory_append', 'memory_replace_range', 'memory_replace_all',
-            'memory_remove_range', 'memory_remove_all',
-        ]))
-        expect(MEMORY_TOOL_NAMES).not.toContain('memory_update')
-        expect(MEMORY_TOOL_NAMES).not.toContain('memory_delete')
+        expect(MEMORY_TOOL_NAMES).toEqual([
+            'memory_list_documents', 'memory_retrieve_chunks', 'memory_semantic_search',
+            'memory_create', 'memory_update',
+        ])
     })
 
-    test('keeps range fields out of whole-document replacement', () => {
-        const tool = makeMemoryReplaceAllTool({})
-        const properties = tool.parameters.properties as Record<string, unknown>
-        expect(properties).not.toHaveProperty('partStart')
-        expect(properties).not.toHaveProperty('partEnd')
-        expect(tool.parameters.required).toEqual(['documentRef', 'content'])
+    test('exposes one exact, batch-oriented update contract', () => {
+        const tool = makeMemoryUpdateTool({})
+        expect(tool.parameters.required).toEqual(['documentId', 'edits'])
         expect(tool.parameters.additionalProperties).toBe(false)
+        expect((tool.parameters.properties as any).edits.items.properties.op.enum).toEqual(['replace', 'delete', 'insert_after'])
     })
 
-    test('requires range boundaries for range replacement', () => {
-        expect(makeMemoryReplaceRangeTool({}).parameters.required).toEqual(['documentRef', 'content', 'partStart', 'partEnd'])
+    test('applies edits exactly and rejects absent or ambiguous matches atomically', () => {
+        const source = '## Preferences\n- Vue 2\n- Project X\n\n## Preferences\n'
+        expect(applyExactMemoryEdits(source, [{ op: 'replace', old: 'Vue 2', new: 'Vue 3' }, { op: 'delete', old: '- Project X\n' }])).toEqual({ content: '## Preferences\n- Vue 3\n\n## Preferences\n' })
+        expect(applyExactMemoryEdits('## Development Preferences\nExisting', [{ op: 'insert_after', anchor: '## Development Preferences', text: '- Prefers pnpm over npm.' }])).toEqual({ content: '## Development Preferences\n- Prefers pnpm over npm.\nExisting' })
+        expect(applyExactMemoryEdits(source, [{ op: 'insert_after', anchor: '## Preferences', text: '- pnpm' }])).toEqual(expect.objectContaining({ error: expect.stringContaining('more than once') }))
+        expect(applyExactMemoryEdits(source, [{ op: 'replace', old: 'vue 2', new: 'Vue 3' }])).toEqual(expect.objectContaining({ error: expect.stringContaining('exact') }))
+        expect(applyExactMemoryEdits('aaa', [{ op: 'delete', old: 'aa' }])).toEqual(expect.objectContaining({ error: expect.stringContaining('more than once') }))
     })
 
     test('exposes an explicit entity merge contract', () => {
@@ -68,11 +65,7 @@ describe('memory mutation tool contracts', () => {
             makeMemoryRetrieveChunksTool({}),
             makeMemorySearchTool({}),
             makeMemoryCreateTool({}),
-            makeMemoryAppendTool({}),
-            makeMemoryReplaceAllTool({}),
-            makeMemoryReplaceRangeTool({}),
-            makeMemoryRemoveAllTool({}),
-            makeMemoryRemoveRangeTool({}),
+            makeMemoryUpdateTool({}),
             makeKnowledgeSearchTool({}),
             makeKnowledgeAssertTool({}),
             makeKnowledgeDeleteTool({}),

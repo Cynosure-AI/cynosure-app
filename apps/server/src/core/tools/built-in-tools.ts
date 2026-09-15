@@ -16,11 +16,7 @@ import {
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryAppendTool,
-    makeMemoryReplaceRangeTool,
-    makeMemoryReplaceAllTool,
-    makeMemoryRemoveAllTool,
-    makeMemoryRemoveRangeTool,
+    makeMemoryUpdateTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -36,11 +32,7 @@ export {
     makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryAppendTool,
-    makeMemoryReplaceRangeTool,
-    makeMemoryReplaceAllTool,
-    makeMemoryRemoveAllTool,
-    makeMemoryRemoveRangeTool,
+    makeMemoryUpdateTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -129,22 +121,7 @@ const BUILTIN_TOOL_HYDRATORS = {
         assignedCategories: ctx.assignedCategories,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
-    memory_append: (ctx: BuiltInHydrationContext) => makeMemoryAppendTool({
-        assignedCategories: ctx.assignedCategories,
-        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
-    }),
-    memory_replace_range: (ctx: BuiltInHydrationContext) => makeMemoryReplaceRangeTool({
-        assignedCategories: ctx.assignedCategories,
-        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
-    }),
-    memory_replace_all: (ctx: BuiltInHydrationContext) => makeMemoryReplaceAllTool({
-        assignedCategories: ctx.assignedCategories,
-        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
-    }),
-    memory_remove_all: (ctx: BuiltInHydrationContext) => makeMemoryRemoveAllTool({
-        assignedCategories: ctx.assignedCategories,
-    }),
-    memory_remove_range: (ctx: BuiltInHydrationContext) => makeMemoryRemoveRangeTool({
+    memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
         assignedCategories: ctx.assignedCategories,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
@@ -201,7 +178,7 @@ export function getBuiltInMemoryToolKeys(): string[] {
     return [
         ...getBuiltInMemoryReadToolKeys(),
         getBuiltInToolKey('memory_create'),
-        getBuiltInToolKey('memory_append'),
+        getBuiltInToolKey('memory_update'),
     ];
 }
 

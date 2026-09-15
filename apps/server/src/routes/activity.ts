@@ -244,7 +244,7 @@ function agentInfo(agentId: string | null): Pick<ActivityItem, 'agentName' | 'ag
 }
 
 function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memoryFolderId' | 'memoryFileName'> {
-    const documentRef = output.match(/documentRef=([^,;)\s]+)/)?.[1]
+    const documentRef = output.match(/document(?:Id|Ref)=([^,;)\s]+)/)?.[1]
     if (!documentRef) return {}
     const document = getDb().prepare(`
         SELECT category_id, file_name FROM memory_documents

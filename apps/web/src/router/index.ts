@@ -68,7 +68,11 @@ const router = createRouter({
       redirect: '/memory-folders/documents'
     },
     {
-      path: '/memory-folders/:section(documents|relationships|visual-graph)',
+      path: '/memory-folders/relationships',
+      redirect: '/memory-folders/documents'
+    },
+    {
+      path: '/memory-folders/:section(documents|visual-graph)',
       name: 'memory-folders',
       component: () => import('@/views/MemoryFoldersView.vue')
     },

@@ -13,9 +13,44 @@ interface Line {
     y: number
 }
 
+interface PageLines {
+    height: number
+    lines: Line[]
+}
+
 interface Bookmark {
     title: string
     items: Bookmark[]
+}
+
+const normalizeLine = (text: string): string => text.trim().replace(/\s+/g, ' ')
+
+function repeatedMarginNoise(pages: PageLines[]): Set<string> {
+    if (pages.length < 2) return new Set()
+    const occurrences = new Map<string, Set<number>>()
+    pages.forEach((page, pageIndex) => {
+        for (const line of page.lines) {
+            if (line.y > page.height * 0.88 || line.y < page.height * 0.12) {
+                const text = normalizeLine(line.text)
+                if (!text) continue
+                const key = /^(?:page\s*)?\d+(?:\s*(?:of|\/)\s*\d+)?$/i.test(text) ? '<page-number>' : text
+                const pageNumbers = occurrences.get(key) ?? new Set<number>()
+                pageNumbers.add(pageIndex)
+                occurrences.set(key, pageNumbers)
+            }
+        }
+    })
+    const minimumPages = Math.max(2, Math.ceil(pages.length * 0.6))
+    return new Set([...occurrences].filter(([, pageNumbers]) => pageNumbers.size >= minimumPages).map(([text]) => text))
+}
+
+function isMarginNoise(line: Line, page: PageLines, noise: Set<string>): boolean {
+    if (line.y <= page.height * 0.12 || line.y >= page.height * 0.88) {
+        const text = normalizeLine(line.text)
+        const key = /^(?:page\s*)?\d+(?:\s*(?:of|\/)\s*\d+)?$/i.test(text) ? '<page-number>' : text
+        return noise.has(key)
+    }
+    return false
 }
 
 /** Keep PDF content order: globally sorting coordinates interleaves columns. */
@@ -58,10 +93,9 @@ export async function parsePdfToMarkdown(buffer: Buffer): Promise<string> {
     const pdf = await getDocumentProxy(new Uint8Array(buffer))
     try {
         const headings = new Map<string, number>()
-        const normalize = (text: string) => text.trim().replace(/\s+/g, ' ')
         const visit = (entries: Bookmark[], level: number): void => {
             for (const entry of entries) {
-                headings.set(normalize(entry.title), Math.min(level, 6))
+                headings.set(normalizeLine(entry.title), Math.min(level, 6))
                 visit(entry.items, level + 1)
             }
         }
@@ -69,36 +103,40 @@ export async function parsePdfToMarkdown(buffer: Buffer): Promise<string> {
         const outline = await pdf.getOutline().catch(() => null)
         if (outline) visit(outline, 1)
 
-        const pages: Line[][] = []
-        const sizes = new Map<number, number>()
+        const pages: PageLines[] = []
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
             const page = await pdf.getPage(pageNumber)
             try {
                 const content = await page.getTextContent()
                 const items = content.items.filter(item => 'str' in item)
-                pages.push(toLines(items))
-                for (const item of items) {
-                    const size = Math.round(Math.hypot(item.transform[2], item.transform[3]) * 2) / 2
-                    if (size > 0) sizes.set(size, (sizes.get(size) || 0) + item.str.trim().length)
-                }
+                pages.push({ height: page.getViewport({ scale: 1 }).height, lines: toLines(items) })
             } finally {
                 page.cleanup()
             }
         }
 
+        const marginNoise = repeatedMarginNoise(pages)
+        const sizes = new Map<number, number>()
+        for (const page of pages) {
+            for (const line of page.lines) {
+                if (line.size > 0 && !isMarginNoise(line, page, marginNoise)) {
+                    sizes.set(line.size, (sizes.get(line.size) || 0) + line.text.length)
+                }
+            }
+        }
         // Character-weighted mode prevents short titles from defining body size.
         const bodySize = [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0] || 0
-        const headingSizes = [...new Set(pages.flat().filter(line =>
-            line.text.length <= 160 && line.size >= bodySize * 1.2 && bodySize > 0,
-        ).map(line => line.size))].sort((a, b) => b - a)
-
-        const markdown = pages.map(lines => {
+        const headingSizes = [...new Set(pages.flatMap(page => page.lines.filter(line =>
+            !isMarginNoise(line, page, marginNoise) && line.text.length <= 160 && line.size >= bodySize * 1.2 && bodySize > 0,
+        ).map(line => line.size)))].sort((a, b) => b - a)
+        const markdown = pages.map(page => {
             const blocks: string[] = []
             let previous: Line | undefined
             let previousHeading = false
-            for (const line of lines) {
+            for (const line of page.lines) {
+                if (isMarginNoise(line, page, marginNoise)) continue
                 const inferred = line.text.length <= 160 ? headingSizes.indexOf(line.size) : -1
-                const level = headings.get(normalize(line.text)) ?? (inferred >= 0 ? Math.min(inferred + 1, 6) : 0)
+                const level = headings.get(normalizeLine(line.text)) ?? (inferred >= 0 ? Math.min(inferred + 1, 6) : 0)
                 const text = line.text.replace(/^[•◦▪●]\s*/, '- ')
                 const isList = /^(?:[-*+] |\d+[.)] )/.test(text)
                 if (blocks.length && (level || previousHeading || isList ||
