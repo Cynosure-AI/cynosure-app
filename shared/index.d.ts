@@ -29,6 +29,8 @@ export interface ChatRunConfig {
   allowedTools?: string[]
   systemPrompt?: string
   generateTitle?: boolean
+  /** Experimental: generate up to three suggested user follow-ups after a turn. */
+  generateQuickResponses?: boolean
   subAgents?: SubAgentAssignmentDto[]
   memoryFolderIds?: string[]
   thinkingEnabled?: boolean

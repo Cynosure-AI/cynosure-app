@@ -75,10 +75,17 @@ export const useChatStore = defineStore('chat', () => {
   const queuePaused = ref(false)
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
+  const quickResponsesMap = new Map<string, { messageId: string | null; suggestions: string[] }>()
+  const quickResponsesTrigger = ref(0)
   const activePostActions = computed(() => {
     void postActionsTrigger.value // track changes
     if (!activeConversationId.value) return new Set<string>()
     return postActionsMap.get(activeConversationId.value) || new Set<string>()
+  })
+  const activeQuickResponses = computed(() => {
+    void quickResponsesTrigger.value
+    if (!activeConversationId.value) return []
+    return quickResponsesMap.get(activeConversationId.value)?.suggestions || []
   })
 
   // ── Composables ──
@@ -237,6 +244,10 @@ export const useChatStore = defineStore('chat', () => {
     if (!memoryFolders.value.length) await loadMemoryFolders()
     agentConfig.ensureFreeChatPreset()
     const conversationId = activeConversationId.value
+    if (conversationId) {
+      quickResponsesMap.delete(conversationId)
+      quickResponsesTrigger.value++
+    }
     await chatMessages.sendMessage(...args)
     const currentConversationId = activeConversationId.value
     if (currentConversationId && (!conversationId || currentConversationId === conversationId)) {
@@ -307,7 +318,7 @@ export const useChatStore = defineStore('chat', () => {
 
       // Hydrate server-side post-action state
       try {
-        const { actions } = await api.chat.getPostActions(id)
+        const { actions, quickResponses } = await api.chat.getPostActions(id)
         if (activeConversationId.value !== id) return
         if (actions.length) {
           postActionsMap.set(id, new Set(actions))
@@ -315,6 +326,12 @@ export const useChatStore = defineStore('chat', () => {
           postActionsMap.delete(id)
         }
         postActionsTrigger.value++
+        if (quickResponses?.suggestions.length) {
+          quickResponsesMap.set(id, quickResponses)
+        } else {
+          quickResponsesMap.delete(id)
+        }
+        quickResponsesTrigger.value++
       } catch {
         // Non-critical
       }
@@ -588,6 +605,18 @@ export const useChatStore = defineStore('chat', () => {
     postActionsTrigger.value++
   }
 
+  function handleQuickResponses(data: { conversationId: string; messageId: string | null; suggestions: string[] }): void {
+    if (data.suggestions.length) {
+      quickResponsesMap.set(data.conversationId, {
+        messageId: data.messageId,
+        suggestions: data.suggestions.slice(0, 3),
+      })
+    } else {
+      quickResponsesMap.delete(data.conversationId)
+    }
+    quickResponsesTrigger.value++
+  }
+
   // ── Computed ──
 
   const sortedConversations = computed(() =>
@@ -639,6 +668,7 @@ export const useChatStore = defineStore('chat', () => {
     queuePaused,
     activeConversation,
     activePostActions,
+    activeQuickResponses,
     activeConversationIsStreaming,
     activeConversationHasRunningInstance,
     isConversationLocked,
@@ -814,6 +844,7 @@ export const useChatStore = defineStore('chat', () => {
     renameConversation,
     startNewChat,
     handlePostAction,
+    handleQuickResponses,
   }
 })
 

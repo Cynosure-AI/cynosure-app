@@ -3,11 +3,13 @@ import { ref, watch, nextTick, computed, onMounted, reactive } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import { usePreferencesStore } from '../../stores/preferences.store'
 import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
 import PreTurnContextTimeline from '../chat/PreTurnContextTimeline.vue'
 import PreResponseActionsCard from '../chat/PreResponseActionsCard.vue'
+import QuickResponses from '../chat/QuickResponses.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
@@ -22,11 +24,12 @@ const props = withDefaults(defineProps<{
   searchOpen: false,
 })
 
-const emit = defineEmits<{ closeSearch: [] }>()
+const emit = defineEmits<{ closeSearch: []; selectQuickResponse: [suggestion: string] }>()
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
+const prefs = usePreferencesStore()
 const forkError = ref('')
 async function forkMessage(messageId: string): Promise<void> {
   forkError.value = ''
@@ -196,6 +199,12 @@ function scrollMainToBottomIfNear(): void {
 const activePreResponseActions = computed(() =>
   Array.from(chatStore.activePostActions).filter((action) => action === 'generating-title'),
 )
+const generatingQuickResponses = computed(() =>
+  prefs.quickResponses
+    && !agentStore.isExecuting
+    && chatStore.activePostActions.has('generating-quick-responses'),
+)
+const visibleQuickResponses = computed(() => prefs.quickResponses ? chatStore.activeQuickResponses : [])
 
 // ─── Unified timeline ───────────────────────────────────────
 
@@ -344,6 +353,7 @@ watch(() => chatStore.messages[chatStore.messages.length - 1]?.imageDataUrls?.le
 watch(() => chatStore.messages[chatStore.messages.length - 1]?.videoDataUrls?.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => agentStore.executionSteps.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
+watch([() => chatStore.activeQuickResponses.length, generatingQuickResponses], scrollMainToBottomIfNear)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
 watch(() => chatStore.loadingMessages, (isLoading) => {
   if (isLoading) {
@@ -837,6 +847,12 @@ onMounted(() => {
           </div>
         </div>
       </template>
+
+      <QuickResponses
+        :suggestions="visibleQuickResponses"
+        :loading="generatingQuickResponses"
+        @select="emit('selectQuickResponse', $event)"
+      />
 
       <!-- Working indicator (executing but not currently streaming) -->
       <div

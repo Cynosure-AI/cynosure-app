@@ -80,6 +80,10 @@ function onDrop(e: DragEvent) {
   }
 }
 
+function fillQuickResponse(suggestion: string): void {
+  inputBarRef.value?.fillSuggestion(suggestion)
+}
+
 async function openRecentChat(conversation: Conversation): Promise<void> {
   await chatStore.selectConversation(conversation.id, conversation.agentId ?? null)
   await router.push({ name: 'conversation', params: { conversationId: conversation.id } })
@@ -156,6 +160,7 @@ watch(
           <ChatPanel
             :search-open="chatSearchOpen"
             @close-search="chatSearchOpen = false"
+            @select-quick-response="fillQuickResponse"
           />
 
           <PlanningTaskList

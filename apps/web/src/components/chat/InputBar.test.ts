@@ -25,8 +25,9 @@ vi.mock('../../stores/chat.store', () => ({
   useChatStore: () => chatStore,
 }))
 
-function mountInputBar() {
+function mountInputBar(attachTo?: Element) {
   return mount(InputBar, {
+    attachTo,
     global: {
       stubs: {
         InputToolbar: true,
@@ -104,6 +105,21 @@ describe('InputBar drafts', () => {
     expect(chatStore.sendMessage).toHaveBeenCalledWith('Send this', undefined, undefined, undefined)
     expect(localStorage.getItem(draftKey)).toBeNull()
     expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('')
+  })
+
+  test('fills and focuses a quick response without sending it', async () => {
+    const wrapper = mountInputBar(document.body)
+    const textarea = wrapper.get<HTMLTextAreaElement>('textarea')
+
+    wrapper.vm.fillSuggestion('Tell me more about that')
+    await flushPromises()
+
+    expect(textarea.element.value).toBe('Tell me more about that')
+    expect(document.activeElement).toBe(textarea.element)
+    expect(chatStore.sendMessage).not.toHaveBeenCalled()
+    expect(localStorage.getItem(`${SK_CHAT_DRAFT_PREFIX}conversation:conversation-1`))
+      .toBe('Tell me more about that')
+    wrapper.unmount()
   })
 
   test('queues Enter submissions while a conversation is running', async () => {

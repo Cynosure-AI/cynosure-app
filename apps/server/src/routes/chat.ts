@@ -10,7 +10,7 @@ import { closePlanningRun, interruptPlanningRun } from '../core/agent/planning-s
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
-import { generateTitle, buildFallbackTitle, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
+import { generateTitle, buildFallbackTitle, generateQuickResponses, getQuickResponses, clearQuickResponses, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../core/agent/context-trimmer.js'
 import type {
   ChatMessage,
@@ -270,6 +270,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         allowedTools,
         systemPrompt,
         generateTitle: generateTitlePref,
+        generateQuickResponses: generateQuickResponsesPref,
         subAgents: reqSubAgents,
         memoryFolderIds: reqMemoryFolderIds,
         thinkingEnabled: reqThinkingEnabled,
@@ -286,6 +287,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         inlineAttachmentTextLimit: reqInlineAttachmentTextLimit,
         debugMode: reqDebugMode,
       } = run
+      cancelPostActions(conversationId)
+      clearQuickResponses(conversationId, broadcast)
       const db = getDb()
       const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
         ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
@@ -664,6 +667,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           })
           db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
 
+          if (generateQuickResponsesPref === true) {
+            void generateQuickResponses({
+              conversationId,
+              messageId: assistantMsgId,
+              userMessage: normalizedContent,
+              assistantResponse: assistantContent,
+              broadcast,
+              providerId: responseProvider,
+            })
+          }
+
           return { streamId, completed: true }
         }
 
@@ -738,6 +752,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             message: { id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow, agentId },
           })
           db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
+
+          if (generateQuickResponsesPref === true) {
+            void generateQuickResponses({
+              conversationId,
+              messageId: assistantMsgId,
+              userMessage: normalizedContent,
+              assistantResponse: assistantContent,
+              broadcast,
+              providerId: responseProvider,
+            })
+          }
 
           return { streamId, completed: true }
         }
@@ -879,6 +904,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           conversationId, streamId,
           message: { id: assistantMsgId, conversationId, role: 'assistant', content: result.content, createdAt: assistantNow, agentId },
         })
+
+        if (generateQuickResponsesPref === true) {
+          void generateQuickResponses({
+            conversationId,
+            messageId: assistantMsgId,
+            userMessage: normalizedContent,
+            assistantResponse: result.content,
+            broadcast,
+            providerId: responseProvider,
+            model: responseModel,
+          })
+        }
 
       } catch (err) {
         if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
@@ -1047,7 +1084,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.get('/post-actions', async (req) => {
     const { conversationId } = req.query as { conversationId?: string }
     if (conversationId) {
-      return { actions: getActiveActions(conversationId) }
+      return { actions: getActiveActions(conversationId), quickResponses: getQuickResponses(conversationId) }
     }
     return { actions: getAllActiveActions() }
   })
