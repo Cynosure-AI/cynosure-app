@@ -5,6 +5,7 @@ import { getDb } from '../db/database.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { listActiveInstances } from './instances.js'
 import { stopAllActivity } from '../core/activity/stop-all.js'
+import { getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, type MemoryDiffSegment } from '../core/memory/memory-revisions.js'
 
 type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
@@ -35,7 +36,17 @@ interface ActivityItem {
     artifacts?: ActivityArtifact[]
     memoryFolderId?: string
     memoryFileName?: string
-    dreamChanges?: Array<{ tool: string; output: string; memoryFolderId?: string; memoryFileName?: string }>
+    dreamChanges?: ActivityDreamChange[]
+}
+
+interface ActivityDreamChange {
+    tool: string
+    output: string
+    summary: string
+    status: 'success'
+    memoryFolderId?: string
+    memoryFileName?: string
+    diffSegments?: MemoryDiffSegment[]
 }
 
 type ActivityTotalsByKind = Record<ActivityKind, number>
@@ -256,6 +267,47 @@ function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memor
         WHERE document_ref = ? AND status = 'active'
     `).get(documentRef) as { category_id: string; file_name: string } | undefined
     return document ? { memoryFolderId: document.category_id, memoryFileName: document.file_name } : {}
+}
+
+function dreamChangeForActivity(change: DreamChange): ActivityDreamChange {
+    const location = memoryLocationFromToolOutput(change.output)
+    let parsed: { fileRef?: unknown; previousRevision?: unknown; revision?: unknown } = {}
+    try { parsed = JSON.parse(change.output) as typeof parsed } catch { /* legacy human-readable tool output */ }
+
+    const documentRef = typeof parsed.fileRef === 'string'
+        ? parsed.fileRef
+        : change.output.match(/(?:fileRef|document(?:Id|Ref))=([^,;)\s]+)/)?.[1]
+    const previousRevision = typeof parsed.previousRevision === 'number' ? parsed.previousRevision : undefined
+    const revision = typeof parsed.revision === 'number'
+        ? parsed.revision
+        : Number(change.output.match(/revision=(\d+)/)?.[1]) || undefined
+    let diffSegments: MemoryDiffSegment[] | undefined
+
+    if (documentRef && revision) {
+        const revisions = listMemoryRevisions(documentRef)
+        const to = revisions.find(candidate => candidate.revisionNumber === revision)
+        if (to && previousRevision !== undefined) {
+            const from = revisions.find(candidate => candidate.revisionNumber === previousRevision)
+            if (from) diffSegments = inlineMemoryDiff(documentRef, from.id, to.id)
+        } else if (to && change.tool === 'memory_create') {
+            const created = getMemoryRevision(documentRef, to.id)
+            if (created) diffSegments = created.content ? [{ type: 'added', text: created.content }] : []
+        }
+    }
+
+    const fileName = location.memoryFileName || 'memory document'
+    const revisionLabel = previousRevision !== undefined && revision !== undefined
+        ? ` · revision ${previousRevision} → ${revision}`
+        : revision !== undefined ? ` · revision ${revision}` : ''
+    const action = change.tool === 'memory_create' ? 'Created' : 'Updated'
+    return {
+        tool: change.tool,
+        output: change.output,
+        summary: `${action} ${fileName}${revisionLabel}`,
+        status: 'success',
+        ...location,
+        ...(diffSegments !== undefined ? { diffSegments } : {}),
+    }
 }
 
 function activitySearchText(item: ActivityItem): string {
@@ -621,7 +673,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 sourceId: run.id,
                 sourceLabel: 'Dream',
                 model: run.model,
-                dreamChanges: changes.map(({ tool, output }) => ({ tool, output, ...memoryLocationFromToolOutput(output) })),
+                dreamChanges: changes.map(dreamChangeForActivity),
             })
         }
 

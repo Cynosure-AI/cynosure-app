@@ -335,7 +335,15 @@ export interface ActivityItem {
     artifacts?: ActivityArtifact[]
     memoryFolderId?: string
     memoryFileName?: string
-    dreamChanges?: Array<{ tool: string; output: string; memoryFolderId?: string; memoryFileName?: string }>
+    dreamChanges?: Array<{
+        tool: string
+        output: string
+        summary: string
+        status: 'success'
+        memoryFolderId?: string
+        memoryFileName?: string
+        diffSegments?: MemoryDiffSegment[]
+    }>
 }
 
 export type ActivityTotalsByKind = Record<ActivityKind, number>
