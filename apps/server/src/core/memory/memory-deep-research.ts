@@ -53,60 +53,10 @@ interface ReusableChunkPlan {
   chunksToExtract: PreparedMemoryChunk[]
 }
 
-export interface MemorySourceRange {
-  start: number
-  end: number
-}
-
-/** Resolve edited source ranges to the current chunk layout and include one
- * neighboring chunk on either side. Chunk boundaries can shift after an edit,
- * so ranges that land between chunks are assigned to the nearest chunk. */
-export function affectedChunkNeighborhood(
-  chunks: PreparedMemoryChunk[],
-  ranges: MemorySourceRange[],
-  radius = 1,
-): Set<number> {
-  const affected = new Set<number>()
-  if (!chunks.length) return affected
-
-  for (const range of ranges) {
-    const start = Math.max(0, Math.min(range.start, range.end))
-    const end = Math.max(start, Math.max(range.start, range.end))
-    const center = start + ((end - start) / 2)
-    const overlapping = chunks.filter((chunk) => {
-      const chunkStart = chunk.sourceStart ?? 0
-      const chunkEnd = chunk.sourceEnd ?? chunkStart + chunk.text.length
-      return end === start
-        ? chunkStart <= start && chunkEnd >= start
-        : chunkStart < end && chunkEnd > start
-    })
-    const anchors = overlapping.length ? overlapping : [chunks.reduce((nearest, chunk) => {
-      const chunkStart = chunk.sourceStart ?? 0
-      const chunkEnd = chunk.sourceEnd ?? chunkStart + chunk.text.length
-      const distance = center < chunkStart ? chunkStart - center : center > chunkEnd ? center - chunkEnd : 0
-      const nearestStart = nearest.sourceStart ?? 0
-      const nearestEnd = nearest.sourceEnd ?? nearestStart + nearest.text.length
-      const nearestDistance = center < nearestStart ? nearestStart - center : center > nearestEnd ? center - nearestEnd : 0
-      return distance < nearestDistance ? chunk : nearest
-    })]
-
-    for (const anchor of anchors) {
-      for (let index = anchor.chunkIndex - radius; index <= anchor.chunkIndex + radius; index++) {
-        if (index >= 0 && index < chunks.length) affected.add(index)
-      }
-    }
-  }
-  return affected
-}
-
 /** Match exact chunks against the last compatible active extraction. Buckets
  * make duplicate chunks occurrence-aware, while hashes allow unchanged chunks
  * to move when an insertion shifts their numeric indexes. */
-export function planReusableKnowledgeChunks(
-  documentId: string,
-  chunks: PreparedMemoryChunk[],
-  forceExtractChunkIndexes: ReadonlySet<number> = new Set(),
-): ReusableChunkPlan {
+export function planReusableKnowledgeChunks(documentId: string, chunks: PreparedMemoryChunk[]): ReusableChunkPlan {
   const priorRun = getDb().prepare(`
     SELECT id FROM memory_knowledge_index_runs
     WHERE document_id = ? AND pipeline_version = ? AND prompt_version = ? AND status = 'active'
@@ -137,7 +87,7 @@ export function planReusableKnowledgeChunks(
   for (const chunk of chunks) {
     const matches = byHash.get(chunk.contentHash)
     const match = matches?.shift()
-    if (!match || forceExtractChunkIndexes.has(chunk.chunkIndex)) {
+    if (!match) {
       chunksToExtract.push(chunk)
       continue
     }
@@ -303,8 +253,6 @@ export async function deepResearchMemoryContent(opts: {
   onDeepResearchProgress?: (current: number, total: number) => void
   resumeCheckpoint?: DeepResearchCheckpoint
   onDeepResearchCheckpoint?: (checkpoint: DeepResearchCheckpoint, current: number, total: number) => void
-  /** Canonical ranges changed by memory_patch, expressed against `content`. */
-  affectedRanges?: MemorySourceRange[]
 }): Promise<DeepResearchResult> {
   const knowledge = getMemoryKnowledgeStore()
   const resetGeneration = knowledge.getResetGeneration()
@@ -342,8 +290,7 @@ export async function deepResearchMemoryContent(opts: {
       chunksReused: 0,
     }
   }
-  const forcedChunkIndexes = affectedChunkNeighborhood(chunks, opts.affectedRanges || [])
-  const reusePlan = planReusableKnowledgeChunks(indexedDocument.document_id, chunks, forcedChunkIndexes)
+  const reusePlan = planReusableKnowledgeChunks(indexedDocument.document_id, chunks)
   const resumable = opts.resumeCheckpoint?.contentHash === contentHash ? opts.resumeCheckpoint : undefined
   const extractableIndexes = new Set(reusePlan.chunksToExtract.map((chunk) => chunk.chunkIndex))
   const resumableSummaryIndexes = new Set((resumable?.chunkSummaries || []).filter((item) => item.summary.trim()).map((item) => item.sourceChunkIndex))
@@ -496,7 +443,6 @@ export async function deepResearchMemoryFile(opts: {
   onDeepResearchProgress?: (current: number, total: number) => void
   resumeCheckpoint?: DeepResearchCheckpoint
   onDeepResearchCheckpoint?: (checkpoint: DeepResearchCheckpoint, current: number, total: number) => void
-  affectedRanges?: MemorySourceRange[]
 }): Promise<DeepResearchResult> {
   const content = await readMemoryFileForDeepResearch(opts.directoryPath, opts.fileName)
   return deepResearchMemoryContent({ ...opts, content })
