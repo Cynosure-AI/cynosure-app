@@ -35,6 +35,8 @@ export interface RetrievedChunk {
   documentId?: string
   documentRef?: string
   revision?: string
+  sourceStart?: number
+  sourceEnd?: number
   sourceChunkId?: string
   matchedRepresentations?: Array<'raw' | 'summary' | 'keywords' | 'fact'>
   /** Stable public alias for representation provenance. */
@@ -55,6 +57,9 @@ export interface PreparedMemoryChunk {
   documentTitle: string
   sectionPath: string
   contentHash: string
+  /** Character range in the canonical source text. Internal addressing only. */
+  sourceStart?: number
+  sourceEnd?: number
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -195,6 +200,8 @@ export class MemoryParser {
           documentTitle,
           sectionPath: item.sectionPath,
           contentHash: item.contentHash,
+          sourceStart: item.sourceStart,
+          sourceEnd: item.sourceEnd,
           embeddingModel: embeddings[j].model,
           representationType: 'raw',
         }))
@@ -300,6 +307,8 @@ export class MemoryParser {
       documentTitle: r.documentTitle,
       sectionPath: r.sectionPath,
       contentHash: r.contentHash,
+      sourceStart: r.sourceStart,
+      sourceEnd: r.sourceEnd,
       sourceFile: r.sourceFile,
       chunkIndex: r.chunkIndex,
       categoryId: r.categoryId,
@@ -348,6 +357,7 @@ export class MemoryParser {
     const documentTitle = inferDocumentTitle(text, sourceFile)
     let inheritedSection = documentTitle
 
+    let searchFrom = 0
     return chunks.map((chunk, chunkIndex) => {
       const explicitSection = inferExplicitSectionPath(chunk)
       if (explicitSection) inheritedSection = explicitSection
@@ -357,6 +367,13 @@ export class MemoryParser {
         sectionPath && sectionPath !== documentTitle ? `Section: ${sectionPath}` : '',
         chunk,
       ].filter(Boolean).join('\n')
+      let sourceStart = text.indexOf(chunk, searchFrom)
+      if (sourceStart < 0) sourceStart = text.indexOf(chunk)
+      if (sourceStart < 0) sourceStart = 0
+      const sourceEnd = sourceStart + chunk.length
+      // Overlapping chunks may begin before the prior chunk ends. Moving one
+      // character forward still distinguishes repeated occurrences in order.
+      searchFrom = sourceStart + 1
       return {
         text: chunk,
         searchText,
@@ -364,6 +381,8 @@ export class MemoryParser {
         documentTitle,
         sectionPath,
         contentHash: createHash('sha256').update(chunk).digest('hex'),
+        sourceStart,
+        sourceEnd,
       }
     })
   }

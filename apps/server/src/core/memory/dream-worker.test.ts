@@ -26,9 +26,8 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
             execute: (params: unknown) => mocks.tool(name, params, opts) }
     }
     return {
-        makeMemoryListDocumentsTool: make('memory_list_documents'), makeMemoryRetrieveChunksTool: make('memory_retrieve_chunks'),
-        makeMemorySearchTool: make('memory_semantic_search'), makeMemoryCreateTool: make('memory_create'),
-        makeMemoryUpdateTool: make('memory_update'),
+        makeMemorySearchTool: make('memory_search'), makeMemoryCreateTool: make('memory_create'),
+        makeMemoryPatchTool: make('memory_patch'),
     }
 })
 import { closeDb, getDb } from '../../db/database.js'
@@ -148,7 +147,7 @@ describe('Dream worker', () => {
             return { success: true, output: 'Saved document preference#dream' }
         })
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
-            await config.tools.find(tool => tool.name === 'memory_semantic_search')!.execute({ query: 'preference' })
+            await config.tools.find(tool => tool.name === 'memory_search')!.execute({ query: 'preference' })
             await config.tools.find(tool => tool.name === 'memory_create')!.execute({ title: 'Preference', content: 'Concise replies' })
         })
 
@@ -234,7 +233,7 @@ describe('Dream worker', () => {
     })
     test('records partial mutations and does not repeat an identical successful write on retry', async () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
-            await config.tools.find(tool => tool.name === 'memory_semantic_search')!.execute({ query: 'preference' })
+            await config.tools.find(tool => tool.name === 'memory_search')!.execute({ query: 'preference' })
             await config.tools.find(tool => tool.name === 'memory_create')!.execute({ title: 'Preference', content: 'Concise replies' })
             if (mocks.run.mock.calls.length === 1) throw new Error('Provider disconnected')
         })
@@ -289,7 +288,7 @@ describe('Dream worker', () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
             const result = await config.tools.find(tool => tool.name === 'memory_create')!.execute({})
             expect(result.success).toBe(false)
-            expect(config.tools).toHaveLength(6)
+            expect(config.tools).toHaveLength(4)
             expect(config.tools.some(tool => /append|replace_range|remove_range|shell|knowledge/.test(tool.name))).toBe(false)
         })
         await ready()
@@ -377,7 +376,7 @@ describe('Dream worker', () => {
     })
     test('rejects writes after disabling or changing the conversation scope', async () => {
         mocks.run.mockImplementation(async (config: AgentExecutorConfig) => {
-            await config.tools.find(tool => tool.name === 'memory_semantic_search')!.execute({ query: 'preference' })
+            await config.tools.find(tool => tool.name === 'memory_search')!.execute({ query: 'preference' })
             getDb().prepare("UPDATE conversations SET execution_config_json = '{\"memoryFolderIds\":[\"missing\"]}' WHERE id = 'chat'").run()
             await expect(config.tools.find(tool => tool.name === 'memory_create')!.execute({ title: 'Blocked' })).rejects.toThrow('scope changed')
         })

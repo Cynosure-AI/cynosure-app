@@ -12,11 +12,9 @@ import { makeNotificationTool } from "./builtin/notification.js";
 import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
 import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import {
-    makeMemoryListDocumentsTool,
-    makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryUpdateTool,
+    makeMemoryPatchTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -28,11 +26,9 @@ import {
 export {
     makeNotificationTool,
     makeChannelNotificationTool,
-    makeMemoryListDocumentsTool,
-    makeMemoryRetrieveChunksTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
-    makeMemoryUpdateTool,
+    makeMemoryPatchTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -105,15 +101,7 @@ const BUILTIN_TOOL_HYDRATORS = {
     schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[1],
     schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[2],
     schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[3],
-    memory_list_documents: (ctx: BuiltInHydrationContext) => makeMemoryListDocumentsTool({
-        categoryFilter: ctx.categoryFilter,
-        assignedCategories: ctx.assignedCategories,
-    }),
-    memory_retrieve_chunks: (ctx: BuiltInHydrationContext) => makeMemoryRetrieveChunksTool({
-        categoryFilter: ctx.categoryFilter,
-        assignedCategories: ctx.assignedCategories,
-    }),
-    memory_semantic_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
+    memory_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
         categoryFilter: ctx.categoryFilter,
         assignedCategories: ctx.assignedCategories,
     }),
@@ -121,7 +109,7 @@ const BUILTIN_TOOL_HYDRATORS = {
         assignedCategories: ctx.assignedCategories,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
-    memory_update: (ctx: BuiltInHydrationContext) => makeMemoryUpdateTool({
+    memory_patch: (ctx: BuiltInHydrationContext) => makeMemoryPatchTool({
         assignedCategories: ctx.assignedCategories,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
@@ -178,7 +166,7 @@ export function getBuiltInMemoryToolKeys(): string[] {
     return [
         ...getBuiltInMemoryReadToolKeys(),
         getBuiltInToolKey('memory_create'),
-        getBuiltInToolKey('memory_update'),
+        getBuiltInToolKey('memory_patch'),
     ];
 }
 

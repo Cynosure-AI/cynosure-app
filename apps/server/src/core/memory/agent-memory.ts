@@ -22,7 +22,7 @@ import { cancelMemoryIndexJobsForFile } from './memory-index-jobs.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 import { randomBytes } from 'node:crypto'
 import { createStableMemoryDocumentRef } from './memory-reference.js'
-import { markMemoryDocumentDeleted, recordMemoryRevision, updateMemoryDocumentLocation, type MemoryRevisionContext } from './memory-revisions.js'
+import { getCurrentMemoryRevisionNumber, markMemoryDocumentDeleted, recordMemoryRevision, updateMemoryDocumentLocation, type MemoryRevisionContext } from './memory-revisions.js'
 
 export interface ReindexFileResult {
     fileName: string
@@ -35,6 +35,7 @@ export interface MemoryDocumentReference {
     categoryId: string
     fileName: string
     revision: string
+    revisionNumber: number
     chunkCount: number
 }
 
@@ -268,6 +269,7 @@ export class AgentMemory {
                 categoryId: row.category_id,
                 fileName: row.file_name,
                 revision: row.content_hash,
+                revisionNumber: getCurrentMemoryRevisionNumber(row.document_id) ?? 1,
                 chunkCount: row.chunk_count,
             } : undefined
         } catch {
@@ -295,6 +297,7 @@ export class AgentMemory {
                 categoryId: row.category_id,
                 fileName: row.file_name,
                 revision: row.content_hash,
+                revisionNumber: getCurrentMemoryRevisionNumber(row.document_id) ?? 1,
                 chunkCount: row.chunk_count,
             } : undefined
         } catch {

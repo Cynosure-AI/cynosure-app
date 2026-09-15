@@ -2,10 +2,8 @@ import { describe, expect, test } from 'vitest'
 import {
     MEMORY_TOOL_NAMES,
     makeMemoryCreateTool,
-    makeMemoryListDocumentsTool,
-    makeMemoryUpdateTool,
-    applyExactMemoryEdits,
-    makeMemoryRetrieveChunksTool,
+    makeMemoryPatchTool,
+    applyMemoryPatch,
     makeMemorySearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -17,25 +15,28 @@ import {
 describe('memory mutation tool contracts', () => {
     test('exposes focused memory mutations', () => {
         expect(MEMORY_TOOL_NAMES).toEqual([
-            'memory_list_documents', 'memory_retrieve_chunks', 'memory_semantic_search',
-            'memory_create', 'memory_update',
+            'memory_search', 'memory_create', 'memory_patch',
         ])
     })
 
-    test('exposes one exact, batch-oriented update contract', () => {
-        const tool = makeMemoryUpdateTool({})
-        expect(tool.parameters.required).toEqual(['documentId', 'edits'])
+    test('exposes one contextual patch contract', () => {
+        const tool = makeMemoryPatchTool({})
+        expect(tool.parameters.required).toEqual(['fileRef', 'expectedRevision', 'patch'])
         expect(tool.parameters.additionalProperties).toBe(false)
-        expect((tool.parameters.properties as any).edits.items.properties.op.enum).toEqual(['replace', 'delete', 'insert_after'])
     })
 
-    test('applies edits exactly and rejects absent or ambiguous matches atomically', () => {
-        const source = '## Preferences\n- Vue 2\n- Project X\n\n## Preferences\n'
-        expect(applyExactMemoryEdits(source, [{ op: 'replace', old: 'Vue 2', new: 'Vue 3' }, { op: 'delete', old: '- Project X\n' }])).toEqual({ content: '## Preferences\n- Vue 3\n\n## Preferences\n' })
-        expect(applyExactMemoryEdits('## Development Preferences\nExisting', [{ op: 'insert_after', anchor: '## Development Preferences', text: '- Prefers pnpm over npm.' }])).toEqual({ content: '## Development Preferences\n- Prefers pnpm over npm.\nExisting' })
-        expect(applyExactMemoryEdits(source, [{ op: 'insert_after', anchor: '## Preferences', text: '- pnpm' }])).toEqual(expect.objectContaining({ error: expect.stringContaining('more than once') }))
-        expect(applyExactMemoryEdits(source, [{ op: 'replace', old: 'vue 2', new: 'Vue 3' }])).toEqual(expect.objectContaining({ error: expect.stringContaining('exact') }))
-        expect(applyExactMemoryEdits('aaa', [{ op: 'delete', old: 'aa' }])).toEqual(expect.objectContaining({ error: expect.stringContaining('more than once') }))
+    test('applies replacement, deletion, insertion, and multi-edit patches atomically', () => {
+        const source = '## Development\n\nUses Vue 2.\nKeeps Project X.\n'
+        expect(applyMemoryPatch(source, '@@\n-Uses Vue 2.\n+Uses Vue 3.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 3.\nKeeps Project X.\n' })
+        expect(applyMemoryPatch(source, '@@\n-Keeps Project X.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 2.\n\n' })
+        expect(applyMemoryPatch(source, '@@\n Uses Vue 2.\n+Uses Electron.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 2.\nUses Electron.\nKeeps Project X.\n' })
+        expect(applyMemoryPatch(source, '@@\n-Uses Vue 2.\n+Uses Vue 3.\n Keeps Project X.\n+Uses Electron.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 3.\nKeeps Project X.\nUses Electron.\n' })
+    })
+
+    test('rejects missing and ambiguous context without returning partial content', () => {
+        expect(applyMemoryPatch('Vue 2\nVue 2', '@@\n-Vue 2\n+Vue 3')).toMatchObject({ status: 'conflict', reason: 'ambiguous_context' })
+        expect(applyMemoryPatch('Vue 2', '@@\n-Vue 1\n+Vue 3')).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found' })
+        expect(applyMemoryPatch('Vue 2', '@@\n-Vue 2\n+Vue 3\n@@\n-Missing\n+Present')).toEqual(expect.objectContaining({ status: 'conflict', reason: 'expected_context_not_found' }))
     })
 
     test('exposes an explicit entity merge contract', () => {
@@ -61,11 +62,9 @@ describe('memory mutation tool contracts', () => {
 
     test('declares complete behavior annotations for every memory and relationship tool', () => {
         const tools = [
-            makeMemoryListDocumentsTool({}),
-            makeMemoryRetrieveChunksTool({}),
             makeMemorySearchTool({}),
             makeMemoryCreateTool({}),
-            makeMemoryUpdateTool({}),
+            makeMemoryPatchTool({}),
             makeKnowledgeSearchTool({}),
             makeKnowledgeAssertTool({}),
             makeKnowledgeDeleteTool({}),

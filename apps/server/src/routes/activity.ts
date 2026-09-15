@@ -244,7 +244,12 @@ function agentInfo(agentId: string | null): Pick<ActivityItem, 'agentName' | 'ag
 }
 
 function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memoryFolderId' | 'memoryFileName'> {
-    const documentRef = output.match(/document(?:Id|Ref)=([^,;)\s]+)/)?.[1]
+    let structuredRef: string | undefined
+    try {
+        const parsed = JSON.parse(output) as { fileRef?: unknown }
+        if (typeof parsed.fileRef === 'string') structuredRef = parsed.fileRef
+    } catch { /* legacy human-readable tool output */ }
+    const documentRef = structuredRef || output.match(/(?:fileRef|document(?:Id|Ref))=([^,;)\s]+)/)?.[1]
     if (!documentRef) return {}
     const document = getDb().prepare(`
         SELECT category_id, file_name FROM memory_documents

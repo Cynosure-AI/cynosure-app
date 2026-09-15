@@ -38,15 +38,13 @@ describe('agent-required execution tools', () => {
 
     test('includes the unified memory mutation tool by default', () => {
         expect(getBuiltInMemoryReadToolKeys()).toEqual([
-            'builtin:memory::memory_list_documents',
-            'builtin:memory::memory_retrieve_chunks',
-            'builtin:memory::memory_semantic_search',
+            'builtin:memory::memory_search',
             'builtin:memory::knowledge_search',
         ])
         expect(getBuiltInMemoryToolKeys()).toEqual([
             ...getBuiltInMemoryReadToolKeys(),
             'builtin:memory::memory_create',
-            'builtin:memory::memory_update',
+            'builtin:memory::memory_patch',
         ])
     })
 })
