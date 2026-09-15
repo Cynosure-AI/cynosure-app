@@ -22,7 +22,7 @@ vi.mock('./rag.js', () => ({
 
 import { closeDb, getDb } from '../../db/database.js'
 import { MemoryKnowledgeStore } from './memory-knowledge.js'
-import { planReusableKnowledgeChunks } from './memory-deep-research.js'
+import { affectedChunkNeighborhood, planReusableKnowledgeChunks } from './memory-deep-research.js'
 import { upsertMemoryFileIndex } from './agent-memory.js'
 import { createMemoryKnowledgeBackup, restoreMemoryKnowledgeBackup } from './memory-knowledge-backup.js'
 import type { PreparedMemoryChunk } from './parser.js'
@@ -69,6 +69,35 @@ afterEach(() => {
 })
 
 describe('memory knowledge v3', () => {
+    test('maps patch ranges to current chunks plus one surrounding chunk on each side', () => {
+        const chunks = Array.from({ length: 5 }, (_, index) => ({
+            ...chunk(`Chunk ${index}`, index),
+            sourceStart: index * 100,
+            sourceEnd: (index * 100) + 80,
+        }))
+
+        expect([...affectedChunkNeighborhood(chunks, [{ start: 235, end: 245 }])]).toEqual([1, 2, 3])
+        expect([...affectedChunkNeighborhood(chunks, [{ start: 90, end: 90 }])]).toEqual([0, 1])
+    })
+
+    test('re-extracts an explicitly affected unchanged chunk and its neighbors', () => {
+        addDocument('doc-neighborhood', 'neighborhood.md', 'revision-1')
+        const chunks = Array.from({ length: 5 }, (_, index) => ({
+            ...chunk(`Stable chunk ${index}`, index),
+            contentHash: `stable-${index}`,
+        }))
+        store.publishDocument({
+            documentId: 'doc-neighborhood', contentHash: 'revision-1', categoryId: 'test-space',
+            fileName: 'neighborhood.md', sourceId: 'memory:test-space:neighborhood.md', chunks,
+            relations: [],
+            chunkSummaries: chunks.map((item) => ({ sourceChunkIndex: item.chunkIndex, summary: item.text })),
+        })
+
+        const plan = planReusableKnowledgeChunks('doc-neighborhood', chunks, new Set([1, 2, 3]))
+        expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([1, 2, 3])
+        expect(plan.reusableChunks.map((item) => item.sourceChunkIndex)).toEqual([0, 4])
+    })
+
     test('reuses unchanged chunk knowledge across a partial document edit', () => {
         addDocument('doc-incremental', 'incremental.md', 'revision-1')
         const originalChunks = [
