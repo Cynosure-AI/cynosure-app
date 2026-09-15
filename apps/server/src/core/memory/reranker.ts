@@ -1,6 +1,7 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { estimateTextTokens, estimateTextsTokens, recordAuxiliaryModelUsage } from '../usage-metering.js'
+import { RERANKER_LIMITS } from '../runtime-limits.js'
 import type { SearchResult } from './rag.js'
 
 export interface MemoryRerankerConfig {
@@ -21,7 +22,7 @@ const SETTINGS_KEY = 'memoryReranker'
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
   model: '',
-  candidateCount: 50
+  candidateCount: RERANKER_LIMITS.defaultCandidateCount
 }
 
 function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): MemoryRerankerConfig {
@@ -32,7 +33,7 @@ function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): Mem
     enabled: !!config?.enabled,
     providerId: config?.providerId?.trim() || undefined,
     model: config?.model?.trim() || '',
-    candidateCount: Math.min(100, Math.max(3, candidateCount))
+    candidateCount: Math.min(RERANKER_LIMITS.maxCandidateCount, Math.max(RERANKER_LIMITS.minCandidateCount, candidateCount))
   }
 }
 

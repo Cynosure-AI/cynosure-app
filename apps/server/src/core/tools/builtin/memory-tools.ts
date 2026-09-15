@@ -10,6 +10,7 @@ import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '.
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
 import { deleteMemoryKnowledgeSource } from '../../memory/memory-deep-research.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
+import { MAX_CHUNK_READ } from '../../runtime-limits.js'
 import {
     parseMemoryDocumentRef,
 } from '../../memory/memory-reference.js'
@@ -737,7 +738,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             }
             const requestedMinIndex = minIndex!
             const requestedMaxIndex = maxIndex!
-            const cappedMax = Math.min(requestedMaxIndex, requestedMinIndex + 19) // cap at 20 chunks per call
+            const cappedMax = Math.min(requestedMaxIndex, requestedMinIndex + MAX_CHUNK_READ - 1) // cap chunks per call
             const readRevisions = opts.onDocumentRead
                 ? new Map((resolvedScope.category ? [resolvedScope.category] : assignedCategories).map(category => {
                     const ref = mem.getDocumentReference(category.id, sourceFile)
@@ -778,7 +779,7 @@ export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefin
             }).join('\n\n---\n\n')
             const wasCapped = cappedMax < requestedMaxIndex
             const capNote = wasCapped
-                ? `\n\n(Showing Parts ${requestedMinIndex + 1}-${cappedMax + 1} of requested Parts ${requestedMinIndex + 1}-${requestedMaxIndex + 1}; capped at 20 chunks per call. Call again with a later range to continue.)`
+                ? `\n\n(Showing Parts ${requestedMinIndex + 1}-${cappedMax + 1} of requested Parts ${requestedMinIndex + 1}-${requestedMaxIndex + 1}; capped at ${MAX_CHUNK_READ} chunks per call. Call again with a later range to continue.)`
                 : ''
             const identity = documentRef
                 ? `[Document: documentRef=${documentRef.documentRef}]\n\n`

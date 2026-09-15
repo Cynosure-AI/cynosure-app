@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import {
   usePreferencesStore,
@@ -7,6 +7,7 @@ import {
 } from "../../stores/preferences.store";
 import { useProviderStore } from "../../stores/provider.store";
 import { api } from "../../api/client";
+import { useRuntimeLimits } from "../../api/limits";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import BaseCard from "../shared/BaseCard.vue";
@@ -15,12 +16,19 @@ import SettingsPersistenceStatus from "./SettingsPersistenceStatus.vue";
 
 const prefs = usePreferencesStore();
 const providerStore = useProviderStore();
+// Server-authoritative bounds — see api/limits.ts.
+const { limits } = useRuntimeLimits();
 const attachmentConfigStatus = ref<"idle" | "saving" | "saved" | "error">("idle");
-const lastSavedAttachmentLimit = ref(24_000);
-const attachmentLimitSteps = [
-  2_000, 4_000, 8_000, 12_000, 16_000, 24_000, 32_000, 48_000,
-  64_000, 96_000, 128_000, 192_000, 256_000, 384_000, 500_000,
-];
+const lastSavedAttachmentLimit = ref(limits.value.attachments.defaultInlineTextLimit);
+/** Discrete slider stops, clipped to the server-enforced bounds so the UI can
+ * never offer a value the server would normalize away. */
+const attachmentLimitSteps = computed(() =>
+  [
+    2_000, 4_000, 8_000, 12_000, 16_000, 24_000, 32_000, 48_000,
+    64_000, 96_000, 128_000, 192_000, 256_000, 384_000, 500_000,
+  ].filter((step) =>
+    step >= limits.value.attachments.minInlineTextLimit &&
+    step <= limits.value.attachments.maxInlineTextLimit));
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -79,7 +87,8 @@ function onCompactSelection(selection: {
 }
 
 function clampInlineAttachmentTextLimit(value: number): number {
-  return Math.max(2_000, Math.min(500_000, Math.floor(value || 24_000)));
+  const { minInlineTextLimit, maxInlineTextLimit, defaultInlineTextLimit } = limits.value.attachments;
+  return Math.max(minInlineTextLimit, Math.min(maxInlineTextLimit, Math.floor(value || defaultInlineTextLimit)));
 }
 
 function formatAttachmentTextLimit(value: number): string {
@@ -87,15 +96,16 @@ function formatAttachmentTextLimit(value: number): string {
 }
 
 function attachmentLimitStepIndex(value: number): number {
-  return attachmentLimitSteps.reduce((closestIndex, step, index) =>
-    Math.abs(step - value) < Math.abs(attachmentLimitSteps[closestIndex] - value)
+  const steps = attachmentLimitSteps.value;
+  return steps.reduce((closestIndex, step, index) =>
+    Math.abs(step - value) < Math.abs(steps[closestIndex] - value)
       ? index
       : closestIndex, 0);
 }
 
 function attachmentLimitFromEvent(event: Event): number {
   const index = Number((event.target as HTMLInputElement).value);
-  return attachmentLimitSteps[index] ?? 24_000;
+  return attachmentLimitSteps.value[index] ?? limits.value.attachments.defaultInlineTextLimit;
 }
 
 function previewInlineAttachmentTextLimit(event: Event): void {

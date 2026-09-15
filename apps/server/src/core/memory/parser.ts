@@ -6,6 +6,7 @@ import { getRAGStore, type VectorDocument } from './rag.js'
 import type { SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
 import { getDb } from '../../db/database.js'
+import { CHUNKING_LIMITS } from '../runtime-limits.js'
 
 export interface DocumentMeta {
   source: string
@@ -95,8 +96,8 @@ export class MemoryParser {
   private chunkOverlap: number
 
   constructor(opts?: { chunkSize?: number; chunkOverlap?: number }) {
-    this.chunkSize = opts?.chunkSize ?? 512
-    this.chunkOverlap = opts?.chunkOverlap ?? 64
+    this.chunkSize = opts?.chunkSize ?? CHUNKING_LIMITS.defaultChunkSize
+    this.chunkOverlap = opts?.chunkOverlap ?? CHUNKING_LIMITS.defaultChunkOverlap
   }
 
   /** Reload chunk config from DB settings. */
@@ -106,7 +107,7 @@ export class MemoryParser {
       const row = db.prepare("SELECT value_json FROM settings WHERE key = 'chunking'").get() as { value_json: string } | undefined
       if (row) {
         const cfg = JSON.parse(row.value_json) as { chunkSize?: number; chunkOverlap?: number }
-        if (cfg.chunkSize && cfg.chunkSize >= 64) this.chunkSize = cfg.chunkSize
+        if (cfg.chunkSize && cfg.chunkSize >= CHUNKING_LIMITS.minChunkSize) this.chunkSize = cfg.chunkSize
         if (cfg.chunkOverlap !== undefined && cfg.chunkOverlap >= 0) this.chunkOverlap = cfg.chunkOverlap
       }
     } catch { /* DB not ready yet — use defaults */ }

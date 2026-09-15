@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentAnalysis, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
+  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentAnalysis, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk, RuntimeLimits,
   AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
@@ -298,6 +298,7 @@ export const api = {
   },
 
   memory: {
+    getLimits: () => get<RuntimeLimits>('/api/memory/limits'),
     getDreamConfig: () => get<DreamConfig>('/api/memory/dream/config'),
     configureDream: (config: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
     cancelDreamRun: (id: string) => post<{ success: boolean }>(`/api/memory/dream/runs/${encodeURIComponent(id)}/cancel`, {}),

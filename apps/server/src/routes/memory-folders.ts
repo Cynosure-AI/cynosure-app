@@ -34,10 +34,10 @@ import {
     deleteMemoryKnowledgeSource,
     deleteMemoryKnowledgeCategory,
     deepResearchMemoryFile,
-    MAX_DEEP_RESEARCH_CHUNKS,
     moveMemoryKnowledgeSource,
     type DeepResearchCheckpoint,
 } from '../core/memory/memory-deep-research.js'
+import { MAX_ANALYSIS_CHUNKS } from '../core/runtime-limits.js'
 import {
     cancelMemoryIndexJob,
     discardMemoryIndexJob,
@@ -98,6 +98,8 @@ export interface MemoryFileStatus {
     lastIndexedAt?: number
     deepResearched: boolean
     analysisStatus: 'not_analyzed' | 'current' | 'needs_refresh'
+    /** Server-enforced maximum chunk count for Deep Research eligibility. */
+    analysisChunkLimit: number
     deepResearchedAt?: number
     dreamedAt?: number
     tags: string[]
@@ -173,7 +175,8 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
             return {
                 fileName: f.fileName, extension: f.extension, size: f.size, modifiedAt: f.modifiedAt,
                 supported: false, textDirect: false, status: 'unsupported' as const,
-                deepResearched: false, analysisStatus: 'not_analyzed' as const, tags: [],
+                deepResearched: false, analysisStatus: 'not_analyzed' as const,
+                analysisChunkLimit: MAX_ANALYSIS_CHUNKS, tags: [],
             }
         }
         const indexed = fileIndex.get(f.fileName)
@@ -182,7 +185,8 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
                 fileName: f.fileName, extension: f.extension, size: f.size, modifiedAt: f.modifiedAt,
                 supported: true, textDirect: f.textDirect, status: 'not_indexed' as const,
                 estimatedChunkCount: estimateChunkCountFromFileSize(f.size, chunkingConfig),
-                deepResearched: false, analysisStatus: 'not_analyzed' as const, tags: [],
+                deepResearched: false, analysisStatus: 'not_analyzed' as const,
+                analysisChunkLimit: MAX_ANALYSIS_CHUNKS, tags: [],
             }
         }
         const currentHash = computeFileHash(f.filePath)
@@ -199,6 +203,7 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
             lastIndexedAt: indexed.lastIndexedAt,
             deepResearched: currentAnalysis,
             analysisStatus: currentAnalysis ? 'current' as const : hasAnyAnalysis ? 'needs_refresh' as const : 'not_analyzed' as const,
+            analysisChunkLimit: MAX_ANALYSIS_CHUNKS,
             deepResearchedAt: indexed.deepResearchedAt || undefined,
             dreamedAt: indexed.dreamedAt || undefined,
             tags: currentAnalysis ? indexed.tags : [],
@@ -558,8 +563,8 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 continue
             }
             const chunkCount = mem.getFileIndexEntry(row.id, fileName)?.chunkCount || 0
-            if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
-                skipped.push({ fileName, reason: `analysis_limit_${MAX_DEEP_RESEARCH_CHUNKS}_chunks` })
+            if (chunkCount > MAX_ANALYSIS_CHUNKS) {
+                skipped.push({ fileName, reason: `analysis_limit_${MAX_ANALYSIS_CHUNKS}_chunks` })
                 continue
             }
             jobs.push(startMemoryIndexJob({
@@ -604,8 +609,8 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const row = loadCategoryRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         const chunkCount = getAgentMemory().getFileIndexEntry(row.id, req.params.fileName)?.chunkCount || 0
-        if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
-            return { status: 'too_large' as const, chunkCount, maxChunks: MAX_DEEP_RESEARCH_CHUNKS, chunks: [], items: [], itemTotal: 0 }
+        if (chunkCount > MAX_ANALYSIS_CHUNKS) {
+            return { status: 'too_large' as const, chunkCount, maxChunks: MAX_ANALYSIS_CHUNKS, chunks: [], items: [], itemTotal: 0 }
         }
         const analysis = getMemoryKnowledgeStore().documentAnalysis(row.id, req.params.fileName)
         if (!analysis) return { status: 'not_analyzed' as const, chunks: [], items: [], itemTotal: 0 }
@@ -673,8 +678,8 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before Deep Research.' : 'File must be re-indexed before Deep Research.' })
         }
         const chunkCount = mem.getFileIndexEntry(row.id, req.params.fileName)?.chunkCount || 0
-        if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
-            return reply.status(422).send({ error: `Analysis supports at most ${MAX_DEEP_RESEARCH_CHUNKS} chunks; this document has ${chunkCount}.` })
+        if (chunkCount > MAX_ANALYSIS_CHUNKS) {
+            return reply.status(422).send({ error: `Analysis supports at most ${MAX_ANALYSIS_CHUNKS} chunks; this document has ${chunkCount}.` })
         }
 
         try {
@@ -704,8 +709,8 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             return reply.status(409).send({ error: status === 'not_indexed' ? 'File must be indexed before Deep Research.' : 'File must be re-indexed before Deep Research.' })
         }
         const chunkCount = mem.getFileIndexEntry(row.id, req.params.fileName)?.chunkCount || 0
-        if (chunkCount > MAX_DEEP_RESEARCH_CHUNKS) {
-            return reply.status(422).send({ error: `Analysis supports at most ${MAX_DEEP_RESEARCH_CHUNKS} chunks; this document has ${chunkCount}.` })
+        if (chunkCount > MAX_ANALYSIS_CHUNKS) {
+            return reply.status(422).send({ error: `Analysis supports at most ${MAX_ANALYSIS_CHUNKS} chunks; this document has ${chunkCount}.` })
         }
 
         const resumableJob = latestResumableMemoryIndexJob(row.id, req.params.fileName)
