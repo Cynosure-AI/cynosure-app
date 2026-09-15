@@ -6,6 +6,7 @@ import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
 import { syncPrefsToElectron } from '../utils/electron-prefs'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
+import { DEFAULT_FREE_CHAT_SYSTEM_PROMPT } from '../utils/default-system-prompts'
 
 interface ChatPreset {
     tools: string[]
@@ -171,7 +172,7 @@ export function useChatAgentConfig(
             tools: [],
             subAgentIds: [],
             memoryFolderIds: [...freeChatDefaultMemoryFolderIds.value],
-            systemPrompt: '',
+            systemPrompt: DEFAULT_FREE_CHAT_SYSTEM_PROMPT,
             thinkingEnabled: true,
             reasoningEffort: 'medium',
             autoToolRouting: true,
