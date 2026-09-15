@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Marked } from "marked";
 import type { MemoryDocumentAnalysis } from "../../api/types";
 import HoverTooltip from "../shared/HoverTooltip.vue";
@@ -34,6 +34,12 @@ const MARKER_SPACING = 22;
 
 const layerRef = ref<HTMLElement | null>(null);
 const markers = ref<Array<{ chunk: MemoryDocumentAnalysis["chunks"][number]; top: number; first: boolean }>>([]);
+const hoveredIndex = ref<number | null>(null);
+const hoveredMarker = computed(() =>
+  hoveredIndex.value === null
+    ? null
+    : markers.value.find((marker) => marker.chunk.chunkIndex === hoveredIndex.value) ?? null,
+);
 let resizeObserver: ResizeObserver | null = null;
 const markdownParser = new Marked({ breaks: true });
 const separatingElements = new Set([
@@ -197,10 +203,17 @@ onBeforeUnmount(() => {
     aria-hidden="false"
   >
     <div
+      v-if="hoveredMarker"
+      class="pointer-events-none absolute inset-x-0 h-px -translate-y-1/2 bg-linear-to-l from-accent-400/80 via-accent-500/45 to-accent-500/10"
+      :style="{ top: `${hoveredMarker.top}px` }"
+    />
+    <div
       v-for="marker in markers"
       :key="marker.chunk.chunkIndex"
       class="pointer-events-auto absolute right-0 flex -translate-y-1/2 items-center gap-1.5"
       :style="{ top: `${marker.top}px` }"
+      @mouseenter="hoveredIndex = marker.chunk.chunkIndex"
+      @mouseleave="hoveredIndex = hoveredIndex === marker.chunk.chunkIndex ? null : hoveredIndex"
     >
       <HoverTooltip
         placement="mouse"
