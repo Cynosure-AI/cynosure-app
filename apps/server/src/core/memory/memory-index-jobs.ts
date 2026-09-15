@@ -363,6 +363,23 @@ export function discardMemoryIndexJob(id: string): boolean {
     return true
 }
 
+/** Permanently remove failed jobs so an acknowledged failure does not
+ * reappear after a reload. Only terminal failures are eligible; active work
+ * and resumable cancelled checkpoints are left untouched. */
+export function dismissMemoryIndexJobFailures(categoryId?: string): number {
+    ensurePersistedJobsLoaded()
+    pruneJobs()
+    const dismissedIds = Array.from(jobs.values())
+        .filter((job) => (job.status === 'error' || job.status === 'dead_letter')
+            && (!categoryId || job.categoryId === categoryId))
+        .map((job) => job.id)
+    if (!dismissedIds.length) return 0
+    for (const id of dismissedIds) jobs.delete(id)
+    const placeholders = dismissedIds.map(() => '?').join(', ')
+    getDb().prepare(`DELETE FROM memory_index_jobs WHERE id IN (${placeholders})`).run(...dismissedIds)
+    return dismissedIds.length
+}
+
 /** Wait for a running job to release its resources after cancellation. */
 export async function waitForMemoryIndexJob(id: string): Promise<void> {
     await jobs.get(id)?.promise

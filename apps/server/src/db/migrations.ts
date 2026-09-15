@@ -34,6 +34,14 @@ const MIGRATIONS: SchemaMigration[] = [
         description: 'Baseline schema',
         up: (db) => db.exec(BASELINE_SCHEMA),
     },
+    {
+        version: 2,
+        description: 'Add per-chunk memory analysis summaries',
+        up: (db) => db.exec(`
+            ALTER TABLE memory_knowledge_text_units
+            ADD COLUMN summary TEXT NOT NULL DEFAULT ''
+        `),
+    },
 ]
 
 /** The schema version this build produces and expects. */

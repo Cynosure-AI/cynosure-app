@@ -6,6 +6,7 @@ import MemoryDocumentEditorModal from './MemoryDocumentEditorModal.vue'
 const mocks = vi.hoisted(() => ({
   getFileContent: vi.fn(),
   updateFileContent: vi.fn(),
+  getDocumentAnalysis: vi.fn(),
   setContent: vi.fn(),
   clearContent: vi.fn(),
 }))
@@ -27,6 +28,7 @@ vi.mock('../../api/client', () => ({
   api: {
     memoryFolders: {
       getFileContent: mocks.getFileContent,
+      getDocumentAnalysis: mocks.getDocumentAnalysis,
       updateFileContent: mocks.updateFileContent,
       renameFile: vi.fn(), listRevisions: vi.fn(), getRevision: vi.fn(),
       getRevisionDiff: vi.fn(), restoreRevision: vi.fn(),
@@ -42,6 +44,7 @@ describe('MemoryDocumentEditorModal large document mode', () => {
     })
     mocks.setContent.mockReset()
     mocks.clearContent.mockReset()
+    mocks.getDocumentAnalysis.mockReset().mockResolvedValue({ status: 'not_analyzed', chunks: [], items: [], itemTotal: 0 })
   })
 
   test('loads and edits large content without constructing a rich-text document', async () => {
@@ -68,5 +71,31 @@ describe('MemoryDocumentEditorModal large document mode', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Save')!.trigger('click')
     await flushPromises()
     expect(mocks.updateFileContent).toHaveBeenCalledWith('category', 'large.md', `${content}changed`, 'current')
+  })
+
+  test('renders ordered summaries, tags, and extracted knowledge in the analysis rail', async () => {
+    mocks.getFileContent.mockResolvedValue({ content: '# Memory\nText', revision: 'current', documentRef: 'memory#ref' })
+    mocks.getDocumentAnalysis.mockResolvedValue({
+      status: 'current',
+      chunks: [
+        { chunkIndex: 0, sectionPath: 'First', summary: 'The first summary.', tags: ['alpha'] },
+        { chunkIndex: 1, sectionPath: 'Second', summary: 'The second summary.', tags: ['beta'] },
+      ],
+      items: [{ kind: 'relationship', label: 'Atlas uses TypeScript', chunkIndex: 1, importance: 2 }],
+      itemTotal: 1,
+    })
+    const wrapper = mount(MemoryDocumentEditorModal, {
+      props: { show: true, categoryId: 'category', sourceFile: 'memory.md' },
+      global: {
+        plugins: [createPinia()],
+        stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('The first summary.')
+    expect(wrapper.text()).toContain('The second summary.')
+    expect(wrapper.text()).toContain('alpha')
+    expect(wrapper.text()).toContain('Atlas uses TypeScript')
   })
 })

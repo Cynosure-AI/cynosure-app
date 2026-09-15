@@ -3,12 +3,25 @@ import { getDb } from '../../db/database.js'
 import { deleteConversationAttachmentChunks, indexConversationAttachment } from './attachment-rag.js'
 import { materializeFileAttachment, type FileAttachmentArtifact, type FileAttachmentInput } from './file-artifacts.js'
 
-export async function stageChatAttachment(conversationId: string, file: FileAttachmentInput): Promise<FileAttachmentArtifact> {
+export async function stageChatAttachment(
+  conversationId: string,
+  file: FileAttachmentInput,
+  opts?: { signal?: AbortSignal; onProgress?: (current: number, total: number) => void },
+): Promise<FileAttachmentArtifact> {
   const artifact = await materializeFileAttachment(file, conversationId)
-  artifact.chunkCount = await indexConversationAttachment(conversationId, artifact)
-  getDb().prepare('INSERT INTO staged_chat_attachments (id, conversation_id, artifact_json, created_at) VALUES (?, ?, ?, ?)')
-    .run(artifact.id, conversationId, JSON.stringify(artifact), Date.now())
-  return artifact
+  try {
+    artifact.chunkCount = await indexConversationAttachment(conversationId, artifact, opts)
+    if (opts?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    getDb().prepare('INSERT INTO staged_chat_attachments (id, conversation_id, artifact_json, created_at) VALUES (?, ?, ?, ?)')
+      .run(artifact.id, conversationId, JSON.stringify(artifact), Date.now())
+    return artifact
+  } catch (error) {
+    for (const path of [artifact.originalPath, artifact.textPath]) {
+      try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
+    }
+    await deleteConversationAttachmentChunks(conversationId, [artifact.assetId || artifact.id]).catch(() => undefined)
+    throw error
+  }
 }
 
 export function takeStagedChatAttachments(conversationId: string, ids: string[]): FileAttachmentArtifact[] {

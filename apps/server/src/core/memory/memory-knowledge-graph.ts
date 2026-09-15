@@ -18,6 +18,27 @@ export interface DocumentKnowledgePreview {
   total: number
 }
 
+export interface DocumentAnalysisChunk {
+  chunkIndex: number
+  sectionPath: string
+  summary: string
+  tags: string[]
+}
+
+export interface DocumentAnalysisItem extends DocumentKnowledgePreviewItem {
+  chunkIndex: number
+  importance?: ImportanceLevel
+}
+
+export interface DocumentAnalysisRecord {
+  contentHash: string
+  pipelineVersion: string
+  promptVersion: string
+  activatedAt: number
+  chunks: DocumentAnalysisChunk[]
+  items: DocumentAnalysisItem[]
+}
+
 /**
  * Read model for the governed knowledge graph.
  *
@@ -309,6 +330,85 @@ export class MemoryKnowledgeGraphStore {
         })),
       ],
       total: relationshipCount + isolatedEntityCount,
+    }
+  }
+
+  documentAnalysis(categoryId: string, fileName: string): DocumentAnalysisRecord | null {
+    const run = getDb().prepare(`
+      SELECT id, content_hash, pipeline_version, prompt_version, activated_at
+      FROM memory_knowledge_index_runs
+      WHERE category_id = ? AND file_name = ? AND status = 'active'
+      ORDER BY activated_at DESC LIMIT 1
+    `).get(categoryId, fileName) as { id: string; content_hash: string; pipeline_version: string; prompt_version: string; activated_at: number } | undefined
+    if (!run) return null
+
+    const chunkRows = getDb().prepare(`
+      SELECT chunk_index, section_path, summary, tags_json
+      FROM memory_knowledge_text_units
+      WHERE run_id = ? ORDER BY chunk_index
+    `).all(run.id) as Array<{ chunk_index: number; section_path: string; summary: string; tags_json: string }>
+    const chunks = chunkRows.map((row) => {
+      let tags: string[] = []
+      try {
+        const parsed = JSON.parse(row.tags_json) as unknown
+        if (Array.isArray(parsed)) tags = parsed.filter((tag): tag is string => typeof tag === 'string')
+      } catch { /* malformed derived metadata is omitted */ }
+      return {
+        chunkIndex: row.chunk_index,
+        sectionPath: row.section_path,
+        summary: row.summary,
+        tags,
+      }
+    })
+
+    const relationshipRows = getDb().prepare(`
+      SELECT DISTINCT a.id, a.object_value_json, p.canonical_name,
+        subject.canonical_name AS subject_name, object.canonical_name AS object_name,
+        a.importance, tu.chunk_index
+      FROM memory_knowledge_assertion_evidence ev
+      JOIN memory_knowledge_assertions a ON a.id = ev.assertion_id
+      JOIN memory_knowledge_predicates p ON p.id = a.predicate_id
+      JOIN memory_knowledge_entities subject ON subject.id = a.subject_entity_id
+      LEFT JOIN memory_knowledge_entities object ON object.id = a.object_entity_id
+      JOIN memory_knowledge_text_units tu ON tu.id = ev.text_unit_id
+      WHERE ev.run_id = ? AND ev.quote_verified = 1 AND a.status IN ('active', 'disputed')
+      ORDER BY tu.chunk_index, a.importance DESC, a.updated_at DESC
+    `).all(run.id) as Array<Record<string, unknown>>
+    const entityRows = getDb().prepare(`
+      SELECT e.id, e.canonical_name, e.entity_type, MIN(tu.chunk_index) AS chunk_index
+      FROM memory_knowledge_entity_mentions mention
+      JOIN memory_knowledge_entities e ON e.id = mention.entity_id AND e.status = 'active'
+      JOIN memory_knowledge_text_units tu ON tu.id = mention.text_unit_id
+      WHERE mention.run_id = ? AND NOT EXISTS (
+        SELECT 1 FROM memory_knowledge_assertion_evidence ev
+        JOIN memory_knowledge_assertions a ON a.id = ev.assertion_id
+        WHERE ev.run_id = mention.run_id AND ev.quote_verified = 1
+          AND a.status IN ('active', 'disputed')
+          AND (a.subject_entity_id = e.id OR a.object_entity_id = e.id)
+      )
+      GROUP BY e.id, e.canonical_name, e.entity_type
+      ORDER BY chunk_index, e.canonical_name
+    `).all(run.id) as Array<Record<string, unknown>>
+
+    return {
+      contentHash: run.content_hash,
+      pipelineVersion: run.pipeline_version,
+      promptVersion: run.prompt_version,
+      activatedAt: run.activated_at,
+      chunks,
+      items: [
+        ...relationshipRows.map((row) => ({
+          kind: 'relationship' as const,
+          label: `${row.subject_name} ${String(row.canonical_name).replace(/_/g, ' ')} ${row.object_name || formatLiteral(row.object_value_json)}`,
+          chunkIndex: Number(row.chunk_index),
+          importance: Math.min(3, Math.max(0, Number(row.importance))) as ImportanceLevel,
+        })),
+        ...entityRows.map((row) => ({
+          kind: 'entity' as const,
+          label: `${row.canonical_name} (${String(row.entity_type).replace(/_/g, ' ')})`,
+          chunkIndex: Number(row.chunk_index),
+        })),
+      ].sort((a, b) => a.chunkIndex - b.chunkIndex),
     }
   }
 

@@ -36,6 +36,36 @@ export function useMemoryDocumentJobs(options: {
       : undefined;
   }
 
+  /** Terminal jobs that ended in a failure the user has not dismissed yet. */
+  const failedJobs = computed(() =>
+    jobs.value.filter((job) => job.status === "error" || job.status === "dead_letter"),
+  );
+
+  /** A background job can fail long after the click that started it, so the
+   * failure is kept visible until the user acknowledges it. Dismissal is
+   * persisted server-side; otherwise the failure would return on reload. */
+  async function dismissFailure(jobId: string): Promise<void> {
+    try {
+      await api.memoryFolders.discardJob(jobId);
+      jobs.value = jobs.value.filter((job) => job.id !== jobId);
+      appJobs.removeJob(jobId);
+    } catch {
+      await loadJobs();
+    }
+  }
+
+  /** Dismiss every failed job in this folder. */
+  async function dismissAllFailures(): Promise<void> {
+    try {
+      await api.memoryFolders.dismissJobFailures(options.categoryId.value);
+      const failedIds = new Set(failedJobs.value.map((job) => job.id));
+      jobs.value = jobs.value.filter((job) => !failedIds.has(job.id));
+      for (const id of failedIds) appJobs.removeJob(id);
+    } catch {
+      await loadJobs();
+    }
+  }
+
   function upsertJob(job: MemoryIndexJob): void {
     jobs.value = [...jobs.value.filter((item) => item.id !== job.id), job];
     appJobs.upsertJob(job);
@@ -150,6 +180,9 @@ export function useMemoryDocumentJobs(options: {
     isJobActive,
     isJobRunning: isJobActive,
     resumableJob,
+    failedJobs,
+    dismissFailure,
+    dismissAllFailures,
     upsertJob,
     loadJobs,
     reindexFile,

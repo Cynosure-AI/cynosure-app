@@ -112,6 +112,18 @@ export function markMemoryDocumentDeleted(documentId: string): void {
     .run(Date.now(), Date.now(), documentId)
 }
 
+/** Record documents removed as a consequence of deleting one or more folders. */
+export function markMemoryCategoriesDeleted(categoryIds: string[]): number {
+  const ids = [...new Set(categoryIds.filter(Boolean))]
+  if (!ids.length) return 0
+  const placeholders = ids.map(() => '?').join(', ')
+  const now = Date.now()
+  return getDb().prepare(`
+    UPDATE memory_documents SET status = 'deleted', deleted_at = ?, updated_at = ?
+    WHERE status = 'active' AND category_id IN (${placeholders})
+  `).run(now, now, ...ids).changes
+}
+
 export function listMemoryRevisions(documentRef: string): MemoryRevisionSummary[] {
   return (getDb().prepare(`
     SELECT r.* FROM memory_document_revisions r

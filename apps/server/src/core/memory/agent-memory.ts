@@ -4,7 +4,6 @@ import { getDb } from '../../db/database.js'
 import { buildMemoryFolderFilter, getMemoryFolderDirectoryPath } from './memory-folder-scope.js'
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import {
-    deleteMemoryKnowledgeSource,
     moveMemoryKnowledgeSource,
 } from './memory-deep-research.js'
 import {
@@ -46,7 +45,7 @@ function throwIfAborted(signal?: AbortSignal): void {
     throw err
 }
 
-function upsertFileIndex(
+export function upsertMemoryFileIndex(
     categoryId: string,
     fileName: string,
     contentHash: string,
@@ -77,17 +76,10 @@ function upsertFileIndex(
                     WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.deep_researched_at
                     ELSE 0
                 END,
-                tags_json = CASE
-                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.tags_json
-                    ELSE '[]'
-                END,
                 content_hash = excluded.content_hash,
                 chunk_count = excluded.chunk_count,
                 last_indexed_at = excluded.last_indexed_at
         `).run(documentId, documentRef, categoryId, fileName, contentHash, chunkCount, now, now)
-        if (existing?.content_hash && existing.content_hash !== contentHash) {
-            deleteMemoryKnowledgeSource(categoryId, fileName)
-        }
     } catch {
         /* non-fatal */
     }
@@ -226,7 +218,7 @@ export class AgentMemory {
             archiveFile(directoryPath, fileName)
             removeFileIndex(categoryId, fileName)
             const hash = computeFileHash(mdPath)
-            upsertFileIndex(categoryId, mdName, hash, count)
+            upsertMemoryFileIndex(categoryId, mdName, hash, count)
             const ref = this.getDocumentReference(categoryId, mdName)
             if (ref) recordMemoryRevision({ documentId: ref.documentId, documentRef: ref.documentRef, categoryId, fileName: mdName, content: text, context: opts?.revisionContext ?? { source: 'import' } })
             return { fileName: mdName, chunkCount: count }
@@ -237,7 +229,7 @@ export class AgentMemory {
         const count = await this.replaceIndexedText(text, fileName, categoryId, [fileName], opts?.signal)
         throwIfAborted(opts?.signal)
         const hash = computeFileHash(filePath)
-        upsertFileIndex(categoryId, fileName, hash, count)
+        upsertMemoryFileIndex(categoryId, fileName, hash, count)
         const ref = this.getDocumentReference(categoryId, fileName)
         if (ref) recordMemoryRevision({ documentId: ref.documentId, documentRef: ref.documentRef, categoryId, fileName, content: text, context: opts?.revisionContext })
         return { fileName, chunkCount: count }
@@ -511,6 +503,7 @@ export class AgentMemory {
 
         const map = new Map<string, { sourceFile: string; categoryId?: string; count: number; latest: number }>()
         for (const doc of docs) {
+            if (doc.representationType && doc.representationType !== 'raw') continue
             if (doc.categoryId && !indexedFiles.has(`${doc.categoryId}\0${doc.sourceFile || ''}`)) continue
             const sourceFile = doc.sourceFile || '(untitled)'
             const key = `${doc.categoryId || ''}\0${sourceFile}`

@@ -370,9 +370,17 @@ export interface MemoryFileStatus {
     estimatedChunkCount?: number
     lastIndexedAt?: number
     deepResearched: boolean
+    analysisStatus: 'not_analyzed' | 'current' | 'needs_refresh'
     deepResearchedAt?: number
     dreamedAt?: number
     tags: string[]
+}
+
+export interface MemoryFileSearchResult extends MemoryFileStatus {
+    categoryId: string
+    categoryName: string
+    categoryPath: string
+    matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary'>
 }
 
 export interface MemoryRevisionSummary {
@@ -397,6 +405,25 @@ export interface MemoryDocumentKnowledgePreview {
         label: string
     }>
     total: number
+}
+
+export interface MemoryDocumentAnalysis {
+    status: 'not_analyzed' | 'current' | 'needs_refresh'
+    pipelineVersion?: string
+    promptVersion?: string
+    chunks: Array<{
+        chunkIndex: number
+        sectionPath: string
+        summary: string
+        tags: string[]
+    }>
+    items: Array<{
+        kind: 'relationship' | 'entity'
+        label: string
+        chunkIndex: number
+        importance?: number
+    }>
+    itemTotal: number
 }
 
 export interface MemoryIndexJob<T = unknown> {

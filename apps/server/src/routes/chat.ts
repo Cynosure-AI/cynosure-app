@@ -948,10 +948,20 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return { success: true }
   })
 
-  app.post<{ Params: { id: string }; Body: { name: string; content: string } }>(
+  app.post<{ Params: { id: string }; Body: { name: string; content: string; clientId?: string } }>(
     '/conversations/:id/attachments/stage',
     async (req, reply) => {
-      const artifact = await stageChatAttachment(req.params.id, req.body)
+      const controller = new AbortController()
+      req.raw.once('aborted', () => controller.abort())
+      const artifact = await stageChatAttachment(req.params.id, req.body, {
+        signal: controller.signal,
+        onProgress: (current, total) => broadcast('attachment:stage-progress', {
+          conversationId: req.params.id,
+          clientId: req.body.clientId,
+          current,
+          total,
+        }),
+      })
       return reply.status(201).send({ id: artifact.id, name: artifact.name, chunkCount: artifact.chunkCount || 0 })
     },
   )

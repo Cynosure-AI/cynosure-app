@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
+  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentAnalysis, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk,
   AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
@@ -129,8 +129,10 @@ export const api = {
       patch<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`),
     send: (conversationId: string, request: ChatSendRequest) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, request),
-    stageAttachment: (conversationId: string, file: { name: string; content: string }) =>
-      post<{ id: string; name: string; chunkCount: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`, file),
+    stageAttachment: (conversationId: string, file: { name: string; content: string; clientId?: string }, signal?: AbortSignal) =>
+      post<{ id: string; name: string; chunkCount: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`, file, signal),
+    onAttachmentStageProgress: (cb: (data: { conversationId: string; clientId?: string; current: number; total: number }) => void) =>
+      onWsEvent('attachment:stage-progress', cb as WsHandler),
     removeStagedAttachment: (conversationId: string, attachmentId: string) =>
       del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage/${encodeURIComponent(attachmentId)}`),
     getQueue: (conversationId: string) =>
@@ -396,9 +398,15 @@ export const api = {
     /** List files in the space folder with their index status. Hash computation is async server-side. */
     listFiles: (categoryId: string) =>
       get<MemoryFileStatus[]>(`/api/memory-folders/${memoryFolderPathId(categoryId)}/files`),
+    searchFiles: (query: string) =>
+      get<MemoryFileSearchResult[]>(`/api/memory-folders/file-search?query=${encodeURIComponent(query)}`),
     getDocumentKnowledgePreview: (categoryId: string, fileName: string) =>
       get<MemoryDocumentKnowledgePreview>(
         `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
+      ),
+    getDocumentAnalysis: (categoryId: string, fileName: string) =>
+      get<MemoryDocumentAnalysis>(
+        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/analysis`
       ),
     listJobs: (categoryId: string) =>
       get<MemoryIndexJob[]>(`/api/memory-folders/${memoryFolderPathId(categoryId)}/jobs`),
@@ -413,6 +421,10 @@ export const api = {
       post<MemoryIndexJob>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     discardJob: (jobId: string) =>
       del<{ success: boolean }>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}`),
+    dismissJobFailures: (categoryId?: string) =>
+      del<{ success: boolean; dismissed: number }>(
+        `/api/memory-folders/jobs/failures${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ''}`
+      ),
     onJobUpdated: (cb: (data: MemoryIndexJob) => void) =>
       onWsEvent('memory:job-updated', cb as WsHandler),
     reindexFile: (categoryId: string, fileName: string) =>

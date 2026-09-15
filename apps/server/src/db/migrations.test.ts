@@ -24,9 +24,10 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1])
+        expect(result.applied).toEqual([1, 2])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
+        expect((db.prepare(`PRAGMA table_info(memory_knowledge_text_units)`).all() as Array<{ name: string }>).map((column) => column.name)).toContain('summary')
         db.close()
     })
 
@@ -82,7 +83,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1])
+        expect(result.applied).toEqual([1, 2])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -94,7 +95,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1])
+        expect(result.applied).toEqual([1, 2])
         db.close()
     })
 

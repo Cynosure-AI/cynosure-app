@@ -18,11 +18,11 @@ import {
   normalizeKnowledgeLabel as normalize,
 } from './memory-knowledge-format.js'
 import { MemoryKnowledgeProjectionStore } from './memory-knowledge-projection.js'
-import { MemoryKnowledgeGraphStore, type DocumentKnowledgePreview } from './memory-knowledge-graph.js'
-export type { DocumentKnowledgePreview, DocumentKnowledgePreviewItem } from './memory-knowledge-graph.js'
+import { MemoryKnowledgeGraphStore, type DocumentAnalysisRecord, type DocumentKnowledgePreview } from './memory-knowledge-graph.js'
+export type { DocumentAnalysisChunk, DocumentAnalysisItem, DocumentAnalysisRecord, DocumentKnowledgePreview, DocumentKnowledgePreviewItem } from './memory-knowledge-graph.js'
 
-export const MEMORY_KNOWLEDGE_PIPELINE_VERSION = 'knowledge-v4.1.0'
-export const MEMORY_KNOWLEDGE_PROMPT_VERSION = 'deep-research-v5'
+export const MEMORY_KNOWLEDGE_PIPELINE_VERSION = 'knowledge-v4.2.0'
+export const MEMORY_KNOWLEDGE_PROMPT_VERSION = 'deep-research-v6'
 export const MEMORY_KNOWLEDGE_VECTOR_TABLE = 'memory_knowledge_v2'
 
 export interface DeepResearchExtractedEntity {
@@ -56,6 +56,11 @@ export interface DeepResearchExtractedMention {
 export interface DeepResearchExtractedChunkTags {
   sourceChunkIndex: number
   tags: string[]
+}
+
+export interface DeepResearchExtractedChunkSummary {
+  sourceChunkIndex: number
+  summary: string
 }
 
 /** An exact source chunk whose previously extracted knowledge can be carried
@@ -398,6 +403,7 @@ export class MemoryKnowledgeStore {
     relations: DeepResearchExtractedRelation[]
     mentions?: DeepResearchExtractedMention[]
     chunkTags?: DeepResearchExtractedChunkTags[]
+    chunkSummaries?: DeepResearchExtractedChunkSummary[]
     reusableChunks?: ReusableKnowledgeChunk[]
     extractorProviderId?: string
     extractorModel?: string
@@ -435,6 +441,7 @@ export class MemoryKnowledgeStore {
     let rejectedClaims = 0
     const touchedAssertions = new Set<string>()
     const tagsByChunk = new Map((opts.chunkTags || []).map((item) => [item.sourceChunkIndex, item.tags]))
+    const summariesByChunk = new Map((opts.chunkSummaries || []).map((item) => [item.sourceChunkIndex, item.summary]))
 
     db.transaction(() => {
       db.prepare(`
@@ -451,15 +458,16 @@ export class MemoryKnowledgeStore {
       const insertTextUnit = db.prepare(`
         INSERT INTO memory_knowledge_text_units
           (id, run_id, document_id, content_hash, category_id, file_name, chunk_index,
-           text, text_hash, document_title, section_path, tags_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           text, text_hash, document_title, section_path, tags_json, summary, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       for (const chunk of opts.chunks) {
         const id = nanoid()
         textUnitIds.set(chunk.chunkIndex, id)
         insertTextUnit.run(id, runId, opts.documentId, opts.contentHash, opts.categoryId, opts.fileName,
           chunk.chunkIndex, chunk.text, chunk.contentHash || createHash('sha256').update(chunk.text).digest('hex'),
-          chunk.documentTitle, chunk.sectionPath, JSON.stringify(tagsByChunk.get(chunk.chunkIndex) || []), now)
+          chunk.documentTitle, chunk.sectionPath, JSON.stringify(tagsByChunk.get(chunk.chunkIndex) || []),
+          summariesByChunk.get(chunk.chunkIndex) || '', now)
       }
 
       // Exact, hash-matched chunks retain their already governed extraction.
@@ -837,6 +845,10 @@ export class MemoryKnowledgeStore {
 
   documentDeepResearchPreview(categoryId: string, fileName: string, limit = 15): DocumentKnowledgePreview {
     return this.graph.documentDeepResearchPreview(categoryId, fileName, limit)
+  }
+
+  documentAnalysis(categoryId: string, fileName: string): DocumentAnalysisRecord | null {
+    return this.graph.documentAnalysis(categoryId, fileName)
   }
 
   browseGraph(opts: {

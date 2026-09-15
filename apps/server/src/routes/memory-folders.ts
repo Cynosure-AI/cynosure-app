@@ -40,6 +40,7 @@ import {
 import {
     cancelMemoryIndexJob,
     discardMemoryIndexJob,
+    dismissMemoryIndexJobFailures,
     getMemoryIndexJob,
     latestResumableMemoryIndexJob,
     listMemoryIndexJobs,
@@ -47,9 +48,9 @@ import {
     cancelMemoryIndexJobsForFile,
     waitForMemoryIndexJob,
 } from '../core/memory/memory-index-jobs.js'
-import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION } from '../core/memory/memory-knowledge.js'
+import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
-import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, recordMemoryRevision, setMemoryDocumentIndexingStatus, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
+import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, markMemoryCategoriesDeleted, recordMemoryRevision, setMemoryDocumentIndexingStatus, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -94,9 +95,17 @@ export interface MemoryFileStatus {
     estimatedChunkCount?: number
     lastIndexedAt?: number
     deepResearched: boolean
+    analysisStatus: 'not_analyzed' | 'current' | 'needs_refresh'
     deepResearchedAt?: number
     dreamedAt?: number
     tags: string[]
+}
+
+export interface MemoryFileSearchResult extends MemoryFileStatus {
+    categoryId: string
+    categoryName: string
+    categoryPath: string
+    matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary'>
 }
 
 // ---------------------------------------------------------------------------
@@ -146,11 +155,127 @@ function decodeCategoryIdParam(id: string): string {
     }
 }
 
+function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): MemoryFileStatus[] {
+    if (!row.directory_path) return []
+    const mem = getAgentMemory()
+    const fileIndex = mem.getFileIndex(row.id)
+    const filesOnDisk = listFilesInFolder(row.directory_path).filter((file) => !candidateNames || candidateNames.has(file.fileName))
+    const chunkingConfig = getMemoryParser().getConfig()
+    const currentKnowledgeFiles = new Map((getDb().prepare(`
+        SELECT file_name, activated_at FROM memory_knowledge_index_runs
+        WHERE category_id = ? AND pipeline_version = ? AND prompt_version = ? AND status = 'active'
+    `).all(row.id, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as Array<{ file_name: string; activated_at: number }>).map((item) => [item.file_name, item.activated_at]))
+
+    return filesOnDisk.map(f => {
+        if (!f.supported) {
+            return {
+                fileName: f.fileName, extension: f.extension, size: f.size, modifiedAt: f.modifiedAt,
+                supported: false, textDirect: false, status: 'unsupported' as const,
+                deepResearched: false, analysisStatus: 'not_analyzed' as const, tags: [],
+            }
+        }
+        const indexed = fileIndex.get(f.fileName)
+        if (!indexed) {
+            return {
+                fileName: f.fileName, extension: f.extension, size: f.size, modifiedAt: f.modifiedAt,
+                supported: true, textDirect: f.textDirect, status: 'not_indexed' as const,
+                estimatedChunkCount: estimateChunkCountFromFileSize(f.size, chunkingConfig),
+                deepResearched: false, analysisStatus: 'not_analyzed' as const, tags: [],
+            }
+        }
+        const currentHash = computeFileHash(f.filePath)
+        const status = currentHash === indexed.contentHash ? 'indexed' as const : 'needs_reindex' as const
+        const hasAnyAnalysis = indexed.deepResearchedAt > 0
+        const currentRunActivatedAt = currentKnowledgeFiles.get(f.fileName)
+        const currentAnalysis = status === 'indexed' && hasAnyAnalysis && currentRunActivatedAt !== undefined
+            && indexed.deepResearchedAt >= currentRunActivatedAt
+        return {
+            fileName: f.fileName, extension: f.extension, size: f.size, modifiedAt: f.modifiedAt,
+            supported: true, textDirect: f.textDirect, status,
+            chunkCount: indexed.chunkCount,
+            estimatedChunkCount: status === 'needs_reindex' ? estimateChunkCountFromFileSize(f.size, chunkingConfig) : undefined,
+            lastIndexedAt: indexed.lastIndexedAt,
+            deepResearched: currentAnalysis,
+            analysisStatus: currentAnalysis ? 'current' as const : hasAnyAnalysis ? 'needs_refresh' as const : 'not_analyzed' as const,
+            deepResearchedAt: indexed.deepResearchedAt || undefined,
+            dreamedAt: indexed.dreamedAt || undefined,
+            tags: currentAnalysis ? indexed.tags : [],
+        }
+    }).sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 
 export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise<void> {
+
+    app.get<{ Querystring: { query?: string } }>('/file-search', async (req) => {
+        const query = (req.query.query || '').normalize('NFKC').trim().toLocaleLowerCase().slice(0, 200)
+        if (!query) return []
+        const terms = query.split(/\s+/).filter(Boolean)
+        syncMemoryFoldersFromFolders(getDb())
+        const rows = getDb().prepare('SELECT * FROM memory_folders ORDER BY sort_order, name').all() as MemoryFolderRow[]
+        const summaries = getDb().prepare(`
+            SELECT r.category_id, r.file_name, GROUP_CONCAT(tu.summary, ' ') AS summaries
+            FROM memory_knowledge_index_runs r
+            JOIN memory_knowledge_text_units tu ON tu.run_id = r.id
+            WHERE r.status = 'active' AND r.pipeline_version = ? AND r.prompt_version = ? AND tu.summary != ''
+            GROUP BY r.category_id, r.file_name
+        `).all(MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as Array<{ category_id: string; file_name: string; summaries: string }>
+        const summaryByFile = new Map(summaries.map((item) => [`${item.category_id}\0${item.file_name}`, item.summaries.normalize('NFKC').toLocaleLowerCase()]))
+        const tagRows = getDb().prepare(`
+            SELECT m.category_id, m.file_name, m.tags_json
+            FROM memory_file_index m
+            WHERE EXISTS (
+                SELECT 1 FROM memory_knowledge_index_runs r
+                WHERE r.document_id = m.document_id AND r.content_hash = m.content_hash
+                  AND r.status = 'active' AND r.pipeline_version = ? AND r.prompt_version = ?
+            )
+        `).all(MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as Array<{ category_id: string; file_name: string; tags_json: string }>
+        const tagsByFile = new Map(tagRows.map((item) => [`${item.category_id}\0${item.file_name}`, item.tags_json]))
+        const results: Array<MemoryFileSearchResult & { rank: number }> = []
+        for (const row of rows) {
+            const folderData = memoryFolderDirectoryData(row)
+            const folderSurface = `${row.name} ${folderData.categoryPath}`.normalize('NFKC').toLocaleLowerCase()
+            const candidateNames = new Set(listFilesInFolder(row.directory_path).filter((file) => {
+                const key = `${row.id}\0${file.fileName}`
+                const surface = [file.fileName, folderSurface, tagsByFile.get(key) || '', summaryByFile.get(key) || '']
+                    .join(' ').normalize('NFKC').toLocaleLowerCase()
+                return terms.every((term) => surface.includes(term))
+            }).map((file) => file.fileName))
+            for (const file of listMemoryFiles(row, candidateNames)) {
+                const currentSummary = file.analysisStatus === 'current' ? summaryByFile.get(`${row.id}\0${file.fileName}`) || '' : ''
+                const fields = {
+                    fileName: file.fileName.normalize('NFKC').toLocaleLowerCase(),
+                    folder: folderSurface,
+                    tags: file.tags.join(' ').normalize('NFKC').toLocaleLowerCase(),
+                    summary: currentSummary,
+                }
+                const combined = Object.values(fields).join(' ')
+                if (!terms.every((term) => combined.includes(term))) continue
+                const matchedFields = (Object.entries(fields) as Array<[MemoryFileSearchResult['matchedFields'][number], string]>)
+                    .filter(([, value]) => terms.some((term) => value.includes(term)))
+                    .map(([field]) => field)
+                const rank = fields.fileName === query ? 0
+                    : fields.fileName.startsWith(query) ? 1
+                        : terms.every((term) => fields.fileName.includes(term)) ? 2
+                            : terms.some((term) => fields.tags.includes(term)) ? 3
+                                : terms.some((term) => fields.summary.includes(term)) ? 4 : 5
+                results.push({
+                    ...file,
+                    categoryId: row.id,
+                    categoryName: row.name,
+                    categoryPath: folderData.categoryPath,
+                    matchedFields,
+                    rank,
+                })
+            }
+        }
+        return results
+            .sort((a, b) => a.rank - b.rank || b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
+            .map(({ rank: _rank, ...result }) => result)
+    })
 
     app.get<{ Params: { documentRef: string } }>('/documents/:documentRef/revisions', async (req, reply) => {
         const document = getMemoryDocument(req.params.documentRef)
@@ -200,6 +325,12 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
     // GET /api/memory-folders/jobs — list recent background indexing jobs
     app.get('/jobs', async () => {
         return listMemoryIndexJobs()
+    })
+
+    // DELETE /api/memory-folders/jobs/failures — dismiss every failed job.
+    // Registered before the parameterized route so "failures" is not read as a job id.
+    app.delete<{ Querystring: { categoryId?: string } }>('/jobs/failures', async (req) => {
+        return { success: true, dismissed: dismissMemoryIndexJobFailures(req.query.categoryId) }
     })
 
     // GET /api/memory-folders/jobs/:jobId — inspect one background indexing job
@@ -352,6 +483,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         }
         archiveMemoryFolderDirectory(row)
         const deleteRows = db.transaction(() => {
+            markMemoryCategoriesDeleted(rowsToDelete.map(target => target.id))
             for (const target of rowsToDelete) {
                 db.prepare('DELETE FROM memory_file_index WHERE category_id = ?').run(target.id)
                 db.prepare('DELETE FROM agent_memory_folders WHERE category_id = ?').run(target.id)
@@ -416,68 +548,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const row = loadCategoryRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         if (!row.directory_path) return reply.status(400).send({ error: 'Memory folder has no backing directory' })
-
-        const mem = getAgentMemory()
-        const fileIndex = mem.getFileIndex(row.id)
-        const filesOnDisk = listFilesInFolder(row.directory_path)
-        const chunkingConfig = getMemoryParser().getConfig()
-        const currentKnowledgeFiles = new Set((getDb().prepare(`
-            SELECT file_name FROM memory_knowledge_index_runs
-            WHERE category_id = ? AND pipeline_version = ? AND status = 'active'
-        `).all(row.id, MEMORY_KNOWLEDGE_PIPELINE_VERSION) as Array<{ file_name: string }>).map((item) => item.file_name))
-
-        const result: MemoryFileStatus[] = filesOnDisk.map(f => {
-            if (!f.supported) {
-                return {
-                    fileName: f.fileName,
-                    extension: f.extension,
-                    size: f.size,
-                    modifiedAt: f.modifiedAt,
-                    supported: false,
-                    textDirect: false,
-                    status: 'unsupported' as const,
-                    deepResearched: false,
-                    tags: [],
-                }
-            }
-            const indexed = fileIndex.get(f.fileName)
-            if (!indexed) {
-                return {
-                    fileName: f.fileName,
-                    extension: f.extension,
-                    size: f.size,
-                    modifiedAt: f.modifiedAt,
-                    supported: true,
-                    textDirect: f.textDirect,
-                    status: 'not_indexed' as const,
-                    estimatedChunkCount: estimateChunkCountFromFileSize(f.size, chunkingConfig),
-                    deepResearched: false,
-                    tags: [],
-                }
-            }
-            const currentHash = computeFileHash(f.filePath)
-            const status = currentHash === indexed.contentHash ? 'indexed' as const : 'needs_reindex' as const
-            return {
-                fileName: f.fileName,
-                extension: f.extension,
-                size: f.size,
-                modifiedAt: f.modifiedAt,
-                supported: true,
-                textDirect: f.textDirect,
-                status,
-                chunkCount: indexed.chunkCount,
-                estimatedChunkCount: status === 'needs_reindex'
-                    ? estimateChunkCountFromFileSize(f.size, chunkingConfig)
-                    : undefined,
-                lastIndexedAt: indexed.lastIndexedAt,
-                deepResearched: status === 'indexed' && indexed.deepResearchedAt > 0 && currentKnowledgeFiles.has(f.fileName),
-                deepResearchedAt: indexed.deepResearchedAt || undefined,
-                dreamedAt: indexed.dreamedAt || undefined,
-                tags: status === 'indexed' ? indexed.tags : [],
-            }
-        })
-
-        return result.sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
+        return listMemoryFiles(row)
     })
 
     // GET /api/memory-folders/:id/files/:fileName/knowledge-preview — a small,
@@ -486,6 +557,32 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const row = loadCategoryRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         return getMemoryKnowledgeStore().documentDeepResearchPreview(row.id, req.params.fileName, 15)
+    })
+
+    // GET /api/memory-folders/:id/files/:fileName/analysis — current or stale
+    // derived summaries and knowledge for the read-only editor sidebar.
+    app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/analysis', async (req, reply) => {
+        const row = loadCategoryRow(req.params.id)
+        if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
+        const analysis = getMemoryKnowledgeStore().documentAnalysis(row.id, req.params.fileName)
+        if (!analysis) return { status: 'not_analyzed' as const, chunks: [], items: [], itemTotal: 0 }
+        const filePath = join(row.directory_path, req.params.fileName)
+        const currentHash = existsSync(filePath) ? computeFileHash(filePath) : ''
+        const indexed = getAgentMemory().getFileIndexEntry(row.id, req.params.fileName)
+        const status = analysis.contentHash === currentHash
+            && analysis.pipelineVersion === MEMORY_KNOWLEDGE_PIPELINE_VERSION
+            && analysis.promptVersion === MEMORY_KNOWLEDGE_PROMPT_VERSION
+            && Boolean(indexed?.deepResearchedAt && indexed.deepResearchedAt >= analysis.activatedAt)
+            ? 'current' as const
+            : 'needs_refresh' as const
+        return {
+            status,
+            pipelineVersion: analysis.pipelineVersion,
+            promptVersion: analysis.promptVersion,
+            chunks: analysis.chunks,
+            items: analysis.items,
+            itemTotal: analysis.items.length,
+        }
     })
 
     // POST /api/memory-folders/:id/files/:fileName/reindex — re-index a specific file

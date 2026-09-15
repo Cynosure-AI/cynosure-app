@@ -8,6 +8,7 @@ import {
   getMemoryRevision,
   listMemoryRevisions,
   markMemoryDocumentDeleted,
+  markMemoryCategoriesDeleted,
   recordMemoryRevision,
   inlineMemoryDiff,
   unifiedMemoryDiff,
@@ -82,5 +83,16 @@ describe('memory revision snapshots', () => {
       file_name: 'Veronica Flowers - Interests.md', status: 'active',
     })
     expect(getDb().prepare('SELECT COUNT(*) AS count FROM memory_document_revisions WHERE document_id = ?').get('doc-2')).toEqual({ count: 1 })
+  })
+
+  test('records documents deleted through a folder cascade', () => {
+    recordMemoryRevision({ documentId: 'parent-doc', documentRef: 'parent#doc', categoryId: 'parent', fileName: 'a.md', content: 'A' })
+    recordMemoryRevision({ documentId: 'child-doc', documentRef: 'child#doc', categoryId: 'child', fileName: 'b.md', content: 'B' })
+    recordMemoryRevision({ documentId: 'kept-doc', documentRef: 'kept#doc', categoryId: 'other', fileName: 'c.md', content: 'C' })
+
+    expect(markMemoryCategoriesDeleted(['parent', 'child'])).toBe(2)
+    expect(getMemoryDocument('parent#doc')?.status).toBe('deleted')
+    expect(getMemoryDocument('child#doc')?.status).toBe('deleted')
+    expect(getMemoryDocument('kept#doc')?.status).toBe('active')
   })
 })

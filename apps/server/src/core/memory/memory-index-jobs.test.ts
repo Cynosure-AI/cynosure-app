@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import { closeDb, getDb } from '../../db/database.js'
-import { cancelAllMemoryIndexJobs, cancelMemoryIndexJob, discardMemoryIndexJob, getMemoryIndexJob, latestResumableMemoryIndexJob, startMemoryIndexJob } from './memory-index-jobs.js'
+import { cancelAllMemoryIndexJobs, cancelMemoryIndexJob, discardMemoryIndexJob, dismissMemoryIndexJobFailures, getMemoryIndexJob, latestResumableMemoryIndexJob, listMemoryIndexJobs, startMemoryIndexJob } from './memory-index-jobs.js'
 
 let dataDir: string
 
@@ -133,5 +133,50 @@ describe('durable memory index jobs', () => {
         expect(getMemoryIndexJob(started.id)).toBeUndefined()
         expect(getMemoryIndexJob(resumed.id)).toBeUndefined()
         expect(latestResumableMemoryIndexJob('default', 'resumable.md')).toBeUndefined()
+    })
+
+    test('dismisses failed jobs durably without touching active or resumable work', async () => {
+        const failed = startMemoryIndexJob({
+            kind: 'deep-research',
+            categoryId: 'dismiss-space',
+            fileName: 'failed.md',
+            run: async () => { throw new Error('lance schema mismatch') },
+        })
+        await vi.waitFor(() => expect(getMemoryIndexJob(failed.id)?.status).toBe('error'))
+
+        const otherSpaceFailure = startMemoryIndexJob({
+            kind: 'reindex',
+            categoryId: 'other-space',
+            fileName: 'failed.md',
+            run: async () => { throw new Error('other failure') },
+        })
+        await vi.waitFor(() => expect(getMemoryIndexJob(otherSpaceFailure.id)?.status).toBe('error'))
+
+        const running = startMemoryIndexJob({
+            kind: 'reindex',
+            categoryId: 'dismiss-space',
+            fileName: 'running.md',
+            run: async (signal) => new Promise<void>((resolve) => {
+                signal.addEventListener('abort', () => resolve(), { once: true })
+            }),
+        })
+
+        // Scoped dismissal only removes failures in the requested folder.
+        expect(dismissMemoryIndexJobFailures('dismiss-space')).toBe(1)
+        expect(getMemoryIndexJob(failed.id)).toBeUndefined()
+        expect(getDb().prepare('SELECT id FROM memory_index_jobs WHERE id = ?').get(failed.id)).toBeUndefined()
+        expect(getMemoryIndexJob(otherSpaceFailure.id)?.status).toBe('error')
+        expect(getMemoryIndexJob(running.id)?.status).toBe('running')
+
+        // An unscoped dismissal clears every remaining failure, including ones
+        // left behind by earlier tests in this file.
+        const remainingFailures = listMemoryIndexJobs().filter((job) => job.status === 'error').length
+        expect(remainingFailures).toBeGreaterThanOrEqual(1)
+        expect(dismissMemoryIndexJobFailures()).toBe(remainingFailures)
+        expect(getMemoryIndexJob(otherSpaceFailure.id)).toBeUndefined()
+        expect(listMemoryIndexJobs().filter((job) => job.status === 'error')).toHaveLength(0)
+
+        cancelMemoryIndexJob(running.id)
+        await vi.waitFor(() => expect(getMemoryIndexJob(running.id)?.status).toBe('cancelled'))
     })
 })

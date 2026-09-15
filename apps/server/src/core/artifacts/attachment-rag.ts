@@ -29,6 +29,7 @@ export function buildAttachmentFilter(conversationId: string, attachmentIds?: st
 export async function indexConversationAttachment(
     conversationId: string,
     attachment: FileAttachmentArtifact,
+    opts?: { signal?: AbortSignal; onProgress?: (current: number, total: number) => void },
 ): Promise<number> {
     const text = readFileAttachmentText(attachment)
     if (!text?.trim()) return 0
@@ -38,7 +39,7 @@ export async function indexConversationAttachment(
             source: 'conversation_attachment',
             sourceFile: attachment.assetId || attachment.id,
             categoryId: ATTACHMENT_ASSET_SPACE_ID,
-        })
+        }, opts)
         updateConversationAttachmentChunkCount(attachment.assetId || attachment.id, chunkCount)
         return chunkCount
     } catch (err) {
