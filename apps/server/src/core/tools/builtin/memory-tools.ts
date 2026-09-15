@@ -3,13 +3,13 @@ import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
 import { getDb } from '../../../db/database.js'
 import { getAgentMemory } from '../../memory/agent-memory.js'
+import { getMemoryParser, type RetrievedChunk } from '../../memory/parser.js'
 import { buildMemoryFolderFilter as buildScopeFilter, getDefaultMemoryFolder, getMemoryFolderDirectoryPath, type MemoryFolderRef } from '../../memory/memory-folder-scope.js'
 import { ensureMemoryFolderPath, categoryPathForDirectory } from '../../memory/memory-folder-directories.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
-import { MAX_CHUNK_READ } from '../../runtime-limits.js'
 import {
     parseMemoryDocumentRef,
 } from '../../memory/memory-reference.js'
@@ -39,7 +39,7 @@ async function reindexMemoryFile(
     fileName: string,
     signal?: AbortSignal,
     revisionContext?: MemoryRevisionContext,
-): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
+): Promise<{ chunkCount: number; revision: number; contentHash: string; documentId: string; documentRef: string }> {
     const directoryPath = getMemoryFolderDirectoryPath(categoryId)
     if (!directoryPath) throw new Error('Memory folder has no category configured')
     cancelMemoryIndexJobsForFile(categoryId, fileName)
@@ -47,18 +47,17 @@ async function reindexMemoryFile(
     const result = await memory.reindexFile(directoryPath, fileName, categoryId, { signal, revisionContext })
     const ref = memory.getDocumentReference(categoryId, result.fileName)
     if (!ref) throw new Error('Memory was indexed but its document reference could not be loaded')
-    return { chunkCount: result.chunkCount, revision: ref.revision, documentId: ref.documentId, documentRef: ref.documentRef }
+    return { chunkCount: result.chunkCount, revision: ref.revisionNumber, contentHash: ref.revision, documentId: ref.documentId, documentRef: ref.documentRef }
 }
 
 export const MEMORY_READ_TOOL_NAMES = [
-    'memory_list_documents',
-    'memory_retrieve_chunks',
-    'memory_semantic_search',
+    'memory_search',
+    'memory_read',
 ] as const
 
 export const MEMORY_WRITE_TOOL_NAMES = [
     'memory_create',
-    'memory_update',
+    'memory_patch',
 ] as const
 
 export const MEMORY_TOOL_NAMES = [
@@ -246,10 +245,6 @@ function clampToolNumber(value: unknown, fallback: number, min: number, max: num
     return Math.max(min, Math.min(max, value))
 }
 
-function toPartIndex(value: unknown): number | undefined {
-    return Number.isInteger(value) ? (value as number) - 1 : undefined
-}
-
 function toImportanceValue(value: unknown): 0 | 1 | 2 | 3 {
     if (typeof value === 'string' && (IMPORTANCE_LABELS as readonly string[]).includes(value)) {
         return IMPORTANCE_MAP[value as ImportanceLabel]
@@ -335,14 +330,6 @@ function makeScopeSummary(assignedCategories: MemoryFolderRef[]): string {
     }
     if (assignedCategories.length === 1) return `Scope: "${assignedCategories[0].name}" category only.`
     return `Scope: selected memory folders only (${assignedCategories.map(s => `"${s.name}"`).join(', ')}).`
-}
-
-function buildCategoryMap(...spaceGroups: MemoryFolderRef[][]): Map<string, string> {
-    const map = new Map<string, string>()
-    for (const group of spaceGroups) {
-        for (const category of group) map.set(category.id, category.name)
-    }
-    return map
 }
 
 function resolveReadableCategoryFilter(
@@ -463,6 +450,7 @@ async function resolveTargetCategory(
 interface ResolvedMemoryDocument {
     documentId: string
     revision: string
+    revisionNumber: number
     documentRef: string
     categoryId: string
     categoryName: string
@@ -470,13 +458,13 @@ interface ResolvedMemoryDocument {
     directoryPath: string
 }
 
-function resolveMemoryDocumentId(
-    documentId: string,
+function resolveMemoryFileRef(
+    fileRef: string,
     assignedCategories: MemoryFolderRef[],
     getKnownCategories: () => MemoryFolderRef[],
 ): ResolvedMemoryDocument | { error: string } {
-    const requested = typeof documentId === 'string' ? documentId.trim() : ''
-    if (!requested) return { error: 'documentId must be a non-empty stable identifier returned by a memory read or listing.' }
+    const requested = typeof fileRef === 'string' ? fileRef.trim() : ''
+    if (!requested) return { error: 'fileRef must be a non-empty stable identifier returned by memory_search.' }
     const parsedRef = parseMemoryDocumentRef(requested)
     const match = getDb().prepare(`
         SELECT document_id FROM memory_file_index
@@ -484,7 +472,7 @@ function resolveMemoryDocumentId(
         LIMIT 1
     `).get(requested, parsedRef ?? requested.toLowerCase()) as { document_id: string } | undefined
     const ref = match ? getAgentMemory().getDocumentReferenceById(match.document_id) : undefined
-    if (!ref) return { error: 'No memory document matches this documentId. Search or list memories again to get a current identifier.' }
+    if (!ref) return { error: 'No canonical memory file matches this fileRef. Run memory_search again to get a current identifier.' }
     if (assignedCategories.length > 0 && !assignedCategories.some((category) => category.id === ref.categoryId)) {
         return { error: 'The referenced memory document is outside the selected memory-folder scope.' }
     }
@@ -495,6 +483,7 @@ function resolveMemoryDocumentId(
     return {
         documentId: ref.documentId,
         revision: ref.revision,
+        revisionNumber: ref.revisionNumber,
         documentRef: ref.documentRef,
         categoryId: ref.categoryId,
         categoryName: category.name,
@@ -503,21 +492,13 @@ function resolveMemoryDocumentId(
     }
 }
 
-function verifyDocumentRef(content: string, resolved: ResolvedMemoryDocument): string | undefined {
-    const actualHash = createHash('sha256').update(content).digest('hex')
-    const matchesIndexedRevision = actualHash === resolved.revision.toLowerCase()
-    return matchesIndexedRevision
-        ? undefined
-        : 'Memory changed outside the index while this update was being prepared. Retrieve it again before retrying.'
-}
-
 async function commitMemoryMutation(
     resolved: ResolvedMemoryDocument,
     previousContent: string,
     nextContent: string,
     signal?: AbortSignal,
     revisionContext?: MemoryRevisionContext,
-): Promise<{ chunkCount: number; revision: string; documentId: string; documentRef: string }> {
+): Promise<{ chunkCount: number; revision: number; contentHash: string; documentId: string; documentRef: string }> {
     signal?.throwIfAborted()
     writeTextFile(resolved.directoryPath, resolved.fileName, nextContent)
     let indexed: Awaited<ReturnType<typeof reindexMemoryFile>>
@@ -533,269 +514,349 @@ async function commitMemoryMutation(
     return indexed
 }
 
-/**
- * Create a `memory_list_documents` tool that returns all stored
- * document names with their chunk counts.
- */
-export function makeMemoryListDocumentsTool(opts: MemoryToolOptions): ToolDefinition {
+const CANONICAL_EXCERPT_CHARS = 8_000
+
+async function canonicalExcerptForResult(result: RetrievedChunk): Promise<{
+    fileRef: string
+    fileName: string
+    category: string
+    revision: number
+    content: string
+    score: number
+} | undefined> {
+    if (!result.sourceFile || !result.categoryId || result.chunkIndex == null) return undefined
+    const mem = getAgentMemory()
+    const ref = mem.getDocumentReference(result.categoryId, result.sourceFile)
+    const directoryPath = getMemoryFolderDirectoryPath(result.categoryId)
+    if (!ref || !directoryPath) return undefined
+
+    let canonical: string
+    try { canonical = readTextFile(directoryPath, result.sourceFile) } catch { return undefined }
+    // Never present an excerpt with a revision belonging to different bytes.
+    if (createHash('sha256').update(canonical).digest('hex') !== ref.revision) return undefined
+
+    let sourceStart = result.sourceStart
+    let sourceEnd = result.sourceEnd
+    if (sourceStart == null || sourceEnd == null || canonical.slice(sourceStart, sourceEnd) !== result.text) {
+        const chunks = await getMemoryParser().prepareChunks(canonical, result.sourceFile)
+        const current = chunks[result.chunkIndex]
+        if (!current || current.contentHash !== result.contentHash) return undefined
+        sourceStart = current.sourceStart
+        sourceEnd = current.sourceEnd
+    }
+    if (sourceStart == null || sourceEnd == null) return undefined
+
+    const surrounding = Math.max(0, Math.floor((CANONICAL_EXCERPT_CHARS - (sourceEnd - sourceStart)) / 2))
+    let excerptStart = Math.max(0, sourceStart - surrounding)
+    let excerptEnd = Math.min(canonical.length, sourceEnd + surrounding)
+    if (excerptStart > 0) {
+        const boundary = canonical.indexOf('\n', excerptStart)
+        if (boundary >= 0 && boundary < sourceStart) excerptStart = boundary + 1
+    }
+    if (excerptEnd < canonical.length) {
+        const boundary = canonical.lastIndexOf('\n', excerptEnd)
+        if (boundary > sourceEnd) excerptEnd = boundary
+    }
+    const category = getDb().prepare('SELECT name FROM memory_folders WHERE id = ?').get(result.categoryId) as { name: string } | undefined
+    return {
+        fileRef: ref.documentRef,
+        fileName: ref.fileName,
+        category: category?.name || result.categoryId,
+        revision: ref.revisionNumber,
+        content: canonical.slice(excerptStart, excerptEnd),
+        score: result.score,
+    }
+}
+
+/** Search derived chunks, then return expanded text read from canonical files. */
+export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
     const { categoryFilter, assignedCategories = [] } = opts
     const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
-        name: 'memory_list_documents',
+        name: 'memory_search',
         execution: { readOnly: true },
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
-            'List memorised documents (source files) stored in your knowledge base. ' +
-            'Returns document names, chunk counts, and ingestion dates. Paginated — max 100 per page. ' +
-            'Results are newest first. ' +
-            'Use this to discover what documents are available before using memory_retrieve_chunks or memory_semantic_search. ' +
-            'Selected memory folders are treated as one unified knowledge base for reading — use the optional "category" parameter to filter to a specific category. ' +
+            'Search canonical memory files using the derived hybrid retrieval index. ' +
+            'Returns expanded canonical excerpts with a stable fileRef and monotonic revision for memory_patch. ' +
+            'Retrieval chunk identifiers and boundaries are intentionally hidden. ' +
+            'Selected memory folders are treated as one unified knowledge base — use the optional "category" parameter to filter to a specific category. ' +
             makeScopeSummary(assignedCategories),
         parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
-                pageIndex: { type: 'number', description: 'Zero-based page index (default: 0). Each page returns up to 100 documents.' },
-                category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the listing. Without this, lists all selected categorys.' },
-            },
-        },
-        timeout: 15_000,
-        execute: async (params: unknown) => {
-            const { pageIndex, category } = (params || {}) as { pageIndex?: number; category?: string }
-            const resolvedScope = resolveReadableCategoryFilter(assignedCategories, categoryFilter, category, getKnownCategories)
-            if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
-            const mem = getAgentMemory()
-            const allFiles = await mem.listSourceFiles(undefined, resolvedScope.filter)
-
-            if (allFiles.length === 0) {
-                const location = resolvedScope.category ? `"${resolvedScope.category.name}"` : 'memory'
-                return {
-                    success: false,
-                    output: `No documents stored in ${location} yet.`
-                }
-            }
-
-            const PAGE_SIZE = 100
-            const page = Math.max(0, Math.floor(pageIndex ?? 0))
-            const totalPages = Math.ceil(allFiles.length / PAGE_SIZE)
-            const start = page * PAGE_SIZE
-            const pageFiles = allFiles.slice(start, start + PAGE_SIZE)
-
-            if (pageFiles.length === 0) {
-                return { success: false, output: `Page ${page + 1} is out of range. Total pages: ${totalPages} (${allFiles.length} documents).` }
-            }
-
-            const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
-            const lines = pageFiles.map((file) => {
-                const ref = file.categoryId ? mem.getDocumentReference(file.categoryId, file.sourceFile) : undefined
-                const location = file.categoryId ? `, category=${categoryMap.get(file.categoryId) || file.categoryId}` : ''
-                const identity = ref ? `, documentId=${ref.documentRef}` : ''
-                return `- ${file.sourceFile} (${file.chunkCount} chunk${file.chunkCount !== 1 ? 's' : ''}${location}${identity})`
-            })
-
-            const scope = resolvedScope.category ? ` in "${resolvedScope.category.name}"` : ''
-            const header = allFiles.length <= PAGE_SIZE
-                ? `${allFiles.length} document${allFiles.length !== 1 ? 's' : ''}${scope}:`
-                : `Page ${page + 1}/${totalPages}${scope} (showing ${pageFiles.length} of ${allFiles.length} documents):`
-
-            return {
-                success: true,
-                output: `${header}\n${lines.join('\n')}`
-            }
-        }
-    }
-}
-
-/**
- * Create a `memory_retrieve_chunks` tool that lets the LLM fetch
- * additional chunks from a document by source file name and Part range.
- */
-export function makeMemoryRetrieveChunksTool(opts: MemoryToolOptions): ToolDefinition {
-    const { categoryFilter, assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryFoldersLoader()
-    return {
-        name: 'memory_retrieve_chunks',
-        execution: { readOnly: true },
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        description:
-            'Retrieve additional chunks from a stored document by source file and part number range. ' +
-            'Very useful to gather more detail of a section (e.g. "Part 4 - 6" when Part 5 matches). ' +
-            'Returns the text of each chunk in order. ' +
-            makeScopeSummary(assignedCategories),
-        parameters: {
-            type: 'object',
-            properties: {
-                sourceFile: { type: 'string', description: 'The source file name exactly as shown in the memory context (e.g. "report.pdf", "notes.md").' },
-                minPart: { type: 'number', description: 'Minimum Part number to retrieve, matching the 1-based Part number shown in memory search results.' },
-                maxPart: { type: 'number', description: 'Maximum Part number to retrieve, inclusive, matching the 1-based Part number shown in memory search results.' },
-                category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Use this when the same source file exists in more than one category.' }
-            },
-            required: ['sourceFile', 'minPart', 'maxPart']
-        },
-        timeout: 15_000,
-        execute: async (params: unknown) => {
-            const { sourceFile, minPart, maxPart, category } = params as {
-                sourceFile: string; minPart?: number; maxPart?: number; category?: string
-            }
-            const requestedFolder = category
-            const resolvedScope = resolveReadableCategoryFilter(assignedCategories, categoryFilter, requestedFolder, getKnownCategories)
-            if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
-            const mem = getAgentMemory()
-
-            const minIndex = minPart !== undefined ? toPartIndex(minPart) : undefined
-            const maxIndex = maxPart !== undefined ? toPartIndex(maxPart) : undefined
-            if (!Number.isInteger(minIndex) || !Number.isInteger(maxIndex)) {
-                return { success: false, output: 'memory_retrieve_chunks requires integer minPart and maxPart values.' }
-            }
-            if (minIndex! < 0 || maxIndex! < minIndex!) {
-                return { success: false, output: 'Invalid part range. maxPart must be greater than or equal to minPart, and Part numbers start at 1.' }
-            }
-            const requestedMinIndex = minIndex!
-            const requestedMaxIndex = maxIndex!
-            const cappedMax = Math.min(requestedMaxIndex, requestedMinIndex + MAX_CHUNK_READ - 1) // cap chunks per call
-            const readRevisions = opts.onDocumentRead
-                ? new Map((resolvedScope.category ? [resolvedScope.category] : assignedCategories).map(category => {
-                    const ref = mem.getDocumentReference(category.id, sourceFile)
-                    return [category.id, ref?.revision] as const
-                }))
-                : undefined
-            const chunks = await mem.getChunksByRange(sourceFile, requestedMinIndex, cappedMax, resolvedScope.filter)
-
-            if (chunks.length === 0) {
-                return { success: false, output: `No chunks found for "${sourceFile}" in Part range ${requestedMinIndex + 1}-${cappedMax + 1}.` }
-            }
-
-            const distinctCategories = [...new Set(chunks.map(c => c.categoryId).filter((id): id is string => Boolean(id)))]
-            if (!requestedFolder && distinctCategories.length > 1) {
-                const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
-                const listing = distinctCategories.map(id => `  - "${categoryMap.get(id) || id}" (id: ${id})`).join('\n')
-                return {
-                    success: false,
-                    output: `Source file "${sourceFile}" exists in multiple memory folders. Re-run with the 'category' parameter.\nMatching categories:\n${listing}`
-                }
-            }
-
-            const total = await mem.countChunks(sourceFile, resolvedScope.filter)
-            const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
-            const resolvedSpaceId = distinctCategories.length === 1 ? distinctCategories[0] : resolvedScope.category?.id
-            const documentRef = resolvedSpaceId ? mem.getDocumentReference(resolvedSpaceId, sourceFile) : undefined
-            if (documentRef && opts.onDocumentRead) {
-                if (readRevisions?.get(documentRef.categoryId) !== documentRef.revision) {
-                    return { success: false, output: 'Document changed while reading. Retrieve it again before editing.' }
-                }
-                opts.onDocumentRead(documentRef.documentId, documentRef.revision)
-            }
-            const formatted = chunks.map(c => {
-                const location = c.categoryId && !resolvedScope.category
-                    ? `[${categoryMap.get(c.categoryId) || c.categoryId} · Part ${c.chunkIndex + 1}/${total}]`
-                    : `[Part ${c.chunkIndex + 1}/${total}]`
-                return `${location}\n${c.text}`
-            }).join('\n\n---\n\n')
-            const wasCapped = cappedMax < requestedMaxIndex
-            const capNote = wasCapped
-                ? `\n\n(Showing Parts ${requestedMinIndex + 1}-${cappedMax + 1} of requested Parts ${requestedMinIndex + 1}-${requestedMaxIndex + 1}; capped at ${MAX_CHUNK_READ} chunks per call. Call again with a later range to continue.)`
-                : ''
-            const identity = documentRef
-                ? `[Document: documentId=${documentRef.documentRef}]\n\n`
-                : ''
-            return { success: true, output: identity + formatted + capNote }
-        }
-    }
-}
-
-/**
- * Create a `memory_semantic_search` tool that lets the LLM run
- * a new semantic search query against stored memories.
- */
-export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
-    const { categoryFilter, assignedCategories = [] } = opts
-    const getKnownCategories = createKnownMemoryFoldersLoader()
-    return {
-        name: 'memory_semantic_search',
-        execution: { readOnly: true },
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        description:
-            'Search through stored RAG memories using a semantic query. ' +
-            'Use this to get a rough starting point for memories, which can then be refined or expanded using other tools. ' +
-            'Returns the most relevant memory chunks with their source, memory folder, and chunk index. ' +
-            'Selected memory folders are treated as one unified knowledge base — use the optional "category" parameter to filter to a specific category. ' +
-            makeScopeSummary(assignedCategories),
-        parameters: {
-            type: 'object',
-            properties: {
                 query: { type: 'string', description: 'A descriptive search query to find relevant memories.' },
-                limit: { type: 'number', description: 'Maximum number of results to return (default: 5, max: 20).' },
+                limit: { type: 'integer', minimum: 1, maximum: 20, description: 'Maximum number of results to return (default: 5, max: 20).' },
                 category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID to restrict the search. Without this, searches all selected categorys.' }
             },
             required: ['query']
+        },
+        outputSchema: {
+            type: 'object',
+            required: ['results'],
+            properties: {
+                results: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        required: ['fileRef', 'fileName', 'revision', 'content'],
+                        properties: {
+                            fileRef: { type: 'string' },
+                            fileName: { type: 'string' },
+                            category: { type: 'string' },
+                            revision: { type: 'integer' },
+                            content: { type: 'string' },
+                            score: { type: 'number' },
+                        },
+                    },
+                },
+            },
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
             const query = pickToolString(params, ['query', 'search_query', 'searchQuery', 'text'])
             if (!query) {
-                return { success: false, output: 'A non-empty "query" string is required for memory_semantic_search.' }
+                return { success: false, output: 'A non-empty "query" string is required for memory_search.' }
             }
-            const { limit, topK, category } = (params || {}) as { limit?: number; topK?: number; category?: string }
+            const { limit, category } = (params || {}) as { limit?: number; category?: string }
             const resolvedScope = resolveReadableCategoryFilter(assignedCategories, categoryFilter, category, getKnownCategories)
             if ('error' in resolvedScope) return { success: false, output: resolvedScope.error }
             const mem = getAgentMemory()
 
-            const k = Math.min(limit ?? topK ?? 5, 20)
+            const k = Math.floor(clampToolNumber(limit, 5, 1, 20))
             const results = await mem.recall(query, k, resolvedScope.filter)
 
             if (results.length === 0) {
                 return { success: false, output: `No relevant memories found for this query${resolvedScope.category ? ` in "${resolvedScope.category.name}"` : ''}.` }
             }
 
-            console.log(`[memory_semantic_search] Found ${results.length} results for query "${query.slice(0, 60)}" (limit=${k})`)
-
-            // Enrich with total chunks per source
-            const uniqueSourceKeys = [...new Set(
-                results
-                    .filter(r => r.sourceFile)
-                    .map(r => `${r.sourceFile!}\u0000${r.categoryId || ''}`)
-            )]
-            const counts = await Promise.all(uniqueSourceKeys.map(key => {
-                const [sf, sid] = key.split('\u0000')
-                const filter = sid ? buildScopeFilter([{ id: sid }]) : resolvedScope.filter
-                return mem.countChunks(sf, filter)
-            }))
-            const countMap = new Map(uniqueSourceKeys.map((key, i) => [key, counts[i]]))
-            const categoryMap = buildCategoryMap(assignedCategories, getKnownCategories())
-
-            const formatted = results.map(r => {
-                const parts: string[] = []
-                const categoryName = r.categoryId ? categoryMap.get(r.categoryId) || r.categoryId : undefined
-                const ref = r.sourceFile && r.categoryId ? mem.getDocumentReference(r.categoryId, r.sourceFile) : undefined
-                if (ref) parts.push(`[documentId=${ref.documentRef}]`)
-                if (r.sourceFile) {
-                    const total = countMap.get(`${r.sourceFile}\u0000${r.categoryId || ''}`)
-                    const label = categoryName ? `${categoryName} · ${r.sourceFile}` : r.sourceFile
-                    if (r.chunkIndex != null && total) {
-                        parts.push(`[${label} · Part ${r.chunkIndex + 1}/${total}]`)
-                    } else {
-                        parts.push(`[${label}]`)
-                    }
-                } else if (categoryName) {
-                    parts.push(`[${categoryName}]`)
-                }
-                parts.push(`(score: ${(r.score * 100).toFixed(1)}%)`)
-                parts.push(r.text)
-                return parts.join(' ')
-            }).join('\n\n---\n\n')
-
-            const graphCategories = resolvedScope.category
-                ? [resolvedScope.category]
-                : (assignedCategories.length > 0 ? assignedCategories : getKnownCategories())
-            const knowledge = getMemoryKnowledgeStore()
-            const graphResult = graphCategories.length > 0
-                ? await knowledge.search(query, graphCategories.map((category) => category.id), 8)
-                : { graph: undefined }
-            const graphContext = graphResult.graph ? knowledge.formatWalk(graphResult.graph) : ''
-            const graphSection = graphContext ? `\n\n---\n\n${graphContext}` : ''
-
-            return { success: true, output: `Showing ${results.length} result${results.length !== 1 ? 's' : ''}${resolvedScope.category ? ` from "${resolvedScope.category.name}"` : ''}:\n\n${formatted}${graphSection}` }
+            console.log(`[memory_search] Found ${results.length} indexed matches for query "${query.slice(0, 60)}" (limit=${k})`)
+            const canonicalMatches = (await Promise.all(results.map(canonicalExcerptForResult)))
+                .filter((result): result is NonNullable<typeof result> => Boolean(result))
+            const canonicalResults = [...new Map(canonicalMatches.map(result => [
+                `${result.fileRef}\u0000${result.content}`,
+                result,
+            ])).values()]
+            if (canonicalResults.length === 0) {
+                return { success: false, output: 'The search index matched memory, but no result still matched its canonical file. Retry after indexing completes.' }
+            }
+            for (const result of results) {
+                if (!opts.onDocumentRead || !result.categoryId || !result.sourceFile) continue
+                const ref = mem.getDocumentReference(result.categoryId, result.sourceFile)
+                if (ref && canonicalResults.some(item => item.fileRef === ref.documentRef)) opts.onDocumentRead(ref.documentId, ref.revision)
+            }
+            const formatted = canonicalResults.map(result =>
+                `[fileRef=${result.fileRef} fileName=${result.fileName} revision=${result.revision} category=${result.category} score=${(result.score * 100).toFixed(1)}%]\n${result.content}`
+            ).join('\n\n---\n\n')
+            return {
+                success: true,
+                output: `Showing ${canonicalResults.length} canonical memory excerpt${canonicalResults.length === 1 ? '' : 's'}:\n\n${formatted}`,
+                structuredContent: { results: canonicalResults },
+            }
         }
+    }
+}
+
+const MAX_MEMORY_READ_LINES = 400
+
+type MemoryReadConflictReason =
+    | 'file_not_found'
+    | 'section_not_found'
+    | 'anchor_not_found'
+    | 'ambiguous_context'
+    | 'invalid_request'
+    | 'revision_conflict'
+
+function memoryReadConflict(reason: MemoryReadConflictReason, message: string, currentRevision?: number): ToolResult {
+    const result = { status: 'conflict' as const, reason, currentRevision, message }
+    return { success: false, output: JSON.stringify(result), structuredContent: result }
+}
+
+function lineStartOffsets(content: string): number[] {
+    const starts = [0]
+    for (let index = content.indexOf('\n'); index >= 0; index = content.indexOf('\n', index + 1)) starts.push(index + 1)
+    return starts
+}
+
+function lineNumberAt(content: string, offset: number): number {
+    let line = 1
+    for (let index = content.indexOf('\n'); index >= 0 && index < offset; index = content.indexOf('\n', index + 1)) line++
+    return line
+}
+
+function canonicalLineWindow(
+    content: string,
+    firstLine: number,
+    requestedLastLine: number,
+): { content: string; startLine: number; endLine: number; totalLines: number; hasMoreBefore: boolean; hasMoreAfter: boolean } {
+    const starts = lineStartOffsets(content)
+    const totalLines = starts.length
+    const startLine = Math.max(1, Math.min(firstLine, totalLines))
+    const endLine = Math.max(startLine, Math.min(requestedLastLine, totalLines))
+    const startOffset = starts[startLine - 1]
+    const endOffset = endLine < totalLines ? starts[endLine] : content.length
+    return {
+        content: content.slice(startOffset, endOffset),
+        startLine,
+        endLine,
+        totalLines,
+        hasMoreBefore: startLine > 1,
+        hasMoreAfter: endLine < totalLines,
+    }
+}
+
+/** Read a deterministic region directly from one canonical memory file. */
+export function makeMemoryReadTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedCategories = [] } = opts
+    const getKnownCategories = createKnownMemoryFoldersLoader()
+    return {
+        name: 'memory_read',
+        execution: { readOnly: true },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        description:
+            'Read canonical text from a memory file returned by memory_search. Choose exactly one locator mode: ' +
+            'section for an exact Markdown heading title, anchor for one exact unique text occurrence with surrounding lines, ' +
+            'or startLine/lineCount for read-only paging. With no locator, reading starts at line 1. ' +
+            'Returned content is undecorated canonical source suitable for memory_patch; line numbers are metadata only.',
+        parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                fileRef: { type: 'string', description: 'Stable canonical file reference returned by memory_search.' },
+                section: { type: 'string', maxLength: 240, description: 'Exact Markdown heading title, with or without its # prefix.' },
+                anchor: { type: 'string', maxLength: 4000, description: 'Exact unique canonical text around which to read.' },
+                beforeLines: { type: 'integer', minimum: 0, maximum: 399, description: 'Lines before an anchor (default: 5).' },
+                afterLines: { type: 'integer', minimum: 0, maximum: 399, description: 'Lines after an anchor (default: 80).' },
+                startLine: { type: 'integer', minimum: 1, description: '1-based first line for sequential reading (default: 1).' },
+                lineCount: { type: 'integer', minimum: 1, maximum: 400, description: 'Maximum lines for sequential or section reading (default: 100; section maximum: 400).' },
+            },
+            required: ['fileRef'],
+        },
+        outputSchema: {
+            type: 'object',
+            required: ['status'],
+            properties: {
+                status: { type: 'string', enum: ['success', 'conflict'] },
+                fileRef: { type: 'string' },
+                revision: { type: 'integer' },
+                content: { type: 'string' },
+                range: {
+                    type: 'object',
+                    properties: {
+                        startLine: { type: 'integer' },
+                        endLine: { type: 'integer' },
+                        totalLines: { type: 'integer' },
+                        hasMoreBefore: { type: 'boolean' },
+                        hasMoreAfter: { type: 'boolean' },
+                    },
+                },
+                reason: { type: 'string' },
+                currentRevision: { type: 'integer' },
+                message: { type: 'string' },
+            },
+        },
+        timeout: 15_000,
+        execute: async (params: unknown) => {
+            const input = (params || {}) as {
+                fileRef?: string
+                section?: string
+                anchor?: string
+                beforeLines?: number
+                afterLines?: number
+                startLine?: number
+                lineCount?: number
+            }
+            const resolved = resolveMemoryFileRef(input.fileRef || '', assignedCategories, getKnownCategories)
+            if ('error' in resolved) return memoryReadConflict('file_not_found', resolved.error)
+
+            const hasSection = input.section !== undefined
+            const hasAnchor = input.anchor !== undefined
+            const hasLineWindow = input.startLine !== undefined
+            const hasAnchorControls = input.beforeLines !== undefined || input.afterLines !== undefined
+            const locatorCount = Number(hasSection) + Number(hasAnchor) + Number(hasLineWindow)
+            if (locatorCount > 1 || (hasAnchorControls && !hasAnchor) || (hasAnchor && input.lineCount !== undefined)) {
+                return memoryReadConflict('invalid_request', 'Choose only one locator mode: section, anchor, or startLine/lineCount.', resolved.revisionNumber)
+            }
+            if (hasSection && !input.section?.trim()) return memoryReadConflict('invalid_request', 'section must not be empty.', resolved.revisionNumber)
+            if (hasAnchor && !input.anchor) return memoryReadConflict('invalid_request', 'anchor must not be empty.', resolved.revisionNumber)
+            for (const [name, value, minimum] of [
+                ['beforeLines', input.beforeLines, 0],
+                ['afterLines', input.afterLines, 0],
+                ['startLine', input.startLine, 1],
+                ['lineCount', input.lineCount, 1],
+            ] as const) {
+                if (value !== undefined && (!Number.isInteger(value) || value < minimum)) {
+                    return memoryReadConflict('invalid_request', `${name} must be an integer greater than or equal to ${minimum}.`, resolved.revisionNumber)
+                }
+            }
+            if ((input.beforeLines ?? 0) >= MAX_MEMORY_READ_LINES || (input.afterLines ?? 0) >= MAX_MEMORY_READ_LINES || (input.lineCount ?? 1) > MAX_MEMORY_READ_LINES) {
+                return memoryReadConflict('invalid_request', `A memory_read call may return at most ${MAX_MEMORY_READ_LINES} lines.`, resolved.revisionNumber)
+            }
+
+            let canonical: string
+            try { canonical = readTextFile(resolved.directoryPath, resolved.fileName) } catch {
+                return memoryReadConflict('file_not_found', 'The canonical memory file could not be read.', resolved.revisionNumber)
+            }
+            if (createHash('sha256').update(canonical).digest('hex') !== resolved.revision) {
+                return memoryReadConflict('revision_conflict', 'The canonical file has changed and is awaiting re-indexing. Retry shortly.', resolved.revisionNumber)
+            }
+
+            let window: ReturnType<typeof canonicalLineWindow>
+            if (hasSection) {
+                const wanted = input.section!.trim().replace(/^#{1,6}[ \t]+/, '')
+                const headings = Array.from(canonical.matchAll(/^(#{1,6})[ \t]+(.+?)[ \t]*\r?$/gm))
+                    .filter(match => match[2].trim() === wanted)
+                if (headings.length === 0) return memoryReadConflict('section_not_found', `Markdown section ${JSON.stringify(wanted)} was not found.`, resolved.revisionNumber)
+                if (headings.length > 1) return memoryReadConflict('ambiguous_context', `Markdown section ${JSON.stringify(wanted)} occurs more than once.`, resolved.revisionNumber)
+                const heading = headings[0]
+                const level = heading[1].length
+                const startLine = lineNumberAt(canonical, heading.index)
+                const following = Array.from(canonical.slice(heading.index + heading[0].length).matchAll(/^(#{1,6})[ \t]+.+?[ \t]*\r?$/gm))
+                    .find(match => match[1].length <= level)
+                const naturalEndLine = following
+                    ? lineNumberAt(canonical, heading.index + heading[0].length + following.index!) - 1
+                    : lineStartOffsets(canonical).length
+                const lineCount = input.lineCount ?? MAX_MEMORY_READ_LINES
+                window = canonicalLineWindow(canonical, startLine, Math.min(naturalEndLine, startLine + lineCount - 1))
+            } else if (hasAnchor) {
+                const anchor = input.anchor!
+                const start = canonical.indexOf(anchor)
+                if (start < 0) return memoryReadConflict('anchor_not_found', 'The exact anchor was not found in the canonical file.', resolved.revisionNumber)
+                if (canonical.indexOf(anchor, start + 1) >= 0) return memoryReadConflict('ambiguous_context', 'The exact anchor occurs more than once; include more text.', resolved.revisionNumber)
+                const anchorStartLine = lineNumberAt(canonical, start)
+                const anchorEndLine = lineNumberAt(canonical, start + anchor.length)
+                const before = input.beforeLines ?? 5
+                const requestedAfter = input.afterLines ?? 80
+                const anchorLines = anchorEndLine - anchorStartLine + 1
+                if (anchorLines > MAX_MEMORY_READ_LINES) return memoryReadConflict('invalid_request', 'The anchor spans more than the maximum readable line count.', resolved.revisionNumber)
+                const after = Math.min(requestedAfter, MAX_MEMORY_READ_LINES - anchorLines - Math.min(before, MAX_MEMORY_READ_LINES - anchorLines))
+                const actualBefore = Math.min(before, MAX_MEMORY_READ_LINES - anchorLines - after)
+                window = canonicalLineWindow(canonical, anchorStartLine - actualBefore, anchorEndLine + after)
+            } else {
+                const startLine = input.startLine ?? 1
+                const lineCount = input.lineCount ?? 100
+                const totalLines = lineStartOffsets(canonical).length
+                if (startLine > totalLines) return memoryReadConflict('invalid_request', `startLine exceeds the file's ${totalLines} lines.`, resolved.revisionNumber)
+                window = canonicalLineWindow(canonical, startLine, startLine + lineCount - 1)
+            }
+
+            opts.onDocumentRead?.(resolved.documentId, resolved.revision)
+            const result = {
+                status: 'success' as const,
+                fileRef: resolved.documentRef,
+                revision: resolved.revisionNumber,
+                content: window.content,
+                range: {
+                    startLine: window.startLine,
+                    endLine: window.endLine,
+                    totalLines: window.totalLines,
+                    hasMoreBefore: window.hasMoreBefore,
+                    hasMoreAfter: window.hasMoreAfter,
+                },
+            }
+            return { success: true, output: JSON.stringify(result), structuredContent: result }
+        },
     }
 }
 
@@ -1119,7 +1180,7 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
         parameters: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'A focused Subject - Aspect title for the memory entry (for example "Veronica Flowers - Hobbies"). The .md extension is appended automatically.' },
+                title: { type: 'string', description: 'A descriptive title for the canonical memory file. The .md extension is appended automatically.' },
                 content: { type: 'string', description: 'The Markdown text content to store in memory.' },
                 category: { type: 'string', description: 'Optional memory folder name, relative path (e.g. "projects/acme"), or ID. Omit to write to the only selected category, or to the default root category when no single selected category is in scope.' }
             },
@@ -1157,131 +1218,170 @@ export function makeMemoryCreateTool(opts: MemoryToolOptions): ToolDefinition {
 
             return {
                 success: true,
-                output: `Memory "${uniqueName}" created and indexed in "${resolved.categoryName}" (documentId=${indexed.documentRef}, chunks=${indexed.chunkCount}).${indexed.chunkCount > 3 ? ' Warning: this memory exceeds the 1–3 chunk topical target; consider splitting it by aspect.' : ''}`
+                output: `Memory "${uniqueName}" created and indexed in "${resolved.categoryName}" (fileRef=${indexed.documentRef}, revision=${indexed.revision}, chunks=${indexed.chunkCount}).`
             }
         }
     }
 }
 
-async function prepareMemoryMutation(
-    resolved: ResolvedMemoryDocument,
-): Promise<{ resolved: ResolvedMemoryDocument; fileContent: string } | { error: string }> {
-    let fileContent: string
+export type MemoryPatchConflictReason =
+    | 'file_not_found'
+    | 'expected_context_not_found'
+    | 'ambiguous_context'
+    | 'invalid_patch'
+    | 'revision_conflict'
+    | 'patch_application_failed'
+
+export type MemoryPatchApplication =
+    | { status: 'success'; content: string; affectedRanges: Array<{ start: number; oldEnd: number; newEnd: number }> }
+    | { status: 'conflict'; reason: MemoryPatchConflictReason; message: string }
+
+interface ParsedPatchHunk { before: string; after: string }
+
+function parseContextualPatch(patch: string): ParsedPatchHunk[] | { error: string } {
+    if (typeof patch !== 'string' || !patch.trim()) return { error: 'patch must be a non-empty string.' }
+    const lines = patch.replace(/\r\n?/g, '\n').split('\n')
+    while (lines.length && !lines[0].startsWith('@@')) lines.shift()
+    while (lines.length && lines[lines.length - 1] === '') lines.pop()
+    if (!lines.length) return { error: 'patch must contain at least one @@ hunk.' }
+
+    const hunks: ParsedPatchHunk[] = []
+    let before: string[] | undefined
+    let after: string[] | undefined
+    const finish = () => {
+        if (!before || !after) return
+        if (before.length === 0) throw new Error('Each hunk needs deleted or unchanged context for safe addressing.')
+        hunks.push({ before: before.join('\n'), after: after.join('\n') })
+    }
     try {
-        fileContent = readTextFile(resolved.directoryPath, resolved.fileName)
-    } catch {
-        return { error: `Could not read file "${resolved.fileName}" from memory folder.` }
-    }
-    const referenceError = verifyDocumentRef(fileContent, resolved)
-    return referenceError ? { error: referenceError } : { resolved, fileContent }
-}
-
-async function runPreparedMemoryMutation(
-    params: { documentId: string },
-    assignedCategories: MemoryFolderRef[],
-    getKnownCategories: () => MemoryFolderRef[],
-    signal: AbortSignal | undefined,
-    operation: (prepared: { resolved: ResolvedMemoryDocument; fileContent: string }) => Promise<ToolResult>,
-    beforeMutation?: (documentId: string, content: string) => void,
-): Promise<ToolResult> {
-    const resolved = resolveMemoryDocumentId(params.documentId, assignedCategories, getKnownCategories)
-    if ('error' in resolved) return { success: false, output: resolved.error }
-    return withMemoryDocumentLock(resolved.documentId, signal, async () => {
-        const prepared = await prepareMemoryMutation(resolved)
-        if ('error' in prepared) return { success: false, output: prepared.error }
-        beforeMutation?.(resolved.documentId, prepared.fileContent)
-        return operation(prepared)
-    })
-}
-
-type MemoryEdit =
-    | { op: 'replace'; old: string; new: string }
-    | { op: 'delete'; old: string }
-    | { op: 'insert_after'; anchor: string; text: string }
-
-function findUniqueExactMatch(content: string, needle: string, label: string, editNumber: number): { start: number; end: number } | { error: string } {
-    if (!needle) return { error: `Edit ${editNumber}: ${label} must not be empty.` }
-    const start = content.indexOf(needle)
-    if (start < 0) return { error: `Edit ${editNumber}: the exact ${label} text was not found. No edits were applied.` }
-    if (content.indexOf(needle, start + 1) >= 0) {
-        return { error: `Edit ${editNumber}: the exact ${label} text occurs more than once. Provide more surrounding text so it identifies one location. No edits were applied.` }
-    }
-    return { start, end: start + needle.length }
-}
-
-/** Apply a complete edit batch in memory so validation failures cannot partially write a document. */
-export function applyExactMemoryEdits(content: string, edits: MemoryEdit[]): { content: string } | { error: string } {
-    if (!Array.isArray(edits) || edits.length === 0) return { error: 'edits must contain at least one operation.' }
-    let next = content
-    for (const [index, edit] of edits.entries()) {
-        const editNumber = index + 1
-        if (!edit || !['replace', 'delete', 'insert_after'].includes(edit.op)) return { error: `Edit ${editNumber}: unsupported operation. No edits were applied.` }
-        if (edit.op === 'replace') {
-            if (typeof edit.old !== 'string' || typeof edit.new !== 'string') return { error: `Edit ${editNumber}: replace requires string old and new fields. No edits were applied.` }
-            const match = findUniqueExactMatch(next, edit.old, 'old', editNumber)
-            if ('error' in match) return match
-            next = next.slice(0, match.start) + edit.new + next.slice(match.end)
-        } else if (edit.op === 'delete') {
-            if (typeof edit.old !== 'string') return { error: `Edit ${editNumber}: delete requires a string old field. No edits were applied.` }
-            const match = findUniqueExactMatch(next, edit.old, 'old', editNumber)
-            if ('error' in match) return match
-            next = next.slice(0, match.start) + next.slice(match.end)
-        } else {
-            if (typeof edit.anchor !== 'string' || typeof edit.text !== 'string' || !edit.text) return { error: `Edit ${editNumber}: insert_after requires non-empty string anchor and text fields. No edits were applied.` }
-            const match = findUniqueExactMatch(next, edit.anchor, 'anchor', editNumber)
-            if ('error' in match) return match
-            const before = next.slice(0, match.end)
-            const after = next.slice(match.end)
-            const leadingBreak = before.endsWith('\n') || edit.text.startsWith('\n') ? '' : '\n'
-            const trailingBreak = !after || after.startsWith('\n') || edit.text.endsWith('\n') ? '' : '\n'
-            next = before + leadingBreak + edit.text + trailingBreak + after
+        for (const line of lines) {
+            if (line.startsWith('@@')) {
+                finish()
+                before = []
+                after = []
+                continue
+            }
+            if (!before || !after) return { error: 'Patch content must follow an @@ hunk header.' }
+            if (line.startsWith('\\ No newline at end of file')) continue
+            if (line.startsWith('-')) before.push(line.slice(1))
+            else if (line.startsWith('+')) after.push(line.slice(1))
+            else if (line.startsWith(' ')) {
+                before.push(line.slice(1))
+                after.push(line.slice(1))
+            } else if (line === '') {
+                before.push('')
+                after.push('')
+            } else {
+                return { error: `Invalid patch line ${JSON.stringify(line)}; lines must start with space, +, or -.` }
+            }
         }
+        finish()
+    } catch (error) {
+        return { error: (error as Error).message }
     }
-    return { content: next }
+    if (hunks.length === 0) return { error: 'patch must contain at least one non-empty hunk.' }
+    return hunks
 }
 
-export function makeMemoryUpdateTool(opts: MemoryToolOptions): ToolDefinition {
+/** Apply all contextual hunks in memory. No content is returned on conflict. */
+export function applyMemoryPatch(content: string, patch: string): MemoryPatchApplication {
+    const parsed = parseContextualPatch(patch)
+    if ('error' in parsed) return { status: 'conflict', reason: 'invalid_patch', message: parsed.error }
+    let next = content
+    const affectedRanges: Array<{ start: number; oldEnd: number; newEnd: number }> = []
+    for (const hunk of parsed) {
+        const start = next.indexOf(hunk.before)
+        if (start < 0) {
+            return { status: 'conflict', reason: 'expected_context_not_found', message: 'Expected patch context was not found in the canonical file.' }
+        }
+        if (next.indexOf(hunk.before, start + 1) >= 0) {
+            return { status: 'conflict', reason: 'ambiguous_context', message: 'Expected patch context occurs more than once; include more unchanged context.' }
+        }
+        next = next.slice(0, start) + hunk.after + next.slice(start + hunk.before.length)
+        affectedRanges.push({ start, oldEnd: start + hunk.before.length, newEnd: start + hunk.after.length })
+    }
+    return { status: 'success', content: next, affectedRanges }
+}
+
+function patchConflict(reason: MemoryPatchConflictReason, currentRevision: number | undefined, message: string): ToolResult {
+    const result = { status: 'conflict' as const, reason, currentRevision, message }
+    return { success: false, output: JSON.stringify(result), structuredContent: result }
+}
+
+export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedCategories = [] } = opts
     const getKnownCategories = createKnownMemoryFoldersLoader()
     return {
-        name: 'memory_update',
+        name: 'memory_patch',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Apply exact, atomic text edits to an existing memory document. replace and delete require their old text to occur exactly once; matching is literal and never fuzzy. insert_after likewise requires one exact anchor. If any edit is invalid, ambiguous, or missing, nothing is written. Use the stable documentId returned by memory reads or listings.',
+        description: 'Atomically apply a strict contextual patch to a canonical memory file. Context is matched literally and must identify exactly one location; matching is never fuzzy. A stale expectedRevision may still succeed when every hunk remains uniquely applicable. Use fileRef and revision returned by memory_search.',
         parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
-                documentId: { type: 'string', description: 'Stable document identifier returned by memory reads or listings (for example user-profile#4k8z2q).' },
-                edits: {
-                    type: 'array', minItems: 1, maxItems: 50,
-                    description: 'Ordered exact edits. Each edit sees the result of the preceding edit.',
-                    items: {
-                        type: 'object', additionalProperties: false,
-                        properties: {
-                            op: { type: 'string', enum: ['replace', 'delete', 'insert_after'] },
-                            old: { type: 'string', description: 'Exact text to replace or delete. It must occur exactly once.' },
-                            new: { type: 'string', description: 'Replacement text for replace.' },
-                            anchor: { type: 'string', description: 'Exact text after which to insert. It must occur exactly once.' },
-                            text: { type: 'string', description: 'Text to insert after the anchor.' },
-                        },
-                        required: ['op'],
-                    },
-                },
+                fileRef: { type: 'string', description: 'Stable canonical file reference returned by memory_search (for example user-profile#4k8z2q).' },
+                expectedRevision: { type: 'integer', minimum: 1, description: 'Monotonic revision returned by memory_search.' },
+                patch: { type: 'string', description: 'One or more @@ contextual diff hunks. Prefix removed lines with -, added lines with +, and unchanged context with a space.' },
             },
-            required: ['documentId', 'edits'],
+            required: ['fileRef', 'expectedRevision', 'patch'],
+        },
+        outputSchema: {
+            type: 'object',
+            required: ['status'],
+            properties: {
+                status: { type: 'string', enum: ['success', 'conflict'] },
+                fileRef: { type: 'string' },
+                previousRevision: { type: 'integer' },
+                revision: { type: 'integer' },
+                currentRevision: { type: 'integer' },
+                reason: { type: 'string' },
+                affectedRanges: { type: 'array' },
+                message: { type: 'string' },
+            },
         },
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = (params || {}) as { documentId: string; edits: MemoryEdit[] }
-            return runPreparedMemoryMutation(input, assignedCategories, getKnownCategories, signal, async ({ resolved, fileContent }) => {
-                const updated = applyExactMemoryEdits(fileContent, input.edits)
-                if ('error' in updated) return { success: false, output: updated.error }
-                if (updated.content === fileContent) return { success: true, output: `No content changed in "${resolved.fileName}"; the exact edits already produce the current document.` }
-                const indexed = await commitMemoryMutation(resolved, fileContent, updated.content, signal, opts.revisionContext)
-                opts.onDocumentMutated?.(indexed.documentId)
-                return { success: true, output: `Applied ${input.edits.length} exact edit${input.edits.length === 1 ? '' : 's'} to "${resolved.fileName}" and indexed it (documentId=${indexed.documentRef}, chunks=${indexed.chunkCount}).` }
-            }, opts.beforeDocumentMutation)
+            const input = (params || {}) as { fileRef: string; expectedRevision: number; patch: string }
+            if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+                return patchConflict('invalid_patch', undefined, 'expectedRevision must be a positive integer.')
+            }
+            const initial = resolveMemoryFileRef(input.fileRef, assignedCategories, getKnownCategories)
+            if ('error' in initial) return patchConflict('file_not_found', undefined, initial.error)
+            return withMemoryDocumentLock(initial.documentId, signal, async () => {
+                const resolved = resolveMemoryFileRef(input.fileRef, assignedCategories, getKnownCategories)
+                if ('error' in resolved) return patchConflict('file_not_found', undefined, resolved.error)
+                if (input.expectedRevision > resolved.revisionNumber) {
+                    return patchConflict('revision_conflict', resolved.revisionNumber, 'expectedRevision is newer than the canonical file revision.')
+                }
+                let current: string
+                try { current = readTextFile(resolved.directoryPath, resolved.fileName) } catch {
+                    return patchConflict('file_not_found', resolved.revisionNumber, 'The canonical memory file could not be read.')
+                }
+                opts.beforeDocumentMutation?.(resolved.documentId, current)
+                let applied = applyMemoryPatch(current, input.patch)
+                if (applied.status === 'conflict') return patchConflict(applied.reason, resolved.revisionNumber, applied.message)
+                if (applied.content === current) {
+                    const result = { status: 'success' as const, fileRef: resolved.documentRef, previousRevision: resolved.revisionNumber, revision: resolved.revisionNumber, affectedRanges: [] }
+                    return { success: true, output: JSON.stringify(result), structuredContent: result }
+                }
+                // Catch canonical writes that occurred after validation but before
+                // commit. Rebase only through the same strict unique-context rules.
+                const latest = readTextFile(resolved.directoryPath, resolved.fileName)
+                if (latest !== current) {
+                    current = latest
+                    applied = applyMemoryPatch(current, input.patch)
+                    if (applied.status === 'conflict') return patchConflict(applied.reason, resolved.revisionNumber, applied.message)
+                }
+                try {
+                    const indexed = await commitMemoryMutation(resolved, current, applied.content, signal, opts.revisionContext)
+                    opts.onDocumentMutated?.(indexed.documentId)
+                    const result = { status: 'success' as const, fileRef: indexed.documentRef, previousRevision: resolved.revisionNumber, revision: indexed.revision, affectedRanges: applied.affectedRanges }
+                    return { success: true, output: JSON.stringify(result), structuredContent: result }
+                } catch (error) {
+                    return patchConflict('patch_application_failed', resolved.revisionNumber, (error as Error).message)
+                }
+            })
         },
     }
 }

@@ -5,11 +5,10 @@ const INTERNAL_TOOL_PREFIXES = [
 ]
 
 export const AUTO_MEMORY_TOOL_NAMES = [
-  'memory_list_documents',
-  'memory_retrieve_chunks',
-  'memory_semantic_search',
+  'memory_search',
+  'memory_read',
   'memory_create',
-  'memory_update',
+  'memory_patch',
 ] as const
 
 export const AGENT_REQUIRED_TOOL_NAMES = [

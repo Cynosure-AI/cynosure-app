@@ -17,6 +17,8 @@ const METADATA_DEFAULT_COLUMNS: Array<{ name: string; defaultValue: (row: Record
   { name: 'sectionPath', defaultValue: () => '' },
   { name: 'contentHash', defaultValue: () => '' },
   { name: 'embeddingModel', defaultValue: () => '' },
+  { name: 'sourceStart', defaultValue: () => -1 },
+  { name: 'sourceEnd', defaultValue: () => -1 },
 ]
 
 // ---------------------------------------------------------------------------
@@ -41,6 +43,8 @@ export interface VectorDocument {
   representationType?: 'raw' | 'summary' | 'keywords' | 'fact'
   /** ID of the raw chunk returned as evidence for every representation. */
   sourceChunkId?: string
+  sourceStart?: number
+  sourceEnd?: number
 }
 
 export interface SearchResult {
@@ -72,6 +76,8 @@ export interface SearchResult {
   matchedRepresentations?: Array<'raw' | 'summary' | 'keywords' | 'fact'>
   /** Exact generated fact projections that led retrieval to this chunk. */
   matchedFacts?: string[]
+  sourceStart?: number
+  sourceEnd?: number
 }
 
 export interface RAGOptimizeResult {
@@ -178,6 +184,8 @@ export class RAGStore {
         { name: 'embeddingModel', valueSql: "''" },
         { name: 'representationType', valueSql: "'raw'" },
         { name: 'sourceChunkId', valueSql: 'id' },
+        { name: 'sourceStart', valueSql: '-1' },
+        { name: 'sourceEnd', valueSql: '-1' },
       ].filter((column) => !existingFields.has(column.name))
       if (metadataColumns.length > 0) {
         await table.addColumns(metadataColumns)
@@ -224,6 +232,8 @@ export class RAGStore {
         embeddingModel: '',
         representationType: 'raw',
         sourceChunkId: '__seed__',
+        sourceStart: -1,
+        sourceEnd: -1,
       }
       const table = await this.db!.createTable(tableName, [{ ...seed }])
 
@@ -409,6 +419,7 @@ export class RAGStore {
     const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', '_distance', 'documentTitle', 'sectionPath', 'contentHash']
     if (fieldNames.has('categoryId')) cols.push('categoryId')
     if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
+    if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
     let query = (table.search(queryVector) as lancedb.VectorQuery)
       .distanceType('cosine')
@@ -436,6 +447,8 @@ export class RAGStore {
         contentHash: (r.contentHash as string | undefined) || undefined,
         representationType: (r.representationType as SearchResult['representationType']) || 'raw',
         sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
+        sourceStart: typeof r.sourceStart === 'number' && r.sourceStart >= 0 ? r.sourceStart : undefined,
+        sourceEnd: typeof r.sourceEnd === 'number' && r.sourceEnd >= 0 ? r.sourceEnd : undefined,
         matchedSearchText: (r.searchText as string | undefined) || undefined,
         createdAt: r.createdAt as number
       }))
@@ -456,6 +469,7 @@ export class RAGStore {
     const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', '_score']
     if (fieldNames.has('categoryId')) cols.push('categoryId')
     if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
+    if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
     if (!this.ftsIndexCurrent.has(tableName)) await this.rebuildFtsIndex(tableName)
     await this.ensureCategoryIdIndex(table, tableName)
@@ -488,6 +502,8 @@ export class RAGStore {
             contentHash: (r.contentHash as string | undefined) || undefined,
             representationType: (r.representationType as SearchResult['representationType']) || 'raw',
             sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
+            sourceStart: typeof r.sourceStart === 'number' && r.sourceStart >= 0 ? r.sourceStart : undefined,
+            sourceEnd: typeof r.sourceEnd === 'number' && r.sourceEnd >= 0 ? r.sourceEnd : undefined,
             matchedSearchText: (r.searchText as string | undefined) || undefined,
             createdAt: r.createdAt as number
           }
@@ -516,6 +532,7 @@ export class RAGStore {
     const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash']
     if (fieldNames.has('categoryId')) cols.push('categoryId')
     if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
+    if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
     // Safety fallback: rebuild FTS if callers didn't trigger it eagerly
     if (!this.ftsIndexCurrent.has(tableName)) {
@@ -562,6 +579,8 @@ export class RAGStore {
             contentHash: (r.contentHash as string | undefined) || undefined,
             representationType: (r.representationType as SearchResult['representationType']) || 'raw',
             sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
+            sourceStart: typeof r.sourceStart === 'number' && r.sourceStart >= 0 ? r.sourceStart : undefined,
+            sourceEnd: typeof r.sourceEnd === 'number' && r.sourceEnd >= 0 ? r.sourceEnd : undefined,
             matchedSearchText: (r.searchText as string | undefined) || undefined,
             createdAt: r.createdAt as number
           }

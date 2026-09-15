@@ -145,6 +145,15 @@ export function getMemoryDocument(documentRef: string): DocumentRow | undefined 
   return getDb().prepare('SELECT * FROM memory_documents WHERE document_ref = ?').get(documentRef) as DocumentRow | undefined
 }
 
+/** Return the current monotonic revision number for a canonical document. */
+export function getCurrentMemoryRevisionNumber(documentId: string): number | undefined {
+  const row = getDb().prepare(`
+    SELECT revision_number FROM memory_document_revisions
+    WHERE document_id = ? ORDER BY revision_number DESC LIMIT 1
+  `).get(documentId) as { revision_number: number } | undefined
+  return row?.revision_number
+}
+
 export function unifiedMemoryDiff(documentRef: string, fromId: string, toId: string): string | undefined {
   const from = getMemoryRevision(documentRef, fromId)
   const to = getMemoryRevision(documentRef, toId)
