@@ -419,6 +419,7 @@ export interface MemoryDocumentAnalysis {
     promptVersion?: string
     chunks: Array<{
         chunkIndex: number
+        text: string
         sectionPath: string
         summary: string
         tags: string[]

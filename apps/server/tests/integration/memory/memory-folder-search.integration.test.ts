@@ -80,7 +80,11 @@ describe('global memory file search', () => {
     const analysisResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-a/files/alpha.md/analysis' })
     expect(analysisResponse.json()).toEqual(expect.objectContaining({
       status: 'current',
-      chunks: [expect.objectContaining({ summary: 'The document explains a quasar indexing strategy.', tags: ['architecture'] })],
+      chunks: [expect.objectContaining({
+        text: 'Plain source wording.',
+        summary: 'The document explains a quasar indexing strategy.',
+        tags: ['architecture'],
+      })],
     }))
 
     await writeFile(join(firstFolder, 'alpha.md'), '# Alpha\nChanged source wording.')
