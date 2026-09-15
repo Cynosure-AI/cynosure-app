@@ -127,7 +127,7 @@ export async function deepResearchContent(opts: {
     'Return strict JSON only: an array of objects. Relationship objects use keys action, from, relation, to, object_value, importance, note, source_chunk_index, valid_from, valid_to, observed_at.',
     'action is "assert" for supported facts, "delete" for facts explicitly corrected or no longer true, "mention" for a durable named entity without a relationship, "tags" for chunk keywords, or "summary" for the chunk summary.',
     'A summary object uses keys action="summary", summary, and source_chunk_index.',
-    'For every source chunk, return exactly one summary object containing a faithful 1-2 sentence summary in the source language.',
+    'For every source chunk, return exactly one summary object containing a faithful 1-sentence summary in the source language. Like a TL;DR.',
     'A mention object uses keys action, entity, note, and source_chunk_index.',
     'For every source chunk, return exactly one tags object with keys action="tags", tags, and source_chunk_index.',
     'tags must contain 3-8 concise, specific keywords or short keyphrases that describe the chunk for document discovery. Use the source language, lowercase text, no # prefix, and avoid generic words such as document, information, notes, relationship, or person.',
