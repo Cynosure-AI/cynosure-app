@@ -49,7 +49,7 @@ afterEach(() => {
 async function read() { return makeMemoryRetrieveChunksTool(options).execute({ sourceFile: 'notes.md', minPart: 1, maxPart: 1 }) }
 test('Dream can replace a topical memory while preserving unrelated supported content', async () => {
     expect((await read()).success).toBe(true)
-    const result = await makeMemoryUpdateTool(options).execute({ documentRef: 'notes#abc123', content: 'Unrelated fact.\n\nPrefers concise replies.' })
+    const result = await makeMemoryUpdateTool(options).execute({ documentId: 'notes#abc123', edits: [{ op: 'insert_after', anchor: 'Unrelated fact.', text: 'Prefers concise replies.' }] })
     expect(result.success).toBe(true)
     expect(readFileSync(file, 'utf8')).toContain('Unrelated fact.')
     expect(readFileSync(file, 'utf8')).toContain('Prefers concise replies.')
@@ -57,10 +57,10 @@ test('Dream can replace a topical memory while preserving unrelated supported co
 test('a concurrent edit is rejected under the document lock until Dream reads again', async () => {
     await read()
     setContent('New human edit.')
-    await expect(makeMemoryUpdateTool(options).execute({ documentRef: 'notes#abc123', content: 'Stale replacement' })).rejects.toThrow('Document changed since read')
+    await expect(makeMemoryUpdateTool(options).execute({ documentId: 'notes#abc123', edits: [{ op: 'replace', old: 'New human edit.', new: 'Stale replacement' }] })).rejects.toThrow('Document changed since read')
     expect(readFileSync(file, 'utf8')).toBe('New human edit.')
     await read()
-    expect((await makeMemoryUpdateTool(options).execute({ documentRef: 'notes#abc123', content: 'Fresh replacement' })).success).toBe(true)
+    expect((await makeMemoryUpdateTool(options).execute({ documentId: 'notes#abc123', edits: [{ op: 'replace', old: 'New human edit.', new: 'Fresh replacement' }] })).success).toBe(true)
 })
 test('an edit during chunk retrieval does not authorize changes using stale content', async () => {
     vi.mocked(getAgentMemory().getChunksByRange).mockImplementationOnce(async () => {
@@ -74,6 +74,23 @@ test('an aborted write leaves the source untouched', async () => {
     await read()
     const controller = new AbortController()
     controller.abort()
-    await expect(makeMemoryUpdateTool(options).execute({ documentRef: 'notes#abc123', content: 'Do not write' }, controller.signal)).rejects.toThrow()
+    await expect(makeMemoryUpdateTool(options).execute({ documentId: 'notes#abc123', edits: [{ op: 'replace', old: 'Unrelated fact.', new: 'Do not write' }] }, controller.signal)).rejects.toThrow()
     expect(readFileSync(file, 'utf8')).toBe('Unrelated fact.')
+})
+
+test('a failed exact edit batch is atomic and does not reindex', async () => {
+    await read()
+    const reindex = vi.mocked(getAgentMemory().reindexFile)
+    const callsBefore = reindex.mock.calls.length
+    const result = await makeMemoryUpdateTool(options).execute({
+        documentId: 'notes#abc123',
+        edits: [
+            { op: 'replace', old: 'Unrelated fact.', new: 'Changed fact.' },
+            { op: 'delete', old: 'Text that is not present.' },
+        ],
+    })
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('exact')
+    expect(readFileSync(file, 'utf8')).toBe('Unrelated fact.')
+    expect(reindex).toHaveBeenCalledTimes(callsBefore)
 })

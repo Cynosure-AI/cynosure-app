@@ -21,7 +21,7 @@ Memory source files are authoritative. Search vectors are rebuildable, while kno
 
 Version 2.1 replaces the legacy entity-graph store. Existing legacy graph rows are intentionally removed during upgrade; re-run Deep Research from the source memory documents afterward.
 
-PDF memory imports and file attachments use `unpdf` for Markdown extraction. Matching bookmark titles retain their heading hierarchy; short lines with larger fonts provide a heading fallback. Line breaks, paragraph gaps, and common bullet markers are preserved. Heading inference is heuristic, and complex tables, columns, and visual formatting may need correction. Scanned PDFs require OCR before importing. Previously converted Markdown is unchanged; import the original PDF again to use the new converter.
+PDF memory imports and file attachments use `unpdf` for positioned text extraction. Matching bookmark titles retain their heading hierarchy; short lines with larger fonts provide a heading fallback. Line breaks, paragraph gaps, and common bullet markers are preserved, while repeated headers, footers, and page numbers in page margins are removed. Heading inference is heuristic, and complex tables, columns, and visual formatting may need correction. Scanned PDFs require OCR before importing. Previously converted Markdown is unchanged; import the original PDF again to use the new converter.
 
 ## Monorepo Structure
 

@@ -72,6 +72,15 @@ describe('PDF Markdown ingestion', () => {
         expect(await parseDocument(makePdf([stream]), 'layout.pdf')).toBe('Hello world\nNext line\n\nNew paragraph\n\n1. First item\n\n2. Second item')
     })
 
+    test('removes repeated headers and page numbers confined to page margins', async () => {
+        const pages = [1, 2, 3].map(page => [
+            text('Confidential report', 9, 775),
+            text(`Unique body ${page}.`, 12, 700),
+            text(`Page ${page} of 3`, 9, 25),
+        ].join('\n'))
+        expect(await parseDocument(makePdf(pages), 'repeated.pdf')).toBe('Unique body 1.\n\nUnique body 2.\n\nUnique body 3.')
+    })
+
     test('rejects PDFs with no text and malformed PDFs', async () => {
         await expect(parseDocument(makePdf(['']), 'scan.pdf')).rejects.toThrow('require OCR')
         await expect(parseDocument(Buffer.from('not a pdf'), 'bad.pdf')).rejects.toThrow()

@@ -11,7 +11,6 @@ import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiS
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
 import MemoryInlineDiff from "../components/memory/MemoryInlineDiff.vue";
-import KnowledgeFactsSection from "../components/memory/KnowledgeFactsSection.vue";
 import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vue";
 import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
@@ -24,10 +23,8 @@ const VISUAL_GRAPH_RELATION_LIMIT = 500;
 /** Server-enforced ceiling from GET /api/memory/limits; requesting more would
  * silently clamp, so the client asks for exactly what the server serves. */
 const ALL_GRAPH_LIMIT = RUNTIME_LIMITS.graph.maxNodes;
-const RELATIONSHIPS_GRAPH_LIMIT = RUNTIME_LIMITS.graph.maxNodes;
-
-type MemoryPanel = "documents" | "relationships" | "visual";
-type GraphViewMode = "relationships" | "visual";
+type MemoryPanel = "documents" | "visual";
+type GraphViewMode = "visual";
 type FactLevelFilter = 0 | 1 | 2 | 3;
 type GraphEntityLimit = 100 | 200 | 300 | 500 | null;
 
@@ -52,13 +49,6 @@ const memorySections = [
     label: "Documents",
     description: "Browse folders, upload files, and manage indexed memory documents.",
     icon: "lucide:file-text",
-  },
-  {
-    id: "relationships",
-    path: "/memory-folders/relationships",
-    label: "Knowledge",
-    description: "Inspect, correct, and manage facts extracted from memory.",
-    icon: "lucide:git-branch",
   },
   {
     id: "visual",
@@ -196,7 +186,6 @@ async function restoreDeletedMemory(memory: DeletedMemory) {
 
 const panelByRouteSegment: Record<string, MemoryPanel> = {
   documents: "documents",
-  relationships: "relationships",
   "visual-graph": "visual",
 };
 
@@ -205,7 +194,6 @@ const activeSection = computed(() =>
 );
 
 const activeGraphView = computed<GraphViewMode | null>(() => {
-  if (activePanel.value === "relationships") return "relationships";
   if (activePanel.value === "visual") return "visual";
   return null;
 });
@@ -359,11 +347,9 @@ async function loadGraph(
   categoryIds = graphSelectedCategoryIds.value,
 ) {
   const trimmedQuery = query.trim();
-  const limit = activePanel.value === "relationships"
-    ? RELATIONSHIPS_GRAPH_LIMIT
-    : graphEntityLimit.value === null
-      ? ALL_GRAPH_LIMIT
-      : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
+  const limit = graphEntityLimit.value === null
+    ? ALL_GRAPH_LIMIT
+    : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
   const view = activeGraphView.value || "visual";
   const minImportance = view === "visual" ? graphFactLevel.value : null;
   const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${[...categoryIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
@@ -556,19 +542,6 @@ async function deleteEdge(edge: KnowledgeGraphEdge) {
   }
 }
 
-async function deleteEdges(ids: string[]) {
-  graphOperationError.value = "";
-  graphMutationPending.value = true;
-  try {
-    await api.memory.deleteGraphEdges(ids);
-    await loadGraph();
-  } catch (error) {
-    graphOperationError.value = error instanceof Error ? error.message : "Could not delete the selected relationships.";
-  } finally {
-    graphMutationPending.value = false;
-  }
-}
-
 function selectPanel(panel: MemoryPanel) {
   const section = memorySections.find((candidate) => candidate.id === panel);
   if (section && route.path !== section.path) void router.push(section.path);
@@ -590,13 +563,10 @@ watch(
     const enteringVisual = panel === "visual" && activePanel.value !== "visual";
     activePanel.value = panel;
     if (enteringVisual) requestGraphFit();
-    const expectedGraphLimit = panel === "relationships"
-      ? RELATIONSHIPS_GRAPH_LIMIT
-      : graphEntityLimit.value === null
-        ? ALL_GRAPH_LIMIT
-        : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
-    const expectedGraphView: GraphViewMode = panel === "relationships" ? "relationships" : "visual";
-    if ((panel === "relationships" || panel === "visual") && (!graph.value || graphLimit.value !== expectedGraphLimit || graphView.value !== expectedGraphView)) await loadGraph();
+    const expectedGraphLimit = graphEntityLimit.value === null
+      ? ALL_GRAPH_LIMIT
+      : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
+    if (panel === "visual" && (!graph.value || graphLimit.value !== expectedGraphLimit || graphView.value !== "visual")) await loadGraph();
   },
   { immediate: true },
 );
@@ -624,7 +594,7 @@ onMounted(() => loadCategories());
             </div>
             <div class="flex shrink-0 items-center gap-2 self-start">
               <MultiSelect
-                v-if="activePanel === 'relationships' || activePanel === 'visual'"
+                v-if="activePanel === 'visual'"
                 :model-value="graphSelectedCategoryIds"
                 :options="graphCategoryOptions"
                 placeholder="No memory folders"
@@ -653,7 +623,7 @@ onMounted(() => loadCategories());
                 New Folder
               </button>
               <button
-                v-if="activePanel === 'relationships' || activePanel === 'visual'"
+                v-if="activePanel === 'visual'"
                 class="p-2 text-theme-500 transition-colors hover:text-theme-200"
                 title="Refresh knowledge graph"
                 @click="loadGraph()"
@@ -676,7 +646,7 @@ onMounted(() => loadCategories());
         </header>
 
         <div
-          v-if="graphOperationError && (activePanel === 'relationships' || activePanel === 'visual')"
+          v-if="graphOperationError && activePanel === 'visual'"
           class="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300 sm:mx-6 lg:mx-8"
           role="alert"
         >
@@ -716,22 +686,6 @@ onMounted(() => loadCategories());
           @delete-folder="confirmDeleteSpace"
           @refresh-spaces="loadCategories"
           @category-navigation="clearDocumentLink"
-        />
-
-        <KnowledgeFactsSection
-          v-else-if="activePanel === 'relationships'"
-          v-model:graph-query="graphQuery"
-          :graph="activeGraph"
-          :graph-loading="graphLoading"
-          :graph-suggestions="graphSuggestions"
-          :walk-nodes="graphSelectedNodes"
-          @load-graph="submitGraphSearch"
-          @clear-walk="clearGraphWalk"
-          @select-suggestion="selectGraphSuggestion"
-          @remove-selected-node="removeSelectedGraphNode"
-          @edit-edge="openEditEdge"
-          @delete-edge="confirmDeleteEdge"
-          @delete-edges="deleteEdges"
         />
 
         <KnowledgeGraphSection
