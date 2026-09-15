@@ -18,7 +18,7 @@ const THEME_IDS = new Set<ThemeId>(['dark', 'light', 'virtualboy', 'crimson', 'c
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 export type VoiceTranscriptionMode = 'local' | 'remote'
-export type RecentChatFilter = 'all' | 'agent'
+export type RecentChatFilter = 'all' | 'free' | 'agents' | 'cron' | 'channel'
 
 export const usePreferencesStore = defineStore('preferences', () => {
     const userName = ref('')
@@ -38,7 +38,16 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const compactProviderId = useLocalStorage(SK_COMPACT_PROVIDER, '')
     const compactModel = useLocalStorage(SK_COMPACT_MODEL, '')
     const sidebarCollapsed = ref(false)
-    const recentChatFilter = useLocalStorage<RecentChatFilter>(SK_RECENT_CHAT_FILTER, 'all')
+    const recentChatFilter = useLocalStorage<RecentChatFilter[]>(SK_RECENT_CHAT_FILTER, ['all'])
+    // Migrate the former single-select preference and discard malformed values.
+    const storedRecentChatFilter = recentChatFilter.value as unknown
+    const validRecentChatFilters = new Set<RecentChatFilter>(['all', 'free', 'agents', 'cron', 'channel'])
+    if (!Array.isArray(storedRecentChatFilter)) {
+        recentChatFilter.value = storedRecentChatFilter === 'agent' ? ['agents'] : ['all']
+    } else {
+        const valid = storedRecentChatFilter.filter((value): value is RecentChatFilter => validRecentChatFilters.has(value as RecentChatFilter))
+        recentChatFilter.value = valid.includes('all') || valid.length === 0 ? ['all'] : [...new Set(valid)]
+    }
     const contextStrategy = useLocalStorage<ContextStrategy>(SK_CONTEXT_STRATEGY, 'sliding-window')
     const inlineAttachmentTextLimit = useLocalStorage(SK_INLINE_ATTACHMENT_TEXT_LIMIT, 24_000)
 

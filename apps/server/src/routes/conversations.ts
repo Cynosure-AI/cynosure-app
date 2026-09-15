@@ -478,7 +478,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
-    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string; search?: string } }>('/conversations', async (req) => {
+    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string; search?: string; filters?: string } }>('/conversations', async (req) => {
         const db = getDb()
         const { agentId, maWorkspaceId } = req.query
         const limit = req.query.limit ? Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20)) : undefined
@@ -502,6 +502,13 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         } else if (agentId === '') {
             conditions.push('agent_id IS NULL AND ma_workspace_id IS NULL')
         }
+        const requestedFilters = new Set((req.query.filters || '').split(',').filter(Boolean))
+        const filterConditions: string[] = []
+        if (requestedFilters.has('free')) filterConditions.push("(origin = 'chat' AND agent_id IS NULL AND ma_workspace_id IS NULL)")
+        if (requestedFilters.has('agents')) filterConditions.push("(origin = 'chat' AND agent_id IS NOT NULL)")
+        if (requestedFilters.has('cron')) filterConditions.push("origin = 'cron'")
+        if (requestedFilters.has('channel')) filterConditions.push("origin = 'channel'")
+        if (filterConditions.length) conditions.push(`(${filterConditions.join(' OR ')})`)
         if (search && search.length >= 2) {
             conditions.push("title COLLATE NOCASE LIKE ? ESCAPE '\\'")
             params.push(`%${escapeSqlLike(search)}%`)
