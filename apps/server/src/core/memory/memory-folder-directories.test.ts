@@ -48,6 +48,8 @@ describe('memory folder directories', () => {
     `)
     const memoryRoot = join(dataDir, 'data', 'memories')
     mkdirSync(join(memoryRoot, 'Topics', 'AI'), { recursive: true })
+    mkdirSync(join(memoryRoot, '.agents', 'research_assistant'), { recursive: true })
+    mkdirSync(join(memoryRoot, 'Archive', 'Old'), { recursive: true })
     db.prepare(`INSERT INTO memory_folders
       (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
       VALUES ('uncategorized', 'Uncategorized', '', ?, 0, 1, ?)`)
@@ -66,8 +68,27 @@ describe('memory folder directories', () => {
       'People/Veronica Flowers',
       'People/Veronica Flowers/Hobbies',
     ])
-    expect(expandMemoryFolderScope([{ id: 'uncategorized', name: 'Uncategorized', categoryPath: '' }], db))
-      .toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
+
+    // A case-insensitive special descendant is omitted from the automatic root
+    // selection, but remains part of a parent explicitly selected by the user.
+    const peopleSecret = ensureMemoryFolderPath(db, 'People/SeCrEt')
+
+    const defaultScope = expandMemoryFolderScope([{ id: 'uncategorized', name: 'Uncategorized', categoryPath: '' }], db)
+    expect(defaultScope).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
+    expect(defaultScope.some(category => category.categoryPath === 'Archive')).toBe(false)
+    expect(defaultScope.some(category => category.categoryPath === 'People/SeCrEt')).toBe(false)
+    expect(defaultScope.some(category => category.categoryPath === '.agents')).toBe(true)
+
+    expect(expandMemoryFolderScope([{ ...people, categoryPath: 'People' }], db))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: peopleSecret.id })]))
+
+    const archiveScope = expandMemoryFolderScope([
+      { id: 'archive', name: 'Archive', categoryPath: 'Archive' },
+    ], db)
+    expect(archiveScope.map(category => category.categoryPath)).toEqual([
+      'Archive',
+      'Archive/Old',
+    ])
 
     mkdirSync(join(memoryRoot, 'Valid'))
     writeFileSync(join(memoryRoot, 'Valid', 'collision'), 'file')

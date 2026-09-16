@@ -6,6 +6,13 @@ import { listAllMemoryFolderRefs, categoryPathForDirectory } from './memory-fold
 export type MemoryFolderRef = { id: string; name: string; categoryPath?: string }
 
 const UNCATEGORIZED_CATEGORY_ID = 'uncategorized'
+const AUTO_EXCLUDED_MEMORY_FOLDER_NAMES = new Set(['archive', 'subconscious', 'secret', 'hidden'])
+
+export function isAutoExcludedMemoryFolderPath(categoryPath: string): boolean {
+    return categoryPath
+        .split('/')
+        .some((segment) => AUTO_EXCLUDED_MEMORY_FOLDER_NAMES.has(segment.toLowerCase()))
+}
 
 /**
  * Resolve the default memory folder.
@@ -61,7 +68,17 @@ export function expandMemoryFolderScope(categories: MemoryFolderRef[], db: Datab
     try {
         const all = listAllMemoryFolderRefs(db)
         const paths = categories.map(item => item.categoryPath ?? '')
-        return all.filter(item => paths.some(path => !path || item.categoryPath === path || item.categoryPath.startsWith(`${path}/`)))
+        return all.filter(item => {
+            const itemIsAutoExcluded = isAutoExcludedMemoryFolderPath(item.categoryPath)
+            return paths.some(path => {
+                const withinScope = !path || item.categoryPath === path || item.categoryPath.startsWith(`${path}/`)
+                if (!withinScope) return false
+                // The root is the automatic/default selection. Special folders are
+                // omitted from that default, but any explicit folder grant behaves
+                // normally and includes all of its descendants.
+                return Boolean(path) || !itemIsAutoExcluded
+            })
+        })
     } catch {
         return categories
     }
