@@ -1,6 +1,6 @@
 {
   "name": "cynosure-web",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Cynosure web frontend – Vue SPA connecting to the Cynosure server",
   "type": "module",
   "scripts": {
