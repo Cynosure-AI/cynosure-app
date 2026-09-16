@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from '@iconify/vue'
+import ChatActivityIndicator from './ChatActivityIndicator.vue'
 
 defineProps<{ suggestions: string[]; loading?: boolean }>()
 const emit = defineEmits<{ select: [suggestion: string] }>()
@@ -11,14 +11,11 @@ const emit = defineEmits<{ select: [suggestion: string] }>()
     class="mx-auto w-full max-w-5xl px-4 pb-3 pt-1"
     aria-label="Quick responses"
   >
-    <div class="mb-1.5 flex items-center gap-1.5 text-[11px] text-theme-500">
-      <Icon
-        :icon="loading ? 'svg-spinners:ring-resize' : 'lucide:sparkles'"
-        class="h-3 w-3"
-        :class="loading ? 'text-accent-400' : ''"
-      />
-      <span>{{ loading ? 'Thinking of follow-ups…' : 'Quick responses' }}</span>
-    </div>
+    <ChatActivityIndicator
+      class="mb-1.5"
+      :label="loading ? 'Thinking of follow-ups…' : 'Quick responses'"
+      :icon="loading ? 'svg-spinners:ring-resize' : 'lucide:sparkles'"
+    />
     <div
       v-if="suggestions.length"
       class="flex flex-wrap gap-2"
