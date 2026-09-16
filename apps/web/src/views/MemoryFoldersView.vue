@@ -15,6 +15,7 @@ import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vu
 import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
 import { selectConnectedGraph } from "../utils/knowledge-graph-selection";
+import { AUTO_EXCLUDED_MEMORY_FOLDER_NAMES } from "../utils/memory-folder-selection";
 import { KNOWLEDGE_GRAPH_FLOW_ID as KNOWLEDGE_FLOW_ID, useKnowledgeGraphLayout } from "../composables/useKnowledgeGraphLayout";
 import { SK_KNOWLEDGE_GRAPH_EDGE_LABELS, SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE, SK_KNOWLEDGE_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
@@ -745,6 +746,15 @@ onMounted(() => loadCategories());
                   placeholder="e.g. Project Notes"
                   @keydown.enter="saveFolder"
                 >
+                <div class="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-theme-500">
+                  <Icon
+                    icon="lucide:info"
+                    class="mt-0.5 h-3 w-3 shrink-0"
+                  />
+                  <span>
+                    Folders named {{ AUTO_EXCLUDED_MEMORY_FOLDER_NAMES.join(", ") }} are excluded from automatic memory selection, regardless of capitalization. They remain available for manual selection.
+                  </span>
+                </div>
               </div>
               <div>
                 <label class="block text-xs text-theme-400 mb-1">Description (optional)</label>

@@ -5,6 +5,7 @@ import type { MemoryFolder } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../shared/ModalDialog.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
+import { allMemoryFolderSelectionIds, isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../../utils/memory-folder-selection'
 
 const chatStore = useChatStore()
 
@@ -39,8 +40,9 @@ watch(visible, async (val) => {
 const selected = computed(() => chatStore.freeChatMemoryFolderIds)
 const rootCategory = computed(() => spaces.value.find(space => space.isUncategorized))
 const rootSelected = computed(() => Boolean(rootCategory.value && selected.value.includes(rootCategory.value.id)))
-const allSelected = computed(() => spaces.value.length > 0 && (rootSelected.value || spaces.value.every((space) => selected.value.includes(space.id))))
-const effectiveSelectedCount = computed(() => rootSelected.value ? spaces.value.length : spaces.value.filter(space => selected.value.includes(space.id)).length)
+const selectedSet = computed(() => new Set(selected.value))
+const allSelected = computed(() => spaces.value.length > 0 && spaces.value.every(isSelected))
+const effectiveSelectedCount = computed(() => spaces.value.filter(isSelected).length)
 
 function collapseFoldersWithChildren(memoryFolders: MemoryFolder[]) {
   const pathsWithChildren = new Set<string>()
@@ -92,7 +94,7 @@ function toggleCollapsed(space: MemoryFolder) {
 }
 
 function selectAll() {
-  const ids = rootCategory.value ? [rootCategory.value.id] : spaces.value.map(space => space.id)
+  const ids = allMemoryFolderSelectionIds(spaces.value)
   chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length, ...ids)
   chatStore.freeChatMemorySelectionInitialized = true
   chatStore.markOverridesModified()
@@ -114,6 +116,12 @@ function toggle(id: string) {
   if (space.isUncategorized) {
     current.clear()
     if (!rootSelected.value) current.add(space.id)
+  } else if (rootSelected.value && isAutoExcludedMemoryFolder(space)) {
+    if (current.has(id)) {
+      for (const scopedId of scopedIds) current.delete(scopedId)
+    } else {
+      for (const scopedId of scopedIds) current.add(scopedId)
+    }
   } else if (rootSelected.value) {
     // Moving from the root grant to a child means narrowing the scope to that subtree.
     current.clear()
@@ -130,7 +138,7 @@ function toggle(id: string) {
 }
 
 function isSelected(space: MemoryFolder): boolean {
-  return rootSelected.value || selected.value.includes(space.id)
+  return isMemoryFolderSelected(space, selectedSet.value, rootSelected.value)
 }
 
 function categoryDepth(space: MemoryFolder): number {
@@ -273,7 +281,7 @@ function toggleAutoMemory(enabled: boolean) {
               {{ space.isUncategorized ? 'All Memory' : space.name }}
             </div>
             <div class="text-[11px] text-theme-500">
-              {{ space.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${space.fileCount} document${space.fileCount !== 1 ? 's' : ''}` }}
+              {{ space.isUncategorized ? 'Includes Uncategorized and standard folders' : `${space.fileCount} document${space.fileCount !== 1 ? 's' : ''}` }}
             </div>
           </div>
           <Icon

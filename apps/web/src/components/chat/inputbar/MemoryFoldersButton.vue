@@ -4,6 +4,7 @@ import { useChatStore } from '../../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import HoverTooltip from '../../shared/HoverTooltip.vue'
 import MemoryFolderSelectorModal from '../modals/MemoryFolderSelectorModal.vue'
+import { isMemoryFolderSelected } from '../../../utils/memory-folder-selection'
 
 const chatStore = useChatStore()
 
@@ -17,7 +18,10 @@ const selectedMemoryFolders = computed(() => {
 })
 
 const rootSelected = computed(() => selectedMemoryFolders.value.some(category => category.isUncategorized))
-const memoryFolderCount = computed(() => rootSelected.value ? chatStore.memoryFolders.length : selectedMemoryFolders.value.length)
+const memoryFolderCount = computed(() => {
+  const selectedIds = new Set(chatStore.freeChatMemoryFolderIds)
+  return chatStore.memoryFolders.filter((folder) => isMemoryFolderSelected(folder, selectedIds, rootSelected.value)).length
+})
 const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
 </script>
 
@@ -50,7 +54,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
     </button>
     <template #content>
       <div class="font-medium text-theme-300 mb-1.5">
-        {{ rootSelected ? 'All Memory selected' : `Memory Folders (${memoryFolderCount} selected)` }}
+        {{ rootSelected ? 'Default Memory selected' : `Memory Folders (${memoryFolderCount} selected)` }}
       </div>
       <div
         v-if="autoMemoryEnabled"
@@ -83,7 +87,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
               {{ s.isUncategorized ? 'All Memory' : s.name }}
             </div>
             <div class="text-theme-500 text-[10px]">
-              {{ s.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${s.fileCount} docs` }}
+              {{ s.isUncategorized ? 'Includes Uncategorized and standard folders' : `${s.fileCount} docs` }}
             </div>
           </div>
         </div>

@@ -89,7 +89,7 @@ describe('AgentMemoryTab', () => {
     const actions = wrapper.findAll('button')
     const deselectAll = actions.find(button => button.text().trim() === 'Deselect all')
     expect(wrapper.text()).toContain('All Memory')
-    expect(wrapper.text()).toContain('Includes Uncategorized and every subfolder')
+    expect(wrapper.text()).toContain('Includes Uncategorized and standard folders')
     expect(wrapper.text()).toContain('All memory selected')
     expect(actions.some(button => button.text().trim() === 'Select all')).toBe(false)
     expect(deselectAll).toBeDefined()

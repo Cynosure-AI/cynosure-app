@@ -6,6 +6,7 @@ import type { AgentDefinition, MemoryFolder } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
+import { allMemoryFolderSelectionIds, isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../utils/memory-folder-selection'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -23,7 +24,7 @@ const rootSelected = computed(() => Boolean(rootCategory.value && assignedIds.va
 const assignedCategories = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
 )
-const effectiveAssignedCount = computed(() => rootSelected.value ? allSpaces.value.length : assignedCategories.value.length)
+const effectiveAssignedCount = computed(() => allSpaces.value.filter(isSelected).length)
 
 const visibleSpaces = computed(() =>
   allSpaces.value.filter((space) => {
@@ -78,6 +79,12 @@ function toggleSpace(categoryId: string) {
   if (space.isUncategorized) {
     current.clear()
     if (!rootSelected.value) current.add(space.id)
+  } else if (rootSelected.value && isAutoExcludedMemoryFolder(space)) {
+    if (current.has(categoryId)) {
+      for (const id of scopedIds) current.delete(id)
+    } else {
+      for (const id of scopedIds) current.add(id)
+    }
   } else if (rootSelected.value) {
     current.clear()
     for (const id of scopedIds) current.add(id)
@@ -91,11 +98,11 @@ function toggleSpace(categoryId: string) {
 }
 
 function selectAll() {
-  emit('update', 'memoryFolders', rootCategory.value ? [rootCategory.value.id] : allSpaces.value.map(space => space.id))
+  emit('update', 'memoryFolders', allMemoryFolderSelectionIds(allSpaces.value))
 }
 
 function isSelected(space: MemoryFolder): boolean {
-  return rootSelected.value || assignedIds.value.has(space.id)
+  return isMemoryFolderSelected(space, assignedIds.value, rootSelected.value)
 }
 
 function categoryDepth(space: MemoryFolder): number {
@@ -337,7 +344,7 @@ onMounted(() => loadCategories())
                 {{ space.isUncategorized ? 'All Memory' : space.name }}
               </div>
               <div class="text-[11px] text-theme-500">
-                {{ space.isUncategorized ? 'Includes Uncategorized and every subfolder' : `${space.fileCount} doc${space.fileCount !== 1 ? 's' : ''}` }}
+                {{ space.isUncategorized ? 'Includes Uncategorized and standard folders' : `${space.fileCount} doc${space.fileCount !== 1 ? 's' : ''}` }}
               </div>
             </div>
             <Icon
