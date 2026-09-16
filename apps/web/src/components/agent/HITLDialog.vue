@@ -175,7 +175,7 @@ function toggleExpand(index: number): void {
             v-if="tc.arguments"
             :content="tc.arguments"
             class="hitl-arguments custom-scrollbar mt-0.5 rounded-lg border border-theme-700/50 bg-theme-950/50 p-2.5 text-[11px] shadow-inner"
-            :class="expandedArgs.has(i) ? 'max-h-96' : 'max-h-40'"
+            :class="expandedArgs.has(i) ? 'max-h-96' : 'max-h-50'"
           />
         </div>
       </div>

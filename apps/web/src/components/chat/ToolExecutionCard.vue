@@ -985,13 +985,13 @@ const hasDisplayableActivity = computed(() =>
                     v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
                     :content="memoryCallMetadata(execution.call)"
                     tone="muted"
-                    class="mt-1.5 max-h-42 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
+                    class="mt-1.5 max-h-50 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
                   />
                   <RichContent
                     v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !scoreForCall(execution.call)"
                     :content="execution.call.arguments"
                     tone="muted"
-                    class="max-h-42 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
+                    class="max-h-50 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
                   />
 
                   <RichContent
