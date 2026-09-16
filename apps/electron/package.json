@@ -1,6 +1,6 @@
 {
     "name": "cynosure-desktop",
-    "version": "2.1.1",
+    "version": "2.2.0",
     "description": "Cynosure - local AI agent with tools, memories, and reasoning capabilities",
     "author": {
         "name": "Andreas Hagen",
