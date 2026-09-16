@@ -138,7 +138,9 @@ describe('ToolExecutionCard', () => {
     expect(wrapper.get('button').text()).toContain('Entity relationships')
     await wrapper.get('button').trigger('click')
     expect(wrapper.text()).toContain('Entity relationships')
-    expect(wrapper.text()).toContain(graphContext)
+    const content = wrapper.get('[data-content-kind="markdown"]')
+    expect(content.text()).toContain('Knowledge Context')
+    expect(content.text()).toContain('Cynosure -> uses -> entity memory')
   })
 
   test('groups gathered context into tools, memory chunks, and entity relationships', async () => {

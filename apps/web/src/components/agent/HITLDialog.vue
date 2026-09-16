@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { useAgentStore, type ToolCallDisplay } from '../../stores/agent-runtime.store'
 import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
+import RichContent from '../shared/RichContent.vue'
+import { formatRichContent } from '../../utils/rich-content'
 
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
@@ -92,18 +94,8 @@ function resetState(): void {
   showApproveDropdown.value = false
 }
 
-function formatArgs(args: string): string {
-  try {
-    return JSON.stringify(JSON.parse(args), null, 2)
-  } catch {
-    return args
-  }
-}
-
-function truncateArgs(args: string, limit = 250): string {
-  const formatted = formatArgs(args)
-  if (formatted.length <= limit) return formatted
-  return formatted.slice(0, limit) + '…'
+function hasLongArgs(args: string, limit = 250): boolean {
+  return formatRichContent(args).markdown.length > limit
 }
 
 function toggleExpand(index: number): void {
@@ -154,6 +146,7 @@ function toggleExpand(index: number): void {
           v-for="(tc, i) in agentStore.pendingHITL.toolCalls"
           :key="i"
           class="hitl-tool-card flex flex-col gap-1.5 rounded-lg border p-2.5 border-theme-700/50 bg-theme-900/25"
+          :class="toolCardClass(tc)"
           :data-tool-effect="toolEffect(tc)"
         >
           <div class="flex items-center justify-between">
@@ -169,7 +162,7 @@ function toggleExpand(index: number): void {
                 :class="toolEffectBadgeClass(tc)"
               >{{ toolEffectLabel(tc) }}</span>
               <button
-                v-if="formatArgs(tc.arguments).length > 250"
+                v-if="hasLongArgs(tc.arguments)"
                 class="text-[10px] font-medium text-theme-500 hover:text-theme-300 transition-colors uppercase tracking-wider"
                 @click="toggleExpand(i)"
               >
@@ -178,10 +171,12 @@ function toggleExpand(index: number): void {
             </div>
           </div>
           
-          <pre
+          <RichContent
             v-if="tc.arguments"
-            class="hitl-arguments mt-0.5 text-[11px] text-theme-300 whitespace-pre-wrap break-all bg-theme-950/50 border border-theme-700/50 rounded-lg p-2.5 overflow-x-auto max-h-40 overflow-y-auto shadow-inner font-mono leading-relaxed custom-scrollbar"
-          >{{ expandedArgs.has(i) ? formatArgs(tc.arguments) : truncateArgs(tc.arguments) }}</pre>
+            :content="tc.arguments"
+            class="hitl-arguments custom-scrollbar mt-0.5 rounded-lg border border-theme-700/50 bg-theme-950/50 p-2.5 text-[11px] shadow-inner"
+            :class="expandedArgs.has(i) ? 'max-h-96' : 'max-h-40'"
+          />
         </div>
       </div>
 

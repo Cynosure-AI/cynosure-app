@@ -6,6 +6,7 @@ import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import { isInternalToolName } from '../../utils/internal-tools'
+import RichContent from '../shared/RichContent.vue'
 
 export interface ToolExecStep {
   iteration: number
@@ -221,14 +222,6 @@ function memoryCallMetadata(call: ToolCall): string {
 
 function subAgentCodenameFromArgs(args: string): string | null {
   return visibleText(parseArgs(args)?.codename)
-}
-
-function prettifyJson(text: string): string {
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2)
-  } catch {
-    return text
-  }
 }
 
 function formatElapsed(ms: number): string {
@@ -981,31 +974,38 @@ const hasDisplayableActivity = computed(() =>
                   >{{ subAgentCodenameFromArgs(execution.call.arguments) }}</span>
                 </div>
 
-                <pre
+                <RichContent
                   v-if="callContent(execution.call)"
-                  class="text-[11px] leading-relaxed text-theme-300 whitespace-pre-wrap rounded px-2 py-1.5 max-h-64 overflow-y-auto bg-theme-900/70 dark:bg-theme-950/50"
-                >{{ callContent(execution.call) }}</pre>
+                  :content="callContent(execution.call)"
+                  class="max-h-64 rounded bg-theme-900/70 px-2 py-1.5 dark:bg-theme-950/50"
+                />
 
                 <template v-if="!section.compactContext">
-                  <pre
+                  <RichContent
                     v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
-                    class="mt-1.5 text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
-                  >{{ memoryCallMetadata(execution.call) }}</pre>
-                  <pre
+                    :content="memoryCallMetadata(execution.call)"
+                    tone="muted"
+                    class="mt-1.5 max-h-42 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
+                  />
+                  <RichContent
                     v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !scoreForCall(execution.call)"
-                    class="text-[10px] text-theme-500 whitespace-pre-wrap break-all bg-theme-900 rounded px-2 py-1.5 max-h-32 overflow-y-auto font-mono dark:bg-theme-950/50"
-                  >{{ prettifyJson(execution.call.arguments) }}</pre>
+                    :content="execution.call.arguments"
+                    tone="muted"
+                    class="max-h-42 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
+                  />
 
-                  <pre
+                  <RichContent
                     v-if="execution.result"
-                    class="text-[10px] whitespace-pre-wrap break-all rounded px-2 py-1.5 max-h-64 overflow-y-auto font-mono"
+                    :content="execution.result.output"
+                    :tone="execution.result.success ? 'default' : 'error'"
+                    class="max-h-64 rounded px-2 py-1.5 text-[10px]"
                     :class="[
                       execution.call?.arguments && execution.call.arguments !== '{}' ? 'mt-1.5' : '',
                       execution.result.success
-                        ? 'text-theme-400 bg-theme-900/50'
-                        : 'text-red-700/80 bg-red-100/80 dark:text-red-300/80 dark:bg-red-950/30',
+                        ? 'bg-theme-900/50'
+                        : 'bg-red-100/80 dark:bg-red-950/30',
                     ]"
-                  >{{ prettifyJson(execution.result.output) }}</pre>
+                  />
 
                   <FileArtifactLinks
                     v-if="execution.result"
