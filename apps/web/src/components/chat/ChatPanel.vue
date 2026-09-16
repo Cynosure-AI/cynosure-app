@@ -8,7 +8,7 @@ import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
 import PreTurnContextTimeline from '../chat/PreTurnContextTimeline.vue'
-import PreResponseActionsCard from '../chat/PreResponseActionsCard.vue'
+import ChatActivityIndicator from '../chat/ChatActivityIndicator.vue'
 import QuickResponses from '../chat/QuickResponses.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
@@ -196,9 +196,7 @@ function scrollMainToBottomIfNear(): void {
   scrollMainToBottom()
 }
 
-const activePreResponseActions = computed(() =>
-  Array.from(chatStore.activePostActions).filter((action) => action === 'generating-title'),
-)
+const generatingTitle = computed(() => chatStore.activePostActions.has('generating-title'))
 const generatingQuickResponses = computed(() =>
   prefs.quickResponses
     && !agentStore.isExecuting
@@ -352,7 +350,7 @@ watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
 watch([
   () => chatStore.activeQuickResponses.length,
   generatingQuickResponses,
-  () => activePreResponseActions.value.length,
+  generatingTitle,
 ], scrollMainToBottomIfNear)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
 watch(() => chatStore.loadingMessages, (isLoading) => {
@@ -843,12 +841,16 @@ onMounted(() => {
         </div>
       </template>
 
-      <PreResponseActionsCard
-        v-if="activePreResponseActions.length"
-        :actions="activePreResponseActions"
+      <!-- Title generation activity indicator -->
+      <ChatActivityIndicator
+        v-if="generatingTitle"
+        class="mx-auto w-full max-w-5xl px-4 pb-1 pt-1"
+        label="Generating title…"
+        cancel-label="Cancel title generation"
         @cancel="chatStore.cancelPostActions()"
       />
 
+      <!-- Quick responses -->
       <QuickResponses
         :suggestions="visibleQuickResponses"
         :loading="generatingQuickResponses"
@@ -856,18 +858,11 @@ onMounted(() => {
       />
 
       <!-- Working indicator (executing but not currently streaming) -->
-      <div
+      <ChatActivityIndicator
         v-if="agentStore.isExecuting && !chatStore.isStreaming"
-        class="px-4 py-2"
-      >
-        <div class="max-w-[80%] ml-10 flex items-center gap-2 text-xs text-theme-500">
-          <Icon
-            icon="svg-spinners:ring-resize"
-            class="w-3.5 h-3.5 text-accent-400"
-          />
-          <span>Working…</span>
-        </div>
-      </div>
+        class="mx-auto w-full max-w-5xl px-4 py-2"
+        label="Working…"
+      />
 
       <!-- HITL dialog -->
       <HITLDialog />
