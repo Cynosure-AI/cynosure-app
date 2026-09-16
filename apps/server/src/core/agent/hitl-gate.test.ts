@@ -19,6 +19,7 @@ vi.mock('../../db/database.js', () => ({
 }))
 
 import { HITLGate } from './hitl-gate.js'
+import { getEventBus } from '../telemetry/event-bus.js'
 
 describe('HITLGate annotation defaults', () => {
   beforeEach(() => approvalRows.clear())
@@ -55,5 +56,35 @@ describe('HITLGate annotation defaults', () => {
 
     expect(gate.isAutoApproved('mcp_read', { readOnlyHint: true })).toBe(true)
     expect(gate.isAutoApproved('mcp_write', { readOnlyHint: false })).toBe(false)
+  })
+
+  test('includes behavior annotations in approval requests', async () => {
+    const gate = new HITLGate()
+    const annotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
+    const events: Array<Record<string, unknown>> = []
+    const unsubscribe = getEventBus().on('hitl:request', (event) => {
+      const request = event as Record<string, unknown> & { resolve: (result: { approved: boolean }) => void }
+      events.push(request)
+      request.resolve({ approved: true })
+    })
+
+    try {
+      await gate.requestApproval('task', [{
+        id: 'call',
+        type: 'function',
+        function: { name: 'remove_item', arguments: '{}' },
+      }], undefined, undefined, [{
+        name: 'remove_item',
+        description: 'Remove an item',
+        parameters: { type: 'object' },
+        timeout: 1_000,
+        annotations,
+        execute: async () => ({ success: true, output: 'removed' }),
+      }])
+    } finally {
+      unsubscribe()
+    }
+
+    expect(events[0].toolCalls).toEqual([expect.objectContaining({ annotations })])
   })
 })

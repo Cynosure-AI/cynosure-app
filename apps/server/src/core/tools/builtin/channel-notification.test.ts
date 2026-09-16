@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { makeChannelNotificationTool } from './channel-notification.js'
+import { makeChannelNotificationTool, resolveNotificationTarget } from './channel-notification.js'
 
 describe('notify_user_on_channel built-in tool', () => {
     it('sends a trimmed message through the requested channel', async () => {
         const notify = vi.fn().mockResolvedValue({ channelId: 'channel-1', target: 'user-1' })
-        const tool = makeChannelNotificationTool({ agentId: 'agent-1', availableChannels: ['telegram'], notify })
+        const tool = makeChannelNotificationTool({ availableChannels: ['telegram'], notify })
 
         const result = await tool.execute({ channel: 'telegram', message: '  Hello this is the agent  ' }, {} as never)
 
@@ -14,7 +14,7 @@ describe('notify_user_on_channel built-in tool', () => {
 
     it('rejects unsupported channels and empty messages', async () => {
         const notify = vi.fn()
-        const tool = makeChannelNotificationTool({ agentId: 'agent-1', availableChannels: ['telegram'], notify })
+        const tool = makeChannelNotificationTool({ availableChannels: ['telegram'], notify })
 
         await expect(tool.execute({ channel: 'email', message: 'Hello' }, {} as never))
             .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: telegram.' })
@@ -25,7 +25,6 @@ describe('notify_user_on_channel built-in tool', () => {
 
     it('returns delivery failures to the agent', async () => {
         const tool = makeChannelNotificationTool({
-            agentId: 'agent-1',
             availableChannels: ['slack'],
             notify: vi.fn().mockRejectedValue(new Error('No recipient')),
         })
@@ -34,10 +33,9 @@ describe('notify_user_on_channel built-in tool', () => {
             .resolves.toEqual({ success: false, output: 'No recipient' })
     })
 
-    it('only exposes and accepts channels available to this agent', async () => {
+    it('only exposes and accepts currently available channel types', async () => {
         const notify = vi.fn().mockResolvedValue({ channelId: 'channel-1', target: 'user-1' })
         const tool = makeChannelNotificationTool({
-            agentId: 'agent-1',
             availableChannels: ['discord'],
             notify,
         })
@@ -46,5 +44,15 @@ describe('notify_user_on_channel built-in tool', () => {
         await expect(tool.execute({ channel: 'telegram', message: 'Hello' }, {} as never))
             .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: discord.' })
         expect(notify).not.toHaveBeenCalled()
+    })
+})
+
+describe('channel notification target resolution', () => {
+    it('uses the configured Telegram user when there is no prior channel conversation', () => {
+        expect(resolveNotificationTarget({
+            id: 'new-channel',
+            type: 'telegram',
+            config: { allowedUserIds: [' 12345 ', 'invalid'] },
+        })).toBe('12345')
     })
 })

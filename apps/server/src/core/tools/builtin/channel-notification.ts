@@ -1,10 +1,10 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
-import type { ChannelType } from '../../channels/base.channel.js'
+import type { ChannelConfig, ChannelType } from '../../channels/base.channel.js'
 import { getChannelManager } from '../../channels/channel-manager.js'
+import { normalizeTelegramUserIds } from '../../channels/telegram/telegram.security.js'
 import { resolveChannelTarget } from '../../triggers/channel-target-resolver.js'
 
 export interface ChannelNotificationToolOptions {
-    agentId: string
     availableChannels?: ChannelType[]
     notify?: (channel: ChannelType, message: string) => Promise<{ channelId: string; target: string }>
 }
@@ -12,13 +12,13 @@ export interface ChannelNotificationToolOptions {
 /** Create a manually-selectable tool for sending a proactive message to a configured channel. */
 export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions): ToolDefinition {
     const staticChannels = opts.availableChannels
-    const resolveChannels = (): ChannelType[] => staticChannels ?? getAvailableNotificationChannels(opts.agentId)
+    const resolveChannels = (): ChannelType[] => staticChannels ?? getAvailableNotificationChannels()
     return {
         name: 'notify_user_on_channel',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
         description:
-            'Send an immediate message to the user through an enabled messaging channel. The channel must be configured and must have a known recipient from an earlier conversation.',
+            'Send an immediate message to the user through an enabled messaging channel. The channel must be connected and have a configured or previously active recipient.',
         parameters: {
             type: 'object',
             properties: {
@@ -46,17 +46,14 @@ export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions
             const availableChannels = resolveChannels()
             if (!isChannelType(channel) || !availableChannels.includes(channel)) {
                 const choices = availableChannels.length ? availableChannels.join(', ') : 'none'
-                const hint = opts.agentId === '__agentless__'
-                    ? ' This chat has no agent assigned; channels are only available in chats with an agent.'
-                    : ''
-                return { success: false, output: `channel must be one of the available configured channels: ${choices}.${hint}` }
+                return { success: false, output: `channel must be one of the available configured channels: ${choices}.` }
             }
             if (!message?.trim()) {
                 return { success: false, output: 'message must not be empty' }
             }
 
             try {
-                const delivered = await (opts.notify ?? ((type, text) => notify(type, text, opts.agentId)))(channel, message.trim())
+                const delivered = await (opts.notify ?? notify)(channel, message.trim())
                 return {
                     success: true,
                     output: `Notification sent on ${channel} (channel ${delivered.channelId}).`
@@ -68,45 +65,49 @@ export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions
     }
 }
 
-/** Channels that are currently capable of delivering a notification for this agent. */
-export function getAvailableNotificationChannels(agentId: string): ChannelType[] {
+/** Configured channels that are currently capable of delivering a notification. */
+export function getAvailableNotificationChannels(): ChannelType[] {
     const manager = getChannelManager()
     const types = new Set<ChannelType>()
     for (const channel of manager.listFromDb()) {
-        if (!channel.enabled || !channelIsAvailableToAgent(channel, agentId)) continue
-        if (!manager.getStatus(channel.id).connected || !resolveChannelTarget(channel.id)) continue
+        if (!channel.enabled) continue
+        if (!manager.getStatus(channel.id).connected || !resolveNotificationTarget(channel)) continue
         types.add(channel.type)
     }
     return ['telegram', 'discord', 'slack'].filter((type): type is ChannelType => types.has(type as ChannelType))
-}
-
-function channelIsAvailableToAgent(channel: { agentId: string; config: Record<string, unknown> }, agentId: string): boolean {
-    const allowed = channel.config.allowedAgentIds
-    return channel.agentId === agentId || (Array.isArray(allowed) && allowed.includes(agentId))
 }
 
 function isChannelType(value: unknown): value is ChannelType {
     return value === 'telegram' || value === 'discord' || value === 'slack'
 }
 
-async function notify(channel: ChannelType, message: string, agentId: string): Promise<{ channelId: string; target: string }> {
+async function notify(channel: ChannelType, message: string): Promise<{ channelId: string; target: string }> {
     const manager = getChannelManager()
     const candidates = manager.listFromDb().filter((candidate) => {
-        if (!candidate.enabled || candidate.type !== channel) return false
-        return channelIsAvailableToAgent(candidate, agentId)
+        return candidate.enabled && candidate.type === channel
     })
 
     if (candidates.length === 0) {
-        throw new Error(`No enabled ${channel} channel is configured for this agent.`)
+        throw new Error(`No enabled ${channel} channel is configured.`)
     }
 
     for (const candidate of candidates) {
-        const target = resolveChannelTarget(candidate.id)
+        const target = resolveNotificationTarget(candidate)
         if (!target) continue
         if (await manager.queueNotification(candidate.id, target, message)) {
             return { channelId: candidate.id, target }
         }
     }
 
-    throw new Error(`No known recipient is available on an enabled ${channel} channel for this agent.`)
+    throw new Error(`No known recipient is available on an enabled ${channel} channel.`)
+}
+
+/** Prefer the most recently active recipient, then use Telegram's configured user allow-list. */
+export function resolveNotificationTarget(channel: Pick<ChannelConfig, 'id' | 'type' | 'config'>): string | null {
+    const recentTarget = resolveChannelTarget(channel.id)
+    if (recentTarget) return recentTarget
+    if (channel.type === 'telegram') {
+        return normalizeTelegramUserIds(channel.config.allowedUserIds)[0] ?? null
+    }
+    return null
 }

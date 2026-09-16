@@ -131,10 +131,15 @@ export class HITLGate {
 
       signal?.addEventListener('abort', onAbort, { once: true })
 
+      const annotatedToolCalls = needsApproval.map((toolCall) => ({
+        ...toolCall,
+        annotations: annotationsByName.get(toolCall.function.name),
+      }))
+
       this.eventBus.emit('hitl:request', {
         taskId,
         conversationId,
-        toolCalls: needsApproval,
+        toolCalls: annotatedToolCalls,
         resolve: (result: ApprovalResult) => {
           this.pendingByConversation.delete(taskId)
           signal?.removeEventListener('abort', onAbort)

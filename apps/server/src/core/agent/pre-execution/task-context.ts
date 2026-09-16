@@ -11,14 +11,11 @@ const MAX_MEMORY_EXPANSIONS = 2
 /** Headroom for tool-call arguments plus any reasoning tokens some models emit despite /no_think. */
 const TASK_CONTEXT_MAX_TOKENS = 1_500
 
-export type RequestedToolEffect = 'read' | 'write' | 'destructive'
-
 export interface TaskContext {
     toolQuery?: string
     /** Primary expansion, mirroring the first entry of `memoryQueries` for event consumers. */
     memoryQuery?: string
     memoryQueries: string[]
-    requestedToolEffect: RequestedToolEffect
     /** Clear memory lookups do not need the external tool catalogue routed. */
     skipToolRouting: boolean
     /** Requests unrelated to stored context do not need automatic memory retrieval. */
@@ -63,7 +60,6 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                         'toolQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
                         'Assess external tools and memory independently. It is valid for neither to be required.',
                         ...enabledRequirementInstructions(input.enabledModes),
-                        'Classify the maximum requested side effect as read, write, or destructive.',
                         'Do not include disabled auto modes.',
                         'Do not add execution instructions.',
                         'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
@@ -118,16 +114,11 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
             description: 'A compact semantic query optimized for selecting relevant tools and tool namespaces.',
         }
         required.push('toolQuery')
-        properties.requestedToolEffect = {
-            type: 'string',
-            enum: ['read', 'write', 'destructive'],
-            description: 'Maximum side effect explicitly required by the user request.',
-        }
         properties.requiresExternalTools = {
             type: 'boolean',
             description: 'False when no external capability is required to answer the request.',
         }
-        required.push('requestedToolEffect', 'requiresExternalTools')
+        required.push('requiresExternalTools')
     }
     if (enabledModes.memories) {
         properties.memoryQueries = {
@@ -166,7 +157,6 @@ function parseTaskContextArguments(
         const parsed = JSON.parse(raw) as {
             toolQuery?: unknown
             memoryQueries?: unknown
-            requestedToolEffect?: unknown
             requiresExternalTools?: unknown
             requiresMemory?: unknown
         }
@@ -176,12 +166,10 @@ function parseTaskContextArguments(
             : []
 
         if (enabledModes.tools && !toolQuery) return null
-        const requestedToolEffect = isRequestedToolEffect(parsed.requestedToolEffect) ? parsed.requestedToolEffect : 'read'
         return {
             toolQuery: toolQuery ? toolQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
             memoryQuery: memoryQueries[0],
             memoryQueries,
-            requestedToolEffect,
             skipToolRouting: enabledModes.tools ? parsed.requiresExternalTools === false : true,
             skipMemoryRouting: enabledModes.memories ? parsed.requiresMemory === false : true,
         }
@@ -197,10 +185,6 @@ function normalizeMemoryQueries(values: unknown[], originalRequest: string): str
         .filter((value) => Boolean(value) && value !== originalRequest.trim())
         .filter((value, index, all) => all.indexOf(value) === index)
         .slice(0, MAX_MEMORY_EXPANSIONS)
-}
-
-function isRequestedToolEffect(value: unknown): value is RequestedToolEffect {
-    return value === 'read' || value === 'write' || value === 'destructive'
 }
 
 function buildRecentConversationBlock(messages: ChatMessage[]): string {
@@ -291,7 +275,6 @@ function emitTaskContextSelection(
                 toolQuery: context?.toolQuery,
                 memoryQuery: context?.memoryQuery,
                 memoryQueries: context?.memoryQueries,
-                requestedToolEffect: context?.requestedToolEffect,
                 skipToolRouting: context?.skipToolRouting,
                 skipMemoryRouting: context?.skipMemoryRouting,
                 emptyReason,

@@ -94,9 +94,7 @@ const BUILTIN_TOOL_HYDRATORS = {
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
     }),
-    notify_user_on_channel: (ctx: BuiltInHydrationContext) => makeChannelNotificationTool({
-        agentId: ctx.agentId || "",
-    }),
+    notify_user_on_channel: () => makeChannelNotificationTool({}),
     schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[0],
     schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[1],
     schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[2],

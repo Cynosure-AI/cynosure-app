@@ -22,6 +22,7 @@ import { closeDb, getDb } from './db/database.js'
 import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
 import { getRAGStore } from './core/memory/rag.js'
 import { getEventBus } from './core/telemetry/event-bus.js'
+import type { ToolBehaviorAnnotations } from './core/gateway/providers/base.provider.js'
 
 import { registerAgentDefinitionRoutes } from './routes/agents.js'
 import { registerChatRoutes } from './routes/chat.js'
@@ -399,6 +400,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         id: string
         type: string
         function: { name: string; arguments: string }
+        annotations?: ToolBehaviorAnnotations
       }>
       resolve: (result: ApprovalResult) => void
     }
@@ -411,7 +413,11 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     ).run(
       data.taskId,
       data.conversationId || '',
-      JSON.stringify(data.toolCalls.map((tc) => ({ name: tc.function.name, arguments: tc.function.arguments }))),
+      JSON.stringify(data.toolCalls.map((tc) => ({
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+        annotations: tc.annotations,
+      }))),
       Date.now()
     )
 
@@ -420,7 +426,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       conversationId: data.conversationId,
       toolCalls: data.toolCalls.map((toolCall) => ({
         name: toolCall.function.name,
-        arguments: toolCall.function.arguments
+        arguments: toolCall.function.arguments,
+        annotations: toolCall.annotations,
       }))
     })
   }
