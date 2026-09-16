@@ -14,6 +14,7 @@ import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
+import RichContent from '../shared/RichContent.vue'
 import { Icon } from '@iconify/vue'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
@@ -727,7 +728,10 @@ onMounted(() => {
                         </button>
                       </template>
                       <div class="mt-1.5 ml-3">
-                        <pre class="text-[10px] text-theme-400 whitespace-pre-wrap break-all bg-theme-900/60 border border-theme-700/30 rounded-lg px-3 py-2 max-h-60 overflow-y-auto font-mono">{{ inner.msg.content }}</pre>
+                        <RichContent
+                          :content="inner.msg.content"
+                          class="max-h-60 rounded-lg border border-theme-700/30 bg-theme-900/60 px-3 py-2 text-[10px]"
+                        />
                       </div>
                     </CollapsibleSection>
                   </div>
@@ -834,7 +838,10 @@ onMounted(() => {
                 </button>
               </template>
               <div class="mt-1.5 ml-3">
-                <pre class="text-[10px] text-theme-400 whitespace-pre-wrap break-all bg-theme-900/60 border border-theme-700/30 rounded-lg px-3 py-2 max-h-60 overflow-y-auto font-mono">{{ entry.msg.content }}</pre>
+                <RichContent
+                  :content="entry.msg.content"
+                  class="max-h-60 rounded-lg border border-theme-700/30 bg-theme-900/60 px-3 py-2 text-[10px]"
+                />
               </div>
             </CollapsibleSection>
           </div>

@@ -39,5 +39,6 @@ describe('HITLDialog', () => {
     expect(cards[0].classes()).toContain('border-sky-500/30')
     expect(cards[1].classes()).toContain('border-amber-500/30')
     expect(cards[2].classes()).toContain('border-red-500/30')
+    expect(wrapper.findAll('[data-content-kind="json"]')).toHaveLength(4)
   })
 })
