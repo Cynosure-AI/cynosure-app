@@ -28,7 +28,8 @@ export const MAIN_AGENT_MAX_ROUNDS = 50
 
 /** One retry for model-only continuation rounds after tools have already run. */
 const MODEL_ROUND_MAX_ATTEMPTS = 2
-const OPEN_PLAN_RECOVERY_ATTEMPTS = 1
+/** Consecutive model-only nudges allowed when a durable plan still has open work. */
+const OPEN_PLAN_RECOVERY_MAX_ATTEMPTS = 3
 
 export class MaxToolRoundsExceededError extends Error {
     constructor(maxRounds: number) {
@@ -294,7 +295,11 @@ export class AgentExecutor {
         contextTokens = maxTokens(contextTokens, usage?.totalTokens)
         this.publishContextUsage(conversationId, usage, contextTokens)
 
-        if (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
+        while (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
+            if (openPlanRecoveryAttempts >= OPEN_PLAN_RECOVERY_MAX_ATTEMPTS) {
+                this.broadcastStreamEnd(activeStreamId, { usage, model: this.config.model, contextTokens })
+                throw new IncompletePlanningRunError()
+            }
             openPlanRecoveryAttempts++
             this.emit('step:status', {
                 taskId,
@@ -320,10 +325,6 @@ export class AgentExecutor {
             usage = accumulateUsage(usage, recoveryResult.usage)
             if (this.config.streamMode === 'per-round') activeStreamId = recoveryResult.streamId
             this.publishContextUsage(conversationId, usage, contextTokens)
-            if (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
-                this.broadcastStreamEnd(activeStreamId, { usage, model: this.config.model, contextTokens })
-                throw new IncompletePlanningRunError()
-            }
         }
 
         // No tool calls → done
@@ -357,6 +358,9 @@ export class AgentExecutor {
                     if (!pendingToolCalls?.length) break
                 }
                 toolRounds = round + 1
+                // A tool call proves the continuation succeeded. A future
+                // premature stop gets a fresh consecutive-recovery budget.
+                openPlanRecoveryAttempts = 0
                 const visibleToolCalls = pendingToolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
                 const hasPlanningUpdate = pendingToolCalls.some((tc) => isPlanningToolName(tc.function.name))
 
@@ -464,7 +468,7 @@ export class AgentExecutor {
                 this.publishContextUsage(conversationId, usage, contextTokens)
 
                 while (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
-                    if (openPlanRecoveryAttempts >= OPEN_PLAN_RECOVERY_ATTEMPTS) {
+                    if (openPlanRecoveryAttempts >= OPEN_PLAN_RECOVERY_MAX_ATTEMPTS) {
                         throw new IncompletePlanningRunError()
                     }
                     openPlanRecoveryAttempts++
