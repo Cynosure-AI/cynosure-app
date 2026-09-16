@@ -212,10 +212,6 @@ const unifiedTimeline = computed(() => buildChatTimeline(
   chatStore.messages, agentStore.executionSteps, conversationAgentId.value,
 ))
 
-const preResponseActionAnchorKey = computed(() => [...unifiedTimeline.value].reverse().find((entry) => (
-  entry.type === 'message' && entry.msg.role === 'user' && !entry.isSubAgent
-))?.key ?? null)
-
 /** Key of the last tool-group entry — only this one can show as "active" */
 const lastToolGroupKey = computed(() => {
   const groups = unifiedTimeline.value.flatMap((entry) => {
@@ -353,7 +349,11 @@ watch(() => chatStore.messages[chatStore.messages.length - 1]?.imageDataUrls?.le
 watch(() => chatStore.messages[chatStore.messages.length - 1]?.videoDataUrls?.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => agentStore.executionSteps.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
 watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
-watch([() => chatStore.activeQuickResponses.length, generatingQuickResponses], scrollMainToBottomIfNear)
+watch([
+  () => chatStore.activeQuickResponses.length,
+  generatingQuickResponses,
+  () => activePreResponseActions.value.length,
+], scrollMainToBottomIfNear)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
 watch(() => chatStore.loadingMessages, (isLoading) => {
   if (isLoading) {
@@ -771,11 +771,6 @@ onMounted(() => {
             @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
             @fork="forkMessage(entry.msg.id)"
           />
-          <PreResponseActionsCard
-            v-if="entry.key === preResponseActionAnchorKey && activePreResponseActions.length"
-            :actions="activePreResponseActions"
-            @cancel="chatStore.cancelPostActions()"
-          />
         </div>
 
         <!-- Tool execution group (from live execution steps) -->
@@ -847,6 +842,12 @@ onMounted(() => {
           </div>
         </div>
       </template>
+
+      <PreResponseActionsCard
+        v-if="activePreResponseActions.length"
+        :actions="activePreResponseActions"
+        @cancel="chatStore.cancelPostActions()"
+      />
 
       <QuickResponses
         :suggestions="visibleQuickResponses"

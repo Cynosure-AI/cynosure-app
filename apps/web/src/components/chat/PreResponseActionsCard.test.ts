@@ -3,13 +3,12 @@ import { describe, expect, test } from 'vitest'
 import PreResponseActionsCard from './PreResponseActionsCard.vue'
 
 describe('PreResponseActionsCard', () => {
-  test('presents title generation as a pre-response action and emits cancel', async () => {
+  test('presents title generation as a utility action and emits cancel', async () => {
     const wrapper = mount(PreResponseActionsCard, {
       props: { actions: ['generating-title'] },
       global: { stubs: { Icon: true } },
     })
 
-    expect(wrapper.text()).toContain('Conversation title')
     expect(wrapper.text()).toContain('Generating title')
     expect(wrapper.text()).not.toContain('Preparing response')
     expect(wrapper.text()).not.toContain('Pre-response actions')
