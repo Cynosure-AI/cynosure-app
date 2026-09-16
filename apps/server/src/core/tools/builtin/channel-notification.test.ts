@@ -17,7 +17,7 @@ describe('notify_user_on_channel built-in tool', () => {
         const tool = makeChannelNotificationTool({ agentId: 'agent-1', availableChannels: ['telegram'], notify })
 
         await expect(tool.execute({ channel: 'email', message: 'Hello' }, {} as never))
-            .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: telegram' })
+            .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: telegram.' })
         await expect(tool.execute({ channel: 'telegram', message: '  ' }, {} as never))
             .resolves.toEqual({ success: false, output: 'message must not be empty' })
         expect(notify).not.toHaveBeenCalled()
@@ -44,7 +44,7 @@ describe('notify_user_on_channel built-in tool', () => {
 
         expect((tool.parameters.properties as Record<string, { enum?: string[] }>).channel.enum).toEqual(['discord'])
         await expect(tool.execute({ channel: 'telegram', message: 'Hello' }, {} as never))
-            .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: discord' })
+            .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: discord.' })
         expect(notify).not.toHaveBeenCalled()
     })
 })

@@ -11,7 +11,8 @@ export interface ChannelNotificationToolOptions {
 
 /** Create a manually-selectable tool for sending a proactive message to a configured channel. */
 export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions): ToolDefinition {
-    const availableChannels = opts.availableChannels ?? getAvailableNotificationChannels(opts.agentId)
+    const staticChannels = opts.availableChannels
+    const resolveChannels = (): ChannelType[] => staticChannels ?? getAvailableNotificationChannels(opts.agentId)
     return {
         name: 'notify_user_on_channel',
         execution: { readOnly: false },
@@ -23,8 +24,12 @@ export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions
             properties: {
                 channel: {
                     type: 'string',
-                    enum: availableChannels,
-                    description: 'Available configured messaging channel to use.'
+                    // Enum must always be non-empty: JSON Schema forbids `enum: []`
+                    // (Ajv rejects the whole schema). When no channel is currently
+                    // available, fall back to all known channel types so the schema
+                    // stays valid — execute() enforces the real availability check.
+                    enum: resolveChannels().length ? resolveChannels() : (['telegram', 'discord', 'slack'] as ChannelType[]),
+                    description: 'Available configured messaging channel to use. If none of these are actually configured/connected, the tool will return an error explaining what is missing.'
                 },
                 message: {
                     type: 'string',
@@ -36,9 +41,15 @@ export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions
         timeout: 30_000,
         execute: async (params: unknown) => {
             const { channel, message } = params as { channel?: string; message?: string }
+            // Recompute availability at call time: channel connectivity can change
+            // between tool hydration (start of the turn) and actual execution.
+            const availableChannels = resolveChannels()
             if (!isChannelType(channel) || !availableChannels.includes(channel)) {
                 const choices = availableChannels.length ? availableChannels.join(', ') : 'none'
-                return { success: false, output: `channel must be one of the available configured channels: ${choices}` }
+                const hint = opts.agentId === '__agentless__'
+                    ? ' This chat has no agent assigned; channels are only available in chats with an agent.'
+                    : ''
+                return { success: false, output: `channel must be one of the available configured channels: ${choices}.${hint}` }
             }
             if (!message?.trim()) {
                 return { success: false, output: 'message must not be empty' }
