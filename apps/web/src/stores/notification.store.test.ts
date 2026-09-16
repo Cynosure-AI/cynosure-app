@@ -33,6 +33,7 @@ describe('notification store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   test('loads notifications newest first and computes unread count', async () => {
@@ -70,6 +71,38 @@ describe('notification store', () => {
     expect(store.notifications.map(({ id }) => id)).toEqual(['one', 'two'])
     expect(store.notifications[0].read).toBe(true)
     expect(store.unreadCount).toBe(1)
+  })
+
+  test('stacks websocket notifications as temporary, independently dismissible toasts', () => {
+    vi.useFakeTimers()
+    const store = useNotificationStore()
+
+    store.addFromWs(notification('one', 1))
+    store.addFromWs(notification('two', 2))
+    expect(store.toasts.map(({ id }) => id)).toEqual(['two', 'one'])
+
+    store.dismissToast('one')
+    expect(store.toasts.map(({ id }) => id)).toEqual(['two'])
+    expect(store.notifications.map(({ id }) => id)).toEqual(['two', 'one'])
+
+    vi.advanceTimersByTime(5000)
+    expect(store.toasts).toEqual([])
+    expect(store.notifications).toHaveLength(2)
+  })
+
+  test('pauses toast expiry while it is being interacted with', () => {
+    vi.useFakeTimers()
+    const store = useNotificationStore()
+    store.addFromWs(notification('one', 1))
+
+    vi.advanceTimersByTime(3000)
+    store.pauseToast('one')
+    vi.advanceTimersByTime(3000)
+    expect(store.toasts).toHaveLength(1)
+
+    store.resumeToast('one')
+    vi.advanceTimersByTime(2000)
+    expect(store.toasts).toEqual([])
   })
 
   test('updates local state only after mutation requests succeed', async () => {

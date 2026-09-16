@@ -10,6 +10,7 @@ import { api } from './api/client'
 import { wsConnected } from './api/http'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import ModalDialog from './components/shared/ModalDialog.vue'
+import NotificationToastHost from './components/notifications/NotificationToastHost.vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
@@ -239,6 +240,8 @@ onUnmounted(() => {
     </div>
 
     <!-- MCP Auth Requests Modal -->
+    <NotificationToastHost />
+
     <ModalDialog
       :show="mcpAuthRequests.length > 0"
       title="Authentication Required"
