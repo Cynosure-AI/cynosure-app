@@ -515,7 +515,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function startNewChat(): Promise<void> {
     if (!memoryFolders.value.length) await loadMemoryFolders()
-    // New chat starts from the selected agent defaults, while free chat keeps its current preset.
+    // Every new chat starts from its selected agent or Free Chat defaults.
     agentConfig.syncAgentBaseline()
 
     if (!activeConversationId.value && messages.value.length === 0) {

@@ -42,6 +42,23 @@ const MIGRATIONS: SchemaMigration[] = [
             ADD COLUMN summary TEXT NOT NULL DEFAULT ''
         `),
     },
+    {
+        version: 3,
+        description: 'Rename the in-app notification tool',
+        up: (db) => {
+            for (const { table, column } of [
+                { table: 'agents', column: 'tools_json' },
+                { table: 'conversations', column: 'execution_config_json' },
+                { table: 'cron_jobs', column: 'execution_config_json' },
+            ]) {
+                db.prepare(`
+                    UPDATE ${table}
+                    SET ${column} = replace(${column}, 'create_app_notification', 'notify_user_in_app')
+                    WHERE ${column} LIKE '%create_app_notification%'
+                `).run()
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

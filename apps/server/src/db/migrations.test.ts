@@ -24,7 +24,7 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2])
+        expect(result.applied).toEqual([1, 2, 3])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect((db.prepare(`PRAGMA table_info(memory_knowledge_text_units)`).all() as Array<{ name: string }>).map((column) => column.name)).toContain('summary')
@@ -83,7 +83,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2])
+        expect(result.applied).toEqual([1, 2, 3])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -95,7 +95,37 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2])
+        expect(result.applied).toEqual([1, 2, 3])
+        db.close()
+    })
+
+    test('renames persisted in-app notification tool selections', () => {
+        const db = memoryDb()
+        applySchemaMigrations(db)
+        const now = Date.now()
+        db.prepare(`
+            INSERT INTO agents (id, name, tools_json, created_at, updated_at)
+            VALUES ('agent-1', 'Agent', '["builtin:notifications::create_app_notification"]', ?, ?)
+        `).run(now, now)
+        db.prepare(`
+            INSERT INTO conversations (id, execution_config_json, created_at, updated_at)
+            VALUES ('conversation-1', '{"allowedTools":["builtin:notifications::create_app_notification"]}', ?, ?)
+        `).run(now, now)
+        db.prepare(`
+            INSERT INTO cron_jobs (id, agent_id, schedule, execution_config_json, created_at, updated_at)
+            VALUES ('cron-1', 'agent-1', '0 9 * * *', '{"allowedTools":["builtin:notifications::create_app_notification"]}', ?, ?)
+        `).run(now, now)
+        db.pragma('user_version = 2')
+
+        const result = applySchemaMigrations(db)
+
+        expect(result.applied).toEqual([3])
+        expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
+            .toContain('builtin:notifications::notify_user_in_app')
+        expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
+            .toContain('builtin:notifications::notify_user_in_app')
+        expect((db.prepare("SELECT execution_config_json FROM cron_jobs WHERE id = 'cron-1'").get() as { execution_config_json: string }).execution_config_json)
+            .toContain('builtin:notifications::notify_user_in_app')
         db.close()
     })
 

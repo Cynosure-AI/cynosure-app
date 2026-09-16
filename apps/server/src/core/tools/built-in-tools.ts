@@ -89,7 +89,7 @@ interface BuiltInHydrationContext {
 }
 
 const BUILTIN_TOOL_HYDRATORS = {
-    create_app_notification: (ctx: BuiltInHydrationContext) => makeNotificationTool({
+    notify_user_in_app: (ctx: BuiltInHydrationContext) => makeNotificationTool({
         agentId: ctx.agentId || "",
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
@@ -128,7 +128,7 @@ export function getBuiltInNamespace(toolName: string): ToolNamespace {
         return BUILTIN_NAMESPACES.memory;
     }
     if (SCHEDULE_TOOL_NAMES.includes(toolName as never)) return BUILTIN_NAMESPACES.scheduling;
-    if (toolName === 'create_app_notification' || toolName === 'notify_user_on_channel') {
+    if (toolName === 'notify_user_in_app' || toolName === 'notify_user_on_channel') {
         return BUILTIN_NAMESPACES.notifications;
     }
     return BUILTIN_NAMESPACES.utility;

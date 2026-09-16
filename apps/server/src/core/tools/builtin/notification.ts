@@ -10,13 +10,13 @@ export interface NotificationToolOptions {
 }
 
 /**
- * Create a `create_app_notification` tool the LLM can call to alert the user.
+ * Create a `notify_user_in_app` tool the LLM can call to alert the user.
  * Used during cron jobs and any autonomous agent run.
  */
 export function makeNotificationTool(opts: NotificationToolOptions): ToolDefinition {
     const { agentId, conversationId, broadcast } = opts
     return {
-        name: 'create_app_notification',
+        name: 'notify_user_in_app',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
         description:

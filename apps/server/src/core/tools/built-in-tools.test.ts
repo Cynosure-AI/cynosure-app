@@ -14,7 +14,7 @@ describe('built-in tool categories', () => {
         ['memory_search', 'builtin:memory', 'Built-In: Memory'],
         ['knowledge_assert', 'builtin:memory', 'Built-In: Memory'],
         ['schedule_create', 'builtin:scheduling', 'Built-In: Scheduling'],
-        ['create_app_notification', 'builtin:notifications', 'Built-In: Notifications'],
+        ['notify_user_in_app', 'builtin:notifications', 'Built-In: Notifications'],
         ['notify_user_on_channel', 'builtin:notifications', 'Built-In: Notifications'],
         ['attachment_search', 'builtin:utility', 'Built-In: Utility'],
         ['spawn_subagent', 'builtin:utility', 'Built-In: Utility'],
