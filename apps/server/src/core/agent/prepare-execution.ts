@@ -211,7 +211,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
         userQuery: toolRoutingQuery,
-        requestedToolEffect: taskContext?.requestedToolEffect,
         suppressAutoTools: taskContext?.skipToolRouting === true,
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,

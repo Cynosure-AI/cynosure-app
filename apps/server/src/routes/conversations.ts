@@ -20,6 +20,7 @@ import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/
 import type { ConversationExecutionConfig } from '@shared/types'
 import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
+import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
@@ -760,7 +761,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         if (!rows.length) return []
         return rows.map(row => ({
             taskId: row.task_id,
-            toolCalls: JSON.parse(row.tool_calls_json) as { name: string; arguments: string }[]
+            toolCalls: JSON.parse(row.tool_calls_json) as Array<{
+                name: string
+                arguments: string
+                annotations?: ToolBehaviorAnnotations
+            }>
         }))
     })
 

@@ -33,6 +33,7 @@ export interface ToolInfo {
 export interface ToolCallDisplay {
   name: string
   arguments: string
+  annotations?: ToolBehaviorAnnotations
 }
 
 export interface HITLRequest {
@@ -394,10 +395,12 @@ export const useAgentStore = defineStore('agent', () => {
           function?: { name: string; arguments: string }
           name?: string
           arguments?: string
+          annotations?: ToolBehaviorAnnotations
         }>
         const mapped: ToolCallDisplay[] = (rawCalls || []).map((tc) => ({
           name: tc.function?.name || tc.name || '',
-          arguments: tc.function?.arguments || tc.arguments || ''
+          arguments: tc.function?.arguments || tc.arguments || '',
+          annotations: tc.annotations,
         }))
         if (isForActiveView) {
           updateLastStepByTask(taskId, { toolCalls: mapped })

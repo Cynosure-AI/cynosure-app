@@ -1,4 +1,4 @@
-import { getBuiltInMemoryReadToolKeys, getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
+import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
 import { isRuntimeMemoryEnabled, type ExecutionMemoryFolderRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
@@ -6,7 +6,6 @@ import type { SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
-import type { RequestedToolEffect } from './task-context.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { makeManageMcpTool } from '../../tools/builtin/manage-mcp.js'
 
@@ -33,7 +32,6 @@ export interface ResolveExecutionToolsInput {
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
     eventMeta?: Record<string, unknown>
-    requestedToolEffect?: RequestedToolEffect
     /** Bypass the external catalogue when intent routing says no external tool is needed. */
     suppressAutoTools?: boolean
     debugContextEnabled?: boolean
@@ -68,7 +66,6 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         memoryFolderOverrides,
         hydrationAgentId,
         eventMeta,
-        requestedToolEffect = 'read',
         suppressAutoTools = false,
         debugContextEnabled,
         scheduleExecutionConfig,
@@ -110,10 +107,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memoryFolderOverrides)) {
-        const memoryToolKeys = requestedToolEffect === 'read'
-            ? getBuiltInMemoryReadToolKeys()
-            : getBuiltInMemoryToolKeys()
-        const memoryTools = toolRegistry.resolveForExecution(memoryToolKeys)
+        const memoryTools = toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys())
         tools = dedupeToolsByName([...memoryTools, ...tools])
     }
 

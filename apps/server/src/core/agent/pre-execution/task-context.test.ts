@@ -32,7 +32,6 @@ describe('task context cancellation', () => {
                     name: 'set_task_context',
                     arguments: JSON.stringify({
                         toolQuery: 'No external capability needed',
-                        requestedToolEffect: 'read',
                         requiresExternalTools: false,
                         memoryQueries: ['information about a close friend'],
                         requiresMemory: true,
@@ -49,7 +48,6 @@ describe('task context cancellation', () => {
             enabledModes: { tools: true, memories: true },
         })).resolves.toMatchObject({
             memoryQueries: ['information about a close friend'],
-            requestedToolEffect: 'read',
             skipToolRouting: true,
             skipMemoryRouting: false,
         })
@@ -82,7 +80,6 @@ describe('task context cancellation', () => {
                     name: 'set_task_context',
                     arguments: JSON.stringify({
                         toolQuery: 'No external capability needed',
-                        requestedToolEffect: 'read',
                         requiresExternalTools: false,
                         memoryQueries: [],
                         requiresMemory: false,
@@ -101,14 +98,13 @@ describe('task context cancellation', () => {
         })
     })
 
-    test('uses the model side-effect classification without lexical overrides', async () => {
+    test('keeps tool routing focused on the requested capability', async () => {
         const complete = vi.fn().mockResolvedValue({
             toolCalls: [{
                 function: {
                     name: 'set_task_context',
                     arguments: JSON.stringify({
                         toolQuery: 'send a message',
-                        requestedToolEffect: 'write',
                         requiresExternalTools: true,
                     }),
                 }
@@ -119,6 +115,6 @@ describe('task context cancellation', () => {
             userQuery: 'Envía el mensaje', enabledModes: { tools: true, memories: false },
         })
 
-        expect(result?.requestedToolEffect).toBe('write')
+        expect(result?.toolQuery).toBe('send a message')
     })
 })

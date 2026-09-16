@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useAgentStore } from '../../stores/agent-runtime.store'
+import { useAgentStore, type ToolCallDisplay } from '../../stores/agent-runtime.store'
 import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 
@@ -10,6 +10,35 @@ const denyReason = ref('')
 const showReasonInput = ref(false)
 const expandedArgs = ref<Set<number>>(new Set())
 const showApproveDropdown = ref(false)
+type ToolEffect = 'destructive' | 'write' | 'read' | 'unknown'
+
+function toolEffect(toolCall: ToolCallDisplay): ToolEffect {
+  if (toolCall.annotations?.destructiveHint === true) return 'destructive'
+  if (toolCall.annotations?.readOnlyHint === false) return 'write'
+  if (toolCall.annotations?.readOnlyHint === true) return 'read'
+  return 'unknown'
+}
+
+function toolEffectLabel(toolCall: ToolCallDisplay): string {
+  const effect = toolEffect(toolCall)
+  return effect === 'unknown' ? 'Unclassified' : effect[0].toUpperCase() + effect.slice(1)
+}
+
+function toolCardClass(toolCall: ToolCallDisplay): string {
+  const effect = toolEffect(toolCall)
+  if (effect === 'destructive') return 'border-red-500/30 bg-red-500/5'
+  if (effect === 'write') return 'border-amber-500/30 bg-amber-500/5'
+  if (effect === 'read') return 'border-sky-500/30 bg-sky-500/5'
+  return 'border-theme-700/50 bg-theme-900/25'
+}
+
+function toolEffectBadgeClass(toolCall: ToolCallDisplay): string {
+  const effect = toolEffect(toolCall)
+  if (effect === 'destructive') return 'border-red-500/30 bg-red-500/10 text-red-400'
+  if (effect === 'write') return 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+  if (effect === 'read') return 'border-sky-500/30 bg-sky-500/10 text-sky-400'
+  return 'border-theme-700/60 bg-theme-900/60 text-theme-500'
+}
 
 const approveAllLabel = computed(() => {
   const names = [...new Set(agentStore.pendingHITL?.toolCalls.map(tc => tc.name) ?? [])]
@@ -124,7 +153,9 @@ function toggleExpand(index: number): void {
         <div
           v-for="(tc, i) in agentStore.pendingHITL.toolCalls"
           :key="i"
-          class="flex flex-col gap-1.5"
+          class="hitl-tool-card flex flex-col gap-1.5 rounded-lg border p-2.5"
+          :class="toolCardClass(tc)"
+          :data-tool-effect="toolEffect(tc)"
         >
           <div class="flex items-center justify-between">
             <span class="hitl-tool-name inline-flex items-center gap-1.5 rounded-md bg-accent-500/10 border border-accent-500/20 px-2 py-0.5 text-[11px] text-accent-400 font-mono font-medium">
@@ -133,13 +164,19 @@ function toggleExpand(index: number): void {
                 class="h-3 w-3 text-accent-500/70"
               />{{ tc.name }}
             </span>
-            <button
-              v-if="formatArgs(tc.arguments).length > 250"
-              class="text-[10px] font-medium text-theme-500 hover:text-theme-300 transition-colors uppercase tracking-wider"
-              @click="toggleExpand(i)"
-            >
-              {{ expandedArgs.has(i) ? 'Show Less' : 'Show More' }}
-            </button>
+            <div class="flex items-center gap-2">
+              <span
+                class="hitl-tool-effect rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                :class="toolEffectBadgeClass(tc)"
+              >{{ toolEffectLabel(tc) }}</span>
+              <button
+                v-if="formatArgs(tc.arguments).length > 250"
+                class="text-[10px] font-medium text-theme-500 hover:text-theme-300 transition-colors uppercase tracking-wider"
+                @click="toggleExpand(i)"
+              >
+                {{ expandedArgs.has(i) ? 'Show Less' : 'Show More' }}
+              </button>
+            </div>
           </div>
           
           <pre
