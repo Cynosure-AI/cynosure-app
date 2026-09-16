@@ -528,8 +528,11 @@ export function useChatAgentConfig(
 
     function syncAgentBaseline(): void {
         if (!activeAgentId.value) {
-            ensureFreeChatPreset()
+            const preset = regularFreeChatPreset()
+            freeChatPreset.value = clonePreset(preset)
+            applyPreset(preset)
             restoreFreeChatModelSelection()
+            setAgentBaseline(preset)
             return
         }
         const { preset } = agentPreset(activeAgentId.value)

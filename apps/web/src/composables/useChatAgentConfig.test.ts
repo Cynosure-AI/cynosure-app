@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { useChatAgentConfig } from './useChatAgentConfig'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore, type ToolInfo } from '../stores/agent-runtime.store'
-import { SK_ACTIVE_AGENT } from '../utils/storage-keys'
+import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
 import { DEFAULT_FREE_CHAT_SYSTEM_PROMPT } from '../utils/default-system-prompts'
 import type { AgentDefinition } from '../api/types'
 
@@ -73,6 +73,31 @@ describe('chat agent provider defaults', () => {
     config.resetToDefaults()
 
     expect(config.sessionSystemPrompt.value).toBe(DEFAULT_FREE_CHAT_SYSTEM_PROMPT)
+    expect(config.hasFreeChatOverrides.value).toBe(false)
+  })
+
+  test('starts a new Free Chat from its defaults instead of retaining overrides', () => {
+    localStorage.setItem(SK_FREE_CHAT_MODEL, 'preferred-model')
+    localStorage.setItem(SK_FREE_CHAT_PROVIDER, 'preferred-provider')
+    const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
+    config.setFreeChatDefaultMemoryFolderIds(['uncategorized'])
+    config.ensureFreeChatPreset()
+    config.sessionSystemPrompt.value = 'Temporary override'
+    config.sessionThinkingEnabled.value = false
+    config.sessionAutoToolRouting.value = false
+    config.freeChatSubAgentIds.value = ['agent-2']
+    config.freeChatMemoryFolderIds.value = ['custom-folder']
+    config.markOverridesModified()
+
+    config.syncAgentBaseline()
+
+    expect(config.sessionSystemPrompt.value).toBe(DEFAULT_FREE_CHAT_SYSTEM_PROMPT)
+    expect(config.sessionThinkingEnabled.value).toBe(true)
+    expect(config.sessionAutoToolRouting.value).toBe(true)
+    expect(config.freeChatSubAgentIds.value).toEqual([])
+    expect(config.freeChatMemoryFolderIds.value).toEqual(['uncategorized'])
+    expect(config.sessionModelOverride.value).toBe('preferred-model')
+    expect(config.sessionProviderOverride.value).toBe('preferred-provider')
     expect(config.hasFreeChatOverrides.value).toBe(false)
   })
 
