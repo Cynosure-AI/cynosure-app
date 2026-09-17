@@ -28,7 +28,6 @@ export interface AgentConfig {
     reasoningEffort: ReasoningEffort
     maxContextTokens: number | null
     sortOrder: number
-    tags: string[]
     favorite: boolean
     createdAt: number
     updatedAt: number
@@ -63,7 +62,6 @@ export type CreateAgentInput = {
     reasoningEffort?: ReasoningEffort
     maxContextTokens?: number | null
     sortOrder?: number
-    tags?: string[]
     favorite?: boolean
 }
 
@@ -160,7 +158,6 @@ interface AgentRow {
     reasoning_effort: string
     max_context_tokens: number | null
     sort_order: number
-    tags_json: string
     favorite: number
     cron_prompt: string
     icon_data: Buffer | null
@@ -204,37 +201,10 @@ function rowToAgentData(row: AgentRow): AgentData {
         reasoningEffort: parseReasoningEffort(row.reasoning_effort),
         maxContextTokens: typeof row.max_context_tokens === 'number' ? row.max_context_tokens : null,
         sortOrder: typeof row.sort_order === 'number' ? row.sort_order : 0,
-        tags: parseTags(row.tags_json),
         favorite: row.favorite === 1,
         createdAt: row.created_at || 0,
         updatedAt: row.updated_at || 0,
     }
-}
-
-function parseTags(raw: string | null | undefined): string[] {
-    try {
-        const parsed = JSON.parse(raw || '[]') as unknown
-        if (!Array.isArray(parsed)) return []
-        return normalizeTags(parsed)
-    } catch {
-        return []
-    }
-}
-
-function normalizeTags(tags: unknown[]): string[] {
-    const result: string[] = []
-    const seen = new Set<string>()
-
-    for (const raw of tags) {
-        if (typeof raw !== 'string') continue
-        const tag = raw.trim().replace(/\s+/g, ' ')
-        const key = tag.toLowerCase()
-        if (!tag || seen.has(key)) continue
-        seen.add(key)
-        result.push(tag)
-    }
-
-    return result
 }
 
 function parseIconDataUrl(dataUrl: string): { data: Buffer; mime: string } | null {
@@ -281,8 +251,8 @@ export function createAgent(input: CreateAgentInput): AgentData {
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
             auto_memory, dreaming_enabled, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
-            sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            sort_order, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -309,7 +279,6 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.autoRouterProviderId || '__agent_provider__',
         input.autoRouterModel || '__agent_model__',
         typeof input.sortOrder === 'number' ? input.sortOrder : 0,
-        JSON.stringify(normalizeTags(input.tags || [])),
         input.favorite === true ? 1 : 0,
         input.cronPrompt || '',
         iconData,
@@ -354,7 +323,6 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         ? (typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null)
         : existing.max_context_tokens
     const updatedSortOrder = input.sortOrder !== undefined ? input.sortOrder : (existing.sort_order || 0)
-    const updatedTags = input.tags !== undefined ? normalizeTags(input.tags) : parseTags(existing.tags_json)
     const updatedFavorite = input.favorite !== undefined ? input.favorite : (existing.favorite === 1)
 
     // Handle icon update
@@ -378,7 +346,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
          internal_name = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
             thinking_enabled = ?, reasoning_effort = ?, max_context_tokens = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
             auto_memory = ?, dreaming_enabled = ?, memory_router_provider_id = ?, memory_router_model = ?,
-            auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, tags_json = ?, favorite = ?, cron_prompt = ?,
+            auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, favorite = ?, cron_prompt = ?,
          icon_data = ?, icon_mime = ?, updated_at = ?
          WHERE id = ?`
     ).run(
@@ -405,7 +373,6 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedAutoRouterProviderId,
         updatedAutoRouterModel,
         updatedSortOrder,
-        JSON.stringify(updatedTags),
         updatedFavorite ? 1 : 0,
         updatedCronPrompt,
         iconData,
@@ -456,8 +423,8 @@ export function duplicateAgent(id: string): AgentData | null {
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, tool_router_provider_id, tool_router_model,
             auto_memory, dreaming_enabled, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
-            sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            sort_order, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -484,7 +451,6 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.auto_router_provider_id || '__agent_provider__',
         existing.auto_router_model || '__agent_model__',
         existing.sort_order,
-        existing.tags_json || '[]',
         existing.favorite,
         existing.cron_prompt,
         existing.icon_data,

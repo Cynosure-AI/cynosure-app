@@ -266,7 +266,6 @@ export interface AgentDefinition {
     reasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     maxContextTokens: number | null
     sortOrder: number
-    tags: string[]
     favorite: boolean
     memoryFolders: string[]
     createdAt: number

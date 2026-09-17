@@ -1,20 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from "vue";
+import { ref, onMounted, nextTick } from "vue";
 import { useProviderStore } from "../../stores/provider.store";
-import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import type { AgentDefinition } from "../../api/types";
 import IconUpload from "../shared/IconUpload.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import PromptSmartTagPicker from "../shared/PromptSmartTagPicker.vue";
-import TagInput from "../shared/TagInput.vue";
 
 const props = defineProps<{ agent: AgentDefinition }>();
 const emit = defineEmits<{ update: [field: string, value: unknown] }>();
 
 const providerStore = useProviderStore();
-const agentDefs = useAgentDefinitionsStore();
 const systemPromptRef = ref<HTMLTextAreaElement | null>(null);
 
 function autoResize(e: Event) {
@@ -22,17 +19,6 @@ function autoResize(e: Event) {
   el.style.height = "auto";
   el.style.height = el.scrollHeight + "px";
 }
-
-const tagSuggestions = computed(() => {
-  const tagMap = new Map<string, string>();
-  for (const agent of agentDefs.agents) {
-    for (const tag of agent.tags || []) {
-      const key = tag.toLowerCase();
-      if (!tagMap.has(key)) tagMap.set(key, tag);
-    }
-  }
-  return [...tagMap.values()].sort((a, b) => a.localeCompare(b));
-});
 
 function insertSystemPromptTag(tag: string): void {
   const el = systemPromptRef.value;
@@ -121,15 +107,6 @@ onMounted(() =>
               ($event.target as HTMLTextAreaElement).value,
             )
           "
-        />
-      </div>
-
-      <div>
-        <label class="block text-sm text-theme-400 mb-1.5">Tags</label>
-        <TagInput
-          :model-value="agent.tags"
-          :suggestions="tagSuggestions"
-          @update:model-value="emit('update', 'tags', $event)"
         />
       </div>
 

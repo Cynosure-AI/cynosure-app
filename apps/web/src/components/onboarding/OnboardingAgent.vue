@@ -81,7 +81,6 @@ async function createAgent(): Promise<boolean> {
       internalName: internalName.value,
       description: description.value.trim(),
       category: '',
-      tags: [],
       favorite: false,
       iconUrl: iconUrl.value,
       providerId: providerId.value,
@@ -205,7 +204,6 @@ defineExpose({ createAgent })
           These instructions are added to Cynosure’s built-in agent behavior.
         </p>
       </div>
-
     </BaseCard>
 
     <div

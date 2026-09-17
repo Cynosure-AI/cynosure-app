@@ -9,11 +9,8 @@ import { useProviderLogos } from '../composables/useProviderLogos'
 import DataTable from '../components/shared/DataTable.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
-import MultiSelect from '../components/shared/MultiSelect.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
-import TagInput from '../components/shared/TagInput.vue'
 import type { Column } from '../components/shared/DataTable.vue'
-import type { MultiSelectOption } from '../components/shared/MultiSelect.vue'
 import type { AgentDefinition } from '../api/types'
 
 const agentDefs = useAgentDefinitionsStore()
@@ -30,30 +27,15 @@ const showDeleteConfirm = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const pendingDeleteName = ref('')
 const searchQuery = ref('')
-const selectedTags = ref<string[]>([])
 const selectedAgentIds = ref<string[]>([])
 const activeSortKey = ref<string | null>(null)
 const editProviderId = ref('')
 const editModel = ref('')
-const editTags = ref<string[]>([])
-const editTagOperation = ref<'add' | 'remove' | 'replace'>('add')
 const editSaving = ref(false)
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
 
 onMounted(() => agentDefs.load())
-
-const allTags = computed(() => {
-  const tags = new Map<string, string>()
-  for (const agent of agentDefs.agents) {
-    for (const tag of agent.tags || []) {
-      const key = tag.toLocaleLowerCase()
-      if (!tags.has(key)) tags.set(key, tag)
-    }
-  }
-  return [...tags.values()].sort((a, b) => a.localeCompare(b))
-})
-const tagFilterOptions = computed<MultiSelectOption[]>(() => allTags.value.map(tag => ({ value: tag, label: tag })))
 
 function getProviderName(agent: AgentDefinition): string {
   return providerStore.providers.find(provider => provider.id === agent.providerId)?.name || 'Unknown'
@@ -66,13 +48,8 @@ function getProviderLogoUrl(agent: AgentDefinition): string | null {
   const provider = providerStore.providers.find(item => item.id === agent.providerId)
   return provider ? logoUrl(provider.type) : null
 }
-function matchesSelectedTags(agent: AgentDefinition): boolean {
-  if (!selectedTags.value.length) return true
-  const tags = new Set((agent.tags || []).map(tag => tag.toLocaleLowerCase()))
-  return selectedTags.value.every(tag => tags.has(tag.toLocaleLowerCase()))
-}
 function matchesSearch(agent: AgentDefinition, query: string): boolean {
-  return [agent.name, agent.description || '', agent.model || '', getProviderName(agent), ...(agent.tags || [])]
+  return [agent.name, agent.description || '', agent.model || '', getProviderName(agent)]
     .some(value => value.toLocaleLowerCase().includes(query))
 }
 function defaultAgentSort(a: AgentDefinition, b: AgentDefinition): number {
@@ -80,13 +57,12 @@ function defaultAgentSort(a: AgentDefinition, b: AgentDefinition): number {
   return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
 }
 
-const tableAgents = computed(() => [...agentDefs.agents].filter(matchesSelectedTags).sort(defaultAgentSort))
+const tableAgents = computed(() => [...agentDefs.agents].sort(defaultAgentSort))
 const hasAnyAgents = computed(() => agentDefs.agents.length > 0)
-const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || selectedTags.value.length > 0)
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()))
 const agentColumns: Column<AgentDefinition>[] = [
   { key: 'favorite', label: '', width: '36px', sortable: true, sortValue: agent => agent.favorite },
   { key: 'name', label: 'Name', width: 'minmax(240px, 1.45fr)', sortable: true, sortValue: agent => agent.name },
-  { key: 'tags', label: 'Tags', width: 'minmax(210px, 1fr)', sortable: true, editable: true, sortValue: agent => (agent.tags || []).join(' ') },
   { key: 'model', label: 'Model / Provider', width: 'minmax(240px, 1.1fr)', sortable: true, editable: true, sortValue: agent => `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}` },
   { key: 'info', label: 'Info', width: '130px' },
   { key: 'date', label: 'Date', width: '140px', sortable: true, sortValue: agent => agent.createdAt },
@@ -101,42 +77,30 @@ const agentsWithIssues = computed(() => {
   ).map(agent => agent.id))
 })
 
-function toggleTagFilter(tag: string): void {
-  const key = tag.toLocaleLowerCase()
-  selectedTags.value = selectedTags.value.some(item => item.toLocaleLowerCase() === key)
-    ? selectedTags.value.filter(item => item.toLocaleLowerCase() !== key)
-    : [...selectedTags.value, tag]
-}
-function isTagSelected(tag: string): boolean {
-  return selectedTags.value.some(item => item.toLocaleLowerCase() === tag.toLocaleLowerCase())
-}
 function clearFilters(): void {
   searchQuery.value = ''
-  selectedTags.value = []
-}
-function applyTagOperation(current: string[], selected: string[], operation: 'add' | 'remove' | 'replace'): string[] {
-  if (operation === 'replace') return [...selected]
-  const selectedKeys = new Set(selected.map(tag => tag.toLocaleLowerCase()))
-  if (operation === 'remove') return current.filter(tag => !selectedKeys.has(tag.toLocaleLowerCase()))
-  const result = [...current]
-  const resultKeys = new Set(result.map(tag => tag.toLocaleLowerCase()))
-  for (const tag of selected) {
-    if (!resultKeys.has(tag.toLocaleLowerCase())) {
-      result.push(tag)
-      resultKeys.add(tag.toLocaleLowerCase())
-    }
-  }
-  return result
 }
 
-function startInlineEdit(item: AgentDefinition, column: Column<AgentDefinition>, items: AgentDefinition[]): void {
+function startInlineEdit(item: AgentDefinition, column: Column<AgentDefinition>): void {
   editSaving.value = false
   if (column.key === 'model') {
     editProviderId.value = item.providerId
     editModel.value = item.model
-  } else if (column.key === 'tags') {
-    editTagOperation.value = items.length > 1 ? 'add' : 'replace'
-    editTags.value = items.length > 1 ? [] : [...(item.tags || [])]
+  }
+}
+
+function toolNamespaces(agent: AgentDefinition): { mcps: string[]; categories: string[] } {
+  const namespaces = new Map<string, { id: string; label: string }>()
+  for (const key of agent.tools) {
+    const namespace = agentStore.availableTools.find(tool => tool.key === key)?.namespace
+    if (namespace) namespaces.set(namespace.id, namespace)
+  }
+  const values = [...namespaces.values()]
+  return {
+    mcps: values.filter(namespace => namespace.id.startsWith('mcp:')).map(namespace => namespace.label),
+    categories: values
+      .filter(namespace => !namespace.id.startsWith('mcp:'))
+      .map(namespace => namespace.label.replace(/^Built-In:\s*/i, '')),
   }
 }
 async function saveInlineModel(items: AgentDefinition[], finish: () => void): Promise<void> {
@@ -147,22 +111,10 @@ async function saveInlineModel(items: AgentDefinition[], finish: () => void): Pr
     finish()
   } finally { editSaving.value = false }
 }
-async function saveInlineTags(items: AgentDefinition[], finish: () => void): Promise<void> {
-  const invalid = items.length > 1 && editTagOperation.value !== 'replace' && !editTags.value.length
-  if (editSaving.value || invalid) return
-  editSaving.value = true
-  try {
-    await Promise.all(items.map(agent => agentDefs.update(agent.id, {
-      tags: items.length === 1 ? [...editTags.value] : applyTagOperation(agent.tags || [], editTags.value, editTagOperation.value),
-    })))
-    finish()
-  } finally { editSaving.value = false }
-}
-
 async function createAgent(): Promise<void> {
   if (!newName.value.trim()) return
   const agent = await agentDefs.create({
-    name: newName.value.trim(), internalName: '', description: newDescription.value.trim(), category: '', tags: [],
+    name: newName.value.trim(), internalName: '', description: newDescription.value.trim(), category: '',
     favorite: false, iconUrl: null, providerId: providerStore.lastUsedProviderId || '',
     model: providerStore.lastUsedProvider?.defaultModel || '', systemPrompt: '', cronPrompt: '', tools: [],
     autoApproveTools: false, autoToolRouting: false, autoMemory: true, dreamingEnabled: true, generateTitle: true,
@@ -248,7 +200,7 @@ function formatDate(timestamp: number): string {
             Agents
           </h1>
           <p class="mt-1 text-sm text-theme-500">
-            Create and manage AI agents with custom configurations, tags, and favorites.
+            Create and manage AI agents with custom configurations and favorites.
           </p>
         </div>
         <button
@@ -274,7 +226,7 @@ function formatDate(timestamp: number): string {
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Search agents, tags, providers, or models..."
+            placeholder="Search agents, providers, or models..."
             class="w-full rounded-lg border border-theme-700/60 bg-theme-800/60 py-2 pl-10 pr-9 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500/60"
           >
           <button
@@ -289,34 +241,6 @@ function formatDate(timestamp: number): string {
             />
           </button>
         </div>
-        <MultiSelect
-          v-model="selectedTags"
-          class="w-full lg:w-64"
-          :options="tagFilterOptions"
-          placeholder="Filter by tags..."
-          max-height="max-h-96"
-        />
-      </div>
-
-      <div
-        v-if="selectedTags.length"
-        class="mb-4 flex flex-wrap items-center gap-2"
-      >
-        <button
-          v-for="tag in selectedTags"
-          :key="tag"
-          class="rounded-full border border-accent-500/70 bg-accent-500/15 px-2.5 py-1 text-xs text-accent-300"
-          :title="`Remove ${tag} filter`"
-          @click="toggleTagFilter(tag)"
-        >
-          {{ tag }}
-        </button>
-        <button
-          class="rounded-full px-2.5 py-1 text-xs text-theme-500 hover:bg-theme-800 hover:text-theme-300"
-          @click="selectedTags = []"
-        >
-          Clear tags
-        </button>
       </div>
 
       <div
@@ -324,7 +248,7 @@ function formatDate(timestamp: number): string {
         class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-500/25 bg-accent-500/8 px-3 py-2"
       >
         <p class="text-xs text-theme-400">
-          <span class="font-medium text-theme-200">{{ selectedAgentIds.length }} selected.</span> Double-click a Tags or Model cell to edit all selected agents.
+          <span class="font-medium text-theme-200">{{ selectedAgentIds.length }} selected.</span> Double-click the Model cell to edit all selected agents.
         </p>
         <button
           class="text-xs text-theme-500 hover:text-theme-200"
@@ -403,66 +327,6 @@ function formatDate(timestamp: number): string {
             </div>
           </div>
         </template>
-        <template #col-tags="{ item }">
-          <div class="flex flex-wrap items-center gap-1.5 pr-4">
-            <span
-              v-for="tag in item.tags"
-              :key="tag"
-              class="rounded-full border px-2 py-0.5 text-xs"
-              :class="isTagSelected(tag) ? 'border-accent-500/70 bg-accent-500/15 text-accent-300' : 'border-theme-700 bg-theme-900/70 text-theme-400'"
-            >{{ tag }}</span>
-            <span
-              v-if="!item.tags.length"
-              class="text-xs text-theme-600"
-            >No tags</span>
-          </div>
-        </template>
-        <template #edit-col-tags="{ items, finish, cancel }">
-          <div
-            v-if="items.length > 1"
-            class="mb-3 grid grid-cols-3 rounded-lg bg-theme-950/70 p-1"
-            role="group"
-            aria-label="Tag operation"
-          >
-            <button
-              v-for="operation in (['add', 'remove', 'replace'] as const)"
-              :key="operation"
-              type="button"
-              class="rounded-md px-2 py-1.5 text-xs capitalize"
-              :class="editTagOperation === operation ? 'bg-theme-700 text-theme-100 shadow-sm' : 'text-theme-500 hover:text-theme-300'"
-              @click="editTagOperation = operation"
-            >
-              {{ operation }}
-            </button>
-          </div>
-          <TagInput
-            v-model="editTags"
-            :suggestions="allTags"
-            :placeholder="items.length === 1 || editTagOperation === 'replace' ? 'Replacement tags' : `Tags to ${editTagOperation}`"
-            input-class="py-1.5"
-          />
-          <p
-            v-if="items.length > 1 && editTagOperation === 'replace' && !editTags.length"
-            class="mt-2 text-[11px] text-amber-400/80"
-          >
-            Saving will clear all tags from the selected agents.
-          </p>
-          <div class="mt-3 flex justify-end gap-2">
-            <button
-              class="rounded-md px-3 py-1.5 text-xs text-theme-400 hover:bg-theme-800"
-              @click="cancel"
-            >
-              Cancel
-            </button>
-            <button
-              class="rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-50"
-              :disabled="editSaving || (items.length > 1 && editTagOperation !== 'replace' && !editTags.length)"
-              @click="saveInlineTags(items, finish)"
-            >
-              {{ editSaving ? 'Saving…' : 'Save' }}
-            </button>
-          </div>
-        </template>
         <template #col-model="{ item }">
           <div class="flex min-w-0 items-center gap-2 pr-4">
             <img
@@ -472,10 +336,8 @@ function formatDate(timestamp: number): string {
               class="h-5 w-5 shrink-0 rounded object-contain"
             >
             <div class="min-w-0">
-              <div class="truncate text-sm font-medium text-theme-200">
+              <div class="truncate text-[13px] font-medium text-theme-200">
                 {{ getModelDisplayName(item) }}
-              </div><div class="truncate text-xs text-theme-500">
-                {{ getProviderName(item) }}
               </div>
             </div>
           </div>
@@ -510,23 +372,49 @@ function formatDate(timestamp: number): string {
         <template #col-info="{ item }">
           <div class="flex items-center gap-2 text-xs text-theme-500">
             <HoverTooltip
-              :disabled="item.tools.length === 0"
               placement="mouse"
               :max-width="220"
             >
-              <span class="flex items-center gap-1 rounded bg-theme-700/50 px-1.5 py-0.5"><Icon
+              <span
+                class="flex items-center gap-1 rounded px-1.5 py-0.5"
+                :class="item.autoMemory ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-500'"
+              ><Icon
                 icon="lucide:wrench"
                 class="h-3 w-3"
               />{{ item.tools.length }}</span>
               <template #content>
-                <div class="mb-1.5 font-medium text-theme-300">
-                  {{ item.tools.length }} {{ item.tools.length === 1 ? 'tool' : 'tools' }}
-                </div><div
-                  v-for="key in item.tools.slice(0, TOOLTIP_MAX_TOOLS)"
-                  :key="key"
-                  class="truncate py-0.5 font-mono text-[10px] text-theme-300"
+                <div
+                  class="mb-2 font-medium"
+                  :class="item.autoMemory ? 'text-emerald-400' : 'text-theme-400'"
                 >
-                  {{ agentStore.availableTools.find(tool => tool.key === key)?.name ?? key }}
+                  Auto memory is {{ item.autoMemory ? 'enabled' : 'disabled' }}
+                </div>
+                <div v-if="toolNamespaces(item).mcps.length">
+                  <div class="mb-1 font-medium text-theme-400">
+                    MCPs
+                  </div>
+                  <div
+                    v-for="name in toolNamespaces(item).mcps"
+                    :key="`mcp:${name}`"
+                    class="truncate py-0.5 text-[10px] text-theme-300"
+                  >
+                    {{ name }}
+                  </div>
+                </div>
+                <div
+                  v-if="toolNamespaces(item).categories.length"
+                  :class="toolNamespaces(item).mcps.length ? 'mt-2' : ''"
+                >
+                  <div class="mb-1 font-medium text-theme-400">
+                    Categories
+                  </div>
+                  <div
+                    v-for="name in toolNamespaces(item).categories"
+                    :key="`category:${name}`"
+                    class="truncate py-0.5 text-[10px] text-theme-300"
+                  >
+                    {{ name }}
+                  </div>
                 </div>
               </template>
             </HoverTooltip>
@@ -549,6 +437,21 @@ function formatDate(timestamp: number): string {
                 >
                   {{ agentDefs.get(subAgent.agentId)?.name ?? subAgent.agentId }}
                 </div>
+              </template>
+            </HoverTooltip>
+            <HoverTooltip
+              placement="mouse"
+              :max-width="220"
+            >
+              <span
+                class="flex items-center rounded px-1.5 py-0.5"
+                :class="item.autoToolRouting ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-600'"
+              ><Icon
+                icon="lucide:route"
+                class="h-3 w-3"
+              /></span>
+              <template #content>
+                Auto router is {{ item.autoToolRouting ? 'enabled' : 'disabled' }}
               </template>
             </HoverTooltip>
           </div>
