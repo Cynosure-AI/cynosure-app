@@ -47,7 +47,7 @@ let stopAllMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
 const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Active", icon: "lucide:square-activity" },
-  { value: "artifact", label: "Artifacts", icon: "lucide:file-output" },
+  { value: "artifact", label: "Generated files", icon: "lucide:file-output" },
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
   { value: "dream", label: "Dream", icon: "lucide:moon-star" },
@@ -607,7 +607,7 @@ watch(searchQuery, () => {
           Activity Log
         </h1>
         <p class="mt-1 max-w-3xl text-sm text-theme-500">
-          Active work and a timeline of completed chats, cron runs, memory indexing, artifacts, channels, and notifications.
+          Active work and a timeline of completed chats, cron runs, memory indexing, generated files, channels, and notifications.
         </p>
       </div>
       <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">

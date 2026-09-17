@@ -528,7 +528,7 @@ const chatRoute = computed(() =>
               { to: '/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
               { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
               { to: '/memory-folders', icon: 'lucide:brain', label: 'Memories' },
-              { to: '/artifacts', icon: 'lucide:shapes', label: 'Artifacts' },
+              { to: '/library', icon: 'lucide:library', label: 'Library' },
             ]"
             :key="item.to"
             placement="right"

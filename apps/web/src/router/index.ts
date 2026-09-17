@@ -52,15 +52,20 @@ const router = createRouter({
       name: 'agent-detail',
       component: () => import('@/views/AgentDetailView.vue')
     },
-    // Artifacts
+    // Library
     {
-      path: '/artifacts',
-      redirect: '/artifacts/generated'
+      path: '/library',
+      redirect: '/library/generated'
     },
     {
-      path: '/artifacts/:section(generated|uploads)',
-      name: 'artifacts',
-      component: () => import('@/views/ArtifactsView.vue')
+      path: '/library/:section(generated|uploads)',
+      name: 'library',
+      component: () => import('@/views/LibraryView.vue')
+    },
+    // Preserve bookmarks created before Artifacts was renamed to Library.
+    {
+      path: '/artifacts/:section(generated|uploads)?',
+      redirect: (to) => `/library/${typeof to.params.section === 'string' ? to.params.section : 'generated'}`
     },
     // Memory Folders
     {

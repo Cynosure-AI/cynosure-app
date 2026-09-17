@@ -6,7 +6,7 @@ import type { ActivityArtifact, ActivityItem, ConversationUpload } from '../../.
 import ModalDialog from '../../shared/ModalDialog.vue'
 import TabBar, { type TabDef } from '../../shared/TabBar.vue'
 
-type LibraryTab = 'attachments' | 'artifacts'
+type LibraryTab = 'attachments' | 'generated'
 type ArtifactSelection = ActivityArtifact & { id: string }
 
 const props = defineProps<{
@@ -26,7 +26,7 @@ const emit = defineEmits<{
 const PAGE_SIZE = 60
 const tabs: TabDef<LibraryTab>[] = [
   { value: 'attachments', label: 'Attachments', icon: 'lucide:paperclip' },
-  { value: 'artifacts', label: 'Artifacts', icon: 'lucide:sparkles' },
+  { value: 'generated', label: 'Generated', icon: 'lucide:sparkles' },
 ]
 const activeTab = ref<LibraryTab>('attachments')
 const uploads = ref<ConversationUpload[]>([])
@@ -192,7 +192,7 @@ watch(query, () => {
         <input
           v-model="query"
           type="search"
-          :placeholder="activeTab === 'attachments' ? 'Filter uploaded files…' : 'Filter generated artifacts…'"
+          :placeholder="activeTab === 'attachments' ? 'Filter uploaded files…' : 'Filter generated files…'"
           class="w-full rounded-lg border border-theme-700 bg-theme-800 py-2.5 pl-9 pr-3 text-sm text-theme-100 outline-none placeholder:text-theme-500 focus:border-accent-500"
         >
       </label>
@@ -227,7 +227,7 @@ watch(query, () => {
             class="mb-3 h-9 w-9"
           />
           <p class="text-sm text-theme-300">
-            {{ query ? 'No matching items' : activeTab === 'attachments' ? 'No uploaded files yet' : 'No generated artifacts yet' }}
+            {{ query ? 'No matching items' : activeTab === 'attachments' ? 'No uploaded files yet' : 'No generated files yet' }}
           </p>
           <p class="mt-1 text-xs">
             {{ activeTab === 'attachments' ? 'Files attached to sent messages will appear here.' : 'Generated images, audio, videos, and documents will appear here.' }}

@@ -21,7 +21,7 @@ const textExtensions = new Set(['txt', 'md', 'csv', 'tsv', 'json'])
 const canPreviewDocument = computed(() => extension.value === 'pdf' || textExtensions.has(extension.value))
 
 const typeLabel = computed(() => {
-  if (!props.artifact) return 'Artifact'
+  if (!props.artifact) return 'Library item'
   if (props.artifact.kind === 'file') return extension.value ? `${extension.value.toUpperCase()} document` : 'Document'
   return props.artifact.kind.charAt(0).toUpperCase() + props.artifact.kind.slice(1)
 })
@@ -44,7 +44,7 @@ const formattedDate = computed(() => props.createdAt
 <template>
   <ModalDialog
     :show="Boolean(artifact)"
-    :title="artifact?.label || 'Artifact preview'"
+    :title="artifact?.label || 'Library item preview'"
     :icon="icon"
     max-width="max-w-5xl"
     max-height="max-h-[94vh]"
