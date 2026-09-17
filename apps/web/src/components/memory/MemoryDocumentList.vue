@@ -544,6 +544,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
       <div class="flex items-center gap-2">
         <button
           v-if="needsAttentionCount > 0"
+          title="Indexing files makes them available for semantic searching."
           class="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm transition-colors flex items-center gap-2"
           @click="reindexAll"
         >
@@ -551,7 +552,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             icon="lucide:refresh-cw"
             class="w-4 h-4"
           />
-          Search-index {{ needsAttentionCount }}
+          Index all {{ needsAttentionCount }} files
         </button>
         <button
           :disabled="uploading"
@@ -756,7 +757,10 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
           :aria-pressed="searchAllFolders"
           @click="searchAllFolders = !searchAllFolders"
         >
-          <Icon :icon="searchAllFolders ? 'lucide:folders' : 'lucide:folder'" class="h-3.5 w-3.5" />
+          <Icon
+            :icon="searchAllFolders ? 'lucide:folders' : 'lucide:folder'"
+            class="h-3.5 w-3.5"
+          />
           All folders
         </button>
         <button
@@ -767,7 +771,10 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
           title="Vectorize the query and match indexed document content"
           @click="semanticSearch = !semanticSearch"
         >
-          <Icon icon="lucide:sparkles" class="h-3.5 w-3.5" />
+          <Icon
+            icon="lucide:sparkles"
+            class="h-3.5 w-3.5"
+          />
           Semantic
         </button>
       </div>
@@ -814,7 +821,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             class="h-3.5 w-3.5"
             :class="{ 'animate-spin': selectedSearchIndexIdleCount === 0 }"
           />
-          Make searchable ({{ selectedSearchIndexFiles.length }})
+          Index files
         </button>
         <button
           v-if="selectedDeepResearchFiles.length > 0"
@@ -828,7 +835,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             class="h-3.5 w-3.5"
             :class="{ 'animate-spin': selectedDeepResearchIdleCount === 0 }"
           />
-          Extract facts
+          Deep Research
         </button>
         <button
           v-if="selectedRememberedFiles.length > 0"
@@ -1200,7 +1207,10 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
             :title="`Analysis is limited to ${analysisChunkLimit(file)} chunks; this document has ${file.chunkCount}.`"
           >
-            <Icon icon="lucide:ban" class="h-3.5 w-3.5" />
+            <Icon
+              icon="lucide:ban"
+              class="h-3.5 w-3.5"
+            />
             Too large to analyze
           </span>
         </div>
