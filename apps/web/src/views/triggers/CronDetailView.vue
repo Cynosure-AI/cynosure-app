@@ -65,6 +65,16 @@ const dlgCustomExpr = ref("");
 
 const jobId = computed(() => route.params.id as string);
 
+function formatTimestamp(timestamp: number): string {
+  return new Date(timestamp).toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const dlgParts = computed(() => ({
   frequency: dlgFrequency.value,
   everyMinutes: dlgEveryMinutes.value,
@@ -237,6 +247,20 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <p class="text-sm text-theme-400 mt-0.5">
                 Agent: {{ job.agentName }}
               </p>
+              <dl class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-theme-500">
+                <div class="flex items-center gap-1">
+                  <dt>Created</dt>
+                  <dd class="text-theme-400">
+                    {{ formatTimestamp(job.createdAt) }}
+                  </dd>
+                </div>
+                <div class="flex items-center gap-1">
+                  <dt>Last changed</dt>
+                  <dd class="text-theme-400">
+                    {{ formatTimestamp(job.updatedAt) }}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </div>
 
@@ -262,7 +286,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div class="flex items-center gap-2">
               <Icon
                 icon="lucide:tag"
-                class="w-4 h-4 text-sky-400"
+                class="w-4 h-4 text-theme-400"
               />
               <h3 class="text-sm font-medium text-theme-200">
                 Identity
@@ -306,7 +330,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                   <div class="flex items-center gap-2 mb-1">
                     <Icon
                       icon="lucide:power"
-                      class="w-4 h-4 text-emerald-400"
+                      class="w-4 h-4 text-theme-400"
                     />
                     <h3 class="text-sm font-medium text-theme-200">
                       Enabled / State
@@ -353,7 +377,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:calendar-clock"
-                class="w-4 h-4 text-indigo-400"
+                class="w-4 h-4 text-theme-400"
               />
               <h3 class="text-sm font-medium text-theme-200">
                 Schedule
@@ -624,7 +648,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 <div class="flex items-center gap-2 mb-1">
                   <Icon
                     icon="lucide:circle-play"
-                    class="w-4 h-4 text-amber-400"
+                    class="w-4 h-4 text-theme-400"
                   />
                   <h3 class="text-sm font-medium text-theme-200">
                     One-off
@@ -649,7 +673,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:send"
-                class="w-4 h-4 text-violet-400"
+                class="w-4 h-4 text-theme-400"
               />
               <h3 class="text-sm font-medium text-theme-200">
                 Output Channel
@@ -709,7 +733,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div class="flex items-center gap-2 mb-1">
               <Icon
                 icon="lucide:file-clock"
-                class="w-4 h-4 text-sky-400"
+                class="w-4 h-4 text-theme-400"
               />
               <h3 class="text-sm font-medium text-theme-200">
                 Cron Prompt

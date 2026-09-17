@@ -268,6 +268,7 @@ function openCreateDialog(parent?: MemoryFolder) {
 }
 
 function openEditDialog(space: MemoryFolder) {
+  if (space.isUncategorized) return;
   editingCategory.value = space;
   parentForCreate.value = null;
   folderName.value = space.name;

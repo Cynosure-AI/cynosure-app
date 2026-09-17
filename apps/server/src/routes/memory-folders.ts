@@ -463,6 +463,9 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         let directoryPath = row.directory_path
         let nextName = name
 
+        if (row.is_uncategorized === 1 && req.body.name !== undefined && name !== row.name) {
+            return reply.status(400).send({ error: 'Cannot rename the Uncategorized memory folder.' })
+        }
         if (row.is_uncategorized === 1 && req.body.categoryPath !== undefined && validateRelativePath(req.body.categoryPath) !== '') {
             return reply.status(400).send({ error: 'Cannot move the Uncategorized memory folder.' })
         }
