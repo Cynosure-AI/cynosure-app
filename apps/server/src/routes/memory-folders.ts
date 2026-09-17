@@ -29,6 +29,7 @@ import {
     syncMemoryFoldersFromFolders,
     validateRelativePath,
     type MemoryFolderDirectoryData,
+    UNCATEGORIZED_MEMORY_FOLDER_ID,
 } from '../core/memory/memory-folder-directories.js'
 import {
     deleteMemoryKnowledgeSource,
@@ -340,20 +341,24 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const document = getMemoryDocument(req.params.documentRef)
         const revision = getMemoryRevision(req.params.documentRef, req.params.revisionId)
         if (!document || !revision) return reply.status(404).send({ error: 'Memory revision not found' })
-        const category = loadCategoryRow(document.category_id)
-        if (!category?.directory_path) return reply.status(409).send({ error: 'Memory folder is unavailable' })
+        // A folder deletion intentionally leaves the document history behind.
+        // Restore those documents into Uncategorized when their original folder
+        // no longer exists instead of leaving a permanently unrestorable row.
+        const category = loadCategoryRow(document.category_id) || loadCategoryRow(UNCATEGORIZED_MEMORY_FOLDER_ID)
+        if (!category?.directory_path) return reply.status(409).send({ error: 'No memory folder is available for restore' })
         const filePath = join(category.directory_path, document.file_name)
         const currentHash = existsSync(filePath) ? computeFileHash(filePath) : ''
         if (req.body.expectedRevision !== undefined && req.body.expectedRevision !== currentHash) {
             return reply.status(409).send({ error: 'Memory changed since it was opened. Reload before restoring.', revision: currentHash })
         }
+        updateMemoryDocumentLocation(document.document_id, category.id, document.file_name)
         writeTextFile(category.directory_path, document.file_name, revision.content)
         getDb().prepare(`
           INSERT OR REPLACE INTO memory_file_index(document_id, document_ref, category_id, file_name, content_hash, chunk_count, created_at)
           VALUES (?, ?, ?, ?, ?, 0, ?)
-        `).run(document.document_id, document.document_ref, document.category_id, document.file_name, revision.contentHash, Date.now())
-        const result = await getAgentMemory().reindexFile(category.directory_path, document.file_name, document.category_id, { revisionContext: { source: 'restore' } })
-        return { success: true, documentRef: document.document_ref, revision: getAgentMemory().getDocumentReference(document.category_id, document.file_name)?.revision, chunksStored: result.chunkCount }
+        `).run(document.document_id, document.document_ref, category.id, document.file_name, revision.contentHash, Date.now())
+        const result = await getAgentMemory().reindexFile(category.directory_path, document.file_name, category.id, { revisionContext: { source: 'restore' } })
+        return { success: true, documentRef: document.document_ref, revision: getAgentMemory().getDocumentReference(category.id, document.file_name)?.revision, chunksStored: result.chunkCount }
     })
 
     app.get('/deleted', async () => getDb().prepare(`
