@@ -577,7 +577,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
             'Search canonical memory files using the derived hybrid retrieval index. ' +
-            'Returns expanded canonical excerpts with a stable fileRef and monotonic revision for memory_patch. ' +
+            'Returns expanded canonical excerpts with a stable fileRef for memory_patch; revision tracking is handled internally. ' +
             'Retrieval chunk identifiers and boundaries are intentionally hidden. ' +
             'Selected memory folders are treated as one unified knowledge base — use the optional "category" parameter to filter to a specific category. ' +
             makeScopeSummary(assignedCategories),
@@ -1026,7 +1026,6 @@ export type MemoryPatchConflictReason =
     | 'expected_context_not_found'
     | 'ambiguous_context'
     | 'invalid_patch'
-    | 'revision_conflict'
     | 'patch_application_failed'
 
 export type MemoryPatchApplication =
@@ -1035,19 +1034,29 @@ export type MemoryPatchApplication =
 
 interface ParsedPatchHunk { before: string; after: string }
 
+const PATCH_CONTEXT_GUIDANCE = 'Lines starting with - are deletions. To anchor the patch to unchanged text, prefix those lines with one space.'
+
+function invalidPatch(message: string): { error: string } {
+    return { error: `${message} ${PATCH_CONTEXT_GUIDANCE}` }
+}
+
 function parseContextualPatch(patch: string): ParsedPatchHunk[] | { error: string } {
-    if (typeof patch !== 'string' || !patch.trim()) return { error: 'patch must be a non-empty string.' }
+    if (typeof patch !== 'string' || !patch.trim()) return invalidPatch('patch must be a non-empty string.')
     const lines = patch.replace(/\r\n?/g, '\n').split('\n')
     while (lines.length && !lines[0].startsWith('@@')) lines.shift()
     while (lines.length && lines[lines.length - 1] === '') lines.pop()
-    if (!lines.length) return { error: 'patch must contain at least one @@ hunk.' }
+    if (!lines.length) return invalidPatch('patch must contain at least one @@ hunk.')
 
     const hunks: ParsedPatchHunk[] = []
     let before: string[] | undefined
     let after: string[] | undefined
+    let hunkLines: string[] = []
     const finish = () => {
         if (!before || !after) return
         if (before.length === 0) throw new Error('Each hunk needs deleted or unchanged context for safe addressing.')
+        if (hunkLines.length > 0 && hunkLines.every(line => line.startsWith('--'))) {
+            throw new Error('This hunk contains only -- lines and no unchanged or added lines. You may have used - as context; use a leading space for unchanged text.')
+        }
         hunks.push({ before: before.join('\n'), after: after.join('\n') })
     }
     try {
@@ -1056,10 +1065,12 @@ function parseContextualPatch(patch: string): ParsedPatchHunk[] | { error: strin
                 finish()
                 before = []
                 after = []
+                hunkLines = []
                 continue
             }
-            if (!before || !after) return { error: 'Patch content must follow an @@ hunk header.' }
+            if (!before || !after) return invalidPatch('Patch content must follow an @@ hunk header.')
             if (line.startsWith('\\ No newline at end of file')) continue
+            hunkLines.push(line)
             if (line.startsWith('-')) before.push(line.slice(1))
             else if (line.startsWith('+')) after.push(line.slice(1))
             else if (line.startsWith(' ')) {
@@ -1069,14 +1080,14 @@ function parseContextualPatch(patch: string): ParsedPatchHunk[] | { error: strin
                 before.push('')
                 after.push('')
             } else {
-                return { error: `Invalid patch line ${JSON.stringify(line)}; lines must start with space, +, or -.` }
+                return invalidPatch(`Invalid patch line ${JSON.stringify(line)}; lines must start with space, +, or -.`)
             }
         }
         finish()
     } catch (error) {
-        return { error: (error as Error).message }
+        return invalidPatch((error as Error).message)
     }
-    if (hunks.length === 0) return { error: 'patch must contain at least one non-empty hunk.' }
+    if (hunks.length === 0) return invalidPatch('patch must contain at least one non-empty hunk.')
     return hunks
 }
 
@@ -1089,7 +1100,11 @@ export function applyMemoryPatch(content: string, patch: string): MemoryPatchApp
     for (const hunk of parsed) {
         const start = next.indexOf(hunk.before)
         if (start < 0) {
-            return { status: 'conflict', reason: 'expected_context_not_found', message: 'Expected patch context was not found in the canonical file.' }
+            return {
+                status: 'conflict',
+                reason: 'expected_context_not_found',
+                message: 'Expected patch context was not found in the canonical file. Matching is literal, including Unicode punctuation and whitespace. Run memory_search again, copy the unchanged text exactly, and prefix each unchanged line with one space.',
+            }
         }
         if (next.indexOf(hunk.before, start + 1) >= 0) {
             return { status: 'conflict', reason: 'ambiguous_context', message: 'Expected patch context occurs more than once; include more unchanged context.' }
@@ -1100,8 +1115,8 @@ export function applyMemoryPatch(content: string, patch: string): MemoryPatchApp
     return { status: 'success', content: next, affectedRanges }
 }
 
-function patchConflict(reason: MemoryPatchConflictReason, currentRevision: number | undefined, message: string): ToolResult {
-    const result = { status: 'conflict' as const, reason, currentRevision, message }
+function patchConflict(reason: MemoryPatchConflictReason, message: string): ToolResult {
+    const result = { status: 'conflict' as const, reason, message }
     return { success: false, output: JSON.stringify(result), structuredContent: result }
 }
 
@@ -1112,16 +1127,15 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
         name: 'memory_patch',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Atomically apply a strict contextual patch to a canonical memory file. Context is matched literally and must identify exactly one location; matching is never fuzzy. A stale expectedRevision may still succeed when every hunk remains uniquely applicable. Use fileRef and revision returned by memory_search.',
+        description: 'Atomically apply a strict contextual patch to a canonical memory file. Context is matched literally and must identify exactly one location; matching is never fuzzy. Concurrent changes and revision tracking are handled internally. Use the fileRef returned by memory_search.',
         parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
                 fileRef: { type: 'string', description: 'Stable canonical file reference returned by memory_search (for example user-profile#4k8z2q).' },
-                expectedRevision: { type: 'integer', minimum: 1, description: 'Monotonic revision returned by memory_search.' },
                 patch: { type: 'string', description: 'One or more @@ contextual diff hunks. Prefix removed lines with -, added lines with +, and unchanged context with a space.' },
             },
-            required: ['fileRef', 'expectedRevision', 'patch'],
+            required: ['fileRef', 'patch'],
         },
         outputSchema: {
             type: 'object',
@@ -1131,7 +1145,6 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 fileRef: { type: 'string' },
                 previousRevision: { type: 'integer' },
                 revision: { type: 'integer' },
-                currentRevision: { type: 'integer' },
                 reason: { type: 'string' },
                 affectedRanges: { type: 'array' },
                 message: { type: 'string' },
@@ -1139,25 +1152,19 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
         },
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = (params || {}) as { fileRef: string; expectedRevision: number; patch: string }
-            if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
-                return patchConflict('invalid_patch', undefined, 'expectedRevision must be a positive integer.')
-            }
+            const input = (params || {}) as { fileRef: string; patch: string }
             const initial = resolveMemoryFileRef(input.fileRef, assignedCategories, getKnownCategories)
-            if ('error' in initial) return patchConflict('file_not_found', undefined, initial.error)
+            if ('error' in initial) return patchConflict('file_not_found', initial.error)
             return withMemoryDocumentLock(initial.documentId, signal, async () => {
                 const resolved = resolveMemoryFileRef(input.fileRef, assignedCategories, getKnownCategories)
-                if ('error' in resolved) return patchConflict('file_not_found', undefined, resolved.error)
-                if (input.expectedRevision > resolved.revisionNumber) {
-                    return patchConflict('revision_conflict', resolved.revisionNumber, 'expectedRevision is newer than the canonical file revision.')
-                }
+                if ('error' in resolved) return patchConflict('file_not_found', resolved.error)
                 let current: string
                 try { current = readTextFile(resolved.directoryPath, resolved.fileName) } catch {
-                    return patchConflict('file_not_found', resolved.revisionNumber, 'The canonical memory file could not be read.')
+                    return patchConflict('file_not_found', 'The canonical memory file could not be read.')
                 }
                 opts.beforeDocumentMutation?.(resolved.documentId, current)
                 let applied = applyMemoryPatch(current, input.patch)
-                if (applied.status === 'conflict') return patchConflict(applied.reason, resolved.revisionNumber, applied.message)
+                if (applied.status === 'conflict') return patchConflict(applied.reason, applied.message)
                 if (applied.content === current) {
                     const result = { status: 'success' as const, fileRef: resolved.documentRef, previousRevision: resolved.revisionNumber, revision: resolved.revisionNumber, affectedRanges: [] }
                     return { success: true, output: JSON.stringify(result), structuredContent: result }
@@ -1168,7 +1175,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 if (latest !== current) {
                     current = latest
                     applied = applyMemoryPatch(current, input.patch)
-                    if (applied.status === 'conflict') return patchConflict(applied.reason, resolved.revisionNumber, applied.message)
+                    if (applied.status === 'conflict') return patchConflict(applied.reason, applied.message)
                 }
                 try {
                     const indexed = await commitMemoryMutation(resolved, current, applied.content, signal, opts.revisionContext)
@@ -1176,7 +1183,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                     const result = { status: 'success' as const, fileRef: indexed.documentRef, previousRevision: resolved.revisionNumber, revision: indexed.revision, affectedRanges: applied.affectedRanges }
                     return { success: true, output: JSON.stringify(result), structuredContent: result }
                 } catch (error) {
-                    return patchConflict('patch_application_failed', resolved.revisionNumber, (error as Error).message)
+                    return patchConflict('patch_application_failed', (error as Error).message)
                 }
             })
         },

@@ -69,7 +69,7 @@ test('memory_search returns canonical context and a monotonic revision without c
 })
 test('Dream can replace a topical memory while preserving unrelated supported content', async () => {
     expect((await read()).success).toBe(true)
-    const result = await makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', expectedRevision: 1, patch: '@@\n Unrelated fact.\n+Prefers concise replies.' })
+    const result = await makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', patch: '@@\n Unrelated fact.\n+Prefers concise replies.' })
     expect(result.success).toBe(true)
     expect(readFileSync(file, 'utf8')).toContain('Unrelated fact.')
     expect(readFileSync(file, 'utf8')).toContain('Prefers concise replies.')
@@ -77,15 +77,15 @@ test('Dream can replace a topical memory while preserving unrelated supported co
 test('a concurrent edit is rejected under the document lock until Dream reads again', async () => {
     await read()
     setContent('New human edit.')
-    await expect(makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', expectedRevision: 1, patch: '@@\n-New human edit.\n+Stale replacement' })).rejects.toThrow('Document changed since read')
+    await expect(makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', patch: '@@\n-New human edit.\n+Stale replacement' })).rejects.toThrow('Document changed since read')
     expect(readFileSync(file, 'utf8')).toBe('New human edit.')
     await read()
-    expect((await makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', expectedRevision: 1, patch: '@@\n-New human edit.\n+Fresh replacement' })).success).toBe(true)
+    expect((await makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', patch: '@@\n-New human edit.\n+Fresh replacement' })).success).toBe(true)
 })
-test('a stale revision can apply when its context remains unique', async () => {
+test('a patch can apply after a concurrent unrelated edit when its context remains unique', async () => {
     setContent('Unrelated fact.\nConcurrent unrelated edit.')
     const result = await makeMemoryPatchTool({ assignedCategories: options.assignedCategories }).execute({
-        fileRef: 'notes#abc123', expectedRevision: 1, patch: '@@\n-Unrelated fact.\n+Updated fact.',
+        fileRef: 'notes#abc123', patch: '@@\n-Unrelated fact.\n+Updated fact.',
     })
     expect(result.success).toBe(true)
     expect(result.structuredContent).toMatchObject({ previousRevision: 2, revision: 3 })
@@ -95,7 +95,7 @@ test('an aborted write leaves the source untouched', async () => {
     await read()
     const controller = new AbortController()
     controller.abort()
-    await expect(makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', expectedRevision: 1, patch: '@@\n-Unrelated fact.\n+Do not write' }, controller.signal)).rejects.toThrow()
+    await expect(makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', patch: '@@\n-Unrelated fact.\n+Do not write' }, controller.signal)).rejects.toThrow()
     expect(readFileSync(file, 'utf8')).toBe('Unrelated fact.')
 })
 
@@ -104,7 +104,7 @@ test('a failed exact edit batch is atomic and does not reindex', async () => {
     const reindex = vi.mocked(getAgentMemory().reindexFile)
     const callsBefore = reindex.mock.calls.length
     const result = await makeMemoryPatchTool(options).execute({
-        fileRef: 'notes#abc123', expectedRevision: 1,
+        fileRef: 'notes#abc123',
         patch: '@@\n-Unrelated fact.\n+Changed fact.\n@@\n-Text that is not present.\n',
     })
     expect(result.success).toBe(false)

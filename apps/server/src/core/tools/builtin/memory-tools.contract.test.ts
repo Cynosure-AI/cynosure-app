@@ -21,8 +21,10 @@ describe('memory mutation tool contracts', () => {
 
     test('exposes one contextual patch contract', () => {
         const tool = makeMemoryPatchTool({})
-        expect(tool.parameters.required).toEqual(['fileRef', 'expectedRevision', 'patch'])
+        expect(tool.parameters.required).toEqual(['fileRef', 'patch'])
         expect(tool.parameters.additionalProperties).toBe(false)
+        expect(tool.parameters.properties).not.toHaveProperty('expectedRevision')
+        expect(tool.outputSchema?.properties).not.toHaveProperty('currentRevision')
     })
 
     test('applies replacement, deletion, insertion, and multi-edit patches atomically', () => {
@@ -37,6 +39,24 @@ describe('memory mutation tool contracts', () => {
         expect(applyMemoryPatch('Vue 2\nVue 2', '@@\n-Vue 2\n+Vue 3')).toMatchObject({ status: 'conflict', reason: 'ambiguous_context' })
         expect(applyMemoryPatch('Vue 2', '@@\n-Vue 1\n+Vue 3')).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found' })
         expect(applyMemoryPatch('Vue 2', '@@\n-Vue 2\n+Vue 3\n@@\n-Missing\n+Present')).toEqual(expect.objectContaining({ status: 'conflict', reason: 'expected_context_not_found' }))
+    })
+
+    test('explains patch syntax and detects deletion markers used as context', () => {
+        const malformed = applyMemoryPatch('- Existing bullet', '@@\n-- Existing bullet')
+        expect(malformed).toMatchObject({ status: 'conflict', reason: 'invalid_patch' })
+        expect('message' in malformed ? malformed.message : '').toContain('You may have used - as context')
+        expect('message' in malformed ? malformed.message : '').toContain('prefix those lines with one space')
+
+        const invalidLine = applyMemoryPatch('Existing text', '@@\nExisting text')
+        expect(invalidLine).toMatchObject({ status: 'conflict', reason: 'invalid_patch' })
+        expect('message' in invalidLine ? invalidLine.message : '').toContain('Lines starting with - are deletions')
+    })
+
+    test('gives literal Unicode recovery guidance when context is not found', () => {
+        const result = applyMemoryPatch('German „quotes“ and an em dash —', '@@\n-German "quotes" and an em dash -\n+Changed')
+        expect(result).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found' })
+        expect('message' in result ? result.message : '').toContain('including Unicode punctuation and whitespace')
+        expect('message' in result ? result.message : '').toContain('Run memory_search again')
     })
 
     test('exposes an explicit entity merge contract', () => {
