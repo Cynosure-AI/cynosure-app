@@ -436,7 +436,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                      max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                      auto_memory, memory_router_provider_id, memory_router_model,
                      auto_router_provider_id, auto_router_model,
-                     sort_order, tags_json, favorite, cron_prompt, icon_mime, created_at, updated_at
+                     sort_order, favorite, cron_prompt, icon_mime, created_at, updated_at
                      FROM agents ORDER BY created_at`
                 ).all() as Record<string, unknown>[]
 
@@ -693,9 +693,9 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                  thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
                                  auto_memory, memory_router_provider_id, memory_router_model,
                                  auto_router_provider_id, auto_router_model,
-                                 sort_order, tags_json, favorite, cron_prompt, icon_data, icon_mime,
+                                 sort_order, favorite, cron_prompt, icon_data, icon_mime,
                                  created_at, updated_at)
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 row.id,
                                 row.name || '',
@@ -720,7 +720,6 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                 row.auto_router_provider_id || '',
                                 row.auto_router_model || '',
                                 row.sort_order ?? 0,
-                                row.tags_json || '[]',
                                 row.favorite ?? 0,
                                 row.cron_prompt || '',
                                 iconData,

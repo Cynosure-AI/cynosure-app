@@ -59,6 +59,16 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 4,
+        description: 'Remove agent tags',
+        up: (db) => {
+            const columns = db.pragma('table_info(agents)') as Array<{ name: string }>
+            if (columns.some((column) => column.name === 'tags_json')) {
+                db.exec('ALTER TABLE agents DROP COLUMN tags_json')
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

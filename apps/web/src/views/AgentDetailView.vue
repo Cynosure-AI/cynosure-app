@@ -96,6 +96,12 @@ function sectionButtonClass(id: AgentSectionId): string {
     : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'
 }
 
+function formatTimestamp(timestamp: number): string {
+  return new Date(timestamp).toLocaleString([], {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  })
+}
+
 function selectSection(id: AgentSectionId): void {
   activeSectionId.value = id
   mobileDetailOpen.value = true
@@ -179,6 +185,20 @@ function selectSection(id: AgentSectionId): void {
               Auto memory: {{ agent.autoMemory ? 'On' : 'Off' }}
             </span>
           </div>
+          <dl class="mt-4 space-y-1.5 border-t border-theme-800 pt-3 text-xs text-theme-500">
+            <div class="flex items-center justify-between gap-3">
+              <dt>Created</dt>
+              <dd class="text-right text-theme-400">
+                {{ formatTimestamp(agent.createdAt) }}
+              </dd>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <dt>Last changed</dt>
+              <dd class="text-right text-theme-400">
+                {{ formatTimestamp(agent.updatedAt) }}
+              </dd>
+            </div>
+          </dl>
         </header>
 
         <nav class="space-y-1 p-4">
