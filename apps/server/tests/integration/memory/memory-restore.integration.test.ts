@@ -1,0 +1,69 @@
+import Fastify from 'fastify'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+describe('deleted memory restore', () => {
+  let dataDirectory = ''
+
+  beforeEach(async () => {
+    dataDirectory = await mkdtemp(join(tmpdir(), 'cynosure-memory-restore-'))
+    process.env.CYNOSURE_DATA_DIR = dataDirectory
+  })
+
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    const { stopAllMemoryFolderWatchers } = await import('../../../src/core/memory/memory-folder-watcher.js')
+    await stopAllMemoryFolderWatchers()
+    const { closeDb } = await import('../../../src/db/database.js')
+    closeDb()
+    delete process.env.CYNOSURE_DATA_DIR
+    await rm(dataDirectory, { recursive: true, force: true })
+  })
+
+  test('restores a document to Uncategorized when its original folder was deleted', async () => {
+    const { getDb } = await import('../../../src/db/database.js')
+    const { getAgentMemory } = await import('../../../src/core/memory/agent-memory.js')
+    const { recordMemoryRevision, markMemoryDocumentDeleted } = await import('../../../src/core/memory/memory-revisions.js')
+    const { registerMemoryFoldersRoutes } = await import('../../../src/routes/memory-folders.js')
+    const db = getDb()
+    const content = '# Restored memory\nStill available.'
+    const revision = recordMemoryRevision({
+      documentId: 'deleted-document',
+      documentRef: 'restored-memory#abc123',
+      categoryId: 'removed-folder',
+      fileName: 'restored-memory.md',
+      content,
+      context: { source: 'user' },
+    })
+    markMemoryDocumentDeleted('deleted-document')
+    vi.spyOn(getAgentMemory(), 'reindexFile').mockImplementation(async (_directoryPath, fileName, categoryId) => {
+      recordMemoryRevision({
+        documentId: 'deleted-document',
+        documentRef: 'restored-memory#abc123',
+        categoryId,
+        fileName,
+        content,
+        context: { source: 'restore' },
+      })
+      return { fileName, chunkCount: 1 }
+    })
+
+    const app = Fastify()
+    await app.register(registerMemoryFoldersRoutes, { prefix: '/api/memory-folders' })
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/memory-folders/documents/${encodeURIComponent('restored-memory#abc123')}/revisions/${revision.id}/restore`,
+      payload: { expectedRevision: '' },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(await readFile(join(dataDirectory, 'data', 'memories', 'restored-memory.md'), 'utf8')).toBe(content)
+    expect(db.prepare('SELECT category_id, status FROM memory_documents WHERE document_id = ?').get('deleted-document'))
+      .toEqual({ category_id: 'uncategorized', status: 'active' })
+    expect(db.prepare('SELECT category_id FROM memory_file_index WHERE document_id = ?').get('deleted-document'))
+      .toEqual({ category_id: 'uncategorized' })
+    await app.close()
+  })
+})
