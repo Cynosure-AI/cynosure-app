@@ -310,6 +310,35 @@ describe('ToolExecutionCard', () => {
     ])
   })
 
+  test('shows created file artifacts in the collapsed header instead of the expanded result', async () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'executing',
+          timestamp: Date.now(),
+          toolCalls: [{ name: 'write_file', arguments: '{"path":"/tmp/report.md"}' }],
+          results: [{
+            name: 'write_file',
+            success: true,
+            output: 'Wrote file: /tmp/report.md',
+          }],
+        }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    const artifact = wrapper.get('a[href="/api/files?path=%2Ftmp%2Freport.md"]')
+    expect(artifact.text()).toContain('report.md')
+    expect(artifact.text()).toContain('MD')
+
+    await wrapper.get('button').trigger('click')
+
+    expect(wrapper.find('a[href="/api/files?path=%2Ftmp%2Freport.md"]').exists()).toBe(false)
+  })
+
   test('shows mixed tool outcomes as an amber partial success', () => {
     const wrapper = mount(ToolExecutionCard, {
       props: {

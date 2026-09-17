@@ -7,6 +7,8 @@ const props = defineProps<{
   text?: string
   artifacts?: FileArtifactLink[]
   excludeHrefs?: string[]
+  compact?: boolean
+  limit?: number
 }>()
 
 const links = computed(() => {
@@ -15,20 +17,29 @@ const links = computed(() => {
   if (!excluded.size) return candidates
   return candidates.filter((artifact) => !excluded.has(fileArtifactKey(artifact.href)))
 })
+
+const visibleLinks = computed(() => props.limit === undefined ? links.value : links.value.slice(0, props.limit))
+
+function handleClick(event: MouseEvent): void {
+  if (props.compact) event.stopPropagation()
+}
 </script>
 
 <template>
   <div
     v-if="links.length"
-    class="mt-2 flex flex-wrap gap-2"
+    class="flex flex-wrap gap-2"
+    :class="compact ? '' : 'mt-2'"
   >
     <a
-      v-for="artifact in links"
+      v-for="artifact in visibleLinks"
       :key="artifact.href"
       :href="artifact.href"
       target="_blank"
       rel="noopener noreferrer"
-      class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-theme-600/50 bg-theme-900/70 px-2 py-1 text-[11px] text-theme-300 transition-colors hover:border-accent-500/50 hover:text-accent-200"
+      class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-theme-600/50 bg-theme-900/70 text-theme-300 transition-colors hover:border-accent-500/50 hover:text-accent-200"
+      :class="compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
+      @click="handleClick"
     >
       <Icon
         icon="lucide:file-text"
@@ -37,5 +48,9 @@ const links = computed(() => {
       <span class="truncate">{{ artifact.label }}</span>
       <span class="shrink-0 rounded bg-theme-700 px-1 py-0.5 text-[9px] text-theme-400">{{ artifact.ext }}</span>
     </a>
+    <span
+      v-if="limit !== undefined && links.length > limit"
+      class="self-center text-[10px] text-theme-500"
+    >+{{ links.length - limit }}</span>
   </div>
 </template>
