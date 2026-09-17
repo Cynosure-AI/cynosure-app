@@ -5,6 +5,7 @@ import { usePreferencesStore } from '../../stores/preferences.store'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
+import { fileArtifactKey, fileArtifactLinks } from '../../utils/file-artifacts'
 import { isInternalToolName } from '../../utils/internal-tools'
 import RichContent from '../shared/RichContent.vue'
 
@@ -522,6 +523,15 @@ const routingStatusSteps = computed(() => {
 
 const successfulResultCount = computed(() => results.value.filter((result) => result.success).length)
 const resultImages = computed(() => results.value.flatMap((result) => result.images?.filter(Boolean) ?? []))
+const resultFileArtifacts = computed(() => {
+  const seen = new Set<string>()
+  return results.value.flatMap((result) => fileArtifactLinks(result.output)).filter((artifact) => {
+    const key = fileArtifactKey(artifact.href)
+    if (seen.has(key) || resultImages.value.some((image) => fileArtifactKey(image) === key)) return false
+    seen.add(key)
+    return true
+  })
+})
 const resultOutcome = computed<ResultOutcomeMeta | null>(() => {
   if (!results.value.length) return null
   if (successfulResultCount.value === results.value.length) {
@@ -819,6 +829,13 @@ const hasDisplayableActivity = computed(() =>
               >+{{ resultImages.length - 1 }}</span>
             </span>
 
+            <FileArtifactLinks
+              v-if="!isExpanded && resultFileArtifacts.length"
+              :artifacts="resultFileArtifacts"
+              :limit="1"
+              compact
+            />
+
             <span
               v-if="resultOutcome"
               class="text-[10px] shrink-0"
@@ -1005,12 +1022,6 @@ const hasDisplayableActivity = computed(() =>
                         ? 'bg-theme-900/50'
                         : 'bg-red-100/80 dark:bg-red-950/30',
                     ]"
-                  />
-
-                  <FileArtifactLinks
-                    v-if="execution.result"
-                    :text="execution.result.output"
-                    :exclude-hrefs="execution.result.images || []"
                   />
 
                   <div
