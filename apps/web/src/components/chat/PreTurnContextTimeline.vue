@@ -200,8 +200,9 @@ const cards = computed<ContextCard[]>(() => {
   const taskContext = taskContextStep?.toolCalls?.find((call) => args(call).type === 'task-context')
   const taskContextArgs = taskContext ? args(taskContext) : {}
   const channelQueries: Record<Channel, string[]> = {
-    tools: [stringValue(taskContextArgs.toolQuery)].filter((query): query is string => Boolean(query)),
+    tools: [stringValue(taskContextArgs.toolSearchQuery) ?? stringValue(taskContextArgs.toolQuery)].filter((query): query is string => Boolean(query)),
     memory: [...new Set([
+      ...stringValues(taskContextArgs.memorySearchQueries),
       ...stringValues(taskContextArgs.memoryQueries),
       ...(stringValue(taskContextArgs.memoryQuery) ? [stringValue(taskContextArgs.memoryQuery)!] : []),
     ])],
