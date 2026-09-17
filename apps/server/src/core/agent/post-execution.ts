@@ -153,7 +153,7 @@ export async function generateQuickResponses(opts: GenerateQuickResponsesOpts): 
             messages: [
                 {
                     role: 'system' as const,
-                    content: 'Suggest up to 3 concise, distinct messages the user could send next. Match the conversation and write each suggestion in the user\'s voice. Return only a JSON array of strings. Return [] when no useful follow-up exists.',
+                    content: 'Suggest up to 3 concise, distinct messages the user could send next as follow-ups. Match the conversation and write each suggestion in the user\'s voice. Return only a JSON array of strings. Return [] when no useful follow-up exists.',
                 },
                 {
                     role: 'user' as const,
