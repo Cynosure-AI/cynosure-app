@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getFileContent: vi.fn(),
   updateFileContent: vi.fn(),
   getDocumentAnalysis: vi.fn(),
+  listRevisions: vi.fn(),
   setContent: vi.fn(),
   clearContent: vi.fn(),
 }))
@@ -39,7 +40,7 @@ vi.mock('../../api/client', () => ({
       getFileContent: mocks.getFileContent,
       getDocumentAnalysis: mocks.getDocumentAnalysis,
       updateFileContent: mocks.updateFileContent,
-      renameFile: vi.fn(), listRevisions: vi.fn(), getRevision: vi.fn(),
+      renameFile: vi.fn(), listRevisions: mocks.listRevisions, getRevision: vi.fn(),
       getRevisionDiff: vi.fn(), restoreRevision: vi.fn(),
     },
   },
@@ -54,6 +55,7 @@ describe('MemoryDocumentEditorModal', () => {
     mocks.setContent.mockReset()
     mocks.clearContent.mockReset()
     mocks.getDocumentAnalysis.mockReset().mockResolvedValue({ status: 'not_analyzed', chunks: [], items: [], itemTotal: 0 })
+    mocks.listRevisions.mockReset().mockResolvedValue([])
   })
 
   test('loads large content into the rich-text editor', async () => {
@@ -154,5 +156,32 @@ describe('MemoryDocumentEditorModal', () => {
     marker.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
     await flushPromises()
     expect(document.body.querySelector('[aria-label="Summary for chunk 1"]')).toBeNull()
+  })
+
+  test('switches History and Facts as mutually exclusive toggle views', async () => {
+    mocks.getFileContent.mockResolvedValue({ content: '# Memory\nText', revision: 'current', documentRef: 'memory#ref' })
+    const wrapper = mount(MemoryDocumentEditorModal, {
+      props: { show: true, categoryId: 'category', sourceFile: 'memory.md' },
+      global: {
+        plugins: [createPinia()],
+        stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
+      },
+    })
+    await flushPromises()
+
+    await vi.waitFor(() => expect(wrapper.get('[title="Revision history"]').attributes('disabled')).toBeUndefined())
+    await wrapper.get('[title="Revision history"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(false)
+
+    await wrapper.get('[title="Extracted facts and entities"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(true)
+    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).toContain('bg-accent-500/15')
+    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('flex')
+
+    await wrapper.get('[title="Extracted facts and entities"]').trigger('click')
+    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).not.toContain('bg-accent-500/15')
+    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('hidden')
   })
 })

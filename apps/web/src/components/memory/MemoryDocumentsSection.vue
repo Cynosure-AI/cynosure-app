@@ -64,6 +64,27 @@ function toggleFolderMenu(space: MemoryFolder, event: MouseEvent): void {
   openFolderMenuId.value = space.id;
 }
 
+function createSubfolderFromMenu(): void {
+  const space = openFolderMenuSpace.value;
+  if (!space) return;
+  openFolderMenuId.value = null;
+  emit("create-folder", space);
+}
+
+function editFolderFromMenu(): void {
+  const space = openFolderMenuSpace.value;
+  if (!space) return;
+  openFolderMenuId.value = null;
+  emit("edit-folder", space);
+}
+
+function deleteFolderFromMenu(): void {
+  const space = openFolderMenuSpace.value;
+  if (!space) return;
+  openFolderMenuId.value = null;
+  emit("delete-folder", space);
+}
+
 const sortedSpaces = computed(() =>
   [...props.spaces].sort((a, b) => {
     if (a.isUncategorized) return -1;
@@ -358,8 +379,8 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
               >Root</span>
               <span
                 class="text-xs text-theme-500"
-                :title="`${space.fileCount} in this folder, ${space.descendantFileCount || 0} in subfolders`"
-              >{{ space.fileCount }} ({{ space.descendantFileCount || 0 }})</span>
+                :title="hasChildren(space) ? `${space.fileCount} in this folder, ${space.descendantFileCount || 0} in subfolders` : `${space.fileCount} in this folder`"
+              >{{ space.fileCount }}<template v-if="hasChildren(space)"> ({{ space.descendantFileCount || 0 }})</template></span>
             </button>
             <span class="relative shrink-0">
               <button
@@ -428,7 +449,7 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
         <button
           type="button"
           class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
-          @click="openFolderMenuId = null; emit('create-folder', openFolderMenuSpace)"
+          @click="createSubfolderFromMenu"
         >
           <Icon
             icon="lucide:plus"
@@ -442,7 +463,7 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
           :disabled="openFolderMenuSpace.isUncategorized"
           :title="openFolderMenuSpace.isUncategorized ? 'The Uncategorized folder cannot be renamed' : 'Rename folder'"
           class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800 disabled:cursor-not-allowed disabled:opacity-40"
-          @click="openFolderMenuId = null; emit('edit-folder', openFolderMenuSpace)"
+          @click="editFolderFromMenu"
         >
           <Icon
             icon="lucide:pencil"
@@ -452,9 +473,10 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
         </button>
         <button
           type="button"
+          data-testid="delete-memory-folder"
           :disabled="openFolderMenuSpace.isUncategorized"
           class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-          @click="openFolderMenuId = null; emit('delete-folder', openFolderMenuSpace)"
+          @click="deleteFolderFromMenu"
         >
           <Icon
             icon="lucide:trash-2"
