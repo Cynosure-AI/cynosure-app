@@ -201,12 +201,12 @@ onMounted(async () => {
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:message-circle-more"
-              class="w-5 h-5 text-accent-400"
+              class="w-5 h-5 text-theme-400"
             />
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
-              Quick Responses <span class="ml-1 text-xs text-amber-400">• Experimental</span>
+              Quick Responses
             </h3>
             <p class="text-xs text-theme-500 mt-0.5">
               Generate up to three relevant follow-up suggestions after each assistant turn
@@ -219,7 +219,7 @@ onMounted(async () => {
         />
       </div>
       <p class="pt-3 border-t border-theme-700 text-[11px] leading-relaxed text-theme-500">
-        Selecting a suggestion fills the chat input so you can review or edit it before sending.
+        Selecting a suggestion fills the chat input so you can review or edit it before sending. Uses the same provider and model as the chat.
       </p>
     </BaseCard>
 
