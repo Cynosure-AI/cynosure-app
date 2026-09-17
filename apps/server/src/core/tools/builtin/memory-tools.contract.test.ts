@@ -52,10 +52,24 @@ describe('memory mutation tool contracts', () => {
         expect('message' in invalidLine ? invalidLine.message : '').toContain('Lines starting with - are deletions')
     })
 
-    test('gives literal Unicode recovery guidance when context is not found', () => {
-        const result = applyMemoryPatch('German „quotes“ and an em dash —', '@@\n-German "quotes" and an em dash -\n+Changed')
+    test('matches safe Unicode variants while preserving canonical context bytes', () => {
+        const source = 'Header\nStatus: ☕️ — „bereit“\u00a0e\u0301\nTail'
+        const result = applyMemoryPatch(source, '@@\n Status: ☕ - "bereit" é\n+Added ✅')
+        expect(result).toMatchObject({
+            status: 'success',
+            content: 'Header\nStatus: ☕️ — „bereit“\u00a0e\u0301\nAdded ✅\nTail',
+        })
+    })
+
+    test('treats multiple Unicode-equivalent contexts as ambiguous', () => {
+        const result = applyMemoryPatch('State — ready\nState - ready', '@@\n-State - ready\n+Done')
+        expect(result).toMatchObject({ status: 'conflict', reason: 'ambiguous_context' })
+    })
+
+    test('keeps recovery guidance for genuinely different context', () => {
+        const result = applyMemoryPatch('Price: €20 and value ≈ 2', '@@\n-Price: $20 and value = 2\n+Changed')
         expect(result).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found' })
-        expect('message' in result ? result.message : '').toContain('including Unicode punctuation and whitespace')
+        expect('message' in result ? result.message : '').toContain('other characters remain exact')
         expect('message' in result ? result.message : '').toContain('Run memory_search again')
     })
 
