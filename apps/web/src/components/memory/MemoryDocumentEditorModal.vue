@@ -197,7 +197,7 @@ async function loadAnalysis() {
     const result = await api.memoryFolders.getDocumentAnalysis(props.categoryId, props.sourceFile);
     if (sequence === analysisLoadSequence) {
       analysis.value = result;
-      analysisExpanded.value = result.items.length > 0;
+      analysisExpanded.value = result.items.length > 0 && !showHistory.value;
     }
   } catch (err) {
     if (sequence === analysisLoadSequence) analysisError.value = (err as Error).message || "Failed to load analysis";
@@ -244,12 +244,26 @@ async function selectRevision(id: string) {
 }
 
 async function toggleHistory() {
-  showHistory.value = !showHistory.value;
-  if (showHistory.value) await loadHistory();
-  else {
+  if (showHistory.value) {
+    showHistory.value = false;
     ++historyLoadSequence;
     historyLoading.value = false;
+    return;
   }
+  analysisExpanded.value = false;
+  showHistory.value = true;
+  await loadHistory();
+}
+
+function toggleFacts() {
+  if (showHistory.value) {
+    showHistory.value = false;
+    ++historyLoadSequence;
+    historyLoading.value = false;
+    analysisExpanded.value = true;
+    return;
+  }
+  analysisExpanded.value = !analysisExpanded.value;
 }
 
 async function restoreSelectedRevision() {
@@ -380,7 +394,7 @@ onBeforeUnmount(() => {
           :class="{ 'bg-accent-500/15 text-accent-300': analysisExpanded }"
           :disabled="analysisLoading"
           title="Extracted facts and entities"
-          @click="analysisExpanded = !analysisExpanded"
+          @click="toggleFacts"
         >
           <Icon
             icon="lucide:list-tree"

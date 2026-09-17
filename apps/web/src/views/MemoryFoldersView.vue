@@ -164,6 +164,15 @@ function revisionSourceLabel(source: RecentMemoryChange["source"]): string {
   return "Import";
 }
 
+function revisionSourceClass(source: RecentMemoryChange["source"]): string {
+  if (source === "dream") return "bg-amber-200/10 text-amber-200 ring-amber-200/20";
+  if (source === "ai") return "bg-emerald-500/10 text-emerald-300 ring-emerald-500/20";
+  if (source === "filesystem") return "bg-green-500/10 text-green-300 ring-green-500/20";
+  if (source === "user") return "bg-sky-500/10 text-sky-300 ring-sky-500/20";
+  if (source === "restore") return "bg-cyan-500/10 text-cyan-300 ring-cyan-500/20";
+  return "bg-violet-500/10 text-violet-300 ring-violet-500/20";
+}
+
 async function openDeletedHistory(memory: DeletedMemory) {
   deletedHistoryRef.value = memory.documentRef;
   deletedSelectedRevisionId.value = "";
@@ -884,7 +893,10 @@ onMounted(() => loadCategories());
                       v-if="change.status === 'deleted'"
                       class="rounded-full bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-300"
                     >Deleted</span>
-                    <span class="rounded-full bg-accent-500/10 px-2 py-1 text-[10px] font-medium text-accent-300">
+                    <span
+                      class="rounded-full px-2 py-1 text-[10px] font-medium ring-1 ring-inset"
+                      :class="revisionSourceClass(change.source)"
+                    >
                       {{ revisionSourceLabel(change.source) }}
                     </span>
                   </div>
@@ -906,13 +918,34 @@ onMounted(() => loadCategories());
         @close="showDeletedMemories = false"
       >
         <div class="max-h-96 space-y-2 overflow-y-auto">
-          <p v-if="deletedError" class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{{ deletedError }}</p>
-          <div v-if="deletedLoading" class="flex items-center gap-2 py-6 text-theme-500">
-            <Icon icon="lucide:loader-2" class="h-4 w-4 animate-spin" /> Loading deleted memories…
+          <p
+            v-if="deletedError"
+            class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          >
+            {{ deletedError }}
+          </p>
+          <div
+            v-if="deletedLoading"
+            class="flex items-center gap-2 py-6 text-theme-500"
+          >
+            <Icon
+              icon="lucide:loader-2"
+              class="h-4 w-4 animate-spin"
+            /> Loading deleted memories…
           </div>
-          <p v-else-if="deletedMemories.length === 0" class="py-6 text-sm text-theme-500">No deleted memories.</p>
+          <p
+            v-else-if="deletedMemories.length === 0"
+            class="py-6 text-sm text-theme-500"
+          >
+            No deleted memories.
+          </p>
           <template v-else-if="deletedHistoryRef">
-            <button class="text-xs text-theme-400 hover:text-theme-200" @click="deletedHistoryRef = ''">← All deleted memories</button>
+            <button
+              class="text-xs text-theme-400 hover:text-theme-200"
+              @click="deletedHistoryRef = ''"
+            >
+              ← All deleted memories
+            </button>
             <div class="grid gap-3 sm:grid-cols-[14rem_minmax(0,1fr)]">
               <div class="space-y-1">
                 <button
@@ -923,31 +956,51 @@ onMounted(() => loadCategories());
                   @click="selectDeletedRevision(revision.id)"
                 >
                   <div>Revision {{ revision.revisionNumber }} · {{ revision.source }}</div>
-                  <div class="mt-1 text-theme-600">{{ new Date(revision.createdAt).toLocaleString() }}</div>
+                  <div class="mt-1 text-theme-600">
+                    {{ new Date(revision.createdAt).toLocaleString() }}
+                  </div>
                 </button>
               </div>
-              <MemoryInlineDiff :segments="deletedRevisionDiff" class="max-h-72" />
+              <MemoryInlineDiff
+                :segments="deletedRevisionDiff"
+                class="max-h-72"
+              />
             </div>
             <button
               class="rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:opacity-50"
               :disabled="!deletedSelectedRevisionId || Boolean(restoringDocumentRef)"
               @click="restoreDeletedMemory(deletedMemories.find(item => item.documentRef === deletedHistoryRef)!)"
-            >Restore selected revision</button>
+            >
+              Restore selected revision
+            </button>
           </template>
-          <div v-for="memory in (deletedHistoryRef ? [] : deletedMemories)" :key="memory.documentRef" class="flex items-center justify-between gap-3 rounded-lg border border-theme-800 px-3 py-2">
+          <div
+            v-for="memory in (deletedHistoryRef ? [] : deletedMemories)"
+            :key="memory.documentRef"
+            class="flex items-center justify-between gap-3 rounded-lg border border-theme-800 px-3 py-2"
+          >
             <div class="min-w-0">
-              <div class="truncate text-sm text-theme-200">{{ memory.fileName }}</div>
-              <div class="text-xs text-theme-500">Deleted {{ new Date(memory.deletedAt).toLocaleString() }}</div>
+              <div class="truncate text-sm text-theme-200">
+                {{ memory.fileName }}
+              </div>
+              <div class="text-xs text-theme-500">
+                Deleted {{ new Date(memory.deletedAt).toLocaleString() }}
+              </div>
             </div>
             <div class="flex gap-2">
-            <button class="rounded-lg border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800" @click="openDeletedHistory(memory)">History</button>
-            <button
-              :disabled="restoringDocumentRef === memory.documentRef"
-              class="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-50"
-              @click="restoreDeletedMemory(memory)"
-            >
-              {{ restoringDocumentRef === memory.documentRef ? "Restoring…" : "Restore" }}
-            </button>
+              <button
+                class="rounded-lg border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800"
+                @click="openDeletedHistory(memory)"
+              >
+                History
+              </button>
+              <button
+                :disabled="restoringDocumentRef === memory.documentRef"
+                class="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-50"
+                @click="restoreDeletedMemory(memory)"
+              >
+                {{ restoringDocumentRef === memory.documentRef ? "Restoring…" : "Restore" }}
+              </button>
             </div>
           </div>
         </div>

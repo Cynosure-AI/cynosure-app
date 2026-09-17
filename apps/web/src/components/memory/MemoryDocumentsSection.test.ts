@@ -126,7 +126,8 @@ describe('MemoryDocumentsSection drag targets', () => {
     ])
 
     expect(wrapper.get('[data-space-id="uncategorized"]').text()).toContain('2 (56)')
-    expect(wrapper.get('[data-space-id="archive"]').text()).toContain('4 (0)')
+    expect(wrapper.get('[data-space-id="archive"]').text()).toContain('4')
+    expect(wrapper.get('[data-space-id="archive"]').text()).not.toContain('(0)')
   })
 
   test('marks direct folder clicks as navigation so a consumed file deep link can be cleared', async () => {
@@ -147,6 +148,11 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(menu?.textContent).toContain('Add subfolder')
     expect(menu?.textContent).toContain('Rename')
     expect(menu?.textContent).toContain('Delete')
+
+    const deleteButton = menu?.querySelector('[data-testid="delete-memory-folder"]') as HTMLButtonElement
+    deleteButton.click()
+    await nextTick()
+    expect(wrapper.emitted('delete-folder')).toEqual([[spaces[1]]])
   })
 
   test('does not allow the Uncategorized folder to be renamed', async () => {
