@@ -74,6 +74,8 @@ describe('MemoryDocumentEditorModal', () => {
 
     expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(true)
     expect(wrapper.find('textarea[aria-label="Large memory document content"]').exists()).toBe(false)
+    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).not.toContain('bg-accent-500/15')
+    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('hidden')
   })
 
   test('renders ordered summaries, tags, and extracted knowledge in the analysis rail', async () => {
@@ -104,6 +106,9 @@ describe('MemoryDocumentEditorModal', () => {
     expect(wrapper.text()).toContain('uses')
     expect(wrapper.text()).toContain('TypeScript')
     expect(wrapper.text()).toContain('Atlas')
+    expect(wrapper.get('[title="Extracted facts and entities"]').text()).toContain('Facts')
+    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).toContain('bg-accent-500/15')
+    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('flex')
     expect(wrapper.text()).not.toContain('The first summary.')
     const firstChunk = wrapper.get('[aria-label="Chunk 1 start"]')
     firstChunk.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))

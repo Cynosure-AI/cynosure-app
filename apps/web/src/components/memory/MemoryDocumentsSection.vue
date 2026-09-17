@@ -356,7 +356,10 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
                 class="rounded bg-accent-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-400"
                 title="Folder grants made at the root include all current and future descendants"
               >Root</span>
-              <span class="text-xs text-theme-500">{{ space.fileCount }}</span>
+              <span
+                class="text-xs text-theme-500"
+                :title="`${space.fileCount} in this folder, ${space.descendantFileCount || 0} in subfolders`"
+              >{{ space.fileCount }} ({{ space.descendantFileCount || 0 }})</span>
             </button>
             <span class="relative shrink-0">
               <button

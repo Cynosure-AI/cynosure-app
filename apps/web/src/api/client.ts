@@ -484,6 +484,8 @@ export const api = {
       post<{ success: boolean; documentRef: string; revision: string; chunksStored: number }>(`/api/memory-folders/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}/restore`, { expectedRevision }),
     listDeleted: () =>
       get<Array<{ documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number }>>('/api/memory-folders/deleted'),
+    listRecentChanges: (limit = 20) =>
+      get<import('./types').RecentMemoryChange[]>(`/api/memory-folders/recent-changes?limit=${limit}`),
     ingestFile: (categoryId: string, fileName: string, content: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string; job?: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
         `/api/memory-folders/${memoryFolderPathId(categoryId)}/ingest-file`, { fileName, content }

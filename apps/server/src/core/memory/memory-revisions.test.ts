@@ -6,6 +6,7 @@ import { closeDb, getDb } from '../../db/database.js'
 import {
   getMemoryDocument,
   getMemoryRevision,
+  listRecentMemoryChanges,
   listMemoryRevisions,
   markMemoryDocumentDeleted,
   markMemoryCategoriesDeleted,
@@ -60,6 +61,30 @@ describe('memory revision snapshots', () => {
       { type: 'added', text: 'Hamburg' },
       { type: 'unchanged', text: '.\n' },
     ])
+  })
+
+  test('lists recent changes across documents with provenance and inline diffs', () => {
+    const first = recordMemoryRevision({
+      documentId: 'doc-a', documentRef: 'a#stable', categoryId: 'projects',
+      fileName: 'a.md', content: 'Status: planned', context: { source: 'dream' },
+    })
+    const second = recordMemoryRevision({
+      documentId: 'doc-a', documentRef: 'a#stable', categoryId: 'projects',
+      fileName: 'a.md', content: 'Status: shipped', context: { source: 'user' },
+    })
+
+    const changes = listRecentMemoryChanges()
+
+    expect(changes.map(change => change.id)).toEqual([second.id, first.id])
+    expect(changes[0]).toMatchObject({
+      documentRef: 'a#stable', categoryId: 'projects', fileName: 'a.md', source: 'user', status: 'active',
+    })
+    expect(changes[0]?.segments).toEqual([
+      { type: 'unchanged', text: 'Status: ' },
+      { type: 'removed', text: 'planned' },
+      { type: 'added', text: 'shipped' },
+    ])
+    expect(changes[1]?.segments).toEqual([{ type: 'added', text: 'Status: planned' }])
   })
 
   test('keeps identity stable across moves and reactivates a matching deleted snapshot', () => {

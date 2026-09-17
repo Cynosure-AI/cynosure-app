@@ -5,7 +5,7 @@ import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
-import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder, MemoryDiffSegment, MemoryRevisionSummary } from "../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder, MemoryDiffSegment, MemoryRevisionSummary, RecentMemoryChange } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
@@ -88,6 +88,10 @@ const deletedHistoryRef = ref("");
 const deletedRevisions = ref<MemoryRevisionSummary[]>([]);
 const deletedSelectedRevisionId = ref("");
 const deletedRevisionDiff = ref<MemoryDiffSegment[]>([]);
+const showRecentChanges = ref(false);
+const recentChanges = ref<RecentMemoryChange[]>([]);
+const recentChangesLoading = ref(false);
+const recentChangesError = ref("");
 const activePanel = ref<MemoryPanel>("documents");
 
 const graph = ref<KnowledgeGraph | null>(null);
@@ -136,6 +140,28 @@ async function openDeletedMemories() {
   } finally {
     deletedLoading.value = false;
   }
+}
+
+async function openRecentChanges() {
+  showRecentChanges.value = true;
+  recentChangesLoading.value = true;
+  recentChangesError.value = "";
+  try {
+    recentChanges.value = await api.memoryFolders.listRecentChanges();
+  } catch (error) {
+    recentChangesError.value = (error as Error).message || "Failed to load recent memory changes";
+  } finally {
+    recentChangesLoading.value = false;
+  }
+}
+
+function revisionSourceLabel(source: RecentMemoryChange["source"]): string {
+  if (source === "ai") return "Model";
+  if (source === "dream") return "Dream";
+  if (source === "user") return "User";
+  if (source === "filesystem") return "File system";
+  if (source === "restore") return "Restore";
+  return "Import";
 }
 
 async function openDeletedHistory(memory: DeletedMemory) {
@@ -607,11 +633,27 @@ onMounted(() => loadCategories());
               />
               <button
                 v-if="activePanel === 'documents'"
-                class="flex items-center gap-2 rounded-lg border border-theme-700 px-3 py-2 text-sm font-medium text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"
+                class="rounded-lg border border-theme-700 p-2 text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"
+                title="Deleted memories"
+                aria-label="Deleted memories"
                 @click="openDeletedMemories"
               >
-                <Icon icon="lucide:archive-restore" class="h-4 w-4" />
-                Deleted
+                <Icon
+                  icon="lucide:trash-2"
+                  class="h-4 w-4"
+                />
+              </button>
+              <button
+                v-if="activePanel === 'documents'"
+                class="rounded-lg border border-theme-700 p-2 text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100"
+                title="Recent memory changes"
+                aria-label="Recent memory changes"
+                @click="openRecentChanges"
+              >
+                <Icon
+                  icon="lucide:history"
+                  class="h-4 w-4"
+                />
               </button>
               <button
                 v-if="activePanel === 'documents'"
@@ -784,6 +826,78 @@ onMounted(() => loadCategories());
           </div>
         </div>
       </Teleport>
+
+      <ModalDialog
+        :show="showRecentChanges"
+        title="Recent Memory Changes"
+        icon="lucide:history"
+        max-width="max-w-4xl"
+        @close="showRecentChanges = false"
+      >
+        <div class="max-h-[65vh] overflow-y-auto pr-1">
+          <p
+            v-if="recentChangesError"
+            class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          >
+            {{ recentChangesError }}
+          </p>
+          <div
+            v-if="recentChangesLoading"
+            class="flex items-center gap-2 py-8 text-theme-500"
+          >
+            <Icon
+              icon="lucide:loader-2"
+              class="h-4 w-4 animate-spin"
+            />
+            Loading recent changes…
+          </div>
+          <p
+            v-else-if="recentChanges.length === 0"
+            class="py-8 text-sm text-theme-500"
+          >
+            No memory changes have been recorded yet.
+          </p>
+          <ol
+            v-else
+            class="space-y-4"
+          >
+            <li
+              v-for="change in recentChanges"
+              :key="change.id"
+              class="relative pl-7 before:absolute before:bottom-[-1rem] before:left-[9px] before:top-5 before:w-px before:bg-theme-800 last:before:hidden"
+            >
+              <span
+                class="absolute left-0 top-2 h-[19px] w-[19px] rounded-full border-4 border-theme-950 bg-accent-500"
+              />
+              <article class="overflow-hidden rounded-xl border border-theme-800 bg-theme-900/35">
+                <header class="flex flex-wrap items-start justify-between gap-2 border-b border-theme-800 px-4 py-3">
+                  <div class="min-w-0">
+                    <h3 class="truncate text-sm font-medium text-theme-100">
+                      {{ change.fileName }}
+                    </h3>
+                    <p class="mt-0.5 text-xs text-theme-500">
+                      {{ new Date(change.createdAt).toLocaleString() }} · Revision {{ change.revisionNumber }}
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span
+                      v-if="change.status === 'deleted'"
+                      class="rounded-full bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-300"
+                    >Deleted</span>
+                    <span class="rounded-full bg-accent-500/10 px-2 py-1 text-[10px] font-medium text-accent-300">
+                      {{ revisionSourceLabel(change.source) }}
+                    </span>
+                  </div>
+                </header>
+                <MemoryInlineDiff
+                  :segments="change.segments"
+                  class="max-h-64 rounded-none border-0"
+                />
+              </article>
+            </li>
+          </ol>
+        </div>
+      </ModalDialog>
 
       <ModalDialog
         :show="showDeletedMemories"

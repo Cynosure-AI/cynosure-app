@@ -192,9 +192,13 @@ async function loadAnalysis() {
   analysisLoading.value = true;
   analysisError.value = "";
   analysis.value = null;
+  analysisExpanded.value = false;
   try {
     const result = await api.memoryFolders.getDocumentAnalysis(props.categoryId, props.sourceFile);
-    if (sequence === analysisLoadSequence) analysis.value = result;
+    if (sequence === analysisLoadSequence) {
+      analysis.value = result;
+      analysisExpanded.value = result.items.length > 0;
+    }
   } catch (err) {
     if (sequence === analysisLoadSequence) analysisError.value = (err as Error).message || "Failed to load analysis";
   } finally {
@@ -359,19 +363,7 @@ onBeforeUnmount(() => {
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
         <button
-          class="mr-1 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100 lg:hidden"
-          :class="{ 'bg-accent-500/15 text-accent-300': analysisExpanded }"
-          title="Document analysis"
-          @click="analysisExpanded = !analysisExpanded"
-        >
-          <Icon
-            icon="lucide:panel-left"
-            class="h-4 w-4"
-          />
-          Analysis
-        </button>
-        <button
-          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
+          class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
           :class="{ 'bg-accent-500/15 text-accent-300': showHistory }"
           :disabled="!documentRef || loading"
           title="Revision history"
@@ -382,6 +374,19 @@ onBeforeUnmount(() => {
             class="h-4 w-4"
           />
           History
+        </button>
+        <button
+          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40"
+          :class="{ 'bg-accent-500/15 text-accent-300': analysisExpanded }"
+          :disabled="analysisLoading"
+          title="Extracted facts and entities"
+          @click="analysisExpanded = !analysisExpanded"
+        >
+          <Icon
+            icon="lucide:list-tree"
+            class="h-4 w-4"
+          />
+          Facts
         </button>
         <button
           v-for="button in [
@@ -490,7 +495,7 @@ onBeforeUnmount(() => {
           Loading…
         </div>
         <aside
-          class="absolute inset-0 z-20 min-h-0 flex-col border-r border-theme-800 bg-theme-950 lg:static lg:flex lg:w-80 lg:shrink-0"
+          class="absolute inset-0 z-20 min-h-0 flex-col border-r border-theme-800 bg-theme-950 lg:static lg:w-80 lg:shrink-0"
           :class="analysisExpanded ? 'flex' : 'hidden'"
           aria-label="Document analysis"
         >
@@ -498,8 +503,8 @@ onBeforeUnmount(() => {
             <div class="flex shrink-0 items-center justify-between px-3 py-2">
               <span class="text-[11px] font-semibold uppercase tracking-wide text-theme-400">Extracted knowledge</span>
               <button
-                class="p-1 text-theme-500 hover:text-theme-200 lg:hidden"
-                title="Close analysis"
+                class="p-1 text-theme-500 hover:text-theme-200"
+                title="Close facts"
                 @click="analysisExpanded = false"
               >
                 <Icon

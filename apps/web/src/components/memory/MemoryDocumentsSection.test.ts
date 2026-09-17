@@ -119,6 +119,16 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(archive.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
   })
 
+  test('shows direct and descendant document counts for each folder', () => {
+    const wrapper = mountSection([
+      { ...spaces[0], fileCount: 2, descendantFileCount: 56 },
+      { ...spaces[1], fileCount: 4, descendantFileCount: 0 },
+    ])
+
+    expect(wrapper.get('[data-space-id="uncategorized"]').text()).toContain('2 (56)')
+    expect(wrapper.get('[data-space-id="archive"]').text()).toContain('4 (0)')
+  })
+
   test('marks direct folder clicks as navigation so a consumed file deep link can be cleared', async () => {
     const wrapper = mountSection()
     await wrapper.get('[data-space-id="archive"] button.min-w-0').trigger('click')
