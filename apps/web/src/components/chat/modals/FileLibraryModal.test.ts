@@ -58,12 +58,12 @@ describe('FileLibraryModal', () => {
     })
   })
 
-  test('selects a generated artifact from the Artifacts tab', async () => {
+  test('selects a generated file from the Generated tab', async () => {
     const wrapper = mountModal()
     await wrapper.setProps({ show: true })
     await flushPromises()
 
-    const artifactsTab = wrapper.findAll('[role="tab"]').find((button) => button.text().includes('Artifacts'))
+    const artifactsTab = wrapper.findAll('[role="tab"]').find((button) => button.text().includes('Generated'))
     expect(artifactsTab).toBeTruthy()
     await artifactsTab!.trigger('click')
     await flushPromises()
@@ -105,7 +105,7 @@ describe('FileLibraryModal', () => {
     const wrapper = mountModal()
     await wrapper.setProps({ show: true })
     await flushPromises()
-    await wrapper.findAll('[role="tab"]').find((button) => button.text().includes('Artifacts'))!.trigger('click')
+    await wrapper.findAll('[role="tab"]').find((button) => button.text().includes('Generated'))!.trigger('click')
     await flushPromises()
 
     const videoButton = wrapper.findAll('button').find((button) => button.text().includes('clip.mp4'))

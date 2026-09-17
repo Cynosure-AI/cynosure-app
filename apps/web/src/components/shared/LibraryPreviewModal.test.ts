@@ -1,8 +1,8 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, test } from 'vitest'
-import ArtifactPreviewModal from './ArtifactPreviewModal.vue'
+import LibraryPreviewModal from './LibraryPreviewModal.vue'
 
-describe('ArtifactPreviewModal', () => {
+describe('LibraryPreviewModal', () => {
   afterEach(() => {
     document.body.innerHTML = ''
   })
@@ -14,7 +14,7 @@ describe('ArtifactPreviewModal', () => {
       kind: 'image' as const,
       ext: 'PNG',
     }
-    mount(ArtifactPreviewModal, {
+    mount(LibraryPreviewModal, {
       props: { artifact },
       attachTo: document.body,
       global: { stubs: { Icon: true } },
@@ -27,7 +27,7 @@ describe('ArtifactPreviewModal', () => {
   })
 
   test('uses a sandboxed inline preview for supported documents', () => {
-    mount(ArtifactPreviewModal, {
+    mount(LibraryPreviewModal, {
       props: {
         artifact: {
           href: 'about:blank#notes.md',
@@ -46,7 +46,7 @@ describe('ArtifactPreviewModal', () => {
   })
 
   test('emits close from the modal action', async () => {
-    const wrapper = mount(ArtifactPreviewModal, {
+    const wrapper = mount(LibraryPreviewModal, {
       props: {
         artifact: {
           href: '/api/files?path=%2Ftmp%2Freport.docx',
@@ -67,7 +67,7 @@ describe('ArtifactPreviewModal', () => {
   })
 
   test('links back to the originating chat when available', () => {
-    mount(ArtifactPreviewModal, {
+    mount(LibraryPreviewModal, {
       props: {
         artifact: {
           href: '/api/files?path=%2Ftmp%2Fgenerated.png',

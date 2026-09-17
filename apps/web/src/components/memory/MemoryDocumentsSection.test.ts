@@ -137,6 +137,26 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(wrapper.emitted('category-navigation')).toHaveLength(1)
   })
 
+  test('uses folder-first navigation with a back button on mobile', async () => {
+    const wrapper = mountSection()
+    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('block')
+    expect(wrapper.get('[data-testid="memory-document-drop-zone"]').classes()).toContain('hidden')
+
+    await wrapper.get('[data-space-id="archive"] button.min-w-0').trigger('click')
+    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('hidden')
+    expect(wrapper.get('[data-testid="memory-document-drop-zone"]').classes()).toContain('block')
+
+    await wrapper.get('[data-testid="memory-mobile-folder-back"]').trigger('click')
+    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('block')
+    expect(wrapper.get('[data-testid="memory-document-drop-zone"]').classes()).toContain('hidden')
+  })
+
+  test('opens the document pane immediately for a linked file', () => {
+    const wrapper = mountSection(spaces, { focusFile: 'notes.md' })
+    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('hidden')
+    expect(wrapper.get('[data-testid="memory-document-drop-zone"]').classes()).toContain('block')
+  })
+
   test('groups folder actions behind an ellipsis menu', async () => {
     const wrapper = mountSection()
     const archive = wrapper.get('[data-space-id="archive"]')

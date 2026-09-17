@@ -38,6 +38,7 @@ const dropTargetSpaceId = ref<string | null>(null);
 const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
 const openFolderMenuId = ref<string | null>(null);
 const folderMenuStyle = ref<Record<string, string>>({});
+const mobileDocumentsVisible = ref(Boolean(props.focusFile));
 
 const openFolderMenuSpace = computed(() =>
   props.spaces.find((space) => space.id === openFolderMenuId.value) || null,
@@ -177,11 +178,20 @@ function toggleFolder(space: MemoryFolder) {
 
 watch(() => props.spaces, initializeFolderState, { immediate: true });
 watch([() => props.focusFile, () => props.selectedCategoryId], revealFocusedCategory);
+watch(() => props.focusFile, (focusFile) => {
+  if (focusFile) mobileDocumentsVisible.value = true;
+});
 
 function selectSpace(categoryId: string) {
   openFolderMenuId.value = null;
   emit("update:selectedCategoryId", categoryId);
   emit("category-navigation");
+  mobileDocumentsVisible.value = true;
+}
+
+function showMobileFolders(): void {
+  openFolderMenuId.value = null;
+  mobileDocumentsVisible.value = false;
 }
 
 function isDocumentDrag(e: DragEvent): boolean {
@@ -291,7 +301,11 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
 <template>
   <div class="p-4 sm:p-6 lg:p-8">
     <div class="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-      <div class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45">
+      <div
+        data-testid="memory-folder-pane"
+        class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
+        :class="mobileDocumentsVisible ? 'hidden md:block' : 'block'"
+      >
         <div class="flex items-center justify-between px-4 py-3 border-b border-theme-800 bg-theme-900/50">
           <div class="text-xs font-medium uppercase tracking-wide text-theme-400">
             Categories
@@ -404,11 +418,26 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
         v-if="selectedCategoryId"
         data-testid="memory-document-drop-zone"
         class="relative min-w-0"
+        :class="mobileDocumentsVisible ? 'block' : 'hidden md:block'"
         @dragenter="onDragEnter($event)"
         @dragleave="onDragLeave($event)"
         @dragover="onDragOver($event)"
         @drop="onFileDrop($event)"
       >
+        <button
+          type="button"
+          data-testid="memory-mobile-folder-back"
+          class="mb-3 inline-flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-900/70 px-3 py-2 text-sm font-medium text-theme-300 transition hover:border-theme-600 hover:text-theme-100 md:hidden"
+          aria-label="Back to memory folders"
+          @click="showMobileFolders"
+        >
+          <Icon
+            icon="lucide:arrow-left"
+            class="h-4 w-4"
+          />
+          Folders
+        </button>
+
         <div
           v-if="dragCounter > 0 && !dropTargetSpaceId"
           class="absolute inset-0 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-accent-500/40 bg-accent-500/10 pointer-events-none"

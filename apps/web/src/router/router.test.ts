@@ -21,12 +21,20 @@ describe('router onboarding guard', () => {
     expect(router.currentRoute.value.name).toBe('settings')
   })
 
-  test('exposes the artifacts workspace route', async () => {
+  test('exposes the library workspace route and redirects legacy artifact URLs', async () => {
     localStorage.setItem(SK_ONBOARDING_COMPLETE, 'true')
     const { default: router } = await import('./index')
+    await router.push('/library')
+    expect(router.currentRoute.value.name).toBe('library')
+    expect(router.currentRoute.value.path).toBe('/library/generated')
+
     await router.push('/artifacts')
-    expect(router.currentRoute.value.name).toBe('artifacts')
-    expect(router.currentRoute.value.path).toBe('/artifacts/generated')
+    expect(router.currentRoute.value.name).toBe('library')
+    expect(router.currentRoute.value.path).toBe('/library/generated')
+
+    await router.push('/artifacts/uploads')
+    expect(router.currentRoute.value.name).toBe('library')
+    expect(router.currentRoute.value.path).toBe('/library/uploads')
   })
 
   test('uses clean canonical URLs for chat and scheduled jobs', async () => {

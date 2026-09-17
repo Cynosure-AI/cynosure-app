@@ -4,14 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { api } from '../api/client'
 import type { ActivityArtifact, ActivityItem, ConversationUpload } from '../api/types'
-import ArtifactPreviewModal from '../components/shared/ArtifactPreviewModal.vue'
+import LibraryPreviewModal from '../components/shared/LibraryPreviewModal.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 
-type ArtifactPanel = 'generated' | 'uploads'
-type ArtifactFilter = 'all' | ActivityArtifact['kind']
-type ArtifactViewMode = 'grid' | 'list'
+type LibraryPanel = 'generated' | 'uploads'
+type LibraryFilter = 'all' | ActivityArtifact['kind']
+type LibraryViewMode = 'grid' | 'list'
 
-interface ArtifactEntry {
+interface LibraryEntry {
   id: string
   artifact: ActivityArtifact
   createdAt: number
@@ -25,21 +25,21 @@ interface ArtifactEntry {
 const sections = [
   {
     id: 'generated',
-    path: '/artifacts/generated',
-    label: 'Artifacts',
+    path: '/library/generated',
+    label: 'Generated',
     description: 'Browse images, videos, audio, and documents generated across your workspace.',
     icon: 'lucide:sparkles',
   },
   {
     id: 'uploads',
-    path: '/artifacts/uploads',
+    path: '/library/uploads',
     label: 'Uploads',
     description: 'Browse durable copies of documents attached to your conversations.',
     icon: 'lucide:paperclip',
   },
 ] as const
 
-const tabs: TabDef<ArtifactPanel>[] = sections.map((section) => ({
+const tabs: TabDef<LibraryPanel>[] = sections.map((section) => ({
   value: section.id,
   label: section.label,
   icon: section.icon,
@@ -47,12 +47,12 @@ const tabs: TabDef<ArtifactPanel>[] = sections.map((section) => ({
 
 const route = useRoute()
 const router = useRouter()
-const activePanel = ref<ArtifactPanel>('generated')
+const activePanel = ref<LibraryPanel>('generated')
 const activityItems = ref<ActivityItem[]>([])
 const uploadItems = ref<ConversationUpload[]>([])
-const selectedFilter = ref<ArtifactFilter>('all')
-const viewMode = ref<ArtifactViewMode>('grid')
-const selectedEntry = ref<ArtifactEntry | null>(null)
+const selectedFilter = ref<LibraryFilter>('all')
+const viewMode = ref<LibraryViewMode>('grid')
+const selectedEntry = ref<LibraryEntry | null>(null)
 const searchQuery = ref('')
 const loading = ref(true)
 const loadingMore = ref(false)
@@ -62,7 +62,7 @@ const PAGE_SIZE = 60
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let loadGeneration = 0
 
-const filterOptions: { value: ArtifactFilter; label: string; icon: string }[] = [
+const filterOptions: { value: LibraryFilter; label: string; icon: string }[] = [
   { value: 'all', label: 'All', icon: 'lucide:shapes' },
   { value: 'image', label: 'Images', icon: 'lucide:image' },
   { value: 'video', label: 'Videos', icon: 'lucide:film' },
@@ -72,8 +72,8 @@ const filterOptions: { value: ArtifactFilter; label: string; icon: string }[] = 
 
 const activeSection = computed(() => sections.find((section) => section.id === activePanel.value) || sections[0])
 
-const generatedEntries = computed<ArtifactEntry[]>(() => {
-  const entries: ArtifactEntry[] = []
+const generatedEntries = computed<LibraryEntry[]>(() => {
+  const entries: LibraryEntry[] = []
   const seen = new Set<string>()
 
   for (const item of activityItems.value) {
@@ -93,7 +93,7 @@ const generatedEntries = computed<ArtifactEntry[]>(() => {
   return entries
 })
 
-const uploads = computed<ArtifactEntry[]>(() => uploadItems.value.map((upload) => ({
+const uploads = computed<LibraryEntry[]>(() => uploadItems.value.map((upload) => ({
   id: upload.id,
   artifact: {
     href: upload.href,
@@ -117,14 +117,14 @@ const visibleEntries = computed(() => {
 })
 
 const emptyTitle = computed(() => {
-  if (searchQuery.value) return activePanel.value === 'uploads' ? 'No matching uploads' : 'No matching artifacts'
+  if (searchQuery.value) return activePanel.value === 'uploads' ? 'No matching uploads' : 'No matching generated files'
   if (activePanel.value === 'uploads') return 'No uploads yet'
-  if (selectedFilter.value === 'all') return 'No artifacts yet'
-  return `No ${filterOptions.find((option) => option.value === selectedFilter.value)?.label.toLowerCase() || 'artifacts'} yet`
+  if (selectedFilter.value === 'all') return 'No generated files yet'
+  return `No ${filterOptions.find((option) => option.value === selectedFilter.value)?.label.toLowerCase() || 'generated files'} yet`
 })
 
 const emptyDescription = computed(() => {
-  if (searchQuery.value) return `Try a different search${activePanel.value === 'generated' ? ' or artifact type' : ''}.`
+  if (searchQuery.value) return `Try a different search${activePanel.value === 'generated' ? ' or file type' : ''}.`
   if (activePanel.value === 'uploads') return 'Documents attached to chat messages will appear here and remain available for edits and retries.'
   if (selectedFilter.value !== 'all') {
     return hasMore.value
@@ -134,7 +134,7 @@ const emptyDescription = computed(() => {
   return 'Images, videos, audio, and files generated by your AI will appear here.'
 })
 
-function filterCount(filter: ArtifactFilter): number {
+function filterCount(filter: LibraryFilter): number {
   if (filter === 'all') return generatedEntries.value.length
   return generatedEntries.value.filter((entry) => entry.artifact.kind === filter).length
 }
@@ -218,7 +218,7 @@ async function loadEntries(reset = false): Promise<void> {
   }
 }
 
-function selectPanel(panel: ArtifactPanel): void {
+function selectPanel(panel: LibraryPanel): void {
   const section = sections.find((candidate) => candidate.id === panel)
   if (section && route.path !== section.path) void router.push(section.path)
 }
@@ -262,7 +262,7 @@ onUnmounted(() => clearTimeout(searchTimer))
       <div class="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
-            Artifacts
+            Library
           </h1>
           <p class="mt-1 text-sm leading-relaxed text-theme-500">
             {{ activeSection.description }}
@@ -271,7 +271,7 @@ onUnmounted(() => clearTimeout(searchTimer))
 
         <div class="flex w-full shrink-0 items-center gap-2 sm:w-auto">
           <label class="relative min-w-0 flex-1 sm:w-80 sm:flex-none">
-            <span class="sr-only">Search {{ activePanel === 'uploads' ? 'uploads' : 'artifacts' }}</span>
+            <span class="sr-only">Search {{ activePanel === 'uploads' ? 'uploads' : 'generated files' }}</span>
             <Icon
               icon="lucide:search"
               class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
@@ -330,7 +330,7 @@ onUnmounted(() => clearTimeout(searchTimer))
             v-for="option in filterOptions"
             :key="option.value"
             type="button"
-            class="artifact-filter-button inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
+            class="library-filter-button inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
             :aria-pressed="selectedFilter === option.value"
             :class="selectedFilter === option.value
               ? 'border-accent-500/50 bg-accent-500/15 text-accent-200'
@@ -359,7 +359,7 @@ onUnmounted(() => clearTimeout(searchTimer))
         <div
           class="flex shrink-0 items-center rounded-lg border border-theme-700 bg-theme-950/70 p-1"
           role="group"
-          aria-label="Artifact view layout"
+          aria-label="Library view layout"
         >
           <button
             v-for="mode in ([
@@ -417,7 +417,7 @@ onUnmounted(() => clearTimeout(searchTimer))
           class="mb-3 h-8 w-8 text-red-400"
         />
         <p class="font-medium text-theme-200">
-          Couldn't load {{ activePanel === 'uploads' ? 'uploads' : 'artifacts' }}
+          Couldn't load {{ activePanel === 'uploads' ? 'uploads' : 'generated files' }}
         </p>
         <p class="mt-1 max-w-md text-sm text-theme-500">
           {{ error }}
@@ -555,7 +555,7 @@ onUnmounted(() => clearTimeout(searchTimer))
           icon="lucide:loader-2"
           class="h-4 w-4 animate-spin"
         />
-        Loading more {{ activePanel === 'uploads' ? 'uploads' : 'artifacts' }}…
+        Loading more {{ activePanel === 'uploads' ? 'uploads' : 'generated files' }}…
       </div>
       <div
         v-else-if="hasMore"
@@ -571,7 +571,7 @@ onUnmounted(() => clearTimeout(searchTimer))
       </div>
     </div>
 
-    <ArtifactPreviewModal
+    <LibraryPreviewModal
       :artifact="selectedEntry?.artifact || null"
       :created-at="selectedEntry?.createdAt"
       :agent-name="selectedEntry?.agentName"
