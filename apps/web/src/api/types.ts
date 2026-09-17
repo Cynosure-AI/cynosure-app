@@ -361,6 +361,8 @@ export interface MemoryFolder {
     isUncategorized: boolean
     createdAt: number
     fileCount: number
+    /** Direct files contained by descendant folders (excluding this folder). */
+    descendantFileCount?: number
 }
 
 export interface MemoryFileStatus {
@@ -408,6 +410,14 @@ export interface MemoryRevisionSummary {
 export interface MemoryDiffSegment {
     type: 'unchanged' | 'added' | 'removed'
     text: string
+}
+
+export interface RecentMemoryChange extends MemoryRevisionSummary {
+    documentRef: string
+    categoryId: string
+    fileName: string
+    status: 'active' | 'deleted'
+    segments: MemoryDiffSegment[]
 }
 
 export interface MemoryDocumentKnowledgePreview {

@@ -53,7 +53,7 @@ import {
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
 import { buildMemoryFolderFilter } from '../core/memory/memory-folder-scope.js'
-import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, markMemoryCategoriesDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
+import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryCategoriesDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -81,6 +81,7 @@ interface MemoryFolderData {
     isUncategorized: boolean
     createdAt: number
     fileCount: number
+    descendantFileCount: number
 }
 
 export interface MemoryFileStatus {
@@ -117,7 +118,7 @@ export interface MemoryFileSearchResult extends MemoryFileStatus {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function rowToData(row: MemoryFolderRow, fileCount: number): MemoryFolderData {
+function rowToData(row: MemoryFolderRow, fileCount: number, descendantFileCount = 0): MemoryFolderData {
     const folderData: MemoryFolderDirectoryData = memoryFolderDirectoryData(row)
     return {
         id: row.id,
@@ -131,6 +132,7 @@ function rowToData(row: MemoryFolderRow, fileCount: number): MemoryFolderData {
         isUncategorized: row.is_uncategorized === 1,
         createdAt: row.created_at,
         fileCount,
+        descendantFileCount,
     }
 }
 
@@ -366,6 +368,11 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
       FROM memory_documents WHERE status = 'deleted' ORDER BY deleted_at DESC
     `).all())
 
+    app.get<{ Querystring: { limit?: string } }>('/recent-changes', async (req) => {
+        const requestedLimit = Number.parseInt(req.query.limit || '20', 10)
+        return listRecentMemoryChanges(Number.isFinite(requestedLimit) ? requestedLimit : 20)
+    })
+
     // GET /api/memory-folders/jobs — list recent background indexing jobs
     app.get('/jobs', async () => {
         return listMemoryIndexJobs()
@@ -405,9 +412,20 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
         const rows = db.prepare('SELECT * FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as MemoryFolderRow[]
+        const directCounts = new Map(rows.map(row => [
+            row.id,
+            listFilesInFolder(row.directory_path).filter(file => file.supported).length,
+        ]))
+        const folderData = new Map(rows.map(row => [row.id, memoryFolderDirectoryData(row)]))
         return rows.map(row => {
-            const files = listFilesInFolder(row.directory_path).filter(f => f.supported)
-            return rowToData(row, files.length)
+            const path = folderData.get(row.id)?.categoryPath || ''
+            const descendantFileCount = rows.reduce((total, candidate) => {
+                if (candidate.id === row.id) return total
+                const candidatePath = folderData.get(candidate.id)?.categoryPath || ''
+                const isDescendant = path ? candidatePath.startsWith(`${path}/`) : Boolean(candidatePath)
+                return isDescendant ? total + (directCounts.get(candidate.id) || 0) : total
+            }, 0)
+            return rowToData(row, directCounts.get(row.id) || 0, descendantFileCount)
         })
     })
 

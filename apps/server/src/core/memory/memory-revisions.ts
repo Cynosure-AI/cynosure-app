@@ -27,6 +27,14 @@ export interface MemoryDiffSegment {
   text: string
 }
 
+export interface RecentMemoryChange extends MemoryRevisionSummary {
+  documentRef: string
+  categoryId: string
+  fileName: string
+  status: 'active' | 'deleted'
+  segments: MemoryDiffSegment[]
+}
+
 interface DocumentRow {
   document_id: string
   document_ref: string
@@ -130,6 +138,43 @@ export function listMemoryRevisions(documentRef: string): MemoryRevisionSummary[
     JOIN memory_documents d ON d.document_id = r.document_id
     WHERE d.document_ref = ? ORDER BY r.revision_number DESC
   `).all(documentRef) as RevisionRow[]).map(rowToSummary)
+}
+
+/** Latest content changes across the memory space, including a readable diff
+ * against each document's preceding snapshot. */
+export function listRecentMemoryChanges(limit = 20): RecentMemoryChange[] {
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)))
+  const rows = getDb().prepare(`
+    SELECT r.*, d.document_ref, d.category_id, d.file_name, d.status,
+      (SELECT previous.content FROM memory_document_revisions previous
+       WHERE previous.document_id = r.document_id
+         AND previous.revision_number < r.revision_number
+       ORDER BY previous.revision_number DESC LIMIT 1) AS previous_content
+    FROM memory_document_revisions r
+    JOIN memory_documents d ON d.document_id = r.document_id
+    ORDER BY r.created_at DESC, r.rowid DESC
+    LIMIT ?
+  `).all(safeLimit) as Array<RevisionRow & {
+    document_ref: string
+    category_id: string
+    file_name: string
+    status: 'active' | 'deleted'
+    previous_content: string | null
+  }>
+
+  return rows.map(row => ({
+    ...rowToSummary(row),
+    documentRef: row.document_ref,
+    categoryId: row.category_id,
+    fileName: row.file_name,
+    status: row.status,
+    segments: row.previous_content === null
+      ? (row.content ? [{ type: 'added' as const, text: row.content }] : [])
+      : diffWordsWithSpace(row.previous_content, row.content).map(part => ({
+          type: part.added ? 'added' as const : part.removed ? 'removed' as const : 'unchanged' as const,
+          text: part.value,
+        })),
+  }))
 }
 
 export function getMemoryRevision(documentRef: string, revisionId: string): (MemoryRevisionSummary & { content: string; documentId: string }) | undefined {
