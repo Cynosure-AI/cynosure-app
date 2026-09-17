@@ -184,10 +184,10 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         signal: input.signal,
         debugContextEnabled: input.debugContextEnabled,
     })
-    const toolRoutingQuery = uniqueQueries([input.userQuery, taskContext?.toolQuery]).join('\n') || input.userQuery
+    const toolRoutingQuery = uniqueQueries([input.userQuery, taskContext?.toolSearchQuery]).join('\n') || input.userQuery
     const memoryRoutingQueries = uniqueQueries([
         input.userQuery,
-        ...(taskContext?.memoryQueries || (taskContext?.memoryQuery ? [taskContext.memoryQuery] : [])),
+        ...(taskContext?.memorySearchQueries || []),
     ])
     // Query rewriting complements recent conversational context; it does not
     // replace it. Follow-ups and pronouns still need the original turns.
@@ -211,7 +211,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
         userQuery: toolRoutingQuery,
-        suppressAutoTools: taskContext?.skipToolRouting === true,
+        suppressAutoTools: taskContext?.requiresTools === false,
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,
         preferredToolKeys: input.preferredToolKeys,
@@ -239,7 +239,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         eventMeta: input.eventMeta,
         signal: input.signal,
         debugContextEnabled: input.debugContextEnabled,
-        suppressAutoMemory: taskContext?.skipMemoryRouting === true,
+        suppressAutoMemory: taskContext?.requiresMemory === false,
     }), attachmentPreparation])
 
     const promptMessages = await resolveSystemPromptMessages({

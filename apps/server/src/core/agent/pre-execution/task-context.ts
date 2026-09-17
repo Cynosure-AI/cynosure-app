@@ -12,14 +12,10 @@ const MAX_MEMORY_EXPANSIONS = 2
 const TASK_CONTEXT_MAX_TOKENS = 1_500
 
 export interface TaskContext {
-    toolQuery?: string
-    /** Primary expansion, mirroring the first entry of `memoryQueries` for event consumers. */
-    memoryQuery?: string
-    memoryQueries: string[]
-    /** Clear memory lookups do not need the external tool catalogue routed. */
-    skipToolRouting: boolean
-    /** Requests unrelated to stored context do not need automatic memory retrieval. */
-    skipMemoryRouting: boolean
+    requiresTools: boolean
+    requiresMemory: boolean
+    toolSearchQuery?: string
+    memorySearchQueries: string[]
 }
 
 export interface BuildTaskContextInput {
@@ -57,7 +53,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                         'The original request is always searched separately. Generate only complementary expansions.',
                         'Keep expansions in the request language and preserve exact names, quoted phrases, identifiers, relationship terms, and constraints.',
                         'Never broaden a specific relationship or operation into generic related topics.',
-                        'toolQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
+                        'toolSearchQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
                         'Assess external tools and memory independently. It is valid for neither to be required.',
                         ...enabledRequirementInstructions(input.enabledModes),
                         'Do not include disabled auto modes.',
@@ -109,29 +105,28 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
     const properties: Record<string, unknown> = {}
     const required: string[] = []
     if (enabledModes.tools) {
-        properties.toolQuery = {
-            type: 'string',
-            description: 'A compact semantic query optimized for selecting relevant tools and tool namespaces.',
-        }
-        required.push('toolQuery')
-        properties.requiresExternalTools = {
+        properties.requiresTools = {
             type: 'boolean',
             description: 'False when no external capability is required to answer the request.',
         }
-        required.push('requiresExternalTools')
+        required.push('requiresTools')
+        properties.toolSearchQuery = {
+            type: 'string',
+            description: 'When tools are required, a compact semantic query optimized for selecting relevant tools and tool namespaces. Omit when requiresTools is false.',
+        }
     }
     if (enabledModes.memories) {
-        properties.memoryQueries = {
-            type: 'array',
-            description: 'Zero to two compact retrieval expansions in the original language. Do not repeat the original request.',
-            items: { type: 'string' },
-            maxItems: MAX_MEMORY_EXPANSIONS,
-        }
         properties.requiresMemory = {
             type: 'boolean',
             description: 'False when stored user or project context is unlikely to help answer the request.',
         }
-        required.push('memoryQueries', 'requiresMemory')
+        required.push('requiresMemory')
+        properties.memorySearchQueries = {
+            type: 'array',
+            description: 'When memory is required, zero to two compact retrieval expansions in the original language. Do not repeat the original request; omit when no useful expansion exists.',
+            items: { type: 'string' },
+            maxItems: MAX_MEMORY_EXPANSIONS,
+        }
     }
 
     return {
@@ -155,23 +150,28 @@ function parseTaskContextArguments(
 ): TaskContext | null {
     try {
         const parsed = JSON.parse(raw) as {
-            toolQuery?: unknown
-            memoryQueries?: unknown
-            requiresExternalTools?: unknown
+            toolSearchQuery?: unknown
+            memorySearchQueries?: unknown
+            requiresTools?: unknown
             requiresMemory?: unknown
         }
-        const toolQuery = enabledModes.tools && typeof parsed.toolQuery === 'string' ? parsed.toolQuery.trim() : ''
-        const memoryQueries = enabledModes.memories
-            ? normalizeMemoryQueries(Array.isArray(parsed.memoryQueries) ? parsed.memoryQueries : [], originalRequest)
+        if (enabledModes.tools && typeof parsed.requiresTools !== 'boolean') return null
+        if (enabledModes.memories && typeof parsed.requiresMemory !== 'boolean') return null
+
+        const requiresTools = enabledModes.tools && parsed.requiresTools !== false
+        const requiresMemory = enabledModes.memories && parsed.requiresMemory !== false
+        const toolSearchQuery = requiresTools && typeof parsed.toolSearchQuery === 'string'
+            ? parsed.toolSearchQuery.trim().slice(0, MAX_ROUTER_QUERY_LENGTH)
+            : ''
+        const memorySearchQueries = requiresMemory
+            ? normalizeMemoryQueries(Array.isArray(parsed.memorySearchQueries) ? parsed.memorySearchQueries : [], originalRequest)
             : []
 
-        if (enabledModes.tools && !toolQuery) return null
         return {
-            toolQuery: toolQuery ? toolQuery.slice(0, MAX_ROUTER_QUERY_LENGTH) : undefined,
-            memoryQuery: memoryQueries[0],
-            memoryQueries,
-            skipToolRouting: enabledModes.tools ? parsed.requiresExternalTools === false : true,
-            skipMemoryRouting: enabledModes.memories ? parsed.requiresMemory === false : true,
+            requiresTools,
+            requiresMemory,
+            toolSearchQuery: toolSearchQuery || undefined,
+            memorySearchQueries,
         }
     } catch {
         return null
@@ -225,10 +225,10 @@ function enabledModeLabels(modes: BuildTaskContextInput['enabledModes']): string
 function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']): string[] {
     return [
         modes.tools
-            ? '- toolQuery: what capabilities, services, filesystems, APIs, or operations should be selected as tools for this task.'
+            ? '- requiresTools: whether external capabilities are needed. If true, optionally provide toolSearchQuery describing the required capabilities, services, filesystems, APIs, or operations.'
             : '',
         modes.memories
-            ? '- memoryQueries: up to two precise alternative searches that complement the unchanged original request.'
+            ? '- requiresMemory: whether stored user or project context is likely to help. If true, optionally provide memorySearchQueries with up to two precise alternative searches that complement the unchanged original request.'
             : '',
     ].filter(Boolean)
 }
@@ -236,7 +236,7 @@ function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']):
 function enabledRequirementInstructions(modes: BuildTaskContextInput['enabledModes']): string[] {
     return [
         modes.tools
-            ? 'Set requiresExternalTools=false when the request can be answered without external capabilities.'
+            ? 'Set requiresTools=false when the request can be answered without external capabilities.'
             : '',
         modes.memories
             ? 'Set requiresMemory=false when stored user or project context is unlikely to help answer the request.'
@@ -272,11 +272,10 @@ function emitTaskContextSelection(
             arguments: JSON.stringify(stripUndefined({
                 type: 'task-context',
                 selectionMethod: 'llm',
-                toolQuery: context?.toolQuery,
-                memoryQuery: context?.memoryQuery,
-                memoryQueries: context?.memoryQueries,
-                skipToolRouting: context?.skipToolRouting,
-                skipMemoryRouting: context?.skipMemoryRouting,
+                requiresTools: context?.requiresTools,
+                requiresMemory: context?.requiresMemory,
+                toolSearchQuery: context?.toolSearchQuery,
+                memorySearchQueries: context?.memorySearchQueries,
                 emptyReason,
                 content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,
             })),

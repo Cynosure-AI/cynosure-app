@@ -31,10 +31,9 @@ describe('task context cancellation', () => {
                 function: {
                     name: 'set_task_context',
                     arguments: JSON.stringify({
-                        toolQuery: 'No external capability needed',
-                        requiresExternalTools: false,
-                        memoryQueries: ['information about a close friend'],
+                        requiresTools: false,
                         requiresMemory: true,
+                        memorySearchQueries: ['information about a close friend'],
                     }),
                 }
             }]
@@ -47,11 +46,22 @@ describe('task context cancellation', () => {
             userQuery: 'Do you remember my best friend?',
             enabledModes: { tools: true, memories: true },
         })).resolves.toMatchObject({
-            memoryQueries: ['information about a close friend'],
-            skipToolRouting: true,
-            skipMemoryRouting: false,
+            requiresTools: false,
+            requiresMemory: true,
+            memorySearchQueries: ['information about a close friend'],
         })
         expect(complete).toHaveBeenCalledOnce()
+        const request = complete.mock.calls[0][0]
+        expect(request.tools?.[0].parameters).toMatchObject({
+            additionalProperties: false,
+            required: ['requiresTools', 'requiresMemory'],
+            properties: {
+                requiresTools: { type: 'boolean' },
+                requiresMemory: { type: 'boolean' },
+                toolSearchQuery: { type: 'string' },
+                memorySearchQueries: { type: 'array', maxItems: 2 },
+            },
+        })
     })
 
     test('drops redundant memory expansions before applying the query budget', async () => {
@@ -60,8 +70,8 @@ describe('task context cancellation', () => {
                 function: {
                     name: 'set_task_context',
                     arguments: JSON.stringify({
-                        memoryQueries: ['project details', 'specific preference', 'related decision'],
                         requiresMemory: true,
+                        memorySearchQueries: ['project details', 'specific preference', 'related decision'],
                     }),
                 }
             }]
@@ -70,7 +80,7 @@ describe('task context cancellation', () => {
             conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
             userQuery: 'project details', enabledModes: { tools: false, memories: true },
         })
-        expect(result?.memoryQueries).toEqual(['specific preference', 'related decision'])
+        expect(result?.memorySearchQueries).toEqual(['specific preference', 'related decision'])
     })
 
     test('can independently skip both automatic tools and automatic memory', async () => {
@@ -79,9 +89,7 @@ describe('task context cancellation', () => {
                 function: {
                     name: 'set_task_context',
                     arguments: JSON.stringify({
-                        toolQuery: 'No external capability needed',
-                        requiresExternalTools: false,
-                        memoryQueries: [],
+                        requiresTools: false,
                         requiresMemory: false,
                     }),
                 }
@@ -93,8 +101,8 @@ describe('task context cancellation', () => {
         })
 
         expect(result).toMatchObject({
-            skipToolRouting: true,
-            skipMemoryRouting: true,
+            requiresTools: false,
+            requiresMemory: false,
         })
     })
 
@@ -104,8 +112,8 @@ describe('task context cancellation', () => {
                 function: {
                     name: 'set_task_context',
                     arguments: JSON.stringify({
-                        toolQuery: 'send a message',
-                        requiresExternalTools: true,
+                        requiresTools: true,
+                        toolSearchQuery: 'send a message',
                     }),
                 }
             }]
@@ -115,6 +123,44 @@ describe('task context cancellation', () => {
             userQuery: 'Envía el mensaje', enabledModes: { tools: true, memories: false },
         })
 
-        expect(result?.toolQuery).toBe('send a message')
+        expect(result?.toolSearchQuery).toBe('send a message')
+    })
+
+    test('allows required modes to fall back to the original request without generated queries', async () => {
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{
+                function: {
+                    name: 'set_task_context',
+                    arguments: JSON.stringify({ requiresTools: true, requiresMemory: true }),
+                }
+            }]
+        })
+        const result = await buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'Use what you know about me to update the project',
+            enabledModes: { tools: true, memories: true },
+        })
+
+        expect(result).toEqual({
+            requiresTools: true,
+            requiresMemory: true,
+            toolSearchQuery: undefined,
+            memorySearchQueries: [],
+        })
+    })
+
+    test('fails open when a required routing decision is missing', async () => {
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{
+                function: {
+                    name: 'set_task_context',
+                    arguments: JSON.stringify({ toolSearchQuery: 'send a message' }),
+                }
+            }]
+        })
+        await expect(buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'Send this', enabledModes: { tools: true, memories: false },
+        })).resolves.toBeNull()
     })
 })

@@ -252,8 +252,9 @@ describe('PreTurnContextTimeline', () => {
             status: 'building-task-context',
             timestamp: 100,
             toolCalls: [{ name: 'Task context', arguments: JSON.stringify({
-              type: 'task-context', selectionMethod: 'llm', toolQuery: 'calendar scheduling capabilities',
-              memoryQueries: ['project deadline notes', 'launch date discussion'],
+              type: 'task-context', selectionMethod: 'llm', requiresTools: true, requiresMemory: true,
+              toolSearchQuery: 'calendar scheduling capabilities',
+              memorySearchQueries: ['project deadline notes', 'launch date discussion'],
             }) }],
           },
           { iteration: 0, taskId: 'memory', status: 'searching-memory', timestamp: 110 },

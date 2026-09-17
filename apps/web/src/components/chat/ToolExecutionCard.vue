@@ -577,9 +577,13 @@ const taskContext = computed(() => {
   const parsed = parseArgs(rawToolCallArgs.value.find(isTaskContextCall)?.arguments)
   if (!parsed) return null
 
+  const memorySearchQueries = Array.isArray(parsed.memorySearchQueries)
+    ? parsed.memorySearchQueries.map(visibleText).filter((query): query is string => Boolean(query))
+    : []
+
   return {
-    toolQuery: visibleText(parsed.toolQuery) ?? '',
-    memoryQuery: visibleText(parsed.memoryQuery) ?? '',
+    toolQuery: visibleText(parsed.toolSearchQuery) ?? visibleText(parsed.toolQuery) ?? '',
+    memoryQuery: memorySearchQueries[0] ?? visibleText(parsed.memoryQuery) ?? '',
     content: visibleText(parsed.content) ?? '',
     emptyReason: visibleText(parsed.emptyReason) ?? '',
   }
