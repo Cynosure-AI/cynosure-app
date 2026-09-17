@@ -244,9 +244,6 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <h1 class="text-2xl font-bold text-theme-100">
                 {{ job.name || "Unnamed cron job" }}
               </h1>
-              <p class="text-sm text-theme-400 mt-0.5">
-                Agent: {{ job.agentName }}
-              </p>
               <dl class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-theme-500">
                 <div class="flex items-center gap-1">
                   <dt>Created</dt>
