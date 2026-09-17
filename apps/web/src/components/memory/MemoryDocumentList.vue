@@ -495,7 +495,7 @@ watch([searchQuery, searchAllFolders, semanticSearch, () => props.categoryId], (
       if (sequence === globalSearchSequence) globalSearchLoading.value = false;
     }
   }, semanticSearch.value ? 400 : 200);
-});
+}, { immediate: true });
 
 onUnmounted(() => {
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
