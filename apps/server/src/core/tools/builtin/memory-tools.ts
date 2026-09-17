@@ -1032,7 +1032,8 @@ export type MemoryPatchApplication =
     | { status: 'success'; content: string; affectedRanges: Array<{ start: number; oldEnd: number; newEnd: number }> }
     | { status: 'conflict'; reason: MemoryPatchConflictReason; message: string }
 
-interface ParsedPatchHunk { before: string; after: string }
+type ParsedPatchLine = { type: 'context' | 'deletion' | 'addition'; text: string }
+interface ParsedPatchHunk { before: string; lines: ParsedPatchLine[] }
 
 const PATCH_CONTEXT_GUIDANCE = 'Lines starting with - are deletions. To anchor the patch to unchanged text, prefix those lines with one space.'
 
@@ -1049,36 +1050,39 @@ function parseContextualPatch(patch: string): ParsedPatchHunk[] | { error: strin
 
     const hunks: ParsedPatchHunk[] = []
     let before: string[] | undefined
-    let after: string[] | undefined
     let hunkLines: string[] = []
+    let parsedLines: ParsedPatchLine[] = []
     const finish = () => {
-        if (!before || !after) return
+        if (!before) return
         if (before.length === 0) throw new Error('Each hunk needs deleted or unchanged context for safe addressing.')
         if (hunkLines.length > 0 && hunkLines.every(line => line.startsWith('--'))) {
             throw new Error('This hunk contains only -- lines and no unchanged or added lines. You may have used - as context; use a leading space for unchanged text.')
         }
-        hunks.push({ before: before.join('\n'), after: after.join('\n') })
+        hunks.push({ before: before.join('\n'), lines: parsedLines })
     }
     try {
         for (const line of lines) {
             if (line.startsWith('@@')) {
                 finish()
                 before = []
-                after = []
                 hunkLines = []
+                parsedLines = []
                 continue
             }
-            if (!before || !after) return invalidPatch('Patch content must follow an @@ hunk header.')
+            if (!before) return invalidPatch('Patch content must follow an @@ hunk header.')
             if (line.startsWith('\\ No newline at end of file')) continue
             hunkLines.push(line)
-            if (line.startsWith('-')) before.push(line.slice(1))
-            else if (line.startsWith('+')) after.push(line.slice(1))
-            else if (line.startsWith(' ')) {
+            if (line.startsWith('-')) {
                 before.push(line.slice(1))
-                after.push(line.slice(1))
+                parsedLines.push({ type: 'deletion', text: line.slice(1) })
+            } else if (line.startsWith('+')) {
+                parsedLines.push({ type: 'addition', text: line.slice(1) })
+            } else if (line.startsWith(' ')) {
+                before.push(line.slice(1))
+                parsedLines.push({ type: 'context', text: line.slice(1) })
             } else if (line === '') {
                 before.push('')
-                after.push('')
+                parsedLines.push({ type: 'context', text: '' })
             } else {
                 return invalidPatch(`Invalid patch line ${JSON.stringify(line)}; lines must start with space, +, or -.`)
             }
@@ -1091,6 +1095,95 @@ function parseContextualPatch(patch: string): ParsedPatchHunk[] | { error: strin
     return hunks
 }
 
+interface NormalizedPatchText {
+    text: string
+    /** Maps normalized UTF-16 boundaries back to offsets in the original string. */
+    sourceOffsets: number[]
+    validBoundaries: Set<number>
+}
+
+/**
+ * Build a comparison-only representation that tolerates common model rendering
+ * differences while retaining a safe mapping to the canonical source. Newlines,
+ * symbols, letters, and emoji ZWJ sequences otherwise remain significant.
+ */
+function normalizePatchText(source: string): NormalizedPatchText {
+    let text = ''
+    const sourceOffsets = [0]
+    const validBoundaries = new Set<number>([0])
+    let offset = 0
+
+    while (offset < source.length) {
+        const start = offset
+        const first = String.fromCodePoint(source.codePointAt(offset)!)
+        offset += first.length
+        let cluster = first
+        while (offset < source.length) {
+            const next = String.fromCodePoint(source.codePointAt(offset)!)
+            if (!/\p{Mark}/u.test(next) && next !== '\uFE0E' && next !== '\uFE0F') break
+            cluster += next
+            offset += next.length
+        }
+
+        const folded = cluster
+            .normalize('NFC')
+            .replace(/[\uFE0E\uFE0F]/gu, '')
+            .replace(/[\u2018\u2019\u201A\u201B]/gu, "'")
+            .replace(/[\u00AB\u00BB\u201C\u201D\u201E\u201F]/gu, '"')
+            .replace(/[\u2010-\u2015\u2212]/gu, '-')
+            .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/gu, ' ')
+
+        const normalizedStart = text.length
+        text += folded
+        for (let index = 0; index < folded.length; index++) {
+            sourceOffsets[normalizedStart + index + 1] = index === folded.length - 1 ? offset : start
+        }
+        validBoundaries.add(normalizedStart)
+        validBoundaries.add(text.length)
+        if (folded.length === 0) sourceOffsets[text.length] = offset
+    }
+
+    return { text, sourceOffsets, validBoundaries }
+}
+
+function findNormalizedPatchMatches(content: string, expected: string): Array<{ start: number; end: number }> {
+    const haystack = normalizePatchText(content)
+    const needle = normalizePatchText(expected).text
+    if (!needle) return []
+
+    const matches: Array<{ start: number; end: number }> = []
+    let normalizedStart = haystack.text.indexOf(needle)
+    while (normalizedStart >= 0) {
+        const normalizedEnd = normalizedStart + needle.length
+        if (haystack.validBoundaries.has(normalizedStart) && haystack.validBoundaries.has(normalizedEnd)) {
+            const match = {
+                start: haystack.sourceOffsets[normalizedStart],
+                end: haystack.sourceOffsets[normalizedEnd],
+            }
+            if (!matches.some(candidate => candidate.start === match.start && candidate.end === match.end)) matches.push(match)
+        }
+        normalizedStart = haystack.text.indexOf(needle, normalizedStart + 1)
+    }
+    return matches
+}
+
+function renderPatchReplacement(hunk: ParsedPatchHunk, matchedSource: string): string {
+    // Preserve canonical Unicode and whitespace for unchanged context rather
+    // than replacing it with the model's normalized approximation.
+    const matchedBeforeLines = matchedSource.split('\n')
+    const replacement: string[] = []
+    let beforeIndex = 0
+    for (const line of hunk.lines) {
+        if (line.type === 'addition') {
+            replacement.push(line.text)
+            continue
+        }
+        if (line.type === 'context') replacement.push(matchedBeforeLines[beforeIndex] ?? line.text)
+        beforeIndex++
+    }
+    return replacement.join('\n')
+}
+
 /** Apply all contextual hunks in memory. No content is returned on conflict. */
 export function applyMemoryPatch(content: string, patch: string): MemoryPatchApplication {
     const parsed = parseContextualPatch(patch)
@@ -1098,19 +1191,21 @@ export function applyMemoryPatch(content: string, patch: string): MemoryPatchApp
     let next = content
     const affectedRanges: Array<{ start: number; oldEnd: number; newEnd: number }> = []
     for (const hunk of parsed) {
-        const start = next.indexOf(hunk.before)
-        if (start < 0) {
+        const matches = findNormalizedPatchMatches(next, hunk.before)
+        if (matches.length === 0) {
             return {
                 status: 'conflict',
                 reason: 'expected_context_not_found',
-                message: 'Expected patch context was not found in the canonical file. Matching is literal, including Unicode punctuation and whitespace. Run memory_search again, copy the unchanged text exactly, and prefix each unchanged line with one space.',
+                message: 'Expected patch context was not found in the canonical file. Unicode normalization, emoji presentation selectors, typographic quotes and dashes, and non-breaking spaces are tolerated; other characters remain exact. Run memory_search again, copy the unchanged text, and prefix each unchanged line with one space.',
             }
         }
-        if (next.indexOf(hunk.before, start + 1) >= 0) {
+        if (matches.length > 1) {
             return { status: 'conflict', reason: 'ambiguous_context', message: 'Expected patch context occurs more than once; include more unchanged context.' }
         }
-        next = next.slice(0, start) + hunk.after + next.slice(start + hunk.before.length)
-        affectedRanges.push({ start, oldEnd: start + hunk.before.length, newEnd: start + hunk.after.length })
+        const { start, end } = matches[0]
+        const replacement = renderPatchReplacement(hunk, next.slice(start, end))
+        next = next.slice(0, start) + replacement + next.slice(end)
+        affectedRanges.push({ start, oldEnd: end, newEnd: start + replacement.length })
     }
     return { status: 'success', content: next, affectedRanges }
 }
@@ -1127,7 +1222,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
         name: 'memory_patch',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Atomically apply a strict contextual patch to a canonical memory file. Context is matched literally and must identify exactly one location; matching is never fuzzy. Concurrent changes and revision tracking are handled internally. Use the fileRef returned by memory_search.',
+        description: 'Atomically apply a contextual patch to a canonical memory file. Context must identify exactly one location. Matching tolerates canonically equivalent Unicode, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Concurrent changes and revision tracking are handled internally. Use the fileRef returned by memory_search.',
         parameters: {
             type: 'object',
             additionalProperties: false,
