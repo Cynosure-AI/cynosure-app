@@ -1072,24 +1072,35 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
             :max-width="380"
             @show="loadKnowledgePreview(file.fileName)"
           >
-            <span class="inline-flex overflow-hidden rounded-md border border-green-500/15 bg-green-500/5">
-              <span class="inline-flex cursor-help items-center gap-1.5 px-2 py-1 text-[11px] text-green-400">
+            <span
+              class="inline-flex overflow-hidden rounded-md border"
+              :class="file.analysisStatus === 'needs_refresh'
+                ? 'border-amber-500/25 bg-amber-500/10'
+                : 'border-green-500/15 bg-green-500/5'"
+            >
+              <span
+                class="inline-flex cursor-help items-center gap-1.5 px-2 py-1 text-[11px]"
+                :class="file.analysisStatus === 'needs_refresh' ? 'text-amber-300' : 'text-green-400'"
+              >
                 <Icon
-                  icon="lucide:check-circle"
+                  :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:triangle-alert' : 'lucide:check-circle'"
                   class="h-3.5 w-3.5"
                 />
-                Deep Research
+                {{ file.analysisStatus === 'needs_refresh' ? 'Analysis outdated' : 'Deep Research' }}
               </span>
               <button
                 v-if="supportsAnalysis(file)"
                 type="button"
-                class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
-                title="Run Deep Research again"
-                aria-label="Run Deep Research again"
+                class="inline-flex items-center border-l px-1.5 transition-colors"
+                :class="file.analysisStatus === 'needs_refresh'
+                  ? 'border-amber-500/25 text-amber-300 hover:bg-amber-500/15 hover:text-amber-200'
+                  : 'border-green-500/15 text-green-500 hover:bg-accent-500/10 hover:text-accent-300'"
+                :title="file.analysisStatus === 'needs_refresh' ? 'Update outdated analysis' : 'Run Deep Research again'"
+                :aria-label="file.analysisStatus === 'needs_refresh' ? 'Update outdated analysis' : 'Run Deep Research again'"
                 @click.stop="extractKnowledgeFromFile(file.fileName)"
               >
                 <Icon
-                  icon="lucide:refresh-cw"
+                  :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:circle-arrow-up' : 'lucide:refresh-cw'"
                   class="h-3.5 w-3.5"
                 />
               </button>
@@ -1098,6 +1109,16 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
               <div class="w-[340px] max-w-full">
                 <div class="mb-2 font-medium text-theme-200">
                   Extracted information
+                </div>
+                <div
+                  v-if="file.analysisStatus === 'needs_refresh'"
+                  class="mb-2 flex items-start gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-amber-200"
+                >
+                  <Icon
+                    icon="lucide:triangle-alert"
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  />
+                  <span>The document changed after this analysis was created. Update it to refresh the extracted information.</span>
                 </div>
                 <div
                   v-if="knowledgePreviews[file.fileName]?.status === 'loading'"
