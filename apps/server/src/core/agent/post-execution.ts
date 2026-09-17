@@ -301,7 +301,7 @@ function buildTitleMessages(userMessage: string, assistantResponse: string) {
     return [
         {
             role: 'system' as const,
-            content: `You are a title and heading generator. Write a short title (3-${MAX_TITLE_WORDS} words) for this chat. Reply with the title only — no quotes, no punctuation at the end, no explanation.`
+            content: `You are a title and heading generator. Write a short title (3-${MAX_TITLE_WORDS} words) for this chat. Reply with the title only — no quotes, no punctuation at the end, no explanation. You basically only generate a title for a users input text.`
         },
         {
             role: 'user' as const,
