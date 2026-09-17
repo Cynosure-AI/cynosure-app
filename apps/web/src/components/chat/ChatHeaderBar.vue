@@ -123,15 +123,15 @@ async function newChat(): Promise<void> {
 
     <!-- Planning task list toggle -->
     <button
+      v-if="hasPlanningTasks"
       type="button"
       class="relative shrink-0 rounded-lg p-1.5 transition-colors"
       :class="taskListOpen
         ? 'bg-accent-500/15 text-accent-300'
-        : hasPlanningTasks ? 'text-theme-300 hover:bg-theme-800' : 'text-theme-600 hover:bg-theme-800 hover:text-theme-400'"
-      :title="hasPlanningTasks ? (taskListOpen ? 'Hide tasks' : 'Show tasks') : 'No planning tasks'"
-      :aria-label="hasPlanningTasks ? (taskListOpen ? 'Hide planning tasks' : 'Show planning tasks') : 'No planning tasks'"
+        : 'text-theme-300 hover:bg-theme-800'"
+      :title="taskListOpen ? 'Hide tasks' : 'Show tasks'"
+      :aria-label="taskListOpen ? 'Hide planning tasks' : 'Show planning tasks'"
       :aria-expanded="taskListOpen"
-      :disabled="!hasPlanningTasks"
       @click="$emit('toggleTaskList')"
     >
       <Icon
@@ -139,7 +139,6 @@ async function newChat(): Promise<void> {
         class="h-4 w-4"
       />
       <span
-        v-if="hasPlanningTasks"
         class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[9px] font-semibold leading-none text-white"
       >
         {{ planningTaskCount > 9 ? '9+' : planningTaskCount }}

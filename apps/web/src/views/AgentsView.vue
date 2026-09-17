@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
@@ -27,6 +27,7 @@ const showDeleteConfirm = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const pendingDeleteName = ref('')
 const searchQuery = ref('')
+const page = ref(0)
 const selectedAgentIds = ref<string[]>([])
 const activeSortKey = ref<string | null>(null)
 const editProviderId = ref('')
@@ -63,7 +64,7 @@ const hasFilters = computed(() => Boolean(searchQuery.value.trim()))
 const agentColumns: Column<AgentDefinition>[] = [
   { key: 'favorite', label: '', width: '36px', sortable: true, sortValue: agent => agent.favorite },
   { key: 'name', label: 'Name', width: 'minmax(240px, 1.45fr)', sortable: true, sortValue: agent => agent.name },
-  { key: 'model', label: 'Model / Provider', width: 'minmax(240px, 1.1fr)', sortable: true, editable: true, sortValue: agent => `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}` },
+  { key: 'model', label: 'Model / Provider', width: 'minmax(200px, 0.85fr)', sortable: true, editable: true, sortValue: agent => `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}` },
   { key: 'info', label: 'Info', width: '130px' },
   { key: 'date', label: 'Date', width: '140px', sortable: true, sortValue: agent => agent.createdAt },
   { key: 'actions', label: 'Actions', width: '84px', class: 'text-right' },
@@ -76,6 +77,8 @@ const agentsWithIssues = computed(() => {
     || (agent.subAgents || []).some(subAgent => !allAgentIds.has(subAgent.agentId)),
   ).map(agent => agent.id))
 })
+
+watch(searchQuery, () => { page.value = 0 })
 
 function clearFilters(): void {
   searchQuery.value = ''
@@ -261,11 +264,15 @@ function formatDate(timestamp: number): string {
       <DataTable
         v-if="hasAnyAgents"
         v-model:selected-ids="selectedAgentIds"
+        v-model:page="page"
         :items="tableAgents"
         :columns="agentColumns"
         :filter-text="searchQuery"
         :filter-predicate="matchesSearch"
         selectable
+        pagination
+        :page-size="20"
+        pagination-position="both"
         row-clickable
         :row-draggable="() => !activeSortKey"
         :row-class="agentRowClass"
