@@ -435,7 +435,10 @@ async function onFileDrop(e: DragEvent, targetCategoryId?: string) {
         </button>
         <button
           type="button"
-          class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+          data-testid="rename-memory-folder"
+          :disabled="openFolderMenuSpace.isUncategorized"
+          :title="openFolderMenuSpace.isUncategorized ? 'The Uncategorized folder cannot be renamed' : 'Rename folder'"
+          class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800 disabled:cursor-not-allowed disabled:opacity-40"
           @click="openFolderMenuId = null; emit('edit-folder', openFolderMenuSpace)"
         >
           <Icon

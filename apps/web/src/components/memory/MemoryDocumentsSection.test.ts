@@ -139,6 +139,15 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(menu?.textContent).toContain('Delete')
   })
 
+  test('does not allow the Uncategorized folder to be renamed', async () => {
+    const wrapper = mountSection()
+    await wrapper.get('[data-space-id="uncategorized"] [aria-label="Folder options"]').trigger('click')
+
+    const rename = document.body.querySelector('[data-testid="rename-memory-folder"]') as HTMLButtonElement | null
+    expect(rename?.disabled).toBe(true)
+    expect(rename?.title).toBe('The Uncategorized folder cannot be renamed')
+  })
+
   test('opens a bottom folder menu above its trigger and outside the clipped sidebar', async () => {
     const wrapper = mountSection()
     const button = wrapper.get('[data-space-id="archive"] [aria-label="Folder options"]')
