@@ -66,7 +66,7 @@ const STATUS: Record<string, { channel: Channel; label: string; summary: string;
   'routing-memory': { channel: 'memory', label: 'Preparing memory retrieval', summary: 'Building the memory search', icon: 'lucide:brain-circuit' },
   'searching-memory': { channel: 'memory', label: 'Searching memory representations', summary: 'Searching raw chunks plus available summaries, keywords, and facts', icon: 'lucide:search' },
   'reranking-memory': { channel: 'memory', label: 'Reranking memory matches', summary: 'Reranker relevance scoring', icon: 'lucide:arrow-down-wide-narrow' },
-  'filtering-memory': { channel: 'memory', label: 'Filtering memory matches', summary: 'Deduplicates repeated chunks and removes matches scoring below 65% of the strongest match', icon: 'lucide:list-filter' },
+  'filtering-memory': { channel: 'memory', label: 'Fusing memory matches', summary: 'Deduplicates matches found by multiple queries, then removes matches scoring below 65% of the strongest match', icon: 'lucide:list-filter' },
   'selecting-memory': { channel: 'memory', label: 'Selecting reranked memories', summary: 'Using the highest-ranked evidence', icon: 'lucide:badge-check' },
   'curating-memory': { channel: 'memory', label: 'AI curating memory evidence', summary: 'Final relevance verification', icon: 'lucide:list-checks' },
   'routing-tools': { channel: 'tools', label: 'Selecting MCPs and toolsets', summary: 'Choosing capability groups', icon: 'lucide:boxes' },
@@ -119,14 +119,14 @@ function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label:
   if (status === 'reranking-memory' && stats.rerankerInputCount > 0) {
     return {
       label: `Reranked ${stats.rerankerInputCount} candidates down to ${plural(stats.rerankerOutputCount, 'match', 'matches')}`,
-      summary: 'A reranker rescored candidates by relevance before filtering',
+      summary: `A reranker rescored candidates by relevance; the top matches from each of the ${plural(stats.queryCount, 'query', 'queries')} advance (duplicates removed next)`,
     }
   }
   if (status === 'filtering-memory') {
     const threshold = Math.round(stats.relativeScoreThreshold * 100)
     return {
-      label: `Kept ${stats.filteredCount} of ${plural(stats.uniqueCount, 'unique match', 'unique matches')}`,
-      summary: `Removed ${plural(stats.duplicateCount, 'cross-query duplicate')} and ${plural(stats.weakCount, 'weak match', 'weak matches')}; weak means below ${threshold}% of the strongest displayed relevance score`,
+      label: `Fused ${stats.returnedCount} matches into ${plural(stats.uniqueCount, 'unique match', 'unique matches')}, kept ${stats.filteredCount}`,
+      summary: `${plural(stats.duplicateCount, 'match', 'matches')} appeared in multiple queries and were deduplicated; ${plural(stats.weakCount, 'more result', 'more results')} dropped for scoring below ${threshold}% of the strongest match`,
     }
   }
   return undefined
@@ -487,7 +487,9 @@ function formatTimestamp(timestamp: number): string {
                 <div
                   v-if="memory.matchedRepresentations?.length"
                   class="mt-1 text-[9px] text-theme-500"
-                >Matched via {{ memory.matchedRepresentations.join(' + ') }}</div>
+                >
+                  Matched via {{ memory.matchedRepresentations.join(' + ') }}
+                </div>
                 <p
                   v-if="memory.content"
                   class="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-theme-400"
