@@ -10,6 +10,7 @@ import HoverTooltip from "../shared/HoverTooltip.vue";
 import SplitButton from "../shared/SplitButton.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
+import ModalDialog from "../shared/ModalDialog.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
@@ -38,6 +39,7 @@ const emit = defineEmits<{
 
 // --- Constants ---
 const FILES_PAGE_SIZE = 30;
+const LARGE_CHUNK_WARNING_THRESHOLD = 100;
 
 /** Deep Research eligibility is decided by the limit the server attaches to
  * each file row, so the button can never be offered for a document the server
@@ -90,6 +92,9 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
 const uploadProgress = ref({ current: 0, total: 0 });
 const uploadResults = ref<{ fileName: string; chunks: number; error?: string }[]>([]);
+const showLargeChunkWarning = ref(false);
+const largeChunkWarningFiles = ref<MemoryFileStatus[]>([]);
+let pendingIndexAction: (() => Promise<void>) | null = null;
 
 // Search + pagination
 const searchQuery = ref("");
@@ -278,7 +283,7 @@ const {
   loadJobs,
   reindexFile,
   extractKnowledgeFromFile,
-  reindexAll,
+  reindexAll: reindexAllNow,
   cancelJob,
   discardJob,
   reset: resetJobs,
@@ -290,6 +295,46 @@ const {
   reloadFiles: loadFiles,
   onCompleted: () => emit("spacesChanged"),
 });
+
+function estimatedChunks(file: MemoryFileStatus): number {
+  return file.estimatedChunkCount ?? file.chunkCount ?? 0;
+}
+
+async function confirmLargeIndex(): Promise<void> {
+  const action = pendingIndexAction;
+  pendingIndexAction = null;
+  showLargeChunkWarning.value = false;
+  largeChunkWarningFiles.value = [];
+  await action?.();
+}
+
+function cancelLargeIndex(): void {
+  pendingIndexAction = null;
+  showLargeChunkWarning.value = false;
+  largeChunkWarningFiles.value = [];
+}
+
+async function indexWithWarning(candidates: MemoryFileStatus[], action: () => Promise<void>): Promise<void> {
+  const largeFiles = candidates.filter((file) => estimatedChunks(file) > LARGE_CHUNK_WARNING_THRESHOLD);
+  if (!largeFiles.length) {
+    await action();
+    return;
+  }
+  largeChunkWarningFiles.value = largeFiles;
+  pendingIndexAction = action;
+  showLargeChunkWarning.value = true;
+}
+
+async function reindexAll(): Promise<void> {
+  const candidates = files.value.filter((file) =>
+    file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"),
+  );
+  await indexWithWarning(candidates, reindexAllNow);
+}
+
+async function reindexDocument(file: MemoryFileStatus): Promise<void> {
+  await indexWithWarning([file], () => reindexFile(file.fileName));
+}
 
 function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
   if (kind === "deep-research") return "Deep Research";
@@ -304,9 +349,10 @@ async function deepResearchSelected(): Promise<void> {
 }
 
 async function makeSearchableSelected(): Promise<void> {
-  for (const file of selectedSearchIndexFiles.value) {
-    if (!isJobActive("reindex", file.fileName)) await reindexFile(file.fileName);
-  }
+  const candidates = selectedSearchIndexFiles.value.filter((file) => !isJobActive("reindex", file.fileName));
+  await indexWithWarning(candidates, async () => {
+    for (const file of candidates) await reindexFile(file.fileName);
+  });
 }
 
 async function loadKnowledgePreview(fileName: string) {
@@ -1449,7 +1495,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
               class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
               title="Re-index semantic search vectors"
               aria-label="Re-index semantic search vectors"
-              @click.stop="reindexFile(file.fileName)"
+              @click.stop="reindexDocument(file)"
             >
               <Icon
                 icon="lucide:refresh-cw"
@@ -1463,7 +1509,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors"
             :class="file.status === 'needs_reindex' ? 'border-orange-500/15 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' : 'border-accent-500/15 bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
             :title="file.status === 'needs_reindex' ? 'Re-index semantic search vectors' : 'Build semantic search vectors for this document'"
-            @click.stop="reindexFile(file.fileName)"
+            @click.stop="reindexDocument(file)"
           >
             <Icon
               :icon="statusIcon(file.status)"
@@ -1493,6 +1539,42 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @close="showEditorModal = false"
       @saved="handleEditorSaved"
     />
+
+    <ModalDialog
+      :show="showLargeChunkWarning"
+      title="Index a large document?"
+      icon="lucide:triangle-alert"
+      icon-color="amber"
+      @close="cancelLargeIndex"
+    >
+      <div class="space-y-3 text-sm leading-relaxed text-theme-400">
+        <p>
+          {{ largeChunkWarningFiles.length === 1
+            ? `${largeChunkWarningFiles[0]?.fileName} is estimated to produce ${estimatedChunks(largeChunkWarningFiles[0]!)} chunks.`
+            : `${largeChunkWarningFiles.length} selected files are each estimated to produce more than ${LARGE_CHUNK_WARNING_THRESHOLD} chunks.` }}
+        </p>
+        <p>
+          Very large documents can dominate search results simply because they contribute so many chunks. They also take longer to embed and may increase embedding costs and storage use.
+        </p>
+        <p class="text-theme-300">You can continue anyway if this is intentional.</p>
+      </div>
+      <template #actions>
+        <button
+          type="button"
+          class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-500"
+          @click="confirmLargeIndex"
+        >
+          Index anyway
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 text-sm text-theme-400 transition-colors hover:text-theme-200"
+          @click="cancelLargeIndex"
+        >
+          Cancel
+        </button>
+      </template>
+    </ModalDialog>
 
     <!-- Hidden file input -->
     <input
