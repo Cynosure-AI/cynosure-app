@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   listFiles: vi.fn(),
   listJobs: vi.fn(),
   searchFiles: vi.fn(),
+  startReindexFile: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -20,6 +21,7 @@ vi.mock('../../api/client', () => ({
       listFiles: mocks.listFiles,
       listJobs: mocks.listJobs,
       searchFiles: mocks.searchFiles,
+      startReindexFile: mocks.startReindexFile,
     },
   },
 }))
@@ -66,6 +68,10 @@ describe('MemoryDocumentList navigation and search', () => {
     }])
     mocks.listJobs.mockResolvedValue([])
     mocks.searchFiles.mockResolvedValue([])
+    mocks.startReindexFile.mockResolvedValue({
+      id: 'job-1', kind: 'reindex', folderId: 'category', fileName: 'notes.md',
+      status: 'queued', progressCurrent: 0, progressTotal: 0, createdAt: 1, updatedAt: 1,
+    })
   })
 
   test('opens a linked document in the editor without putting its name in search', async () => {
@@ -93,5 +99,44 @@ describe('MemoryDocumentList navigation and search', () => {
     expect((input.element as HTMLInputElement).value).toBe('')
     expect(wrapper.find('[aria-label="Clear document search"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('1 file')
+  })
+
+  test('warns before indexing a file estimated above 100 chunks and proceeds after confirmation', async () => {
+    mocks.listFiles.mockResolvedValue([{
+      fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
+      supported: true, textDirect: true, status: 'not_indexed', estimatedChunkCount: 101,
+      deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
+    }])
+    const wrapper = mountList()
+    await flushPromises()
+
+    await wrapper.get('button[title="Indexing files makes them available for semantic searching."]').trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('estimated to produce 101 chunks')
+    expect(mocks.startReindexFile).not.toHaveBeenCalled()
+
+    const confirm = [...document.body.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Index anyway') as HTMLButtonElement
+    confirm.click()
+    await flushPromises()
+
+    expect(mocks.startReindexFile).toHaveBeenCalledWith('category', 'notes.md')
+  })
+
+  test('indexes without warning at the 100 chunk threshold', async () => {
+    mocks.listFiles.mockResolvedValue([{
+      fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
+      supported: true, textDirect: true, status: 'not_indexed', estimatedChunkCount: 100,
+      deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
+    }])
+    const wrapper = mountList()
+    await flushPromises()
+
+    await wrapper.get('button[title="Indexing files makes them available for semantic searching."]').trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).not.toContain('Index a large document?')
+    expect(mocks.startReindexFile).toHaveBeenCalledWith('category', 'notes.md')
   })
 })
