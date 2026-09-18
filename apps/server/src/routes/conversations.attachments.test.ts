@@ -154,6 +154,8 @@ describe('conversation message attachment resolution', () => {
                 conversationId: 'conversation-1',
                 conversationTitle: 'Quarterly research',
                 agentName: 'Researcher',
+                status: 'ready',
+                staged: false,
             }],
         })
     })

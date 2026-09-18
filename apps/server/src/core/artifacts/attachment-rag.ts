@@ -30,7 +30,7 @@ export function buildAttachmentFilter(conversationId: string, attachmentIds?: st
 export async function indexConversationAttachment(
     conversationId: string,
     attachment: FileAttachmentArtifact,
-    opts?: { signal?: AbortSignal; onProgress?: (current: number, total: number) => void },
+    opts?: { signal?: AbortSignal; onProgress?: (current: number, total: number) => void; throwOnError?: boolean },
 ): Promise<number> {
     const text = readFileAttachmentText(attachment)
     if (!text?.trim()) return 0
@@ -45,6 +45,7 @@ export async function indexConversationAttachment(
         return chunkCount
     } catch (err) {
         console.warn('[attachment-rag] Failed to index attachment:', err instanceof Error ? err.message : err)
+        if (opts?.throwOnError) throw err
         return 0
     }
 }

@@ -15,6 +15,7 @@ import {
     type MediaArtifactKind,
 } from '../core/artifacts/image-artifacts.js'
 import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, preserveReferencedAttachmentAssets } from '../core/artifacts/attachment-rag.js'
+import { listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { ConversationExecutionConfig } from '@shared/types'
@@ -324,38 +325,54 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
     )
 
-    // GET /api/chat/uploads — list durable document attachments across conversations.
+    // GET /api/chat/uploads — list durable and currently staged document attachments.
     app.get<{ Querystring: { limit?: string; offset?: string; search?: string } }>('/uploads', async (req) => {
+        // Reading the library also recovers processing jobs interrupted by an
+        // application restart; progress remains authoritative in SQLite.
+        listStagedChatAttachments()
         const db = getDb()
         const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '60', 10) || 60))
         const offset = Math.max(0, parseInt(req.query.offset || '0', 10) || 0)
         const search = req.query.search?.trim()
-        const conditions = [
-            "a.kind = 'file'",
-            'a.original_path IS NOT NULL',
-            'a.id = (SELECT MIN(a2.id) FROM message_attachments a2 WHERE a2.asset_id = a.asset_id)',
-        ]
+        const conditions = ['original_path IS NOT NULL']
         const params: unknown[] = []
 
         if (search) {
-            conditions.push("(a.name COLLATE NOCASE LIKE ? ESCAPE '\\' OR c.title COLLATE NOCASE LIKE ? ESCAPE '\\' OR ag.name COLLATE NOCASE LIKE ? ESCAPE '\\')")
+            conditions.push("(name COLLATE NOCASE LIKE ? ESCAPE '\\' OR conversation_title COLLATE NOCASE LIKE ? ESCAPE '\\' OR agent_name COLLATE NOCASE LIKE ? ESCAPE '\\')")
             const pattern = `%${escapeSqlLike(search)}%`
             params.push(pattern, pattern, pattern)
         }
 
-        const from = `
-            FROM message_attachments a
-            JOIN conversations c ON c.id = a.conversation_id
-            LEFT JOIN agents ag ON ag.id = c.agent_id
-            WHERE ${conditions.join(' AND ')}
+        const uploadsCte = `
+            WITH uploads AS (
+              SELECT a.id, a.name, a.original_path, a.size_bytes, COALESCE(a.chunk_count, 0) AS chunk_count,
+                     a.created_at, c.id AS conversation_id, c.title AS conversation_title,
+                     c.agent_id, ag.name AS agent_name, 'ready' AS status,
+                     COALESCE(a.chunk_count, 0) AS progress_current,
+                     COALESCE(a.chunk_count, 0) AS progress_total, NULL AS error, 0 AS staged
+              FROM message_attachments a
+              JOIN conversations c ON c.id = a.conversation_id
+              LEFT JOIN agents ag ON ag.id = c.agent_id
+              WHERE a.kind = 'file' AND a.original_path IS NOT NULL
+                AND a.id = (SELECT MIN(a2.id) FROM message_attachments a2 WHERE a2.asset_id = a.asset_id)
+              UNION ALL
+              SELECT s.id, json_extract(s.artifact_json, '$.name'),
+                     json_extract(s.artifact_json, '$.originalPath'),
+                     COALESCE(json_extract(s.artifact_json, '$.sizeBytes'), 0),
+                     COALESCE(json_extract(s.artifact_json, '$.chunkCount'), 0),
+                     s.created_at, c.id, c.title, c.agent_id, ag.name, s.status,
+                     s.progress_current, s.progress_total, s.error, 1 AS staged
+              FROM staged_chat_attachments s
+              JOIN conversations c ON c.id = s.conversation_id
+              LEFT JOIN agents ag ON ag.id = c.agent_id
+            )
         `
-        const total = (db.prepare(`SELECT COUNT(*) AS count ${from}`).get(...params) as { count: number }).count
+        const from = `FROM uploads WHERE ${conditions.join(' AND ')}`
+        const total = (db.prepare(`${uploadsCte} SELECT COUNT(*) AS count ${from}`).get(...params) as { count: number }).count
         const rows = db.prepare(`
-            SELECT a.id, a.name, a.original_path, a.size_bytes, a.chunk_count, a.created_at,
-                   c.id AS conversation_id, c.title AS conversation_title,
-                   c.agent_id, ag.name AS agent_name
-            ${from}
-            ORDER BY a.created_at DESC, a.id DESC
+            ${uploadsCte}
+            SELECT * ${from}
+            ORDER BY created_at DESC, id DESC
             LIMIT ? OFFSET ?
         `).all(...params, limit, offset) as {
             id: string
@@ -368,6 +385,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             conversation_title: string
             agent_id: string | null
             agent_name: string | null
+            status: 'processing' | 'ready' | 'failed'
+            progress_current: number
+            progress_total: number
+            error: string | null
+            staged: number
         }[]
 
         return {
@@ -383,6 +405,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 conversationTitle: row.conversation_title,
                 agentId: row.agent_id,
                 agentName: row.agent_name,
+                status: row.status,
+                progressCurrent: row.progress_current,
+                progressTotal: row.progress_total,
+                error: row.error || undefined,
+                staged: Boolean(row.staged),
             })),
             total,
         }

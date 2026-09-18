@@ -238,33 +238,6 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
 <template>
   <div class="p-4 sm:p-6 lg:p-8">
     <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div class="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
-        <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
-          <div class="text-xs text-theme-500">
-            Entities
-          </div>
-          <div class="mt-1 text-xl font-semibold text-theme-100">
-            {{ graph?.stats.nodeCount ?? 0 }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
-          <div class="text-xs text-theme-500">
-            Relations
-          </div>
-          <div class="mt-1 text-xl font-semibold text-theme-100">
-            {{ graph?.stats.edgeCount ?? 0 }}
-          </div>
-        </div>
-        <div class="rounded-lg border border-theme-800 bg-theme-900/35 px-4 py-3">
-          <div class="text-xs text-theme-500">
-            This Week
-          </div>
-          <div class="mt-1 text-xl font-semibold text-theme-100">
-            {{ graph?.stats.recentEdgeCount ?? 0 }}
-          </div>
-        </div>
-      </div>
-
       <form
         class="flex items-start gap-2"
         @submit.prevent="emit('load-graph', graphQuery)"

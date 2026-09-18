@@ -104,7 +104,7 @@ async function loadEntries(reset = true): Promise<void> {
 }
 
 function toggleUpload(upload: ConversationUpload): void {
-  if (unavailableIds.value.has(upload.id)) return
+  if (unavailableIds.value.has(upload.id) || upload.staged || (upload.status && upload.status !== 'ready')) return
   const next = new Set(selectedUploadIds.value)
   if (next.has(upload.id)) next.delete(upload.id)
   else next.add(upload.id)
@@ -243,8 +243,8 @@ watch(query, () => {
             :key="upload.id"
             type="button"
             class="group min-w-0 rounded-xl border p-3 text-left transition-colors"
-            :class="[selectedUploadIds.has(upload.id) ? 'border-accent-500 bg-accent-500/10' : 'border-theme-700 bg-theme-800 hover:border-theme-600 hover:bg-theme-700', unavailableIds.has(upload.id) ? 'cursor-default opacity-50' : '']"
-            :disabled="unavailableIds.has(upload.id)"
+            :class="[selectedUploadIds.has(upload.id) ? 'border-accent-500 bg-accent-500/10' : 'border-theme-700 bg-theme-800 hover:border-theme-600 hover:bg-theme-700', unavailableIds.has(upload.id) || upload.staged || (upload.status && upload.status !== 'ready') ? 'cursor-default opacity-50' : '']"
+            :disabled="unavailableIds.has(upload.id) || upload.staged || (upload.status && upload.status !== 'ready')"
             :aria-pressed="selectedUploadIds.has(upload.id)"
             @click="toggleUpload(upload)"
           >
@@ -263,6 +263,19 @@ watch(query, () => {
                     class="h-4 w-4 shrink-0 text-accent-400"
                   />
                 </div>
+                <p
+                  v-if="upload.status && upload.status !== 'ready'"
+                  class="mt-1 text-[11px]"
+                  :class="upload.status === 'failed' ? 'text-red-400' : 'text-accent-400'"
+                >
+                  {{ upload.status === 'failed' ? 'Indexing failed' : `Indexing ${upload.progressCurrent || 0}/${upload.progressTotal || '?'} chunks` }}
+                </p>
+                <p
+                  v-else-if="upload.staged"
+                  class="mt-1 text-[11px] text-accent-400"
+                >
+                  Ready in chat draft
+                </p>
                 <p class="mt-1 truncate text-xs text-theme-500">
                   {{ upload.conversationTitle }}
                 </p>

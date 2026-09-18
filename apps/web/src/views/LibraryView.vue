@@ -20,6 +20,10 @@ interface LibraryEntry {
   conversationId: string | null
   sizeBytes?: number
   chunkCount?: number
+  status?: ConversationUpload['status']
+  progressCurrent?: number
+  progressTotal?: number
+  error?: string
 }
 
 const sections = [
@@ -60,6 +64,7 @@ const hasMore = ref(false)
 const error = ref('')
 const PAGE_SIZE = 60
 let searchTimer: ReturnType<typeof setTimeout> | undefined
+let uploadRefreshTimer: ReturnType<typeof setTimeout> | undefined
 let loadGeneration = 0
 
 const filterOptions: { value: LibraryFilter; label: string; icon: string }[] = [
@@ -107,6 +112,10 @@ const uploads = computed<LibraryEntry[]>(() => uploadItems.value.map((upload) =>
   conversationId: upload.conversationId,
   sizeBytes: upload.sizeBytes,
   chunkCount: upload.chunkCount,
+  status: upload.status,
+  progressCurrent: upload.progressCurrent,
+  progressTotal: upload.progressTotal,
+  error: upload.error,
 })))
 
 const visibleEntries = computed(() => {
@@ -214,6 +223,10 @@ async function loadEntries(reset = false): Promise<void> {
     if (generation === loadGeneration) {
       loading.value = false
       loadingMore.value = false
+      clearTimeout(uploadRefreshTimer)
+      if (activePanel.value === 'uploads' && uploadItems.value.some((upload) => upload.status === 'processing')) {
+        uploadRefreshTimer = setTimeout(() => void loadEntries(true), 1_500)
+      }
     }
   }
 }
@@ -250,7 +263,24 @@ watch(searchQuery, () => {
   searchTimer = setTimeout(() => void loadEntries(true), 250)
 })
 
-onUnmounted(() => clearTimeout(searchTimer))
+const unsubscribeStageProgress = api.chat.onAttachmentStageProgress((progress) => {
+  const upload = uploadItems.value.find((item) => item.id === progress.id)
+  if (upload) {
+    upload.status = progress.status
+    upload.progressCurrent = progress.progressCurrent
+    upload.progressTotal = progress.progressTotal
+    upload.chunkCount = progress.chunkCount
+    upload.error = progress.error
+  } else if (activePanel.value === 'uploads') {
+    void loadEntries(true)
+  }
+})
+
+onUnmounted(() => {
+  clearTimeout(searchTimer)
+  clearTimeout(uploadRefreshTimer)
+  unsubscribeStageProgress()
+})
 </script>
 
 <template>
@@ -510,6 +540,19 @@ onUnmounted(() => clearTimeout(searchTimer))
               {{ artifactTypeLabel(entry.artifact) }}
             </span>
             <span
+              v-if="entry.status && entry.status !== 'ready'"
+              class="absolute right-3 top-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold backdrop-blur-sm"
+              :class="entry.status === 'failed' ? 'border-red-500/30 bg-red-950/80 text-red-300' : 'border-accent-500/30 bg-theme-950/85 text-accent-300'"
+              :title="entry.error"
+            >
+              <Icon
+                :icon="entry.status === 'failed' ? 'lucide:circle-alert' : 'lucide:loader-2'"
+                class="h-3 w-3"
+                :class="{ 'animate-spin': entry.status === 'processing' }"
+              />
+              {{ entry.status === 'failed' ? 'Failed' : `${entry.progressCurrent || 0}/${entry.progressTotal || '?'} chunks` }}
+            </span>
+            <span
               v-if="viewMode === 'grid'"
               class="absolute bottom-3 right-3 flex h-9 w-9 translate-y-1 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-lg backdrop-blur-sm transition group-hover:translate-y-0 group-hover:opacity-100"
             >
@@ -542,6 +585,15 @@ onUnmounted(() => clearTimeout(searchTimer))
                 <template v-if="entry.sizeBytes != null"> · {{ formatBytes(entry.sizeBytes) }}</template>
               </span>
               <span class="shrink-0">{{ formatDate(entry.createdAt) }}</span>
+            </div>
+            <div
+              v-if="entry.status === 'processing' && entry.progressTotal"
+              class="mt-2 h-1 overflow-hidden rounded-full bg-theme-800"
+            >
+              <div
+                class="h-full rounded-full bg-accent-500 transition-[width]"
+                :style="{ width: `${Math.min(100, ((entry.progressCurrent || 0) / entry.progressTotal) * 100)}%` }"
+              />
             </div>
           </div>
         </button>

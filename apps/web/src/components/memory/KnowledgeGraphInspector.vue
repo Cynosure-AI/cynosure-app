@@ -23,6 +23,7 @@ const emit = defineEmits<{
 const hydratedSourceChunks = ref<Record<string, KnowledgeSourceChunk>>({});
 const loadingSourceChunkIds = ref<Set<string>>(new Set());
 const selectedGraphNode = computed(() => props.selectedGraphNodes.length === 1 ? props.selectedGraphNodes[0] : null);
+const selectedGraphNodeIsLiteral = computed(() => selectedGraphNode.value?.id.startsWith("literal:") === true);
 const selectedNodeIds = computed(() => new Set(props.selectedGraphNodes.map((node) => node.id)));
 const sidebarTitle = computed(() => {
   if (props.selectedGraphEdge) return formatRelation(props.selectedGraphEdge.relation);
@@ -117,7 +118,7 @@ function clearSelection(): void { emit("close"); }
             <span>{{ formatCount(selectedGraphEdge.mentionCount) }} evidence</span>
           </template>
           <template v-else>
-            <span>{{ selectedGraphNode?.type || "selection" }}</span>
+            <span>{{ selectedGraphNodeIsLiteral ? "fact value" : selectedGraphNode?.type || "selection" }}</span>
             <span v-if="selectedGraphNode">{{ importanceName(selectedGraphNode.importance) }}</span>
             <span>{{ formatCount(selectedMentionCount) }} mentions</span>
             <span>{{ formatCount(selectedSourceCount) }} sources</span>
@@ -261,7 +262,7 @@ function clearSelection(): void { emit("close"); }
 
       <div class="entity-node-sidebar-actions">
         <button
-          v-if="selectedGraphNode"
+          v-if="selectedGraphNode && !selectedGraphNodeIsLiteral"
           type="button"
           class="entity-node-sidebar-action"
           title="Show this entity's connected neighborhood"
@@ -274,7 +275,7 @@ function clearSelection(): void { emit("close"); }
           Explore
         </button>
         <button
-          v-if="selectedGraphNode"
+          v-if="selectedGraphNode && !selectedGraphNodeIsLiteral"
           type="button"
           class="entity-node-sidebar-action"
           @click="emit('edit-node', selectedGraphNode!)"
@@ -294,7 +295,7 @@ function clearSelection(): void { emit("close"); }
             icon="lucide:trash-2"
             class="h-4 w-4"
           />
-          {{ selectedGraphNodes.length > 1 ? `Delete ${selectedGraphNodes.length}` : "Delete" }}
+          {{ selectedGraphNodes.length > 1 ? `Delete ${selectedGraphNodes.length}` : selectedGraphNodeIsLiteral ? "Delete fact" : "Delete" }}
         </button>
       </div>
 

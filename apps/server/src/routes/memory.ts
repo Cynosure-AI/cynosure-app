@@ -220,7 +220,17 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // DELETE /api/memory/knowledge/graph/nodes/:id — manually remove an entity and its relationships
   app.delete<{ Params: { id: string } }>('/knowledge/graph/nodes/:id', async (req, reply) => {
-    const deleted = getMemoryKnowledgeStore().retractEntityById(req.params.id)
+    const knowledge = getMemoryKnowledgeStore()
+    // Literal assertion values are projected as selectable graph nodes even
+    // though they do not have a row in memory_knowledge_entities. Deleting one
+    // means retracting the fact/edge that owns the synthetic node.
+    if (req.params.id.startsWith('literal:')) {
+      const assertionId = req.params.id.slice('literal:'.length)
+      const result = knowledge.deleteEdge(assertionId)
+      if (!result.edgeDeleted) return reply.status(404).send({ error: 'Fact not found' })
+      return { success: true }
+    }
+    const deleted = knowledge.retractEntityById(req.params.id)
     if (!deleted) return reply.status(404).send({ error: 'Entity not found' })
     return { success: true }
   })
@@ -230,8 +240,16 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const ids = Array.from(new Set((req.body.ids || []).filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))))
     if (!ids.length) return reply.status(400).send({ error: 'At least one entity ID is required' })
     if (ids.length > 500) return reply.status(400).send({ error: 'At most 500 entities can be deleted at once' })
-    const deleted = getMemoryKnowledgeStore().retractEntitiesByIds(ids)
-    if (deleted !== ids.length) return reply.status(404).send({ error: 'One or more entities no longer exist; nothing was deleted' })
+    const knowledge = getMemoryKnowledgeStore()
+    const literalAssertionIds = ids.filter((id) => id.startsWith('literal:')).map((id) => id.slice('literal:'.length))
+    const entityIds = ids.filter((id) => !id.startsWith('literal:'))
+    if (entityIds.some((id) => !knowledge.getNode(id)) || literalAssertionIds.some((id) => !knowledge.getEdge(id))) {
+      return reply.status(404).send({ error: 'One or more entities or facts no longer exist; nothing was deleted' })
+    }
+    const deletedEntities = entityIds.length ? knowledge.retractEntitiesByIds(entityIds) : 0
+    const deletedFacts = literalAssertionIds.length ? knowledge.deleteEdgesByIds(literalAssertionIds) : 0
+    const deleted = deletedEntities + deletedFacts
+    if (deleted !== ids.length) return reply.status(404).send({ error: 'One or more entities or facts no longer exist' })
     return { success: true, deleted }
   })
 

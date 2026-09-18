@@ -24,7 +24,7 @@ import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
-import { releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
+import { listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
@@ -988,20 +988,35 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.post<{ Params: { id: string }; Body: { name: string; content: string; clientId?: string } }>(
     '/conversations/:id/attachments/stage',
     async (req, reply) => {
-      const controller = new AbortController()
-      req.raw.once('aborted', () => controller.abort())
-      const artifact = await stageChatAttachment(req.params.id, req.body, {
-        signal: controller.signal,
-        onProgress: (current, total) => broadcast('attachment:stage-progress', {
-          conversationId: req.params.id,
-          clientId: req.body.clientId,
-          current,
-          total,
-        }),
+      const staged = await stageChatAttachment(req.params.id, req.body, {
+        onUpdate: (update) => broadcast('attachment:stage-progress', update),
       })
-      return reply.status(201).send({ id: artifact.id, name: artifact.name, chunkCount: artifact.chunkCount || 0 })
+      return reply.status(202).send({
+        id: staged.id,
+        conversationId: staged.conversationId,
+        clientId: staged.clientId,
+        name: staged.name,
+        status: staged.status,
+        progressCurrent: staged.progressCurrent,
+        progressTotal: staged.progressTotal,
+        chunkCount: staged.chunkCount,
+      })
     },
   )
+
+  app.get<{ Params: { id: string } }>('/conversations/:id/attachments/stage', async (req) => {
+    return listStagedChatAttachments(req.params.id).map((staged) => ({
+      id: staged.id,
+      conversationId: staged.conversationId,
+      clientId: staged.clientId,
+      name: staged.name,
+      status: staged.status,
+      progressCurrent: staged.progressCurrent,
+      progressTotal: staged.progressTotal,
+      chunkCount: staged.chunkCount,
+      error: staged.error,
+    }))
+  })
 
   app.delete<{ Params: { id: string; attachmentId: string } }>(
     '/conversations/:id/attachments/stage/:attachmentId',
