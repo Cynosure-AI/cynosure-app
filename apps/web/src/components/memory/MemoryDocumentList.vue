@@ -31,6 +31,7 @@ const emit = defineEmits<{
   editSpace: [];
   deleteSpace: [];
   spacesChanged: [];
+  navigateFolder: [folderId: string];
   documentDragState: [active: boolean, payload?: DocumentDragPayload];
   openGlobalDocument: [folderId: string, fileName: string];
 }>();
@@ -102,6 +103,69 @@ let globalSearchTimer: number | null = null;
 let globalSearchSequence = 0;
 
 const currentSpace = computed(() => props.spaces.find((s) => s.id === props.folderId));
+const folderHistory = ref<string[]>([props.folderId]);
+const folderHistoryIndex = ref(0);
+const canNavigateBack = computed(() => folderHistoryIndex.value > 0);
+const canNavigateForward = computed(() => folderHistoryIndex.value < folderHistory.value.length - 1);
+const pathCopied = ref(false);
+let pathCopiedTimer: number | null = null;
+
+const pathSegments = computed(() => {
+  const path = currentSpace.value?.directoryPath || "";
+  return path.split(/[\\/]+/).filter(Boolean).map((label, index, segments) => ({
+    label,
+    folderId: props.spaces.find((space) => {
+      const candidate = (space.directoryPath || "").split(/[\\/]+/).filter(Boolean);
+      return candidate.length === index + 1 && candidate.every((part, partIndex) => part === segments[partIndex]);
+    })?.id,
+  }));
+});
+
+async function copyCurrentFolderPath(): Promise<void> {
+  const path = currentSpace.value?.directoryPath;
+  if (!path) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(path);
+    } else {
+      const input = document.createElement("textarea");
+      input.value = path;
+      input.setAttribute("readonly", "");
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      input.remove();
+    }
+    pathCopied.value = true;
+    if (pathCopiedTimer !== null) window.clearTimeout(pathCopiedTimer);
+    pathCopiedTimer = window.setTimeout(() => {
+      pathCopied.value = false;
+      pathCopiedTimer = null;
+    }, 1600);
+  } catch {
+    pathCopied.value = false;
+  }
+}
+
+function navigateHistory(offset: -1 | 1): void {
+  const nextIndex = folderHistoryIndex.value + offset;
+  const folderId = folderHistory.value[nextIndex];
+  if (!folderId || nextIndex < 0 || nextIndex >= folderHistory.value.length) return;
+  folderHistoryIndex.value = nextIndex;
+  emit("navigateFolder", folderId);
+}
+
+function navigateBreadcrumb(folderId?: string): void {
+  if (folderId && folderId !== props.folderId) emit("navigateFolder", folderId);
+}
+
+watch(() => props.folderId, (folderId) => {
+  if (folderHistory.value[folderHistoryIndex.value] === folderId) return;
+  folderHistory.value = [...folderHistory.value.slice(0, folderHistoryIndex.value + 1), folderId];
+  folderHistoryIndex.value = folderHistory.value.length - 1;
+});
 
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -497,6 +561,7 @@ watch([searchQuery, searchAllFolders, semanticSearch, () => props.folderId], ([q
 
 onUnmounted(() => {
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
+  if (pathCopiedTimer !== null) window.clearTimeout(pathCopiedTimer);
   window.clearInterval(dreamIndicatorTimer);
   unsubscribeGraphReset();
   unsubscribeDreamUpdate();
@@ -581,17 +646,136 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       No description set
     </p>
 
-    <!-- Folder path hint -->
-    <div
-      v-if="currentSpace?.directoryPath"
-      class="mb-3 flex items-center gap-1.5 text-xs text-theme-600 min-w-0 overflow-hidden"
-    >
-      <Icon
-        icon="lucide:folder"
-        class="w-3.5 h-3.5 shrink-0"
-      />
+    <!-- Explorer toolbar -->
+    <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div class="flex min-w-0 items-center gap-2">
+        <div class="flex shrink-0 items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5">
+          <button
+            type="button"
+            :disabled="!canNavigateBack"
+            class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Back to previous folder"
+            aria-label="Back to previous folder"
+            @click="navigateHistory(-1)"
+          >
+            <Icon
+              icon="lucide:arrow-left"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+          <button
+            type="button"
+            :disabled="!canNavigateForward"
+            class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Forward to next folder"
+            aria-label="Forward to next folder"
+            @click="navigateHistory(1)"
+          >
+            <Icon
+              icon="lucide:arrow-right"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+        </div>
 
-      <span class="truncate font-mono">{{ currentSpace.directoryPath }}</span>
+        <nav
+          v-if="pathSegments.length"
+          class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-800 bg-theme-900/40 px-2 py-1.5 text-xs"
+          aria-label="Memory folder path"
+        >
+          <button
+            type="button"
+            class="mr-1.5 shrink-0 rounded p-0.5 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+            :title="pathCopied ? 'Path copied' : 'Copy folder path'"
+            aria-label="Copy current folder path"
+            @click="copyCurrentFolderPath"
+          >
+            <Icon
+              :icon="pathCopied ? 'lucide:check' : 'lucide:folder'"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+          <template
+            v-for="(segment, index) in pathSegments"
+            :key="`${segment.label}-${index}`"
+          >
+            <Icon
+              v-if="index > 0"
+              icon="lucide:chevron-right"
+              class="h-3 w-3 shrink-0 text-theme-700"
+            />
+            <button
+              type="button"
+              :disabled="!segment.folderId || segment.folderId === folderId"
+              class="shrink-0 rounded px-1.5 py-0.5 text-theme-500 transition-colors enabled:hover:bg-theme-800 enabled:hover:text-theme-200 disabled:cursor-default last:text-theme-300"
+              @click="navigateBreadcrumb(segment.folderId)"
+            >
+              {{ segment.label }}
+            </button>
+          </template>
+        </nav>
+      </div>
+
+      <div class="flex min-w-0 items-center gap-2 lg:w-[min(48rem,58%)] lg:justify-end">
+        <div class="relative min-w-[12rem] flex-1 lg:max-w-md">
+          <Icon
+            icon="lucide:search"
+            class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
+          />
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search files…"
+            class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder-theme-500 transition-colors focus:border-theme-600 focus:outline-none"
+            @input="page = 0"
+          >
+          <Icon
+            v-if="globalSearchLoading"
+            icon="lucide:loader-2"
+            class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
+          />
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+            title="Clear search"
+            aria-label="Clear document search"
+            @click="searchQuery = ''"
+          >
+            <Icon
+              icon="lucide:x"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+        </div>
+        <button
+          type="button"
+          class="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
+          :class="searchAllFolders ? 'border-accent-500/30 bg-accent-500/10 text-accent-300' : 'border-theme-800 text-theme-500 hover:text-theme-300'"
+          :aria-pressed="searchAllFolders"
+          @click="searchAllFolders = !searchAllFolders"
+        >
+          <Icon
+            :icon="searchAllFolders ? 'lucide:folders' : 'lucide:folder'"
+            class="h-3.5 w-3.5"
+          />
+          All folders
+        </button>
+        <button
+          type="button"
+          class="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
+          :class="semanticSearch ? 'border-accent-500/30 bg-accent-500/10 text-accent-300' : 'border-theme-800 text-theme-500 hover:text-theme-300'"
+          :aria-pressed="semanticSearch"
+          title="Vectorize the query and match indexed document content"
+          @click="semanticSearch = !semanticSearch"
+        >
+          <Icon
+            icon="lucide:sparkles"
+            class="h-3.5 w-3.5"
+          />
+          Semantic
+        </button>
+      </div>
     </div>
 
     <!-- Upload progress -->
@@ -723,70 +907,6 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             class="w-3.5 h-3.5"
             :class="{ 'animate-spin': filesLoading }"
           />
-        </button>
-      </div>
-    </div>
-
-    <!-- Search -->
-    <div class="mb-3 flex items-center gap-2">
-      <div class="relative min-w-0 flex-1">
-        <Icon
-          icon="lucide:search"
-          class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-theme-500"
-        />
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search files…"
-          class="w-full py-2 pl-9 pr-14 text-sm bg-theme-900/60 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-600 transition-colors"
-          @input="page = 0"
-        >
-        <Icon
-          v-if="globalSearchLoading"
-          icon="lucide:loader-2"
-          class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
-        />
-        <button
-          v-if="searchQuery"
-          type="button"
-          class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-          title="Clear search"
-          aria-label="Clear document search"
-          @click="searchQuery = ''"
-        >
-          <Icon
-            icon="lucide:x"
-            class="h-3.5 w-3.5"
-          />
-        </button>
-      </div>
-      <div class="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
-          :class="searchAllFolders ? 'border-accent-500/30 bg-accent-500/10 text-accent-300' : 'border-theme-800 text-theme-500 hover:text-theme-300'"
-          :aria-pressed="searchAllFolders"
-          @click="searchAllFolders = !searchAllFolders"
-        >
-          <Icon
-            :icon="searchAllFolders ? 'lucide:folders' : 'lucide:folder'"
-            class="h-3.5 w-3.5"
-          />
-          All folders
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
-          :class="semanticSearch ? 'border-accent-500/30 bg-accent-500/10 text-accent-300' : 'border-theme-800 text-theme-500 hover:text-theme-300'"
-          :aria-pressed="semanticSearch"
-          title="Vectorize the query and match indexed document content"
-          @click="semanticSearch = !semanticSearch"
-        >
-          <Icon
-            icon="lucide:sparkles"
-            class="h-3.5 w-3.5"
-          />
-          Semantic
         </button>
       </div>
     </div>
