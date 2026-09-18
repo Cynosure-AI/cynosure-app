@@ -121,11 +121,13 @@ const formattedDate = computed(() => props.createdAt
           </p>
         </div>
 
+        <!-- No sandbox: Chromium's built-in PDF viewer is an internal extension,
+             which sandboxed frames block (ERR_BLOCKED_BY_CLIENT). The source is
+             our own /api/files route with an extension allowlist. -->
         <iframe
           v-else-if="canPreviewDocument"
           :src="artifact.href"
           :title="`Preview of ${artifact.label}`"
-          :sandbox="''"
           class="h-[62vh] w-full border-0 bg-white"
         />
 
