@@ -189,6 +189,11 @@ function selectSpace(folderId: string) {
   mobileDocumentsVisible.value = true;
 }
 
+function navigateToFolder(folderId: string): void {
+  emit("update:selectedFolderId", folderId);
+  emit("folder-navigation");
+}
+
 function showMobileFolders(): void {
   openFolderMenuId.value = null;
   mobileDocumentsVisible.value = false;
@@ -461,6 +466,7 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
           @edit-space="selectedFolder && emit('edit-folder', selectedFolder)"
           @delete-space="selectedFolder && emit('delete-folder', selectedFolder)"
           @spaces-changed="emit('refresh-spaces')"
+          @navigate-folder="navigateToFolder"
           @document-drag-state="setDocumentDragState"
           @open-global-document="openGlobalDocument"
         />
