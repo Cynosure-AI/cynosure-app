@@ -262,12 +262,12 @@ const chatRoute = computed(() =>
             <img
               :src="logoIconUrl"
               alt=""
-              class="brand-logo-icon w-8 h-8 object-contain"
+              class="brand-logo-icon w-10 h-10 object-contain"
             >
             <img
               :src="logoTextUrl"
               alt="Cynosure"
-              class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
+              class="brand-logo-text h-10 w-auto max-w-36 object-contain flex-1"
             >
           </div>
 
@@ -278,12 +278,12 @@ const chatRoute = computed(() =>
             <img
               :src="logoIconUrl"
               alt=""
-              class="brand-logo-icon w-8 h-8 object-contain"
+              class="brand-logo-icon w-10 h-10 object-contain"
             >
             <img
               :src="logoTextUrl"
               alt=""
-              class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
+              class="brand-logo-text h-10 w-auto max-w-36 object-contain flex-1"
             >
           </div>
 
@@ -589,9 +589,7 @@ const chatRoute = computed(() =>
             class="absolute right-2 top-7 z-30 w-44 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
             @click.stop
           >
-            <div
-              class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-theme-500"
-            >
+            <div class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-theme-500">
               Filter by
             </div>
 
@@ -634,7 +632,9 @@ const chatRoute = computed(() =>
         :aria-expanded="showStatusPopover"
         @click="showStatusPopover = !showStatusPopover"
       >
-        <span class="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-theme-800 ring-1 ring-theme-700/70">
+        <span
+          class="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-theme-800 ring-1 ring-theme-700/70"
+        >
           <img
             v-if="preferencesStore.userAvatarUrl"
             :src="preferencesStore.userAvatarUrl"
@@ -928,12 +928,15 @@ const chatRoute = computed(() =>
   0% {
     transform: translate(0, 0);
   }
+
   16% {
     transform: translate(-1px, 0);
   }
+
   32% {
     transform: translate(1px, 0);
   }
+
   48%,
   100% {
     transform: translate(0, 0);
@@ -946,21 +949,25 @@ const chatRoute = computed(() =>
     clip-path: polygon(0 0, 0 0, 0 0, 0 0);
     transform: translate(0, 0);
   }
+
   8% {
     opacity: 0.8;
     clip-path: polygon(0 6%, 100% 6%, 100% 18%, 0 18%);
     transform: translate(3px, 0);
   }
+
   18% {
     opacity: 0.75;
     clip-path: polygon(0 58%, 100% 58%, 100% 72%, 0 72%);
     transform: translate(-3px, 0);
   }
+
   28% {
     opacity: 0.65;
     clip-path: polygon(0 34%, 100% 34%, 100% 46%, 0 46%);
     transform: translate(2px, 0);
   }
+
   40%,
   100% {
     opacity: 0;
@@ -975,21 +982,25 @@ const chatRoute = computed(() =>
     clip-path: polygon(0 0, 0 0, 0 0, 0 0);
     transform: translate(0, 0);
   }
+
   10% {
     opacity: 0.55;
     clip-path: polygon(0 72%, 100% 72%, 100% 86%, 0 86%);
     transform: translate(-2px, 0);
   }
+
   20% {
     opacity: 0.5;
     clip-path: polygon(0 18%, 100% 18%, 100% 28%, 0 28%);
     transform: translate(2px, 0);
   }
+
   30% {
     opacity: 0.45;
     clip-path: polygon(0 48%, 100% 48%, 100% 60%, 0 60%);
     transform: translate(-3px, 0);
   }
+
   42%,
   100% {
     opacity: 0;
