@@ -8,6 +8,7 @@ import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
 import { api } from '../../api/client'
+import type { StagedChatAttachment } from '../../api/types'
 
 const chatStore = useChatStore()
 
@@ -54,6 +55,9 @@ const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([]
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
 const liveCleanups: Array<() => void> = []
+const cancelledStageClientIds = new Set<string>()
+let stagedPollTimer: number | null = null
+let stagedLoadGeneration = 0
 
 function modelHasInputModality(modality: string): boolean | null {
   const inputModalities = chatStore.modelModalities?.input
@@ -165,20 +169,72 @@ async function stageFile(name: string, content: string, sourceId?: string): Prom
     const conversationId = chatStore.activeConversationId || await chatStore.createConversation()
     const staged = await api.chat.stageAttachment(conversationId, { name, content, clientId: draft.clientId }, controller.signal)
     const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
-    if (!current) {
+    if (cancelledStageClientIds.delete(draft.clientId)) {
       await api.chat.removeStagedAttachment(conversationId, staged.id)
       return
     }
+    // A route or conversation change can replace the local composer state
+    // while this request is returning. Keep the durable server job so it can
+    // be restored when that conversation is revisited.
+    if (!current) return
     current.stagedId = staged.id
     current.stagedConversationId = conversationId
-    current.status = 'ready'
+    current.status = staged.status === 'failed' ? 'error' : staged.status
+    current.progressCurrent = staged.progressCurrent
+    current.progressTotal = staged.progressTotal
+    current.error = staged.error
+    if (staged.status === 'processing') scheduleStagedRefresh(1_000)
   } catch (err) {
-    if (controller.signal.aborted) return
+    if (cancelledStageClientIds.delete(draft.clientId) || controller.signal.aborted) return
     const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
     if (!current) return
     current.status = 'error'
     current.error = (err as Error).message || 'Attachment processing failed'
   }
+}
+
+function applyStagedState(staged: StagedChatAttachment): void {
+  let file = attachedFiles.value.find(item => item.stagedId === staged.id)
+    || attachedFiles.value.find(item => item.clientId === staged.clientId)
+  if (!file) {
+    file = {
+      clientId: staged.clientId || staged.id,
+      name: staged.name,
+      stagedId: staged.id,
+      stagedConversationId: staged.conversationId,
+      status: staged.status === 'failed' ? 'error' : staged.status,
+    }
+    attachedFiles.value.push(file)
+  }
+  file.stagedId = staged.id
+  file.stagedConversationId = staged.conversationId
+  file.status = staged.status === 'failed' ? 'error' : staged.status
+  file.progressCurrent = staged.progressCurrent
+  file.progressTotal = staged.progressTotal
+  file.error = staged.error
+}
+
+async function refreshStagedAttachments(): Promise<void> {
+  const conversationId = chatStore.activeConversationId
+  const generation = ++stagedLoadGeneration
+  if (!conversationId) return
+  try {
+    const staged = await api.chat.listStagedAttachments(conversationId)
+    if (generation !== stagedLoadGeneration || conversationId !== chatStore.activeConversationId) return
+    const serverIds = new Set(staged.map(item => item.id))
+    attachedFiles.value = attachedFiles.value.filter(file =>
+      !file.stagedId || file.stagedConversationId !== conversationId || serverIds.has(file.stagedId),
+    )
+    for (const item of staged) applyStagedState(item)
+    if (staged.some(item => item.status === 'processing')) scheduleStagedRefresh(1_000)
+  } catch {
+    if (attachedFiles.value.some(file => file.status === 'processing')) scheduleStagedRefresh(5_000)
+  }
+}
+
+function scheduleStagedRefresh(delay: number): void {
+  if (stagedPollTimer !== null) window.clearTimeout(stagedPollTimer)
+  stagedPollTimer = window.setTimeout(() => void refreshStagedAttachments(), delay)
 }
 
 function processFiles(files: File[]): void {
@@ -228,8 +284,9 @@ function removeFile(idx: number): void {
   const file = attachedFiles.value[idx]
   if (!file) return
   attachedFiles.value.splice(idx, 1)
-  file.controller?.abort()
+  cancelledStageClientIds.add(file.clientId)
   if (file.stagedId && file.stagedConversationId) {
+    cancelledStageClientIds.delete(file.clientId)
     void api.chat.removeStagedAttachment(file.stagedConversationId, file.stagedId)
   }
 }
@@ -274,6 +331,8 @@ watch(inputText, () => {
 watch(draftStorageKey, (newKey, oldKey) => {
   persistDraft(oldKey, inputText.value)
   inputText.value = readDraft(newKey)
+  attachedFiles.value = []
+  void refreshStagedAttachments()
 })
 
 onMounted(() => {
@@ -281,19 +340,18 @@ onMounted(() => {
   // not run on mount. Size the now-mounted composer to the restored content.
   autoResize()
   const unsubscribe = api.chat.onAttachmentStageProgress((progress) => {
-    const file = attachedFiles.value.find(item => item.clientId === progress.clientId && item.stagedConversationId === progress.conversationId)
-      || attachedFiles.value.find(item => item.clientId === progress.clientId)
-    if (!file) return
-    file.progressCurrent = progress.current
-    file.progressTotal = progress.total
+    if (progress.conversationId !== chatStore.activeConversationId) return
+    applyStagedState(progress)
+    if (progress.status === 'processing') scheduleStagedRefresh(1_000)
   })
   liveCleanups.push(unsubscribe)
+  void refreshStagedAttachments()
 })
 
 onBeforeUnmount(() => {
   persistDraft(draftStorageKey.value, inputText.value)
   for (const cleanup of liveCleanups) cleanup()
-  for (const file of attachedFiles.value) file.controller?.abort()
+  if (stagedPollTimer !== null) window.clearTimeout(stagedPollTimer)
 })
 
 function onTranscription(text: string): void {
@@ -441,9 +499,19 @@ defineExpose({ processFiles, focus, fillSuggestion })
             :class="file.status === 'processing' ? 'animate-spin text-accent-400' : file.status === 'error' ? 'text-red-400' : 'text-theme-400'"
           />
           <span class="text-xs text-theme-300 max-w-32 truncate">{{ file.name }}</span>
-          <span v-if="file.status === 'processing'" class="text-[10px] text-theme-500 group-hover:hidden">{{ file.progressCurrent || 0 }} / {{ file.progressTotal || '?' }} chunks</span>
-          <span v-if="file.status === 'processing'" class="hidden text-[10px] text-red-300 group-hover:inline">Cancel</span>
-          <span v-else-if="file.status === 'error'" class="text-[10px] text-red-400" :title="file.error">Failed</span>
+          <span
+            v-if="file.status === 'processing'"
+            class="text-[10px] text-theme-500 group-hover:hidden"
+          >{{ file.progressCurrent || 0 }} / {{ file.progressTotal || '?' }} chunks</span>
+          <span
+            v-if="file.status === 'processing'"
+            class="hidden text-[10px] text-red-300 group-hover:inline"
+          >Cancel</span>
+          <span
+            v-else-if="file.status === 'error'"
+            class="text-[10px] text-red-400"
+            :title="file.error"
+          >Failed</span>
           <button
             class="ml-1 h-4 w-4 rounded-full bg-red-600 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             :aria-label="file.status === 'processing' ? `Cancel upload of ${file.name}` : `Remove ${file.name}`"

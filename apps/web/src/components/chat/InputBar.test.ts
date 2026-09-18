@@ -50,6 +50,7 @@ describe('InputBar drafts', () => {
     chatStore.sendMessage.mockResolvedValue()
     chatStore.queueMessage.mockReset()
     chatStore.queueMessage.mockResolvedValue()
+    vi.spyOn(api.chat, 'listStagedAttachments').mockResolvedValue([])
   })
 
   test('restores the latest conversation draft after the composer remounts', async () => {
@@ -191,7 +192,7 @@ describe('InputBar drafts', () => {
   })
 
   test('re-enables sending when attachment preprocessing completes', async () => {
-    let finish!: (value: { id: string; name: string; chunkCount: number }) => void
+    let finish!: (value: Awaited<ReturnType<typeof api.chat.stageAttachment>>) => void
     const stage = vi.spyOn(api.chat, 'stageAttachment').mockReturnValue(new Promise(resolve => { finish = resolve }))
     const wrapper = mountInputBar()
     await wrapper.get('textarea').setValue('Read this')
@@ -201,10 +202,48 @@ describe('InputBar drafts', () => {
       expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(false)
     })
 
-    finish({ id: 'staged-1', name: 'notes.txt', chunkCount: 1 })
+    finish({
+      id: 'staged-1', conversationId: 'conversation-1', name: 'notes.txt',
+      status: 'ready', progressCurrent: 1, progressTotal: 1, chunkCount: 1,
+    })
     await flushPromises()
     expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(true)
 
     stage.mockRestore()
+  })
+
+  test('restores server-side attachment indexing progress after remounting', async () => {
+    vi.mocked(api.chat.listStagedAttachments).mockResolvedValue([{
+      id: 'staged-1', conversationId: 'conversation-1', clientId: 'client-1', name: 'large.pdf',
+      status: 'processing', progressCurrent: 7, progressTotal: 20, chunkCount: 0,
+    }])
+
+    const wrapper = mountInputBar()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('large.pdf')
+    expect(wrapper.text()).toContain('7 / 20 chunks')
+    expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(false)
+    wrapper.unmount()
+  })
+
+  test('keeps an in-flight backend staging job when navigating to another conversation', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof api.chat.stageAttachment>>) => void
+    vi.spyOn(api.chat, 'stageAttachment').mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const remove = vi.spyOn(api.chat, 'removeStagedAttachment').mockResolvedValue({ success: true })
+    const wrapper = mountInputBar()
+
+    wrapper.vm.processFiles([new File(['large notes'], 'large.txt', { type: 'text/plain' })])
+    await vi.waitFor(() => expect(wrapper.text()).toContain('large.txt'))
+    chatStore.activeConversationId = 'conversation-2'
+    await flushPromises()
+    finish({
+      id: 'staged-navigation', conversationId: 'conversation-1', name: 'large.txt',
+      status: 'processing', progressCurrent: 1, progressTotal: 10, chunkCount: 0,
+    })
+    await flushPromises()
+
+    expect(remove).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })

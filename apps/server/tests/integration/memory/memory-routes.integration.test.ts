@@ -102,4 +102,46 @@ describe('memory search routes', () => {
     expect(tooLarge.statusCode).toBe(400)
     await app.close()
   })
+
+  test('deletes a literal fact-value node instead of treating it as an entity', async () => {
+    const { getDb } = await import('../../../src/db/database.js')
+    const { getMemoryKnowledgeStore } = await import('../../../src/core/memory/memory-knowledge.js')
+    const db = getDb()
+    const now = Date.now()
+    db.prepare(`
+      INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
+      VALUES ('medical', 'Medical', '', ?, 1, 0, ?)
+    `).run(directory, now)
+    db.prepare(`
+      INSERT INTO memory_file_index
+        (document_id, document_ref, category_id, file_name, content_hash, chunk_count,
+         last_indexed_at, deep_researched_at, created_at)
+      VALUES ('doc-medical', 'doc-medical-ref', 'medical', 'medical.md', 'revision-1', 1, ?, 0, ?)
+    `).run(now, now)
+    const value = 'HNO-Vorstellung zur Bestätigung des paroxysmalen neuronalen Tinnitus-Charakters, Ausschluss struktureller Ursachen und Beratung zu medikamentöser Testung (z. B. Carbamazepin) oder weiterer Diagnostik (MRT nur bei zusätzlichen Symptomen)'
+    const knowledge = getMemoryKnowledgeStore()
+    knowledge.publishDocument({
+      documentId: 'doc-medical', contentHash: 'revision-1', categoryId: 'medical',
+      fileName: 'medical.md', sourceId: 'memory:medical:medical.md',
+      chunks: [{ text: value, searchText: value, chunkIndex: 0, documentTitle: 'Medical', sectionPath: '', contentHash: 'chunk-1' }],
+      relations: [{
+        from: { name: 'Patient', type: 'person' }, relation: 'next_step', objectValue: value,
+        sourceChunkIndex: 0, note: value,
+      }],
+    })
+    const literal = knowledge.browseGraph({ categoryIds: ['medical'] }).nodes.find((node) => node.id.startsWith('literal:'))
+    expect(literal?.name).toBe(value)
+    const assertionId = literal!.id.slice('literal:'.length)
+    const app = await createApp()
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/memory/knowledge/graph/nodes/${encodeURIComponent(literal!.id)}`,
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ success: true })
+    expect(knowledge.getEdge(assertionId)).toBeNull()
+    await app.close()
+  })
 })

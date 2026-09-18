@@ -108,6 +108,7 @@ const editingNode = ref<KnowledgeGraphNode | null>(null);
 const editingEdge = ref<KnowledgeGraphEdge | null>(null);
 const pendingDeleteNode = ref<KnowledgeGraphNode | null>(null);
 const pendingDeleteNodes = ref<KnowledgeGraphNode[]>([]);
+const pendingDeleteNodeIsLiteral = computed(() => pendingDeleteNode.value?.id.startsWith("literal:") === true);
 const pendingDeleteEdge = ref<KnowledgeGraphEdge | null>(null);
 const nodeName = ref("");
 const nodeType = ref<KnowledgeGraphNodeType>("other");
@@ -1157,13 +1158,18 @@ onMounted(() => loadCategories());
 
       <ModalDialog
         :show="Boolean(pendingDeleteNode)"
-        title="Delete Entity"
+        :title="pendingDeleteNodeIsLiteral ? 'Delete Fact' : 'Delete Entity'"
         icon="lucide:trash-2"
         icon-color="red"
         @close="pendingDeleteNode = null"
       >
         <p class="text-theme-400 leading-relaxed">
-          Delete <strong class="text-theme-200">{{ pendingDeleteNode?.name }}</strong> and all of its relationships?
+          <template v-if="pendingDeleteNodeIsLiteral">
+            Delete the fact whose value is <strong class="text-theme-200">{{ pendingDeleteNode?.name }}</strong>?
+          </template>
+          <template v-else>
+            Delete <strong class="text-theme-200">{{ pendingDeleteNode?.name }}</strong> and all of its relationships?
+          </template>
         </p>
         <template #actions>
           <button
@@ -1171,7 +1177,7 @@ onMounted(() => loadCategories());
             class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 disabled:cursor-wait disabled:opacity-60 text-white rounded-xl text-center font-medium transition-colors"
             @click="pendingDeleteNode && deleteNode(pendingDeleteNode)"
           >
-            Delete Entity
+            {{ pendingDeleteNodeIsLiteral ? 'Delete Fact' : 'Delete Entity' }}
           </button>
           <button
             class="w-full px-4 py-3 bg-theme-800 hover:bg-theme-700 text-theme-300 rounded-xl text-center font-medium transition-colors"

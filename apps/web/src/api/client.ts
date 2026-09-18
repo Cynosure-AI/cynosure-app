@@ -6,7 +6,7 @@ import type {
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
-  ModelListItem,
+  ModelListItem, StagedChatAttachment,
   VideoGenerationJob,
   VideoGenerationModelInfo,
   VideoGenerationRequest,
@@ -131,8 +131,10 @@ export const api = {
     send: (conversationId: string, request: ChatSendRequest) =>
       post<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/send`, request),
     stageAttachment: (conversationId: string, file: { name: string; content: string; clientId?: string }, signal?: AbortSignal) =>
-      post<{ id: string; name: string; chunkCount: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`, file, signal),
-    onAttachmentStageProgress: (cb: (data: { conversationId: string; clientId?: string; current: number; total: number }) => void) =>
+      post<StagedChatAttachment>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`, file, signal),
+    listStagedAttachments: (conversationId: string) =>
+      get<StagedChatAttachment[]>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`),
+    onAttachmentStageProgress: (cb: (data: StagedChatAttachment) => void) =>
       onWsEvent('attachment:stage-progress', cb as WsHandler),
     removeStagedAttachment: (conversationId: string, attachmentId: string) =>
       del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage/${encodeURIComponent(attachmentId)}`),

@@ -69,6 +69,23 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 5,
+        description: 'Persist staged attachment indexing progress',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(staged_chat_attachments)') as Array<{ name: string }>).map((column) => column.name))
+            const addColumn = (name: string, declaration: string) => {
+                if (!columns.has(name)) db.exec(`ALTER TABLE staged_chat_attachments ADD COLUMN ${name} ${declaration}`)
+            }
+            addColumn('client_id', 'TEXT')
+            addColumn('status', "TEXT NOT NULL DEFAULT 'ready' CHECK(status IN ('processing', 'ready', 'failed'))")
+            addColumn('progress_current', 'INTEGER NOT NULL DEFAULT 0')
+            addColumn('progress_total', 'INTEGER NOT NULL DEFAULT 0')
+            addColumn('error', 'TEXT')
+            addColumn('updated_at', 'INTEGER')
+            db.exec('CREATE INDEX IF NOT EXISTS idx_staged_chat_attachments_status ON staged_chat_attachments(status, updated_at)')
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

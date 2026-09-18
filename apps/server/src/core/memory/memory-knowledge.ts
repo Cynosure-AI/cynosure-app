@@ -1085,7 +1085,13 @@ export class MemoryKnowledgeStore {
         throwOnError: false,
       })
     }
-    await Promise.allSettled(activeRuns.map((run) => this.indexSearchProjection(run.id)))
+    // The relational graph mutation above is already complete and immediately
+    // visible. Re-embedding every affected document can take much longer than
+    // the tool's 30-second budget, especially with remote embedding providers,
+    // so refresh the derived semantic-search projection in the background.
+    for (const run of activeRuns) void this.indexSearchProjection(run.id).catch((error) => {
+      console.warn('[memory] Failed to refresh a merged knowledge projection:', error)
+    })
     const entity = this.getNode(primaryId)
     if (!entity) throw new Error('ENTITY_MERGE_RESULT_MISSING')
     return {
