@@ -449,25 +449,23 @@ function formatFileSize(bytes: number): string {
 // --- Lifecycle ---
 watch(
   () => props.categoryId,
-  () => {
+  async (categoryId) => {
     files.value = [];
     knowledgePreviews.value = {};
     selectedFiles.value = new Set();
     resetJobs();
     showEditorModal.value = false;
     editorFileName.value = "";
-    searchQuery.value = props.focusFile || "";
+    searchQuery.value = "";
     page.value = 0;
-    loadFiles();
-    loadJobs();
+    await Promise.all([loadFiles(), loadJobs()]);
+    if (props.categoryId === categoryId && props.focusFile) openEditorModal(props.focusFile);
   },
   { immediate: true },
 );
 
-watch(() => props.focusFile, (fileName, previousFileName) => {
-  if (!fileName && !previousFileName) return;
-  searchQuery.value = fileName || "";
-  page.value = 0;
+watch(() => props.focusFile, (fileName) => {
+  if (fileName) openEditorModal(fileName);
 });
 
 watch([searchQuery, searchAllFolders, semanticSearch, () => props.categoryId], ([query]) => {
@@ -740,14 +738,27 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
           v-model="searchQuery"
           type="text"
           placeholder="Search files…"
-          class="w-full py-2 pl-9 pr-9 text-sm bg-theme-900/60 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-600 transition-colors"
+          class="w-full py-2 pl-9 pr-14 text-sm bg-theme-900/60 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-600 transition-colors"
           @input="page = 0"
         >
         <Icon
           v-if="globalSearchLoading"
           icon="lucide:loader-2"
-          class="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
+          class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
         />
+        <button
+          v-if="searchQuery"
+          type="button"
+          class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          title="Clear search"
+          aria-label="Clear document search"
+          @click="searchQuery = ''"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-3.5 w-3.5"
+          />
+        </button>
       </div>
       <div class="flex shrink-0 items-center gap-2">
         <button

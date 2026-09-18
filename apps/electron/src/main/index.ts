@@ -296,11 +296,13 @@ function registerAppProtocol(): void {
 
     protocol.handle('app', async (request) => {
         const url = new URL(request.url)
-        let pathname = decodeURIComponent(url.pathname)
 
-        // Proxy /api/ requests to the embedded server
-        if (pathname.startsWith('/api/')) {
-            const serverUrl = `http://127.0.0.1:${serverPort}${pathname}${url.search}`
+        // Proxy /api/ requests to the embedded server. Keep the pathname
+        // percent-encoded: route parameters such as OpenRouter model IDs contain
+        // slashes (for example `openai/gpt-5`). Decoding `%2F` here turns one
+        // parameter into two path segments before Fastify can match the route.
+        if (url.pathname.startsWith('/api/')) {
+            const serverUrl = `http://127.0.0.1:${serverPort}${url.pathname}${url.search}`
 
             // On Windows, passing request.body (a ReadableStream) directly to
             // net.fetch is unreliable — the body can be silently dropped.
@@ -315,6 +317,7 @@ function registerAppProtocol(): void {
             })
         }
 
+        let pathname = decodeURIComponent(url.pathname)
         if (pathname === '/') pathname = '/index.html'
         const filePath = join(webDist, pathname)
 

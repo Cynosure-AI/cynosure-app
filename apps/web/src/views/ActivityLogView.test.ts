@@ -51,7 +51,7 @@ test('a live Dream update immediately appears under Active Now and can be cancel
   wrapper.unmount()
   expect(mocks.unsubscribe).toHaveBeenCalledOnce()
 })
-test('memory and Dream change links open the changed document with a pagination-safe filter', async () => {
+test('memory and Dream change links open the changed document directly', async () => {
   mocks.list.mockResolvedValue({
     items: [{
       id: 'memory-file:category:notes', kind: 'memory', title: 'Updated knowledge graph for notes.md',
