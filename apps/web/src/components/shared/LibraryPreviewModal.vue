@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { ActivityArtifact } from '../../api/types'
 import ModalDialog from './ModalDialog.vue'
@@ -18,7 +18,26 @@ const emit = defineEmits<{
 
 const extension = computed(() => (props.artifact?.ext || '').replace(/^\./, '').toLowerCase())
 const textExtensions = new Set(['txt', 'md', 'csv', 'tsv', 'json'])
-const canPreviewDocument = computed(() => extension.value === 'pdf' || textExtensions.has(extension.value))
+const isTextDocument = computed(() => textExtensions.has(extension.value))
+const canPreviewDocument = computed(() => extension.value === 'pdf' || isTextDocument.value)
+
+// Text documents are rendered inline (themed) instead of in an iframe, whose
+// UA styling follows the app's color-scheme and can render white-on-white.
+const textContent = ref('')
+const textLoadError = ref(false)
+
+watch(() => props.artifact, async (artifact) => {
+  textContent.value = ''
+  textLoadError.value = false
+  if (!artifact || !isTextDocument.value) return
+  try {
+    const response = await fetch(artifact.href)
+    if (!response.ok) throw new Error(String(response.status))
+    textContent.value = await response.text()
+  } catch {
+    textLoadError.value = true
+  }
+}, { immediate: true })
 
 const typeLabel = computed(() => {
   if (!props.artifact) return 'Library item'
@@ -82,6 +101,24 @@ const formattedDate = computed(() => props.createdAt
             controls
             class="w-full"
           />
+        </div>
+
+        <pre
+          v-else-if="isTextDocument && !textLoadError"
+          class="library-text-preview h-[62vh] w-full overflow-auto whitespace-pre-wrap wrap-break-word p-5 font-mono text-sm leading-relaxed text-theme-200"
+        >{{ textContent || ' ' }}</pre>
+
+        <div
+          v-else-if="isTextDocument && textLoadError"
+          class="flex h-[62vh] w-full flex-col items-center justify-center gap-2 text-center"
+        >
+          <Icon
+            icon="lucide:triangle-alert"
+            class="h-8 w-8 text-theme-400"
+          />
+          <p class="text-sm text-theme-300">
+            Could not load the document preview.
+          </p>
         </div>
 
         <iframe

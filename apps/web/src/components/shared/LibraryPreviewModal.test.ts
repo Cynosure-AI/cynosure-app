@@ -1,10 +1,13 @@
-import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, test } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import LibraryPreviewModal from './LibraryPreviewModal.vue'
+
+const fetchMock = vi.fn()
 
 describe('LibraryPreviewModal', () => {
   afterEach(() => {
     document.body.innerHTML = ''
+    vi.unstubAllGlobals()
   })
 
   test('previews an image and offers the original as a download', () => {
@@ -26,7 +29,9 @@ describe('LibraryPreviewModal', () => {
     expect(download?.getAttribute('download')).toBe(artifact.label)
   })
 
-  test('uses a sandboxed inline preview for supported documents', () => {
+  test('renders text documents inline with themed styling', async () => {
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(new Response('# notes\ncontent', { status: 200 }))
     mount(LibraryPreviewModal, {
       props: {
         artifact: {
@@ -39,10 +44,11 @@ describe('LibraryPreviewModal', () => {
       attachTo: document.body,
       global: { stubs: { Icon: true } },
     })
+    await flushPromises()
 
-    const preview = document.body.querySelector<HTMLIFrameElement>('iframe')
-    expect(preview?.getAttribute('src')).toContain('notes.md')
-    expect(preview?.hasAttribute('sandbox')).toBe(true)
+    const preview = document.body.querySelector('pre.library-text-preview')
+    expect(preview?.textContent).toContain('content')
+    expect(document.body.querySelector('iframe')).toBeNull()
   })
 
   test('emits close from the modal action', async () => {
