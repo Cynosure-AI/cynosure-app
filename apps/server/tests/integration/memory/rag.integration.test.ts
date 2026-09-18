@@ -2,8 +2,33 @@ import { expect, test } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import * as lancedb from '@lancedb/lancedb'
 import { RAGStore } from '../../../src/core/memory/rag.js'
 import { andLanceDbFilters, lanceDbEqFilter } from '../../../src/core/memory/lancedb-filter.js'
+
+test('migrates legacy categoryId metadata to folderId in place', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-folder-migration-'))
+  const legacy = await lancedb.connect(directory)
+  await legacy.createTable('memory', [{
+    id: 'legacy', text: 'existing memory', vector: [1, 0, 0], source: 'memory',
+    sourceFile: 'existing.md', chunkIndex: 0, categoryId: 'people', createdAt: 1,
+  }])
+
+  const store = new RAGStore()
+  try {
+    await store.initialize(directory)
+    expect(await store.listDocuments('memory', lanceDbEqFilter('folderId', 'people'), { throwOnError: true }))
+      .toMatchObject([{ id: 'legacy', folderId: 'people' }])
+
+    const migrated = await legacy.openTable('memory')
+    const fields = (await migrated.schema()).fields.map((field) => field.name)
+    expect(fields).toContain('folderId')
+    expect(fields).not.toContain('categoryId')
+  } finally {
+    await store.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
 
 test('hybrid search retains LanceDB fusion scores for lexical candidates', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-'))

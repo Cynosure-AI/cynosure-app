@@ -173,9 +173,21 @@ export class RAGStore {
     if (!this.db) return null
     try {
       const table = await this.db.openTable(tableName)
-      this.tables.set(tableName, table)
       let schema = await table.schema()
-      const existingFields = new Set(schema.fields.map((f: { name: string }) => f.name))
+      let existingFields = new Set(schema.fields.map((f: { name: string }) => f.name))
+
+      // v2 memory-index schema: migrate the former category terminology in
+      // place. LanceDB versions each table mutation, so interrupted upgrades
+      // leave a recoverable prior version and this check safely resumes.
+      if (existingFields.has('categoryId') && !existingFields.has('folderId')) {
+        await table.addColumns([{ name: 'folderId', valueSql: 'categoryId' }])
+        const legacyIndices = (await table.listIndices()).filter((index) => index.columns?.includes('categoryId'))
+        for (const index of legacyIndices) await table.dropIndex(index.name)
+        await table.dropColumns(['categoryId'])
+        schema = await table.schema()
+        existingFields = new Set(schema.fields.map((f: { name: string }) => f.name))
+        console.log(`[rag] Migrated table "${tableName}" from categoryId to folderId`)
+      }
       const metadataColumns = [
         { name: 'searchText', valueSql: 'text' },
         { name: 'documentTitle', valueSql: "''" },
@@ -191,6 +203,7 @@ export class RAGStore {
         await table.addColumns(metadataColumns)
         schema = await table.schema()
       }
+      this.tables.set(tableName, table)
       this.fieldNamesCache.set(tableName, new Set(schema.fields.map((f: { name: string }) => f.name)))
       return table
     } catch {
