@@ -3,6 +3,11 @@
   "version": "2.2.0",
   "packageManager": "pnpm@11.1.2",
   "private": true,
+  "pnpm": {
+    "overrides": {
+      "node-abi": "^4.35.0"
+    }
+  },
   "description": "Cynosure monorepo — server, web UI, and Electron desktop app",
   "scripts": {
     "dev:server": "pnpm --filter cynosure-server dev",
