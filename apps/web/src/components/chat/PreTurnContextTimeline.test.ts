@@ -56,15 +56,15 @@ describe('PreTurnContextTimeline', () => {
     const text = wrapper.text()
     expect(text).toContain('Hybrid search found 40 candidates')
     expect(text).toContain('Reranked 40 candidates down to 16 matches')
-    expect(text).toContain('Kept 7 of 12 unique matches')
-    expect(text).toContain('Removed 4 cross-query duplicates and 5 weak matches; weak means below 65% of the strongest displayed relevance score')
+    expect(text).toContain('Fused 16 matches into 12 unique matches, kept 7')
+    expect(text).toContain('4 matches appeared in multiple queries and were deduplicated; 5 more results dropped for scoring below 65% of the strongest match')
     expect(text).toContain('Selected top 2 memories')
     expect(text).not.toContain('Found 2 memory matches')
     expect(text).not.toContain('Selecting the highest-ranked memories')
     expect(wrapper.findAll('ol > li').map((item) => item.text())).toEqual([
       expect.stringContaining('Hybrid search found 40 candidates'),
       expect.stringContaining('Reranked 40 candidates down to 16 matches'),
-      expect.stringContaining('Kept 7 of 12 unique matches'),
+      expect.stringContaining('Fused 16 matches into 12 unique matches, kept 7'),
       expect.stringContaining('Selected top 2 memories'),
     ])
     const cards = wrapper.findAll('.memory-card')
@@ -81,10 +81,12 @@ describe('PreTurnContextTimeline', () => {
       props: {
         steps: [{
           iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 100,
-          toolCalls: [{ name: 'memory', arguments: JSON.stringify({
-            type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker',
-            sourceFile: 'complete-memory.md', content: fullContent,
-          }) }],
+          toolCalls: [{
+            name: 'memory', arguments: JSON.stringify({
+              type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker',
+              sourceFile: 'complete-memory.md', content: fullContent,
+            })
+          }],
         }],
         isActive: false,
       },
@@ -134,10 +136,12 @@ describe('PreTurnContextTimeline', () => {
           { iteration: 0, taskId: 'memory', status: 'searching-memory', timestamp: 100 },
           {
             iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 120,
-            toolCalls: [{ name: 'best.md', arguments: JSON.stringify({
-              type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker',
-              sourceFile: 'best.md', matchScore: .93, pipelineStats,
-            }) }],
+            toolCalls: [{
+              name: 'best.md', arguments: JSON.stringify({
+                type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker',
+                sourceFile: 'best.md', matchScore: .93, pipelineStats,
+              })
+            }],
           },
         ],
         isActive: false,
@@ -251,11 +255,13 @@ describe('PreTurnContextTimeline', () => {
             iteration: 0,
             status: 'building-task-context',
             timestamp: 100,
-            toolCalls: [{ name: 'Task context', arguments: JSON.stringify({
-              type: 'task-context', selectionMethod: 'llm', requiresTools: true, requiresMemory: true,
-              toolSearchQuery: 'calendar scheduling capabilities',
-              memorySearchQueries: ['project deadline notes', 'launch date discussion'],
-            }) }],
+            toolCalls: [{
+              name: 'Task context', arguments: JSON.stringify({
+                type: 'task-context', selectionMethod: 'llm', requiresTools: true, requiresMemory: true,
+                toolSearchQuery: 'calendar scheduling capabilities',
+                memorySearchQueries: ['project deadline notes', 'launch date discussion'],
+              })
+            }],
           },
           { iteration: 0, taskId: 'memory', status: 'searching-memory', timestamp: 110 },
           { iteration: 0, taskId: 'tools', status: 'finding-tools', timestamp: 120 },
