@@ -365,6 +365,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const tasks = count('tasks')
         const executionLogs = count('execution_logs')
         const executionSteps = count('execution_steps')
+        const auxiliaryModelUsage = count('auxiliary_model_usage')
         const knowledgeEntities = count('memory_knowledge_entities')
         const knowledgeRelationships = count('memory_knowledge_assertions')
         const knowledgeEvidence = count('memory_knowledge_assertion_evidence')
@@ -396,8 +397,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 details: { conversations, messages, attachments, tasks }
             },
             usage: {
-                count: executionLogs + executionSteps,
-                details: { runs: executionLogs, steps: executionSteps }
+                count: executionLogs + executionSteps + auxiliaryModelUsage,
+                details: { runs: executionLogs, steps: executionSteps, auxiliaryModelUsage }
             }
         }
 
@@ -580,10 +581,12 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const db = getDb()
                 const executionLogs = db.prepare('SELECT * FROM execution_logs ORDER BY created_at').all()
                 const executionSteps = db.prepare('SELECT * FROM execution_steps ORDER BY created_at').all()
+                const auxiliaryModelUsage = db.prepare('SELECT * FROM auxiliary_model_usage ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(executionLogs, null, 2), { name: 'usage/execution_logs.json' })
                 archive.append(JSON.stringify(executionSteps, null, 2), { name: 'usage/execution_steps.json' })
-                manifest.modules.usage = { count: executionLogs.length + executionSteps.length }
+                archive.append(JSON.stringify(auxiliaryModelUsage, null, 2), { name: 'usage/auxiliary_model_usage.json' })
+                manifest.modules.usage = { count: executionLogs.length + executionSteps.length + auxiliaryModelUsage.length }
             }
 
             // Write manifest
@@ -1455,6 +1458,33 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             res.restored++
                         } catch (e) {
                             res.errors.push(`Execution step: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Auxiliary model usage (embeddings, reranking, dreaming, etc.)
+                const auxiliaryUsageEntry = zip.getEntry('usage/auxiliary_model_usage.json')
+                if (auxiliaryUsageEntry) {
+                    const auxiliaryUsage = JSON.parse(auxiliaryUsageEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    for (const usage of auxiliaryUsage) {
+                        try {
+                            db.prepare(
+                                `INSERT OR REPLACE INTO auxiliary_model_usage
+                                 (id, kind, provider, model, input_tokens, output_tokens, request_count, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+                            ).run(
+                                usage.id,
+                                usage.kind,
+                                usage.provider || '',
+                                usage.model || '',
+                                usage.input_tokens ?? 0,
+                                usage.output_tokens ?? 0,
+                                usage.request_count ?? 1,
+                                usage.created_at || Date.now(),
+                            )
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Auxiliary model usage: ${(e as Error).message}`)
                         }
                     }
                 }
