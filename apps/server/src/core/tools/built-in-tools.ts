@@ -83,8 +83,8 @@ interface BuiltInHydrationContext {
     agentId?: string;
     conversationId: string;
     broadcast: BroadcastFn;
-    assignedCategories: MemoryFolderRef[];
-    categoryFilter?: string;
+    assignedFolders: MemoryFolderRef[];
+    folderFilter?: string;
     scheduleExecutionConfig?: ConversationExecutionConfig;
 }
 
@@ -100,21 +100,21 @@ const BUILTIN_TOOL_HYDRATORS = {
     schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[2],
     schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[3],
     memory_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
-        categoryFilter: ctx.categoryFilter,
-        assignedCategories: ctx.assignedCategories,
+        folderFilter: ctx.folderFilter,
+        assignedFolders: ctx.assignedFolders,
     }),
     memory_create: (ctx: BuiltInHydrationContext) => makeMemoryCreateTool({
-        assignedCategories: ctx.assignedCategories,
+        assignedFolders: ctx.assignedFolders,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
     memory_patch: (ctx: BuiltInHydrationContext) => makeMemoryPatchTool({
-        assignedCategories: ctx.assignedCategories,
+        assignedFolders: ctx.assignedFolders,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
-    knowledge_search: (ctx: BuiltInHydrationContext) => makeKnowledgeSearchTool({ assignedCategories: ctx.assignedCategories }),
-    knowledge_assert: (ctx: BuiltInHydrationContext) => makeKnowledgeAssertTool({ assignedCategories: ctx.assignedCategories }),
-    knowledge_delete: (ctx: BuiltInHydrationContext) => makeKnowledgeDeleteTool({ assignedCategories: ctx.assignedCategories }),
-    knowledge_entity_merge: (ctx: BuiltInHydrationContext) => makeKnowledgeEntityMergeTool({ assignedCategories: ctx.assignedCategories }),
+    knowledge_search: (ctx: BuiltInHydrationContext) => makeKnowledgeSearchTool({ assignedFolders: ctx.assignedFolders }),
+    knowledge_assert: (ctx: BuiltInHydrationContext) => makeKnowledgeAssertTool({ assignedFolders: ctx.assignedFolders }),
+    knowledge_delete: (ctx: BuiltInHydrationContext) => makeKnowledgeDeleteTool({ assignedFolders: ctx.assignedFolders }),
+    knowledge_entity_merge: (ctx: BuiltInHydrationContext) => makeKnowledgeEntityMergeTool({ assignedFolders: ctx.assignedFolders }),
 } as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
 export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
@@ -140,7 +140,7 @@ function getBuiltInToolSpecs(): BuiltInToolSpec[] {
     const specContext: BuiltInHydrationContext = {
         conversationId: "",
         broadcast: () => undefined,
-        assignedCategories: [],
+        assignedFolders: [],
     };
 
     return BUILTIN_TOOL_NAMES.map((name) => {
@@ -201,8 +201,8 @@ export function registerBuiltInTools(): void {
  * Get the default memory folder when no agent context is available.
  */
 function getDefaultMemoryFolders(): MemoryFolderRef[] {
-    const uncategorizedCategory = getDefaultMemoryFolder();
-    return uncategorizedCategory ? [uncategorizedCategory] : [];
+    const uncategorizedFolder = getDefaultMemoryFolder();
+    return uncategorizedFolder ? [uncategorizedFolder] : [];
 }
 
 /**
@@ -219,18 +219,18 @@ export function hydrateBuiltInTools(
         scheduleExecutionConfig?: ConversationExecutionConfig;
     },
 ): RegistryAwareToolDefinition[] {
-    const selectedCategories =
+    const selectedFolders =
         ctx.memoryFolderOverrides ??
         (ctx.agentId ? getAssignedMemoryFolders(ctx.agentId) : getDefaultMemoryFolders());
-    const assignedCategories = expandMemoryFolderScope(selectedCategories);
-    const categoryFilter = buildMemoryFolderFilter(assignedCategories);
+    const assignedFolders = expandMemoryFolderScope(selectedFolders);
+    const folderFilter = buildMemoryFolderFilter(assignedFolders);
 
     const hydrationContext: BuiltInHydrationContext = {
         agentId: ctx.agentId,
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
-        assignedCategories,
-        categoryFilter,
+        assignedFolders,
+        folderFilter,
         scheduleExecutionConfig: ctx.scheduleExecutionConfig,
     };
 

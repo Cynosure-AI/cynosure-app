@@ -7,13 +7,13 @@ import {
   isMemoryFolderSelected,
 } from './memory-folder-selection'
 
-function folder(id: string, categoryPath: string, isUncategorized = false): MemoryFolder {
+function folder(id: string, folderPath: string, isUncategorized = false): MemoryFolder {
   return {
     id,
     name: id,
     description: '',
-    directoryPath: `/memory/${categoryPath}`,
-    categoryPath,
+    directoryPath: `/memory/${folderPath}`,
+    folderPath,
     sortOrder: 0,
     isUncategorized,
     createdAt: 1,

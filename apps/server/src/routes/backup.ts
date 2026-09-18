@@ -21,7 +21,7 @@ import {
 } from 'fs'
 import type { LLMProviderConfig } from '../core/gateway/providers/base.provider.js'
 import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-manager.js'
-import { directoryPathForRelative, categoryPathForDirectory, validateRelativePath } from '../core/memory/memory-folder-directories.js'
+import { directoryPathForRelative, folderPathForDirectory, validateRelativePath } from '../core/memory/memory-folder-directories.js'
 import { stopAllMemoryFolderWatchers, watchMemoryFolder } from '../core/memory/memory-folder-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
@@ -80,7 +80,7 @@ interface BackupManifest {
 }
 
 interface MemoryFileBackup {
-    categoryId: string
+    folderId: string
     fileName: string
     archiveName: string
 }
@@ -101,7 +101,7 @@ interface MemoryFolderBackupRow extends Record<string, unknown> {
     id?: unknown
     name?: unknown
     directory_path?: unknown
-    categoryPath?: unknown
+    folderPath?: unknown
     is_uncategorized?: unknown
     sort_order?: unknown
     created_at?: unknown
@@ -173,12 +173,12 @@ function getMemoryKnowledgeBackup(zip: AdmZip): MemoryKnowledgeBackup | null {
 }
 
 function relativePathFromBackupCategory(category: MemoryFolderBackupRow): string {
-    if (typeof category.categoryPath !== 'string') throw new Error('Memory folder path is missing from backup.')
-    return validateRelativePath(category.categoryPath)
+    if (typeof category.folderPath !== 'string') throw new Error('Memory folder path is missing from backup.')
+    return validateRelativePath(category.folderPath)
 }
 
 function portableRelativePathForFolder(directoryPath: string): string {
-    return validateRelativePath(categoryPathForDirectory(directoryPath))
+    return validateRelativePath(folderPathForDirectory(directoryPath))
 }
 
 async function resetVectorIndexes(): Promise<void> {
@@ -513,7 +513,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         const isUncategorized = category.is_uncategorized === 1 || category.is_uncategorized === true
                         return {
                             ...category,
-                            categoryPath: isUncategorized || !directoryPath ? '' : portableRelativePathForFolder(directoryPath),
+                            folderPath: isUncategorized || !directoryPath ? '' : portableRelativePathForFolder(directoryPath),
                         }
                     })
                 const assignments = db.prepare('SELECT * FROM agent_memory_folders').all()
@@ -526,14 +526,14 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const files: MemoryFileBackup[] = []
 
                 for (const category of categories) {
-                    const categoryId = String(category.id || '')
+                    const folderId = String(category.id || '')
                     const directoryPath = typeof category.directory_path === 'string' ? category.directory_path : ''
-                    if (!categoryId || !directoryPath) continue
+                    if (!folderId || !directoryPath) continue
 
                     for (const file of listFilesInFolder(directoryPath).filter(f => f.supported)) {
-                        const archiveName = `memory/files/${encodeURIComponent(categoryId)}/${encodeURIComponent(file.fileName)}`
+                        const archiveName = `memory/files/${encodeURIComponent(folderId)}/${encodeURIComponent(file.fileName)}`
                         archive.file(file.filePath, { name: archiveName })
-                        files.push({ categoryId, fileName: file.fileName, archiveName })
+                        files.push({ folderId, fileName: file.fileName, archiveName })
                     }
                 }
 
@@ -1002,7 +1002,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
 
                 // Restore category metadata, document identities, revisions, and assignments.
                 const categoriesEntry = zip.getEntry('memory/categories.json')
-                const categoryIdMap = new Map<string, string>()
+                const folderIdMap = new Map<string, string>()
                 if (categoriesEntry) {
                     const { categories, assignments, fileIndex, documents, revisions } = JSON.parse(categoriesEntry.getData().toString('utf-8')) as {
                         categories: MemoryFolderBackupRow[]
@@ -1016,7 +1016,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         if (!importedId) continue
                         const isUncategorized = sp.is_uncategorized === 1 || sp.is_uncategorized === true || importedId === 'uncategorized'
                         const id = isUncategorized ? 'uncategorized' : importedId
-                        categoryIdMap.set(importedId, id)
+                        folderIdMap.set(importedId, id)
                         const directoryPath = id === 'uncategorized' ? getDefaultMemoryFolderDir() : directoryPathForRelative(relativePathFromBackupCategory(sp))
                         ensureFolder(directoryPath)
                         db.prepare(`
@@ -1035,25 +1035,25 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     }
                     ensureDefaultMemoryFolder(db)
                     for (const asg of assignments) {
-                        const mappedCategoryId = categoryIdMap.get(String(asg.category_id || '')) || asg.category_id
+                        const mappedFolderId = folderIdMap.get(String(asg.category_id || '')) || asg.category_id
                         db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
-                            .run(asg.agent_id, mappedCategoryId)
+                            .run(asg.agent_id, mappedFolderId)
                     }
                     for (const file of fileIndex || []) {
-                        const mappedCategoryId = categoryIdMap.get(file.category_id) || file.category_id
+                        const mappedFolderId = folderIdMap.get(file.category_id) || file.category_id
                         db.prepare(`
                             INSERT OR REPLACE INTO memory_file_index
                                 (document_id, document_ref, category_id, file_name, content_hash,
                                  chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json, created_at)
                             VALUES (?, ?, ?, ?, '', 0, 0, 0, ?, '[]', ?)
-                        `).run(file.document_id, file.document_ref, mappedCategoryId, file.file_name, file.dreamed_at || 0, file.created_at || Date.now())
+                        `).run(file.document_id, file.document_ref, mappedFolderId, file.file_name, file.dreamed_at || 0, file.created_at || Date.now())
                     }
                     for (const document of documents || []) {
-                        const categoryId = categoryIdMap.get(String(document.category_id || '')) || String(document.category_id || '')
+                        const folderId = folderIdMap.get(String(document.category_id || '')) || String(document.category_id || '')
                         db.prepare(`INSERT OR REPLACE INTO memory_documents
                             (document_id, document_ref, category_id, file_name, current_hash, status, indexing_status, created_at, updated_at, deleted_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                            .run(document.document_id, document.document_ref, categoryId, document.file_name,
+                            .run(document.document_id, document.document_ref, folderId, document.file_name,
                                 document.current_hash || '', document.status || 'active', document.indexing_status || 'pending', document.created_at || Date.now(),
                                 document.updated_at || Date.now(), document.deleted_at || null)
                     }
@@ -1078,14 +1078,14 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     for (const file of files || []) {
                         try {
                             const safeFileName = basename(file.fileName)
-                            if (!file.categoryId || !safeFileName || safeFileName !== file.fileName) {
+                            if (!file.folderId || !safeFileName || safeFileName !== file.fileName) {
                                 throw new Error('Invalid memory file name')
                             }
-                            const targetCategoryId = categoryIdMap.get(file.categoryId) || file.categoryId
+                            const targetFolderId = folderIdMap.get(file.folderId) || file.folderId
 
                             const category = db.prepare('SELECT directory_path FROM memory_folders WHERE id = ?')
-                                .get(targetCategoryId) as { directory_path: string } | undefined
-                            if (!category?.directory_path) throw new Error(`Memory folder "${targetCategoryId}" not found`)
+                                .get(targetFolderId) as { directory_path: string } | undefined
+                            if (!category?.directory_path) throw new Error(`Memory folder "${targetFolderId}" not found`)
 
                             const entry = zip.getEntry(file.archiveName)
                             if (!entry || entry.isDirectory) throw new Error('File content missing from backup')

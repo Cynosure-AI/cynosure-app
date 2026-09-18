@@ -141,7 +141,7 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     status: job.status,
     sourceId: job.id,
     sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Deep Research" : "Search indexing",
-    memoryFolderId: toolJob ? undefined : job.categoryId,
+    memoryFolderId: toolJob ? undefined : job.folderId,
     memoryFileName: toolJob ? undefined : job.fileName,
   };
 }
@@ -438,7 +438,7 @@ async function openItem(item: ActivityItem) {
     return;
   }
   if (item.memoryFolderId && item.memoryFileName) {
-    router.push({ path: "/memory-folders/documents", query: { category: item.memoryFolderId, file: item.memoryFileName } });
+    router.push({ path: "/memory-folders/documents", query: { folder: item.memoryFolderId, file: item.memoryFileName } });
     return;
   }
   if (item.conversationId) {
@@ -448,9 +448,9 @@ async function openItem(item: ActivityItem) {
   }
 }
 
-function openMemoryLocation(categoryId: string | undefined, fileName: string | undefined) {
-  if (!categoryId || !fileName) return;
-  router.push({ path: "/memory-folders/documents", query: { category: categoryId, file: fileName } });
+function openMemoryLocation(folderId: string | undefined, fileName: string | undefined) {
+  if (!folderId || !fileName) return;
+  router.push({ path: "/memory-folders/documents", query: { folder: folderId, file: fileName } });
 }
 
 function isActiveInstance(item: ActivityItem): boolean {

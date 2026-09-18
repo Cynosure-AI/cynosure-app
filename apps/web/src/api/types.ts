@@ -371,9 +371,9 @@ export interface MemoryFolder {
     name: string
     description: string
     directoryPath: string
-    categoryPath: string
+    folderPath: string
     depth?: number
-    parentCategoryPath?: string | null
+    parentFolderPath?: string | null
     sortOrder: number
     isUncategorized: boolean
     createdAt: number
@@ -407,9 +407,9 @@ export interface MemoryFileStatus {
 export type { RuntimeLimits } from '@shared/runtime-limits'
 
 export interface MemoryFileSearchResult extends MemoryFileStatus {
-    categoryId: string
-    categoryName: string
-    categoryPath: string
+    folderId: string
+    folderName: string
+    folderPath: string
     matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary' | 'content'>
 }
 
@@ -431,7 +431,7 @@ export interface MemoryDiffSegment {
 
 export interface RecentMemoryChange extends MemoryRevisionSummary {
     documentRef: string
-    categoryId: string
+    folderId: string
     fileName: string
     status: 'active' | 'deleted'
     segments: MemoryDiffSegment[]
@@ -474,7 +474,7 @@ export interface MemoryDocumentAnalysis {
 export interface MemoryIndexJob<T = unknown> {
     id: string
     kind: 'reindex' | 'deep-research' | 'tool-embeddings'
-    categoryId: string
+    folderId: string
     fileName: string
     status: 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
     createdAt: number

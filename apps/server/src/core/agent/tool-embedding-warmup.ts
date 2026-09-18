@@ -26,7 +26,7 @@ export function startToolEmbeddingWarmup(): () => Promise<void> {
                 }
                 const job = startMemoryIndexJob({
                     kind: 'tool-embeddings',
-                    categoryId: 'tool-registry',
+                    folderId: 'tool-registry',
                     fileName: 'Tool capabilities',
                     run: async (signal, reportProgress) => {
                         let indexed = 0

@@ -36,10 +36,10 @@ const EditorStub = defineComponent({
 function mountList(focusFile?: string) {
   return mount(MemoryDocumentList, {
     props: {
-      categoryId: 'category',
+      folderId: 'category',
       spaces: [{
         id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
-        categoryPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 1,
+        folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 1,
       }],
       focusFile,
     },

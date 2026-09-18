@@ -62,7 +62,7 @@ describe('MemoryDocumentEditorModal', () => {
     const content = `# Large\n${'memory line\n'.repeat(25_000)}`
     mocks.getFileContent.mockResolvedValue({ content, revision: 'current', documentRef: 'large#ref' })
     const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, categoryId: 'category', sourceFile: 'large.md' },
+      props: { show: true, folderId: 'category', sourceFile: 'large.md' },
       global: {
         plugins: [createPinia()],
         stubs: {
@@ -95,7 +95,7 @@ describe('MemoryDocumentEditorModal', () => {
       itemTotal: 1,
     })
     const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, categoryId: 'category', sourceFile: 'memory.md' },
+      props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
       global: {
         plugins: [createPinia()],
         stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
@@ -141,7 +141,7 @@ describe('MemoryDocumentEditorModal', () => {
       itemTotal: 0,
     })
     const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, categoryId: 'category', sourceFile: 'memory.md' },
+      props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
       global: {
         plugins: [createPinia()],
         stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
@@ -161,7 +161,7 @@ describe('MemoryDocumentEditorModal', () => {
   test('switches History and Facts as mutually exclusive toggle views', async () => {
     mocks.getFileContent.mockResolvedValue({ content: '# Memory\nText', revision: 'current', documentRef: 'memory#ref' })
     const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, categoryId: 'category', sourceFile: 'memory.md' },
+      props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
       global: {
         plugins: [createPinia()],
         stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },

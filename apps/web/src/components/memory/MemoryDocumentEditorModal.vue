@@ -19,7 +19,7 @@ import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
   show: boolean;
-  categoryId: string;
+  folderId: string;
   sourceFile: string;
 }>();
 
@@ -154,7 +154,7 @@ function editorToMarkdown(): string {
 }
 
 async function loadContent() {
-  if (!props.show || !props.categoryId || !props.sourceFile || !editor.value) return;
+  if (!props.show || !props.folderId || !props.sourceFile || !editor.value) return;
   const sequence = ++contentLoadSequence;
   ++historyLoadSequence;
   loading.value = true;
@@ -168,7 +168,7 @@ async function loadContent() {
   currentFileName.value = props.sourceFile;
   editableTitle.value = splitFileName(props.sourceFile).stem;
   try {
-    const res = await api.memoryFolders.getFileContent(props.categoryId, props.sourceFile);
+    const res = await api.memoryFolders.getFileContent(props.folderId, props.sourceFile);
     if (sequence !== contentLoadSequence) return;
     loadedRevision.value = res.revision;
     documentRef.value = res.documentRef || "";
@@ -187,14 +187,14 @@ async function loadContent() {
 }
 
 async function loadAnalysis() {
-  if (!props.show || !props.categoryId || !props.sourceFile) return;
+  if (!props.show || !props.folderId || !props.sourceFile) return;
   const sequence = ++analysisLoadSequence;
   analysisLoading.value = true;
   analysisError.value = "";
   analysis.value = null;
   analysisExpanded.value = false;
   try {
-    const result = await api.memoryFolders.getDocumentAnalysis(props.categoryId, props.sourceFile);
+    const result = await api.memoryFolders.getDocumentAnalysis(props.folderId, props.sourceFile);
     if (sequence === analysisLoadSequence) {
       analysis.value = result;
       analysisExpanded.value = result.items.length > 0 && !showHistory.value;
@@ -284,7 +284,7 @@ async function restoreSelectedRevision() {
 async function applyRename() {
   const nextFileName = titleToFileName(editableTitle.value);
   if (!nextFileName || nextFileName === currentFileName.value) return currentFileName.value;
-  const res = await api.memoryFolders.renameFile(props.categoryId, currentFileName.value, nextFileName);
+  const res = await api.memoryFolders.renameFile(props.folderId, currentFileName.value, nextFileName);
   currentFileName.value = res.fileName;
   editableTitle.value = splitFileName(res.fileName).stem;
   return res.fileName;
@@ -300,7 +300,7 @@ async function saveContent() {
     const fileName = await applyRename();
     if (hasChanges.value) {
       const res = await api.memoryFolders.updateFileContent(
-        props.categoryId,
+        props.folderId,
         fileName,
         markdown,
         loadedRevision.value,
@@ -338,7 +338,7 @@ function close() {
 }
 
 watch(
-  () => [props.show, props.categoryId, props.sourceFile, editor.value] as const,
+  () => [props.show, props.folderId, props.sourceFile, editor.value] as const,
   () => {
     if (props.show) {
       void loadContent().then(() => loadAnalysis());

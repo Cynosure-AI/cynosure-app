@@ -17,7 +17,7 @@ const selectedMemoryFolders = computed(() => {
   return chatStore.memoryFolders.filter(s => ids.includes(s.id))
 })
 
-const rootSelected = computed(() => selectedMemoryFolders.value.some(category => category.isUncategorized))
+const rootSelected = computed(() => selectedMemoryFolders.value.some(folder => folder.isUncategorized))
 const memoryFolderCount = computed(() => {
   const selectedIds = new Set(chatStore.freeChatMemoryFolderIds)
   return chatStore.memoryFolders.filter((folder) => isMemoryFolderSelected(folder, selectedIds, rootSelected.value)).length

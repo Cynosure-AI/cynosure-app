@@ -26,7 +26,7 @@ const spaces: MemoryFolder[] = [
     name: 'Uncategorized',
     description: '',
     directoryPath: '/memory/default',
-    categoryPath: '',
+    folderPath: '',
     sortOrder: 0,
     isUncategorized: true,
     createdAt: 1,
@@ -37,7 +37,7 @@ const spaces: MemoryFolder[] = [
     name: 'Research',
     description: '',
     directoryPath: '/memory/research',
-    categoryPath: 'research',
+    folderPath: 'research',
     sortOrder: 1,
     isUncategorized: false,
     createdAt: 1,
@@ -94,7 +94,7 @@ describe('AgentMemoryTab', () => {
     expect(actions.some(button => button.text().trim() === 'Select all')).toBe(false)
     expect(deselectAll).toBeDefined()
 
-    const research = wrapper.get('[data-category-depth="1"]')
+    const research = wrapper.get('[data-folder-depth="1"]')
     expect(research.classes()).toContain('bg-accent-600/10')
     expect(research.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
 

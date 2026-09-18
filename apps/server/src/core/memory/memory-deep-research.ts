@@ -141,12 +141,12 @@ export function saveDeepResearchConfig(config: Partial<DeepResearchConfig>): Dee
   return normalized
 }
 
-export function memoryKnowledgeSourceId(categoryId: string, fileName: string): string {
-  return `memory:${categoryId}:${fileName}`
+export function memoryKnowledgeSourceId(folderId: string, fileName: string): string {
+  return `memory:${folderId}:${fileName}`
 }
 
 export function markMemoryFileDeepResearched(
-  categoryId: string,
+  folderId: string,
   fileName: string,
   indexedAt = Date.now(),
   expectedContentHash?: string,
@@ -157,26 +157,26 @@ export function markMemoryFileDeepResearched(
     ? getDb().prepare(`
         UPDATE memory_file_index SET deep_researched_at = ?, tags_json = ?
         WHERE category_id = ? AND file_name = ? AND content_hash = ?
-      `).run(indexedAt, tagsJson, categoryId, fileName, expectedContentHash)
+      `).run(indexedAt, tagsJson, folderId, fileName, expectedContentHash)
     : getDb().prepare(`
         UPDATE memory_file_index SET deep_researched_at = ?, tags_json = ?
         WHERE category_id = ? AND file_name = ?
-      `).run(indexedAt, tagsJson, categoryId, fileName)
+      `).run(indexedAt, tagsJson, folderId, fileName)
   return result.changes > 0
 }
 
-export function moveMemoryKnowledgeSource(sourceCategoryId: string, sourceFileName: string, targetCategoryId: string, targetFileName: string): void {
-  const newSourceId = memoryKnowledgeSourceId(targetCategoryId, targetFileName)
+export function moveMemoryKnowledgeSource(sourceFolderId: string, sourceFileName: string, targetFolderId: string, targetFileName: string): void {
+  const newSourceId = memoryKnowledgeSourceId(targetFolderId, targetFileName)
   const db = getDb()
   let knowledgeDocumentId: string | undefined
-  if (sourceCategoryId !== targetCategoryId) {
+  if (sourceFolderId !== targetFolderId) {
     knowledgeDocumentId = (db.prepare(`
       SELECT document_id FROM memory_knowledge_index_runs
       WHERE category_id = ? AND file_name = ? AND status = 'active'
       ORDER BY activated_at DESC LIMIT 1
-    `).get(sourceCategoryId, sourceFileName) as { document_id: string } | undefined)?.document_id
+    `).get(sourceFolderId, sourceFileName) as { document_id: string } | undefined)?.document_id
     if (knowledgeDocumentId) getMemoryKnowledgeStore().retireDocument(knowledgeDocumentId)
-    db.prepare(`UPDATE memory_file_index SET deep_researched_at = 0, tags_json = '[]' WHERE category_id = ? AND file_name = ?`).run(targetCategoryId, targetFileName)
+    db.prepare(`UPDATE memory_file_index SET deep_researched_at = 0, tags_json = '[]' WHERE category_id = ? AND file_name = ?`).run(targetFolderId, targetFileName)
     return
   }
   db.transaction(() => {
@@ -184,17 +184,17 @@ export function moveMemoryKnowledgeSource(sourceCategoryId: string, sourceFileNa
       SELECT document_id FROM memory_knowledge_index_runs
       WHERE category_id = ? AND file_name = ? AND status = 'active'
       ORDER BY activated_at DESC LIMIT 1
-    `).get(sourceCategoryId, sourceFileName) as { document_id: string } | undefined)?.document_id
+    `).get(sourceFolderId, sourceFileName) as { document_id: string } | undefined)?.document_id
     db.prepare(`
       UPDATE memory_knowledge_index_runs
       SET category_id = ?, file_name = ?, source_id = ?
       WHERE category_id = ? AND file_name = ?
-    `).run(targetCategoryId, targetFileName, newSourceId, sourceCategoryId, sourceFileName)
+    `).run(targetFolderId, targetFileName, newSourceId, sourceFolderId, sourceFileName)
     db.prepare(`
       UPDATE memory_knowledge_text_units
       SET category_id = ?, file_name = ?
       WHERE category_id = ? AND file_name = ?
-    `).run(targetCategoryId, targetFileName, sourceCategoryId, sourceFileName)
+    `).run(targetFolderId, targetFileName, sourceFolderId, sourceFileName)
   })()
   if (knowledgeDocumentId) {
     void getMemoryKnowledgeStore().reindexActiveDocumentProjection(knowledgeDocumentId).catch((error) => {
@@ -203,16 +203,16 @@ export function moveMemoryKnowledgeSource(sourceCategoryId: string, sourceFileNa
   }
 }
 
-export function deleteMemoryKnowledgeSource(categoryId: string, fileName: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
+export function deleteMemoryKnowledgeSource(folderId: string, fileName: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
   let document = getDb().prepare(`
     SELECT document_id FROM memory_file_index WHERE category_id = ? AND file_name = ?
-  `).get(categoryId, fileName) as { document_id: string } | undefined
+  `).get(folderId, fileName) as { document_id: string } | undefined
   if (!document) {
     document = getDb().prepare(`
       SELECT document_id FROM memory_knowledge_index_runs
       WHERE category_id = ? AND file_name = ? AND status = 'active'
       ORDER BY activated_at DESC LIMIT 1
-    `).get(categoryId, fileName) as { document_id: string } | undefined
+    `).get(folderId, fileName) as { document_id: string } | undefined
   }
   const before = document?.document_id
     ? Number((getDb().prepare(`SELECT COUNT(DISTINCT ev.assertion_id) AS count FROM memory_knowledge_assertion_evidence ev JOIN memory_knowledge_index_runs r ON r.id = ev.run_id WHERE r.document_id = ? AND r.status = 'active'`).get(document.document_id) as { count: number } | undefined)?.count || 0)
@@ -222,11 +222,11 @@ export function deleteMemoryKnowledgeSource(categoryId: string, fileName: string
 }
 
 /** Retire every active knowledge revision sourced from a memory folder. */
-export function deleteMemoryKnowledgeCategory(categoryId: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
-  const edgesDeleted = Number((getDb().prepare(`SELECT COUNT(DISTINCT ev.assertion_id) AS count FROM memory_knowledge_assertion_evidence ev JOIN memory_knowledge_index_runs r ON r.id = ev.run_id WHERE r.category_id = ? AND r.status = 'active'`).get(categoryId) as { count: number } | undefined)?.count || 0)
+export function deleteMemoryKnowledgeCategory(folderId: string): { edgesDeleted: number; orphanedNodeIds: string[] } {
+  const edgesDeleted = Number((getDb().prepare(`SELECT COUNT(DISTINCT ev.assertion_id) AS count FROM memory_knowledge_assertion_evidence ev JOIN memory_knowledge_index_runs r ON r.id = ev.run_id WHERE r.category_id = ? AND r.status = 'active'`).get(folderId) as { count: number } | undefined)?.count || 0)
   const documents = getDb().prepare(`
     SELECT DISTINCT document_id FROM memory_knowledge_index_runs WHERE category_id = ? AND status = 'active'
-  `).all(categoryId) as Array<{ document_id: string }>
+  `).all(folderId) as Array<{ document_id: string }>
   for (const document of documents) getMemoryKnowledgeStore().retireDocument(document.document_id)
   return { edgesDeleted, orphanedNodeIds: [] }
 }
@@ -244,7 +244,7 @@ export async function readMemoryFileForDeepResearch(directoryPath: string, fileN
 
 export async function deepResearchMemoryContent(opts: {
   content: string
-  categoryId: string
+  folderId: string
   fileName: string
   replaceExisting?: boolean
   providerId?: string
@@ -261,22 +261,22 @@ export async function deepResearchMemoryContent(opts: {
     SELECT document_id, content_hash
     FROM memory_file_index
     WHERE category_id = ? AND file_name = ?
-  `).get(opts.categoryId, opts.fileName) as { document_id: string; content_hash: string } | undefined
+  `).get(opts.folderId, opts.fileName) as { document_id: string; content_hash: string } | undefined
   if (!indexedDocument || indexedDocument.content_hash !== contentHash) {
     throw new Error('MEMORY_DOCUMENT_NOT_CURRENTLY_INDEXED')
   }
 
-  const sourceId = memoryKnowledgeSourceId(opts.categoryId, opts.fileName)
+  const sourceId = memoryKnowledgeSourceId(opts.folderId, opts.fileName)
   const configuredTarget = getDeepResearchConfig()
   const chunks = await getMemoryParser().prepareChunks(opts.content, opts.fileName)
   if (chunks.length > MAX_ANALYSIS_CHUNKS) {
     throw new Error(`Analysis supports at most ${MAX_ANALYSIS_CHUNKS} chunks; this document has ${chunks.length}.`)
   }
   if (chunks.length === 0) {
-    if (opts.replaceExisting !== false) deleteMemoryKnowledgeSource(opts.categoryId, opts.fileName)
+    if (opts.replaceExisting !== false) deleteMemoryKnowledgeSource(opts.folderId, opts.fileName)
     getMemoryKnowledgeStore().retireDocument(indexedDocument.document_id)
     const deepResearchedAt = Date.now()
-    markMemoryFileDeepResearched(opts.categoryId, opts.fileName, deepResearchedAt, contentHash)
+    markMemoryFileDeepResearched(opts.folderId, opts.fileName, deepResearchedAt, contentHash)
     return {
       fileName: opts.fileName,
       sourceId,
@@ -338,7 +338,7 @@ export async function deepResearchMemoryContent(opts: {
   const knowledgeResult = knowledge.publishDocument({
     documentId: indexedDocument.document_id,
     contentHash,
-    categoryId: opts.categoryId,
+    folderId: opts.folderId,
     fileName: opts.fileName,
     sourceId,
     chunks,
@@ -353,7 +353,7 @@ export async function deepResearchMemoryContent(opts: {
       const current = getDb().prepare(`
         SELECT content_hash FROM memory_file_index
         WHERE category_id = ? AND file_name = ?
-      `).get(opts.categoryId, opts.fileName) as { content_hash: string } | undefined
+      `).get(opts.folderId, opts.fileName) as { content_hash: string } | undefined
       return current?.content_hash === contentHash
     },
   })
@@ -399,7 +399,7 @@ export async function deepResearchMemoryContent(opts: {
     facts: factsByChunk.get(chunk.chunkIndex) || [],
   }]))
   const chunkFilter = andLanceDbFilters(
-    lanceDbEqFilter('categoryId', opts.categoryId),
+    lanceDbEqFilter('folderId', opts.folderId),
     lanceDbEqFilter('sourceFile', opts.fileName),
   )
   if (chunkFilter) {
@@ -412,7 +412,7 @@ export async function deepResearchMemoryContent(opts: {
   }
   opts.signal?.throwIfAborted()
   const deepResearchedAt = Date.now()
-  if (!markMemoryFileDeepResearched(opts.categoryId, opts.fileName, deepResearchedAt, contentHash, tags)) {
+  if (!markMemoryFileDeepResearched(opts.folderId, opts.fileName, deepResearchedAt, contentHash, tags)) {
     // A concurrent edit landed after extraction committed. Remove the now-stale
     // version only; never delete a newer extraction that may already exist.
     knowledge.retireRun(knowledgeResult.runId)
@@ -434,7 +434,7 @@ export async function deepResearchMemoryContent(opts: {
 
 export async function deepResearchMemoryFile(opts: {
   directoryPath: string
-  categoryId: string
+  folderId: string
   fileName: string
   replaceExisting?: boolean
   providerId?: string

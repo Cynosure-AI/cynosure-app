@@ -64,7 +64,7 @@ test('memory and Dream change links open the changed document directly', async (
   await flushPromises()
   await wrapper.get('article').trigger('click')
   expect(mocks.push).toHaveBeenCalledWith({
-    path: '/memory-folders/documents', query: { category: 'category', file: 'notes.md' },
+    path: '/memory-folders/documents', query: { folder: 'category', file: 'notes.md' },
   })
 })
 

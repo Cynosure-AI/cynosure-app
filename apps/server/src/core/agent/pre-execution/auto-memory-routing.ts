@@ -126,7 +126,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         let retrievalResults = await Promise.all(
             retrievalQueries.map((query, queryIndex) => aggregator.aggregate(query, {
                 agentId,
-                categoryIds: memoryFolderIds,
+                folderIds: memoryFolderIds,
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(primaryQuery),
@@ -181,7 +181,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             const correctedStats: MemoryRetrievalStatusDetails = {}
             const corrected = await aggregator.aggregate(correctiveQuery, {
                 agentId,
-                categoryIds: memoryFolderIds,
+                folderIds: memoryFolderIds,
                 permanentTopK: retrievalCount,
                 includeGraph: true,
                 graphQuery: qualifyFirstPersonGraphQuery(correctiveQuery),
@@ -591,7 +591,7 @@ function formatGraphCandidate(edge: KnowledgeAssertion, id: string): string {
 function formatMemoryCandidate(candidate: RetrievedChunk, id: string): string {
     const score = memoryMatch(candidate).score
     const metadata = [
-        candidate.categoryName ? `space=${candidate.categoryName}` : '',
+        candidate.folderName ? `space=${candidate.folderName}` : '',
         candidate.sourceFile ? `source=${candidate.sourceFile}` : '',
         candidate.chunkIndex != null ? `part=${candidate.chunkIndex + 1}${candidate.totalChunks ? `/${candidate.totalChunks}` : ''}` : '',
         typeof score === 'number' && Number.isFinite(score) ? `score=${score.toFixed(4)}` : '',
@@ -625,7 +625,7 @@ function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
     const ranked = new Map<string, RetrievedChunk>()
     for (const result of results) {
         result.permanent.forEach((chunk) => {
-            const key = chunk.id || [chunk.categoryId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
+            const key = chunk.id || [chunk.folderId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
             const existing = ranked.get(key)
             if (!existing) {
                 ranked.set(key, chunk)
@@ -684,7 +684,7 @@ function sortMemoriesByMatch(candidates: RetrievedChunk[]): RetrievedChunk[] {
 
 function memoryLabel(chunk: RetrievedChunk): string {
     const label = [
-        chunk.categoryName,
+        chunk.folderName,
         chunk.sourceFile,
         chunk.chunkIndex != null ? `part ${chunk.chunkIndex + 1}${chunk.totalChunks ? `/${chunk.totalChunks}` : ''}` : '',
     ].filter(Boolean).join(' - ')
@@ -759,7 +759,7 @@ function emitMemoryRoutingSelection(
                 selectionMethod,
                 contextPhase,
                 sourceFile: memory.sourceFile,
-                directoryPath: memory.categoryName,
+                directoryPath: memory.folderName,
                 chunkIndex: memory.chunkIndex,
                 content: memory.text,
                 matchScore: visibleMatch.score,

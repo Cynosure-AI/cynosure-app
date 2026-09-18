@@ -29,7 +29,7 @@ export interface MemoryDiffSegment {
 
 export interface RecentMemoryChange extends MemoryRevisionSummary {
   documentRef: string
-  categoryId: string
+  folderId: string
   fileName: string
   status: 'active' | 'deleted'
   segments: MemoryDiffSegment[]
@@ -65,7 +65,7 @@ export function contentRevisionHash(content: string): string {
 export function recordMemoryRevision(input: {
   documentId: string
   documentRef: string
-  categoryId: string
+  folderId: string
   fileName: string
   content: string
   context?: MemoryRevisionContext
@@ -89,7 +89,7 @@ export function recordMemoryRevision(input: {
         indexing_status = excluded.indexing_status,
         updated_at = excluded.updated_at,
         deleted_at = NULL
-    `).run(input.documentId, input.documentRef, input.categoryId, input.fileName, contentHash, input.indexingStatus ?? 'indexed', now, now)
+    `).run(input.documentId, input.documentRef, input.folderId, input.fileName, contentHash, input.indexingStatus ?? 'indexed', now, now)
 
     if (existing?.current_hash === contentHash) {
       const latest = db.prepare('SELECT * FROM memory_document_revisions WHERE document_id = ? ORDER BY revision_number DESC LIMIT 1').get(input.documentId) as RevisionRow | undefined
@@ -105,9 +105,9 @@ export function recordMemoryRevision(input: {
   })()
 }
 
-export function updateMemoryDocumentLocation(documentId: string, categoryId: string, fileName: string): void {
+export function updateMemoryDocumentLocation(documentId: string, folderId: string, fileName: string): void {
   getDb().prepare('UPDATE memory_documents SET category_id = ?, file_name = ?, updated_at = ? WHERE document_id = ?')
-    .run(categoryId, fileName, Date.now(), documentId)
+    .run(folderId, fileName, Date.now(), documentId)
 }
 
 export function setMemoryDocumentIndexingStatus(documentId: string, status: 'pending' | 'indexed' | 'error'): void {
@@ -121,8 +121,8 @@ export function markMemoryDocumentDeleted(documentId: string): void {
 }
 
 /** Record documents removed as a consequence of deleting one or more folders. */
-export function markMemoryCategoriesDeleted(categoryIds: string[]): number {
-  const ids = [...new Set(categoryIds.filter(Boolean))]
+export function markMemoryFoldersDeleted(folderIds: string[]): number {
+  const ids = [...new Set(folderIds.filter(Boolean))]
   if (!ids.length) return 0
   const placeholders = ids.map(() => '?').join(', ')
   const now = Date.now()
@@ -165,7 +165,7 @@ export function listRecentMemoryChanges(limit = 20): RecentMemoryChange[] {
   return rows.map(row => ({
     ...rowToSummary(row),
     documentRef: row.document_ref,
-    categoryId: row.category_id,
+    folderId: row.category_id,
     fileName: row.file_name,
     status: row.status,
     segments: row.previous_content === null

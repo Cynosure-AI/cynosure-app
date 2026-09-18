@@ -68,17 +68,17 @@ const memoryTabs: TabDef<MemoryPanel>[] = memorySections.map((section) => ({
 
 const spaces = ref<MemoryFolder[]>([]);
 const spacesLoading = ref(false);
-const selectedCategoryId = ref<string | null>(null);
-const graphSelectedCategoryIds = ref<string[]>([]);
-const graphCategorySelectionInitialized = ref(false);
+const selectedFolderId = ref<string | null>(null);
+const graphSelectedFolderIds = ref<string[]>([]);
+const graphFolderSelectionInitialized = ref(false);
 const showCreateDialog = ref(false);
-const editingCategory = ref<MemoryFolder | null>(null);
+const editingFolder = ref<MemoryFolder | null>(null);
 const parentForCreate = ref<MemoryFolder | null>(null);
 const folderName = ref("");
 const folderDescription = ref("");
 const showDeleteConfirm = ref(false);
-const pendingDeleteCategory = ref<MemoryFolder | null>(null);
-type DeletedMemory = { documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number };
+const pendingDeleteFolder = ref<MemoryFolder | null>(null);
+type DeletedMemory = { documentRef: string; folderId: string; fileName: string; revision: string; deletedAt: number };
 const showDeletedMemories = ref(false);
 const deletedMemories = ref<DeletedMemory[]>([]);
 const deletedLoading = ref(false);
@@ -123,7 +123,7 @@ const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_KNOWLEDGE_GRAPH_
 
 const route = useRoute();
 const router = useRouter();
-const linkedCategoryId = computed(() => typeof route.query.category === "string" ? route.query.category : "");
+const linkedFolderId = computed(() => typeof route.query.folder === "string" ? route.query.folder : "");
 const linkedFileName = computed(() => typeof route.query.file === "string" ? route.query.file : "");
 let graphSuggestionTimer: number | null = null;
 let graphSuggestionRequest = 0;
@@ -213,7 +213,7 @@ async function restoreDeletedMemory(memory: DeletedMemory) {
     await api.memoryFolders.restoreRevision(memory.documentRef, selected.id, "");
     deletedMemories.value = deletedMemories.value.filter(item => item.documentRef !== memory.documentRef);
     deletedHistoryRef.value = "";
-    await loadCategories();
+    await loadFolders();
   } catch (error) {
     deletedError.value = (error as Error).message || "Failed to restore memory";
   } finally {
@@ -239,10 +239,10 @@ const activeGraph = computed(() =>
   activeGraphView.value && graphView.value === activeGraphView.value ? graph.value : null,
 );
 
-const selectedCategory = computed(() =>
-  spaces.value.find((s) => s.id === selectedCategoryId.value) || null,
+const selectedFolder = computed(() =>
+  spaces.value.find((s) => s.id === selectedFolderId.value) || null,
 );
-const graphCategoryOptions = computed<MultiSelectOption[]>(() => spaces.value.map((space) => ({
+const graphFolderOptions = computed<MultiSelectOption[]>(() => spaces.value.map((space) => ({
   value: space.id,
   label: space.name,
 })));
@@ -265,28 +265,28 @@ watch([nodeSpacing, showGraphEdgeLabels, graphEdgePathType], () => {
   syncPrefsToElectron();
 });
 
-async function loadCategories() {
+async function loadFolders() {
   spacesLoading.value = true;
   try {
     const previousSpaceIds = spaces.value.map((space) => space.id);
-    const previouslySelectedAll = !graphCategorySelectionInitialized.value
-      || (previousSpaceIds.length > 0 && previousSpaceIds.every((id) => graphSelectedCategoryIds.value.includes(id)));
+    const previouslySelectedAll = !graphFolderSelectionInitialized.value
+      || (previousSpaceIds.length > 0 && previousSpaceIds.every((id) => graphSelectedFolderIds.value.includes(id)));
     const loaded = await api.memoryFolders.list();
     spaces.value = [...loaded].sort((a, b) => {
       if (a.isUncategorized) return -1;
       if (b.isUncategorized) return 1;
-      return (a.categoryPath || "").localeCompare(b.categoryPath || "");
+      return (a.folderPath || "").localeCompare(b.folderPath || "");
     });
-    if (linkedCategoryId.value && spaces.value.some(space => space.id === linkedCategoryId.value)) {
-      selectedCategoryId.value = linkedCategoryId.value;
+    if (linkedFolderId.value && spaces.value.some(space => space.id === linkedFolderId.value)) {
+      selectedFolderId.value = linkedFolderId.value;
     }
-    graphSelectedCategoryIds.value = previouslySelectedAll
+    graphSelectedFolderIds.value = previouslySelectedAll
       ? spaces.value.map((space) => space.id)
-      : graphSelectedCategoryIds.value.filter((id) => spaces.value.some((space) => space.id === id));
-    graphCategorySelectionInitialized.value = true;
-    if (!selectedCategoryId.value && spaces.value.length > 0) selectedCategoryId.value = spaces.value[0].id;
-    if (selectedCategoryId.value && !spaces.value.some((s) => s.id === selectedCategoryId.value)) {
-      selectedCategoryId.value = spaces.value[0]?.id || null;
+      : graphSelectedFolderIds.value.filter((id) => spaces.value.some((space) => space.id === id));
+    graphFolderSelectionInitialized.value = true;
+    if (!selectedFolderId.value && spaces.value.length > 0) selectedFolderId.value = spaces.value[0].id;
+    if (selectedFolderId.value && !spaces.value.some((s) => s.id === selectedFolderId.value)) {
+      selectedFolderId.value = spaces.value[0]?.id || null;
     }
     if (activeGraphView.value) await loadGraph();
   } catch {
@@ -296,8 +296,8 @@ async function loadCategories() {
 }
 
 function openCreateDialog(parent?: MemoryFolder) {
-  editingCategory.value = null;
-  parentForCreate.value = parent || selectedCategory.value;
+  editingFolder.value = null;
+  parentForCreate.value = parent || selectedFolder.value;
   folderName.value = "";
   folderDescription.value = "";
   showCreateDialog.value = true;
@@ -305,7 +305,7 @@ function openCreateDialog(parent?: MemoryFolder) {
 
 function openEditDialog(space: MemoryFolder) {
   if (space.isUncategorized) return;
-  editingCategory.value = space;
+  editingFolder.value = space;
   parentForCreate.value = null;
   folderName.value = space.name;
   folderDescription.value = space.description;
@@ -315,7 +315,7 @@ function openEditDialog(space: MemoryFolder) {
 function relativePathForName(space: MemoryFolder, name: string): string {
   const trimmed = name.trim();
   if (space.isUncategorized) return "";
-  const current = space.categoryPath || "";
+  const current = space.folderPath || "";
   const slash = current.lastIndexOf("/");
   return slash >= 0 ? `${current.slice(0, slash)}/${trimmed}` : trimmed;
 }
@@ -323,23 +323,23 @@ function relativePathForName(space: MemoryFolder, name: string): string {
 async function saveFolder() {
   if (!folderName.value.trim()) return;
   try {
-    if (editingCategory.value) {
-      const data: { name?: string; description?: string; categoryPath?: string } = {
+    if (editingFolder.value) {
+      const data: { name?: string; description?: string; folderPath?: string } = {
         name: folderName.value.trim(),
         description: folderDescription.value,
       };
-      if (!editingCategory.value.isUncategorized) data.categoryPath = relativePathForName(editingCategory.value, folderName.value);
-      const updated = await api.memoryFolders.update(editingCategory.value.id, data);
-      selectedCategoryId.value = updated.id;
+      if (!editingFolder.value.isUncategorized) data.folderPath = relativePathForName(editingFolder.value, folderName.value);
+      const updated = await api.memoryFolders.update(editingFolder.value.id, data);
+      selectedFolderId.value = updated.id;
     } else {
       const created = await api.memoryFolders.create(
         folderName.value.trim(),
         folderDescription.value,
-        parentForCreate.value?.categoryPath || "",
+        parentForCreate.value?.folderPath || "",
       );
-      selectedCategoryId.value = created.id;
+      selectedFolderId.value = created.id;
     }
-    await loadCategories();
+    await loadFolders();
   } catch {
     /* surface errors later with shared notifications */
   }
@@ -347,22 +347,22 @@ async function saveFolder() {
 }
 
 function confirmDeleteSpace(space: MemoryFolder) {
-  const prefix = space.categoryPath ? `${space.categoryPath}/` : "";
-  const hasSubfolders = Boolean(prefix && spaces.value.some(candidate => candidate.categoryPath?.startsWith(prefix)));
+  const prefix = space.folderPath ? `${space.folderPath}/` : "";
+  const hasSubfolders = Boolean(prefix && spaces.value.some(candidate => candidate.folderPath?.startsWith(prefix)));
   if (space.fileCount === 0 && !hasSubfolders) {
     void deleteSpace(space);
     return;
   }
-  pendingDeleteCategory.value = space;
+  pendingDeleteFolder.value = space;
   showDeleteConfirm.value = true;
 }
 
 async function deleteSpace(space: MemoryFolder) {
   showDeleteConfirm.value = false;
-  pendingDeleteCategory.value = null;
+  pendingDeleteFolder.value = null;
   try {
     await api.memoryFolders.remove(space.id);
-    await loadCategories();
+    await loadFolders();
   } catch {
     /* ignore */
   }
@@ -382,7 +382,7 @@ function capVisualGraph(nextGraph: KnowledgeGraph, view: GraphViewMode): Knowled
 async function loadGraph(
   query = graphQuery.value,
   nodeIds = graphSelectedNodes.value.map((node) => node.id),
-  categoryIds = graphSelectedCategoryIds.value,
+  folderIds = graphSelectedFolderIds.value,
 ) {
   const trimmedQuery = query.trim();
   const limit = graphEntityLimit.value === null
@@ -390,7 +390,7 @@ async function loadGraph(
     : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
   const view = activeGraphView.value || "visual";
   const minImportance = view === "visual" ? graphFactLevel.value : null;
-  const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${[...categoryIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
+  const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${[...folderIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
   if (graphLoading.value && inFlightGraphKey === requestKey) return;
   const requestId = ++graphRequest;
   inFlightGraphKey = requestKey;
@@ -403,7 +403,7 @@ async function loadGraph(
       view,
       nodeIds,
       minImportance,
-      graphCategorySelectionInitialized.value ? categoryIds : undefined,
+      graphFolderSelectionInitialized.value ? folderIds : undefined,
     );
     if (requestId !== graphRequest) return;
     focusedGraphNodeId.value = null;
@@ -424,10 +424,10 @@ async function loadGraph(
   }
 }
 
-async function updateGraphSpaceSelection(categoryIds: string[]) {
-  graphSelectedCategoryIds.value = categoryIds;
+async function updateGraphSpaceSelection(folderIds: string[]) {
+  graphSelectedFolderIds.value = folderIds;
   graphSelectedNodes.value = [];
-  await loadGraph(graphQuery.value, [], categoryIds);
+  await loadGraph(graphQuery.value, [], folderIds);
 }
 
 async function clearGraphWalk() {
@@ -456,7 +456,7 @@ async function loadGraphSuggestions(query = graphQuery.value) {
     const result = await api.memory.getGraphSuggestions(
       trimmed,
       8,
-      graphCategorySelectionInitialized.value ? graphSelectedCategoryIds.value : undefined,
+      graphFolderSelectionInitialized.value ? graphSelectedFolderIds.value : undefined,
     );
     if (requestId !== graphSuggestionRequest) return;
     graphSuggestions.value = result.suggestions;
@@ -586,9 +586,9 @@ function selectPanel(panel: MemoryPanel) {
 }
 
 function clearDocumentLink(): void {
-  if (!linkedCategoryId.value && !linkedFileName.value) return;
+  if (!linkedFolderId.value && !linkedFileName.value) return;
   const query = { ...route.query };
-  delete query.category;
+  delete query.folder;
   delete query.file;
   void router.replace({ path: route.path, query });
 }
@@ -609,11 +609,11 @@ watch(
   { immediate: true },
 );
 
-watch(linkedCategoryId, (categoryId) => {
-  if (categoryId && spaces.value.some(space => space.id === categoryId)) selectedCategoryId.value = categoryId;
+watch(linkedFolderId, (folderId) => {
+  if (folderId && spaces.value.some(space => space.id === folderId)) selectedFolderId.value = folderId;
 });
 
-onMounted(() => loadCategories());
+onMounted(() => loadFolders());
 </script>
 
 <template>
@@ -633,8 +633,8 @@ onMounted(() => loadCategories());
             <div class="flex shrink-0 items-center gap-2 self-start">
               <MultiSelect
                 v-if="activePanel === 'visual'"
-                :model-value="graphSelectedCategoryIds"
-                :options="graphCategoryOptions"
+                :model-value="graphSelectedFolderIds"
+                :options="graphFolderOptions"
                 placeholder="No memory folders"
                 all-selected-label="All memory folders"
                 show-bulk-actions
@@ -730,16 +730,16 @@ onMounted(() => loadCategories());
 
         <MemoryDocumentsSection
           v-else-if="activePanel === 'documents'"
-          v-model:selected-category-id="selectedCategoryId"
+          v-model:selected-folder-id="selectedFolderId"
           :spaces="spaces"
           :spaces-loading="spacesLoading"
-          :selected-category="selectedCategory"
+          :selected-folder="selectedFolder"
           :focus-file="linkedFileName"
           @create-folder="openCreateDialog"
           @edit-folder="openEditDialog"
           @delete-folder="confirmDeleteSpace"
-          @refresh-spaces="loadCategories"
-          @category-navigation="clearDocumentLink"
+          @refresh-spaces="loadFolders"
+          @folder-navigation="clearDocumentLink"
         />
 
         <KnowledgeGraphSection
@@ -781,11 +781,11 @@ onMounted(() => loadCategories());
         >
           <div class="bg-theme-900 border border-theme-700 rounded-xl p-6 w-full max-w-md shadow-xl">
             <h3 class="text-base font-medium text-theme-200 mb-4">
-              {{ editingCategory ? "Edit Folder" : "New Memory Folder" }}
+              {{ editingFolder ? "Edit Folder" : "New Memory Folder" }}
             </h3>
             <div class="space-y-3">
               <div
-                v-if="!editingCategory"
+                v-if="!editingFolder"
                 class="text-xs text-theme-500"
               >
                 Parent: <span class="text-theme-300">{{ parentForCreate?.name || "Uncategorized" }}</span>
@@ -830,7 +830,7 @@ onMounted(() => loadCategories());
                 class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
                 @click="saveFolder"
               >
-                {{ editingCategory ? "Save" : "Create" }}
+                {{ editingFolder ? "Save" : "Create" }}
               </button>
             </div>
           </div>
@@ -1015,12 +1015,12 @@ onMounted(() => loadCategories());
         @close="showDeleteConfirm = false"
       >
         <p class="text-theme-400 leading-relaxed">
-          Remove <strong class="text-theme-200">{{ pendingDeleteCategory?.name }}</strong>? Its folder will be moved to the memory trash and its indexes will be removed.
+          Remove <strong class="text-theme-200">{{ pendingDeleteFolder?.name }}</strong>? Its folder will be moved to the memory trash and its indexes will be removed.
         </p>
         <template #actions>
           <button
             class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-center font-medium transition-colors"
-            @click="deleteSpace(pendingDeleteCategory!)"
+            @click="deleteSpace(pendingDeleteFolder!)"
           >
             Remove Folder
           </button>

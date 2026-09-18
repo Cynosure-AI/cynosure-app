@@ -22,14 +22,14 @@ test('an assertion survives until its final active evidence source is retired', 
       db.prepare(`INSERT INTO memory_file_index (document_id, document_ref, category_id, file_name, content_hash, created_at) VALUES (?, ?, 'space-a', ?, 'revision-1', ?)`)
         .run(documentId, `ref-${documentId}`, `${documentId}.md`, Date.now())
       store.publishDocument({
-        documentId, contentHash: 'revision-1', categoryId: 'space-a', fileName: `${documentId}.md`,
+        documentId, contentHash: 'revision-1', folderId: 'space-a', fileName: `${documentId}.md`,
         sourceId: `memory:space-a:${documentId}.md`,
         chunks: [{ text: 'Cynosure uses LanceDB.', searchText: 'Cynosure uses LanceDB.', chunkIndex: 0, documentTitle: 'Architecture', sectionPath: 'Architecture', contentHash: `${documentId}-chunk` }],
         relations: relation,
       })
     }
 
-    const edge = store.browseGraph({ categoryIds: ['space-a'] }).edges[0]
+    const edge = store.browseGraph({ folderIds: ['space-a'] }).edges[0]
     expect((db.prepare(`SELECT COUNT(*) AS count FROM memory_knowledge_assertion_evidence WHERE assertion_id = ?`).get(edge.id) as { count: number }).count).toBe(2)
     store.retireDocument('doc-b')
     expect(store.getEdge(edge.id)).not.toBeNull()

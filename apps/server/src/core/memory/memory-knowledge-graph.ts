@@ -52,8 +52,8 @@ export interface DocumentAnalysisRecord {
  * literal nodes, and scoped edges must be assembled by the same rules.
  */
 export class MemoryKnowledgeGraphStore {
-  graphRows(categoryIds: string[] = [], limit = GRAPH_LIMITS.maxNodes, assertionId?: string): Array<Record<string, unknown>> {
-    const scopes = Array.from(new Set(categoryIds.filter(Boolean)))
+  graphRows(folderIds: string[] = [], limit = GRAPH_LIMITS.maxNodes, assertionId?: string): Array<Record<string, unknown>> {
+    const scopes = Array.from(new Set(folderIds.filter(Boolean)))
     const scopeClause = scopes.length ? `AND r.category_id IN (${scopes.map(() => '?').join(', ')})` : ''
     const assertionClause = assertionId ? 'AND a.id = ?' : ''
     return getDb().prepare(`
@@ -242,9 +242,9 @@ export class MemoryKnowledgeGraphStore {
     return row ? this.graphEdge(row) : null
   }
 
-  graphStats(categoryIds: string[] = []): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
+  graphStats(folderIds: string[] = []): { nodeCount: number; edgeCount: number; recentEdgeCount: number } {
     const since = Date.now() - 30 * 24 * 60 * 60 * 1000
-    const scopes = Array.from(new Set(categoryIds.filter(Boolean)))
+    const scopes = Array.from(new Set(folderIds.filter(Boolean)))
     const scopeClause = scopes.length ? `AND r.category_id IN (${scopes.map(() => '?').join(', ')})` : ''
     const row = getDb().prepare(`
       SELECT
@@ -264,13 +264,13 @@ export class MemoryKnowledgeGraphStore {
     return { nodeCount: row.nodes, edgeCount: row.edges, recentEdgeCount: row.recent }
   }
 
-  documentDeepResearchPreview(categoryId: string, fileName: string, limit = 15): DocumentKnowledgePreview {
+  documentDeepResearchPreview(folderId: string, fileName: string, limit = 15): DocumentKnowledgePreview {
     const boundedLimit = Math.min(15, Math.max(1, Math.round(limit)))
     const run = getDb().prepare(`
       SELECT id FROM memory_knowledge_index_runs
       WHERE category_id = ? AND file_name = ? AND status = 'active'
       ORDER BY activated_at DESC LIMIT 1
-    `).get(categoryId, fileName) as { id: string } | undefined
+    `).get(folderId, fileName) as { id: string } | undefined
     if (!run) return { items: [], total: 0 }
 
     const relationshipCount = Number((getDb().prepare(`
@@ -339,13 +339,13 @@ export class MemoryKnowledgeGraphStore {
     }
   }
 
-  documentAnalysis(categoryId: string, fileName: string): DocumentAnalysisRecord | null {
+  documentAnalysis(folderId: string, fileName: string): DocumentAnalysisRecord | null {
     const run = getDb().prepare(`
       SELECT id, content_hash, pipeline_version, prompt_version, activated_at
       FROM memory_knowledge_index_runs
       WHERE category_id = ? AND file_name = ? AND status = 'active'
       ORDER BY activated_at DESC LIMIT 1
-    `).get(categoryId, fileName) as { id: string; content_hash: string; pipeline_version: string; prompt_version: string; activated_at: number } | undefined
+    `).get(folderId, fileName) as { id: string; content_hash: string; pipeline_version: string; prompt_version: string; activated_at: number } | undefined
     if (!run) return null
 
     const chunkRows = getDb().prepare(`
@@ -433,15 +433,15 @@ export class MemoryKnowledgeGraphStore {
     nodeIds?: string[]
     limit?: number
     minImportance?: ImportanceLevel
-    categoryIds?: string[]
+    folderIds?: string[]
     depth?: number
   } = {}): KnowledgeGraphProjection {
     const limit = Math.max(1, opts.limit || 80)
     const minImportance = opts.minImportance || 0
     const requestedNodeIds = Array.from(new Set([opts.nodeId, ...(opts.nodeIds || [])].filter((id): id is string => Boolean(id))))
-    let edges = this.graphRows(opts.categoryIds, Math.max(limit * 4, 100)).map((row) => this.graphEdge(row)).filter((edge) => edge.importance >= minImportance)
+    let edges = this.graphRows(opts.folderIds, Math.max(limit * 4, 100)).map((row) => this.graphEdge(row)).filter((edge) => edge.importance >= minImportance)
     const allEntityIds = new Set(edges.flatMap((edge) => [edge.fromNodeId, ...(edge.toNodeId.startsWith('literal:') ? [] : [edge.toNodeId])]))
-    const scopes = Array.from(new Set((opts.categoryIds || []).filter(Boolean)))
+    const scopes = Array.from(new Set((opts.folderIds || []).filter(Boolean)))
     const mentionedRows = getDb().prepare(`
       SELECT DISTINCT e.* FROM memory_knowledge_entities e
       JOIN memory_knowledge_entity_mentions m ON m.entity_id = e.id
@@ -511,9 +511,9 @@ export class MemoryKnowledgeGraphStore {
     return { seedNodes, nodes, edges }
   }
 
-  suggestNodes(query: string, limit = 8, categoryIds: string[] = []): KnowledgeEntity[] {
+  suggestNodes(query: string, limit = 8, folderIds: string[] = []): KnowledgeEntity[] {
     const normalized = normalize(query)
-    const scopeClause = categoryIds.length ? `AND r.category_id IN (${categoryIds.map(() => '?').join(', ')})` : ''
+    const scopeClause = folderIds.length ? `AND r.category_id IN (${folderIds.map(() => '?').join(', ')})` : ''
     const rows = getDb().prepare(`
       SELECT DISTINCT e.* FROM memory_knowledge_entities e
       JOIN memory_knowledge_entity_mentions m ON m.entity_id = e.id
@@ -523,7 +523,7 @@ export class MemoryKnowledgeGraphStore {
           SELECT 1 FROM memory_knowledge_entity_aliases a WHERE a.entity_id = e.id AND a.normalized_alias LIKE ? ESCAPE '\\'
         ))
       ORDER BY e.updated_at DESC LIMIT ?
-    `).all(...categoryIds, normalized, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, limit) as Array<Record<string, unknown>>
+    `).all(...folderIds, normalized, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, `%${normalized.replace(/[\\%_]/g, (char) => `\\${char}`)}%`, limit) as Array<Record<string, unknown>>
     return rows.map((row) => this.hydrateGraphNode(row))
   }
 

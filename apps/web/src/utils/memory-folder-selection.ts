@@ -6,8 +6,8 @@ const autoExcludedMemoryFolderNameSet = new Set(
 )
 
 /** Match special folder names at any path depth, ignoring capitalization. */
-export function isAutoExcludedMemoryFolder(folder: Pick<MemoryFolder, 'categoryPath'>): boolean {
-  return (folder.categoryPath || '')
+export function isAutoExcludedMemoryFolder(folder: Pick<MemoryFolder, 'folderPath'>): boolean {
+  return (folder.folderPath || '')
     .split('/')
     .some((segment) => autoExcludedMemoryFolderNameSet.has(segment.toLowerCase()))
 }

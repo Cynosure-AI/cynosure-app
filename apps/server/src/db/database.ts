@@ -28,20 +28,20 @@ export function getDb(): Database.Database {
 }
 
 export function ensureDefaultMemoryFolder(database: Database.Database = getDb()): void {
-  const uncategorizedCategoryId = 'uncategorized'
+  const uncategorizedFolderId = 'uncategorized'
   const defaultFolderPath = getDefaultMemoryFolderDir()
   mkdirSync(defaultFolderPath, { recursive: true })
 
-  const uncategorizedCategoryExists = database.prepare("SELECT id FROM memory_folders WHERE id = ?").get(uncategorizedCategoryId)
-  if (!uncategorizedCategoryExists) {
+  const uncategorizedFolderExists = database.prepare("SELECT id FROM memory_folders WHERE id = ?").get(uncategorizedFolderId)
+  if (!uncategorizedFolderExists) {
     const now = Date.now()
     database.prepare("INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(uncategorizedCategoryId, 'Uncategorized', 'Memories that do not yet have a category', defaultFolderPath, 0, 1, now)
+      .run(uncategorizedFolderId, 'Uncategorized', 'Memories that do not yet have a folder', defaultFolderPath, 0, 1, now)
     return
   }
 
   database.prepare("UPDATE memory_folders SET name = ?, description = ?, directory_path = ?, is_uncategorized = 1 WHERE id = ?")
-    .run('Uncategorized', 'Memories that do not yet have a category', defaultFolderPath, uncategorizedCategoryId)
+    .run('Uncategorized', 'Memories that do not yet have a folder', defaultFolderPath, uncategorizedFolderId)
 }
 
 export function closeDb(): void {

@@ -9,7 +9,7 @@ import {
   listRecentMemoryChanges,
   listMemoryRevisions,
   markMemoryDocumentDeleted,
-  markMemoryCategoriesDeleted,
+  markMemoryFoldersDeleted,
   recordMemoryRevision,
   inlineMemoryDiff,
   unifiedMemoryDiff,
@@ -33,17 +33,17 @@ describe('memory revision snapshots', () => {
 
   test('stores immutable snapshots, provenance, and line diffs', () => {
     const first = recordMemoryRevision({
-      documentId: 'doc-1', documentRef: 'profile#stable', categoryId: 'uncategorized',
+      documentId: 'doc-1', documentRef: 'profile#stable', folderId: 'uncategorized',
       fileName: 'Veronica Flowers - General Profile.md', content: 'Lives in Berlin.\n',
       context: { source: 'dream', conversationId: 'chat-1', agentId: 'agent-1', messageIds: ['m1'] },
     })
     const duplicate = recordMemoryRevision({
-      documentId: 'doc-1', documentRef: 'profile#stable', categoryId: 'uncategorized',
+      documentId: 'doc-1', documentRef: 'profile#stable', folderId: 'uncategorized',
       fileName: 'Veronica Flowers - General Profile.md', content: 'Lives in Berlin.\n',
       context: { source: 'filesystem' },
     })
     const second = recordMemoryRevision({
-      documentId: 'doc-1', documentRef: 'profile#stable', categoryId: 'uncategorized',
+      documentId: 'doc-1', documentRef: 'profile#stable', folderId: 'uncategorized',
       fileName: 'Veronica Flowers - General Profile.md', content: 'Lives in Hamburg.\n',
       context: { source: 'user' },
     })
@@ -65,11 +65,11 @@ describe('memory revision snapshots', () => {
 
   test('lists recent changes across documents with provenance and inline diffs', () => {
     const first = recordMemoryRevision({
-      documentId: 'doc-a', documentRef: 'a#stable', categoryId: 'projects',
+      documentId: 'doc-a', documentRef: 'a#stable', folderId: 'projects',
       fileName: 'a.md', content: 'Status: planned', context: { source: 'dream' },
     })
     const second = recordMemoryRevision({
-      documentId: 'doc-a', documentRef: 'a#stable', categoryId: 'projects',
+      documentId: 'doc-a', documentRef: 'a#stable', folderId: 'projects',
       fileName: 'a.md', content: 'Status: shipped', context: { source: 'user' },
     })
 
@@ -77,7 +77,7 @@ describe('memory revision snapshots', () => {
 
     expect(changes.map(change => change.id)).toEqual([second.id, first.id])
     expect(changes[0]).toMatchObject({
-      documentRef: 'a#stable', categoryId: 'projects', fileName: 'a.md', source: 'user', status: 'active',
+      documentRef: 'a#stable', folderId: 'projects', fileName: 'a.md', source: 'user', status: 'active',
     })
     expect(changes[0]?.segments).toEqual([
       { type: 'unchanged', text: 'Status: ' },
@@ -89,7 +89,7 @@ describe('memory revision snapshots', () => {
 
   test('keeps identity stable across moves and reactivates a matching deleted snapshot', () => {
     const first = recordMemoryRevision({
-      documentId: 'doc-2', documentRef: 'hobbies#stable', categoryId: 'uncategorized',
+      documentId: 'doc-2', documentRef: 'hobbies#stable', folderId: 'uncategorized',
       fileName: 'Veronica Flowers - Hobbies.md', content: 'Enjoys hiking.',
       context: { source: 'import' },
     })
@@ -97,7 +97,7 @@ describe('memory revision snapshots', () => {
     markMemoryDocumentDeleted('doc-2')
 
     const restored = recordMemoryRevision({
-      documentId: 'doc-2', documentRef: 'hobbies#stable', categoryId: 'people-veronica',
+      documentId: 'doc-2', documentRef: 'hobbies#stable', folderId: 'people-veronica',
       fileName: 'Veronica Flowers - Interests.md', content: 'Enjoys hiking.',
       context: { source: 'restore' },
     })
@@ -111,11 +111,11 @@ describe('memory revision snapshots', () => {
   })
 
   test('records documents deleted through a folder cascade', () => {
-    recordMemoryRevision({ documentId: 'parent-doc', documentRef: 'parent#doc', categoryId: 'parent', fileName: 'a.md', content: 'A' })
-    recordMemoryRevision({ documentId: 'child-doc', documentRef: 'child#doc', categoryId: 'child', fileName: 'b.md', content: 'B' })
-    recordMemoryRevision({ documentId: 'kept-doc', documentRef: 'kept#doc', categoryId: 'other', fileName: 'c.md', content: 'C' })
+    recordMemoryRevision({ documentId: 'parent-doc', documentRef: 'parent#doc', folderId: 'parent', fileName: 'a.md', content: 'A' })
+    recordMemoryRevision({ documentId: 'child-doc', documentRef: 'child#doc', folderId: 'child', fileName: 'b.md', content: 'B' })
+    recordMemoryRevision({ documentId: 'kept-doc', documentRef: 'kept#doc', folderId: 'other', fileName: 'c.md', content: 'C' })
 
-    expect(markMemoryCategoriesDeleted(['parent', 'child'])).toBe(2)
+    expect(markMemoryFoldersDeleted(['parent', 'child'])).toBe(2)
     expect(getMemoryDocument('parent#doc')?.status).toBe('deleted')
     expect(getMemoryDocument('child#doc')?.status).toBe('deleted')
     expect(getMemoryDocument('kept#doc')?.status).toBe('active')

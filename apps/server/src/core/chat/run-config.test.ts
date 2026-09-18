@@ -41,8 +41,8 @@ describe('chat run configuration', () => {
         db.prepare('INSERT INTO memory_folders VALUES (?, ?, ?, ?)').run('project', 'Project', '/tmp/project', 0)
 
         expect(resolveMemoryFolderOverrides(db, [' project ', '', 'missing', 'uncategorized', 'project'])).toEqual([
-            { id: 'project', name: 'Project', categoryPath: expect.any(String) },
-            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
+            { id: 'project', name: 'Project', folderPath: expect.any(String) },
+            { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
         ])
         expect(resolveMemoryFolderOverrides(db)).toBeUndefined()
         db.close()

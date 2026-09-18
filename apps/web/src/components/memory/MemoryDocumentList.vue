@@ -14,7 +14,7 @@ import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
 interface DocumentDragPayload {
-  sourceCategoryId: string;
+  sourceFolderId: string;
   sourceFiles: string[];
 }
 
@@ -22,7 +22,7 @@ type DocumentRow = MemoryFileStatus & { id: string };
 type GlobalDocumentRow = MemoryFileSearchResult & { id: string };
 
 const props = defineProps<{
-  categoryId: string;
+  folderId: string;
   spaces: MemoryFolder[];
   focusFile?: string;
 }>();
@@ -32,7 +32,7 @@ const emit = defineEmits<{
   deleteSpace: [];
   spacesChanged: [];
   documentDragState: [active: boolean, payload?: DocumentDragPayload];
-  openGlobalDocument: [categoryId: string, fileName: string];
+  openGlobalDocument: [folderId: string, fileName: string];
 }>();
 
 // --- Constants ---
@@ -101,7 +101,7 @@ const semanticSearch = ref(false);
 let globalSearchTimer: number | null = null;
 let globalSearchSequence = 0;
 
-const currentSpace = computed(() => props.spaces.find((s) => s.id === props.categoryId));
+const currentSpace = computed(() => props.spaces.find((s) => s.id === props.folderId));
 
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -114,7 +114,7 @@ const filteredFiles = computed(() => {
 const documentRows = computed<DocumentRow[]>(() => filteredFiles.value.map((file) => ({ ...file, id: file.fileName })));
 const globalDocumentRows = computed<GlobalDocumentRow[]>(() => globalSearchResults.value.map((file) => ({
   ...file,
-  id: `${file.categoryId}\0${file.fileName}`,
+  id: `${file.folderId}\0${file.fileName}`,
 })));
 
 const selectedFileIds = computed({
@@ -134,13 +134,13 @@ const columns: Column<DocumentRow>[] = [
 
 const globalColumns: Column<GlobalDocumentRow>[] = [
   { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
-  { key: "categoryName", label: "Folder", minWidth: "150px", grow: 1.5, sortable: true, sortValue: (file) => file.categoryPath || file.categoryName },
+  { key: "folderName", label: "Folder", minWidth: "150px", grow: 1.5, sortable: true, sortValue: (file) => file.folderPath || file.folderName },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "status", label: "Searchable", minWidth: "150px", grow: 1, sortable: true, sortValue: (file) => file.status },
 ];
 const searchColumns = computed(() => searchAllFolders.value
   ? globalColumns
-  : globalColumns.filter((column) => column.key !== "categoryName"));
+  : globalColumns.filter((column) => column.key !== "folderName"));
 
 const allFilteredSelected = computed(
   () =>
@@ -181,7 +181,7 @@ async function loadFiles() {
   filesLoading.value = true;
   knowledgePreviews.value = {};
   try {
-    files.value = await api.memoryFolders.listFiles(props.categoryId);
+    files.value = await api.memoryFolders.listFiles(props.folderId);
   } catch {
     files.value = [];
   }
@@ -208,7 +208,7 @@ const {
   deepResearchProgress,
   searchIndexProgress,
 } = useMemoryDocumentJobs({
-  categoryId: toRef(props, "categoryId"),
+  folderId: toRef(props, "folderId"),
   files,
   reloadFiles: loadFiles,
   onCompleted: () => emit("spacesChanged"),
@@ -239,7 +239,7 @@ async function loadKnowledgePreview(fileName: string) {
     [fileName]: { status: "loading" },
   };
   try {
-    const data = await api.memoryFolders.getDocumentKnowledgePreview(props.categoryId, fileName);
+    const data = await api.memoryFolders.getDocumentKnowledgePreview(props.folderId, fileName);
     knowledgePreviews.value = {
       ...knowledgePreviews.value,
       [fileName]: { status: "ready", data },
@@ -265,7 +265,7 @@ async function deleteSelectedFiles() {
   if (selectedFiles.value.size === 0) return;
   deleting.value = true;
   try {
-    await api.memoryFolders.deleteDocuments(props.categoryId, Array.from(selectedFiles.value));
+    await api.memoryFolders.deleteDocuments(props.folderId, Array.from(selectedFiles.value));
     const deleted = selectedFiles.value;
     selectedFiles.value = new Set();
     files.value = files.value.filter((f) => !deleted.has(f.fileName));
@@ -281,7 +281,7 @@ async function forgetSelectedMemories() {
   if (sourceFiles.length === 0) return;
   forgettingMemories.value = true;
   try {
-    await api.memoryFolders.forgetMemories(props.categoryId, sourceFiles);
+    await api.memoryFolders.forgetMemories(props.folderId, sourceFiles);
     selectedFiles.value = new Set();
     await loadFiles();
     await loadJobs();
@@ -293,11 +293,11 @@ async function forgetSelectedMemories() {
 }
 
 // --- Move ---
-async function moveSelectedFiles(targetCategoryId: string) {
-  if (selectedFiles.value.size === 0 || targetCategoryId === props.categoryId) return;
+async function moveSelectedFiles(targetFolderId: string) {
+  if (selectedFiles.value.size === 0 || targetFolderId === props.folderId) return;
   moving.value = true;
   try {
-    await api.memoryFolders.moveDocuments(props.categoryId, Array.from(selectedFiles.value), targetCategoryId);
+    await api.memoryFolders.moveDocuments(props.folderId, Array.from(selectedFiles.value), targetFolderId);
     const moved = selectedFiles.value;
     selectedFiles.value = new Set();
     files.value = files.value.filter((f) => !moved.has(f.fileName));
@@ -309,10 +309,10 @@ async function moveSelectedFiles(targetCategoryId: string) {
   moving.value = false;
 }
 
-async function moveDocumentsToCategory(targetCategoryId: string, sourceFiles: string[]) {
-  if (sourceFiles.length === 0 || targetCategoryId === props.categoryId) return;
+async function moveDocumentsToFolder(targetFolderId: string, sourceFiles: string[]) {
+  if (sourceFiles.length === 0 || targetFolderId === props.folderId) return;
   try {
-    await api.memoryFolders.moveDocuments(props.categoryId, sourceFiles, targetCategoryId);
+    await api.memoryFolders.moveDocuments(props.folderId, sourceFiles, targetFolderId);
     files.value = files.value.filter((f) => !sourceFiles.includes(f.fileName));
     emit("spacesChanged");
   } catch {
@@ -365,7 +365,7 @@ async function ingestFiles(fileList: File[]) {
     }
     try {
       const content = await readFileContent(file);
-      const res = await api.memoryFolders.ingestFile(props.categoryId, file.name, content);
+      const res = await api.memoryFolders.ingestFile(props.folderId, file.name, content);
       if (res.job) upsertJob(res.job);
       results.push({ fileName: res.fileName, chunks: res.chunksStored });
     } catch (err) {
@@ -396,7 +396,7 @@ function openDocument(fileName: string) {
 
 function openGlobalResult(file: GlobalDocumentRow) {
   if (!file.textDirect) return;
-  emit("openGlobalDocument", file.categoryId, file.fileName);
+  emit("openGlobalDocument", file.folderId, file.fileName);
 }
 
 async function handleEditorSaved() {
@@ -410,7 +410,7 @@ async function handleEditorSaved() {
 function startDocumentDrag(event: DragEvent, fileName: string) {
   const fileNames = selectedFiles.value.size > 0 ? Array.from(selectedFiles.value) : [fileName];
   if (!event.dataTransfer) return;
-  const payload = { sourceCategoryId: props.categoryId, sourceFiles: fileNames } satisfies DocumentDragPayload;
+  const payload = { sourceFolderId: props.folderId, sourceFiles: fileNames } satisfies DocumentDragPayload;
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData(DOCUMENT_DRAG_MIME, JSON.stringify(payload));
   event.dataTransfer.setData("text/plain", JSON.stringify(payload));
@@ -448,8 +448,8 @@ function formatFileSize(bytes: number): string {
 
 // --- Lifecycle ---
 watch(
-  () => props.categoryId,
-  async (categoryId) => {
+  () => props.folderId,
+  async (folderId) => {
     files.value = [];
     knowledgePreviews.value = {};
     selectedFiles.value = new Set();
@@ -459,7 +459,7 @@ watch(
     searchQuery.value = "";
     page.value = 0;
     await Promise.all([loadFiles(), loadJobs()]);
-    if (props.categoryId === categoryId && props.focusFile) openEditorModal(props.focusFile);
+    if (props.folderId === folderId && props.focusFile) openEditorModal(props.focusFile);
   },
   { immediate: true },
 );
@@ -468,7 +468,7 @@ watch(() => props.focusFile, (fileName) => {
   if (fileName) openEditorModal(fileName);
 });
 
-watch([searchQuery, searchAllFolders, semanticSearch, () => props.categoryId], ([query]) => {
+watch([searchQuery, searchAllFolders, semanticSearch, () => props.folderId], ([query]) => {
   page.value = 0;
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   const trimmed = query.trim();
@@ -483,7 +483,7 @@ watch([searchQuery, searchAllFolders, semanticSearch, () => props.categoryId], (
   globalSearchTimer = window.setTimeout(async () => {
     try {
       const results = await api.memoryFolders.searchFiles(trimmed, {
-        categoryId: searchAllFolders.value ? undefined : props.categoryId,
+        folderId: searchAllFolders.value ? undefined : props.folderId,
         semantic: semanticSearch.value,
       });
       if (sequence === globalSearchSequence) globalSearchResults.value = results;
@@ -502,7 +502,7 @@ onUnmounted(() => {
   unsubscribeDreamUpdate();
 });
 
-defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
+defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 </script>
 
 <template>
@@ -924,16 +924,16 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
           </div>
         </div>
       </template>
-      <template #col-categoryName="{ item: file }">
+      <template #col-folderName="{ item: file }">
         <div class="min-w-0 text-xs text-theme-400">
           <div class="truncate">
-            {{ file.categoryName }}
+            {{ file.folderName }}
           </div>
           <div
-            v-if="file.categoryPath && file.categoryPath !== file.categoryName"
+            v-if="file.folderPath && file.folderPath !== file.folderName"
             class="truncate text-[10px] text-theme-600"
           >
-            {{ file.categoryPath }}
+            {{ file.folderPath }}
           </div>
         </div>
       </template>
@@ -1331,7 +1331,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
 
     <MemoryDocumentEditorModal
       :show="showEditorModal"
-      :category-id="categoryId"
+      :folder-id="folderId"
       :source-file="editorFileName"
       @close="showEditorModal = false"
       @saved="handleEditorSaved"
@@ -1349,7 +1349,7 @@ defineExpose({ ingestFiles, moveDocumentsToCategory, openDocument });
 
     <MemoryDocumentMoveDialog
       :show="showMoveDialog"
-      :source-category-id="categoryId"
+      :source-folder-id="folderId"
       :selected-count="selectedFiles.size"
       :spaces="spaces"
       :moving="moving"

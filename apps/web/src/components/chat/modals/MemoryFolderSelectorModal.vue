@@ -38,8 +38,8 @@ watch(visible, async (val) => {
 })
 
 const selected = computed(() => chatStore.freeChatMemoryFolderIds)
-const rootCategory = computed(() => spaces.value.find(space => space.isUncategorized))
-const rootSelected = computed(() => Boolean(rootCategory.value && selected.value.includes(rootCategory.value.id)))
+const rootFolder = computed(() => spaces.value.find(space => space.isUncategorized))
+const rootSelected = computed(() => Boolean(rootFolder.value && selected.value.includes(rootFolder.value.id)))
 const selectedSet = computed(() => new Set(selected.value))
 const allSelected = computed(() => spaces.value.length > 0 && spaces.value.every(isSelected))
 const effectiveSelectedCount = computed(() => spaces.value.filter(isSelected).length)
@@ -47,7 +47,7 @@ const effectiveSelectedCount = computed(() => spaces.value.filter(isSelected).le
 function collapseFoldersWithChildren(memoryFolders: MemoryFolder[]) {
   const pathsWithChildren = new Set<string>()
   const paths = memoryFolders
-    .map((space) => space.categoryPath || '')
+    .map((space) => space.folderPath || '')
     .filter(Boolean)
 
   for (const path of paths) {
@@ -63,7 +63,7 @@ function collapseFoldersWithChildren(memoryFolders: MemoryFolder[]) {
 const visibleSpaces = computed(() =>
   spaces.value.filter((space) => {
     if (space.isUncategorized) return true
-    const parts = (space.categoryPath || '').split('/')
+    const parts = (space.folderPath || '').split('/')
     for (let i = 1; i < parts.length; i++) {
       if (collapsedFolders.value.has(parts.slice(0, i).join('/'))) return false
     }
@@ -72,21 +72,21 @@ const visibleSpaces = computed(() =>
 )
 
 function hasChildren(space: MemoryFolder): boolean {
-  const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
-  return spaces.value.some((candidate) => space.isUncategorized ? Boolean(candidate.categoryPath) : candidate.categoryPath?.startsWith(prefix))
+  const prefix = space.folderPath ? `${space.folderPath}/` : ''
+  return spaces.value.some((candidate) => space.isUncategorized ? Boolean(candidate.folderPath) : candidate.folderPath?.startsWith(prefix))
 }
 
 function isPartiallySelected(space: MemoryFolder): boolean {
   if (space.isUncategorized || !hasChildren(space)) return false
   // Show partial icon whenever children are selected but the parent itself is not
   if (selected.value.includes(space.id)) return false
-  const prefix = `${space.categoryPath}/`
-  const directChildren = spaces.value.filter(c => c.categoryPath?.startsWith(prefix))
+  const prefix = `${space.folderPath}/`
+  const directChildren = spaces.value.filter(c => c.folderPath?.startsWith(prefix))
   return directChildren.some(c => selected.value.includes(c.id))
 }
 
 function toggleCollapsed(space: MemoryFolder) {
-  const key = space.categoryPath || ''
+  const key = space.folderPath || ''
   const next = new Set(collapsedFolders.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
@@ -141,16 +141,16 @@ function isSelected(space: MemoryFolder): boolean {
   return isMemoryFolderSelected(space, selectedSet.value, rootSelected.value)
 }
 
-function categoryDepth(space: MemoryFolder): number {
+function folderDepth(space: MemoryFolder): number {
   if (space.isUncategorized) return 0
-  return Math.max(1, (space.categoryPath || '').split('/').filter(Boolean).length)
+  return Math.max(1, (space.folderPath || '').split('/').filter(Boolean).length)
 }
 
 function memoryFolderScopeIds(space: MemoryFolder): string[] {
   if (space.isUncategorized) return [space.id]
-  const prefix = space.categoryPath ? `${space.categoryPath}/` : ''
+  const prefix = space.folderPath ? `${space.folderPath}/` : ''
   return spaces.value
-    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.categoryPath?.startsWith(prefix)))
+    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.folderPath?.startsWith(prefix)))
     .map((candidate) => candidate.id)
 }
 
@@ -238,7 +238,7 @@ function toggleAutoMemory(enabled: boolean) {
         v-for="space in visibleSpaces"
         :key="space.id"
         class="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg transition-colors text-left"
-        :data-category-depth="categoryDepth(space)"
+        :data-folder-depth="folderDepth(space)"
         :class="isSelected(space)
           ? 'bg-accent-600/15 border border-accent-500/30'
           : isPartiallySelected(space)
@@ -247,8 +247,8 @@ function toggleAutoMemory(enabled: boolean) {
       >
         <!-- Indent spacer -->
         <span
-          v-if="categoryDepth(space) > 0"
-          :style="{ width: `${categoryDepth(space) * 12}px` }"
+          v-if="folderDepth(space) > 0"
+          :style="{ width: `${folderDepth(space) * 12}px` }"
           class="shrink-0 self-stretch border-r border-theme-700/60"
           aria-hidden="true"
         />
@@ -261,7 +261,7 @@ function toggleAutoMemory(enabled: boolean) {
           <Icon
             icon="lucide:chevron-down"
             class="w-3.5 h-3.5 transition-transform"
-            :class="{ '-rotate-90': collapsedFolders.has(space.categoryPath || '') }"
+            :class="{ '-rotate-90': collapsedFolders.has(space.folderPath || '') }"
           />
         </button>
         <!-- Folder name / toggle selection -->
