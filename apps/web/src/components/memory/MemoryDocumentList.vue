@@ -707,7 +707,8 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             <button
               type="button"
               :disabled="!segment.folderId || segment.folderId === folderId"
-              class="shrink-0 rounded px-1.5 py-0.5 text-theme-500 transition-colors enabled:hover:bg-theme-800 enabled:hover:text-theme-200 disabled:cursor-default last:text-theme-300"
+              class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:hover:bg-theme-800 disabled:cursor-default"
+              :class="segment.folderId && segment.folderId !== folderId ? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
               @click="navigateBreadcrumb(segment.folderId)"
             >
               {{ segment.label }}
