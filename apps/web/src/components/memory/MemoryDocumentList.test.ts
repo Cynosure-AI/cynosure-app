@@ -73,6 +73,8 @@ describe('MemoryDocumentList navigation and search', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('true:notes.md')
+    expect(wrapper.find('input[placeholder="Search files…"]').exists()).toBe(false)
+    await wrapper.get('[aria-label="Show document search"]').trigger('click')
     expect((wrapper.get('input[placeholder="Search files…"]').element as HTMLInputElement).value).toBe('')
     expect(mocks.searchFiles).not.toHaveBeenCalled()
   })
@@ -80,6 +82,7 @@ describe('MemoryDocumentList navigation and search', () => {
   test('shows a clear button only for a query and restores the unfiltered list', async () => {
     const wrapper = mountList()
     await flushPromises()
+    await wrapper.get('[aria-label="Show document search"]').trigger('click')
     const input = wrapper.get('input[placeholder="Search files…"]')
 
     expect(wrapper.find('[aria-label="Clear document search"]').exists()).toBe(false)
