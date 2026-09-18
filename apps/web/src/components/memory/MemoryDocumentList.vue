@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted, toRef, watch } from "vue";
+import { ref, computed, nextTick, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
@@ -93,6 +93,8 @@ const uploadResults = ref<{ fileName: string; chunks: number; error?: string }[]
 
 // Search + pagination
 const searchQuery = ref("");
+const searchVisible = ref(false);
+const searchInput = ref<HTMLInputElement | null>(null);
 const page = ref(0);
 const visibleDocumentRows = ref<DocumentRow[]>([]);
 const globalSearchResults = ref<MemoryFileSearchResult[]>([]);
@@ -101,6 +103,17 @@ const searchAllFolders = ref(false);
 const semanticSearch = ref(false);
 let globalSearchTimer: number | null = null;
 let globalSearchSequence = 0;
+
+async function toggleSearch(): Promise<void> {
+  searchVisible.value = !searchVisible.value;
+  if (!searchVisible.value) {
+    searchQuery.value = "";
+    page.value = 0;
+    return;
+  }
+  await nextTick();
+  searchInput.value?.focus();
+}
 
 const currentSpace = computed(() => props.spaces.find((s) => s.id === props.folderId));
 const folderHistory = ref<string[]>([props.folderId]);
@@ -708,7 +721,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
               type="button"
               :disabled="!segment.folderId || segment.folderId === folderId"
               class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:hover:bg-theme-800 disabled:cursor-default"
-              :class="segment.folderId? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
+              :class="segment.folderId && segment.folderId !== folderId ? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
               @click="navigateBreadcrumb(segment.folderId)"
             >
               {{ segment.label }}
@@ -717,38 +730,61 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </nav>
       </div>
 
-      <div class="flex min-w-0 items-center gap-2 lg:w-[min(48rem,58%)] lg:justify-end">
-        <div class="relative min-w-[12rem] flex-1 lg:max-w-md">
+      <button
+        type="button"
+        class="inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors"
+        :class="searchVisible ? 'border-accent-500/30 bg-accent-500/10 text-accent-300' : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:bg-theme-800 hover:text-theme-200'"
+        :aria-expanded="searchVisible"
+        :aria-label="searchVisible ? 'Hide document search' : 'Show document search'"
+        aria-controls="memory-document-search"
+        @click="toggleSearch"
+      >
+        <Icon
+          :icon="searchVisible ? 'lucide:x' : 'lucide:search'"
+          class="h-3.5 w-3.5"
+        />
+        Search
+      </button>
+    </div>
+
+    <div
+      v-if="searchVisible"
+      id="memory-document-search"
+      class="mb-3 flex flex-col gap-2 rounded-lg border border-theme-800 bg-theme-950/30 p-2 sm:flex-row sm:items-center"
+    >
+      <div class="relative min-w-0 flex-1">
+        <Icon
+          icon="lucide:search"
+          class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
+        />
+        <input
+          ref="searchInput"
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search files…"
+          class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder-theme-500 transition-colors focus:border-theme-600 focus:outline-none"
+          @input="page = 0"
+        >
+        <Icon
+          v-if="globalSearchLoading"
+          icon="lucide:loader-2"
+          class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
+        />
+        <button
+          v-if="searchQuery"
+          type="button"
+          class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          title="Clear search"
+          aria-label="Clear document search"
+          @click="searchQuery = ''"
+        >
           <Icon
-            icon="lucide:search"
-            class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
+            icon="lucide:x"
+            class="h-3.5 w-3.5"
           />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search files…"
-            class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder-theme-500 transition-colors focus:border-theme-600 focus:outline-none"
-            @input="page = 0"
-          >
-          <Icon
-            v-if="globalSearchLoading"
-            icon="lucide:loader-2"
-            class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
-          />
-          <button
-            v-if="searchQuery"
-            type="button"
-            class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-            title="Clear search"
-            aria-label="Clear document search"
-            @click="searchQuery = ''"
-          >
-            <Icon
-              icon="lucide:x"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-        </div>
+        </button>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
         <button
           type="button"
           class="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] transition-colors"
