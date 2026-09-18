@@ -4,11 +4,11 @@ import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter, lanceDbStringLiter
 describe('LanceDB filter construction', () => {
   test('escapes quote characters in user-controlled values', () => {
     expect(lanceDbStringLiteral("owner's notes")).toBe("'owner''s notes'")
-    expect(lanceDbEqFilter('categoryId', "a' OR 1=1 --")).toBe("categoryId = 'a'' OR 1=1 --'")
+    expect(lanceDbEqFilter('folderId', "a' OR 1=1 --")).toBe("folderId = 'a'' OR 1=1 --'")
   })
 
   test('does not create an unbounded IN filter from an empty scope', () => {
-    expect(lanceDbInFilter('categoryId', [])).toBeUndefined()
-    expect(andLanceDbFilters(undefined, 'categoryId = \'default\'')).toBe("categoryId = 'default'")
+    expect(lanceDbInFilter('folderId', [])).toBeUndefined()
+    expect(andLanceDbFilters(undefined, 'folderId = \'default\'')).toBe("folderId = 'default'")
   })
 })

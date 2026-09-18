@@ -29,8 +29,8 @@ function defaultMemoryFolderIds(db = getDb()): string[] {
         .get() as { id: string } | undefined
     if (row) return [row.id]
 
-    const uncategorizedCategory = getDefaultMemoryFolder()
-    return uncategorizedCategory ? [uncategorizedCategory.id] : []
+    const uncategorizedFolder = getDefaultMemoryFolder()
+    return uncategorizedFolder ? [uncategorizedFolder.id] : []
 }
 
 export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promise<void> {
@@ -79,7 +79,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         const assignedMemoryFolders = memoryFolders !== undefined ? memoryFolders : defaultMemoryFolderIds()
         const db = getDb()
         const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
-        for (const categoryId of assignedMemoryFolders) insert.run(agent.id, categoryId)
+        for (const folderId of assignedMemoryFolders) insert.run(agent.id, folderId)
         getChannelManager().refreshAllCommands()
         return { ...agent, memoryFolders: assignedMemoryFolders }
     })
@@ -97,7 +97,7 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             const db = getDb()
             db.prepare('DELETE FROM agent_memory_folders WHERE agent_id = ?').run(agent.id)
             const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
-            for (const categoryId of memoryFolders) insert.run(agent.id, categoryId)
+            for (const folderId of memoryFolders) insert.run(agent.id, folderId)
         }
         const db = getDb()
         const categoryRows = db.prepare('SELECT category_id FROM agent_memory_folders WHERE agent_id = ?').all(agent.id) as { category_id: string }[]

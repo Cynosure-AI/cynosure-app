@@ -77,7 +77,7 @@ export class MemoryKnowledgeProjectionStore {
         ...projection,
         vector: embeddings[index].vector,
         chunkIndex: 0,
-        categoryId: String(run.category_id),
+        folderId: String(run.category_id),
         createdAt: Date.now(),
         documentTitle: String(run.file_name),
         sectionPath: projection.source === 'knowledge_assertion' ? 'Knowledge assertions' : 'Entities',

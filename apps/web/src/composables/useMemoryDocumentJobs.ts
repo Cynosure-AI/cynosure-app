@@ -7,7 +7,7 @@ const ACTIVE_JOB_STATUSES = new Set<MemoryIndexJob["status"]>(["queued", "runnin
 
 /** Owns polling and job transitions for one memory folder's document list. */
 export function useMemoryDocumentJobs(options: {
-  categoryId: Ref<string>;
+  folderId: Ref<string>;
   files: Ref<MemoryFileStatus[]>;
   reloadFiles: () => Promise<void>;
   onCompleted: () => void;
@@ -57,7 +57,7 @@ export function useMemoryDocumentJobs(options: {
   /** Dismiss every failed job in this folder. */
   async function dismissAllFailures(): Promise<void> {
     try {
-      await api.memoryFolders.dismissJobFailures(options.categoryId.value);
+      await api.memoryFolders.dismissJobFailures(options.folderId.value);
       const failedIds = new Set(failedJobs.value.map((job) => job.id));
       jobs.value = jobs.value.filter((job) => !failedIds.has(job.id));
       for (const id of failedIds) appJobs.removeJob(id);
@@ -84,7 +84,7 @@ export function useMemoryDocumentJobs(options: {
 
   async function loadJobs(): Promise<void> {
     try {
-      const nextJobs = await api.memoryFolders.listJobs(options.categoryId.value);
+      const nextJobs = await api.memoryFolders.listJobs(options.folderId.value);
       jobs.value = nextJobs;
       await applyTerminalJobs(nextJobs);
       if (nextJobs.some(isActive)) startPolling();
@@ -109,8 +109,8 @@ export function useMemoryDocumentJobs(options: {
   async function startFileJob(kind: "reindex" | "deep-research", fileName: string): Promise<void> {
     try {
       const job = kind === "reindex"
-        ? await api.memoryFolders.startReindexFile(options.categoryId.value, fileName)
-        : await api.memoryFolders.startDeepResearchFile(options.categoryId.value, fileName);
+        ? await api.memoryFolders.startReindexFile(options.folderId.value, fileName)
+        : await api.memoryFolders.startDeepResearchFile(options.folderId.value, fileName);
       upsertJob(job);
     } catch {
       // The next authoritative refresh exposes failures without inventing a
@@ -157,7 +157,7 @@ export function useMemoryDocumentJobs(options: {
   function reset(): void {
     // Show app-wide active work immediately while loadJobs refreshes the
     // authoritative folder-specific list.
-    jobs.value = appJobs.activeJobs.filter((job) => job.categoryId === options.categoryId.value);
+    jobs.value = appJobs.activeJobs.filter((job) => job.folderId === options.folderId.value);
     handledTerminalJobIds.value = new Set();
   }
 

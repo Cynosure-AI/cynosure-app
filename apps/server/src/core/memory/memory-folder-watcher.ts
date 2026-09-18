@@ -18,7 +18,7 @@ const MOVE_GRACE_MS = 2_000
 
 interface PendingDelete {
     timer: ReturnType<typeof setTimeout>
-    categoryId: string
+    folderId: string
     fileName: string
 }
 
@@ -31,40 +31,40 @@ function isExpectedWatchError(err: unknown): boolean {
     return code === 'EPERM' || code === 'ENOENT'
 }
 
-function pendingDeleteKey(categoryId: string, fileName: string): string {
-    return `${categoryId}\0${fileName}`
+function pendingDeleteKey(folderId: string, fileName: string): string {
+    return `${folderId}\0${fileName}`
 }
 
-async function deleteIndexedFile(categoryId: string, fileName: string): Promise<void> {
-    await getAgentMemory().deleteSourceFile(fileName, categoryId)
-    deleteMemoryKnowledgeSource(categoryId, fileName)
+async function deleteIndexedFile(folderId: string, fileName: string): Promise<void> {
+    await getAgentMemory().deleteSourceFile(fileName, folderId)
+    deleteMemoryKnowledgeSource(folderId, fileName)
 }
 
-function scheduleDelete(categoryId: string, fileName: string): void {
-    const key = pendingDeleteKey(categoryId, fileName)
+function scheduleDelete(folderId: string, fileName: string): void {
+    const key = pendingDeleteKey(folderId, fileName)
     const existing = pendingDeletes.get(key)
     if (existing) clearTimeout(existing.timer)
     const timer = setTimeout(() => {
         pendingDeletes.delete(key)
-        deleteIndexedFile(categoryId, fileName)
-            .catch(err => console.warn(`[memory-watcher] cleanup failed for ${fileName} in space ${categoryId}:`, err))
+        deleteIndexedFile(folderId, fileName)
+            .catch(err => console.warn(`[memory-watcher] cleanup failed for ${fileName} in space ${folderId}:`, err))
     }, MOVE_GRACE_MS)
-    pendingDeletes.set(key, { timer, categoryId, fileName })
+    pendingDeletes.set(key, { timer, folderId, fileName })
 }
 
-function clearPendingDelete(categoryId: string, fileName: string): void {
-    const key = pendingDeleteKey(categoryId, fileName)
+function clearPendingDelete(folderId: string, fileName: string): void {
+    const key = pendingDeleteKey(folderId, fileName)
     const existing = pendingDeletes.get(key)
     if (!existing) return
     clearTimeout(existing.timer)
     pendingDeletes.delete(key)
 }
 
-async function tryRemapAddedFile(categoryId: string, directoryPath: string, fileName: string): Promise<void> {
-    const result = await getAgentMemory().remapMovedFileByHash(categoryId, fileName, directoryPath)
+async function tryRemapAddedFile(folderId: string, directoryPath: string, fileName: string): Promise<void> {
+    const result = await getAgentMemory().remapMovedFileByHash(folderId, fileName, directoryPath)
     if (!result.remapped || !result.fromSpaceId || !result.fromFileName) return
     clearPendingDelete(result.fromSpaceId, result.fromFileName)
-    console.log(`[memory-watcher] remapped moved file ${result.fromSpaceId}/${result.fromFileName} -> ${categoryId}/${fileName}`)
+    console.log(`[memory-watcher] remapped moved file ${result.fromSpaceId}/${result.fromFileName} -> ${folderId}/${fileName}`)
 }
 
 /**
@@ -72,11 +72,11 @@ async function tryRemapAddedFile(categoryId: string, directoryPath: string, file
  * Safe to call multiple times — stops any existing watcher first.
  * The watcher handles both the startup offline-diff purge and realtime deletions.
  */
-export function watchMemoryFolder(categoryId: string, directoryPath: string): void {
-    stopWatchingMemoryFolder(categoryId)
+export function watchMemoryFolder(folderId: string, directoryPath: string): void {
+    stopWatchingMemoryFolder(folderId)
 
     if (!existsSync(directoryPath)) {
-        console.warn(`[memory-watcher] not watching missing folder for space ${categoryId}: ${directoryPath}`)
+        console.warn(`[memory-watcher] not watching missing folder for space ${folderId}: ${directoryPath}`)
         return
     }
 
@@ -96,28 +96,28 @@ export function watchMemoryFolder(categoryId: string, directoryPath: string): vo
     watcher.on('add', (filePath) => {
         const fileName = basename(filePath)
         seenOnDisk.add(fileName)
-        clearPendingDelete(categoryId, fileName)
+        clearPendingDelete(folderId, fileName)
         if (!ready) return
-        tryRemapAddedFile(categoryId, directoryPath, fileName)
-            .catch(err => console.warn(`[memory-watcher] remap failed for ${fileName} in space ${categoryId}:`, err))
+        tryRemapAddedFile(folderId, directoryPath, fileName)
+            .catch(err => console.warn(`[memory-watcher] remap failed for ${fileName} in space ${folderId}:`, err))
     })
 
     // After the initial scan: purge DB entries for files no longer on disk
     watcher.on('ready', () => {
         ready = true
         const mem = getAgentMemory()
-        const indexed = mem.getFileIndex(categoryId)
+        const indexed = mem.getFileIndex(folderId)
         const orphans = [...indexed.keys()].filter(name => !seenOnDisk.has(name))
         for (const name of orphans) {
-            scheduleDelete(categoryId, name)
+            scheduleDelete(folderId, name)
         }
         for (const name of seenOnDisk) {
             if (indexed.has(name)) continue
-            tryRemapAddedFile(categoryId, directoryPath, name)
-                .catch(err => console.warn(`[memory-watcher] startup remap failed for ${name} in space ${categoryId}:`, err))
+            tryRemapAddedFile(folderId, directoryPath, name)
+                .catch(err => console.warn(`[memory-watcher] startup remap failed for ${name} in space ${folderId}:`, err))
         }
         if (orphans.length > 0) {
-            console.log(`[memory-watcher] scheduled cleanup for ${orphans.length} stale entries from space ${categoryId}`)
+            console.log(`[memory-watcher] scheduled cleanup for ${orphans.length} stale entries from space ${folderId}`)
         }
     })
 
@@ -125,35 +125,35 @@ export function watchMemoryFolder(categoryId: string, directoryPath: string): vo
     watcher.on('unlink', (filePath) => {
         const fileName = basename(filePath)
         seenOnDisk.delete(fileName)
-        scheduleDelete(categoryId, fileName)
+        scheduleDelete(folderId, fileName)
     })
 
     watcher.on('unlinkDir', (deletedPath) => {
         if (resolve(deletedPath) !== watchedRoot) return
-        console.warn(`[memory-watcher] watched folder for space ${categoryId} was removed: ${directoryPath}`)
-        stopWatchingMemoryFolder(categoryId)
+        console.warn(`[memory-watcher] watched folder for space ${folderId} was removed: ${directoryPath}`)
+        stopWatchingMemoryFolder(folderId)
     })
 
     watcher.on('error', (err) => {
         if (isExpectedWatchError(err) && !existsSync(directoryPath)) {
-            console.warn(`[memory-watcher] stopped watching removed folder for space ${categoryId}: ${directoryPath}`)
+            console.warn(`[memory-watcher] stopped watching removed folder for space ${folderId}: ${directoryPath}`)
         } else {
-            console.warn(`[memory-watcher] watcher error for space ${categoryId}:`, err)
+            console.warn(`[memory-watcher] watcher error for space ${folderId}:`, err)
         }
-        stopWatchingMemoryFolder(categoryId)
+        stopWatchingMemoryFolder(folderId)
     })
 
-    activeWatchers.set(categoryId, watcher)
+    activeWatchers.set(folderId, watcher)
 }
 
 /** Stop watching a specific space folder. */
-export function stopWatchingMemoryFolder(categoryId: string): void {
-    const watcher = activeWatchers.get(categoryId)
+export function stopWatchingMemoryFolder(folderId: string): void {
+    const watcher = activeWatchers.get(folderId)
     if (!watcher) return
     watcher.close().catch(() => { /* ignore */ })
-    activeWatchers.delete(categoryId)
+    activeWatchers.delete(folderId)
     for (const [key, pending] of pendingDeletes.entries()) {
-        if (pending.categoryId !== categoryId) continue
+        if (pending.folderId !== folderId) continue
         clearTimeout(pending.timer)
         pendingDeletes.delete(key)
     }

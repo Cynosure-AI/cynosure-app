@@ -35,7 +35,7 @@ describe('memory folder directories', () => {
     expect(() => validateRelativePath('Default/Notes')).toThrow(/reserved/)
   })
 
-  test('discovers directories and atomically creates nested categories', () => {
+  test('discovers directories and atomically creates nested folders', () => {
     const db = new Database(':memory:')
     db.exec(`
       CREATE TABLE memory_folders (
@@ -62,8 +62,8 @@ describe('memory folder directories', () => {
     expect(created.name).toBe('Hobbies')
     expect(existsSync(join(memoryRoot, 'People', 'Veronica Flowers', 'Hobbies'))).toBe(true)
     const people = db.prepare("SELECT id, name FROM memory_folders WHERE name = 'People'").get() as { id: string; name: string }
-    const peopleScope = expandMemoryFolderScope([{ ...people, categoryPath: 'People' }], db)
-    expect(peopleScope.map(category => category.categoryPath)).toEqual([
+    const peopleScope = expandMemoryFolderScope([{ ...people, folderPath: 'People' }], db)
+    expect(peopleScope.map(folder => folder.folderPath)).toEqual([
       'People',
       'People/Veronica Flowers',
       'People/Veronica Flowers/Hobbies',
@@ -73,19 +73,19 @@ describe('memory folder directories', () => {
     // selection, but remains part of a parent explicitly selected by the user.
     const peopleSecret = ensureMemoryFolderPath(db, 'People/SeCrEt')
 
-    const defaultScope = expandMemoryFolderScope([{ id: 'uncategorized', name: 'Uncategorized', categoryPath: '' }], db)
+    const defaultScope = expandMemoryFolderScope([{ id: 'uncategorized', name: 'Uncategorized', folderPath: '' }], db)
     expect(defaultScope).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
-    expect(defaultScope.some(category => category.categoryPath === 'Archive')).toBe(false)
-    expect(defaultScope.some(category => category.categoryPath === 'People/SeCrEt')).toBe(false)
-    expect(defaultScope.some(category => category.categoryPath === '.agents')).toBe(true)
+    expect(defaultScope.some(folder => folder.folderPath === 'Archive')).toBe(false)
+    expect(defaultScope.some(folder => folder.folderPath === 'People/SeCrEt')).toBe(false)
+    expect(defaultScope.some(folder => folder.folderPath === '.agents')).toBe(true)
 
-    expect(expandMemoryFolderScope([{ ...people, categoryPath: 'People' }], db))
+    expect(expandMemoryFolderScope([{ ...people, folderPath: 'People' }], db))
       .toEqual(expect.arrayContaining([expect.objectContaining({ id: peopleSecret.id })]))
 
     const archiveScope = expandMemoryFolderScope([
-      { id: 'archive', name: 'Archive', categoryPath: 'Archive' },
+      { id: 'archive', name: 'Archive', folderPath: 'Archive' },
     ], db)
-    expect(archiveScope.map(category => category.categoryPath)).toEqual([
+    expect(archiveScope.map(folder => folder.folderPath)).toEqual([
       'Archive',
       'Archive/Old',
     ])
@@ -99,7 +99,7 @@ describe('memory folder directories', () => {
     db.close()
   })
 
-  test('removes an empty category branch without removing a non-empty ancestor', () => {
+  test('removes an empty folder branch without removing a non-empty ancestor', () => {
     const memoryRoot = join(dataDir, 'data', 'memories')
     const branch = join(memoryRoot, 'Projects', 'Finished', 'Notes')
     mkdirSync(branch, { recursive: true })

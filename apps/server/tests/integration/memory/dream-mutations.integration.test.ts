@@ -14,7 +14,7 @@ let file: string
 const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const revisions = new Map<string, string>()
 const options = {
-    assignedCategories: [{ id: 'uncategorized', name: 'Uncategorized' }],
+    assignedFolders: [{ id: 'uncategorized', name: 'Uncategorized' }],
     onDocumentRead: (id: string, revision: string) => { revisions.set(id, revision) },
     beforeDocumentMutation: (id: string, content: string) => {
         if (revisions.get(id) !== hash(content)) throw new Error('Document changed since read')
@@ -23,7 +23,7 @@ const options = {
 function setContent(content: string) {
     writeFileSync(file, content)
     getDb().prepare("UPDATE memory_file_index SET content_hash = ? WHERE document_id = 'doc'").run(hash(content))
-    recordMemoryRevision({ documentId: 'doc', documentRef: 'notes#abc123', categoryId: 'uncategorized', fileName: 'notes.md', content })
+    recordMemoryRevision({ documentId: 'doc', documentRef: 'notes#abc123', folderId: 'uncategorized', fileName: 'notes.md', content })
 }
 beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), 'cynosure-dream-mutations-'))
@@ -33,10 +33,10 @@ beforeEach(() => {
     db.prepare(`INSERT INTO memory_file_index(document_id, document_ref, category_id, file_name, content_hash, chunk_count, created_at)
         VALUES ('doc', 'notes#abc123', 'uncategorized', 'notes.md', ?, 1, ?)`).run(hash('Unrelated fact.'), Date.now())
     writeFileSync(file, 'Unrelated fact.')
-    recordMemoryRevision({ documentId: 'doc', documentRef: 'notes#abc123', categoryId: 'uncategorized', fileName: 'notes.md', content: 'Unrelated fact.' })
+    recordMemoryRevision({ documentId: 'doc', documentRef: 'notes#abc123', folderId: 'uncategorized', fileName: 'notes.md', content: 'Unrelated fact.' })
     revisions.clear()
     const memory = getAgentMemory()
-    vi.spyOn(memory, 'getChunksByRange').mockImplementation(async () => [{ text: readFileSync(file, 'utf8'), chunkIndex: 0, sourceFile: 'notes.md', categoryId: 'uncategorized' }])
+    vi.spyOn(memory, 'getChunksByRange').mockImplementation(async () => [{ text: readFileSync(file, 'utf8'), chunkIndex: 0, sourceFile: 'notes.md', folderId: 'uncategorized' }])
     vi.spyOn(memory, 'countChunks').mockResolvedValue(1)
     vi.spyOn(memory, 'reindexFile').mockImplementation(async () => {
         setContent(readFileSync(file, 'utf8'))
@@ -57,7 +57,7 @@ async function read() {
 test('memory_search returns canonical context and a monotonic revision without chunk coordinates', async () => {
     vi.spyOn(getAgentMemory(), 'recall').mockResolvedValueOnce([{
         id: 'chunk', text: 'Unrelated fact.', source: 'permanent', score: 0.9,
-        sourceFile: 'notes.md', categoryId: 'uncategorized', chunkIndex: 0,
+        sourceFile: 'notes.md', folderId: 'uncategorized', chunkIndex: 0,
         contentHash: hash('Unrelated fact.'), sourceStart: 0, sourceEnd: 15,
     }])
     const result = await makeMemorySearchTool(options).execute({ query: 'unrelated' })
@@ -84,7 +84,7 @@ test('a concurrent edit is rejected under the document lock until Dream reads ag
 })
 test('a patch can apply after a concurrent unrelated edit when its context remains unique', async () => {
     setContent('Unrelated fact.\nConcurrent unrelated edit.')
-    const result = await makeMemoryPatchTool({ assignedCategories: options.assignedCategories }).execute({
+    const result = await makeMemoryPatchTool({ assignedFolders: options.assignedFolders }).execute({
         fileRef: 'notes#abc123', patch: '@@\n-Unrelated fact.\n+Updated fact.',
     })
     expect(result.success).toBe(true)

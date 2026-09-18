@@ -5,7 +5,7 @@ import ModalDialog from "../shared/ModalDialog.vue";
 
 defineProps<{
   show: boolean;
-  sourceCategoryId: string;
+  sourceFolderId: string;
   selectedCount: number;
   spaces: MemoryFolder[];
   moving: boolean;
@@ -13,7 +13,7 @@ defineProps<{
 
 defineEmits<{
   close: [];
-  move: [targetCategoryId: string];
+  move: [targetFolderId: string];
 }>();
 </script>
 
@@ -31,7 +31,7 @@ defineEmits<{
     </p>
     <div class="grid max-h-[55vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
       <button
-        v-for="space in spaces.filter((item) => item.id !== sourceCategoryId)"
+        v-for="space in spaces.filter((item) => item.id !== sourceFolderId)"
         :key="space.id"
         :disabled="moving"
         class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-theme-800 hover:border-accent-500/50 hover:bg-accent-500/5 transition-colors text-left disabled:opacity-50"

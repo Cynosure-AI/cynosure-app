@@ -47,14 +47,14 @@ export const GRAPH_LIMITS: Readonly<{
   maxSuggestions: number
   defaultSuggestions: number
   maxSeedNodes: number
-  maxCategories: number
+  maxFolders: number
 }> = {
   maxNodes: 5000,
   defaultNodes: 80,
   maxSuggestions: 20,
   defaultSuggestions: 8,
   maxSeedNodes: 50,
-  maxCategories: 100,
+  maxFolders: 100,
 }
 
 export interface RuntimeLimits {

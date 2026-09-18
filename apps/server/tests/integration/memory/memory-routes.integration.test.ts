@@ -44,7 +44,7 @@ describe('memory search routes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/memory/search',
-      payload: { query: 'project dependencies', categoryId: 'missing-space' },
+      payload: { query: 'project dependencies', folderId: 'missing-space' },
     })
 
     expect(response.statusCode).toBe(404)
@@ -121,7 +121,7 @@ describe('memory search routes', () => {
     const value = 'HNO-Vorstellung zur Bestätigung des paroxysmalen neuronalen Tinnitus-Charakters, Ausschluss struktureller Ursachen und Beratung zu medikamentöser Testung (z. B. Carbamazepin) oder weiterer Diagnostik (MRT nur bei zusätzlichen Symptomen)'
     const knowledge = getMemoryKnowledgeStore()
     knowledge.publishDocument({
-      documentId: 'doc-medical', contentHash: 'revision-1', categoryId: 'medical',
+      documentId: 'doc-medical', contentHash: 'revision-1', folderId: 'medical',
       fileName: 'medical.md', sourceId: 'memory:medical:medical.md',
       chunks: [{ text: value, searchText: value, chunkIndex: 0, documentTitle: 'Medical', sectionPath: '', contentHash: 'chunk-1' }],
       relations: [{
@@ -129,7 +129,7 @@ describe('memory search routes', () => {
         sourceChunkIndex: 0, note: value,
       }],
     })
-    const literal = knowledge.browseGraph({ categoryIds: ['medical'] }).nodes.find((node) => node.id.startsWith('literal:'))
+    const literal = knowledge.browseGraph({ folderIds: ['medical'] }).nodes.find((node) => node.id.startsWith('literal:'))
     expect(literal?.name).toBe(value)
     const assertionId = literal!.id.slice('literal:'.length)
     const app = await createApp()

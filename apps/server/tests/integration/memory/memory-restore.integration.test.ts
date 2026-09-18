@@ -32,17 +32,17 @@ describe('deleted memory restore', () => {
     const revision = recordMemoryRevision({
       documentId: 'deleted-document',
       documentRef: 'restored-memory#abc123',
-      categoryId: 'removed-folder',
+      folderId: 'removed-folder',
       fileName: 'restored-memory.md',
       content,
       context: { source: 'user' },
     })
     markMemoryDocumentDeleted('deleted-document')
-    vi.spyOn(getAgentMemory(), 'reindexFile').mockImplementation(async (_directoryPath, fileName, categoryId) => {
+    vi.spyOn(getAgentMemory(), 'reindexFile').mockImplementation(async (_directoryPath, fileName, folderId) => {
       recordMemoryRevision({
         documentId: 'deleted-document',
         documentRef: 'restored-memory#abc123',
-        categoryId,
+        folderId,
         fileName,
         content,
         context: { source: 'restore' },

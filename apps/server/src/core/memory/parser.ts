@@ -11,7 +11,7 @@ import { CHUNKING_LIMITS } from '../runtime-limits.js'
 export interface DocumentMeta {
   source: string
   sourceFile?: string
-  categoryId?: string
+  folderId?: string
 }
 
 export interface RetrievedChunk {
@@ -26,8 +26,8 @@ export interface RetrievedChunk {
   scoreType?: 'dense' | 'lexical' | 'fusion' | 'reranker' | 'entity-resolution'
   sourceFile?: string
   chunkIndex?: number
-  categoryId?: string
-  categoryName?: string
+  folderId?: string
+  folderName?: string
   totalChunks?: number
   documentTitle?: string
   sectionPath?: string
@@ -195,7 +195,7 @@ export class MemoryParser {
           source: meta.source,
           sourceFile: meta.sourceFile || '',
           chunkIndex: item.chunkIndex,
-          categoryId: meta.categoryId || '',
+          folderId: meta.folderId || '',
           createdAt: Date.now(),
           documentTitle,
           sectionPath: item.sectionPath,
@@ -311,7 +311,7 @@ export class MemoryParser {
       sourceEnd: r.sourceEnd,
       sourceFile: r.sourceFile,
       chunkIndex: r.chunkIndex,
-      categoryId: r.categoryId,
+      folderId: r.folderId,
       sourceChunkId: r.sourceChunkId || r.id,
       matchedRepresentations: r.matchedRepresentations,
       matchedBy: r.matchedRepresentations?.map((representation) =>

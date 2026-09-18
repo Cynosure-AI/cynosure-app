@@ -81,7 +81,7 @@ authoritative piece of evidence returned to the model.
 - Failed and dead-lettered memory index jobs are surfaced in the document list
   with their error message, individually dismissible or clearable in bulk.
 - New `DELETE /api/memory-folders/jobs/failures` endpoint (optionally scoped by
-  `categoryId`) permanently removes acknowledged failures so they do not
+  `folderId`) permanently removes acknowledged failures so they do not
   reappear after a reload.
 
 ### Changed
@@ -89,7 +89,7 @@ authoritative piece of evidence returned to the model.
 - Folder actions (add subfolder, rename, delete) are grouped behind an ellipsis
   menu instead of three always-visible icon buttons.
 - Deleting a folder now records its documents as deleted via
-  `markMemoryCategoriesDeleted()`, so folder cascades appear in document history.
+  `markMemoryFoldersDeleted()`, so folder cascades appear in document history.
 - Memory file status is computed by a shared `listMemoryFiles()` helper, and
   "deep researched" now requires the analysis to be newer than the active
   knowledge run.
@@ -115,6 +115,6 @@ authoritative piece of evidence returned to the model.
 
 - New integration test: `apps/server/tests/integration/memory/memory-folder-search.integration.test.ts`.
 - Extended coverage for retrieval policy (`withSearchAnalysis`), revision
-  cascades (`markMemoryCategoriesDeleted`), deep-research extraction, knowledge
+  cascades (`markMemoryFoldersDeleted`), deep-research extraction, knowledge
   indexing, and index jobs.
 - New web tests for the analysis rail and the folder options menu.

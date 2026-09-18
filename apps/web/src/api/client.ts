@@ -309,8 +309,8 @@ export const api = {
     configureDream: (config: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
     cancelDreamRun: (id: string) => post<{ success: boolean }>(`/api/memory/dream/runs/${encodeURIComponent(id)}/cancel`, {}),
     onDreamUpdated: (cb: (data: { id: string; status: string }) => void) => onWsEvent('memory:dream-updated', cb as WsHandler),
-    search: (query: string, topK?: number, categoryId?: string) =>
-      post<unknown[]>('/api/memory/search', { query, topK, categoryId }),
+    search: (query: string, topK?: number, folderId?: string) =>
+      post<unknown[]>('/api/memory/search', { query, topK, folderId }),
     aggregate: (
       query: string,
       opts?: { conversationId?: string }
@@ -347,22 +347,22 @@ export const api = {
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
       post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
-    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeIds?: string[], minImportance?: number | null, categoryIds?: string[]) => {
+    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeIds?: string[], minImportance?: number | null, folderIds?: string[]) => {
       const params = new URLSearchParams()
       if (query) params.set('query', query)
       if (nodeIds?.length) params.set('nodeIds', nodeIds.join(','))
       if (limit) params.set('limit', String(limit))
       if (view) params.set('view', view)
       if (minImportance !== undefined && minImportance !== null) params.set('minImportance', String(minImportance))
-      if (categoryIds) params.set('categoryIds', categoryIds.length ? categoryIds.join(',') : '__none__')
+      if (folderIds) params.set('folderIds', folderIds.length ? folderIds.join(',') : '__none__')
       const qs = params.toString()
       return get<KnowledgeGraph>(`/api/memory/knowledge/graph${qs ? `?${qs}` : ''}`)
     },
-    getGraphSuggestions: (query: string, limit?: number, categoryIds?: string[]) => {
+    getGraphSuggestions: (query: string, limit?: number, folderIds?: string[]) => {
       const params = new URLSearchParams()
       params.set('query', query)
       if (limit) params.set('limit', String(limit))
-      if (categoryIds) params.set('categoryIds', categoryIds.length ? categoryIds.join(',') : '__none__')
+      if (folderIds) params.set('folderIds', folderIds.length ? folderIds.join(',') : '__none__')
       return get<KnowledgeGraphSuggestionsResponse>(`/api/memory/knowledge/graph/suggestions?${params.toString()}`)
     },
     updateGraphNode: (id: string, data: { name?: string; type?: KnowledgeGraph['nodes'][number]['type']; aliases?: string[]; importance?: number }) =>
@@ -392,9 +392,9 @@ export const api = {
   memoryFolders: {
     list: () =>
       get<MemoryFolder[]>('/api/memory-folders'),
-    create: (name: string, description?: string, parentCategoryPath?: string) =>
-      post<MemoryFolder>('/api/memory-folders', { name, description, parentCategoryPath }),
-    update: (id: string, data: { name?: string; description?: string; categoryPath?: string }) =>
+    create: (name: string, description?: string, parentFolderPath?: string) =>
+      post<MemoryFolder>('/api/memory-folders', { name, description, parentFolderPath }),
+    update: (id: string, data: { name?: string; description?: string; folderPath?: string }) =>
       put<MemoryFolder>(`/api/memory-folders/${memoryFolderPathId(id)}`, data),
     remove: (id: string) =>
       del<{ success: boolean }>(`/api/memory-folders/${memoryFolderPathId(id)}`),
@@ -403,27 +403,27 @@ export const api = {
     listAllJobs: () =>
       get<MemoryIndexJob[]>('/api/memory-folders/jobs'),
     /** List files in the space folder with their index status. Hash computation is async server-side. */
-    listFiles: (categoryId: string) =>
-      get<MemoryFileStatus[]>(`/api/memory-folders/${memoryFolderPathId(categoryId)}/files`),
-    searchFiles: (query: string, opts?: { categoryId?: string; semantic?: boolean }) => {
+    listFiles: (folderId: string) =>
+      get<MemoryFileStatus[]>(`/api/memory-folders/${memoryFolderPathId(folderId)}/files`),
+    searchFiles: (query: string, opts?: { folderId?: string; semantic?: boolean }) => {
       const params = new URLSearchParams({ query })
-      if (opts?.categoryId) params.set('categoryId', opts.categoryId)
+      if (opts?.folderId) params.set('folderId', opts.folderId)
       if (opts?.semantic) params.set('semantic', 'true')
       return get<MemoryFileSearchResult[]>(`/api/memory-folders/file-search?${params.toString()}`)
     },
-    getDocumentKnowledgePreview: (categoryId: string, fileName: string) =>
+    getDocumentKnowledgePreview: (folderId: string, fileName: string) =>
       get<MemoryDocumentKnowledgePreview>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
       ),
-    getDocumentAnalysis: (categoryId: string, fileName: string) =>
+    getDocumentAnalysis: (folderId: string, fileName: string) =>
       get<MemoryDocumentAnalysis>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/analysis`
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/analysis`
       ),
-    listJobs: (categoryId: string) =>
-      get<MemoryIndexJob[]>(`/api/memory-folders/${memoryFolderPathId(categoryId)}/jobs`),
-    rebuildKnowledge: (categoryId: string) =>
+    listJobs: (folderId: string) =>
+      get<MemoryIndexJob[]>(`/api/memory-folders/${memoryFolderPathId(folderId)}/jobs`),
+    rebuildKnowledge: (folderId: string) =>
       post<{ success: boolean; scheduled: number; jobs: MemoryIndexJob[]; skipped: Array<{ fileName: string; reason: string }> }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/knowledge/rebuild`,
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/knowledge/rebuild`,
         {}
       ),
     getJob: (jobId: string) =>
@@ -432,48 +432,48 @@ export const api = {
       post<MemoryIndexJob>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     discardJob: (jobId: string) =>
       del<{ success: boolean }>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}`),
-    dismissJobFailures: (categoryId?: string) =>
+    dismissJobFailures: (folderId?: string) =>
       del<{ success: boolean; dismissed: number }>(
-        `/api/memory-folders/jobs/failures${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ''}`
+        `/api/memory-folders/jobs/failures${folderId ? `?folderId=${encodeURIComponent(folderId)}` : ''}`
       ),
     onJobUpdated: (cb: (data: MemoryIndexJob) => void) =>
       onWsEvent('memory:job-updated', cb as WsHandler),
-    reindexFile: (categoryId: string, fileName: string) =>
+    reindexFile: (folderId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/reingest-file`,
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/reingest-file`,
         { fileName }
       ),
-    startReindexFile: (categoryId: string, fileName: string) =>
+    startReindexFile: (folderId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }>>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
         {}
       ),
-    extractKnowledgeFromFile: (categoryId: string, fileName: string) =>
+    extractKnowledgeFromFile: (folderId: string, fileName: string) =>
       post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research`,
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/deep-research`,
         {}
       ),
-    startDeepResearchFile: (categoryId: string, fileName: string) =>
+    startDeepResearchFile: (folderId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/deep-research-job`,
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/deep-research-job`,
         {}
       ),
-    deleteFile: (categoryId: string, fileName: string) =>
+    deleteFile: (folderId: string, fileName: string) =>
       del<{ success: boolean }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}`
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}`
       ),
-    getFileContent: (categoryId: string, fileName: string) =>
+    getFileContent: (folderId: string, fileName: string) =>
       get<{ fileName: string; content: string; revision: string; documentRef?: string }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/content`
       ),
-    updateFileContent: (categoryId: string, fileName: string, content: string, expectedRevision?: string) =>
+    updateFileContent: (folderId: string, fileName: string, content: string, expectedRevision?: string) =>
       put<{ success: boolean; fileName: string; revision: string }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/content`,
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/content`,
         { content, expectedRevision }
       ),
-    renameFile: (categoryId: string, fileName: string, nextFileName: string) =>
+    renameFile: (folderId: string, fileName: string, nextFileName: string) =>
       put<{ success: boolean; fileName: string }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/files/${encodeURIComponent(fileName)}/name`,
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/name`,
         { fileName: nextFileName }
       ),
     listRevisions: (documentRef: string) =>
@@ -485,28 +485,28 @@ export const api = {
     restoreRevision: (documentRef: string, revisionId: string, expectedRevision?: string) =>
       post<{ success: boolean; documentRef: string; revision: string; chunksStored: number }>(`/api/memory-folders/documents/${encodeURIComponent(documentRef)}/revisions/${encodeURIComponent(revisionId)}/restore`, { expectedRevision }),
     listDeleted: () =>
-      get<Array<{ documentRef: string; categoryId: string; fileName: string; revision: string; deletedAt: number }>>('/api/memory-folders/deleted'),
+      get<Array<{ documentRef: string; folderId: string; fileName: string; revision: string; deletedAt: number }>>('/api/memory-folders/deleted'),
     listRecentChanges: (limit = 20) =>
       get<import('./types').RecentMemoryChange[]>(`/api/memory-folders/recent-changes?limit=${limit}`),
-    ingestFile: (categoryId: string, fileName: string, content: string) =>
+    ingestFile: (folderId: string, fileName: string, content: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string; job?: MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }> }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/ingest-file`, { fileName, content }
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/ingest-file`, { fileName, content }
       ),
-    reingestFile: (categoryId: string, fileName: string) =>
+    reingestFile: (folderId: string, fileName: string) =>
       post<{ success: boolean; chunksStored: number; fileName: string }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/reingest-file`, { fileName }
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/reingest-file`, { fileName }
       ),
-    deleteDocuments: (categoryId: string, sourceFiles: string[]) =>
+    deleteDocuments: (folderId: string, sourceFiles: string[]) =>
       post<{ success: boolean }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/delete-documents`, { sourceFiles }
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/delete-documents`, { sourceFiles }
       ),
-    forgetMemories: (categoryId: string, sourceFiles: string[]) =>
+    forgetMemories: (folderId: string, sourceFiles: string[]) =>
       post<{ success: boolean; filesReset: number; chunksDeleted: number; graphEdgesDeleted: number }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/drop-indexes`, { sourceFiles }
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/drop-indexes`, { sourceFiles }
       ),
-    moveDocuments: (categoryId: string, sourceFiles: string[], targetCategoryId: string) =>
+    moveDocuments: (folderId: string, sourceFiles: string[], targetFolderId: string) =>
       post<{ success: boolean; moved: number }>(
-        `/api/memory-folders/${memoryFolderPathId(categoryId)}/move-documents`, { sourceFiles, targetCategoryId }
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/move-documents`, { sourceFiles, targetFolderId }
       ),
   },
 

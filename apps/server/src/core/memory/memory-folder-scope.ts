@@ -1,22 +1,22 @@
 import { getDb } from '../../db/database.js'
 import type Database from 'better-sqlite3'
 import { lanceDbInFilter } from './lancedb-filter.js'
-import { listAllMemoryFolderRefs, categoryPathForDirectory } from './memory-folder-directories.js'
+import { listAllMemoryFolderRefs, folderPathForDirectory } from './memory-folder-directories.js'
 
-export type MemoryFolderRef = { id: string; name: string; categoryPath?: string }
+export type MemoryFolderRef = { id: string; name: string; folderPath?: string }
 
 const UNCATEGORIZED_CATEGORY_ID = 'uncategorized'
 const AUTO_EXCLUDED_MEMORY_FOLDER_NAMES = new Set(['archive', 'subconscious', 'secret', 'hidden'])
 
-export function isAutoExcludedMemoryFolderPath(categoryPath: string): boolean {
-    return categoryPath
+export function isAutoExcludedMemoryFolderPath(folderPath: string): boolean {
+    return folderPath
         .split('/')
         .some((segment) => AUTO_EXCLUDED_MEMORY_FOLDER_NAMES.has(segment.toLowerCase()))
 }
 
 /**
  * Resolve the default memory folder.
- * Uses the category marked as Uncategorized.
+ * Uses the folder marked as Uncategorized.
  */
 export function getDefaultMemoryFolder(): MemoryFolderRef | undefined {
     try {
@@ -53,7 +53,7 @@ export function getAssignedMemoryFolders(agentId: string): MemoryFolderRef[] {
         const assigned = rows.map((row) => ({
             id: row.id,
             name: row.name,
-            categoryPath: row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path),
+            folderPath: row.is_uncategorized === 1 ? '' : folderPathForDirectory(row.directory_path),
         }))
 
         return expandMemoryFolderScope(assigned, db)
@@ -62,16 +62,16 @@ export function getAssignedMemoryFolders(agentId: string): MemoryFolderRef[] {
     }
 }
 
-/** Expand category grants to every currently registered descendant. */
-export function expandMemoryFolderScope(categories: MemoryFolderRef[], db: Database.Database = getDb()): MemoryFolderRef[] {
-    if (categories.length === 0) return []
+/** Expand folder grants to every currently registered descendant. */
+export function expandMemoryFolderScope(folders: MemoryFolderRef[], db: Database.Database = getDb()): MemoryFolderRef[] {
+    if (folders.length === 0) return []
     try {
         const all = listAllMemoryFolderRefs(db)
-        const paths = categories.map(item => item.categoryPath ?? '')
+        const paths = folders.map(item => item.folderPath ?? '')
         return all.filter(item => {
-            const itemIsAutoExcluded = isAutoExcludedMemoryFolderPath(item.categoryPath)
+            const itemIsAutoExcluded = isAutoExcludedMemoryFolderPath(item.folderPath)
             return paths.some(path => {
-                const withinScope = !path || item.categoryPath === path || item.categoryPath.startsWith(`${path}/`)
+                const withinScope = !path || item.folderPath === path || item.folderPath.startsWith(`${path}/`)
                 if (!withinScope) return false
                 // The root is the automatic/default selection. Special folders are
                 // omitted from that default, but any explicit folder grant behaves
@@ -80,7 +80,7 @@ export function expandMemoryFolderScope(categories: MemoryFolderRef[], db: Datab
             })
         })
     } catch {
-        return categories
+        return folders
     }
 }
 
@@ -92,12 +92,12 @@ export function getAllMemoryFolders(): MemoryFolderRef[] {
     }
 }
 
-export function getMemoryFolderDirectoryPath(categoryId: string): string | undefined {
+export function getMemoryFolderDirectoryPath(folderId: string): string | undefined {
     try {
         const db = getDb()
         const row = db
             .prepare('SELECT directory_path FROM memory_folders WHERE id = ?')
-            .get(categoryId) as { directory_path: string } | undefined
+            .get(folderId) as { directory_path: string } | undefined
         return row?.directory_path || undefined
     } catch {
         return undefined
@@ -105,8 +105,8 @@ export function getMemoryFolderDirectoryPath(categoryId: string): string | undef
 }
 
 /**
- * Build a LanceDB where-clause filter for a set of categories.
+ * Build a LanceDB where-clause filter for a set of folders.
  */
-export function buildMemoryFolderFilter(categories: Array<{ id: string }>): string | undefined {
-    return lanceDbInFilter('categoryId', categories.map((category) => category.id))
+export function buildMemoryFolderFilter(folders: Array<{ id: string }>): string | undefined {
+    return lanceDbInFilter('folderId', folders.map((folder) => folder.id))
 }

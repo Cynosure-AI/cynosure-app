@@ -12,7 +12,7 @@ const spaces: MemoryFolder[] = [
     name: 'Uncategorized',
     description: '',
     directoryPath: '/memory',
-    categoryPath: '',
+    folderPath: '',
     sortOrder: 0,
     isUncategorized: true,
     createdAt: 1,
@@ -23,7 +23,7 @@ const spaces: MemoryFolder[] = [
     name: 'Archive',
     description: '',
     directoryPath: '/memory/archive',
-    categoryPath: 'archive',
+    folderPath: 'archive',
     sortOrder: 1,
     isUncategorized: false,
     createdAt: 1,
@@ -34,7 +34,7 @@ const spaces: MemoryFolder[] = [
 const MemoryDocumentListStub = defineComponent({
   name: 'MemoryDocumentList',
   setup(_, { expose }) {
-    expose({ ingestFiles: () => undefined, moveDocumentsToCategory: () => undefined })
+    expose({ ingestFiles: () => undefined, moveDocumentsToFolder: () => undefined })
     return () => null
   },
 })
@@ -57,8 +57,8 @@ function mountSection(memorySpaces = spaces, extraProps: Record<string, unknown>
     props: {
       spaces: memorySpaces,
       spacesLoading: false,
-      selectedCategoryId: 'uncategorized',
-      selectedCategory: spaces[0],
+      selectedFolderId: 'uncategorized',
+      selectedFolder: spaces[0],
       ...extraProps,
     },
     global: {
@@ -73,8 +73,8 @@ describe('MemoryDocumentsSection drag targets', () => {
   test('collapses document folders initially and restores opened folders during the session', async () => {
     const nestedSpaces: MemoryFolder[] = [
       ...spaces,
-      { ...spaces[1], id: 'projects', name: 'Projects', categoryPath: 'projects', directoryPath: '/memory/projects' },
-      { ...spaces[1], id: 'acme', name: 'Acme', categoryPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
+      { ...spaces[1], id: 'projects', name: 'Projects', folderPath: 'projects', directoryPath: '/memory/projects' },
+      { ...spaces[1], id: 'acme', name: 'Acme', folderPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
     ]
     const first = mountSection(nestedSpaces)
     expect(first.find('[data-space-id="acme"]').exists()).toBe(false)
@@ -87,21 +87,21 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(restored.find('[data-space-id="acme"]').exists()).toBe(true)
   })
 
-  test('reveals the linked category and keeps drag highlighting when MIME inspection is unavailable', async () => {
+  test('reveals the linked folder and keeps drag highlighting when MIME inspection is unavailable', async () => {
     const nestedSpaces: MemoryFolder[] = [
       ...spaces,
-      { ...spaces[1], id: 'projects', name: 'Projects', categoryPath: 'projects', directoryPath: '/memory/projects' },
-      { ...spaces[1], id: 'acme', name: 'Acme', categoryPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
+      { ...spaces[1], id: 'projects', name: 'Projects', folderPath: 'projects', directoryPath: '/memory/projects' },
+      { ...spaces[1], id: 'acme', name: 'Acme', folderPath: 'projects/acme', directoryPath: '/memory/projects/acme' },
     ]
     const wrapper = mountSection(nestedSpaces, {
-      selectedCategoryId: 'acme',
-      selectedCategory: nestedSpaces[3],
+      selectedFolderId: 'acme',
+      selectedFolder: nestedSpaces[3],
       focusFile: 'notes.md',
     })
     expect(wrapper.find('[data-space-id="acme"]').exists()).toBe(true)
 
     wrapper.getComponent(MemoryDocumentListStub).vm.$emit('documentDragState', true, {
-      sourceCategoryId: 'acme', sourceFiles: ['notes.md'],
+      sourceFolderId: 'acme', sourceFiles: ['notes.md'],
     })
     wrapper.get('[data-space-id="archive"]').element.dispatchEvent(dragEvent('dragover', []))
     await nextTick()
@@ -113,9 +113,9 @@ describe('MemoryDocumentsSection drag targets', () => {
     const root = wrapper.get('[data-space-id="uncategorized"]')
     const archive = wrapper.get('[data-space-id="archive"]')
 
-    expect(root.attributes('data-category-depth')).toBe('0')
+    expect(root.attributes('data-folder-depth')).toBe('0')
     expect(root.text()).toContain('Root')
-    expect(archive.attributes('data-category-depth')).toBe('1')
+    expect(archive.attributes('data-folder-depth')).toBe('1')
     expect(archive.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
   })
 
@@ -133,8 +133,8 @@ describe('MemoryDocumentsSection drag targets', () => {
   test('marks direct folder clicks as navigation so a consumed file deep link can be cleared', async () => {
     const wrapper = mountSection()
     await wrapper.get('[data-space-id="archive"] button.min-w-0').trigger('click')
-    expect(wrapper.emitted('update:selectedCategoryId')).toContainEqual(['archive'])
-    expect(wrapper.emitted('category-navigation')).toHaveLength(1)
+    expect(wrapper.emitted('update:selectedFolderId')).toContainEqual(['archive'])
+    expect(wrapper.emitted('folder-navigation')).toHaveLength(1)
   })
 
   test('uses folder-first navigation with a back button on mobile', async () => {

@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
-import { categoryPathForDirectory } from '../memory/memory-folder-directories.js'
+import { folderPathForDirectory } from '../memory/memory-folder-directories.js'
 import { expandMemoryFolderScope, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 
 export interface ToolSelectionConfig {
@@ -77,7 +77,7 @@ export function resolveMemoryFolderOverrides(
         .map((row) => ({
             id: row.id,
             name: row.name,
-            categoryPath: row.is_uncategorized === 1 ? '' : categoryPathForDirectory(row.directory_path),
+            folderPath: row.is_uncategorized === 1 ? '' : folderPathForDirectory(row.directory_path),
         }))
     return expandMemoryFolderScope(selected, db)
 }

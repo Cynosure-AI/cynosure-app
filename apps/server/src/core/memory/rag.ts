@@ -32,7 +32,7 @@ export interface VectorDocument {
   source: string
   sourceFile?: string
   chunkIndex?: number
-  categoryId?: string
+  folderId?: string
   createdAt: number
   searchText?: string
   documentTitle?: string
@@ -53,7 +53,7 @@ export interface SearchResult {
   source: string
   sourceFile?: string
   chunkIndex?: number
-  categoryId?: string
+  folderId?: string
   score: number
   /** Cosine similarity from dense retrieval, when available. */
   denseScore?: number
@@ -131,7 +131,7 @@ export class RAGStore {
   private tableCreationPromises = new Map<string, Promise<lancedb.Table>>()
 
   // Index bookkeeping
-  private categoryIdIndexReady = new Set<string>()
+  private folderIdIndexReady = new Set<string>()
   // Tables whose FTS index covers all current data
   private ftsIndexCurrent = new Set<string>()
   // Debounce timers for FTS rebuilds after writes
@@ -223,7 +223,7 @@ export class RAGStore {
         source: 'system',
         sourceFile: '',
         chunkIndex: 0,
-        categoryId: '',
+        folderId: '',
         createdAt: Date.now(),
         searchText: '',
         documentTitle: '',
@@ -260,15 +260,15 @@ export class RAGStore {
   // Index management
   // -----------------------------------------------------------------------
 
-  /** Ensure a BTree scalar index on categoryId (once per table per process). */
-  private async ensureCategoryIdIndex(table: lancedb.Table, tableName: string): Promise<void> {
-    if (this.categoryIdIndexReady.has(tableName)) return
+  /** Ensure a BTree scalar index on folderId (once per table per process). */
+  private async ensureFolderIdIndex(table: lancedb.Table, tableName: string): Promise<void> {
+    if (this.folderIdIndexReady.has(tableName)) return
     try {
       const indices = await table.listIndices()
-      if (!indices.some((idx) => idx.columns?.includes('categoryId'))) {
-        await table.createIndex('categoryId', { config: lancedb.Index.btree() })
+      if (!indices.some((idx) => idx.columns?.includes('folderId'))) {
+        await table.createIndex('folderId', { config: lancedb.Index.btree() })
       }
-      this.categoryIdIndexReady.add(tableName)
+      this.folderIdIndexReady.add(tableName)
     } catch { /* will retry next time */ }
   }
 
@@ -398,8 +398,8 @@ export class RAGStore {
     this.ftsIndexCurrent.delete(tableName)
     this.scheduleFtsRebuild(tableName)
 
-    // Ensure scalar index on categoryId
-    await this.ensureCategoryIdIndex(table, tableName)
+    // Ensure scalar index on folderId
+    await this.ensureFolderIdIndex(table, tableName)
   }
 
   // -----------------------------------------------------------------------
@@ -414,10 +414,10 @@ export class RAGStore {
     filter?: string
   ): Promise<SearchResult[]> {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
-    await this.ensureCategoryIdIndex(table, tableName)
+    await this.ensureFolderIdIndex(table, tableName)
     const fieldNames = await this.getFieldNames(table, tableName)
     const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', '_distance', 'documentTitle', 'sectionPath', 'contentHash']
-    if (fieldNames.has('categoryId')) cols.push('categoryId')
+    if (fieldNames.has('folderId')) cols.push('folderId')
     if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
     if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
@@ -438,7 +438,7 @@ export class RAGStore {
         source: r.source as string,
         sourceFile: r.sourceFile as string | undefined,
         chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
-        categoryId: (r.categoryId as string | undefined) || undefined,
+        folderId: (r.folderId as string | undefined) || undefined,
         score: r._distance != null ? 1 - (r._distance as number) : 0,
         denseScore: r._distance != null ? 1 - (r._distance as number) : undefined,
         scoreType: 'dense' as const,
@@ -467,12 +467,12 @@ export class RAGStore {
     if (!table || !queryText.trim()) return []
     const fieldNames = await this.getFieldNames(table, tableName)
     const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', '_score']
-    if (fieldNames.has('categoryId')) cols.push('categoryId')
+    if (fieldNames.has('folderId')) cols.push('folderId')
     if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
     if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
     if (!this.ftsIndexCurrent.has(tableName)) await this.rebuildFtsIndex(tableName)
-    await this.ensureCategoryIdIndex(table, tableName)
+    await this.ensureFolderIdIndex(table, tableName)
 
     try {
       let query = table.search(queryText, 'fts', 'searchText')
@@ -493,7 +493,7 @@ export class RAGStore {
             source: r.source as string,
             sourceFile: r.sourceFile as string | undefined,
             chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
-            categoryId: (r.categoryId as string | undefined) || undefined,
+            folderId: (r.folderId as string | undefined) || undefined,
             score: lexicalScore ?? 0,
             lexicalScore,
             scoreType: 'lexical' as const,
@@ -530,7 +530,7 @@ export class RAGStore {
     const table = await this.getOrCreateTable(tableName, queryVector.length)
     const fieldNames = await this.getFieldNames(table, tableName)
     const cols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash']
-    if (fieldNames.has('categoryId')) cols.push('categoryId')
+    if (fieldNames.has('folderId')) cols.push('folderId')
     if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
     if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
@@ -538,7 +538,7 @@ export class RAGStore {
     if (!this.ftsIndexCurrent.has(tableName)) {
       await this.rebuildFtsIndex(tableName)
     }
-    await this.ensureCategoryIdIndex(table, tableName)
+    await this.ensureFolderIdIndex(table, tableName)
 
     // Native hybrid: vector + FTS + RRF in a single chained query
     try {
@@ -566,7 +566,7 @@ export class RAGStore {
             source: r.source as string,
             sourceFile: r.sourceFile as string | undefined,
             chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
-            categoryId: (r.categoryId as string | undefined) || undefined,
+            folderId: (r.folderId as string | undefined) || undefined,
             // A hybrid result must retain the score that produced its rank.
             // Dense and BM25 scores are not comparable, so never substitute a
             // secondary vector-only similarity for LanceDB's RRF score.
@@ -616,14 +616,14 @@ export class RAGStore {
     minIndex: number,
     maxIndex: number,
     filter?: string
-  ): Promise<{ text: string; chunkIndex: number; sourceFile: string; categoryId?: string }[]> {
+  ): Promise<{ text: string; chunkIndex: number; sourceFile: string; folderId?: string }[]> {
     if (!this.db) return []
     try {
       const table = await this.openExistingTable(tableName)
       if (!table) return []
       const fieldNames = await this.getFieldNames(table, tableName)
       const cols = ['id', 'text', 'chunkIndex', 'sourceFile']
-      if (fieldNames.has('categoryId')) cols.push('categoryId')
+      if (fieldNames.has('folderId')) cols.push('folderId')
 
       let whereClause = `${lanceDbEqFilter('sourceFile', sourceFile)} AND chunkIndex >= ${minIndex} AND chunkIndex <= ${maxIndex}`
       if (filter) whereClause += ` AND ${filter}`
@@ -636,7 +636,7 @@ export class RAGStore {
           text: r.text as string,
           chunkIndex: r.chunkIndex as number,
           sourceFile: r.sourceFile as string,
-          categoryId: (r.categoryId as string | undefined) || undefined
+          folderId: (r.folderId as string | undefined) || undefined
         }))
         .sort((a, b) => a.chunkIndex - b.chunkIndex)
     } catch {
@@ -681,7 +681,7 @@ export class RAGStore {
     this.tables.delete(tableName)
     this.fieldNamesCache.delete(tableName)
     this.ftsIndexCurrent.delete(tableName)
-    this.categoryIdIndexReady.delete(tableName)
+    this.folderIdIndexReady.delete(tableName)
   }
 
   /** List all documents (excluding vectors) with optional filter. */
@@ -695,7 +695,7 @@ export class RAGStore {
       const table = await this.openExistingTable(tableName)
       if (!table) return []
 
-      const fullCols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'categoryId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', 'embeddingModel', 'representationType', 'sourceChunkId']
+      const fullCols = ['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'folderId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', 'embeddingModel', 'representationType', 'sourceChunkId']
       const safeCols = ['id', 'text', 'source', 'createdAt']
 
       let results: Record<string, unknown>[]
@@ -717,7 +717,7 @@ export class RAGStore {
           source: r.source as string,
           sourceFile: (r.sourceFile as string | undefined) || undefined,
           chunkIndex: r.chunkIndex != null ? (r.chunkIndex as number) : undefined,
-          categoryId: (r.categoryId as string | undefined) || undefined,
+          folderId: (r.folderId as string | undefined) || undefined,
           createdAt: r.createdAt as number,
           searchText: (r.searchText as string | undefined) || undefined,
           documentTitle: (r.documentTitle as string | undefined) || undefined,
@@ -856,20 +856,20 @@ export class RAGStore {
     this.tables.clear()
     this.fieldNamesCache.clear()
     this.ftsIndexCurrent.clear()
-    this.categoryIdIndexReady.clear()
+    this.folderIdIndexReady.clear()
     this.rerankerPromise = null
     this.db = null
   }
 
-  /** Update the categoryId for documents matching a filter. */
-  async updateCategoryId(tableName: string, filter: string, newCategoryId: string): Promise<void> {
+  /** Update the folderId for documents matching a filter. */
+  async updateFolderId(tableName: string, filter: string, newFolderId: string): Promise<void> {
     if (!this.db || !filter) return
     try {
       const table = await this.openExistingTable(tableName)
       if (!table) return
-      await table.update({ where: filter, values: { categoryId: newCategoryId } })
+      await table.update({ where: filter, values: { folderId: newFolderId } })
     } catch (err) {
-      console.error('[rag] updateCategoryId error:', (err as Error).message)
+      console.error('[rag] updateFolderId error:', (err as Error).message)
     }
   }
 
@@ -898,7 +898,7 @@ export class RAGStore {
     const table = await this.openExistingTable(tableName)
     if (!table) return 0
     const rows = await table.query()
-      .select(['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'categoryId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash'])
+      .select(['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'folderId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash'])
       .where(`(${filter}) AND representationType = 'raw'`)
       .toArray()
     const pending: Array<Omit<VectorDocument, 'vector' | 'embeddingModel'> & { id: string; searchText: string }> = []
@@ -910,7 +910,7 @@ export class RAGStore {
       const rawSearchText = String(row.searchText || row.text || '').split(SEARCH_KEYWORDS_MARKER, 1)[0]
       const common = {
         text: String(row.text || ''), source: String(row.source || ''), sourceFile: String(row.sourceFile || ''),
-        chunkIndex: Number(row.chunkIndex), categoryId: String(row.categoryId || ''), createdAt: Number(row.createdAt || Date.now()),
+        chunkIndex: Number(row.chunkIndex), folderId: String(row.folderId || ''), createdAt: Number(row.createdAt || Date.now()),
         documentTitle: String(row.documentTitle || ''), sectionPath: String(row.sectionPath || ''),
         contentHash: String(row.contentHash || ''), sourceChunkId: String(row.id),
       }

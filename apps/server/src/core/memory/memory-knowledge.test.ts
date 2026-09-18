@@ -31,13 +31,13 @@ import { getEventBus } from '../telemetry/event-bus.js'
 let dataDir: string
 let store: MemoryKnowledgeStore
 
-function addDocument(documentId: string, fileName: string, contentHash: string, categoryId = 'test-space'): void {
+function addDocument(documentId: string, fileName: string, contentHash: string, folderId = 'test-space'): void {
     getDb().prepare(`
         INSERT INTO memory_file_index
             (document_id, document_ref, category_id, file_name, content_hash, chunk_count,
              last_indexed_at, deep_researched_at, created_at)
         VALUES (?, ?, ?, ?, ?, 2, ?, 0, ?)
-    `).run(documentId, `doc-${documentId}`, categoryId, fileName, contentHash, Date.now(), Date.now())
+    `).run(documentId, `doc-${documentId}`, folderId, fileName, contentHash, Date.now(), Date.now())
 }
 
 function chunk(text: string, chunkIndex: number): PreparedMemoryChunk {
@@ -76,7 +76,7 @@ describe('memory knowledge v3', () => {
             { ...chunk('Bob uses Python.', 1), contentHash: 'stable-bob' },
         ]
         store.publishDocument({
-            documentId: 'doc-incremental', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-incremental', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'incremental.md', sourceId: 'memory:test-space:incremental.md', chunks: originalChunks,
             relations: [
                 { from: { name: 'Ada', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0, note: 'Ada uses TypeScript.' },
@@ -104,7 +104,7 @@ describe('memory knowledge v3', () => {
 
         getDb().prepare(`UPDATE memory_file_index SET content_hash = 'revision-2' WHERE document_id = 'doc-incremental'`).run()
         store.publishDocument({
-            documentId: 'doc-incremental', contentHash: 'revision-2', categoryId: 'test-space',
+            documentId: 'doc-incremental', contentHash: 'revision-2', folderId: 'test-space',
             fileName: 'incremental.md', sourceId: 'memory:test-space:incremental.md', chunks: revisedChunks,
             relations: [{
                 from: { name: 'Cynosure', type: 'project' }, relation: 'has_goal',
@@ -116,7 +116,7 @@ describe('memory knowledge v3', () => {
             reusableChunks: plan.reusableChunks,
         })
 
-        const edges = store.browseGraph({ categoryIds: ['test-space'] }).edges
+        const edges = store.browseGraph({ folderIds: ['test-space'] }).edges
         expect(edges.some((edge) => edge.fromName === 'Ada' && edge.toName === 'TypeScript' && edge.sourceChunk?.chunkIndex === 1)).toBe(true)
         expect(edges.some((edge) => edge.fromName === 'Cynosure' && edge.toName === 'New project context')).toBe(true)
         expect(edges.some((edge) => edge.fromName === 'Bob' || edge.toName === 'Python')).toBe(false)
@@ -137,7 +137,7 @@ describe('memory knowledge v3', () => {
             { ...chunk('Bob uses Python.', 1), contentHash: 'stable-bob' },
         ]
         store.publishDocument({
-            documentId: 'doc-reindexed', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-reindexed', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'reindexed.md', sourceId: 'memory:test-space:reindexed.md', chunks: originalChunks,
             relations: [{
                 from: { name: 'Ada', type: 'person' }, relation: 'uses',
@@ -172,7 +172,7 @@ describe('memory knowledge v3', () => {
     test('backs up and restores manual knowledge corrections', async () => {
         addDocument('doc-backup', 'backup.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-backup', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-backup', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'backup.md', sourceId: 'memory:test-space:backup.md', chunks: [chunk('Ada leads Project Atlas.', 0)],
             relations: [{
                 from: { name: 'Ada', type: 'person' }, relation: 'manages',
@@ -181,12 +181,12 @@ describe('memory knowledge v3', () => {
             }],
             chunkSummaries: [{ sourceChunkIndex: 0, summary: 'Ada leads Project Atlas.' }],
         })
-        const edge = store.browseGraph({ categoryIds: ['test-space'] }).edges[0]
+        const edge = store.browseGraph({ folderIds: ['test-space'] }).edges[0]
         store.updateEdge(edge.id, { note: 'Manually verified leadership relationship.' })
         const backup = createMemoryKnowledgeBackup()
 
         await store.reset()
-        expect(store.browseGraph({ categoryIds: ['test-space'] }).edges).toHaveLength(0)
+        expect(store.browseGraph({ folderIds: ['test-space'] }).edges).toHaveLength(0)
         const restored = await restoreMemoryKnowledgeBackup(backup)
 
         expect(restored.restored).toBeGreaterThan(0)
@@ -198,19 +198,19 @@ describe('memory knowledge v3', () => {
     test('bulk graph retractions are all-or-nothing', () => {
         addDocument('doc-bulk', 'bulk.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-bulk', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-bulk', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'bulk.md', sourceId: 'memory:test-space:bulk.md', chunks: [chunk('Ada manages Atlas and uses TypeScript.', 0)],
             relations: [
                 { from: { name: 'Ada', type: 'person' }, relation: 'manages', to: { name: 'Atlas', type: 'project' }, sourceChunkIndex: 0, note: 'Ada manages Atlas.' },
                 { from: { name: 'Ada', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0, note: 'Ada uses TypeScript.' },
             ],
         })
-        const graph = store.browseGraph({ categoryIds: ['test-space'] })
+        const graph = store.browseGraph({ folderIds: ['test-space'] })
         const edgeIds = graph.edges.map((edge) => edge.id)
         expect(store.deleteEdgesByIds([edgeIds[0], 'missing-edge'])).toBe(0)
-        expect(store.browseGraph({ categoryIds: ['test-space'] }).edges).toHaveLength(2)
+        expect(store.browseGraph({ folderIds: ['test-space'] }).edges).toHaveLength(2)
         expect(store.deleteEdgesByIds(edgeIds)).toBe(2)
-        expect(store.browseGraph({ categoryIds: ['test-space'] }).edges).toHaveLength(0)
+        expect(store.browseGraph({ folderIds: ['test-space'] }).edges).toHaveLength(0)
 
         const nodeIds = graph.nodes.map((node) => node.id)
         expect(store.retractEntitiesByIds([nodeIds[0], 'missing-node'])).toBe(0)
@@ -226,7 +226,7 @@ describe('memory knowledge v3', () => {
             chunk('The team directory confirms that Caroline works at Acme.', 1),
         ]
         const published = store.publishDocument({
-            documentId: 'doc-1', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-1', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'people.md', sourceId: 'memory:test-space:people.md', chunks,
             relations: chunks.map((item) => ({
                 from: { name: 'Caroline', type: 'person' }, relation: 'works_for',
@@ -258,7 +258,7 @@ describe('memory knowledge v3', () => {
         expect(result.sourceChunks[0].text).toContain('Caroline works at Acme')
         expect(result.sourceChunks.map((item) => item.chunkIndex).sort()).toEqual([0, 1])
         expect(result.sourceChunks.every((item) => item.documentId === 'doc-1')).toBe(true)
-        const graph = store.browseGraph({ categoryIds: ['test-space'] })
+        const graph = store.browseGraph({ folderIds: ['test-space'] })
         expect(graph.edges[0]).toMatchObject({
             note: expect.stringContaining('Caroline'),
             sourceChunk: { documentId: 'doc-1', fileName: 'people.md', chunkIndex: expect.any(Number), text: '' },
@@ -280,7 +280,7 @@ describe('memory knowledge v3', () => {
     test('rejects a relationship whose source chunk does not exist', () => {
         addDocument('doc-2', 'unsupported.md', 'revision-1')
         const published = store.publishDocument({
-            documentId: 'doc-2', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-2', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'unsupported.md', sourceId: 'memory:test-space:unsupported.md',
             chunks: [chunk('Caroline visited Berlin.', 0)],
             relations: [{
@@ -297,12 +297,12 @@ describe('memory knowledge v3', () => {
         addDocument('doc-a', 'a.md', 'revision-a')
         addDocument('doc-b', 'b.md', 'revision-b')
         store.publishDocument({
-            documentId: 'doc-a', contentHash: 'revision-a', categoryId: 'test-space', fileName: 'a.md',
+            documentId: 'doc-a', contentHash: 'revision-a', folderId: 'test-space', fileName: 'a.md',
             sourceId: 'memory:test-space:a.md', chunks: [chunk('Alex uses Python.', 0)],
             relations: [{ from: { name: 'Alex', type: 'person' }, relation: 'uses', to: { name: 'Python', type: 'technology' }, sourceChunkIndex: 0 }],
         })
         store.publishDocument({
-            documentId: 'doc-b', contentHash: 'revision-b', categoryId: 'test-space', fileName: 'b.md',
+            documentId: 'doc-b', contentHash: 'revision-b', folderId: 'test-space', fileName: 'b.md',
             sourceId: 'memory:test-space:b.md', chunks: [chunk('Alex uses Rust.', 0)],
             relations: [{ from: { name: 'Alex', type: 'person' }, relation: 'uses', to: { name: 'Rust', type: 'technology' }, sourceChunkIndex: 0 }],
         })
@@ -322,17 +322,17 @@ describe('memory knowledge v3', () => {
         addDocument('doc-auto-alex-b', 'auto-alex-b.md', 'revision-b')
         addDocument('doc-auto-caroline', 'auto-caroline.md', 'revision-c')
         store.publishDocument({
-            documentId: 'doc-auto-alex-a', contentHash: 'revision-a', categoryId: 'test-space', fileName: 'auto-alex-a.md',
+            documentId: 'doc-auto-alex-a', contentHash: 'revision-a', folderId: 'test-space', fileName: 'auto-alex-a.md',
             sourceId: 'memory:test-space:auto-alex-a.md', chunks: [chunk('Alex uses Python.', 0)],
             relations: [{ from: { name: 'Alex', type: 'person' }, relation: 'uses', to: { name: 'Python', type: 'technology' }, sourceChunkIndex: 0 }],
         })
         store.publishDocument({
-            documentId: 'doc-auto-alex-b', contentHash: 'revision-b', categoryId: 'test-space', fileName: 'auto-alex-b.md',
+            documentId: 'doc-auto-alex-b', contentHash: 'revision-b', folderId: 'test-space', fileName: 'auto-alex-b.md',
             sourceId: 'memory:test-space:auto-alex-b.md', chunks: [chunk('Alex uses Rust.', 0)],
             relations: [{ from: { name: 'Alex', type: 'person' }, relation: 'uses', to: { name: 'Rust', type: 'technology' }, sourceChunkIndex: 0 }],
         })
         store.publishDocument({
-            documentId: 'doc-auto-caroline', contentHash: 'revision-c', categoryId: 'test-space', fileName: 'auto-caroline.md',
+            documentId: 'doc-auto-caroline', contentHash: 'revision-c', folderId: 'test-space', fileName: 'auto-caroline.md',
             sourceId: 'memory:test-space:auto-caroline.md', chunks: [chunk('Caroline wants a reliable relationship.', 0)],
             relations: [{ from: { name: 'Caroline', type: 'person' }, relation: 'has_goal', to: { name: 'Reliable relationship', type: 'concept' }, sourceChunkIndex: 0 }],
         })
@@ -356,7 +356,7 @@ describe('memory knowledge v3', () => {
             chunk('Andi South uses Rust.', 1),
         ]
         store.publishDocument({
-            documentId: 'doc-multi-select', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-multi-select', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'multi-select.md', sourceId: 'memory:test-space:multi-select.md', chunks,
             relations: [
                 { from: { name: 'Andi North', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0 },
@@ -364,11 +364,11 @@ describe('memory knowledge v3', () => {
             ],
         })
 
-        const fullGraph = store.browseGraph({ categoryIds: ['test-space'] })
+        const fullGraph = store.browseGraph({ folderIds: ['test-space'] })
         const selectedIds = fullGraph.nodes
             .filter((node) => node.name === 'Andi North' || node.name === 'Andi South')
             .map((node) => node.id)
-        const walk = store.browseGraph({ categoryIds: ['test-space'], nodeIds: selectedIds, depth: 1 })
+        const walk = store.browseGraph({ folderIds: ['test-space'], nodeIds: selectedIds, depth: 1 })
 
         expect(walk.seedNodes.map((node) => node.name).sort()).toEqual(['Andi North', 'Andi South'])
         expect(walk.edges.map((edge) => edge.fromName).sort()).toEqual(['Andi North', 'Andi South'])
@@ -378,7 +378,7 @@ describe('memory knowledge v3', () => {
         addDocument('doc-entity-merge', 'entity-merge.md', 'revision-1')
         const source = chunk('Chantal, Chantal Partner, and Chantal Example all use Atlas and refer to the same person.', 0)
         store.publishDocument({
-            documentId: 'doc-entity-merge', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-entity-merge', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'entity-merge.md', sourceId: 'memory:test-space:entity-merge.md', chunks: [source],
             relations: [
                 { from: { name: 'Chantal', type: 'person' }, relation: 'uses', to: { name: 'Atlas', type: 'technology' }, sourceChunkIndex: 0 },
@@ -394,7 +394,7 @@ describe('memory knowledge v3', () => {
         const result = await store.mergeEntities({
             entityIds: chantal.filter((node) => node.name !== 'Chantal Example').map((node) => node.id),
             canonicalName: 'Chantal Example',
-            categoryIds: ['test-space'],
+            folderIds: ['test-space'],
         })
 
         expect(result.entity).toMatchObject({ name: 'Chantal Example', type: 'person' })
@@ -402,7 +402,7 @@ describe('memory knowledge v3', () => {
         expect(result.mergedEntityIds).toHaveLength(2)
         expect(result.consolidatedAssertions).toBe(2)
         expect(result.retiredSelfRelationships).toBe(1)
-        const graph = store.browseGraph({ categoryIds: ['test-space'] })
+        const graph = store.browseGraph({ folderIds: ['test-space'] })
         expect(graph.nodes.filter((node) => node.name === 'Chantal Example')).toHaveLength(1)
         expect(graph.edges.filter((edge) => edge.fromName === 'Chantal Example' && edge.relation === 'uses')).toHaveLength(1)
         expect(graph.edges.some((edge) => edge.fromNodeId === edge.toNodeId)).toBe(false)
@@ -418,12 +418,12 @@ describe('memory knowledge v3', () => {
         addDocument('doc-primary-person', 'primary.md', 'revision-1')
         addDocument('doc-alternate-person', 'alternate.md', 'revision-1', 'second-space')
         store.publishDocument({
-            documentId: 'doc-primary-person', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-primary-person', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'primary.md', sourceId: 'memory:test-space:primary.md', chunks: [chunk('Herbert Hagen uses Atlas.', 0)],
             relations: [{ from: { name: 'Herbert Hagen', type: 'person' }, relation: 'uses', to: { name: 'Atlas', type: 'technology' }, sourceChunkIndex: 0 }],
         })
         store.publishDocument({
-            documentId: 'doc-alternate-person', contentHash: 'revision-1', categoryId: 'second-space',
+            documentId: 'doc-alternate-person', contentHash: 'revision-1', folderId: 'second-space',
             fileName: 'alternate.md', sourceId: 'memory:second-space:alternate.md', chunks: [chunk('Herbert H. created Beacon.', 0)],
             relations: [{ from: { name: 'Herbert H.', type: 'person', aliases: ['H. Hagen'] }, relation: 'created', to: { name: 'Beacon', type: 'project' }, sourceChunkIndex: 0 }],
         })
@@ -435,17 +435,17 @@ describe('memory knowledge v3', () => {
             // when only the duplicate ID is supplied.
             entityIds: [alternate.id],
             canonicalName: 'Herbert Hagen',
-            categoryIds: ['test-space', 'second-space'],
+            folderIds: ['test-space', 'second-space'],
         })
 
         expect(result.mergedEntityIds).toEqual([alternate.id])
         expect(result.entity.id).toBe(primary.id)
-        expect(store.browseGraph({ categoryIds: ['test-space'] }).nodes.some((node) => node.id === result.entity.id)).toBe(true)
-        expect(store.browseGraph({ categoryIds: ['second-space'] }).nodes.some((node) => node.id === result.entity.id)).toBe(true)
+        expect(store.browseGraph({ folderIds: ['test-space'] }).nodes.some((node) => node.id === result.entity.id)).toBe(true)
+        expect(store.browseGraph({ folderIds: ['second-space'] }).nodes.some((node) => node.id === result.entity.id)).toBe(true)
 
         getDb().prepare("UPDATE memory_file_index SET content_hash = 'revision-2' WHERE document_id = 'doc-alternate-person'").run()
         store.publishDocument({
-            documentId: 'doc-alternate-person', contentHash: 'revision-2', categoryId: 'second-space',
+            documentId: 'doc-alternate-person', contentHash: 'revision-2', folderId: 'second-space',
             fileName: 'alternate.md', sourceId: 'memory:second-space:alternate.md', chunks: [chunk('H. Hagen created Beacon.', 0)],
             relations: [{ from: { name: 'H. Hagen', type: 'person' }, relation: 'created', to: { name: 'Beacon', type: 'project' }, sourceChunkIndex: 0 }],
         })
@@ -459,13 +459,13 @@ describe('memory knowledge v3', () => {
     test('atomically retires claims removed by a newer document revision', async () => {
         addDocument('doc-versioned', 'versioned.md', 'revision-old')
         store.publishDocument({
-            documentId: 'doc-versioned', contentHash: 'revision-old', categoryId: 'test-space', fileName: 'versioned.md',
+            documentId: 'doc-versioned', contentHash: 'revision-old', folderId: 'test-space', fileName: 'versioned.md',
             sourceId: 'memory:test-space:versioned.md', chunks: [chunk('Mira works at Northwind.', 0)],
             relations: [{ from: { name: 'Mira', type: 'person' }, relation: 'works_at', to: { name: 'Northwind', type: 'organization' }, sourceChunkIndex: 0 }],
         })
         getDb().prepare("UPDATE memory_file_index SET content_hash = 'revision-new' WHERE document_id = 'doc-versioned'").run()
         store.publishDocument({
-            documentId: 'doc-versioned', contentHash: 'revision-new', categoryId: 'test-space', fileName: 'versioned.md',
+            documentId: 'doc-versioned', contentHash: 'revision-new', folderId: 'test-space', fileName: 'versioned.md',
             sourceId: 'memory:test-space:versioned.md', chunks: [chunk('Mira is taking a sabbatical.', 0)], relations: [],
         })
 
@@ -478,12 +478,12 @@ describe('memory knowledge v3', () => {
     test('audits manual relationship corrections and applies them to retrieval', async () => {
         addDocument('doc-correction', 'correction.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-correction', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'correction.md',
+            documentId: 'doc-correction', contentHash: 'revision-1', folderId: 'test-space', fileName: 'correction.md',
             sourceId: 'memory:test-space:correction.md', chunks: [chunk('Nora works at Contoso.', 0)],
             relations: [{ from: { name: 'Nora', type: 'person' }, relation: 'works_at', to: { name: 'Contoso', type: 'organization' }, sourceChunkIndex: 0 }],
         })
 
-        const edge = store.browseGraph({ categoryIds: ['test-space'] }).edges[0]
+        const edge = store.browseGraph({ folderIds: ['test-space'] }).edges[0]
         expect(store.updateEdge(edge.id, { relation: 'created', note: 'Manually verified correction.', importance: 3 })).toMatchObject({ relation: 'created' })
 
         const result = await store.search('What did Nora create?', ['test-space'])
@@ -502,13 +502,13 @@ describe('memory knowledge v3', () => {
     test('marks same-source functional changes as superseded instead of silently overwriting them', async () => {
         addDocument('doc-employment', 'employment.md', 'revision-old')
         store.publishDocument({
-            documentId: 'doc-employment', contentHash: 'revision-old', categoryId: 'test-space', fileName: 'employment.md',
+            documentId: 'doc-employment', contentHash: 'revision-old', folderId: 'test-space', fileName: 'employment.md',
             sourceId: 'memory:test-space:employment.md', chunks: [chunk('Mira works at Northwind.', 0)],
             relations: [{ from: { name: 'Mira', type: 'person' }, relation: 'works_at', to: { name: 'Northwind', type: 'organization' }, sourceChunkIndex: 0 }],
         })
         getDb().prepare("UPDATE memory_file_index SET content_hash = 'revision-new' WHERE document_id = 'doc-employment'").run()
         store.publishDocument({
-            documentId: 'doc-employment', contentHash: 'revision-new', categoryId: 'test-space', fileName: 'employment.md',
+            documentId: 'doc-employment', contentHash: 'revision-new', folderId: 'test-space', fileName: 'employment.md',
             sourceId: 'memory:test-space:employment.md', chunks: [chunk('Mira now works at Contoso.', 0)],
             relations: [{ from: { name: 'Mira', type: 'person' }, relation: 'works_at', to: { name: 'Contoso', type: 'organization' }, sourceChunkIndex: 0 }],
         })
@@ -530,7 +530,7 @@ describe('memory knowledge v3', () => {
     test('propagates unambiguous entity corrections and retractions into the knowledge authority', async () => {
         addDocument('doc-entity', 'entity.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-entity', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'entity.md',
+            documentId: 'doc-entity', contentHash: 'revision-1', folderId: 'test-space', fileName: 'entity.md',
             sourceId: 'memory:test-space:entity.md', chunks: [chunk('Nora uses TypeScript.', 0)],
             relations: [{ from: { name: 'Nora', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0 }],
         })
@@ -545,7 +545,7 @@ describe('memory knowledge v3', () => {
     test('indexes isolated named entities and returns their grounded source chunk', async () => {
         addDocument('doc-mention', 'mention.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-mention', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'mention.md',
+            documentId: 'doc-mention', contentHash: 'revision-1', folderId: 'test-space', fileName: 'mention.md',
             sourceId: 'memory:test-space:mention.md', chunks: [chunk('The keynote speaker was Dr. Selene Voss.', 0)],
             relations: [],
             mentions: [{ entity: { name: 'Dr. Selene Voss', type: 'person', identityHint: 'keynote speaker' }, sourceChunkIndex: 0, note: 'Dr. Selene Voss is identified as the keynote speaker.' }],
@@ -556,7 +556,7 @@ describe('memory knowledge v3', () => {
         expect(result.graph?.edges).toEqual([])
         expect(result.sourceChunks[0]).toMatchObject({ sourceFile: 'mention.md', scoreType: 'entity-resolution' })
         expect(result.sourceChunks[0].text).toContain('keynote speaker')
-        const originChunk = store.browseGraph({ categoryIds: ['test-space'] }).nodes[0].origins?.[0].chunks[0]
+        const originChunk = store.browseGraph({ folderIds: ['test-space'] }).nodes[0].origins?.[0].chunks[0]
         expect(originChunk).toMatchObject({
             chunkIndex: 0,
             text: '',
@@ -568,7 +568,7 @@ describe('memory knowledge v3', () => {
     test('previews document relationships and standalone entities without duplicating participants', () => {
         addDocument('doc-preview', 'preview.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-preview', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'preview.md',
+            documentId: 'doc-preview', contentHash: 'revision-1', folderId: 'test-space', fileName: 'preview.md',
             sourceId: 'memory:test-space:preview.md', chunks: [chunk('Nora uses TypeScript. Selene spoke.', 0)],
             relations: [{ from: { name: 'Nora', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0 }],
             mentions: [{ entity: { name: 'Selene', type: 'person' }, sourceChunkIndex: 0 }],
@@ -598,7 +598,7 @@ describe('memory knowledge v3', () => {
         const chunks = Array.from({ length: 16 }, (_, index) => chunk(`Person ${index} uses Tool ${index}.`, index))
         addDocument('doc-preview-limit', 'preview-limit.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-preview-limit', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'preview-limit.md',
+            documentId: 'doc-preview-limit', contentHash: 'revision-1', folderId: 'test-space', fileName: 'preview-limit.md',
             sourceId: 'memory:test-space:preview-limit.md', chunks,
             relations: chunks.map((item, index) => ({
                 from: { name: `Person ${index}`, type: 'person' }, relation: 'uses',
@@ -618,7 +618,7 @@ describe('memory knowledge v3', () => {
             chunk('Andi wants to build a workshop.', 1),
         ]
         store.publishDocument({
-            documentId: 'doc-family', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'family.md',
+            documentId: 'doc-family', contentHash: 'revision-1', folderId: 'test-space', fileName: 'family.md',
             sourceId: 'memory:test-space:family.md', chunks: familyChunks,
             relations: [
                 { from: { name: 'Carmen Hagen', type: 'person' }, relation: 'parent_of', to: { name: 'Andi', type: 'person' }, sourceChunkIndex: 0 },
@@ -643,7 +643,7 @@ describe('memory knowledge v3', () => {
             chunk('Gamma Person knows Delta Person.', 2),
         ]
         store.publishDocument({
-            documentId: 'doc-depth', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'depth.md',
+            documentId: 'doc-depth', contentHash: 'revision-1', folderId: 'test-space', fileName: 'depth.md',
             sourceId: 'memory:test-space:depth.md', chunks: depthChunks,
             relations: depthChunks.map((item, index) => ({
                 from: { name: ['Alpha Person', 'Beta Person', 'Gamma Person'][index], type: 'person' },
@@ -671,7 +671,7 @@ describe('memory knowledge v3', () => {
             chunk('Andreas Hagen is located in Salzburg.', 2),
         ]
         store.publishDocument({
-            documentId: 'doc-shared-location', contentHash: 'revision-1', categoryId: 'test-space',
+            documentId: 'doc-shared-location', contentHash: 'revision-1', folderId: 'test-space',
             fileName: 'shared-location.md', sourceId: 'memory:test-space:shared-location.md', chunks: locationChunks,
             relations: [
                 { from: { name: 'Patrick Klabacher', type: 'person' }, relation: 'uses', to: { name: 'Notion', type: 'technology' }, sourceChunkIndex: 0 },
@@ -681,7 +681,7 @@ describe('memory knowledge v3', () => {
         })
 
         const andreas = store.suggestNodes('Andreas Hagen', 1, ['test-space'])[0]
-        const oneHop = store.browseGraph({ categoryIds: ['test-space'], nodeIds: [andreas.id], depth: 1 })
+        const oneHop = store.browseGraph({ folderIds: ['test-space'], nodeIds: [andreas.id], depth: 1 })
 
         expect(oneHop.edges).toHaveLength(1)
         expect(oneHop.edges[0]).toMatchObject({ fromName: 'Andreas Hagen', relation: 'located_in', toName: 'Salzburg' })
@@ -690,7 +690,7 @@ describe('memory knowledge v3', () => {
 
     test('stores and retracts explicit relationship assertions in the same knowledge plane', () => {
         const edge = store.assertRelationship({
-            categoryId: 'test-space',
+            folderId: 'test-space',
             from: { name: 'Cynosure', type: 'project' },
             relation: 'uses',
             to: { name: 'SQLite', type: 'technology' },
@@ -699,9 +699,9 @@ describe('memory knowledge v3', () => {
         })
 
         expect(edge).toMatchObject({ fromName: 'Cynosure', relation: 'uses', toName: 'SQLite', sourceKind: 'manual' })
-        expect(store.browseGraph({ categoryIds: ['test-space'] }).edges).toHaveLength(1)
+        expect(store.browseGraph({ folderIds: ['test-space'] }).edges).toHaveLength(1)
         expect(store.deleteEdge(edge.id, ['test-space']).edgeDeleted).toBe(true)
-        expect(store.browseGraph({ categoryIds: ['test-space'] }).edges).toHaveLength(0)
+        expect(store.browseGraph({ folderIds: ['test-space'] }).edges).toHaveLength(0)
     })
 
     test('scopes graph rows and graph statistics to selected memory folders', () => {
@@ -712,19 +712,19 @@ describe('memory knowledge v3', () => {
         addDocument('doc-scoped-a', 'a.md', 'revision-1')
         addDocument('doc-scoped-b', 'b.md', 'revision-1', 'other-space')
         store.publishDocument({
-            documentId: 'doc-scoped-a', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'a.md',
+            documentId: 'doc-scoped-a', contentHash: 'revision-1', folderId: 'test-space', fileName: 'a.md',
             sourceId: 'memory:test-space:a.md', chunks: [chunk('Alice knows Bob.', 0)],
             relations: [{ from: { name: 'Alice', type: 'person' }, relation: 'knows', to: { name: 'Bob', type: 'person' }, sourceChunkIndex: 0 }],
         })
         store.publishDocument({
-            documentId: 'doc-scoped-b', contentHash: 'revision-1', categoryId: 'other-space', fileName: 'b.md',
+            documentId: 'doc-scoped-b', contentHash: 'revision-1', folderId: 'other-space', fileName: 'b.md',
             sourceId: 'memory:other-space:b.md', chunks: [chunk('Carol knows Dave.', 0)],
             relations: [{ from: { name: 'Carol', type: 'person' }, relation: 'knows', to: { name: 'Dave', type: 'person' }, sourceChunkIndex: 0 }],
         })
 
         expect(store.graphStats()).toMatchObject({ nodeCount: 4, edgeCount: 2 })
         expect(store.graphStats(['test-space'])).toMatchObject({ nodeCount: 2, edgeCount: 1 })
-        expect(store.browseGraph({ categoryIds: ['test-space'] }).nodes.map((node) => node.name).sort()).toEqual(['Alice', 'Bob'])
+        expect(store.browseGraph({ folderIds: ['test-space'] }).nodes.map((node) => node.name).sort()).toEqual(['Alice', 'Bob'])
     })
 
     test('resets the complete knowledge projection while preserving source memory', async () => {
@@ -732,7 +732,7 @@ describe('memory knowledge v3', () => {
         const unsubscribe = getEventBus().on('memory:knowledge-reset', (event) => resetEvents.push(event))
         addDocument('doc-reset', 'reset.md', 'revision-1')
         store.publishDocument({
-            documentId: 'doc-reset', contentHash: 'revision-1', categoryId: 'test-space', fileName: 'reset.md',
+            documentId: 'doc-reset', contentHash: 'revision-1', folderId: 'test-space', fileName: 'reset.md',
             sourceId: 'memory:test-space:reset.md', chunks: [chunk('Nora uses TypeScript.', 0)],
             relations: [{ from: { name: 'Nora', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 0 }],
         })

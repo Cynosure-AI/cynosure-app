@@ -23,7 +23,7 @@ describe('durable memory index jobs', () => {
     test('cancels all queued and running jobs together', async () => {
         const started = startMemoryIndexJob({
             kind: 'reindex',
-            categoryId: 'default',
+            folderId: 'default',
             fileName: 'long-running.md',
             run: async (signal) => new Promise<void>((resolve) => {
                 signal.addEventListener('abort', () => resolve(), { once: true })
@@ -37,7 +37,7 @@ describe('durable memory index jobs', () => {
     test('persists progress updates while a job is running', async () => {
         const started = startMemoryIndexJob({
             kind: 'deep-research',
-            categoryId: 'default',
+            folderId: 'default',
             fileName: 'progress.md',
             run: async (_signal, reportProgress) => {
                 reportProgress(2, 4)
@@ -60,7 +60,7 @@ describe('durable memory index jobs', () => {
         const run = vi.fn(async () => { throw new Error('provider failure') })
         const started = startMemoryIndexJob({
             kind: 'deep-research',
-            categoryId: 'default',
+            folderId: 'default',
             fileName: 'failure.md',
             run,
         })
@@ -76,7 +76,7 @@ describe('durable memory index jobs', () => {
     test('retains and explicitly discards a cancelled extraction checkpoint', async () => {
         const started = startMemoryIndexJob({
             kind: 'deep-research',
-            categoryId: 'default',
+            folderId: 'default',
             fileName: 'resumable.md',
             run: async (signal, reportProgress) => {
                 reportProgress(4, 7, { contentHash: 'same-revision', completedChunkIndexes: [0, 1, 2, 3] })
@@ -99,7 +99,7 @@ describe('durable memory index jobs', () => {
         // Recover checkpoints hidden by resume jobs created before checkpoint
         // handoff was made atomic.
         const emptyResume = startMemoryIndexJob({
-            kind: 'deep-research', categoryId: 'default', fileName: 'resumable.md',
+            kind: 'deep-research', folderId: 'default', fileName: 'resumable.md',
             run: async (signal) => new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
         })
         cancelMemoryIndexJob(emptyResume.id)
@@ -108,7 +108,7 @@ describe('durable memory index jobs', () => {
 
         const resumed = startMemoryIndexJob({
             kind: 'deep-research',
-            categoryId: 'default',
+            folderId: 'default',
             fileName: 'resumable.md',
             resume: {
                 current: checkpoint!.progressCurrent!,
@@ -138,7 +138,7 @@ describe('durable memory index jobs', () => {
     test('dismisses failed jobs durably without touching active or resumable work', async () => {
         const failed = startMemoryIndexJob({
             kind: 'deep-research',
-            categoryId: 'dismiss-space',
+            folderId: 'dismiss-space',
             fileName: 'failed.md',
             run: async () => { throw new Error('lance schema mismatch') },
         })
@@ -146,7 +146,7 @@ describe('durable memory index jobs', () => {
 
         const otherSpaceFailure = startMemoryIndexJob({
             kind: 'reindex',
-            categoryId: 'other-space',
+            folderId: 'other-space',
             fileName: 'failed.md',
             run: async () => { throw new Error('other failure') },
         })
@@ -154,7 +154,7 @@ describe('durable memory index jobs', () => {
 
         const running = startMemoryIndexJob({
             kind: 'reindex',
-            categoryId: 'dismiss-space',
+            folderId: 'dismiss-space',
             fileName: 'running.md',
             run: async (signal) => new Promise<void>((resolve) => {
                 signal.addEventListener('abort', () => resolve(), { once: true })

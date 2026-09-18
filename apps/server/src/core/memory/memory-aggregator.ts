@@ -30,7 +30,7 @@ export class MemoryAggregator {
     opts?: {
       conversationId?: string
       agentId?: string
-      categoryIds?: string[]
+      folderIds?: string[]
       permanentTopK?: number
       /** Add a small, source-grounded relationship supplement to RAG passages. */
       includeGraph?: boolean
@@ -43,14 +43,14 @@ export class MemoryAggregator {
     const permanentMem = getAgentMemory()
 
     let spaceFilter: string | undefined
-    const categoryNameMap = new Map<string, string>()
+    const folderNameMap = new Map<string, string>()
 
     let scopedSpaces: { id: string; name: string }[] = []
 
-    if (Array.isArray(opts?.categoryIds)) {
+    if (Array.isArray(opts?.folderIds)) {
       try {
         const db = getDb()
-        const uniqueSpaceIds = [...new Set(opts.categoryIds.map((s) => s.trim()).filter(Boolean))]
+        const uniqueSpaceIds = [...new Set(opts.folderIds.map((s) => s.trim()).filter(Boolean))]
         if (uniqueSpaceIds.length > 0) {
           const placeholders = uniqueSpaceIds.map(() => '?').join(', ')
           scopedSpaces = db.prepare(`SELECT id, name FROM memory_folders WHERE id IN (${placeholders})`).all(...uniqueSpaceIds) as { id: string; name: string }[]
@@ -70,12 +70,12 @@ export class MemoryAggregator {
       scopedSpaces = getAllMemoryFolders()
     }
 
-    if (Array.isArray(opts?.categoryIds) && scopedSpaces.length === 0) {
+    if (Array.isArray(opts?.folderIds) && scopedSpaces.length === 0) {
       return { permanent: [], graph: undefined }
     }
 
     if (scopedSpaces.length > 0) {
-      for (const row of scopedSpaces) categoryNameMap.set(row.id, row.name)
+      for (const row of scopedSpaces) folderNameMap.set(row.id, row.name)
       spaceFilter = buildMemoryFolderFilter(scopedSpaces)
     }
 
@@ -98,38 +98,38 @@ export class MemoryAggregator {
     const uniqueSourceKeys = [...new Set(
       dedupedPermanent
         .filter(c => c.sourceFile)
-        .map(c => `${c.sourceFile!}\u0000${c.categoryId || ''}`)
+        .map(c => `${c.sourceFile!}\u0000${c.folderId || ''}`)
     )]
     if (uniqueSourceKeys.length > 0) {
       const counts = await Promise.all(
         uniqueSourceKeys.map(key => {
-          const [sf, categoryId] = key.split('\u0000')
-          const filter = categoryId ? buildMemoryFolderFilter([{ id: categoryId }]) : spaceFilter
+          const [sf, folderId] = key.split('\u0000')
+          const filter = folderId ? buildMemoryFolderFilter([{ id: folderId }]) : spaceFilter
           return permanentMem.countChunks(sf, filter)
         })
       )
       const countMap = new Map(uniqueSourceKeys.map((key, i) => [key, counts[i]]))
       for (const chunk of dedupedPermanent) {
-        const key = chunk.sourceFile ? `${chunk.sourceFile}\u0000${chunk.categoryId || ''}` : undefined
+        const key = chunk.sourceFile ? `${chunk.sourceFile}\u0000${chunk.folderId || ''}` : undefined
         if (key && countMap.has(key)) {
           chunk.totalChunks = countMap.get(key)
         }
       }
     }
 
-    if (categoryNameMap.size === 0) {
+    if (folderNameMap.size === 0) {
       try {
         const db = getDb()
         const rows = db.prepare('SELECT id, name FROM memory_folders').all() as { id: string; name: string }[]
-        for (const row of rows) categoryNameMap.set(row.id, row.name)
+        for (const row of rows) folderNameMap.set(row.id, row.name)
       } catch { /* DB not ready */ }
     }
 
     for (const chunk of dedupedPermanent) {
-      if (chunk.categoryId) {
-        chunk.categoryName = categoryNameMap.get(chunk.categoryId)
+      if (chunk.folderId) {
+        chunk.folderName = folderNameMap.get(chunk.folderId)
         if (chunk.sourceFile) {
-          const ref = permanentMem.getDocumentReference(chunk.categoryId, chunk.sourceFile)
+          const ref = permanentMem.getDocumentReference(chunk.folderId, chunk.sourceFile)
           chunk.documentId = ref?.documentId
           chunk.documentRef = ref?.documentRef
           chunk.revision = ref?.revision
@@ -185,7 +185,7 @@ export class MemoryAggregator {
           if (c.sourceFile) {
             const idx = c.chunkIndex != null ? c.chunkIndex + 1 : null
             const total = c.totalChunks ?? null
-            const label = c.categoryName ? `${c.categoryName} · ${c.sourceFile}` : c.sourceFile
+            const label = c.folderName ? `${c.folderName} · ${c.sourceFile}` : c.sourceFile
             if (idx != null && total != null) {
               parts.push(`[${label} · Part ${idx}/${total}]`)
             } else if (idx != null) {
@@ -199,8 +199,8 @@ export class MemoryAggregator {
             if (c.documentRef) {
               parts.push(`[documentRef=${c.documentRef}]`)
             }
-          } else if (c.categoryName) {
-            parts.push(`[${c.categoryName}]`)
+          } else if (c.folderName) {
+            parts.push(`[${c.folderName}]`)
           }
           parts.push(c.text)
           return `- ${parts.join(' ')}`

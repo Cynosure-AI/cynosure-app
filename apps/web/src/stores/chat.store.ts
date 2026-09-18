@@ -183,7 +183,7 @@ export const useChatStore = defineStore('chat', () => {
       memoryFolders.value = [...spaces].sort((a, b) => {
         if (a.isUncategorized) return -1
         if (b.isUncategorized) return 1
-        return (a.categoryPath || '').localeCompare(b.categoryPath || '')
+        return (a.folderPath || '').localeCompare(b.folderPath || '')
       })
       agentConfig.setFreeChatDefaultMemoryFolderIds(memoryFolders.value.filter((space) => space.isUncategorized).map((space) => space.id))
     } catch {

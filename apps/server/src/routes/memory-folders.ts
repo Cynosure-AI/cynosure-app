@@ -21,10 +21,10 @@ import { watchMemoryFolder, stopWatchingMemoryFolder } from '../core/memory/memo
 import {
     archiveMemoryFolderDirectory,
     directoryPathForRelative,
-    makeChildCategoryPath,
+    makeChildFolderPath,
     memoryFolderDirectoryData,
     newMemoryFolderId,
-    categoryPathForDirectory,
+    folderPathForDirectory,
     renameMemoryFolderDirectory,
     syncMemoryFoldersFromFolders,
     validateRelativePath,
@@ -53,7 +53,7 @@ import {
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
 import { buildMemoryFolderFilter } from '../core/memory/memory-folder-scope.js'
-import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryCategoriesDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
+import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryFoldersDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -74,9 +74,9 @@ interface MemoryFolderData {
     name: string
     description: string
     directoryPath: string
-    categoryPath: string
+    folderPath: string
     depth: number
-    parentCategoryPath: string | null
+    parentFolderPath: string | null
     sortOrder: number
     isUncategorized: boolean
     createdAt: number
@@ -108,9 +108,9 @@ export interface MemoryFileStatus {
 }
 
 export interface MemoryFileSearchResult extends MemoryFileStatus {
-    categoryId: string
-    categoryName: string
-    categoryPath: string
+    folderId: string
+    folderName: string
+    folderPath: string
     matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary' | 'content'>
 }
 
@@ -125,9 +125,9 @@ function rowToData(row: MemoryFolderRow, fileCount: number, descendantFileCount 
         name: row.name,
         description: row.description,
         directoryPath: folderData.directoryPath,
-        categoryPath: folderData.categoryPath,
+        folderPath: folderData.folderPath,
         depth: folderData.depth,
-        parentCategoryPath: folderData.parentCategoryPath,
+        parentFolderPath: folderData.parentFolderPath,
         sortOrder: row.sort_order,
         isUncategorized: row.is_uncategorized === 1,
         createdAt: row.created_at,
@@ -139,7 +139,7 @@ function rowToData(row: MemoryFolderRow, fileCount: number, descendantFileCount 
 function loadCategoryRow(id: string): MemoryFolderRow | undefined {
     const db = getDb()
     syncMemoryFoldersFromFolders(db)
-    return db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(decodeCategoryIdParam(id)) as MemoryFolderRow | undefined
+    return db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(decodeFolderIdParam(id)) as MemoryFolderRow | undefined
 }
 
 function validateEditableFileName(fileName: string): string {
@@ -154,7 +154,7 @@ function validateEditableFileName(fileName: string): string {
     return cleanName
 }
 
-function decodeCategoryIdParam(id: string): string {
+function decodeFolderIdParam(id: string): string {
     try {
         return decodeURIComponent(id)
     } catch {
@@ -220,23 +220,23 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
 
 export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise<void> {
 
-    app.get<{ Querystring: { query?: string; categoryId?: string; semantic?: string } }>('/file-search', async (req, reply) => {
+    app.get<{ Querystring: { query?: string; folderId?: string; semantic?: string } }>('/file-search', async (req, reply) => {
         const query = (req.query.query || '').normalize('NFKC').trim().toLocaleLowerCase().slice(0, 200)
         if (!query) return []
         const terms = query.split(/\s+/).filter(Boolean)
         syncMemoryFoldersFromFolders(getDb())
         const allRows = getDb().prepare('SELECT * FROM memory_folders ORDER BY sort_order, name').all() as MemoryFolderRow[]
-        const requestedCategoryId = req.query.categoryId ? decodeCategoryIdParam(req.query.categoryId) : ''
-        const rows = requestedCategoryId ? allRows.filter((row) => row.id === requestedCategoryId) : allRows
-        if (requestedCategoryId && rows.length === 0) return reply.status(404).send({ error: 'Memory folder not found' })
+        const requestedFolderId = req.query.folderId ? decodeFolderIdParam(req.query.folderId) : ''
+        const rows = requestedFolderId ? allRows.filter((row) => row.id === requestedFolderId) : allRows
+        if (requestedFolderId && rows.length === 0) return reply.status(404).send({ error: 'Memory folder not found' })
 
         if (req.query.semantic === 'true') {
             const filter = buildMemoryFolderFilter(rows)
             const chunks = await getAgentMemory().recall(query, 100, filter)
             const rankByFile = new Map<string, number>()
             for (const chunk of chunks) {
-                if (!chunk.categoryId || !chunk.sourceFile) continue
-                const key = `${chunk.categoryId}\0${chunk.sourceFile}`
+                if (!chunk.folderId || !chunk.sourceFile) continue
+                const key = `${chunk.folderId}\0${chunk.sourceFile}`
                 if (!rankByFile.has(key)) rankByFile.set(key, rankByFile.size)
             }
             const results: Array<MemoryFileSearchResult & { rank: number }> = []
@@ -248,9 +248,9 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 for (const file of listMemoryFiles(row, candidateNames)) {
                     results.push({
                         ...file,
-                        categoryId: row.id,
-                        categoryName: row.name,
-                        categoryPath: folderData.categoryPath,
+                        folderId: row.id,
+                        folderName: row.name,
+                        folderPath: folderData.folderPath,
                         matchedFields: ['content'],
                         rank: rankByFile.get(`${row.id}\0${file.fileName}`) ?? Number.MAX_SAFE_INTEGER,
                     })
@@ -279,7 +279,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const results: Array<MemoryFileSearchResult & { rank: number }> = []
         for (const row of rows) {
             const folderData = memoryFolderDirectoryData(row)
-            const folderSurface = `${row.name} ${folderData.categoryPath}`.normalize('NFKC').toLocaleLowerCase()
+            const folderSurface = `${row.name} ${folderData.folderPath}`.normalize('NFKC').toLocaleLowerCase()
             const candidateNames = new Set(listFilesInFolder(row.directory_path).filter((file) => {
                 const key = `${row.id}\0${file.fileName}`
                 const surface = [file.fileName, folderSurface, tagsByFile.get(key) || '', summaryByFile.get(key) || '']
@@ -306,9 +306,9 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                                 : terms.some((term) => fields.summary.includes(term)) ? 4 : 5
                 results.push({
                     ...file,
-                    categoryId: row.id,
-                    categoryName: row.name,
-                    categoryPath: folderData.categoryPath,
+                    folderId: row.id,
+                    folderName: row.name,
+                    folderPath: folderData.folderPath,
                     matchedFields,
                     rank,
                 })
@@ -346,25 +346,25 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         // A folder deletion intentionally leaves the document history behind.
         // Restore those documents into Uncategorized when their original folder
         // no longer exists instead of leaving a permanently unrestorable row.
-        const category = loadCategoryRow(document.category_id) || loadCategoryRow(UNCATEGORIZED_MEMORY_FOLDER_ID)
-        if (!category?.directory_path) return reply.status(409).send({ error: 'No memory folder is available for restore' })
-        const filePath = join(category.directory_path, document.file_name)
+        const folder = loadCategoryRow(document.category_id) || loadCategoryRow(UNCATEGORIZED_MEMORY_FOLDER_ID)
+        if (!folder?.directory_path) return reply.status(409).send({ error: 'No memory folder is available for restore' })
+        const filePath = join(folder.directory_path, document.file_name)
         const currentHash = existsSync(filePath) ? computeFileHash(filePath) : ''
         if (req.body.expectedRevision !== undefined && req.body.expectedRevision !== currentHash) {
             return reply.status(409).send({ error: 'Memory changed since it was opened. Reload before restoring.', revision: currentHash })
         }
-        updateMemoryDocumentLocation(document.document_id, category.id, document.file_name)
-        writeTextFile(category.directory_path, document.file_name, revision.content)
+        updateMemoryDocumentLocation(document.document_id, folder.id, document.file_name)
+        writeTextFile(folder.directory_path, document.file_name, revision.content)
         getDb().prepare(`
           INSERT OR REPLACE INTO memory_file_index(document_id, document_ref, category_id, file_name, content_hash, chunk_count, created_at)
           VALUES (?, ?, ?, ?, ?, 0, ?)
-        `).run(document.document_id, document.document_ref, category.id, document.file_name, revision.contentHash, Date.now())
-        const result = await getAgentMemory().reindexFile(category.directory_path, document.file_name, category.id, { revisionContext: { source: 'restore' } })
-        return { success: true, documentRef: document.document_ref, revision: getAgentMemory().getDocumentReference(category.id, document.file_name)?.revision, chunksStored: result.chunkCount }
+        `).run(document.document_id, document.document_ref, folder.id, document.file_name, revision.contentHash, Date.now())
+        const result = await getAgentMemory().reindexFile(folder.directory_path, document.file_name, folder.id, { revisionContext: { source: 'restore' } })
+        return { success: true, documentRef: document.document_ref, revision: getAgentMemory().getDocumentReference(folder.id, document.file_name)?.revision, chunksStored: result.chunkCount }
     })
 
     app.get('/deleted', async () => getDb().prepare(`
-      SELECT document_ref AS documentRef, category_id AS categoryId, file_name AS fileName, current_hash AS revision, deleted_at AS deletedAt
+      SELECT document_ref AS documentRef, category_id AS folderId, file_name AS fileName, current_hash AS revision, deleted_at AS deletedAt
       FROM memory_documents WHERE status = 'deleted' ORDER BY deleted_at DESC
     `).all())
 
@@ -380,8 +380,8 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
 
     // DELETE /api/memory-folders/jobs/failures — dismiss every failed job.
     // Registered before the parameterized route so "failures" is not read as a job id.
-    app.delete<{ Querystring: { categoryId?: string } }>('/jobs/failures', async (req) => {
-        return { success: true, dismissed: dismissMemoryIndexJobFailures(req.query.categoryId) }
+    app.delete<{ Querystring: { folderId?: string } }>('/jobs/failures', async (req) => {
+        return { success: true, dismissed: dismissMemoryIndexJobFailures(req.query.folderId) }
     })
 
     // GET /api/memory-folders/jobs/:jobId — inspect one background indexing job
@@ -407,7 +407,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         return { success: true }
     })
 
-    // GET /api/memory-folders — list all categories with file counts
+    // GET /api/memory-folders — list all folders with file counts
     app.get('/', async () => {
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
@@ -418,10 +418,10 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         ]))
         const folderData = new Map(rows.map(row => [row.id, memoryFolderDirectoryData(row)]))
         return rows.map(row => {
-            const path = folderData.get(row.id)?.categoryPath || ''
+            const path = folderData.get(row.id)?.folderPath || ''
             const descendantFileCount = rows.reduce((total, candidate) => {
                 if (candidate.id === row.id) return total
-                const candidatePath = folderData.get(candidate.id)?.categoryPath || ''
+                const candidatePath = folderData.get(candidate.id)?.folderPath || ''
                 const isDescendant = path ? candidatePath.startsWith(`${path}/`) : Boolean(candidatePath)
                 return isDescendant ? total + (directCounts.get(candidate.id) || 0) : total
             }, 0)
@@ -429,20 +429,20 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         })
     })
 
-    // POST /api/memory-folders — create a directory-backed category
-    app.post<{ Body: { name: string; description?: string; parentCategoryPath?: string } }>('/', async (req, reply) => {
-        const { name, description, parentCategoryPath } = req.body
+    // POST /api/memory-folders — create a directory-backed folder
+    app.post<{ Body: { name: string; description?: string; parentFolderPath?: string } }>('/', async (req, reply) => {
+        const { name, description, parentFolderPath } = req.body
         if (!name?.trim()) return reply.status(400).send({ error: 'name is required' })
         const trimmedName = name.trim()
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
-        let categoryPath: string
+        let folderPath: string
         try {
-            categoryPath = makeChildCategoryPath(trimmedName, parentCategoryPath || '')
+            folderPath = makeChildFolderPath(trimmedName, parentFolderPath || '')
         } catch (err) {
             return reply.status(400).send({ error: (err as Error).message })
         }
-        const resolvedFolder = directoryPathForRelative(categoryPath)
+        const resolvedFolder = directoryPathForRelative(folderPath)
         const existing = db.prepare('SELECT id FROM memory_folders WHERE directory_path = ?').get(resolvedFolder) as { id: string } | undefined
         if (existing) return reply.status(409).send({ error: 'A memory folder with that path already exists.' })
 
@@ -468,12 +468,12 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         return { success: true }
     })
 
-    // PUT /api/memory-folders/:id — update name/description/categoryPath
-    app.put<{ Params: { id: string }; Body: { name?: string; description?: string; categoryPath?: string } }>('/:id', async (req, reply) => {
+    // PUT /api/memory-folders/:id — update name/description/folderPath
+    app.put<{ Params: { id: string }; Body: { name?: string; description?: string; folderPath?: string } }>('/:id', async (req, reply) => {
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
-        const categoryId = decodeCategoryIdParam(req.params.id)
-        const row = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(categoryId) as MemoryFolderRow | undefined
+        const folderId = decodeFolderIdParam(req.params.id)
+        const row = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(folderId) as MemoryFolderRow | undefined
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
 
         const name = req.body.name?.trim() || row.name
@@ -484,14 +484,14 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         if (row.is_uncategorized === 1 && req.body.name !== undefined && name !== row.name) {
             return reply.status(400).send({ error: 'Cannot rename the Uncategorized memory folder.' })
         }
-        if (row.is_uncategorized === 1 && req.body.categoryPath !== undefined && validateRelativePath(req.body.categoryPath) !== '') {
+        if (row.is_uncategorized === 1 && req.body.folderPath !== undefined && validateRelativePath(req.body.folderPath) !== '') {
             return reply.status(400).send({ error: 'Cannot move the Uncategorized memory folder.' })
         }
 
         if (row.is_uncategorized === 0) {
-            const currentRelativePath = categoryPathForDirectory(row.directory_path)
-            const requestedRelativePath = req.body.categoryPath !== undefined
-                ? req.body.categoryPath
+            const currentRelativePath = folderPathForDirectory(row.directory_path)
+            const requestedRelativePath = req.body.folderPath !== undefined
+                ? req.body.folderPath
                 : (() => {
                     const parent = currentRelativePath.includes('/') ? currentRelativePath.slice(0, currentRelativePath.lastIndexOf('/')) : ''
                     return parent ? `${parent}/${name}` : name
@@ -530,25 +530,25 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
     app.delete<{ Params: { id: string } }>('/:id', async (req, reply) => {
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
-        const categoryId = decodeCategoryIdParam(req.params.id)
-        const row = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(categoryId) as MemoryFolderRow | undefined
+        const folderId = decodeFolderIdParam(req.params.id)
+        const row = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(folderId) as MemoryFolderRow | undefined
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
         if (row.is_uncategorized) {
             return reply.status(400).send({ error: 'Cannot delete the Uncategorized memory folder.' })
         }
         const rag = getRAGStore()
-        const categoryPath = categoryPathForDirectory(row.directory_path)
+        const folderPath = folderPathForDirectory(row.directory_path)
         const descendants = db.prepare('SELECT * FROM memory_folders WHERE id != ? AND directory_path LIKE ?').all(row.id, `${row.directory_path}${row.directory_path.endsWith(sep) ? '' : sep}%`) as MemoryFolderRow[]
         const rowsToDelete = [row, ...descendants]
         for (const target of rowsToDelete) {
-            await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('categoryId', target.id))
+            await rag.deleteByFilter(getActivePermanentMemoryTableName(), lanceDbEqFilter('folderId', target.id))
             stopWatchingMemoryFolder(target.id)
-            // Retire the knowledge derived from this category.
+            // Retire the knowledge derived from this folder.
             deleteMemoryKnowledgeCategory(target.id)
         }
         archiveMemoryFolderDirectory(row)
         const deleteRows = db.transaction(() => {
-            markMemoryCategoriesDeleted(rowsToDelete.map(target => target.id))
+            markMemoryFoldersDeleted(rowsToDelete.map(target => target.id))
             for (const target of rowsToDelete) {
                 db.prepare('DELETE FROM memory_file_index WHERE category_id = ?').run(target.id)
                 db.prepare('DELETE FROM agent_memory_folders WHERE category_id = ?').run(target.id)
@@ -556,14 +556,14 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             }
         })
         deleteRows()
-        return { success: true, archived: categoryPath }
+        return { success: true, archived: folderPath }
     })
 
     // -----------------------------------------------------------------------
     // File browser
     // -----------------------------------------------------------------------
 
-    // GET /api/memory-folders/:id/jobs — list recent indexing jobs for a category
+    // GET /api/memory-folders/:id/jobs — list recent indexing jobs for a folder
     app.get<{ Params: { id: string } }>('/:id/jobs', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
@@ -571,7 +571,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
     })
 
     // POST /api/memory-folders/:id/knowledge/rebuild — migrate every current
-    // source document in a category into the versioned knowledge projection.
+    // source document in a folder into the versioned knowledge projection.
     // Jobs are durable, bounded by the shared worker pool, and independently
     // retryable; source files and their current RAG index remain untouched.
     app.post<{ Params: { id: string } }>('/:id/knowledge/rebuild', async (req, reply) => {
@@ -595,13 +595,13 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             }
             jobs.push(startMemoryIndexJob({
                 kind: 'deep-research',
-                categoryId: row.id,
+                folderId: row.id,
                 fileName,
                 run: async (signal, reportProgress) => ({
                     success: true,
                     ...(await deepResearchMemoryFile({
                         directoryPath: row.directory_path,
-                        categoryId: row.id,
+                        folderId: row.id,
                         fileName,
                         replaceExisting: true,
                         signal,
@@ -646,7 +646,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 req.params.fileName,
                 0,
                 Math.max(0, indexed.chunkCount - 1),
-                lanceDbEqFilter('categoryId', row.id),
+                lanceDbEqFilter('folderId', row.id),
             )
             return {
                 status: 'searchable' as const,
@@ -704,7 +704,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const mem = getAgentMemory()
         return startMemoryIndexJob({
             kind: 'reindex',
-            categoryId: row.id,
+            folderId: row.id,
             fileName: req.params.fileName,
             run: async (signal) => {
                 const result = await mem.reindexFile(row.directory_path, req.params.fileName, row.id, { signal })
@@ -734,7 +734,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 success: true,
                 ...(await deepResearchMemoryFile({
                     directoryPath: row.directory_path,
-                    categoryId: row.id,
+                    folderId: row.id,
                     fileName: req.params.fileName,
                     replaceExisting: true,
                 })),
@@ -764,7 +764,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const resumeCheckpoint = (resumableJob?.result as { resumeCheckpoint?: DeepResearchCheckpoint } | undefined)?.resumeCheckpoint
         return startMemoryIndexJob({
             kind: 'deep-research',
-            categoryId: row.id,
+            folderId: row.id,
             fileName: req.params.fileName,
             resume: resumableJob && resumeCheckpoint ? {
                 current: resumableJob.progressCurrent || 0,
@@ -775,7 +775,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 success: true,
                 ...(await deepResearchMemoryFile({
                     directoryPath: row.directory_path,
-                    categoryId: row.id,
+                    folderId: row.id,
                     fileName: req.params.fileName,
                     replaceExisting: true,
                     signal,
@@ -852,7 +852,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 recordMemoryRevision({
                     documentId: identity.documentId,
                     documentRef: identity.documentRef,
-                    categoryId: row.id,
+                    folderId: row.id,
                     fileName,
                     content: req.body.content,
                     context: { source: 'user' },
@@ -899,7 +899,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
 
             const rag = getRAGStore()
             const filter = andLanceDbFilters(
-                lanceDbEqFilter('categoryId', row.id),
+                lanceDbEqFilter('folderId', row.id),
                 lanceDbEqFilter('sourceFile', currentFileName),
             )
             if (filter) await rag.updateSourceFile(getActivePermanentMemoryTableName(), filter, nextFileName)
@@ -920,7 +920,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
     // Ingest / upload
     // -----------------------------------------------------------------------
 
-    // POST /api/memory-folders/:id/ingest-file — upload a document to a category without indexing it
+    // POST /api/memory-folders/:id/ingest-file — upload a document to a folder without indexing it
     app.post<{ Params: { id: string }; Body: { fileName: string; content: string } }>('/:id/ingest-file', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
@@ -949,7 +949,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         }
     })
 
-    // POST /api/memory-folders/:id/reingest-file — re-index an existing file in the category
+    // POST /api/memory-folders/:id/reingest-file — re-index an existing file in the folder
     app.post<{ Params: { id: string }; Body: { fileName?: string; sourceFile?: string } }>('/:id/reingest-file', async (req, reply) => {
         const row = loadCategoryRow(req.params.id)
         if (!row) return reply.status(404).send({ error: 'Memory folder not found' })
@@ -1006,19 +1006,19 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         }
     })
 
-    // POST /api/memory-folders/:id/move-documents — move files to another category
-    app.post<{ Params: { id: string }; Body: { sourceFiles: string[]; targetCategoryId: string } }>('/:id/move-documents', async (req, reply) => {
+    // POST /api/memory-folders/:id/move-documents — move files to another folder
+    app.post<{ Params: { id: string }; Body: { sourceFiles: string[]; targetFolderId: string } }>('/:id/move-documents', async (req, reply) => {
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
-        const categoryId = decodeCategoryIdParam(req.params.id)
-        const source = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(categoryId) as MemoryFolderRow | undefined
+        const folderId = decodeFolderIdParam(req.params.id)
+        const source = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(folderId) as MemoryFolderRow | undefined
         if (!source) return reply.status(404).send({ error: 'Source memory folder not found' })
-        const { sourceFiles, targetCategoryId } = req.body
+        const { sourceFiles, targetFolderId } = req.body
         if (!sourceFiles?.length) return reply.status(400).send({ error: 'No sourceFiles provided' })
-        if (!targetCategoryId) return reply.status(400).send({ error: 'targetCategoryId is required' })
-        if (targetCategoryId === source.id) return reply.status(400).send({ error: 'Target memory folder must be different from source' })
+        if (!targetFolderId) return reply.status(400).send({ error: 'targetFolderId is required' })
+        if (targetFolderId === source.id) return reply.status(400).send({ error: 'Target memory folder must be different from source' })
 
-        const target = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(targetCategoryId) as MemoryFolderRow | undefined
+        const target = db.prepare('SELECT * FROM memory_folders WHERE id = ?').get(targetFolderId) as MemoryFolderRow | undefined
         if (!target) return reply.status(404).send({ error: 'Target memory folder not found' })
 
         const rag = getRAGStore()
@@ -1031,7 +1031,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             const existingIndex = db.prepare('SELECT document_id, document_ref, content_hash, chunk_count, last_indexed_at, deep_researched_at, dreamed_at, created_at FROM memory_file_index WHERE category_id = ? AND file_name = ?')
                 .get(source.id, sf) as { document_id: string; document_ref: string; content_hash: string; chunk_count: number; last_indexed_at: number; deep_researched_at: number; dreamed_at: number; created_at: number } | undefined
 
-            // Move the physical file between category directories
+            // Move the physical file between folder directories
             if (source.directory_path && target.directory_path) {
                 try {
                     copyFileToFolder(join(source.directory_path, sf), target.directory_path, uniqueName)
@@ -1042,19 +1042,19 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             // Update LanceDB sourceFile name if renamed
             if (uniqueName !== sf) {
                 const srcFilter = andLanceDbFilters(
-                    lanceDbEqFilter('categoryId', source.id),
+                    lanceDbEqFilter('folderId', source.id),
                     lanceDbEqFilter('sourceFile', sf),
                 )
                 if (srcFilter) await rag.updateSourceFile(getActivePermanentMemoryTableName(), srcFilter, uniqueName)
             }
 
-            // Move vectors to the target category
+            // Move vectors to the target folder
             const filter = andLanceDbFilters(
-                lanceDbEqFilter('categoryId', source.id),
+                lanceDbEqFilter('folderId', source.id),
                 lanceDbEqFilter('sourceFile', uniqueName),
             )
             if (!filter) continue
-            await rag.updateCategoryId(getActivePermanentMemoryTableName(), filter, target.id)
+            await rag.updateFolderId(getActivePermanentMemoryTableName(), filter, target.id)
 
             // Move file index entry
             if (existingIndex) {

@@ -39,7 +39,7 @@ export async function indexConversationAttachment(
         const chunkCount = await getMemoryParser().ingest(CONVERSATION_ATTACHMENTS_TABLE, text, {
             source: 'conversation_attachment',
             sourceFile: attachment.assetId || attachment.id,
-            categoryId: ATTACHMENT_ASSET_SPACE_ID,
+            folderId: ATTACHMENT_ASSET_SPACE_ID,
         }, opts)
         updateConversationAttachmentChunkCount(attachment.assetId || attachment.id, chunkCount)
         return chunkCount
@@ -154,7 +154,7 @@ export async function getConversationAttachmentChunks(
     attachmentId: string,
     minIndex: number,
     maxIndex: number,
-): Promise<{ text: string; chunkIndex: number; sourceFile: string; categoryId?: string }[]> {
+): Promise<{ text: string; chunkIndex: number; sourceFile: string; folderId?: string }[]> {
     const attachments = listConversationFileAttachments(getDb(), conversationId)
     await ensureConversationAttachmentsIndexed(conversationId, attachments, [attachmentId])
     const filter = buildAttachmentFilter(conversationId)

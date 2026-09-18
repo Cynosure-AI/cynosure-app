@@ -191,27 +191,27 @@ describe('Dream worker', () => {
         expect(isDreamEligibleConversation({ agent_id: 'disabled' })).toBe(false)
         expect(isDreamEligibleConversation({ agent_id: 'missing' })).toBe(false)
     })
-    test('resolves Dream categories from conversation overrides, agent assignments, then Uncategorized', () => {
+    test('resolves Dream folders from conversation overrides, agent assignments, then Uncategorized', () => {
         mkdirSync(join(directory, 'data', 'memories', 'Assigned'), { recursive: true })
         getDb().prepare("INSERT INTO memory_folders(id, name, directory_path, created_at) VALUES ('assigned', 'Assigned', ?, ?)")
             .run(join(directory, 'data', 'memories', 'Assigned'), Date.now())
         getDb().prepare("INSERT INTO agent_memory_folders(agent_id, category_id) VALUES ('agent-with-space', 'assigned')").run()
 
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memoryFolderIds":["uncategorized"],"autoMemory":false}' })).toEqual([
-            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
-            { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
+            { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
+            { id: 'assigned', name: 'Assigned', folderPath: 'Assigned' },
         ])
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"autoMemory":false}' })).toEqual([
             expect.objectContaining({ id: 'assigned', name: 'Assigned' }),
         ])
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memoryFolderIds":[],"autoMemory":false}' })).toEqual([
-            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
-            { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
+            { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
+            { id: 'assigned', name: 'Assigned', folderPath: 'Assigned' },
         ])
         expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{"memoryFolderIds":["missing"]}' })).toEqual([])
         expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([
-            { id: 'uncategorized', name: 'Uncategorized', categoryPath: '' },
-            { id: 'assigned', name: 'Assigned', categoryPath: 'Assigned' },
+            { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
+            { id: 'assigned', name: 'Assigned', folderPath: 'Assigned' },
         ])
     })
     test('serializes sweeps and reviews oldest conversations first', async () => {
@@ -294,7 +294,7 @@ describe('Dream worker', () => {
         await ready()
         expect(mocks.tool).not.toHaveBeenCalled()
         expect(mocks.scopes).toEqual(expect.arrayContaining([expect.objectContaining({
-            assignedCategories: [expect.objectContaining({ id: 'uncategorized', name: 'Uncategorized' })],
+            assignedFolders: [expect.objectContaining({ id: 'uncategorized', name: 'Uncategorized' })],
         })]))
     })
     test('cancels active work and skips its pending messages until new activity', async () => {

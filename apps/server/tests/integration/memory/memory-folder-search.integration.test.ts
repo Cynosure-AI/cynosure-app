@@ -43,7 +43,7 @@ describe('global memory file search', () => {
     db.prepare(`INSERT INTO memory_file_index (document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, created_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`)
       .run('doc-alpha', 'ref-alpha', 'folder-a', 'alpha.md', alphaHash, now, now, now)
     new MemoryKnowledgeStore().publishDocument({
-      documentId: 'doc-alpha', contentHash: alphaHash, categoryId: 'folder-a', fileName: 'alpha.md',
+      documentId: 'doc-alpha', contentHash: alphaHash, folderId: 'folder-a', fileName: 'alpha.md',
       sourceId: 'memory:folder-a:alpha.md', relations: [],
       chunks: [{ text: 'Plain source wording.', searchText: 'Plain source wording.', chunkIndex: 0, documentTitle: 'Alpha', sectionPath: 'Alpha', contentHash: 'chunk-alpha' }],
       chunkTags: [{ sourceChunkIndex: 0, tags: ['architecture'] }],
@@ -55,24 +55,24 @@ describe('global memory file search', () => {
     await app.register(registerMemoryFoldersRoutes, { prefix: '/api/memory-folders' })
     const summaryResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=quasar' })
     expect(summaryResponse.statusCode).toBe(200)
-    expect(summaryResponse.json()).toEqual([expect.objectContaining({ fileName: 'alpha.md', categoryId: 'folder-a', matchedFields: ['summary'] })])
+    expect(summaryResponse.json()).toEqual([expect.objectContaining({ fileName: 'alpha.md', folderId: 'folder-a', matchedFields: ['summary'] })])
 
     const filenameResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap' })
-    expect(filenameResponse.json()).toEqual([expect.objectContaining({ fileName: 'roadmap.md', categoryId: 'folder-b' })])
+    expect(filenameResponse.json()).toEqual([expect.objectContaining({ fileName: 'roadmap.md', folderId: 'folder-b' })])
 
-    const scopedMiss = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap&categoryId=folder-a' })
+    const scopedMiss = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap&folderId=folder-a' })
     expect(scopedMiss.json()).toEqual([])
-    const scopedMatch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap&categoryId=folder-b' })
-    expect(scopedMatch.json()).toEqual([expect.objectContaining({ fileName: 'roadmap.md', categoryId: 'folder-b' })])
+    const scopedMatch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap&folderId=folder-b' })
+    expect(scopedMatch.json()).toEqual([expect.objectContaining({ fileName: 'roadmap.md', folderId: 'folder-b' })])
 
     const { getAgentMemory } = await import('../../../src/core/memory/agent-memory.js')
     const recall = vi.spyOn(getAgentMemory(), 'recall').mockResolvedValue([{
       id: 'chunk-alpha', text: 'Plain source wording.', source: 'permanent', score: 0.9,
-      sourceFile: 'alpha.md', categoryId: 'folder-a', chunkIndex: 0,
+      sourceFile: 'alpha.md', folderId: 'folder-a', chunkIndex: 0,
     }])
-    const semanticResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=architecture&categoryId=folder-a&semantic=true' })
+    const semanticResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=architecture&folderId=folder-a&semantic=true' })
     expect(semanticResponse.json()).toEqual([expect.objectContaining({
-      fileName: 'alpha.md', categoryId: 'folder-a', matchedFields: ['content'],
+      fileName: 'alpha.md', folderId: 'folder-a', matchedFields: ['content'],
     })])
     expect(recall).toHaveBeenCalledWith('architecture', 100, expect.any(String))
     recall.mockRestore()
@@ -92,8 +92,8 @@ describe('global memory file search', () => {
       'doc-roadmap', 'ref-roadmap', 'folder-b', 'roadmap.md', roadmapHash, now, now,
     )
     const chunksByRange = vi.spyOn(getAgentMemory(), 'getChunksByRange').mockResolvedValue([
-      { text: '# Roadmap\nMilestones.', chunkIndex: 0, sourceFile: 'roadmap.md', categoryId: 'folder-b' },
-      { text: 'Delivery dates.', chunkIndex: 1, sourceFile: 'roadmap.md', categoryId: 'folder-b' },
+      { text: '# Roadmap\nMilestones.', chunkIndex: 0, sourceFile: 'roadmap.md', folderId: 'folder-b' },
+      { text: 'Delivery dates.', chunkIndex: 1, sourceFile: 'roadmap.md', folderId: 'folder-b' },
     ])
     const searchableResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-b/files/roadmap.md/analysis' })
     expect(searchableResponse.json()).toEqual({
