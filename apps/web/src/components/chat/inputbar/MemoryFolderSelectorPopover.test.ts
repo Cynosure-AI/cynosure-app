@@ -32,6 +32,8 @@ describe('MemoryFolderSelectorPopover', () => {
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(document.body.textContent).toContain('Projects')
     expect(document.body.textContent).not.toContain('Alpha')
+    const allMemoryRow = document.body.querySelector('[aria-label="Toggle All Memory"]')?.closest('[role="menuitem"]')
+    expect(allMemoryRow?.nextElementSibling?.getAttribute('role')).toBe('separator')
 
     document.body.querySelector<HTMLButtonElement>('[aria-label="Open Projects"]')?.click()
     await nextTick()
