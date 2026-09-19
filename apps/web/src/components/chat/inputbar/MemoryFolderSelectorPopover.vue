@@ -256,10 +256,10 @@ onBeforeUnmount(() => {
           </span>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-semibold text-theme-100">
-              Memory access
+              Auto Memories
             </div>
             <div class="text-[10px] text-theme-500">
-              Retrieve context from selected folders
+              Automatically retrieve relevant memory context for this chat at turn-start. Decide which memory folders to include below.
             </div>
           </div>
           <ToggleSwitch
