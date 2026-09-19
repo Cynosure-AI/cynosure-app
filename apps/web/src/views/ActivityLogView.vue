@@ -437,8 +437,13 @@ async function openItem(item: ActivityItem) {
     router.push("/tools-policy");
     return;
   }
-  if (item.memoryFolderId && item.memoryFileName) {
-    router.push({ path: "/memory-folders/documents", query: { folder: item.memoryFolderId, file: item.memoryFileName } });
+  const dreamMemoryChange = item.kind === "dream"
+    ? item.dreamChanges?.find((change) => change.memoryFolderId && change.memoryFileName)
+    : undefined;
+  const memoryFolderId = dreamMemoryChange?.memoryFolderId || item.memoryFolderId;
+  const memoryFileName = dreamMemoryChange?.memoryFileName || item.memoryFileName;
+  if (memoryFolderId && memoryFileName) {
+    router.push({ path: "/memory-folders/documents", query: { folder: memoryFolderId, file: memoryFileName } });
     return;
   }
   if (item.conversationId) {
