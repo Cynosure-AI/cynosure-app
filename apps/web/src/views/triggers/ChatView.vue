@@ -7,10 +7,12 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
+import { useProviderStore } from '../../stores/provider.store'
 import { Icon } from '@iconify/vue'
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
+const providerStore = useProviderStore()
 const route = useRoute()
 const router = useRouter()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
@@ -19,13 +21,16 @@ const taskListOpen = ref(false)
 const chatSearchOpen = ref(false)
 let dragCounter = 0
 let syncingFromRoute = false
+const canUseChat = computed(() => providerStore.providersLoaded && providerStore.providers.length > 0)
+const hasNoProviders = computed(() => providerStore.providersLoaded && providerStore.providers.length === 0)
 
 const showCenteredComposer = computed(() => {
   const routeConversationId = Array.isArray(route.params.conversationId)
     ? route.params.conversationId[0]
     : route.params.conversationId
 
-  return !routeConversationId &&
+  return canUseChat.value &&
+    !routeConversationId &&
     !chatStore.activeConversationId &&
     !chatStore.loadingMessages &&
     chatStore.messages.length === 0
@@ -52,6 +57,7 @@ watch(
 )
 
 function onDragEnter(e: DragEvent) {
+  if (!canUseChat.value) return
   e.preventDefault()
   dragCounter++
   isDragOver.value = true
@@ -155,52 +161,97 @@ watch(
         @dragover="onDragOver"
         @drop="onDrop"
       >
-        <!-- Chat area -->
-        <div class="flex flex-col flex-1 min-h-0 relative">
-          <ChatPanel
-            :search-open="chatSearchOpen"
-            @close-search="chatSearchOpen = false"
-            @select-quick-response="fillQuickResponse"
-          />
-
-          <PlanningTaskList
-            v-if="taskListOpen"
-            @close="taskListOpen = false"
-          />
-        </div>
-
-        <!-- Input bar (full width of chat column) -->
-        <InputBar
-          ref="inputBarRef"
-          :floating="showCenteredComposer"
-        />
-
         <div
-          v-if="showCenteredComposer && latestAgentChats.length"
-          class="recent-agent-chats mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-2 px-4 pb-3"
-          aria-label="Recent chats with this agent"
+          v-if="!providerStore.providersLoaded"
+          class="flex flex-1 items-center justify-center text-theme-500"
+          aria-label="Loading AI providers"
         >
-          <button
-            v-for="(conversation, index) in latestAgentChats"
-            :key="conversation.id"
-            type="button"
-            class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-theme-700/80 bg-theme-800/70 px-3 py-1.5 text-xs text-theme-400 shadow-sm transition-colors hover:border-accent-500/50 hover:bg-theme-800 hover:text-theme-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
-            :style="{ animationDelay: `${120 + index * 80}ms` }"
-            :title="conversation.title"
-            @click="openRecentChat(conversation)"
-          >
-            <Icon
-              icon="lucide:history"
-              class="h-3.5 w-3.5 shrink-0 text-theme-500"
-            />
-            <span class="max-w-52 truncate">{{ conversation.title }}</span>
-          </button>
+          <Icon
+            icon="lucide:loader-2"
+            class="h-6 w-6 animate-spin"
+          />
         </div>
 
         <div
-          class="composer-spacer hidden md:block"
-          aria-hidden="true"
-        />
+          v-else-if="hasNoProviders"
+          class="flex flex-1 items-center justify-center px-6 py-12"
+          data-testid="chat-no-providers"
+        >
+          <div class="max-w-md text-center">
+            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-500/10">
+              <Icon
+                icon="lucide:brain-circuit"
+                class="h-8 w-8 text-accent-400"
+              />
+            </div>
+            <h2 class="mb-2 text-xl font-medium text-theme-100">
+              Set up an AI provider to start chatting
+            </h2>
+            <p class="mb-6 text-sm leading-relaxed text-theme-500">
+              Chat needs an AI provider and model. Add one in Settings, then return here to begin a conversation.
+            </p>
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+              @click="router.push({ name: 'settings', query: { category: 'providers' } })"
+            >
+              <Icon
+                icon="lucide:settings"
+                class="h-4 w-4"
+              />
+              Configure providers
+            </button>
+          </div>
+        </div>
+
+        <template v-else>
+          <!-- Chat area -->
+          <div class="flex flex-col flex-1 min-h-0 relative">
+            <ChatPanel
+              :search-open="chatSearchOpen"
+              @close-search="chatSearchOpen = false"
+              @select-quick-response="fillQuickResponse"
+            />
+
+            <PlanningTaskList
+              v-if="taskListOpen"
+              @close="taskListOpen = false"
+            />
+          </div>
+
+          <!-- Input bar (full width of chat column) -->
+          <InputBar
+            ref="inputBarRef"
+            :floating="showCenteredComposer"
+          />
+
+          <div
+            v-if="showCenteredComposer && latestAgentChats.length"
+            class="recent-agent-chats mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-2 px-4 pb-3"
+            aria-label="Recent chats with this agent"
+          >
+            <button
+              v-for="(conversation, index) in latestAgentChats"
+              :key="conversation.id"
+              type="button"
+              class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-theme-700/80 bg-theme-800/70 px-3 py-1.5 text-xs text-theme-400 shadow-sm transition-colors hover:border-accent-500/50 hover:bg-theme-800 hover:text-theme-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
+              :style="{ animationDelay: `${120 + index * 80}ms` }"
+              :title="conversation.title"
+              @click="openRecentChat(conversation)"
+            >
+              <Icon
+                icon="lucide:history"
+                class="h-3.5 w-3.5 shrink-0 text-theme-500"
+              />
+              <span class="max-w-52 truncate">{{ conversation.title }}</span>
+            </button>
+          </div>
+
+          <div
+            class="composer-spacer hidden md:block"
+            aria-hidden="true"
+          />
+        </template>
 
         <div
           v-if="isDragOver"
