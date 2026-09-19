@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
           </span>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-semibold text-theme-100">
-              Auto Tool Discovery
+              Auto Tool Selection
             </div>
             <div class="text-[10px] text-theme-500">
               Toggle to let the AI decide which tools to use for a task. You can still manually select tools below.
