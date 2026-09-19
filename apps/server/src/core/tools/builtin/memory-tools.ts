@@ -1228,7 +1228,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
             additionalProperties: false,
             properties: {
                 fileRef: { type: 'string', description: 'Stable canonical file reference returned by memory_search (for example user-profile#4k8z2q).' },
-                patch: { type: 'string', description: 'One or more @@ contextual diff hunks. Prefix removed lines with -, added lines with +, and unchanged context with a space.' },
+                patch: { type: 'string', description: 'One or more @@ contextual diff hunks. Prefix removed lines with -, added lines with +, and unchanged context with a space. Utilise new lines to fit the schema like "@@\n"' },
             },
             required: ['fileRef', 'patch'],
         },
