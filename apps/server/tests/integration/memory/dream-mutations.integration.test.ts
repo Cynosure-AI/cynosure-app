@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -7,7 +7,7 @@ import { closeDb, getDb } from '../../../src/db/database.js'
 import { getAgentMemory } from '../../../src/core/memory/agent-memory.js'
 import { recordMemoryRevision } from '../../../src/core/memory/memory-revisions.js'
 import { getMemoryFolderDirectoryPath } from '../../../src/core/memory/memory-folder-scope.js'
-import { makeMemoryPatchTool, makeMemorySearchTool } from '../../../src/core/tools/builtin/memory-tools.js'
+import { makeMemoryDeleteTool, makeMemoryPatchTool, makeMemorySearchTool } from '../../../src/core/tools/builtin/memory-tools.js'
 
 let directory: string
 let file: string
@@ -97,6 +97,27 @@ test('an aborted write leaves the source untouched', async () => {
     controller.abort()
     await expect(makeMemoryPatchTool(options).execute({ fileRef: 'notes#abc123', patch: '@@\n-Unrelated fact.\n+Do not write' }, controller.signal)).rejects.toThrow()
     expect(readFileSync(file, 'utf8')).toBe('Unrelated fact.')
+})
+
+test('memory_delete archives a searched canonical file and removes its active index', async () => {
+    await read()
+    const result = await makeMemoryDeleteTool(options).execute({ fileRef: 'notes#abc123' })
+
+    expect(result).toMatchObject({
+        success: true,
+        structuredContent: {
+            status: 'deleted',
+            fileRef: 'notes#abc123',
+            fileName: 'notes.md',
+            folder: 'Uncategorized',
+        },
+    })
+    expect(existsSync(file)).toBe(false)
+    expect(readdirSync(join(getMemoryFolderDirectoryPath('uncategorized')!, '.trash')))
+        .toEqual([expect.stringMatching(/^notes-.*\.md$/)])
+    expect(getAgentMemory().getDocumentReference('uncategorized', 'notes.md')).toBeUndefined()
+    expect(getDb().prepare("SELECT status FROM memory_documents WHERE document_id = 'doc'").get())
+        .toEqual({ status: 'deleted' })
 })
 
 test('a failed exact edit batch is atomic and does not reindex', async () => {

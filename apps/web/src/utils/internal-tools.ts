@@ -8,6 +8,7 @@ export const AUTO_MEMORY_TOOL_NAMES = [
   'memory_search',
   'memory_create',
   'memory_patch',
+  'memory_delete',
 ] as const
 
 export const AGENT_REQUIRED_TOOL_NAMES = [

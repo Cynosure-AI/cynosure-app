@@ -27,7 +27,7 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
     }
     return {
         makeMemorySearchTool: make('memory_search'), makeMemoryCreateTool: make('memory_create'),
-        makeMemoryPatchTool: make('memory_patch'),
+        makeMemoryPatchTool: make('memory_patch'), makeMemoryDeleteTool: make('memory_delete'),
     }
 })
 import { closeDb, getDb } from '../../db/database.js'

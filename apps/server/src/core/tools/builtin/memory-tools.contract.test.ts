@@ -3,6 +3,7 @@ import {
     MEMORY_TOOL_NAMES,
     makeMemoryCreateTool,
     makeMemoryPatchTool,
+    makeMemoryDeleteTool,
     applyMemoryPatch,
     makeMemorySearchTool,
     makeKnowledgeAssertTool,
@@ -15,7 +16,7 @@ import {
 describe('memory mutation tool contracts', () => {
     test('exposes focused memory mutations', () => {
         expect(MEMORY_TOOL_NAMES).toEqual([
-            'memory_search', 'memory_create', 'memory_patch',
+            'memory_search', 'memory_create', 'memory_patch', 'memory_delete',
         ])
     })
 
@@ -112,6 +113,7 @@ describe('memory mutation tool contracts', () => {
             makeMemorySearchTool({}),
             makeMemoryCreateTool({}),
             makeMemoryPatchTool({}),
+            makeMemoryDeleteTool({}),
             makeKnowledgeSearchTool({}),
             makeKnowledgeAssertTool({}),
             makeKnowledgeDeleteTool({}),
