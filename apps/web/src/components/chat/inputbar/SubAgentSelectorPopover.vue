@@ -22,11 +22,17 @@ const menuStyle = ref<CSSProperties>({})
 const selectedSet = computed(() => new Set(chatStore.freeChatSubAgentIds))
 const filteredAgents = computed(() => {
   const query = search.value.trim().toLowerCase()
-  if (!query) return agentDefs.agents
-  return agentDefs.agents.filter((agent) =>
+  const matchingAgents = query
+    ? agentDefs.agents.filter((agent) =>
     agent.name.toLowerCase().includes(query)
     || agent.internalName?.toLowerCase().includes(query)
     || agent.description?.toLowerCase().includes(query),
+  )
+    : agentDefs.agents
+
+  return [...matchingAgents].sort((left, right) =>
+    Number(chatStore.freeChatSubAgentIds.includes(right.id))
+    - Number(chatStore.freeChatSubAgentIds.includes(left.id)),
   )
 })
 const missingCount = computed(() =>

@@ -56,6 +56,39 @@ describe('SubAgentSelectorPopover', () => {
 
     wrapper.unmount()
   })
+
+  test('lists enabled sub-agents before the remaining agents', async () => {
+    const agentDefs = useAgentDefinitionsStore()
+    const chatStore = useChatStore()
+    agentDefs.agents = [
+      agent('researcher', 'Researcher', 'Finds reliable sources'),
+      agent('writer', 'Writer', 'Drafts final copy'),
+      agent('reviewer', 'Reviewer', 'Checks the result'),
+    ]
+    const wrapper = mount(SubAgentSelectorPopover, {
+      attachTo: document.body,
+      slots: {
+        trigger: ({ toggle }: { toggle: () => void }) => h('button', { 'data-test': 'trigger', onClick: toggle }, 'Agents'),
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    chatStore.freeChatSubAgentIds.splice(0)
+    await wrapper.get('[data-test="trigger"]').trigger('click')
+    await nextTick()
+
+    const menus = document.body.querySelectorAll<HTMLElement>('[role="menu"][aria-label="Sub-agents"]')
+    const menu = menus.item(menus.length - 1)
+    menu.querySelector<HTMLButtonElement>('[aria-label="Toggle Writer"]')?.click()
+    menu.querySelector<HTMLButtonElement>('[aria-label="Toggle Reviewer"]')?.click()
+    await nextTick()
+
+    const labels = [...menu.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')]
+      .map((element) => element.getAttribute('aria-label'))
+    expect(labels).toEqual(['Toggle Writer', 'Toggle Reviewer', 'Toggle Researcher'])
+
+    wrapper.unmount()
+  })
 })
 
 function agent(id: string, name: string, description: string): AgentDefinition {
