@@ -52,7 +52,6 @@ import {
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
-import { buildMemoryFolderFilter } from '../core/memory/memory-folder-scope.js'
 import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryFoldersDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
@@ -220,44 +219,22 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
 
 export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise<void> {
 
-    app.get<{ Querystring: { query?: string; folderId?: string; semantic?: string } }>('/file-search', async (req, reply) => {
+    app.get<{ Querystring: { query?: string; folderId?: string } }>('/file-search', async (req, reply) => {
         const query = (req.query.query || '').normalize('NFKC').trim().toLocaleLowerCase().slice(0, 200)
         if (!query) return []
         const terms = query.split(/\s+/).filter(Boolean)
         syncMemoryFoldersFromFolders(getDb())
         const allRows = getDb().prepare('SELECT * FROM memory_folders ORDER BY sort_order, name').all() as MemoryFolderRow[]
         const requestedFolderId = req.query.folderId ? decodeFolderIdParam(req.query.folderId) : ''
-        const rows = requestedFolderId ? allRows.filter((row) => row.id === requestedFolderId) : allRows
-        if (requestedFolderId && rows.length === 0) return reply.status(404).send({ error: 'Memory folder not found' })
-
-        if (req.query.semantic === 'true') {
-            const filter = buildMemoryFolderFilter(rows)
-            const chunks = await getAgentMemory().recall(query, 100, filter)
-            const rankByFile = new Map<string, number>()
-            for (const chunk of chunks) {
-                if (!chunk.folderId || !chunk.sourceFile) continue
-                const key = `${chunk.folderId}\0${chunk.sourceFile}`
-                if (!rankByFile.has(key)) rankByFile.set(key, rankByFile.size)
-            }
-            const results: Array<MemoryFileSearchResult & { rank: number }> = []
-            for (const row of rows) {
-                const folderData = memoryFolderDirectoryData(row)
-                const candidateNames = new Set([...rankByFile.keys()]
-                    .filter((key) => key.startsWith(`${row.id}\0`))
-                    .map((key) => key.slice(row.id.length + 1)))
-                for (const file of listMemoryFiles(row, candidateNames)) {
-                    results.push({
-                        ...file,
-                        folderId: row.id,
-                        folderName: row.name,
-                        folderPath: folderData.folderPath,
-                        matchedFields: ['content'],
-                        rank: rankByFile.get(`${row.id}\0${file.fileName}`) ?? Number.MAX_SAFE_INTEGER,
-                    })
-                }
-            }
-            return results.sort((a, b) => a.rank - b.rank).map(({ rank: _rank, ...result }) => result)
-        }
+        const requestedRow = requestedFolderId ? allRows.find((row) => row.id === requestedFolderId) : undefined
+        if (requestedFolderId && !requestedRow) return reply.status(404).send({ error: 'Memory folder not found' })
+        const requestedPath = requestedRow ? memoryFolderDirectoryData(requestedRow).folderPath : ''
+        const rows = !requestedRow || requestedRow.is_uncategorized
+            ? allRows
+            : allRows.filter((row) => {
+                const folderPath = memoryFolderDirectoryData(row).folderPath
+                return row.id === requestedRow.id || folderPath.startsWith(`${requestedPath}/`)
+            })
         const summaries = getDb().prepare(`
             SELECT r.category_id, r.file_name, GROUP_CONCAT(tu.summary, ' ') AS summaries
             FROM memory_knowledge_index_runs r

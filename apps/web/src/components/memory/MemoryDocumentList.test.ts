@@ -74,22 +74,19 @@ describe('MemoryDocumentList navigation and search', () => {
     })
   })
 
-  test('opens a linked document in the editor without putting its name in search', async () => {
+  test('opens a linked document while leaving the always-visible search empty', async () => {
     const wrapper = mountList('notes.md')
     await flushPromises()
 
     expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('true:notes.md')
-    expect(wrapper.find('input[placeholder="Search files…"]').exists()).toBe(false)
-    await wrapper.get('[aria-label="Show document search"]').trigger('click')
-    expect((wrapper.get('input[placeholder="Search files…"]').element as HTMLInputElement).value).toBe('')
+    expect((wrapper.get('input[placeholder="Search this folder and subfolders…"]').element as HTMLInputElement).value).toBe('')
     expect(mocks.searchFiles).not.toHaveBeenCalled()
   })
 
   test('shows a clear button only for a query and restores the unfiltered list', async () => {
     const wrapper = mountList()
     await flushPromises()
-    await wrapper.get('[aria-label="Show document search"]').trigger('click')
-    const input = wrapper.get('input[placeholder="Search files…"]')
+    const input = wrapper.get('input[placeholder="Search this folder and subfolders…"]')
 
     expect(wrapper.find('[aria-label="Clear document search"]').exists()).toBe(false)
     await input.setValue('notes')
