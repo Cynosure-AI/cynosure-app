@@ -1,4 +1,4 @@
-import { getBuiltInMemoryToolKeys, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
+import { getBuiltInMemoryToolKeys, getBuiltInToolKey, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
 import { isRuntimeMemoryEnabled, type ExecutionMemoryFolderRef } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
@@ -7,7 +7,7 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 import type { ConversationExecutionConfig } from '@shared/types'
-import { makeManageMcpTool } from '../../tools/builtin/manage-mcp.js'
+import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -73,8 +73,13 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
 
     const routingEnabled = !suppressAutoTools && isToolRoutingEnabled(preset, autoToolRouting)
     const configuredToolKeys = preset.tools || []
+    const manageMcpToolKey = getBuiltInToolKey(MANAGE_MCP_TOOL_NAME)
+    const manageMcpEnabled = configuredToolKeys.includes(manageMcpToolKey)
+        || preferredToolKeys?.includes(manageMcpToolKey) === true
     const toolKeys = routingEnabled
-        ? toolRegistry.listRegisteredTools().map((tool) => tool.key)
+        ? toolRegistry.listRegisteredTools()
+            .map((tool) => tool.key)
+            .filter((key) => key !== manageMcpToolKey || manageMcpEnabled)
         : configuredToolKeys
 
     let tools: RegistryAwareToolDefinition[] = suppressAutoTools
@@ -111,7 +116,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         tools = dedupeToolsByName([...memoryTools, ...tools])
     }
 
-    const effectiveSubAgents = includeSubAgents && !suppressAutoTools
+    const effectiveSubAgents = includeSubAgents
         ? (subAgentAssignments ?? preset.subAgents)
         : []
     const hasSubAgents = effectiveSubAgents.length > 0
@@ -138,10 +143,6 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         memoryFolderOverrides,
         scheduleExecutionConfig,
     })
-    // MCP configuration is an application-level capability, so it remains
-    // available even when the user has not selected any external tool yet.
-    tools = dedupeToolsByName([...tools, makeManageMcpTool()])
-
     return {
         tools,
         hasSubAgents,

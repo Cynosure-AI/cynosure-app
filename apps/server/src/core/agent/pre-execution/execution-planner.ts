@@ -1,7 +1,7 @@
 import { prepareAgentExecution } from '../prepare-execution.js'
 import { presetFromAgent, presetFromAgentless } from '../execution-preset.js'
 import { toExecutionPlanInput } from './execution-input.js'
-import { getBuiltInMemoryToolKeys, isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
+import { getBuiltInMemoryToolKeys, getBuiltInToolKey, isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
 import {
     buildPlanningStateContext,
     getLatestPlanningState,
@@ -13,7 +13,6 @@ import {
     PLANNING_SYSTEM_PROMPT,
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
-import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
 import type { ContextEvidence } from '@shared/types'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
@@ -69,6 +68,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     const allRegisteredToolKeys = toolRegistry.listRegisteredTools()
         .map((tool) => tool.key)
         .filter((key) => !isBuiltInMemoryToolKey(key))
+        .filter((key) => key !== getBuiltInToolKey('manage_mcp'))
     const effectiveAutoToolRouting = autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false
     const configuredTools = hasExplicitToolAllowlist
         ? selectedToolKeys
@@ -168,11 +168,7 @@ function applyPlanningIfToolCapable(
         return { tools, systemMessages }
     }
 
-    // manage_mcp is always available as a management capability. Its mere
-    // presence should not activate planning for an otherwise tool-free chat.
-    const hasVisibleExecutionTool = tools.some(
-        (tool) => tool.name !== MANAGE_MCP_TOOL_NAME && isVisibleExecutionTool(tool.name),
-    )
+    const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name))
     if (!hasVisibleExecutionTool) {
         return { tools, systemMessages }
     }

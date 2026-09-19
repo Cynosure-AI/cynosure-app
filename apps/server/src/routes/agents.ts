@@ -19,7 +19,6 @@ import { BUILTIN_NAMESPACES } from '../core/tools/built-in-tools.js'
 import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeAttachmentTools } from '../core/artifacts/attachment-rag.js'
-import { makeManageMcpTool } from '../core/tools/builtin/manage-mcp.js'
 import { getDefaultMemoryFolder } from '../core/memory/memory-folder-scope.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
@@ -191,16 +190,6 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
         const explicitApprovals = gate.getAllApprovals()
         const items = registry.listRegisteredTools()
         const dynamicBuiltIns = [
-            ...[makeManageMcpTool()].map((tool) => ({
-                key: `${BUILTIN_NAMESPACES.utility.id}::${tool.name}`,
-                name: tool.name,
-                executionName: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-                annotations: tool.annotations,
-                namespace: BUILTIN_NAMESPACES.utility,
-                ambiguous: false,
-            })),
             ...makePlanningTools('').map((tool) => ({
                 key: `${BUILTIN_NAMESPACES.utility.id}::${tool.name}`,
                 name: tool.name,
