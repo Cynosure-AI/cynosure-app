@@ -7,6 +7,7 @@ import ToolSelector from '../shared/ToolSelector.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId, memoryAutomaticToolStates } from '../../utils/internal-tools'
+import { DIRECT_TOOL_SELECTION_LIMIT } from '@shared/runtime-limits'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -15,6 +16,7 @@ const agentStore = useAgentStore()
 
 const hasMemoryScope = computed(() => (props.agent.memoryFolders?.length ?? 0) > 0)
 const hasSelectableExecutionTools = computed(() => props.agent.tools.length > 0 || props.agent.autoToolRouting)
+const usesSelectionCapRouting = computed(() => props.agent.tools.length > DIRECT_TOOL_SELECTION_LIMIT)
 
 const automaticToolStates = computed(() => ({
   todo_write: {
@@ -35,8 +37,8 @@ const automaticToolStates = computed(() => ({
     criteria: 'large indexed attachment available during chat',
   },
   expand_available_toolset: {
-    active: props.agent.autoToolRouting,
-    criteria: 'auto tool mode enabled',
+    active: props.agent.autoToolRouting || usesSelectionCapRouting.value,
+    criteria: `auto tool mode enabled or more than ${DIRECT_TOOL_SELECTION_LIMIT} tools selected`,
   },
   spawn_subagent: {
     active: (props.agent.subAgents?.length ?? 0) > 0,
@@ -76,9 +78,15 @@ function removeMissing() {
             <p class="text-sm font-medium text-theme-200">
               Automatic tool discovery
             </p>
+            <span
+              v-if="usesSelectionCapRouting && !agent.autoToolRouting"
+              class="rounded bg-accent-500/10 px-1.5 py-0.5 text-[10px] text-accent-300"
+            >
+              Auto for {{ agent.tools.length }} tools
+            </span>
           </div>
           <p class="mt-1 text-xs text-theme-500">
-            Discover a compact set of relevant registered tools for each request. Tools selected below are pinned and always kept; required internal tools are added separately.
+            Discover a compact set of relevant registered tools for each request. Up to {{ DIRECT_TOOL_SELECTION_LIMIT }} selected tools are sent directly and remain pinned. Above that limit, a relevant subset is selected automatically from only those tools, even when this switch is off. Required internal tools are added separately.
           </p>
         </div>
         <ToggleSwitch

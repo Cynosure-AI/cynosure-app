@@ -36,12 +36,12 @@ describe('chat run configuration', () => {
 
     test('resolves unique, existing memory folders while preserving request order', () => {
         const db = new Database(':memory:')
-        db.exec('CREATE TABLE memory_folders (id TEXT, name TEXT, directory_path TEXT, is_uncategorized INTEGER)')
-        db.prepare('INSERT INTO memory_folders VALUES (?, ?, ?, ?)').run('uncategorized', 'Uncategorized', '/tmp/memory', 1)
-        db.prepare('INSERT INTO memory_folders VALUES (?, ?, ?, ?)').run('project', 'Project', '/tmp/project', 0)
+        db.exec('CREATE TABLE memory_folders (id TEXT, name TEXT, description TEXT, directory_path TEXT, is_uncategorized INTEGER)')
+        db.prepare('INSERT INTO memory_folders VALUES (?, ?, ?, ?, ?)').run('uncategorized', 'Uncategorized', '', '/tmp/memory', 1)
+        db.prepare('INSERT INTO memory_folders VALUES (?, ?, ?, ?, ?)').run('project', 'Project', 'Delivery context', '/tmp/project', 0)
 
         expect(resolveMemoryFolderOverrides(db, [' project ', '', 'missing', 'uncategorized', 'project'])).toEqual([
-            { id: 'project', name: 'Project', folderPath: expect.any(String) },
+            { id: 'project', name: 'Project', description: 'Delivery context', folderPath: expect.any(String) },
             { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
         ])
         expect(resolveMemoryFolderOverrides(db)).toBeUndefined()

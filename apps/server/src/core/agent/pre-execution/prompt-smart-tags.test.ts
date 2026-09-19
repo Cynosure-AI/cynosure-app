@@ -16,13 +16,18 @@ describe('prompt smart tags', () => {
                 agentName: 'Researcher',
                 providerId: 'provider',
                 model: 'model',
-                selectedMemFolderNames: [' Project ', '', 'Project', 'Shared'],
+                selectedMemFolderNames: [
+                    { name: ' Project ', description: ' Active delivery work ' },
+                    '',
+                    { name: 'Project', description: 'Active delivery work' },
+                    'Shared',
+                ],
                 now: new Date('2026-05-06T07:08:09.000Z'),
             },
         )
 
         expect(result).toBe(
-            'Ada + Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Folders are: Project, Shared',
+            'Ada + Researcher/provider/model at 2026-05-06 07:08:09. Provided Memory Folders are: Project (description: Active delivery work), Shared',
         )
     })
 

@@ -308,7 +308,8 @@ function formatFolders(folders: MemoryFolderRef[]): string {
     if (folders.length === 0) return 'No memory folders exist yet.'
     return folders.map(s => {
         const path = s.folderPath ? `, folder: ${s.folderPath}` : ', folder: Uncategorized'
-        return `  - "${s.name}" (id: ${s.id}${path})`
+        const description = s.description?.trim() ? ` — ${s.description.trim()}` : ''
+        return `  - "${s.name}" (id: ${s.id}${path})${description}`
     }).join('\n')
 }
 
@@ -327,8 +328,16 @@ function makeScopeSummary(assignedFolders: MemoryFolderRef[]): string {
         const uncategorizedFolder = getDefaultMemoryFolder()
         return uncategorizedFolder ? `Scope: all memory folders; writes default to "${uncategorizedFolder.name}".` : 'Scope: no memory folders.'
     }
-    if (assignedFolders.length === 1) return `Scope: "${assignedFolders[0].name}" folder only.`
-    return `Scope: selected memory folders only (${assignedFolders.map(s => `"${s.name}"`).join(', ')}).`
+    if (assignedFolders.length === 1) {
+        const folder = assignedFolders[0]
+        const description = folder.description?.trim() ? ` Description: ${folder.description.trim()}` : ''
+        return `Scope: "${folder.name}" folder only.${description}`
+    }
+    const folders = assignedFolders.map((folder) => {
+        const description = folder.description?.trim() ? ` — ${folder.description.trim()}` : ''
+        return `"${folder.name}"${description}`
+    })
+    return `Scope: selected memory folders only (${folders.join('; ')}).`
 }
 
 function resolveReadableFolderFilter(

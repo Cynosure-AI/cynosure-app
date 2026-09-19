@@ -72,11 +72,12 @@ export function resolveMemoryFolderOverrides(
 
     const uniqueSpaceIds = Array.from(new Set(requestedSpaceIds.map((sid) => sid.trim()).filter(Boolean)))
     const selected = uniqueSpaceIds
-        .map((sid) => db.prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_folders WHERE id = ?').get(sid) as { id: string; name: string; directory_path: string; is_uncategorized: number } | undefined)
-        .filter((row): row is { id: string; name: string; directory_path: string; is_uncategorized: number } => Boolean(row))
+        .map((sid) => db.prepare('SELECT id, name, description, directory_path, is_uncategorized FROM memory_folders WHERE id = ?').get(sid) as { id: string; name: string; description: string; directory_path: string; is_uncategorized: number } | undefined)
+        .filter((row): row is { id: string; name: string; description: string; directory_path: string; is_uncategorized: number } => Boolean(row))
         .map((row) => ({
             id: row.id,
             name: row.name,
+            ...(row.description?.trim() ? { description: row.description.trim() } : {}),
             folderPath: row.is_uncategorized === 1 ? '' : folderPathForDirectory(row.directory_path),
         }))
     return expandMemoryFolderScope(selected, db)

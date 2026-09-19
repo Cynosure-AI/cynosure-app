@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import { lanceDbInFilter } from './lancedb-filter.js'
 import { listAllMemoryFolderRefs, folderPathForDirectory } from './memory-folder-directories.js'
 
-export type MemoryFolderRef = { id: string; name: string; folderPath?: string }
+export type MemoryFolderRef = { id: string; name: string; description?: string; folderPath?: string }
 
 const UNCATEGORIZED_CATEGORY_ID = 'uncategorized'
 const AUTO_EXCLUDED_MEMORY_FOLDER_NAMES = new Set(['archive', 'subconscious', 'secret', 'hidden'])
@@ -22,13 +22,22 @@ export function getDefaultMemoryFolder(): MemoryFolderRef | undefined {
     try {
         const db = getDb()
         const byFlag = db
-            .prepare('SELECT id, name FROM memory_folders WHERE is_uncategorized = 1 ORDER BY sort_order ASC, created_at ASC LIMIT 1')
-            .get() as MemoryFolderRef | undefined
-        if (byFlag) return byFlag
+            .prepare('SELECT id, name, description FROM memory_folders WHERE is_uncategorized = 1 ORDER BY sort_order ASC, created_at ASC LIMIT 1')
+            .get() as { id: string; name: string; description: string | null } | undefined
+        if (byFlag) return {
+            id: byFlag.id,
+            name: byFlag.name,
+            ...(byFlag.description?.trim() ? { description: byFlag.description.trim() } : {}),
+        }
 
-        return db
-            .prepare('SELECT id, name FROM memory_folders WHERE id = ?')
-            .get(UNCATEGORIZED_CATEGORY_ID) as MemoryFolderRef | undefined
+        const byId = db
+            .prepare('SELECT id, name, description FROM memory_folders WHERE id = ?')
+            .get(UNCATEGORIZED_CATEGORY_ID) as { id: string; name: string; description: string | null } | undefined
+        return byId ? {
+            id: byId.id,
+            name: byId.name,
+            ...(byId.description?.trim() ? { description: byId.description.trim() } : {}),
+        } : undefined
     } catch {
         return undefined
     }
@@ -43,16 +52,17 @@ export function getAssignedMemoryFolders(agentId: string): MemoryFolderRef[] {
         const db = getDb()
         const rows = db
             .prepare(
-                `SELECT ms.id, ms.name, ms.directory_path, ms.is_uncategorized
+                `SELECT ms.id, ms.name, ms.description, ms.directory_path, ms.is_uncategorized
          FROM agent_memory_folders ams
          JOIN memory_folders ms ON ms.id = ams.category_id
          WHERE ams.agent_id = ?`
             )
-            .all(agentId) as { id: string; name: string; directory_path: string; is_uncategorized: number }[]
+            .all(agentId) as { id: string; name: string; description: string; directory_path: string; is_uncategorized: number }[]
 
         const assigned = rows.map((row) => ({
             id: row.id,
             name: row.name,
+            ...(row.description?.trim() ? { description: row.description.trim() } : {}),
             folderPath: row.is_uncategorized === 1 ? '' : folderPathForDirectory(row.directory_path),
         }))
 

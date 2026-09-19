@@ -31,6 +31,7 @@ import { resolveExecutionTools } from './execution-tools.js'
 
 const manageMcpKey = 'builtin:utility::manage_mcp'
 const readKey = 'builtin:utility::read'
+const writeKey = 'builtin:utility::write'
 
 function tool(name: string, registryKey?: string): RegistryAwareToolDefinition {
     return {
@@ -57,6 +58,7 @@ function registry() {
     const tools = new Map([
         [manageMcpKey, tool('manage_mcp', manageMcpKey)],
         [readKey, tool('read', readKey)],
+        [writeKey, tool('write', writeKey)],
     ])
     return {
         listRegisteredTools: () => [...tools].map(([key, value]) => ({
@@ -96,14 +98,24 @@ describe('resolveExecutionTools selection', () => {
             preset: preset({ autoToolRouting: true }),
             autoToolRouting: true,
         }))
-        expect(disabled.tools.map(({ name }) => name)).toEqual(['read'])
+        expect(disabled.tools.map(({ name }) => name)).toEqual(['read', 'write'])
 
         const enabled = await resolveExecutionTools(input({
             preset: preset({ autoToolRouting: true }),
             autoToolRouting: true,
             preferredToolKeys: [manageMcpKey],
         }))
-        expect(enabled.tools.map(({ name }) => name)).toEqual(['manage_mcp', 'read'])
+        expect(enabled.tools.map(({ name }) => name)).toEqual(['manage_mcp', 'read', 'write'])
+    })
+
+    test('limits automatic routing candidates to an explicit routing catalogue', async () => {
+        const result = await resolveExecutionTools(input({
+            preset: preset({ tools: [readKey], autoToolRouting: true }),
+            autoToolRouting: true,
+            routingToolKeys: [readKey],
+        }))
+
+        expect(result.tools.map(({ name }) => name)).toEqual(['read'])
     })
 
     test('keeps configured Free Chat sub-agents when automatic external tools are suppressed', async () => {

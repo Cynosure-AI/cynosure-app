@@ -19,6 +19,19 @@ describe('memory mutation tool contracts', () => {
         ])
     })
 
+    test('includes configured folder descriptions in memory tool scope hints', () => {
+        const tool = makeMemorySearchTool({
+            assignedFolders: [
+                { id: 'project', name: 'Project', description: 'Current product delivery.' },
+                { id: 'shared', name: 'Shared' },
+            ],
+        })
+
+        expect(tool.description).toContain('"Project" — Current product delivery.')
+        expect(tool.description).toContain('"Shared"')
+        expect(tool.description).not.toContain('"Shared" —')
+    })
+
     test('exposes one contextual patch contract', () => {
         const tool = makeMemoryPatchTool({})
         expect(tool.parameters.required).toEqual(['fileRef', 'patch'])

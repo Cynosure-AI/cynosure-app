@@ -23,6 +23,7 @@ export interface ResolveExecutionToolsInput {
     recentMessages?: ChatMessage[]
     usedToolNames?: Set<string>
     preferredToolKeys?: string[]
+    routingToolKeys?: string[]
     autoToolRouting?: boolean
     autoMemory?: boolean
     includeSubAgents?: boolean
@@ -58,6 +59,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         recentMessages,
         usedToolNames,
         preferredToolKeys,
+        routingToolKeys,
         autoToolRouting,
         autoMemory,
         includeSubAgents = true,
@@ -77,8 +79,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
     const manageMcpEnabled = configuredToolKeys.includes(manageMcpToolKey)
         || preferredToolKeys?.includes(manageMcpToolKey) === true
     const toolKeys = routingEnabled
-        ? toolRegistry.listRegisteredTools()
-            .map((tool) => tool.key)
+        ? (routingToolKeys ?? toolRegistry.listRegisteredTools().map((tool) => tool.key))
             .filter((key) => key !== manageMcpToolKey || manageMcpEnabled)
         : configuredToolKeys
 

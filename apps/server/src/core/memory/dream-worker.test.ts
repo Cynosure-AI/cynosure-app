@@ -198,19 +198,19 @@ describe('Dream worker', () => {
         getDb().prepare("INSERT INTO agent_memory_folders(agent_id, category_id) VALUES ('agent-with-space', 'assigned')").run()
 
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"memoryFolderIds":["uncategorized"],"autoMemory":false}' })).toEqual([
-            { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
+            { id: 'uncategorized', name: 'Uncategorized', description: 'Memories that do not yet have a folder', folderPath: '' },
             { id: 'assigned', name: 'Assigned', folderPath: 'Assigned' },
         ])
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-with-space', execution_config_json: '{"autoMemory":false}' })).toEqual([
             expect.objectContaining({ id: 'assigned', name: 'Assigned' }),
         ])
         expect(resolveDreamCategories({ id: 'x', agent_id: 'agent-without-space', execution_config_json: '{"memoryFolderIds":[],"autoMemory":false}' })).toEqual([
-            { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
+            { id: 'uncategorized', name: 'Uncategorized', description: 'Memories that do not yet have a folder', folderPath: '' },
             { id: 'assigned', name: 'Assigned', folderPath: 'Assigned' },
         ])
         expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{"memoryFolderIds":["missing"]}' })).toEqual([])
         expect(resolveDreamCategories({ id: 'x', agent_id: null, execution_config_json: '{}' })).toEqual([
-            { id: 'uncategorized', name: 'Uncategorized', folderPath: '' },
+            { id: 'uncategorized', name: 'Uncategorized', description: 'Memories that do not yet have a folder', folderPath: '' },
             { id: 'assigned', name: 'Assigned', folderPath: 'Assigned' },
         ])
     })

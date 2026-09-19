@@ -5,6 +5,7 @@ import ModalDialog from '../../shared/ModalDialog.vue'
 import ToolSelector from '../../shared/ToolSelector.vue'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 import { memoryAutomaticToolStates } from '../../../utils/internal-tools'
+import { DIRECT_TOOL_SELECTION_LIMIT } from '@shared/runtime-limits'
 
 const chatStore = useChatStore()
 
@@ -13,6 +14,7 @@ const visible = defineModel<boolean>({ required: true })
 const hasMemoryScope = computed(() => chatStore.freeChatMemoryFolderIds.length > 0)
 const hasConversationAttachment = computed(() => chatStore.messages.some((message) => (message.fileAttachments?.length ?? 0) > 0))
 const hasSelectableExecutionTools = computed(() => chatStore.selectedToolNames.length > 0 || chatStore.sessionAutoToolRouting)
+const usesSelectionCapRouting = computed(() => chatStore.selectedToolNames.length > DIRECT_TOOL_SELECTION_LIMIT)
 
 const automaticToolStates = computed(() => ({
   todo_write: {
@@ -33,8 +35,8 @@ const automaticToolStates = computed(() => ({
     criteria: 'large indexed attachment available',
   },
   expand_available_toolset: {
-    active: chatStore.sessionAutoToolRouting,
-    criteria: 'auto tool mode enabled',
+    active: chatStore.sessionAutoToolRouting || usesSelectionCapRouting.value,
+    criteria: `auto tool mode enabled or more than ${DIRECT_TOOL_SELECTION_LIMIT} tools selected`,
   },
   spawn_subagent: {
     active: chatStore.freeChatSubAgentIds.length > 0,
@@ -75,14 +77,14 @@ function onAutoRoutingUpdate(enabled: boolean): void {
           <div class="flex items-center gap-2">
             <span class="text-xs font-medium text-theme-200">Automatic tool discovery</span>
             <span
-              v-if="chatStore.sessionAutoToolRouting"
+              v-if="chatStore.sessionAutoToolRouting || usesSelectionCapRouting"
               class="text-[10px] px-1.5 py-0.5 rounded bg-accent-500/10 text-accent-300"
             >
-              On
+              {{ chatStore.sessionAutoToolRouting ? 'On' : `Auto for ${chatStore.selectedToolNames.length} tools` }}
             </span>
           </div>
           <p class="mt-1 text-[11px] text-theme-500">
-            Uses recent context to discover a compact tool set. Selected tools are pinned and always retained. Context routing uses the current agent / selected model by default; agent overrides are configured in the Advanced tab.
+            Uses recent context to discover a compact tool set. Up to {{ DIRECT_TOOL_SELECTION_LIMIT }} selected tools are sent directly and remain pinned. Above that limit, a relevant subset is selected automatically from only those tools, even when this switch is off. Context routing uses the current agent / selected model by default; agent overrides are configured in the Advanced tab.
           </p>
         </div>
         <ToggleSwitch
