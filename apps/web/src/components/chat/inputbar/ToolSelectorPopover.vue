@@ -221,10 +221,10 @@ onBeforeUnmount(() => {
           </span>
           <div class="min-w-0 flex-1">
             <div class="text-xs font-semibold text-theme-100">
-              Tool access
+              Auto Tool Discovery
             </div>
             <div class="text-[10px] text-theme-500">
-              Discover and enable tools for this chat
+              Toggle to let the AI decide which tools to use for a task. You can still manually select tools below.
             </div>
           </div>
           <ToggleSwitch
