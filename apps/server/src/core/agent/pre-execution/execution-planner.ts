@@ -13,6 +13,7 @@ import {
     PLANNING_SYSTEM_PROMPT,
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
+import { DIRECT_TOOL_SELECTION_LIMIT } from '../../runtime-limits.js'
 import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
 import type { ContextEvidence } from '@shared/types'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
@@ -28,6 +29,13 @@ export interface PlannedExecution {
     planningRunId?: string
     chatAgentName?: string
     chatAgentIconUrl?: string | null
+}
+
+export interface ExecutionToolPolicy {
+    configuredTools: string[]
+    fixedToolKeys: string[]
+    routingToolKeys?: string[]
+    autoToolRouting: boolean
 }
 
 export async function planExecution(request: ExecutionRequest): Promise<PlannedExecution> {
@@ -69,24 +77,25 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         .map((tool) => tool.key)
         .filter((key) => !isBuiltInMemoryToolKey(key))
         .filter((key) => key !== getBuiltInToolKey('manage_mcp'))
-    const effectiveAutoToolRouting = autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false
-    const configuredTools = hasExplicitToolAllowlist
-        ? selectedToolKeys
-        : resolvedAgent
-            ? (stripAutomaticallyManagedMemoryToolKeys(resolvedAgent.tools).length ? stripAutomaticallyManagedMemoryToolKeys(resolvedAgent.tools) : (effectiveAutoToolRouting ? allRegisteredToolKeys : []))
-            : allRegisteredToolKeys
-    const fixedToolKeys = hasRequestToolSelection
-        ? selectedToolKeys
-        : stripAutomaticallyManagedMemoryToolKeys(resolvedAgent?.tools ?? [])
+    const agentToolKeys = stripAutomaticallyManagedMemoryToolKeys(resolvedAgent?.tools ?? [])
+    const toolPolicy = resolveExecutionToolPolicy({
+        selectedToolKeys,
+        hasRequestToolSelection,
+        agentToolKeys,
+        allRegisteredToolKeys,
+        hasExplicitToolAllowlist,
+        autoToolRouting: autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false,
+        hasResolvedAgent: Boolean(resolvedAgent),
+    })
 
     const effectiveSubAgents = requestedSubAgents ?? resolvedAgent?.subAgents ?? []
     const preset = resolvedAgent
         ? presetFromAgent(resolvedAgent, {
-            tools: configuredTools,
+            tools: toolPolicy.configuredTools,
             subAgents: effectiveSubAgents,
         })
         : presetFromAgentless({
-            tools: configuredTools,
+            tools: toolPolicy.configuredTools,
             subAgents: effectiveSubAgents,
             autoToolRouting: autoToolRouting === true,
             autoMemory,
@@ -105,11 +114,12 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         includeSubAgents: effectiveSubAgents.length > 0,
         subAgentAssignments: effectiveSubAgents,
         signal: abortSignal,
-        autoToolRouting,
+        autoToolRouting: toolPolicy.autoToolRouting,
         autoMemory,
         autoRouterProviderId,
         autoRouterModel,
-        preferredToolKeys: fixedToolKeys,
+        preferredToolKeys: toolPolicy.fixedToolKeys,
+        routingToolKeys: toolPolicy.routingToolKeys,
         usedToolNames,
         // Every current caller has already appended the active user turn to
         // `messages`. The routing passes receive it separately as `userQuery`,
@@ -155,6 +165,40 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
 export function stripAutomaticallyManagedMemoryToolKeys(toolKeys: string[]): string[] {
     const automaticallyManagedKeys = new Set(getBuiltInMemoryToolKeys())
     return toolKeys.filter((key) => !automaticallyManagedKeys.has(key))
+}
+
+export function resolveExecutionToolPolicy(input: {
+    selectedToolKeys: string[]
+    hasRequestToolSelection: boolean
+    agentToolKeys: string[]
+    allRegisteredToolKeys: string[]
+    hasExplicitToolAllowlist: boolean
+    autoToolRouting: boolean
+    hasResolvedAgent: boolean
+}): ExecutionToolPolicy {
+    const manualToolKeys = input.hasRequestToolSelection ? input.selectedToolKeys : input.agentToolKeys
+    if (manualToolKeys.length > DIRECT_TOOL_SELECTION_LIMIT) {
+        return {
+            configuredTools: manualToolKeys,
+            fixedToolKeys: [],
+            routingToolKeys: manualToolKeys,
+            autoToolRouting: true,
+        }
+    }
+
+    const configuredTools = input.hasExplicitToolAllowlist
+        ? input.selectedToolKeys
+        : input.hasResolvedAgent
+            ? (input.agentToolKeys.length
+                ? input.agentToolKeys
+                : (input.autoToolRouting ? input.allRegisteredToolKeys : []))
+            : input.allRegisteredToolKeys
+
+    return {
+        configuredTools,
+        fixedToolKeys: manualToolKeys,
+        autoToolRouting: input.autoToolRouting,
+    }
 }
 
 function applyPlanningIfToolCapable(

@@ -56,6 +56,8 @@ export interface PrepareExecutionInput {
     usedToolNames?: Set<string>
     /** Explicit tool registry keys that should be fixed into the routed tool set */
     preferredToolKeys?: string[]
+    /** Optional allowlist for the automatic router's candidate catalogue. */
+    routingToolKeys?: string[]
     /** Enable context-aware MCP tool routing for this execution */
     autoToolRouting?: boolean
     /** Enable automatic memory retrieval for this execution. */
@@ -215,6 +217,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         recentMessages: routingMessages,
         usedToolNames: input.usedToolNames,
         preferredToolKeys: input.preferredToolKeys,
+        routingToolKeys: input.routingToolKeys,
         autoToolRouting: input.autoToolRouting,
         autoMemory: input.autoMemory,
         includeSubAgents: input.includeSubAgents,
@@ -286,12 +289,12 @@ function uniqueQueries(values: Array<string | undefined>): string[] {
 function resolveSelectedMemoryFolderNames(
     agentId: string,
     memoryFolderOverrides: MemoryFolderRef[] | undefined,
-): string[] {
+): Array<{ name: string; description?: string }> {
     if (Array.isArray(memoryFolderOverrides)) {
-        return memoryFolderOverrides.map((space) => space.name)
+        return memoryFolderOverrides.map(({ name, description }) => ({ name, ...(description ? { description } : {}) }))
     }
 
     if (agentId === '__agentless__') return []
 
-    return getAssignedMemoryFolders(agentId).map((space) => space.name)
+    return getAssignedMemoryFolders(agentId).map(({ name, description }) => ({ name, ...(description ? { description } : {}) }))
 }

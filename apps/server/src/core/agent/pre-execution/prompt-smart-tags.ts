@@ -6,7 +6,7 @@ export interface PromptSmartTagContext {
     providerId?: string
     model?: string
     conversationId?: string
-    selectedMemFolderNames?: string[]
+    selectedMemFolderNames?: Array<string | { name: string; description?: string }>
     now?: Date
 }
 
@@ -50,10 +50,16 @@ function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartT
     }
 }
 
-function formatSelectedMemoryFolderNames(names: string[] | undefined): string {
-    const uniqueNames = Array.from(new Set((names ?? []).map((name) => name.trim()).filter(Boolean)))
-    return uniqueNames.length
-        ? `Provided Memory Folders are: ${uniqueNames.join(', ')}`
+function formatSelectedMemoryFolderNames(folders: PromptSmartTagContext['selectedMemFolderNames']): string {
+    const formatted = (folders ?? []).map((folder) => {
+        const name = (typeof folder === 'string' ? folder : folder.name).trim()
+        if (!name) return ''
+        const description = typeof folder === 'string' ? '' : folder.description?.trim()
+        return description ? `${name} (description: ${description})` : name
+    }).filter(Boolean)
+    const uniqueFolders = Array.from(new Set(formatted))
+    return uniqueFolders.length
+        ? `Provided Memory Folders are: ${uniqueFolders.join(', ')}`
         : ''
 }
 

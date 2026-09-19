@@ -176,17 +176,19 @@ export function syncMemoryFoldersFromFolders(db: Database.Database): MemoryFolde
     return rows
 }
 
-export function listAllMemoryFolderRefs(db: Database.Database): { id: string; name: string; folderPath: string }[] {
+export function listAllMemoryFolderRefs(db: Database.Database): { id: string; name: string; description?: string; folderPath: string }[] {
     syncMemoryFoldersFromFolders(db)
-    const rows = db.prepare('SELECT id, name, directory_path, is_uncategorized FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as {
+    const rows = db.prepare('SELECT id, name, description, directory_path, is_uncategorized FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as {
         id: string
         name: string
+        description: string
         directory_path: string
         is_uncategorized: number
     }[]
     return rows.map((row) => ({
         id: row.id,
         name: row.name,
+        ...(row.description?.trim() ? { description: row.description.trim() } : {}),
         folderPath: row.is_uncategorized === 1 ? '' : folderPathForDirectory(row.directory_path),
     }))
 }

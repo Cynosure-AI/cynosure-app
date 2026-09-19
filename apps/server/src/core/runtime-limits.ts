@@ -41,6 +41,9 @@ export const ATTACHMENT_TEXT_LIMITS: Readonly<{
 
 export const MAX_CHUNK_READ: number = 20
 
+/** Manual selections at or below this size are sent directly to the model. */
+export const DIRECT_TOOL_SELECTION_LIMIT: number = 30
+
 export const GRAPH_LIMITS: Readonly<{
   maxNodes: number
   defaultNodes: number
