@@ -16,6 +16,7 @@ describe('built-in tool categories', () => {
         ['schedule_create', 'builtin:scheduling', 'Built-In: Scheduling'],
         ['notify_user_in_app', 'builtin:notifications', 'Built-In: Notifications'],
         ['notify_user_on_channel', 'builtin:notifications', 'Built-In: Notifications'],
+        ['manage_mcp', 'builtin:utility', 'Built-In: Utility'],
         ['attachment_search', 'builtin:utility', 'Built-In: Utility'],
         ['spawn_subagent', 'builtin:utility', 'Built-In: Utility'],
         ['continue_subagent', 'builtin:utility', 'Built-In: Utility'],

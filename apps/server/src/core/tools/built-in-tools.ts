@@ -11,6 +11,7 @@ import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
 import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
 import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
+import { makeManageMcpTool } from "./builtin/manage-mcp.js";
 import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
@@ -89,6 +90,7 @@ interface BuiltInHydrationContext {
 }
 
 const BUILTIN_TOOL_HYDRATORS = {
+    manage_mcp: () => makeManageMcpTool(),
     notify_user_in_app: (ctx: BuiltInHydrationContext) => makeNotificationTool({
         agentId: ctx.agentId || "",
         conversationId: ctx.conversationId,
