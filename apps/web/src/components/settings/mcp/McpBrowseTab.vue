@@ -17,9 +17,10 @@ const registryServers = ref<McpRegistryServer[]>([])
 const registrySearch = ref('')
 const registrySource = ref<'recommended' | 'official' | 'smithery' | 'glama'>('recommended')
 const selectedRegistryServer = ref<McpRegistryServer | null>(null)
-const registryCursor = ref<string | undefined>(undefined)
+const registryPage = ref(1)
+const registryPageCursors = ref<Array<string | undefined>>([undefined])
+const registryNextCursor = ref<string | undefined>(undefined)
 const registryLoading = ref(false)
-const registryHasMore = ref(true)
 const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
 
@@ -38,6 +39,8 @@ const registryRows = computed<RegistryRow[]>(() =>
     id: entryId(entry.server),
   }))
 )
+const registryHasPrevious = computed(() => registryPage.value > 1)
+const registryHasNext = computed(() => Boolean(registryNextCursor.value))
 
 const registryTableColumns: Column<RegistryRow>[] = [
   { key: 'server', label: 'Server', width: 'minmax(0,4fr)', sortable: true, sortValue: item => getDisplayName(item.server) },
@@ -50,17 +53,17 @@ let currentAbortController: AbortController | null = null
 
 function resetRegistry(): void {
   if (searchTimer) { clearTimeout(searchTimer); searchTimer = null }
+  currentAbortController?.abort()
   registryServers.value = []
-  registryCursor.value = undefined
-  registryHasMore.value = true
+  registryPage.value = 1
+  registryPageCursors.value = [undefined]
+  registryNextCursor.value = undefined
 }
 
 watch(registrySearch, () => {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
-    registryServers.value = []
-    registryCursor.value = undefined
-    registryHasMore.value = true
+    resetRegistry()
     loadRegistry()
   }, 400)
 })
@@ -70,7 +73,7 @@ watch(registrySource, () => {
   loadRegistry()
 })
 
-async function loadRegistry(): Promise<void> {
+async function loadRegistry(page = 1, cursor?: string): Promise<void> {
   currentAbortController?.abort()
   currentAbortController = new AbortController()
   const { signal } = currentAbortController
@@ -79,21 +82,34 @@ async function loadRegistry(): Promise<void> {
   try {
     const data = await api.mcp.searchRegistry({
       search: registrySearch.value || undefined,
-      cursor: registryCursor.value,
+      cursor,
       limit: 20,
       registry: registrySource.value,
       signal,
     })
     if (signal.aborted) return
-    registryServers.value.push(...data.servers)
-    registryCursor.value = data.metadata.nextCursor
-    registryHasMore.value = !!data.metadata.nextCursor && data.metadata.count >= 20
+    registryServers.value = data.servers
+    registryPage.value = page
+    registryPageCursors.value[page - 1] = cursor
+    registryPageCursors.value = registryPageCursors.value.slice(0, page)
+    registryNextCursor.value = data.metadata.nextCursor
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') return
-    registryHasMore.value = false
+    registryNextCursor.value = undefined
   } finally {
     if (!signal.aborted) registryLoading.value = false
   }
+}
+
+function loadNextRegistryPage(): void {
+  if (!registryNextCursor.value || registryLoading.value) return
+  loadRegistry(registryPage.value + 1, registryNextCursor.value)
+}
+
+function loadPreviousRegistryPage(): void {
+  if (!registryHasPrevious.value || registryLoading.value) return
+  const previousPage = registryPage.value - 1
+  loadRegistry(previousPage, registryPageCursors.value[previousPage - 1])
 }
 
 function entryId(srv: McpRegistryServer['server']): string {
@@ -474,17 +490,10 @@ onMounted(() => {
     </template>
   </DataTable>
 
-  <!-- Load more / Loading -->
+  <!-- Registry pagination / Loading -->
   <div class="flex justify-center py-6">
-    <button
-      v-if="registryHasMore && !registryLoading"
-      class="px-4 py-2 bg-theme-800 hover:bg-theme-700 text-theme-300 text-sm rounded-lg transition-colors"
-      @click="loadRegistry"
-    >
-      Load More
-    </button>
     <div
-      v-else-if="registryLoading && registryRows.length > 0"
+      v-if="registryLoading && registryRows.length === 0"
       class="flex items-center gap-2 text-theme-500 text-sm"
     >
       <Icon
@@ -499,6 +508,36 @@ onMounted(() => {
     >
       No servers found{{ registrySearch ? ` for "${registrySearch}"` : '' }}
     </p>
+    <div
+      v-else-if="registryHasPrevious || registryHasNext"
+      class="flex items-center gap-3"
+      aria-label="Registry pagination"
+    >
+      <button
+        :disabled="!registryHasPrevious || registryLoading"
+        class="px-3 py-2 bg-theme-800 hover:bg-theme-700 disabled:opacity-40 disabled:cursor-not-allowed text-theme-300 text-sm rounded-lg transition-colors"
+        aria-label="Previous registry page"
+        @click="loadPreviousRegistryPage"
+      >
+        Previous
+      </button>
+      <span class="min-w-16 text-center text-theme-500 text-sm">
+        <Icon
+          v-if="registryLoading"
+          icon="lucide:loader-2"
+          class="inline-block w-4 h-4 animate-spin"
+        />
+        <template v-else>Page {{ registryPage }}</template>
+      </span>
+      <button
+        :disabled="!registryHasNext || registryLoading"
+        class="px-3 py-2 bg-theme-800 hover:bg-theme-700 disabled:opacity-40 disabled:cursor-not-allowed text-theme-300 text-sm rounded-lg transition-colors"
+        aria-label="Next registry page"
+        @click="loadNextRegistryPage"
+      >
+        Next
+      </button>
+    </div>
     <p
       v-else
       class="text-theme-600 text-xs"
