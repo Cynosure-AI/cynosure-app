@@ -287,3 +287,48 @@ export function ensureMemoryFolderPath(db: Database.Database, requestedPath: str
     for (const row of createdRows) watchMemoryFolder(row.id, row.directoryPath)
     return db.prepare('SELECT * FROM memory_folders WHERE directory_path = ?').get(directoryPathForRelative(folderPath)) as MemoryFolderDirectoryRow
 }
+
+/** Starter folders created on first launch so new users have a sensible structure. */
+const DEFAULT_MEMORY_FOLDER_PATHS = [
+    'Personal',
+    'People',
+    'Work',
+    'Hobbies',
+    'Notes & Ideas',
+    'Travel',
+] as const
+
+const DEFAULT_MEMORY_FOLDER_DESCRIPTIONS: Record<string, string> = {
+    'Personal': 'Identity, values, health, goals — everything about you',
+    'People': 'Contacts, friends, and family — who they are and what matters to them',
+    'Work': 'Career, projects, and professional knowledge',
+    'Hobbies': 'Interests, games, sports, and creative pursuits',
+    'Notes & Ideas': 'Scratch thoughts, references, and things worth remembering',
+    'Travel': 'Trips, places visited, and travel wishlist',
+}
+
+/**
+ * Create the starter memory folders on first launch. Only runs when the memory
+ * root contains no user folders yet, so existing installs and restored backups
+ * are never re-seeded.
+ */
+export function ensureDefaultMemoryFolders(db: Database.Database): void {
+    const root = ensureMemoryRoot()
+    const hasUserFolders = db.prepare('SELECT 1 FROM memory_folders WHERE is_uncategorized != 1 LIMIT 1').get()
+    if (hasUserFolders) return
+    if (discoverRelativeFolders(root).length > 0) return
+
+    for (const folderPath of DEFAULT_MEMORY_FOLDER_PATHS) {
+        try {
+            ensureMemoryFolderPath(db, folderPath)
+            const row = db.prepare('SELECT * FROM memory_folders WHERE directory_path = ?')
+                .get(directoryPathForRelative(folderPath)) as MemoryFolderDirectoryRow | undefined
+            if (row) {
+                db.prepare('UPDATE memory_folders SET description = ? WHERE id = ?')
+                    .run(DEFAULT_MEMORY_FOLDER_DESCRIPTIONS[folderPath] ?? '', row.id)
+            }
+        } catch {
+            // Never block startup over a starter folder (e.g. name collision with a file).
+        }
+    }
+}
