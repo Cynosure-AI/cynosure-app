@@ -94,4 +94,9 @@ test('completed Dream changes render a success summary and inline diff instead o
   expect(wrapper.text()).toContain('Favorite color: bluegreen')
   expect(wrapper.text()).not.toContain(rawOutput)
   expect(wrapper.find('.border-emerald-500\\/20').exists()).toBe(true)
+
+  await wrapper.get('article').trigger('click')
+  expect(mocks.push).toHaveBeenCalledWith({
+    path: '/memory-folders/documents', query: { folder: 'uncategorized', file: 'preferences.md' },
+  })
 })
