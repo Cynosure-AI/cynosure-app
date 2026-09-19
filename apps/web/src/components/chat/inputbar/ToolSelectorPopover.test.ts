@@ -61,8 +61,7 @@ describe('ToolSelectorPopover', () => {
     expect(document.body.querySelector('img[src="/github.png"]')).not.toBeNull()
     expect((document.body.querySelector('[aria-label="Tool access"]') as HTMLElement).style.maxHeight).toBe('484px')
 
-    const groupRow = document.body.querySelector('[role="menuitem"]') as HTMLElement
-    groupRow.click()
+    document.body.querySelector<HTMLButtonElement>('[aria-label="Open GitHub MCP tools"]')?.click()
     await nextTick()
 
     expect(document.body.textContent).toContain('Search repositories')
@@ -136,8 +135,7 @@ describe('ToolSelectorPopover', () => {
     })
 
     await wrapper.get('[data-test="trigger"]').trigger('click')
-    const groupRow = document.body.querySelector('[role="menuitem"]') as HTMLElement
-    groupRow.click()
+    document.body.querySelector<HTMLButtonElement>('[aria-label="Open GitHub MCP tools"]')?.click()
     await nextTick()
 
     expect(document.body.querySelectorAll('[role="menu"]')).toHaveLength(2)

@@ -342,16 +342,18 @@ onBeforeUnmount(() => {
                 />
               </span>
               <span class="min-w-0 flex-1 truncate text-xs">{{ group.namespace.label }}</span>
-              <div
+              <button
+                type="button"
                 class="flex rounded-lg hover:border hover:border-theme-600 group-hover:bg-theme-800/70 group-hover:text-theme-100 p-1 pl-2"
-                @click="showGroup(group.namespace.id)"
+                :aria-label="`Open ${group.namespace.label} tools`"
+                @click.stop="showGroup(group.namespace.id)"
               >
                 <span class="text-[10px] tabular-nums text-theme-600">{{ selectedCount(group) }}/{{ group.tools.length }}</span>
                 <Icon
                   icon="lucide:chevron-right"
                   class="h-3.5 w-3.5 shrink-0 text-theme-600 group-hover:text-theme-400"
                 />
-              </div>
+              </button>
             </div>
 
             <div
