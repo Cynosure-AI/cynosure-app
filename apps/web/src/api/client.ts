@@ -405,10 +405,9 @@ export const api = {
     /** List files in the space folder with their index status. Hash computation is async server-side. */
     listFiles: (folderId: string) =>
       get<MemoryFileStatus[]>(`/api/memory-folders/${memoryFolderPathId(folderId)}/files`),
-    searchFiles: (query: string, opts?: { folderId?: string; semantic?: boolean }) => {
+    searchFiles: (query: string, opts?: { folderId?: string }) => {
       const params = new URLSearchParams({ query })
       if (opts?.folderId) params.set('folderId', opts.folderId)
-      if (opts?.semantic) params.set('semantic', 'true')
       return get<MemoryFileSearchResult[]>(`/api/memory-folders/file-search?${params.toString()}`)
     },
     getDocumentKnowledgePreview: (folderId: string, fileName: string) =>

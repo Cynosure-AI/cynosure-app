@@ -8,12 +8,14 @@ describe('global memory file search', () => {
   let dataDirectory = ''
   let firstFolder = ''
   let secondFolder = ''
+  let childFolder = ''
 
   beforeEach(async () => {
     dataDirectory = await mkdtemp(join(tmpdir(), 'cynosure-memory-file-search-'))
     firstFolder = join(dataDirectory, 'memory-a')
     secondFolder = join(dataDirectory, 'memory-b')
-    await Promise.all([mkdir(firstFolder), mkdir(secondFolder)])
+    childFolder = join(firstFolder, 'child')
+    await Promise.all([mkdir(childFolder, { recursive: true }), mkdir(secondFolder)])
     process.env.CYNOSURE_DATA_DIR = dataDirectory
   })
 
@@ -30,15 +32,19 @@ describe('global memory file search', () => {
     const { getDb } = await import('../../../src/db/database.js')
     const { computeFileHash } = await import('../../../src/core/memory/memory-file-manager.js')
     const { MemoryKnowledgeStore } = await import('../../../src/core/memory/memory-knowledge.js')
+    const { getAgentMemory } = await import('../../../src/core/memory/agent-memory.js')
     const { registerMemoryFoldersRoutes } = await import('../../../src/routes/memory-folders.js')
     await writeFile(join(firstFolder, 'alpha.md'), '# Alpha\nPlain source wording.')
     await writeFile(join(secondFolder, 'roadmap.md'), '# Roadmap\nMilestones.')
+    await writeFile(join(childFolder, 'nested-plan.md'), '# Nested plan\nDelivery notes.')
     const db = getDb()
     const now = Date.now()
     db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
       .run('folder-a', 'Archive', firstFolder, 1, now)
     db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
       .run('folder-b', 'Projects', secondFolder, 2, now)
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
+      .run('folder-c', 'Child', childFolder, 3, now)
     const alphaHash = computeFileHash(join(firstFolder, 'alpha.md'))
     db.prepare(`INSERT INTO memory_file_index (document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, created_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`)
       .run('doc-alpha', 'ref-alpha', 'folder-a', 'alpha.md', alphaHash, now, now, now)
@@ -64,18 +70,8 @@ describe('global memory file search', () => {
     expect(scopedMiss.json()).toEqual([])
     const scopedMatch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=roadmap&folderId=folder-b' })
     expect(scopedMatch.json()).toEqual([expect.objectContaining({ fileName: 'roadmap.md', folderId: 'folder-b' })])
-
-    const { getAgentMemory } = await import('../../../src/core/memory/agent-memory.js')
-    const recall = vi.spyOn(getAgentMemory(), 'recall').mockResolvedValue([{
-      id: 'chunk-alpha', text: 'Plain source wording.', source: 'permanent', score: 0.9,
-      sourceFile: 'alpha.md', folderId: 'folder-a', chunkIndex: 0,
-    }])
-    const semanticResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=architecture&folderId=folder-a&semantic=true' })
-    expect(semanticResponse.json()).toEqual([expect.objectContaining({
-      fileName: 'alpha.md', folderId: 'folder-a', matchedFields: ['content'],
-    })])
-    expect(recall).toHaveBeenCalledWith('architecture', 100, expect.any(String))
-    recall.mockRestore()
+    const recursiveMatch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=nested-plan&folderId=folder-a' })
+    expect(recursiveMatch.json()).toEqual([expect.objectContaining({ fileName: 'nested-plan.md', folderId: 'folder-c' })])
 
     const analysisResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-a/files/alpha.md/analysis' })
     expect(analysisResponse.json()).toEqual(expect.objectContaining({
