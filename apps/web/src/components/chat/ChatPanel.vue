@@ -367,30 +367,221 @@ watch(() => chatStore.loadingMessages, (isLoading) => {
 // ─── Time-based greeting ────────────────────────────────────
 
 const HOURLY_GREETINGS: Record<number, string[]> = {
-  0:  ['Midnight mode.', 'Still building?', 'Late-night runtime online.'],
-  1:  ['Quiet hours.', 'Deep work or debugging?', 'Burning the midnight oil?'],
-  2:  ['Night shift active.', 'Still up?', 'Everything is quieter at 2 AM.'],
-  3:  ['Graveyard session.', 'Late-night ideas?', 'The system is still awake.'],
-  4:  ['Almost morning.', 'Early start or late finish?', 'Pre-dawn focus.'],
-  5:  ['Early start.', 'Good morning.', 'Fresh run, fresh context.'],
-  6:  ['Morning boot-up.', 'Ready when you are.', 'Good morning.'],
-  7:  ['Good morning.', 'What are we building today?', 'New day, clean slate.'],
-  8:  ['Morning focus.', 'Let’s get started.', 'What should we tackle first?'],
-  9:  ['Work mode online.', 'Good morning.', 'Ready for the first task.'],
-  10: ['Mid-morning check-in.', 'What needs attention?', 'Let’s make progress.'],
-  11: ['Almost lunch.', 'What are we solving next?', 'Still in the flow.'],
-  12: ['Lunchtime.', 'Midday check-in.', 'Taking a break or pushing on?'],
-  13: ['Back from lunch?', 'Early afternoon mode.', 'What’s next on the list?'],
-  14: ['Afternoon focus.', 'Let’s keep momentum.', 'What are we improving?'],
-  15: ['Mid-afternoon run.', 'Still going strong.', 'Time to refine things.'],
-  16: ['Late-afternoon focus.', 'What should we finish today?', 'Let’s close some loops.'],
-  17: ['Wrapping up or diving in?', 'End-of-day push.', 'What still needs doing?'],
-  18: ['Good evening.', 'Evening session?', 'What are we working on tonight?'],
-  19: ['Evening mode.', 'Ready for a calmer session.', 'What’s on your mind?'],
-  20: ['Night work?', 'Evening focus.', 'Let’s build something useful.'],
-  21: ['Late-evening session.', 'Ideas after hours?', 'What should we explore?'],
-  22: ['Night mode.', 'Still productive?', 'Quiet time, sharp thoughts.'],
-  23: ['Almost midnight.', 'Final task before shutdown?', 'Late-night thoughts?'],
+  0: [
+    'Midnight mode.',
+    'Still building?',
+    'Late-night runtime online.',
+    'New day, same session?',
+    'Past midnight already.',
+    'One more thing before sleep?',
+  ],
+
+  1: [
+    'Quiet hours.',
+    'Deep work or debugging?',
+    'Burning the midnight oil?',
+    'The world is mostly offline.',
+    'Late-night focus.',
+    'Still something to solve?',
+  ],
+
+  2: [
+    'Night shift active.',
+    'Still up?',
+    'Everything is quieter at 2 AM.',
+    'Prime time for questionable ideas.',
+    'Deep into the night.',
+    'What’s keeping us busy?',
+  ],
+
+  3: [
+    'Graveyard session.',
+    'Late-night ideas?',
+    'The system is still awake.',
+    'This definitely counts as late.',
+    '3 AM engineering?',
+    'What are we still fixing?',
+  ],
+
+  4: [
+    'Almost morning.',
+    'Early start or late finish?',
+    'Pre-dawn focus.',
+    'The morning shift is approaching.',
+    'Still running?',
+    'One last push before sunrise?',
+  ],
+
+  5: [
+    'Early start.',
+    'Good morning.',
+    'Fresh run, fresh context.',
+    'Up before the noise.',
+    'Starting early today?',
+    'Morning systems online.',
+  ],
+
+  6: [
+    'Morning boot-up.',
+    'Ready when you are.',
+    'Good morning.',
+    'Early momentum.',
+    'Fresh start?',
+    'Let’s get the day moving.',
+  ],
+
+  7: [
+    'Good morning.',
+    'What are we building today?',
+    'New day, clean slate.',
+    'Morning. What’s first?',
+    'Ready to get started?',
+    'What deserves attention today?',
+  ],
+
+  8: [
+    'Morning focus.',
+    'Let’s get started.',
+    'What should we tackle first?',
+    'Time to get things moving.',
+    'What’s first on the list?',
+    'Ready for a productive morning?',
+  ],
+
+  9: [
+    'Work mode online.',
+    'Good morning.',
+    'Ready for the first task.',
+    'Morning momentum.',
+    'What are we working on?',
+    'Let’s make something happen.',
+  ],
+
+  10: [
+    'Mid-morning check-in.',
+    'What needs attention?',
+    'Let’s make progress.',
+    'Already in the flow?',
+    'What are we improving today?',
+    'Ready for the next task?',
+  ],
+
+  11: [
+    'Almost lunch.',
+    'What are we solving next?',
+    'Still in the flow.',
+    'One more thing before lunch?',
+    'Late-morning focus.',
+    'What’s next?',
+  ],
+
+  12: [
+    'Lunchtime.',
+    'Midday check-in.',
+    'Taking a break or pushing on?',
+    'Halfway through the day.',
+    'Midday mode.',
+    'What are we tackling this afternoon?',
+  ],
+
+  13: [
+    'Back from lunch?',
+    'Early afternoon mode.',
+    'What’s next on the list?',
+    'Afternoon session starting?',
+    'Ready for round two?',
+    'Let’s pick things back up.',
+  ],
+
+  14: [
+    'Afternoon focus.',
+    'Let’s keep momentum.',
+    'What are we improving?',
+    'Back into the flow.',
+    'What needs solving?',
+    'Plenty of day left.',
+  ],
+
+  15: [
+    'Mid-afternoon run.',
+    'Still going strong.',
+    'Time to refine things.',
+    'What are we polishing?',
+    'Afternoon momentum.',
+    'Let’s knock something out.',
+  ],
+
+  16: [
+    'Late-afternoon focus.',
+    'What should we finish today?',
+    'Let’s close some loops.',
+    'What’s still open?',
+    'End-of-day tasks incoming?',
+    'Time to wrap up the important stuff.',
+  ],
+
+  17: [
+    'Wrapping up or diving in?',
+    'End-of-day push.',
+    'What still needs doing?',
+    'One last productive stretch?',
+    'Closing time approaches.',
+    'Anything worth finishing today?',
+  ],
+
+  18: [
+    'Good evening.',
+    'Evening session?',
+    'What are we working on tonight?',
+    'Workday over — or not quite?',
+    'Evening mode online.',
+    'What’s the plan for tonight?',
+  ],
+
+  19: [
+    'Evening mode.',
+    'Ready for a calmer session.',
+    'What’s on your mind?',
+    'Back for another round?',
+    'Evening focus.',
+    'What are we exploring tonight?',
+  ],
+
+  20: [
+    'Night work?',
+    'Evening focus.',
+    'Let’s build something useful.',
+    'Quiet hours are starting.',
+    'What are we making tonight?',
+    'Time for a side project?',
+  ],
+
+  21: [
+    'Late-evening session.',
+    'Ideas after hours?',
+    'What should we explore?',
+    'Night session starting?',
+    'Still got some momentum?',
+    'Good time for experiments.',
+  ],
+
+  22: [
+    'Night mode.',
+    'Still productive?',
+    'Quiet time, sharp thoughts.',
+    'Late-night focus.',
+    'One more problem to solve?',
+    'The distractions are gone.',
+  ],
+
+  23: [
+    'Almost midnight.',
+    'Final task before shutdown?',
+    'Late-night thoughts?',
+    'Calling it soon?',
+    'One last session?',
+    'Let’s finish the day strong.',
+  ],
 }
 
 function getRandomHourlyGreeting(): string {
