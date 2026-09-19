@@ -45,6 +45,7 @@ describe('agent-required execution tools', () => {
             ...getBuiltInMemoryReadToolKeys(),
             'builtin:memory::memory_create',
             'builtin:memory::memory_patch',
+            'builtin:memory::memory_delete',
         ])
     })
 })

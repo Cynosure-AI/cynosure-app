@@ -264,7 +264,7 @@ function memoryLocationFromToolOutput(output: string): Pick<ActivityItem, 'memor
     if (!documentRef) return {}
     const document = getDb().prepare(`
         SELECT category_id, file_name FROM memory_documents
-        WHERE document_ref = ? AND status = 'active'
+        WHERE document_ref = ?
     `).get(documentRef) as { category_id: string; file_name: string } | undefined
     return document ? { memoryFolderId: document.category_id, memoryFileName: document.file_name } : {}
 }
@@ -299,7 +299,7 @@ function dreamChangeForActivity(change: DreamChange): ActivityDreamChange {
     const revisionLabel = previousRevision !== undefined && revision !== undefined
         ? ` · revision ${previousRevision} → ${revision}`
         : revision !== undefined ? ` · revision ${revision}` : ''
-    const action = change.tool === 'memory_create' ? 'Created' : 'Updated'
+    const action = change.tool === 'memory_create' ? 'Created' : change.tool === 'memory_delete' ? 'Deleted' : 'Updated'
     return {
         tool: change.tool,
         output: change.output,

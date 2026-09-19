@@ -16,6 +16,7 @@ import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryPatchTool,
+    makeMemoryDeleteTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -30,6 +31,7 @@ export {
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryPatchTool,
+    makeMemoryDeleteTool,
     makeKnowledgeSearchTool,
     makeKnowledgeAssertTool,
     makeKnowledgeDeleteTool,
@@ -113,6 +115,10 @@ const BUILTIN_TOOL_HYDRATORS = {
         assignedFolders: ctx.assignedFolders,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
+    memory_delete: (ctx: BuiltInHydrationContext) => makeMemoryDeleteTool({
+        assignedFolders: ctx.assignedFolders,
+        revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
+    }),
     knowledge_search: (ctx: BuiltInHydrationContext) => makeKnowledgeSearchTool({ assignedFolders: ctx.assignedFolders }),
     knowledge_assert: (ctx: BuiltInHydrationContext) => makeKnowledgeAssertTool({ assignedFolders: ctx.assignedFolders }),
     knowledge_delete: (ctx: BuiltInHydrationContext) => makeKnowledgeDeleteTool({ assignedFolders: ctx.assignedFolders }),
@@ -167,6 +173,7 @@ export function getBuiltInMemoryToolKeys(): string[] {
         ...getBuiltInMemoryReadToolKeys(),
         getBuiltInToolKey('memory_create'),
         getBuiltInToolKey('memory_patch'),
+        getBuiltInToolKey('memory_delete'),
     ];
 }
 

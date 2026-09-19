@@ -9,6 +9,7 @@ import { ensureMemoryFolderPath, folderPathForDirectory } from '../../memory/mem
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
 import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
 import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
+import { deleteMemoryKnowledgeSource } from '../../memory/memory-deep-research.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
     parseMemoryDocumentRef,
@@ -57,6 +58,7 @@ export const MEMORY_READ_TOOL_NAMES = [
 export const MEMORY_WRITE_TOOL_NAMES = [
     'memory_create',
     'memory_patch',
+    'memory_delete',
 ] as const
 
 export const MEMORY_TOOL_NAMES = [
@@ -586,7 +588,7 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
         annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         description:
             'Search canonical memory files using the derived hybrid retrieval index. ' +
-            'Returns expanded canonical excerpts with a stable fileRef for memory_patch; revision tracking is handled internally. ' +
+            'Returns expanded canonical excerpts with a stable fileRef for memory_patch or memory_delete; revision tracking is handled internally. ' +
             'Retrieval chunk identifiers and boundaries are intentionally hidden. ' +
             'Selected memory folders are treated as one unified knowledge base — use the optional "folder" parameter to filter to a specific folder. ' +
             makeScopeSummary(assignedFolders),
@@ -1289,6 +1291,63 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 } catch (error) {
                     return patchConflict('patch_application_failed', (error as Error).message)
                 }
+            })
+        },
+    }
+}
+
+/**
+ * Create a `memory_delete` tool that archives a canonical memory file and
+ * removes all of its derived retrieval and knowledge indexes.
+ */
+export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
+    const { assignedFolders = [] } = opts
+    const getKnownFolders = createKnownMemoryFoldersLoader()
+    return {
+        name: 'memory_delete',
+        execution: { readOnly: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+        description: 'Delete an entire canonical memory file. The source is archived in the memory folder trash, and its retrieval and source-derived knowledge indexes are removed. Use the fileRef returned by memory_search. Use memory_patch instead when only part of a file is obsolete.',
+        parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                fileRef: { type: 'string', description: 'Stable canonical file reference returned by memory_search (for example user-profile#4k8z2q).' },
+            },
+            required: ['fileRef'],
+        },
+        outputSchema: {
+            type: 'object',
+            required: ['status', 'fileRef', 'fileName', 'folder'],
+            properties: {
+                status: { type: 'string', enum: ['deleted'] },
+                fileRef: { type: 'string' },
+                fileName: { type: 'string' },
+                folder: { type: 'string' },
+            },
+        },
+        timeout: 120_000,
+        execute: async (params: unknown, signal?: AbortSignal) => {
+            const input = (params || {}) as { fileRef?: string }
+            const initial = resolveMemoryFileRef(input.fileRef ?? '', assignedFolders, getKnownFolders)
+            if ('error' in initial) return { success: false, output: initial.error }
+            return withMemoryDocumentLock(initial.documentId, signal, async () => {
+                const resolved = resolveMemoryFileRef(input.fileRef ?? '', assignedFolders, getKnownFolders)
+                if ('error' in resolved) return { success: false, output: resolved.error }
+                const current = readTextFile(resolved.directoryPath, resolved.fileName)
+                opts.beforeDocumentMutation?.(resolved.documentId, current)
+                signal?.throwIfAborted()
+                cancelMemoryIndexJobsForFile(resolved.folderId, resolved.fileName)
+                await getAgentMemory().deleteSourceFile(resolved.fileName, resolved.folderId)
+                deleteMemoryKnowledgeSource(resolved.folderId, resolved.fileName)
+                opts.onDocumentMutated?.(resolved.documentId)
+                const result = {
+                    status: 'deleted' as const,
+                    fileRef: resolved.documentRef,
+                    fileName: resolved.fileName,
+                    folder: resolved.folderName,
+                }
+                return { success: true, output: JSON.stringify(result), structuredContent: result }
             })
         },
     }
