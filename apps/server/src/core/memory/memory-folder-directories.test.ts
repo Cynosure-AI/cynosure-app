@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
   AGENT_MEMORY_FOLDER_NAME,
+  ensureDefaultMemoryFolders,
   ensureMemoryFolderPath,
   isIgnoredMemoryFolderName,
   removeEmptyMemoryFolderFolders,
@@ -110,5 +111,52 @@ describe('memory folder directories', () => {
     expect(existsSync(branch)).toBe(false)
     expect(existsSync(join(memoryRoot, 'Projects', 'Finished'))).toBe(false)
     expect(existsSync(join(memoryRoot, 'Projects'))).toBe(true)
+  })
+
+  test('seeds default starter folders only on first launch', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE memory_folders (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        directory_path TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0,
+        is_uncategorized INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+      );
+      CREATE TABLE memory_file_index (category_id TEXT);
+      CREATE TABLE agent_memory_folders (category_id TEXT);
+    `)
+    const memoryRoot = join(dataDir, 'data', 'memories')
+    mkdirSync(memoryRoot, { recursive: true })
+    db.prepare(`INSERT INTO memory_folders
+      (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
+      VALUES ('uncategorized', 'Uncategorized', '', ?, 0, 1, ?)`)
+      .run(memoryRoot, Date.now())
+
+    ensureDefaultMemoryFolders(db)
+
+    const names = db.prepare('SELECT name FROM memory_folders WHERE is_uncategorized != 1 ORDER BY directory_path')
+      .all() as { name: string }[]
+    expect(names.map(row => row.name)).toEqual([
+      'Hobbies', 'Notes & Ideas', 'People', 'Personal', 'Travel', 'Work',
+    ])
+    expect(existsSync(join(memoryRoot, 'Personal'))).toBe(true)
+    expect(existsSync(join(memoryRoot, 'Travel'))).toBe(true)
+    const personal = db.prepare("SELECT description FROM memory_folders WHERE name = 'Personal'").get() as { description: string }
+    expect(personal.description).toContain('Identity')
+
+    // Existing user folders prevent re-seeding.
+    ensureMemoryFolderPath(db, 'Custom')
+    ensureDefaultMemoryFolders(db)
+    expect(db.prepare("SELECT COUNT(*) FROM memory_folders WHERE name = 'Custom'").pluck().get()).toBe(1)
+    expect(db.prepare("SELECT COUNT(*) FROM memory_folders WHERE name = 'Hobbies'").pluck().get()).toBe(1)
+
+    // An empty install with pre-existing directories on disk is also left alone.
+    db.prepare('DELETE FROM memory_folders WHERE is_uncategorized != 1').run()
+    rmSync(memoryRoot, { recursive: true, force: true })
+    mkdirSync(join(memoryRoot, 'Existing'), { recursive: true })
+    ensureDefaultMemoryFolders(db)
+    expect(db.prepare("SELECT COUNT(*) FROM memory_folders WHERE name = 'Existing'").pluck().get()).toBe(0)
+    expect(db.prepare("SELECT COUNT(*) FROM memory_folders WHERE name = 'Work'").pluck().get()).toBe(0)
+
+    db.close()
   })
 })

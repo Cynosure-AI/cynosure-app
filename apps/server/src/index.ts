@@ -38,7 +38,7 @@ import { registerBackupRoutes } from './routes/backup.js'
 import { registerChannelRoutes } from './routes/channels.js'
 import { registerMemoryFoldersRoutes } from './routes/memory-folders.js'
 import { stopAllMemoryFolderWatchers } from './core/memory/memory-folder-watcher.js'
-import { syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
+import { ensureDefaultMemoryFolders, syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
@@ -300,9 +300,11 @@ async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<v
   })
 }
 
-/** Start filesystem watchers for all existing memory folders (sync also watches each row). */
+/** Seed starter folders on first launch, then start filesystem watchers for all memory folders. */
 function startMemoryFolderWatchers(): void {
-  syncMemoryFoldersFromFolders(getDb())
+  const db = getDb()
+  ensureDefaultMemoryFolders(db)
+  syncMemoryFoldersFromFolders(db)
 }
 
 async function startServer(options: StartServerOptions): Promise<RunningServer> {
