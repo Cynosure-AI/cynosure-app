@@ -157,7 +157,10 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
             // ── Official MCP registry (default) ──
             while (collectedServers.length < targetLimit) {
                 const params = new URLSearchParams()
-                params.set('limit', '50')
+                // Only request as many upstream rows as this page can still hold.
+                // Advancing an opaque cursor past a larger response would otherwise
+                // skip installable servers that did not fit in the current page.
+                params.set('limit', String(targetLimit - collectedServers.length))
                 if (search) params.set('search', search)
                 if (currentCursor) params.set('cursor', currentCursor)
 
