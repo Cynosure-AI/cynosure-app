@@ -20,13 +20,10 @@ const { servers, loadServers } = useMcpServers()
 
 const root = ref<HTMLElement | null>(null)
 const menu = ref<HTMLElement | null>(null)
-const submenu = ref<HTMLElement | null>(null)
 const open = ref(false)
 const search = ref('')
 const activeNamespaceId = ref<string | null>(null)
 const menuStyle = ref<CSSProperties>({})
-const submenuStyle = ref<CSSProperties>({})
-const namespaceRows = new Map<string, HTMLElement>()
 const brokenIcons = ref<Set<string>>(new Set())
 
 const selectableTools = computed(() => agentStore.availableTools.filter(isSelectableTool))
@@ -111,11 +108,6 @@ function markIconBroken(namespaceId: string): void {
   brokenIcons.value = new Set([...brokenIcons.value, namespaceId])
 }
 
-function setNamespaceRow(namespaceId: string, element: unknown): void {
-  if (element instanceof HTMLElement) namespaceRows.set(namespaceId, element)
-  else namespaceRows.delete(namespaceId)
-}
-
 function updateMenuPosition(): void {
   const rect = root.value?.getBoundingClientRect()
   if (!rect) return
@@ -137,34 +129,14 @@ function updateMenuPosition(): void {
     maxHeight: `${Math.min(preferredHeight, availableHeight)}px`,
     ...position,
   }
-  updateSubmenuPosition()
 }
 
-function updateSubmenuPosition(): void {
-  if (!activeNamespaceId.value) return
-  const row = namespaceRows.get(activeNamespaceId.value)
-  const menuRect = menu.value?.getBoundingClientRect()
-  const rowRect = row?.getBoundingClientRect()
-  if (!menuRect || !rowRect) return
-
-  const padding = 8
-  const width = Math.min(320, window.innerWidth - padding * 2)
-  const openRight = menuRect.right + width <= window.innerWidth - padding
-  const left = openRight ? menuRect.right : menuRect.left - width
-  const estimatedHeight = Math.min(440, 62 + (activeGroup.value?.tools.length ?? 0) * 54)
-  const top = Math.max(padding, Math.min(rowRect.top, window.innerHeight - estimatedHeight - padding))
-  submenuStyle.value = {
-    width: `${width}px`,
-    left: `${Math.max(padding, Math.min(left, window.innerWidth - width - padding))}px`,
-    top: `${top}px`,
-    maxHeight: `${window.innerHeight - top - padding}px`,
-  }
-}
-
-async function showGroup(namespaceId: string): Promise<void> {
+function showGroup(namespaceId: string): void {
   activeNamespaceId.value = namespaceId
-  await nextTick()
-  updateSubmenuPosition()
+}
+
+function showNamespaceList(): void {
+  activeNamespaceId.value = null
 }
 
 function close(): void {
@@ -188,7 +160,7 @@ function handleEscape(): void {
   else close()
 }
 
-onClickOutside(root, close, { ignore: [menu, submenu] })
+onClickOutside(root, close, { ignore: [menu] })
 
 watch(open, (isOpen) => {
   if (isOpen && servers.value.length === 0) void loadServers().catch(() => undefined)
@@ -264,88 +236,132 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <div class="border-b border-theme-800 p-2">
-          <label class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-1.5 focus-within:ring-1 focus-within:ring-accent-500">
-            <Icon
-              icon="lucide:search"
-              class="h-3.5 w-3.5 shrink-0 text-theme-500"
-            />
-            <input
-              v-model="search"
-              type="search"
-              class="min-w-0 flex-1 bg-transparent text-xs text-theme-200 outline-none placeholder:text-theme-600"
-              placeholder="Search MCPs and tools..."
-              aria-label="Search MCPs and tools"
-            >
-          </label>
-        </div>
-
-        <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
-          <div
-            v-for="group in groups"
-            :key="group.namespace.id"
-            :ref="(element) => setNamespaceRow(group.namespace.id, element)"
-            class="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors"
-            :class="activeNamespaceId === group.namespace.id ? 'bg-theme-800 text-theme-100' : 'text-theme-300 hover:bg-theme-800/70 hover:text-theme-100'"
-            role="menuitem"
-            tabindex="0"
-            aria-haspopup="menu"
-            :aria-expanded="activeNamespaceId === group.namespace.id"
-            @mouseenter="showGroup(group.namespace.id)"
-            @focus="showGroup(group.namespace.id)"
-            @click="showGroup(group.namespace.id)"
-            @keydown.enter.prevent="showGroup(group.namespace.id)"
-            @keydown.space.prevent="showGroup(group.namespace.id)"
+        <template v-if="activeGroup">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 border-b border-theme-800 px-3 py-2.5 text-left text-xs text-theme-300 hover:bg-theme-800 hover:text-theme-100"
+            aria-label="Back to MCP list"
+            @click="showNamespaceList"
           >
-            <button
-              type="button"
-              class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
-              :class="isGroupSelected(group) || isGroupPartiallySelected(group) ? 'border-accent-500 bg-accent-500 text-white' : 'border-theme-600 bg-theme-950'"
-              role="checkbox"
-              :aria-checked="isGroupPartiallySelected(group) ? 'mixed' : isGroupSelected(group)"
-              :aria-label="`Toggle all tools in ${group.namespace.label}`"
-              @click.stop="toggleGroup(group)"
+            <Icon
+              icon="lucide:chevron-left"
+              class="h-4 w-4 shrink-0"
+            />
+            <span class="min-w-0 flex-1 truncate font-medium">{{ activeGroup.namespace.label }}</span>
+            <span class="text-[10px] tabular-nums text-theme-600">{{ selectedCount(activeGroup) }}/{{ activeGroup.tools.length }}</span>
+          </button>
+
+          <div
+            class="min-h-0 flex-1 overflow-y-auto p-1.5"
+            role="menu"
+            :aria-label="`${activeGroup.namespace.label} tools`"
+          >
+            <label
+              v-for="tool in activeGroup.tools"
+              :key="tool.key"
+              class="flex cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2.5 hover:bg-theme-800"
             >
-              <Icon
-                v-if="isGroupSelected(group)"
-                icon="lucide:check"
-                class="h-3 w-3"
-              />
-              <Icon
-                v-else-if="isGroupPartiallySelected(group)"
-                icon="lucide:minus"
-                class="h-3 w-3"
-              />
-            </button>
-            <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
-              <img
-                v-if="namespaceIcon(group.namespace.id)"
-                :src="namespaceIcon(group.namespace.id)!"
-                alt=""
-                class="h-5 w-5 object-contain"
-                @error="markIconBroken(group.namespace.id)"
+              <input
+                type="checkbox"
+                class="mt-0.5 h-4 w-4 shrink-0 accent-accent-500"
+                :checked="selectedSet.has(tool.key)"
+                @change="toggleTool(tool)"
               >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-xs font-medium text-theme-200">{{ tool.name }}</span>
+                <span class="mt-0.5 block line-clamp-2 text-[10px] leading-snug text-theme-500">
+                  {{ tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '') || 'No description available' }}
+                </span>
+              </span>
+            </label>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="border-b border-theme-800 p-2">
+            <label class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-1.5 focus-within:ring-1 focus-within:ring-accent-500">
               <Icon
-                v-else
-                :icon="isBuiltInNamespaceId(group.namespace.id) ? 'lucide:blocks' : 'lucide:plug'"
-                class="h-4 w-4 text-theme-400"
+                icon="lucide:search"
+                class="h-3.5 w-3.5 shrink-0 text-theme-500"
               />
-            </span>
-            <span class="min-w-0 flex-1 truncate text-xs">{{ group.namespace.label }}</span>
-            <span class="text-[10px] tabular-nums text-theme-600">{{ selectedCount(group) }}/{{ group.tools.length }}</span>
-            <Icon
-              icon="lucide:chevron-right"
-              class="h-3.5 w-3.5 shrink-0 text-theme-600 group-hover:text-theme-400"
-            />
+              <input
+                v-model="search"
+                type="search"
+                class="min-w-0 flex-1 bg-transparent text-xs text-theme-200 outline-none placeholder:text-theme-600"
+                placeholder="Search MCPs and tools..."
+                aria-label="Search MCPs and tools"
+              >
+            </label>
           </div>
 
-          <div
-            v-if="groups.length === 0"
-            class="px-3 py-6 text-center text-xs text-theme-500"
-          >
-            No MCPs or tools match “{{ search }}”
+          <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+            <div
+              v-for="group in groups"
+              :key="group.namespace.id"
+              class="group cursor-pointer flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-theme-300 transition-colors hover:bg-theme-800/70 hover:text-theme-100"
+              role="menuitem"
+              tabindex="0"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              @click="toggleGroup(group)"
+              @keydown.enter.prevent="showGroup(group.namespace.id)"
+              @keydown.space.prevent="showGroup(group.namespace.id)"
+            >
+              <button
+                type="button"
+                class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                :class="isGroupSelected(group) || isGroupPartiallySelected(group) ? 'border-accent-500 bg-accent-500 text-white' : 'border-theme-600 bg-theme-950'"
+                role="checkbox"
+                :aria-checked="isGroupPartiallySelected(group) ? 'mixed' : isGroupSelected(group)"
+                :aria-label="`Toggle all tools in ${group.namespace.label}`"
+                @click.stop="toggleGroup(group)"
+              >
+                <Icon
+                  v-if="isGroupSelected(group)"
+                  icon="lucide:check"
+                  class="h-3 w-3"
+                />
+                <Icon
+                  v-else-if="isGroupPartiallySelected(group)"
+                  icon="lucide:minus"
+                  class="h-3 w-3"
+                />
+              </button>
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
+                <img
+                  v-if="namespaceIcon(group.namespace.id)"
+                  :src="namespaceIcon(group.namespace.id)!"
+                  alt=""
+                  class="h-5 w-5 object-contain"
+                  @error="markIconBroken(group.namespace.id)"
+                >
+                <Icon
+                  v-else
+                  :icon="isBuiltInNamespaceId(group.namespace.id) ? 'lucide:blocks' : 'lucide:plug'"
+                  class="h-4 w-4 text-theme-400"
+                />
+              </span>
+              <span class="min-w-0 flex-1 truncate text-xs">{{ group.namespace.label }}</span>
+              <div
+                class="flex rounded-lg hover:border hover:border-theme-600 group-hover:bg-theme-800/70 group-hover:text-theme-100 p-1 pl-2"
+                @click="showGroup(group.namespace.id)"
+              >
+                <span class="text-[10px] tabular-nums text-theme-600">{{ selectedCount(group) }}/{{ group.tools.length }}</span>
+                <Icon
+                  icon="lucide:chevron-right"
+                  class="h-3.5 w-3.5 shrink-0 text-theme-600 group-hover:text-theme-400"
+                />
+              </div>
+            </div>
+
+            <div
+              v-if="groups.length === 0"
+              class="px-3 py-6 text-center text-xs text-theme-500"
+            >
+              No MCPs or tools match “{{ search }}”
+            </div>
           </div>
-        </div>
+        </template>
 
         <div class="flex items-center justify-between border-t border-theme-800 px-3 py-2 text-[10px] text-theme-500">
           <span>{{ chatStore.selectedToolNames.length }} tool{{ chatStore.selectedToolNames.length === 1 ? '' : 's' }} enabled</span>
@@ -358,50 +374,6 @@ onBeforeUnmount(() => {
             Clear all
           </button>
         </div>
-      </div>
-    </Transition>
-
-    <Transition
-      enter-active-class="transition duration-100 ease-out"
-      leave-active-class="transition duration-75 ease-in"
-      enter-from-class="-translate-x-1 opacity-0"
-      leave-to-class="-translate-x-1 opacity-0"
-    >
-      <div
-        v-if="open && activeGroup"
-        ref="submenu"
-        class="fixed z-[51] max-h-[min(27.5rem,calc(100vh-1rem))] overflow-y-auto rounded-xl border border-theme-700 bg-theme-900 p-1.5 shadow-2xl shadow-black/40"
-        :style="submenuStyle"
-        role="menu"
-        :aria-label="`${activeGroup.namespace.label} tools`"
-        @keydown.esc="handleEscape"
-      >
-        <div class="border-b border-theme-800 px-2.5 py-2">
-          <div class="truncate text-xs font-semibold text-theme-100">
-            {{ activeGroup.namespace.label }}
-          </div>
-          <div class="mt-0.5 text-[10px] text-theme-500">
-            Choose tools available in this chat
-          </div>
-        </div>
-        <label
-          v-for="tool in activeGroup.tools"
-          :key="tool.key"
-          class="flex cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 hover:bg-theme-800"
-        >
-          <input
-            type="checkbox"
-            class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-accent-500"
-            :checked="selectedSet.has(tool.key)"
-            @change="toggleTool(tool)"
-          >
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-xs font-medium text-theme-200">{{ tool.name }}</span>
-            <span class="mt-0.5 block line-clamp-2 text-[10px] leading-snug text-theme-500">
-              {{ tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '') || 'No description available' }}
-            </span>
-          </span>
-        </label>
       </div>
     </Transition>
   </Teleport>

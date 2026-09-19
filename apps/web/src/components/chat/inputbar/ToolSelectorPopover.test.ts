@@ -24,12 +24,13 @@ vi.mock('../../../composables/useMcpServers', async () => {
 describe('ToolSelectorPopover', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
     setActivePinia(createPinia())
     mocks.loadServers.mockClear()
     vi.spyOn(api.memoryFolders, 'list').mockResolvedValue([])
   })
 
-  test('opens namespace tools as a submenu and toggles tools without a modal', async () => {
+  test('drills into namespace tools and toggles tools without a modal', async () => {
     const agentStore = useAgentStore()
     const chatStore = useChatStore()
     agentStore.availableTools = [
@@ -61,7 +62,7 @@ describe('ToolSelectorPopover', () => {
     expect((document.body.querySelector('[aria-label="Tool access"]') as HTMLElement).style.maxHeight).toBe('484px')
 
     const groupRow = document.body.querySelector('[role="menuitem"]') as HTMLElement
-    groupRow.dispatchEvent(new MouseEvent('mouseenter'))
+    groupRow.click()
     await nextTick()
 
     expect(document.body.textContent).toContain('Search repositories')
@@ -71,6 +72,8 @@ describe('ToolSelectorPopover', () => {
     await nextTick()
     expect(chatStore.selectedToolNames).toEqual(['mcp:github::search'])
 
+    document.body.querySelector<HTMLButtonElement>('[aria-label="Back to MCP list"]')?.click()
+    await nextTick()
     const groupCheckbox = document.body.querySelector<HTMLButtonElement>('[aria-label="Toggle all tools in GitHub MCP"]')
     groupCheckbox?.click()
     await nextTick()
@@ -113,6 +116,38 @@ describe('ToolSelectorPopover', () => {
     await wrapper.get('[data-test="trigger"]').trigger('click')
     await nextTick()
     expect(document.body.querySelector('[aria-label="Tool access"]')).toBeNull()
+
+    wrapper.unmount()
+  })
+
+  test('uses an in-place tool drill-down', async () => {
+    const agentStore = useAgentStore()
+    agentStore.availableTools = [
+      tool('mcp:github::search', 'search', 'Search repositories'),
+      tool('mcp:github::issues', 'issues', 'List issues'),
+    ]
+
+    const wrapper = mount(ToolSelectorPopover, {
+      attachTo: document.body,
+      slots: {
+        trigger: ({ toggle }: { toggle: () => void }) => h('button', { 'data-test': 'trigger', onClick: toggle }, 'Tools'),
+      },
+      global: { stubs: { Icon: true, ToggleSwitch: true } },
+    })
+
+    await wrapper.get('[data-test="trigger"]').trigger('click')
+    const groupRow = document.body.querySelector('[role="menuitem"]') as HTMLElement
+    groupRow.click()
+    await nextTick()
+
+    expect(document.body.querySelectorAll('[role="menu"]')).toHaveLength(2)
+    expect(document.body.querySelector('[aria-label="Back to MCP list"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('Search repositories')
+
+    document.body.querySelector<HTMLButtonElement>('[aria-label="Back to MCP list"]')?.click()
+    await nextTick()
+    expect(document.body.querySelector('[aria-label="Search MCPs and tools"]')).not.toBeNull()
+    expect(document.body.querySelector('[aria-label="Back to MCP list"]')).toBeNull()
 
     wrapper.unmount()
   })
