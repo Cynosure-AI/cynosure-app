@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { usePreferencesStore } from '../../stores/preferences.store'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
@@ -64,8 +63,8 @@ const props = defineProps<{
   isActive: boolean
 }>()
 
-const prefs = usePreferencesStore()
-const expanded = ref(prefs.autoExpandToolCalls)
+// Tool-call details are collapsed until the user opens them.
+const expanded = ref(false)
 const lightboxSrc = ref<string | null>(null)
 
 const FALLBACK_META: StatusMeta = { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-500 dark:text-emerald-400' }

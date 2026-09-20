@@ -559,17 +559,6 @@ onMounted(() => loadFolders());
                 @update:model-value="updateGraphSpaceSelection"
               />
               <button
-                v-if="activePanel === 'documents'"
-                class="flex items-center gap-2 rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500"
-                @click="openCreateDialog()"
-              >
-                <Icon
-                  icon="lucide:folder-plus"
-                  class="h-4 w-4"
-                />
-                New Folder
-              </button>
-              <button
                 v-if="activePanel === 'visual'"
                 class="p-2 text-theme-500 transition-colors hover:text-theme-200"
                 title="Refresh knowledge graph"
