@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import type { MemoryFolder } from '../api/types'
 import {
-  AUTO_EXCLUDED_MEMORY_FOLDER_NAMES,
   allMemoryFolderSelectionIds,
   isAutoExcludedMemoryFolder,
   isMemoryFolderSelected,
 } from './memory-folder-selection'
 
-function folder(id: string, folderPath: string, isUncategorized = false): MemoryFolder {
+function folder(id: string, folderPath: string, isUncategorized = false, autoMemoryExcluded = false): MemoryFolder {
   return {
     id,
     name: id,
@@ -16,6 +15,7 @@ function folder(id: string, folderPath: string, isUncategorized = false): Memory
     folderPath,
     sortOrder: 0,
     isUncategorized,
+    autoMemoryExcluded,
     createdAt: 1,
     fileCount: 0,
   }
@@ -25,23 +25,18 @@ describe('memory folder selection', () => {
   const folders = [
     folder('root', '', true),
     folder('notes', 'notes'),
-    folder('archive', 'Archive'),
-    folder('archive-child', 'Archive/2024'),
-    folder('nested-secret', 'notes/SeCrEt'),
+    folder('archive', 'Archive', false, true),
+    folder('archive-child', 'Archive/2024', false, true),
+    folder('nested-secret', 'notes/SeCrEt', false, true),
     folder('agents', '.agents'),
   ]
 
-  test('publishes the special names shown in the folder UI', () => {
-    expect(AUTO_EXCLUDED_MEMORY_FOLDER_NAMES).toEqual([
-      'Archive', 'Subconscious', 'Secret', 'Hidden',
-    ])
-  })
-
-  test('recognizes special folder names at any depth without regard to capitalization', () => {
+  test('uses the persisted exclusion setting instead of the folder name', () => {
     expect(isAutoExcludedMemoryFolder(folders[1])).toBe(false)
     expect(isAutoExcludedMemoryFolder(folders[2])).toBe(true)
     expect(isAutoExcludedMemoryFolder(folders[4])).toBe(true)
     expect(isAutoExcludedMemoryFolder(folders[5])).toBe(false)
+    expect(isAutoExcludedMemoryFolder(folder('ordinary-archive', 'Archive'))).toBe(false)
   })
 
   test('a root default selects standard folders but leaves special folders available manually', () => {

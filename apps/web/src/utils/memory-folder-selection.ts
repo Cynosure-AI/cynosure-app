@@ -1,18 +1,10 @@
 import type { MemoryFolder } from '../api/types'
 
-export const AUTO_EXCLUDED_MEMORY_FOLDER_NAMES = ['Archive', 'Subconscious', 'Secret', 'Hidden'] as const
-const autoExcludedMemoryFolderNameSet = new Set(
-  AUTO_EXCLUDED_MEMORY_FOLDER_NAMES.map((name) => name.toLowerCase()),
-)
-
-/** Match special folder names at any path depth, ignoring capitalization. */
-export function isAutoExcludedMemoryFolder(folder: Pick<MemoryFolder, 'folderPath'>): boolean {
-  return (folder.folderPath || '')
-    .split('/')
-    .some((segment) => autoExcludedMemoryFolderNameSet.has(segment.toLowerCase()))
+export function isAutoExcludedMemoryFolder(folder: Pick<MemoryFolder, 'autoMemoryExcluded'>): boolean {
+  return folder.autoMemoryExcluded === true
 }
 
-/** Root defaults omit special folders; explicit selections always remain available. */
+/** Root defaults omit opted-out folders; explicit selections always remain available. */
 export function isMemoryFolderSelected(
   folder: MemoryFolder,
   selectedIds: ReadonlySet<string>,

@@ -104,6 +104,7 @@ interface MemoryFolderBackupRow extends Record<string, unknown> {
     folderPath?: unknown
     is_uncategorized?: unknown
     sort_order?: unknown
+    auto_memory_excluded?: unknown
     created_at?: unknown
 }
 
@@ -1021,8 +1022,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         ensureFolder(directoryPath)
                         db.prepare(`
                             INSERT OR REPLACE INTO memory_folders
-                                (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                                (id, name, description, directory_path, sort_order, is_uncategorized, auto_memory_excluded, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         `).run(
                             id,
                             sp.name || '',
@@ -1030,6 +1031,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             directoryPath,
                             sp.sort_order ?? 0,
                             id === 'uncategorized' ? 1 : 0,
+                            sp.auto_memory_excluded === 1 || sp.auto_memory_excluded === true ? 1 : 0,
                             sp.created_at || Date.now()
                         )
                     }

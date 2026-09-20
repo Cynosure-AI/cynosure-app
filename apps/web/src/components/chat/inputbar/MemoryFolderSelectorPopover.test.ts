@@ -12,7 +12,7 @@ const memoryFolders = [
   folder('projects', 'Projects', 'Projects'),
   folder('alpha', 'Alpha', 'Projects/Alpha', 'Projects'),
   folder('personal', 'Personal', 'Personal'),
-  folder('archive', 'Archive', 'Archive'),
+  folder('archive', 'Archive', 'Archive', null, false, true),
 ]
 
 describe('MemoryFolderSelectorPopover', () => {
@@ -118,6 +118,7 @@ function folder(
   folderPath: string,
   parentFolderPath: string | null = null,
   isUncategorized = false,
+  autoMemoryExcluded = false,
 ): MemoryFolder {
   return {
     id,
@@ -128,6 +129,7 @@ function folder(
     parentFolderPath,
     sortOrder: 0,
     isUncategorized,
+    autoMemoryExcluded,
     createdAt: 0,
     fileCount: 1,
   }

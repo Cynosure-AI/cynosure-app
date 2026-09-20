@@ -376,6 +376,8 @@ export interface MemoryFolder {
     parentFolderPath?: string | null
     sortOrder: number
     isUncategorized: boolean
+    /** Excluded from automatic root-scope memory routing; manual selection still works. */
+    autoMemoryExcluded?: boolean
     createdAt: number
     fileCount: number
     /** Direct files contained by descendant folders (excluding this folder). */

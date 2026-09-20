@@ -394,7 +394,7 @@ export const api = {
       get<MemoryFolder[]>('/api/memory-folders'),
     create: (name: string, description?: string, parentFolderPath?: string) =>
       post<MemoryFolder>('/api/memory-folders', { name, description, parentFolderPath }),
-    update: (id: string, data: { name?: string; description?: string; folderPath?: string }) =>
+    update: (id: string, data: { name?: string; description?: string; folderPath?: string; autoMemoryExcluded?: boolean }) =>
       put<MemoryFolder>(`/api/memory-folders/${memoryFolderPathId(id)}`, data),
     remove: (id: string) =>
       del<{ success: boolean }>(`/api/memory-folders/${memoryFolderPathId(id)}`),

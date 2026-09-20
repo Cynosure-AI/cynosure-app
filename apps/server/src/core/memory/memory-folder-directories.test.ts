@@ -42,7 +42,8 @@ describe('memory folder directories', () => {
       CREATE TABLE memory_folders (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
         directory_path TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0,
-        is_uncategorized INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+        is_uncategorized INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+        auto_memory_excluded INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE memory_file_index (category_id TEXT);
       CREATE TABLE agent_memory_folders (category_id TEXT);
@@ -70,9 +71,13 @@ describe('memory folder directories', () => {
       'People/Veronica Flowers/Hobbies',
     ])
 
-    // A case-insensitive special descendant is omitted from the automatic root
-    // selection, but remains part of a parent explicitly selected by the user.
+    // A formerly special folder name is omitted from the automatic root selection
+    // only after the persisted setting is enabled; names are no longer magic.
     const peopleSecret = ensureMemoryFolderPath(db, 'People/SeCrEt')
+    const defaultBeforeOptOut = expandMemoryFolderScope([{ id: 'uncategorized', name: 'Uncategorized', folderPath: '' }], db)
+    expect(defaultBeforeOptOut.some(folder => folder.folderPath === 'Archive')).toBe(true)
+    expect(defaultBeforeOptOut.some(folder => folder.folderPath === 'People/SeCrEt')).toBe(true)
+    db.prepare("UPDATE memory_folders SET auto_memory_excluded = 1 WHERE name IN ('Archive', 'Old', 'SeCrEt')").run()
 
     const defaultScope = expandMemoryFolderScope([{ id: 'uncategorized', name: 'Uncategorized', folderPath: '' }], db)
     expect(defaultScope).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
@@ -119,7 +124,8 @@ describe('memory folder directories', () => {
       CREATE TABLE memory_folders (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
         directory_path TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0,
-        is_uncategorized INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+        is_uncategorized INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+        auto_memory_excluded INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE memory_file_index (category_id TEXT);
       CREATE TABLE agent_memory_folders (category_id TEXT);

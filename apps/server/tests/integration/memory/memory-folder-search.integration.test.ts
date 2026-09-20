@@ -131,4 +131,34 @@ describe('global memory file search', () => {
     expect(staleSummarySearch.json()).toEqual([])
     await app.close()
   })
+
+  test('persists automatic-memory exclusion for a folder tree', async () => {
+    const { getDb } = await import('../../../src/db/database.js')
+    const { registerMemoryFoldersRoutes } = await import('../../../src/routes/memory-folders.js')
+    const db = getDb()
+    const now = Date.now()
+    const projectsFolder = join(dataDirectory, 'data', 'memories', 'Projects')
+    const projectsChildFolder = join(projectsFolder, 'Child')
+    await mkdir(projectsChildFolder, { recursive: true })
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
+      .run('folder-a', 'Projects', projectsFolder, 1, now)
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
+      .run('folder-c', 'Child', projectsChildFolder, 2, now)
+
+    const app = Fastify()
+    await app.register(registerMemoryFoldersRoutes, { prefix: '/api/memory-folders' })
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/memory-folders/folder-a',
+      payload: { autoMemoryExcluded: true },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ id: 'folder-a', autoMemoryExcluded: true })
+    expect(db.prepare("SELECT auto_memory_excluded FROM memory_folders WHERE id = 'folder-c'").get())
+      .toEqual({ auto_memory_excluded: 1 })
+    const folders = (await app.inject('/api/memory-folders')).json() as Array<{ id: string; autoMemoryExcluded: boolean }>
+    expect(folders.find((folder) => folder.id === 'folder-c')?.autoMemoryExcluded).toBe(true)
+    await app.close()
+  })
 })
