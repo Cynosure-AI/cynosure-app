@@ -20,7 +20,7 @@ defineEmits<{
 <template>
   <ModalDialog
     :show="show"
-    :title="`Move ${selectedCount} file${selectedCount !== 1 ? 's' : ''}`"
+    :title="`Move ${selectedCount} item${selectedCount !== 1 ? 's' : ''}`"
     icon="lucide:folder-input"
     max-width="max-w-2xl"
     max-height="max-h-[85vh]"
