@@ -210,6 +210,44 @@ describe('MemoryFileExplorer navigation and search', () => {
     wrapper.unmount()
   })
 
+  test('shows only navigable memory-root breadcrumbs while copying the absolute path', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const root = {
+      id: 'root', name: 'Memory', description: '', directoryPath: '/home/user/Cynosure/memory',
+      folderPath: '', sortOrder: 0, isUncategorized: true, createdAt: 1, fileCount: 0,
+    }
+    const child = {
+      id: 'child', name: 'Projects', description: '', directoryPath: '/home/user/Cynosure/memory/Projects',
+      folderPath: 'Projects', parentFolderPath: null, sortOrder: 0,
+      isUncategorized: false, createdAt: 2, fileCount: 0,
+    }
+    const wrapper = mount(MemoryFileExplorer, {
+      props: { folderId: 'child', spaces: [root, child] },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+
+    const breadcrumbs = wrapper.get('nav[aria-label="Memory folder path"]')
+    expect(breadcrumbs.text()).toContain('memory')
+    expect(breadcrumbs.text()).toContain('Projects')
+    expect(breadcrumbs.text()).not.toContain('home')
+    expect(breadcrumbs.text()).not.toContain('user')
+    expect(breadcrumbs.text()).not.toContain('Cynosure')
+
+    await breadcrumbs.get('[aria-label="Copy current folder path"]').trigger('click')
+    expect(writeText).toHaveBeenCalledWith('/home/user/Cynosure/memory/Projects')
+  })
+
   test('opens grid documents on item click and selects only through checkboxes with shift ranges', async () => {
     mocks.listFiles.mockResolvedValue([
       {
