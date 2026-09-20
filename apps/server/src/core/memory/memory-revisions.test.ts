@@ -10,6 +10,7 @@ import {
   listMemoryRevisions,
   markMemoryDocumentDeleted,
   markMemoryFoldersDeleted,
+  purgeDeletedMemoryDocuments,
   recordMemoryRevision,
   inlineMemoryDiff,
   unifiedMemoryDiff,
@@ -108,6 +109,23 @@ describe('memory revision snapshots', () => {
       file_name: 'Veronica Flowers - Interests.md', status: 'active',
     })
     expect(getDb().prepare('SELECT COUNT(*) AS count FROM memory_document_revisions WHERE document_id = ?').get('doc-2')).toEqual({ count: 1 })
+  })
+
+  test('permanently purges deleted documents and their revision history', () => {
+    recordMemoryRevision({
+      documentId: 'deleted-doc', documentRef: 'deleted#stable', folderId: 'uncategorized',
+      fileName: 'deleted.md', content: 'Deleted content', context: { source: 'user' },
+    })
+    recordMemoryRevision({
+      documentId: 'active-doc', documentRef: 'active#stable', folderId: 'uncategorized',
+      fileName: 'active.md', content: 'Active content', context: { source: 'user' },
+    })
+    markMemoryDocumentDeleted('deleted-doc')
+
+    expect(purgeDeletedMemoryDocuments()).toBe(1)
+    expect(getMemoryDocument('deleted#stable')).toBeUndefined()
+    expect(listMemoryRevisions('deleted#stable')).toEqual([])
+    expect(getMemoryDocument('active#stable')).toBeDefined()
   })
 
   test('records documents deleted through a folder cascade', () => {

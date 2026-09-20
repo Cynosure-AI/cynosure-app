@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted, toRef, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
-import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
+import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import DataTable, { type Column } from "../shared/DataTable.vue";
-import HoverTooltip from "../shared/HoverTooltip.vue";
-import SplitButton from "../shared/SplitButton.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
@@ -19,7 +17,18 @@ interface DocumentDragPayload {
   sourceFiles: string[];
 }
 
-type DocumentRow = MemoryFileStatus & { id: string };
+type DocumentRow = MemoryFileStatus & { id: string; kind: "file"; name: string };
+type FolderRow = {
+  id: string;
+  kind: "folder";
+  name: string;
+  folder: MemoryFolder;
+  modifiedAt: number;
+  chunkCount?: number;
+  deepResearched: false;
+  status: "folder";
+};
+type ExplorerRow = DocumentRow | FolderRow;
 type GlobalDocumentRow = MemoryFileSearchResult & { id: string };
 
 const props = defineProps<{
@@ -31,6 +40,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   editSpace: [];
   deleteSpace: [];
+  createFolder: [parent: MemoryFolder];
+  editFolder: [folder: MemoryFolder];
+  deleteFolder: [folder: MemoryFolder];
+  toggleAutoMemoryExclusion: [folder: MemoryFolder];
   spacesChanged: [];
   navigateFolder: [folderId: string];
   documentDragState: [active: boolean, payload?: DocumentDragPayload];
@@ -40,6 +53,7 @@ const emit = defineEmits<{
 // --- Constants ---
 const FILES_PAGE_SIZE = 30;
 const LARGE_CHUNK_WARNING_THRESHOLD = 100;
+const EXPLORER_VIEW_KEY = "cy-memory-explorer-view";
 
 /** Deep Research eligibility is decided by the limit the server attaches to
  * each file row, so the button can never be offered for a document the server
@@ -53,21 +67,33 @@ function supportsAnalysis(file: MemoryFileStatus): boolean {
   return file.status === "indexed" && (file.chunkCount || 0) <= analysisChunkLimit(file);
 }
 
-function exceedsAnalysisLimit(file: MemoryFileStatus): boolean {
-  return file.status === "indexed" && (file.chunkCount || 0) > analysisChunkLimit(file);
-}
-
 // --- State ---
 const files = ref<MemoryFileStatus[]>([]);
 const filesLoading = ref(false);
 const selectedFiles = ref<Set<string>>(new Set());
+const selectedFolders = ref<Set<string>>(new Set());
+const gridSelectionAnchor = ref<string | null>(null);
 const deleting = ref(false);
 const forgettingMemories = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
-const knowledgePreviews = ref<Record<string, { status: "loading" | "ready" | "error"; data?: MemoryDocumentKnowledgePreview }>>({});
+const savedExplorerView = localStorage.getItem(EXPLORER_VIEW_KEY);
+const explorerView = ref<"list" | "grid">(
+  savedExplorerView === "grid" || savedExplorerView === "list"
+    ? savedExplorerView
+    : window.matchMedia("(max-width: 639px)").matches ? "grid" : "list",
+);
+const highlightedFolderId = ref<string | null>(null);
+const dropTargetFolderId = ref<string | null>(null);
+const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
+const contextMenu = ref<{
+  kind: "folder" | "document";
+  folder?: MemoryFolder;
+  file?: MemoryFileStatus;
+  x: number;
+  y: number;
+} | null>(null);
 const unsubscribeGraphReset = api.memory.onGraphReset(() => {
-  knowledgePreviews.value = {};
   files.value = files.value.map((file) => ({
     ...file,
     deepResearched: false,
@@ -100,13 +126,25 @@ let pendingIndexAction: (() => Promise<void>) | null = null;
 const searchQuery = ref("");
 const semanticSearch = ref(false);
 const page = ref(0);
-const visibleDocumentRows = ref<DocumentRow[]>([]);
+const visibleDocumentRows = ref<ExplorerRow[]>([]);
 const globalSearchResults = ref<MemoryFileSearchResult[]>([]);
 const globalSearchLoading = ref(false);
 let globalSearchTimer: number | null = null;
 let globalSearchSequence = 0;
 
 const currentSpace = computed(() => props.spaces.find((s) => s.id === props.folderId));
+const childFolders = computed(() => {
+  const current = currentSpace.value;
+  if (!current) return [];
+  return props.spaces
+    .filter((folder) => {
+      if (folder.isUncategorized) return false;
+      return current.isUncategorized
+        ? !folder.parentFolderPath
+        : folder.parentFolderPath === current.folderPath;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+});
 const folderHistory = ref<string[]>([props.folderId]);
 const folderHistoryIndex = ref(0);
 const canNavigateBack = computed(() => folderHistoryIndex.value > 0);
@@ -165,6 +203,137 @@ function navigateBreadcrumb(folderId?: string): void {
   if (folderId && folderId !== props.folderId) emit("navigateFolder", folderId);
 }
 
+function setExplorerView(view: "list" | "grid"): void {
+  explorerView.value = view;
+  localStorage.setItem(EXPLORER_VIEW_KEY, view);
+}
+
+function openFolder(folder: MemoryFolder): void {
+  contextMenu.value = null;
+  emit("navigateFolder", folder.id);
+}
+
+function openDocumentRow(file: DocumentRow): void {
+  highlightedFolderId.value = null;
+  openEditorModal(file.fileName);
+}
+
+function openExplorerRow(item: ExplorerRow): void {
+  if (item.kind === "folder") openFolder(item.folder);
+  else openDocumentRow(item);
+}
+
+function openExplorerContextMenu(item: ExplorerRow, event: MouseEvent): void {
+  if (item.kind === "folder") openContextMenu("folder", event, item.folder);
+  else openContextMenu("document", event, item);
+}
+
+function startExplorerDrag(item: ExplorerRow, event: DragEvent): void {
+  if (item.kind === "file") startDocumentDrag(event, item.fileName);
+}
+
+function dragOverExplorerRow(item: ExplorerRow, event: DragEvent): void {
+  if (item.kind === "folder") onFolderDocumentDragOver(item.folder, event);
+}
+
+function dragLeaveExplorerRow(item: ExplorerRow, event: DragEvent): void {
+  if (item.kind === "folder") onFolderDocumentDragLeave(item.folder, event);
+}
+
+function dropOnExplorerRow(item: ExplorerRow, event: DragEvent): void {
+  if (item.kind === "folder") void onFolderDocumentDrop(item.folder, event);
+}
+
+function isExplorerRowSelectable(item: ExplorerRow): boolean {
+  return item.kind === "folder" || item.supported;
+}
+
+function toggleGridSelection(item: ExplorerRow, event: MouseEvent): void {
+  if (!isExplorerRowSelectable(item)) return;
+  const next = new Set(selectedExplorerIds.value);
+  const anchorIndex = gridSelectionAnchor.value
+    ? documentRows.value.findIndex((candidate) => candidate.id === gridSelectionAnchor.value)
+    : -1;
+  const clickedIndex = documentRows.value.findIndex((candidate) => candidate.id === item.id);
+  if (event.shiftKey && anchorIndex >= 0 && clickedIndex >= 0) {
+    const start = Math.min(anchorIndex, clickedIndex);
+    const end = Math.max(anchorIndex, clickedIndex);
+    for (const candidate of documentRows.value.slice(start, end + 1)) {
+      if (isExplorerRowSelectable(candidate)) next.add(candidate.id);
+    }
+  } else {
+    if (next.has(item.id)) next.delete(item.id);
+    else next.add(item.id);
+  }
+  if (!event.shiftKey || anchorIndex < 0) gridSelectionAnchor.value = item.id;
+  selectedExplorerIds.value = [...next];
+}
+
+function rowForFolder(folder: MemoryFolder): FolderRow {
+  return documentRows.value.find((item): item is FolderRow => item.kind === "folder" && item.folder.id === folder.id)!;
+}
+
+function rowForFile(file: MemoryFileStatus): DocumentRow {
+  return documentRows.value.find((item): item is DocumentRow => item.kind === "file" && item.fileName === file.fileName)!;
+}
+
+function onFolderDocumentDragOver(folder: MemoryFolder, event: DragEvent): void {
+  if (!activeDocumentDrag.value || folder.id === props.folderId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  dropTargetFolderId.value = folder.id;
+}
+
+function onFolderDocumentDragLeave(folder: MemoryFolder, event: DragEvent): void {
+  if (event.currentTarget instanceof HTMLElement && event.currentTarget.contains(event.relatedTarget as Node)) return;
+  if (dropTargetFolderId.value === folder.id) dropTargetFolderId.value = null;
+}
+
+async function onFolderDocumentDrop(folder: MemoryFolder, event: DragEvent): Promise<void> {
+  if (!activeDocumentDrag.value || folder.id === props.folderId) return;
+  event.preventDefault();
+  const sourceFiles = activeDocumentDrag.value.sourceFiles;
+  dropTargetFolderId.value = null;
+  activeDocumentDrag.value = null;
+  await moveDocumentsToFolder(folder.id, sourceFiles);
+}
+
+function openContextMenu(
+  kind: "folder" | "document",
+  event: MouseEvent,
+  item: MemoryFolder | MemoryFileStatus,
+): void {
+  event.preventDefault();
+  if (kind === "folder") {
+    const folder = item as MemoryFolder;
+    highlightedFolderId.value = folder.id;
+    if (!selectedFolders.value.has(folder.id)) {
+      clearSelection();
+      selectedFolders.value = new Set([folder.id]);
+    }
+  } else {
+    const file = item as MemoryFileStatus;
+    highlightedFolderId.value = null;
+    if (!selectedFiles.value.has(file.fileName)) {
+      clearSelection();
+      selectedFiles.value = file.supported ? new Set([file.fileName]) : new Set();
+    }
+  }
+  const menuWidth = 240;
+  const menuHeight = kind === "folder" ? 248 : 286;
+  contextMenu.value = {
+    kind,
+    folder: kind === "folder" ? item as MemoryFolder : undefined,
+    file: kind === "document" ? item as MemoryFileStatus : undefined,
+    x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
+    y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+  };
+}
+
+function closeContextMenu(): void {
+  contextMenu.value = null;
+}
+
 watch(() => props.folderId, (folderId) => {
   if (folderHistory.value[folderHistoryIndex.value] === folderId) return;
   folderHistory.value = [...folderHistory.value.slice(0, folderHistoryIndex.value + 1), folderId];
@@ -179,25 +348,46 @@ const filteredFiles = computed(() => {
   );
 });
 
-const documentRows = computed<DocumentRow[]>(() => filteredFiles.value.map((file) => ({ ...file, id: file.fileName })));
+const documentRows = computed<ExplorerRow[]>(() => [
+  ...childFolders.value.map((folder): FolderRow => ({
+    id: `folder:${folder.id}`,
+    kind: "folder",
+    name: folder.name,
+    folder,
+    modifiedAt: folder.createdAt,
+    chunkCount: folder.fileCount + (folder.descendantFileCount || 0),
+    deepResearched: false,
+    status: "folder",
+  })),
+  ...filteredFiles.value.map((file): DocumentRow => ({
+    ...file,
+    id: `file:${file.fileName}`,
+    kind: "file",
+    name: file.fileName,
+  })),
+]);
 const globalDocumentRows = computed<GlobalDocumentRow[]>(() => globalSearchResults.value.map((file) => ({
   ...file,
   id: `${file.folderId}\0${file.fileName}`,
 })));
 
-const selectedFileIds = computed({
-  get: () => Array.from(selectedFiles.value),
+const selectedExplorerIds = computed({
+  get: () => [
+    ...Array.from(selectedFolders.value, (id) => `folder:${id}`),
+    ...Array.from(selectedFiles.value, (name) => `file:${name}`),
+  ],
   set: (value: string[]) => {
-    selectedFiles.value = new Set(value);
+    selectedFolders.value = new Set(value.filter((id) => id.startsWith("folder:")).map((id) => id.slice(7)));
+    selectedFiles.value = new Set(value.filter((id) => id.startsWith("file:")).map((id) => id.slice(5)));
   },
 });
 
-const columns: Column<DocumentRow>[] = [
-  { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
+const columns: Column<ExplorerRow>[] = [
+  { key: "name", label: "Name", minWidth: "220px", grow: 3, sortable: true, sortValue: (item) => item.name },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
-  { key: "chunkCount", label: "Chunks", minWidth: "70px", grow: 0, sortable: true, sortValue: (file) => file.status === "indexed" ? (file.chunkCount || 0) : (file.estimatedChunkCount || 0) },
-  { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (file) => file.deepResearched },
-  { key: "status", label: "Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (file) => file.status },
+  { key: "chunkCount", label: "Items / Chunks", minWidth: "90px", grow: 0, sortable: true, sortValue: (item) => item.kind === "folder" ? item.chunkCount : item.status === "indexed" ? (item.chunkCount || 0) : (item.estimatedChunkCount || 0) },
+  { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (item) => item.kind === "file" && item.deepResearched },
+  { key: "status", label: "Type / Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (item) => item.status },
 ];
 
 const globalColumns: Column<GlobalDocumentRow>[] = [
@@ -219,10 +409,14 @@ const searchColumns = computed(() => semanticSearch.value
   : globalColumns);
 
 const allFilteredSelected = computed(
-  () =>
-    filteredFiles.value.length > 0 &&
-    filteredFiles.value.every((f) => selectedFiles.value.has(f.fileName)),
+  () => {
+    const selectable = documentRows.value.filter(isExplorerRowSelectable);
+    return selectable.length > 0 && selectable.every((item) => item.kind === "folder"
+      ? selectedFolders.value.has(item.folder.id)
+      : selectedFiles.value.has(item.fileName));
+  },
 );
+const selectedItemCount = computed(() => selectedFiles.value.size + selectedFolders.value.size);
 
 const supportedFiles = computed(() => files.value.filter((f) => f.supported));
 const needsAttentionCount = computed(
@@ -255,7 +449,6 @@ const selectedSearchIndexIdleCount = computed(() =>
 // --- Data loading ---
 async function loadFiles() {
   filesLoading.value = true;
-  knowledgePreviews.value = {};
   try {
     files.value = await api.memoryFolders.listFiles(props.folderId);
   } catch {
@@ -266,10 +459,7 @@ async function loadFiles() {
 
 const {
   runningJobs,
-  activeJob: runningJob,
   isJobActive,
-  isJobRunning,
-  resumableJob,
   failedJobs,
   dismissFailure,
   dismissAllFailures,
@@ -278,11 +468,7 @@ const {
   reindexFile,
   extractKnowledgeFromFile,
   reindexAll: reindexAllNow,
-  cancelJob,
-  discardJob,
   reset: resetJobs,
-  deepResearchProgress,
-  searchIndexProgress,
 } = useMemoryDocumentJobs({
   folderId: toRef(props, "folderId"),
   files,
@@ -326,10 +512,6 @@ async function reindexAll(): Promise<void> {
   await indexWithWarning(candidates, reindexAllNow);
 }
 
-async function reindexDocument(file: MemoryFileStatus): Promise<void> {
-  await indexWithWarning([file], () => reindexFile(file.fileName));
-}
-
 function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
   if (kind === "deep-research") return "Deep Research";
   if (kind === "tool-embeddings") return "Tool indexing";
@@ -337,54 +519,88 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
 }
 
 async function deepResearchSelected(): Promise<void> {
-  for (const file of selectedDeepResearchFiles.value) {
-    if (!isJobActive("deep-research", file.fileName)) await extractKnowledgeFromFile(file.fileName);
+  const groups = await resolveSelectedFileGroups();
+  for (const [folderId, groupFiles] of groups) {
+    for (const file of groupFiles.filter((candidate) => supportsAnalysis(candidate))) {
+      if (folderId === props.folderId) {
+        if (!isJobActive("deep-research", file.fileName)) await extractKnowledgeFromFile(file.fileName);
+      } else {
+        await api.memoryFolders.startDeepResearchFile(folderId, file.fileName);
+      }
+    }
   }
 }
 
 async function makeSearchableSelected(): Promise<void> {
-  const candidates = selectedSearchIndexFiles.value.filter((file) => !isJobActive("reindex", file.fileName));
+  const groups = await resolveSelectedFileGroups();
+  const candidates = [...groups.values()].flat().filter((file) =>
+    file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"),
+  );
   await indexWithWarning(candidates, async () => {
-    for (const file of candidates) await reindexFile(file.fileName);
+    for (const [folderId, groupFiles] of groups) {
+      for (const file of groupFiles.filter((candidate) =>
+        candidate.supported && (candidate.status === "needs_reindex" || candidate.status === "not_indexed"),
+      )) {
+        if (folderId === props.folderId) await reindexFile(file.fileName);
+        else await api.memoryFolders.startReindexFile(folderId, file.fileName);
+      }
+    }
   });
 }
 
-async function loadKnowledgePreview(fileName: string) {
-  if (knowledgePreviews.value[fileName]) return;
-  knowledgePreviews.value = {
-    ...knowledgePreviews.value,
-    [fileName]: { status: "loading" },
-  };
-  try {
-    const data = await api.memoryFolders.getDocumentKnowledgePreview(props.folderId, fileName);
-    knowledgePreviews.value = {
-      ...knowledgePreviews.value,
-      [fileName]: { status: "ready", data },
-    };
-  } catch {
-    knowledgePreviews.value = {
-      ...knowledgePreviews.value,
-      [fileName]: { status: "error" },
-    };
-  }
-}
-
 function selectAllOnPage() {
-  selectedFiles.value = new Set(visibleDocumentRows.value.filter((f) => f.supported).map((f) => f.fileName));
+  selectedExplorerIds.value = visibleDocumentRows.value.filter(isExplorerRowSelectable).map((item) => item.id);
 }
 
 function selectAll() {
+  selectedFolders.value = new Set(childFolders.value.map((folder) => folder.id));
   selectedFiles.value = new Set(filteredFiles.value.filter((f) => f.supported).map((f) => f.fileName));
 }
 
+function clearSelection(): void {
+  selectedFiles.value = new Set();
+  selectedFolders.value = new Set();
+  gridSelectionAnchor.value = null;
+}
+
+function selectedFolderScope(): MemoryFolder[] {
+  const selected = props.spaces.filter((folder) => selectedFolders.value.has(folder.id));
+  return props.spaces.filter((candidate) => selected.some((folder) =>
+    candidate.id === folder.id || Boolean(folder.folderPath && candidate.folderPath.startsWith(`${folder.folderPath}/`)),
+  ));
+}
+
+async function resolveSelectedFileGroups(): Promise<Map<string, MemoryFileStatus[]>> {
+  const groups = new Map<string, MemoryFileStatus[]>();
+  const direct = files.value.filter((file) => selectedFiles.value.has(file.fileName));
+  if (direct.length) groups.set(props.folderId, direct);
+  await Promise.all(selectedFolderScope().map(async (folder) => {
+    const folderFiles = await api.memoryFolders.listFiles(folder.id);
+    if (folderFiles.length) groups.set(folder.id, folderFiles);
+  }));
+  return groups;
+}
+
+const moveTargetSpaces = computed(() => {
+  const selected = props.spaces.filter((folder) => selectedFolders.value.has(folder.id));
+  return props.spaces.filter((candidate) => candidate.id !== props.folderId && !selected.some((folder) =>
+    candidate.id === folder.id || Boolean(folder.folderPath && candidate.folderPath.startsWith(`${folder.folderPath}/`)),
+  ));
+});
+
 // --- Bulk removal ---
 async function deleteSelectedFiles() {
-  if (selectedFiles.value.size === 0) return;
+  if (selectedItemCount.value === 0) return;
   deleting.value = true;
   try {
-    await api.memoryFolders.deleteDocuments(props.folderId, Array.from(selectedFiles.value));
+    if (selectedFiles.value.size) {
+      await api.memoryFolders.deleteDocuments(props.folderId, Array.from(selectedFiles.value));
+    }
+    for (const folder of props.spaces.filter((item) => selectedFolders.value.has(item.id))) {
+      await api.memoryFolders.remove(folder.id);
+    }
     const deleted = selectedFiles.value;
-    selectedFiles.value = new Set();
+    clearSelection();
     files.value = files.value.filter((f) => !deleted.has(f.fileName));
     emit("spacesChanged");
   } catch {
@@ -394,12 +610,17 @@ async function deleteSelectedFiles() {
 }
 
 async function forgetSelectedMemories() {
-  const sourceFiles = selectedRememberedFiles.value.map((file) => file.fileName);
-  if (sourceFiles.length === 0) return;
+  const groups = await resolveSelectedFileGroups();
+  if (groups.size === 0) return;
   forgettingMemories.value = true;
   try {
-    await api.memoryFolders.forgetMemories(props.folderId, sourceFiles);
-    selectedFiles.value = new Set();
+    for (const [folderId, groupFiles] of groups) {
+      const sourceFiles = groupFiles
+        .filter((file) => file.status !== "not_indexed" || file.deepResearched)
+        .map((file) => file.fileName);
+      if (sourceFiles.length) await api.memoryFolders.forgetMemories(folderId, sourceFiles);
+    }
+    clearSelection();
     await loadFiles();
     await loadJobs();
     emit("spacesChanged");
@@ -411,12 +632,20 @@ async function forgetSelectedMemories() {
 
 // --- Move ---
 async function moveSelectedFiles(targetFolderId: string) {
-  if (selectedFiles.value.size === 0 || targetFolderId === props.folderId) return;
+  if (selectedItemCount.value === 0 || targetFolderId === props.folderId) return;
+  const target = props.spaces.find((folder) => folder.id === targetFolderId);
+  if (!target) return;
   moving.value = true;
   try {
-    await api.memoryFolders.moveDocuments(props.folderId, Array.from(selectedFiles.value), targetFolderId);
+    if (selectedFiles.value.size) {
+      await api.memoryFolders.moveDocuments(props.folderId, Array.from(selectedFiles.value), targetFolderId);
+    }
+    for (const folder of props.spaces.filter((item) => selectedFolders.value.has(item.id))) {
+      const folderPath = target.folderPath ? `${target.folderPath}/${folder.name}` : folder.name;
+      await api.memoryFolders.update(folder.id, { folderPath });
+    }
     const moved = selectedFiles.value;
-    selectedFiles.value = new Set();
+    clearSelection();
     files.value = files.value.filter((f) => !moved.has(f.fileName));
     showMoveDialog.value = false;
     emit("spacesChanged");
@@ -531,10 +760,13 @@ function startDocumentDrag(event: DragEvent, fileName: string) {
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData(DOCUMENT_DRAG_MIME, JSON.stringify(payload));
   event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+  activeDocumentDrag.value = payload;
   emit("documentDragState", true, payload);
 }
 
 function endDocumentDrag() {
+  activeDocumentDrag.value = null;
+  dropTargetFolderId.value = null;
   emit("documentDragState", false);
 }
 
@@ -568,12 +800,13 @@ watch(
   () => props.folderId,
   async (folderId) => {
     files.value = [];
-    knowledgePreviews.value = {};
-    selectedFiles.value = new Set();
+    clearSelection();
     resetJobs();
     showEditorModal.value = false;
     editorFileName.value = "";
     searchQuery.value = "";
+    highlightedFolderId.value = null;
+    contextMenu.value = null;
     page.value = 0;
     await Promise.all([loadFiles(), loadJobs()]);
     if (props.folderId === folderId && props.focusFile) openEditorModal(props.focusFile);
@@ -596,6 +829,7 @@ watch([searchQuery, () => props.folderId, semanticSearch], ([query]) => {
     return;
   }
   selectedFiles.value = new Set();
+  selectedFolders.value = new Set();
   globalSearchLoading.value = true;
   globalSearchTimer = window.setTimeout(async () => {
     try {
@@ -612,12 +846,27 @@ watch([searchQuery, () => props.folderId, semanticSearch], ([query]) => {
   }, 200);
 }, { immediate: true });
 
+function handleExplorerPointerDown(event: MouseEvent): void {
+  if (!(event.target as HTMLElement).closest("[data-memory-context-menu]")) closeContextMenu();
+}
+
+function handleExplorerKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape") closeContextMenu();
+}
+
+onMounted(() => {
+  document.addEventListener("mousedown", handleExplorerPointerDown);
+  window.addEventListener("keydown", handleExplorerKeydown);
+});
+
 onUnmounted(() => {
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   if (pathCopiedTimer !== null) window.clearTimeout(pathCopiedTimer);
   window.clearInterval(dreamIndicatorTimer);
   unsubscribeGraphReset();
   unsubscribeDreamUpdate();
+  document.removeEventListener("mousedown", handleExplorerPointerDown);
+  window.removeEventListener("keydown", handleExplorerKeydown);
 });
 
 defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
@@ -658,6 +907,18 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </button>
       </div>
       <div class="flex items-center gap-2">
+        <button
+          v-if="currentSpace"
+          type="button"
+          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          @click="emit('createFolder', currentSpace)"
+        >
+          <Icon
+            icon="lucide:folder-plus"
+            class="h-4 w-4 text-amber-400"
+          />
+          New folder
+        </button>
         <button
           v-if="needsAttentionCount > 0"
           title="Indexing files makes them available for semantic searching."
@@ -744,7 +1005,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             @click="copyCurrentFolderPath"
           >
             <Icon
-              :icon="pathCopied ? 'lucide:check' : 'lucide:folder'"
+              :icon="pathCopied ? 'lucide:check' : 'lucide:clipboard'"
               class="h-3.5 w-3.5"
             />
           </button>
@@ -761,7 +1022,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
               type="button"
               :disabled="!segment.folderId || segment.folderId === folderId"
               class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:hover:bg-theme-800 disabled:cursor-default"
-              :class="segment.folderId && segment.folderId !== folderId ? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
+              :class="segment.folderId ? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
               @click="navigateBreadcrumb(segment.folderId)"
             >
               {{ segment.label }}
@@ -922,6 +1183,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           in {{ currentSpace?.name || "this folder" }} and subfolders
         </template>
         <template v-else>
+          {{ childFolders.length }} folder{{ childFolders.length !== 1 ? "s" : "" }} ·
           {{ files.length }} file{{ files.length !== 1 ? "s" : "" }}
         </template>
         <template v-if="runningJobs.length > 0">
@@ -929,7 +1191,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </template>
       </div>
       <div class="flex items-center gap-2">
-        <template v-if="!searchQuery.trim() && selectedFiles.size === 0 && files.length > 0">
+        <template v-if="!searchQuery.trim() && selectedItemCount === 0 && documentRows.length > 0">
           <button
             class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
             @click="selectAllOnPage"
@@ -943,6 +1205,40 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             Select all {{ filteredFiles.length }}
           </button>
         </template>
+        <div
+          v-if="!searchQuery.trim()"
+          class="flex items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5"
+          aria-label="Explorer view"
+        >
+          <button
+            type="button"
+            class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+            :class="explorerView === 'list' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+            title="List view"
+            aria-label="List view"
+            :aria-pressed="explorerView === 'list'"
+            @click="setExplorerView('list')"
+          >
+            <Icon
+              icon="lucide:list"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+          <button
+            type="button"
+            class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+            :class="explorerView === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+            title="Grid view"
+            aria-label="Grid view"
+            :aria-pressed="explorerView === 'grid'"
+            @click="setExplorerView('grid')"
+          >
+            <Icon
+              icon="lucide:grid-2x2"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+        </div>
         <button
           type="button"
           :disabled="filesLoading"
@@ -961,19 +1257,19 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 
     <!-- Floating bulk actions: pinned inside the document area while scrolling. -->
     <div
-      v-if="!searchQuery.trim() && selectedFiles.size > 0"
+      v-if="!searchQuery.trim() && selectedItemCount > 0"
       class="pointer-events-none sticky top-[calc(100vh_-_8rem)] z-30 h-0 sm:top-[calc(100vh_-_5.5rem)]"
     >
       <div class="pointer-events-auto mx-auto flex w-fit max-w-full items-center overflow-x-auto rounded-xl border border-theme-700/80 bg-theme-950/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
         <span class="shrink-0 border-r border-theme-800 px-3 text-xs font-medium text-theme-300">
-          {{ selectedFiles.size }} selected
+          {{ selectedItemCount }} selected
         </span>
         <button
           v-if="!allFilteredSelected"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-theme-400 transition-colors hover:bg-theme-800 hover:text-theme-200"
           @click="selectAll"
         >
-          Select all {{ filteredFiles.length }}
+          Select all {{ documentRows.length }}
         </button>
         <button
           v-if="spaces.length > 1"
@@ -989,35 +1285,35 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           Move
         </button>
         <button
-          v-if="selectedSearchIndexFiles.length > 0"
-          :disabled="selectedSearchIndexIdleCount === 0"
+          v-if="selectedSearchIndexFiles.length > 0 || selectedFolders.size > 0"
+          :disabled="selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
           title="Build or refresh semantic search vectors for the selected documents"
           @click="makeSearchableSelected"
         >
           <Icon
-            :icon="selectedSearchIndexIdleCount === 0 ? 'lucide:loader-2' : 'lucide:search-check'"
+            :icon="selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0 ? 'lucide:loader-2' : 'lucide:search-check'"
             class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': selectedSearchIndexIdleCount === 0 }"
+            :class="{ 'animate-spin': selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0 }"
           />
           Index files
         </button>
         <button
-          v-if="selectedDeepResearchFiles.length > 0"
-          :disabled="selectedDeepResearchIdleCount === 0"
+          v-if="selectedDeepResearchFiles.length > 0 || selectedFolders.size > 0"
+          :disabled="selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
           title="Extract and classify facts from the selected searchable documents"
           @click="deepResearchSelected"
         >
           <Icon
-            :icon="selectedDeepResearchIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
+            :icon="selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
             class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': selectedDeepResearchIdleCount === 0 }"
+            :class="{ 'animate-spin': selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0 }"
           />
           Deep Research
         </button>
         <button
-          v-if="selectedRememberedFiles.length > 0"
+          v-if="selectedRememberedFiles.length > 0 || selectedFolders.size > 0"
           :disabled="forgettingMemories"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
           title="Remove semantic search vectors and extracted facts while keeping the source files"
@@ -1047,7 +1343,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-l border-theme-800 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
           title="Clear selection"
           aria-label="Clear selection"
-          @click="selectedFiles = new Set()"
+          @click="clearSelection"
         >
           <Icon
             icon="lucide:x"
@@ -1132,378 +1428,355 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 
     <!-- Empty states -->
     <div
-      v-else-if="files.length === 0 && !filesLoading"
+      v-else-if="files.length === 0 && childFolders.length === 0 && !filesLoading"
       class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
     >
       No files in this folder yet. Upload files to get started.
     </div>
-    <!-- File rows -->
+    <!-- Grid explorer -->
+    <div
+      v-else-if="explorerView === 'grid'"
+      class="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3"
+      data-testid="memory-explorer-grid"
+    >
+      <div
+        v-for="folder in childFolders"
+        :key="folder.id"
+        role="button"
+        tabindex="0"
+        class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+        :class="[
+          highlightedFolderId === folder.id || selectedFolders.has(folder.id) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
+          dropTargetFolderId === folder.id ? 'border-accent-500/60 bg-accent-500/10 ring-1 ring-accent-500/50' : '',
+        ]"
+        @click="openFolder(folder)"
+        @keydown.enter="openFolder(folder)"
+        @dblclick="openFolder(folder)"
+        @contextmenu="openContextMenu('folder', $event, folder)"
+        @dragover="onFolderDocumentDragOver(folder, $event)"
+        @dragleave="onFolderDocumentDragLeave(folder, $event)"
+        @drop="onFolderDocumentDrop(folder, $event)"
+      >
+        <input
+          type="checkbox"
+          class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFolders.has(folder.id) }"
+          :checked="selectedFolders.has(folder.id)"
+          :aria-label="`${selectedFolders.has(folder.id) ? 'Deselect' : 'Select'} ${folder.name}`"
+          @click.stop="toggleGridSelection(rowForFolder(folder), $event)"
+        >
+        <Icon
+          :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
+          class="mb-3 h-11 w-11"
+          :class="folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'"
+        />
+        <span class="w-full truncate text-sm font-medium text-theme-200">{{ folder.name }}</span>
+        <span class="mt-1 text-[11px] text-theme-600">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
+      </div>
+      <div
+        v-for="file in filteredFiles"
+        :key="file.fileName"
+        :draggable="true"
+        role="button"
+        tabindex="0"
+        class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+        :class="[
+          selectedFiles.has(file.fileName) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
+          !file.supported ? 'opacity-50' : '',
+        ]"
+        @click="openEditorModal(file.fileName)"
+        @dblclick="openEditorModal(file.fileName)"
+        @keydown.enter="openEditorModal(file.fileName)"
+        @contextmenu="openContextMenu('document', $event, file)"
+        @dragstart.stop="startDocumentDrag($event, file.fileName)"
+        @dragend="endDocumentDrag"
+      >
+        <input
+          v-if="file.supported"
+          type="checkbox"
+          class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFiles.has(file.fileName) }"
+          :checked="selectedFiles.has(file.fileName)"
+          :aria-label="`${selectedFiles.has(file.fileName) ? 'Deselect' : 'Select'} ${file.fileName}`"
+          @click.stop="toggleGridSelection(rowForFile(file), $event)"
+        >
+        <Icon
+          :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+          class="mb-3 h-10 w-10"
+          :class="hasRecentDreamUpdate(file) ? 'text-violet-400' : file.supported ? 'text-theme-400' : 'text-theme-600'"
+        />
+        <span class="w-full truncate text-sm font-medium text-theme-200">{{ file.fileName }}</span>
+        <span class="mt-1 text-[11px] text-theme-600">{{ formatFileSize(file.size) }}</span>
+        <span
+          class="mt-2 inline-flex items-center gap-1 text-[10px]"
+          :class="file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        >
+          <Icon
+            :icon="statusIcon(file.status)"
+            class="h-3 w-3"
+          />
+          {{ statusLabel(file.status) }}
+        </span>
+      </div>
+    </div>
+    <!-- Unified sortable folder/file list -->
     <DataTable
       v-else
-      v-model:selected-ids="selectedFileIds"
+      v-model:selected-ids="selectedExplorerIds"
       v-model:page="page"
       :items="documentRows"
       :columns="columns"
       :selectable="true"
-      :row-selectable="(file) => file.supported"
+      :row-selectable="isExplorerRowSelectable"
       :row-clickable="true"
-      :row-draggable="true"
-      :row-class="(file) => !file.supported ? 'opacity-50' : file.textDirect ? 'cursor-pointer' : undefined"
+      :row-draggable="(item) => item.kind === 'file'"
+      :row-class="(item) => item.kind === 'folder' ? (dropTargetFolderId === item.folder.id ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/60' : 'cursor-pointer') : !item.supported ? 'opacity-50' : 'cursor-pointer'"
       :pagination="true"
       :page-size="FILES_PAGE_SIZE"
       pagination-position="both"
-      initial-sort-key="modifiedAt"
-      initial-sort-direction="desc"
-      empty-message="No files in this folder yet."
-      @row-click="(file) => openEditorModal(file.fileName)"
-      @row-dragstart="(file, event) => startDocumentDrag(event, file.fileName)"
+      initial-sort-key="name"
+      initial-sort-direction="asc"
+      empty-message="No folders or files here yet."
+      @row-click="openExplorerRow"
+      @row-contextmenu="openExplorerContextMenu"
+      @row-dragstart="startExplorerDrag"
+      @row-dragover="dragOverExplorerRow"
+      @row-dragleave="dragLeaveExplorerRow"
+      @row-drop="dropOnExplorerRow"
       @row-dragend="endDocumentDrag"
       @visible-items-change="visibleDocumentRows = $event"
     >
-      <template #col-fileName="{ item: file }">
+      <template #col-name="{ item }">
         <div class="flex min-w-0 items-center gap-3">
           <Icon
-            :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-            class="h-4 w-4 shrink-0"
-            :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
+            :icon="item.kind === 'folder'
+              ? item.folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'
+              : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+            class="h-5 w-5 shrink-0"
+            :class="item.kind === 'folder'
+              ? item.folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'
+              : item.supported ? 'text-theme-400' : 'text-theme-600'"
           />
           <div class="min-w-0">
-            <div
-              class="flex items-center gap-1.5 truncate text-sm"
-              :class="hasRecentDreamUpdate(file) ? 'text-violet-400' : file.supported ? 'text-theme-200' : 'text-theme-500'"
-            >
-              <Icon
-                v-if="hasRecentDreamUpdate(file)"
-                icon="lucide:moon-star"
-                class="h-3.5 w-3.5 shrink-0"
-                title="Created or updated by Dream in the last 2 days"
-                aria-label="Created or updated by Dream in the last 2 days"
-              />
-              <span class="truncate">{{ file.fileName }}</span>
+            <div class="truncate text-sm font-medium text-theme-200">
+              {{ item.name }}
             </div>
-            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-theme-600">
-              <span>{{ formatFileSize(file.size) }}</span>
-              <span
-                v-for="tag in (file.tags || []).slice(0, 4)"
-                :key="tag"
-                class="rounded border border-theme-700/80 bg-theme-900/70 px-1.5 py-0.5 text-[10px] text-theme-400"
-              >{{ tag }}</span>
-              <span
-                v-if="(file.tags || []).length > 4"
-                :title="(file.tags || []).slice(4).join(', ')"
-                class="text-[10px] text-theme-500"
-              >+{{ (file.tags || []).length - 4 }}</span>
+            <div class="mt-0.5 truncate text-[11px] text-theme-600">
+              <template v-if="item.kind === 'folder'">
+                {{ item.folder.fileCount }} direct · {{ item.folder.descendantFileCount || 0 }} nested
+              </template>
+              <template v-else>
+                {{ formatFileSize(item.size) }}<template v-if="item.tags.length">
+                  · {{ item.tags.slice(0, 4).join(', ') }}
+                </template>
+              </template>
             </div>
           </div>
         </div>
       </template>
-
-      <template #col-modifiedAt="{ item: file }">
+      <template #col-modifiedAt="{ item }">
         <span class="text-xs text-theme-500">
-          {{ new Date(file.modifiedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) }}
+          {{ new Date(item.modifiedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }}
         </span>
       </template>
-
-      <template #col-chunkCount="{ item: file }">
-        <span
-          v-if="file.supported && file.status === 'indexed'"
-          class="text-xs text-theme-400"
-        >
-          {{ file.chunkCount || 0 }}
+      <template #col-chunkCount="{ item }">
+        <span class="text-xs text-theme-400">
+          <template v-if="item.kind === 'folder'">{{ item.chunkCount || 0 }} items</template>
+          <template v-else-if="item.status === 'indexed'">{{ item.chunkCount || 0 }}</template>
+          <template v-else-if="item.estimatedChunkCount !== undefined">~{{ item.estimatedChunkCount }}</template>
+          <template v-else>—</template>
         </span>
+      </template>
+      <template #col-deepResearched="{ item }">
         <span
-          v-else-if="file.supported && file.estimatedChunkCount !== undefined"
+          v-if="item.kind === 'folder'"
           class="text-xs text-theme-600"
-          title="Estimated from file size and current chunking settings"
+        >Recursive</span>
+        <span
+          v-else
+          class="inline-flex items-center gap-1.5 text-xs"
+          :class="item.deepResearched ? 'text-green-400' : 'text-theme-500'"
         >
-          ~{{ file.estimatedChunkCount }}
+          <Icon
+            :icon="item.deepResearched ? 'lucide:check-circle' : 'lucide:circle-dashed'"
+            class="h-3.5 w-3.5"
+          />
+          {{ item.deepResearched ? 'Researched' : 'Not researched' }}
+        </span>
+      </template>
+      <template #col-status="{ item }">
+        <span
+          v-if="item.kind === 'folder'"
+          class="inline-flex items-center gap-1.5 text-xs text-amber-400"
+        >
+          <Icon
+            icon="lucide:folder"
+            class="h-3.5 w-3.5"
+          /> Folder
         </span>
         <span
           v-else
-          class="text-xs text-theme-700"
+          class="inline-flex items-center gap-1.5 text-xs"
+          :class="item.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
         >
-          —
+          <Icon
+            :icon="statusIcon(item.status)"
+            class="h-3.5 w-3.5"
+          />
+          {{ statusLabel(item.status) }}
         </span>
-      </template>
-
-      <template #col-deepResearched="{ item: file }">
-        <div
-          v-if="file.supported"
-          class="flex items-center gap-1.5"
-          :title="!isJobRunning('deep-research', file.fileName) && !file.deepResearched ? (file.status === 'indexed' ? (file.analysisStatus === 'needs_refresh' ? 'Analysis needs to be refreshed' : 'Facts not extracted') : 'Deep Research requires a search index first') : undefined"
-        >
-          <button
-            v-if="isJobRunning('deep-research', file.fileName)"
-            type="button"
-            class="job-cancel-control inline-flex items-center rounded-md px-2 py-1 text-[11px] text-accent-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
-            title="Cancel Deep Research"
-            @click.stop="cancelJob(runningJob('deep-research', file.fileName))"
-          >
-            <span class="job-progress inline-flex items-center gap-1.5">
-              <Icon
-                icon="lucide:loader-2"
-                class="h-3.5 w-3.5 animate-spin"
-              />
-              {{ deepResearchProgress(file.fileName) }}
-            </span>
-            <span class="job-cancel items-center gap-1.5 font-medium">
-              <Icon
-                icon="lucide:x"
-                class="h-3.5 w-3.5"
-              />
-              Cancel
-            </span>
-          </button>
-          <HoverTooltip
-            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && file.deepResearched"
-            :max-width="380"
-            @show="loadKnowledgePreview(file.fileName)"
-          >
-            <span
-              class="inline-flex overflow-hidden rounded-md border"
-              :class="file.analysisStatus === 'needs_refresh'
-                ? 'border-amber-500/25 bg-amber-500/10'
-                : 'border-green-500/15 bg-green-500/5'"
-            >
-              <span
-                class="inline-flex cursor-help items-center gap-1.5 px-2 py-1 text-[11px]"
-                :class="file.analysisStatus === 'needs_refresh' ? 'text-amber-300' : 'text-green-400'"
-              >
-                <Icon
-                  :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:triangle-alert' : 'lucide:check-circle'"
-                  class="h-3.5 w-3.5"
-                />
-                {{ file.analysisStatus === 'needs_refresh' ? 'Analysis outdated' : 'Deep Research' }}
-              </span>
-              <button
-                v-if="supportsAnalysis(file)"
-                type="button"
-                class="inline-flex items-center border-l px-1.5 transition-colors"
-                :class="file.analysisStatus === 'needs_refresh'
-                  ? 'border-amber-500/25 text-amber-300 hover:bg-amber-500/15 hover:text-amber-200'
-                  : 'border-green-500/15 text-green-500 hover:bg-accent-500/10 hover:text-accent-300'"
-                :title="file.analysisStatus === 'needs_refresh' ? 'Update outdated analysis' : 'Run Deep Research again'"
-                :aria-label="file.analysisStatus === 'needs_refresh' ? 'Update outdated analysis' : 'Run Deep Research again'"
-                @click.stop="extractKnowledgeFromFile(file.fileName)"
-              >
-                <Icon
-                  :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:circle-arrow-up' : 'lucide:refresh-cw'"
-                  class="h-3.5 w-3.5"
-                />
-              </button>
-            </span>
-            <template #content>
-              <div class="w-[340px] max-w-full">
-                <div class="mb-2 font-medium text-theme-200">
-                  Extracted information
-                </div>
-                <div
-                  v-if="file.analysisStatus === 'needs_refresh'"
-                  class="mb-2 flex items-start gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-amber-200"
-                >
-                  <Icon
-                    icon="lucide:triangle-alert"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0"
-                  />
-                  <span>The document changed after this analysis was created. Update it to refresh the extracted information.</span>
-                </div>
-                <div
-                  v-if="knowledgePreviews[file.fileName]?.status === 'loading'"
-                  class="flex items-center gap-2 text-theme-500"
-                >
-                  <Icon
-                    icon="lucide:loader-2"
-                    class="h-3.5 w-3.5 animate-spin"
-                  />
-                  Loading…
-                </div>
-                <div
-                  v-else-if="knowledgePreviews[file.fileName]?.status === 'error'"
-                  class="text-red-400"
-                >
-                  Could not load extracted information.
-                </div>
-                <div
-                  v-else-if="knowledgePreviews[file.fileName]?.data?.items.length"
-                  class="space-y-1.5"
-                >
-                  <div
-                    v-for="(item, index) in knowledgePreviews[file.fileName]?.data?.items"
-                    :key="`${item.kind}-${index}-${item.label}`"
-                    class="flex items-start gap-2 text-theme-300"
-                  >
-                    <Icon
-                      :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:user-round'"
-                      class="mt-0.5 h-3 w-3 shrink-0 text-theme-500"
-                    />
-                    <span class="break-words">{{ item.label }}</span>
-                  </div>
-                  <div
-                    v-if="(knowledgePreviews[file.fileName]?.data?.total || 0) > 15"
-                    class="pt-1 text-theme-500"
-                  >
-                    +{{ (knowledgePreviews[file.fileName]?.data?.total || 0) - 15 }} more
-                  </div>
-                </div>
-                <div
-                  v-else
-                  class="text-theme-500"
-                >
-                  No durable knowledge was extracted.
-                </div>
-              </div>
-            </template>
-          </HoverTooltip>
-          <SplitButton
-            v-if="!isJobRunning('deep-research', file.fileName) && supportsAnalysis(file) && resumableJob(file.fileName)"
-            :primary-label="`Resume Deep Research of ${file.fileName}`"
-            :menu-label="`Deep Research options for ${file.fileName}`"
-            title="Continue running Deep Research on the remaining document parts"
-            placement="above"
-            @primary="extractKnowledgeFromFile(file.fileName)"
-          >
-            <Icon
-              icon="lucide:play"
-              class="h-3.5 w-3.5"
-            />
-            <span class="text-[11px] font-medium">
-              Resume {{ resumableJob(file.fileName)?.progressCurrent }}/{{ resumableJob(file.fileName)?.progressTotal }}
-            </span>
-            <template #menu="{ close }">
-              <button
-                type="button"
-                class="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left text-red-300 transition-colors hover:bg-red-500/10 focus:outline-none focus-visible:bg-red-500/10"
-                role="menuitem"
-                @click.stop="close(); discardJob(resumableJob(file.fileName))"
-              >
-                <Icon
-                  icon="lucide:x"
-                  class="mt-0.5 h-4 w-4 shrink-0"
-                />
-                <span>
-                  <span class="block text-xs font-medium">Cancel</span>
-                  <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Discard saved Deep Research progress and start over next time.</span>
-                </span>
-              </button>
-            </template>
-          </SplitButton>
-          <span
-            v-if="!isJobRunning('deep-research', file.fileName) && !file.deepResearched && file.status !== 'indexed'"
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
-          >
-            <Icon
-              icon="lucide:circle-dashed"
-              class="h-3.5 w-3.5"
-            />
-            Not researched
-          </span>
-          <button
-            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && !file.deepResearched && supportsAnalysis(file)"
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/15 bg-accent-500/10 px-2 py-1 text-[11px] text-accent-300 transition-colors hover:bg-accent-500/20"
-            title="Extract and classify facts from this document"
-            @click.stop="extractKnowledgeFromFile(file.fileName)"
-          >
-            <Icon
-              :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:refresh-cw' : 'lucide:network'"
-              class="h-3.5 w-3.5"
-            />
-            {{ file.analysisStatus === 'needs_refresh' ? 'Refresh analysis' : 'Run Deep Research' }}
-          </button>
-          <span
-            v-if="!isJobRunning('deep-research', file.fileName) && exceedsAnalysisLimit(file)"
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
-            :title="`Analysis is limited to ${analysisChunkLimit(file)} chunks; this document has ${file.chunkCount}.`"
-          >
-            <Icon
-              icon="lucide:ban"
-              class="h-3.5 w-3.5"
-            />
-            Too large to analyze
-          </span>
-        </div>
-      </template>
-
-      <template #col-status="{ item: file }">
-        <button
-          v-if="file.supported && isJobRunning('reindex', file.fileName)"
-          type="button"
-          class="job-cancel-control inline-flex items-center rounded-md px-2 py-1 text-[11px] text-accent-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
-          title="Cancel search indexing"
-          @click.stop="cancelJob(runningJob('reindex', file.fileName))"
-        >
-          <span class="job-progress inline-flex items-center gap-1.5">
-            <Icon
-              icon="lucide:loader-2"
-              class="h-3.5 w-3.5 animate-spin"
-            />
-            {{ searchIndexProgress(file.fileName) }}
-          </span>
-          <span class="job-cancel items-center gap-1.5 font-medium">
-            <Icon
-              icon="lucide:x"
-              class="h-3.5 w-3.5"
-            />
-            Cancel
-          </span>
-        </button>
-        <div
-          v-else
-          class="flex items-center gap-1.5"
-          :title="statusLabel(file.status)"
-        >
-          <div
-            v-if="file.status === 'indexed'"
-            class="inline-flex overflow-hidden rounded-md border border-green-500/15 bg-green-500/5"
-          >
-            <span class="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] text-green-400">
-              <Icon
-                icon="lucide:check-circle"
-                class="h-3.5 w-3.5"
-              />
-              Searchable
-            </span>
-            <button
-              type="button"
-              class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
-              title="Re-index semantic search vectors"
-              aria-label="Re-index semantic search vectors"
-              @click.stop="reindexDocument(file)"
-            >
-              <Icon
-                icon="lucide:refresh-cw"
-                class="h-3.5 w-3.5"
-              />
-            </button>
-          </div>
-          <button
-            v-else-if="file.supported"
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors"
-            :class="file.status === 'needs_reindex' ? 'border-orange-500/15 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' : 'border-accent-500/15 bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
-            :title="file.status === 'needs_reindex' ? 'Re-index semantic search vectors' : 'Build semantic search vectors for this document'"
-            @click.stop="reindexDocument(file)"
-          >
-            <Icon
-              :icon="statusIcon(file.status)"
-              class="h-3.5 w-3.5"
-            />
-            <span v-if="file.status === 'needs_reindex'">Re-index</span>
-            <span v-else>Make searchable</span>
-          </button>
-          <span
-            v-else
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-600"
-          >
-            <Icon
-              icon="lucide:slash"
-              class="h-3.5 w-3.5"
-            />
-            Not supported
-          </span>
-        </div>
       </template>
     </DataTable>
+
+
+    <Teleport to="body">
+      <div
+        v-if="contextMenu"
+        data-memory-context-menu
+        data-testid="memory-explorer-context-menu"
+        class="fixed z-[80] w-60 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-2xl shadow-black/50"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+        role="menu"
+        @contextmenu.prevent
+      >
+        <template v-if="contextMenu.kind === 'folder' && contextMenu.folder">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="openFolder(contextMenu.folder)"
+          >
+            <Icon
+              icon="lucide:folder-open"
+              class="h-3.5 w-3.5 text-amber-400"
+            /> Open
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="emit('createFolder', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:folder-plus"
+              class="h-3.5 w-3.5 text-accent-400"
+            /> Add subfolder
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="emit('editFolder', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:settings-2"
+              class="h-3.5 w-3.5"
+            /> Folder settings
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="emit('toggleAutoMemoryExclusion', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              :icon="contextMenu.folder.autoMemoryExcluded ? 'lucide:folder-check' : 'lucide:folder-x'"
+              class="h-3.5 w-3.5"
+              :class="contextMenu.folder.autoMemoryExcluded ? 'text-emerald-400' : 'text-orange-400'"
+            />
+            {{ contextMenu.folder.autoMemoryExcluded ? 'Include in Auto Memory Router' : 'Exclude from Auto Memory Router' }}
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
+            role="menuitem"
+            @click="emit('deleteFolder', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-3.5 w-3.5"
+            /> Delete folder
+          </button>
+        </template>
+        <template v-else-if="contextMenu.kind === 'document' && contextMenu.file">
+          <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-theme-500">
+            {{ selectedItemCount }} item{{ selectedItemCount !== 1 ? 's' : '' }} selected
+          </div>
+          <button
+            v-if="selectedItemCount === 1 && selectedFiles.size === 1 && contextMenu.file.textDirect"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="openEditorModal(contextMenu.file.fileName); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:file-pen-line"
+              class="h-3.5 w-3.5"
+            /> Open
+          </button>
+          <button
+            v-if="spaces.length > 1 && selectedItemCount > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="showMoveDialog = true; closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:folder-input"
+              class="h-3.5 w-3.5 text-accent-400"
+            /> Move
+          </button>
+          <button
+            v-if="selectedSearchIndexFiles.length > 0 || selectedFolders.size > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
+            role="menuitem"
+            @click="makeSearchableSelected(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:search-check"
+              class="h-3.5 w-3.5"
+            /> Index files
+          </button>
+          <button
+            v-if="selectedDeepResearchFiles.length > 0 || selectedFolders.size > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-emerald-300 hover:bg-emerald-500/10"
+            role="menuitem"
+            @click="deepResearchSelected(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:network"
+              class="h-3.5 w-3.5"
+            /> Deep Research
+          </button>
+          <button
+            v-if="selectedRememberedFiles.length > 0 || selectedFolders.size > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
+            role="menuitem"
+            @click="forgetSelectedMemories(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:brain-circuit"
+              class="h-3.5 w-3.5"
+            /> Drop Index
+          </button>
+          <button
+            v-if="selectedItemCount > 0"
+            type="button"
+            class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
+            role="menuitem"
+            @click="deleteSelectedFiles(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-3.5 w-3.5"
+            /> Remove
+          </button>
+        </template>
+      </div>
+    </Teleport>
 
     <MemoryDocumentEditorModal
       :show="showEditorModal"
@@ -1529,7 +1802,9 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <p>
           Very large documents can dominate search results simply because they contribute so many chunks. They also take longer to embed and may increase embedding costs and storage use.
         </p>
-        <p class="text-theme-300">You can continue anyway if this is intentional.</p>
+        <p class="text-theme-300">
+          You can continue anyway if this is intentional.
+        </p>
       </div>
       <template #actions>
         <button
@@ -1562,8 +1837,8 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
     <MemoryDocumentMoveDialog
       :show="showMoveDialog"
       :source-folder-id="folderId"
-      :selected-count="selectedFiles.size"
-      :spaces="spaces"
+      :selected-count="selectedItemCount"
+      :spaces="moveTargetSpaces"
       :moving="moving"
       @close="showMoveDialog = false"
       @move="moveSelectedFiles"

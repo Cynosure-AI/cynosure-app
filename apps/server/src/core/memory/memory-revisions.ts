@@ -132,6 +132,21 @@ export function markMemoryFoldersDeleted(folderIds: string[]): number {
   `).run(now, now, ...ids).changes
 }
 
+/** Permanently remove every deleted document and its revision/index history. */
+export function purgeDeletedMemoryDocuments(): number {
+  const db = getDb()
+  return db.transaction(() => {
+    const documentIds = db.prepare("SELECT document_id FROM memory_documents WHERE status = 'deleted'")
+      .all() as Array<{ document_id: string }>
+    if (!documentIds.length) return 0
+    const ids = documentIds.map(row => row.document_id)
+    const placeholders = ids.map(() => '?').join(', ')
+    db.prepare(`DELETE FROM memory_knowledge_index_runs WHERE document_id IN (${placeholders})`).run(...ids)
+    db.prepare(`DELETE FROM memory_file_index WHERE document_id IN (${placeholders})`).run(...ids)
+    return db.prepare(`DELETE FROM memory_documents WHERE document_id IN (${placeholders})`).run(...ids).changes
+  })()
+}
+
 export function listMemoryRevisions(documentRef: string): MemoryRevisionSummary[] {
   return (getDb().prepare(`
     SELECT r.* FROM memory_document_revisions r
