@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted, toRef, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
@@ -31,6 +31,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   editSpace: [];
   deleteSpace: [];
+  createFolder: [parent: MemoryFolder];
+  editFolder: [folder: MemoryFolder];
+  deleteFolder: [folder: MemoryFolder];
+  toggleAutoMemoryExclusion: [folder: MemoryFolder];
   spacesChanged: [];
   navigateFolder: [folderId: string];
   documentDragState: [active: boolean, payload?: DocumentDragPayload];
@@ -40,6 +44,7 @@ const emit = defineEmits<{
 // --- Constants ---
 const FILES_PAGE_SIZE = 30;
 const LARGE_CHUNK_WARNING_THRESHOLD = 100;
+const EXPLORER_VIEW_KEY = "cy-memory-explorer-view";
 
 /** Deep Research eligibility is decided by the limit the server attaches to
  * each file row, so the button can never be offered for a document the server
@@ -61,10 +66,27 @@ function exceedsAnalysisLimit(file: MemoryFileStatus): boolean {
 const files = ref<MemoryFileStatus[]>([]);
 const filesLoading = ref(false);
 const selectedFiles = ref<Set<string>>(new Set());
+const gridSelectionAnchor = ref<string | null>(null);
 const deleting = ref(false);
 const forgettingMemories = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
+const savedExplorerView = localStorage.getItem(EXPLORER_VIEW_KEY);
+const explorerView = ref<"list" | "grid">(
+  savedExplorerView === "grid" || savedExplorerView === "list"
+    ? savedExplorerView
+    : window.matchMedia("(max-width: 639px)").matches ? "grid" : "list",
+);
+const highlightedFolderId = ref<string | null>(null);
+const dropTargetFolderId = ref<string | null>(null);
+const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
+const contextMenu = ref<{
+  kind: "folder" | "document";
+  folder?: MemoryFolder;
+  file?: MemoryFileStatus;
+  x: number;
+  y: number;
+} | null>(null);
 const knowledgePreviews = ref<Record<string, { status: "loading" | "ready" | "error"; data?: MemoryDocumentKnowledgePreview }>>({});
 const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   knowledgePreviews.value = {};
@@ -107,6 +129,18 @@ let globalSearchTimer: number | null = null;
 let globalSearchSequence = 0;
 
 const currentSpace = computed(() => props.spaces.find((s) => s.id === props.folderId));
+const childFolders = computed(() => {
+  const current = currentSpace.value;
+  if (!current) return [];
+  return props.spaces
+    .filter((folder) => {
+      if (folder.isUncategorized) return false;
+      return current.isUncategorized
+        ? !folder.parentFolderPath
+        : folder.parentFolderPath === current.folderPath;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+});
 const folderHistory = ref<string[]>([props.folderId]);
 const folderHistoryIndex = ref(0);
 const canNavigateBack = computed(() => folderHistoryIndex.value > 0);
@@ -163,6 +197,95 @@ function navigateHistory(offset: -1 | 1): void {
 
 function navigateBreadcrumb(folderId?: string): void {
   if (folderId && folderId !== props.folderId) emit("navigateFolder", folderId);
+}
+
+function setExplorerView(view: "list" | "grid"): void {
+  explorerView.value = view;
+  localStorage.setItem(EXPLORER_VIEW_KEY, view);
+}
+
+function openFolder(folder: MemoryFolder): void {
+  contextMenu.value = null;
+  emit("navigateFolder", folder.id);
+}
+
+function openDocumentRow(file: DocumentRow): void {
+  highlightedFolderId.value = null;
+  openEditorModal(file.fileName);
+}
+
+function toggleGridSelection(file: MemoryFileStatus, event: MouseEvent): void {
+  if (!file.supported) return;
+  const next = new Set(selectedFiles.value);
+  const anchorIndex = gridSelectionAnchor.value
+    ? filteredFiles.value.findIndex((candidate) => candidate.fileName === gridSelectionAnchor.value)
+    : -1;
+  const clickedIndex = filteredFiles.value.findIndex((candidate) => candidate.fileName === file.fileName);
+  if (event.shiftKey && anchorIndex >= 0 && clickedIndex >= 0) {
+    const start = Math.min(anchorIndex, clickedIndex);
+    const end = Math.max(anchorIndex, clickedIndex);
+    for (const candidate of filteredFiles.value.slice(start, end + 1)) {
+      if (candidate.supported) next.add(candidate.fileName);
+    }
+  } else {
+    if (next.has(file.fileName)) next.delete(file.fileName);
+    else next.add(file.fileName);
+  }
+  if (!event.shiftKey || anchorIndex < 0) gridSelectionAnchor.value = file.fileName;
+  selectedFiles.value = next;
+}
+
+function onFolderDocumentDragOver(folder: MemoryFolder, event: DragEvent): void {
+  if (!activeDocumentDrag.value || folder.id === props.folderId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  dropTargetFolderId.value = folder.id;
+}
+
+function onFolderDocumentDragLeave(folder: MemoryFolder, event: DragEvent): void {
+  if (event.currentTarget instanceof HTMLElement && event.currentTarget.contains(event.relatedTarget as Node)) return;
+  if (dropTargetFolderId.value === folder.id) dropTargetFolderId.value = null;
+}
+
+async function onFolderDocumentDrop(folder: MemoryFolder, event: DragEvent): Promise<void> {
+  if (!activeDocumentDrag.value || folder.id === props.folderId) return;
+  event.preventDefault();
+  const sourceFiles = activeDocumentDrag.value.sourceFiles;
+  dropTargetFolderId.value = null;
+  activeDocumentDrag.value = null;
+  await moveDocumentsToFolder(folder.id, sourceFiles);
+}
+
+function openContextMenu(
+  kind: "folder" | "document",
+  event: MouseEvent,
+  item: MemoryFolder | MemoryFileStatus,
+): void {
+  event.preventDefault();
+  if (kind === "folder") {
+    highlightedFolderId.value = (item as MemoryFolder).id;
+    selectedFiles.value = new Set();
+    gridSelectionAnchor.value = null;
+  } else {
+    const file = item as MemoryFileStatus;
+    highlightedFolderId.value = null;
+    if (!selectedFiles.value.has(file.fileName)) {
+      selectedFiles.value = file.supported ? new Set([file.fileName]) : new Set();
+    }
+  }
+  const menuWidth = 240;
+  const menuHeight = kind === "folder" ? 248 : 286;
+  contextMenu.value = {
+    kind,
+    folder: kind === "folder" ? item as MemoryFolder : undefined,
+    file: kind === "document" ? item as MemoryFileStatus : undefined,
+    x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
+    y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+  };
+}
+
+function closeContextMenu(): void {
+  contextMenu.value = null;
 }
 
 watch(() => props.folderId, (folderId) => {
@@ -531,10 +654,13 @@ function startDocumentDrag(event: DragEvent, fileName: string) {
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData(DOCUMENT_DRAG_MIME, JSON.stringify(payload));
   event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+  activeDocumentDrag.value = payload;
   emit("documentDragState", true, payload);
 }
 
 function endDocumentDrag() {
+  activeDocumentDrag.value = null;
+  dropTargetFolderId.value = null;
   emit("documentDragState", false);
 }
 
@@ -570,10 +696,13 @@ watch(
     files.value = [];
     knowledgePreviews.value = {};
     selectedFiles.value = new Set();
+    gridSelectionAnchor.value = null;
     resetJobs();
     showEditorModal.value = false;
     editorFileName.value = "";
     searchQuery.value = "";
+    highlightedFolderId.value = null;
+    contextMenu.value = null;
     page.value = 0;
     await Promise.all([loadFiles(), loadJobs()]);
     if (props.folderId === folderId && props.focusFile) openEditorModal(props.focusFile);
@@ -612,12 +741,27 @@ watch([searchQuery, () => props.folderId, semanticSearch], ([query]) => {
   }, 200);
 }, { immediate: true });
 
+function handleExplorerPointerDown(event: MouseEvent): void {
+  if (!(event.target as HTMLElement).closest("[data-memory-context-menu]")) closeContextMenu();
+}
+
+function handleExplorerKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape") closeContextMenu();
+}
+
+onMounted(() => {
+  document.addEventListener("mousedown", handleExplorerPointerDown);
+  window.addEventListener("keydown", handleExplorerKeydown);
+});
+
 onUnmounted(() => {
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   if (pathCopiedTimer !== null) window.clearTimeout(pathCopiedTimer);
   window.clearInterval(dreamIndicatorTimer);
   unsubscribeGraphReset();
   unsubscribeDreamUpdate();
+  document.removeEventListener("mousedown", handleExplorerPointerDown);
+  window.removeEventListener("keydown", handleExplorerKeydown);
 });
 
 defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
@@ -658,6 +802,18 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </button>
       </div>
       <div class="flex items-center gap-2">
+        <button
+          v-if="currentSpace"
+          type="button"
+          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          @click="emit('createFolder', currentSpace)"
+        >
+          <Icon
+            icon="lucide:folder-plus"
+            class="h-4 w-4 text-amber-400"
+          />
+          New folder
+        </button>
         <button
           v-if="needsAttentionCount > 0"
           title="Indexing files makes them available for semantic searching."
@@ -922,6 +1078,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           in {{ currentSpace?.name || "this folder" }} and subfolders
         </template>
         <template v-else>
+          {{ childFolders.length }} folder{{ childFolders.length !== 1 ? "s" : "" }} ·
           {{ files.length }} file{{ files.length !== 1 ? "s" : "" }}
         </template>
         <template v-if="runningJobs.length > 0">
@@ -943,6 +1100,40 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             Select all {{ filteredFiles.length }}
           </button>
         </template>
+        <div
+          v-if="!searchQuery.trim()"
+          class="flex items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5"
+          aria-label="Explorer view"
+        >
+          <button
+            type="button"
+            class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+            :class="explorerView === 'list' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+            title="List view"
+            aria-label="List view"
+            :aria-pressed="explorerView === 'list'"
+            @click="setExplorerView('list')"
+          >
+            <Icon
+              icon="lucide:list"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+          <button
+            type="button"
+            class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
+            :class="explorerView === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+            title="Grid view"
+            aria-label="Grid view"
+            :aria-pressed="explorerView === 'grid'"
+            @click="setExplorerView('grid')"
+          >
+            <Icon
+              icon="lucide:grid-2x2"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+        </div>
         <button
           type="button"
           :disabled="filesLoading"
@@ -1057,6 +1248,64 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </div>
     </div>
 
+    <div
+      v-if="!searchQuery.trim() && explorerView === 'list' && (childFolders.length > 0 || files.length > 0)"
+      class="grid grid-cols-[40px_minmax(220px,3fr)_104px_70px_190px_minmax(220px,1.15fr)] items-center gap-4 overflow-x-auto rounded-t-xl border border-b-0 border-theme-800 bg-theme-900/70 px-5 py-3 text-[11px] uppercase tracking-wider text-theme-400"
+    >
+      <input
+        type="checkbox"
+        class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500"
+        :checked="allFilteredSelected"
+        aria-label="Select all documents"
+        @change="allFilteredSelected ? selectedFiles = new Set() : selectAll()"
+      >
+      <span>File</span><span>Modified</span><span>Chunks</span><span>Deep Research</span><span>Searchable</span>
+    </div>
+
+    <!-- Immediate child folders share the list surface with documents. They
+         intentionally remain above file sorting, matching desktop explorers. -->
+    <div
+      v-if="!searchQuery.trim() && explorerView === 'list' && childFolders.length > 0"
+      class="overflow-hidden border-x border-b border-theme-800 bg-theme-950/45"
+      data-testid="memory-explorer-folders"
+    >
+      <button
+        v-for="folder in childFolders"
+        :key="folder.id"
+        type="button"
+        class="grid w-full grid-cols-[40px_minmax(220px,3fr)_104px_70px_190px_minmax(220px,1.15fr)] items-center gap-4 border-b border-theme-800/70 px-5 py-4 text-left transition-colors last:border-b-0 hover:bg-theme-800/30"
+        :class="[
+          highlightedFolderId === folder.id ? 'bg-accent-500/[0.06]' : '',
+          dropTargetFolderId === folder.id ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/60' : '',
+        ]"
+        @click="openFolder(folder)"
+        @dblclick="openFolder(folder)"
+        @contextmenu="openContextMenu('folder', $event, folder)"
+        @dragover="onFolderDocumentDragOver(folder, $event)"
+        @dragleave="onFolderDocumentDragLeave(folder, $event)"
+        @drop="onFolderDocumentDrop(folder, $event)"
+      >
+        <span />
+        <span class="flex min-w-0 items-center gap-3">
+          <Icon
+            :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
+            class="h-5 w-5 shrink-0"
+            :class="folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'"
+          />
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-medium text-theme-200">{{ folder.name }}</span>
+            <span class="block text-[11px] text-theme-600">
+              {{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}<template v-if="folder.descendantFileCount"> · {{ folder.descendantFileCount }} nested</template>
+            </span>
+          </span>
+        </span>
+        <span class="text-xs text-theme-500">{{ new Date(folder.createdAt).toLocaleDateString() }}</span>
+        <span class="text-xs text-theme-700">—</span>
+        <span class="text-xs text-theme-700">—</span>
+        <span class="text-xs text-theme-500">Folder</span>
+      </button>
+    </div>
+
     <!-- Scoped or global search results -->
     <DataTable
       v-if="searchQuery.trim()"
@@ -1132,10 +1381,86 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 
     <!-- Empty states -->
     <div
-      v-else-if="files.length === 0 && !filesLoading"
+      v-else-if="files.length === 0 && childFolders.length === 0 && !filesLoading"
       class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
     >
       No files in this folder yet. Upload files to get started.
+    </div>
+    <!-- Grid explorer -->
+    <div
+      v-else-if="explorerView === 'grid'"
+      class="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3"
+      data-testid="memory-explorer-grid"
+    >
+      <button
+        v-for="folder in childFolders"
+        :key="folder.id"
+        type="button"
+        class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+        :class="[
+          highlightedFolderId === folder.id ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
+          dropTargetFolderId === folder.id ? 'border-accent-500/60 bg-accent-500/10 ring-1 ring-accent-500/50' : '',
+        ]"
+        @click="openFolder(folder)"
+        @dblclick="openFolder(folder)"
+        @contextmenu="openContextMenu('folder', $event, folder)"
+        @dragover="onFolderDocumentDragOver(folder, $event)"
+        @dragleave="onFolderDocumentDragLeave(folder, $event)"
+        @drop="onFolderDocumentDrop(folder, $event)"
+      >
+        <Icon
+          :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
+          class="mb-3 h-11 w-11"
+          :class="folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'"
+        />
+        <span class="w-full truncate text-sm font-medium text-theme-200">{{ folder.name }}</span>
+        <span class="mt-1 text-[11px] text-theme-600">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
+      </button>
+      <div
+        v-for="file in filteredFiles"
+        :key="file.fileName"
+        :draggable="true"
+        role="button"
+        tabindex="0"
+        class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+        :class="[
+          selectedFiles.has(file.fileName) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
+          !file.supported ? 'opacity-50' : '',
+        ]"
+        @click="openEditorModal(file.fileName)"
+        @dblclick="openEditorModal(file.fileName)"
+        @keydown.enter="openEditorModal(file.fileName)"
+        @contextmenu="openContextMenu('document', $event, file)"
+        @dragstart.stop="startDocumentDrag($event, file.fileName)"
+        @dragend="endDocumentDrag"
+      >
+        <input
+          v-if="file.supported"
+          type="checkbox"
+          class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+          :class="{ 'sm:!opacity-100': selectedFiles.size > 0 || selectedFiles.has(file.fileName) }"
+          :checked="selectedFiles.has(file.fileName)"
+          :aria-label="`${selectedFiles.has(file.fileName) ? 'Deselect' : 'Select'} ${file.fileName}`"
+          @click.stop="toggleGridSelection(file, $event)"
+        >
+        <Icon
+          :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+          class="mb-3 h-10 w-10"
+          :class="hasRecentDreamUpdate(file) ? 'text-violet-400' : file.supported ? 'text-theme-400' : 'text-theme-600'"
+        />
+        <span class="w-full truncate text-sm font-medium text-theme-200">{{ file.fileName }}</span>
+        <span class="mt-1 text-[11px] text-theme-600">{{ formatFileSize(file.size) }}</span>
+        <span
+          class="mt-2 inline-flex items-center gap-1 text-[10px]"
+          :class="file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        >
+          <Icon
+            :icon="statusIcon(file.status)"
+            class="h-3 w-3"
+          />
+          {{ statusLabel(file.status) }}
+        </span>
+      </div>
     </div>
     <!-- File rows -->
     <DataTable
@@ -1144,6 +1469,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       v-model:page="page"
       :items="documentRows"
       :columns="columns"
+      :show-header="false"
       :selectable="true"
       :row-selectable="(file) => file.supported"
       :row-clickable="true"
@@ -1155,7 +1481,9 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       initial-sort-key="modifiedAt"
       initial-sort-direction="desc"
       empty-message="No files in this folder yet."
-      @row-click="(file) => openEditorModal(file.fileName)"
+      @row-click="openDocumentRow"
+      @row-dblclick="(file) => openEditorModal(file.fileName)"
+      @row-contextmenu="(file, event) => openContextMenu('document', event, file)"
       @row-dragstart="(file, event) => startDocumentDrag(event, file.fileName)"
       @row-dragend="endDocumentDrag"
       @visible-items-change="visibleDocumentRows = $event"
@@ -1505,6 +1833,155 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </template>
     </DataTable>
 
+    <Teleport to="body">
+      <div
+        v-if="contextMenu"
+        data-memory-context-menu
+        data-testid="memory-explorer-context-menu"
+        class="fixed z-[80] w-60 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-2xl shadow-black/50"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+        role="menu"
+        @contextmenu.prevent
+      >
+        <template v-if="contextMenu.kind === 'folder' && contextMenu.folder">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="openFolder(contextMenu.folder)"
+          >
+            <Icon
+              icon="lucide:folder-open"
+              class="h-3.5 w-3.5 text-amber-400"
+            /> Open
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="emit('createFolder', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:folder-plus"
+              class="h-3.5 w-3.5 text-accent-400"
+            /> Add subfolder
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="emit('editFolder', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:settings-2"
+              class="h-3.5 w-3.5"
+            /> Folder settings
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="emit('toggleAutoMemoryExclusion', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              :icon="contextMenu.folder.autoMemoryExcluded ? 'lucide:folder-check' : 'lucide:folder-x'"
+              class="h-3.5 w-3.5"
+              :class="contextMenu.folder.autoMemoryExcluded ? 'text-emerald-400' : 'text-orange-400'"
+            />
+            {{ contextMenu.folder.autoMemoryExcluded ? 'Include in Auto Memory Router' : 'Exclude from Auto Memory Router' }}
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
+            role="menuitem"
+            @click="emit('deleteFolder', contextMenu.folder); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-3.5 w-3.5"
+            /> Delete folder
+          </button>
+        </template>
+        <template v-else-if="contextMenu.kind === 'document' && contextMenu.file">
+          <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-theme-500">
+            {{ selectedFiles.size }} document{{ selectedFiles.size !== 1 ? 's' : '' }} selected
+          </div>
+          <button
+            v-if="selectedFiles.size === 1 && contextMenu.file.textDirect"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="openEditorModal(contextMenu.file.fileName); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:file-pen-line"
+              class="h-3.5 w-3.5"
+            /> Open
+          </button>
+          <button
+            v-if="spaces.length > 1 && selectedFiles.size > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+            role="menuitem"
+            @click="showMoveDialog = true; closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:folder-input"
+              class="h-3.5 w-3.5 text-accent-400"
+            /> Move
+          </button>
+          <button
+            v-if="selectedSearchIndexFiles.length > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
+            role="menuitem"
+            @click="makeSearchableSelected(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:search-check"
+              class="h-3.5 w-3.5"
+            /> Index files
+          </button>
+          <button
+            v-if="selectedDeepResearchFiles.length > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-emerald-300 hover:bg-emerald-500/10"
+            role="menuitem"
+            @click="deepResearchSelected(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:network"
+              class="h-3.5 w-3.5"
+            /> Deep Research
+          </button>
+          <button
+            v-if="selectedRememberedFiles.length > 0"
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
+            role="menuitem"
+            @click="forgetSelectedMemories(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:brain-circuit"
+              class="h-3.5 w-3.5"
+            /> Drop Index
+          </button>
+          <button
+            v-if="selectedFiles.size > 0"
+            type="button"
+            class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
+            role="menuitem"
+            @click="deleteSelectedFiles(); closeContextMenu()"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-3.5 w-3.5"
+            /> Remove
+          </button>
+        </template>
+      </div>
+    </Teleport>
+
     <MemoryDocumentEditorModal
       :show="showEditorModal"
       :folder-id="folderId"
@@ -1529,7 +2006,9 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <p>
           Very large documents can dominate search results simply because they contribute so many chunks. They also take longer to embed and may increase embedding costs and storage use.
         </p>
-        <p class="text-theme-300">You can continue anyway if this is intentional.</p>
+        <p class="text-theme-300">
+          You can continue anyway if this is intentional.
+        </p>
       </div>
       <template #actions>
         <button

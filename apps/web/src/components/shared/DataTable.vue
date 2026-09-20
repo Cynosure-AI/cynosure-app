@@ -74,6 +74,8 @@ const emit = defineEmits<{
   'update:selectedIds': [value: string[]]
   'update:page': [value: number]
   'row-click': [item: T, event: MouseEvent | KeyboardEvent]
+  'row-dblclick': [item: T, event: MouseEvent]
+  'row-contextmenu': [item: T, event: MouseEvent]
   'row-dragstart': [item: T, event: DragEvent]
   'row-dragover': [item: T, event: DragEvent]
   'row-dragleave': [item: T, event: DragEvent]
@@ -191,6 +193,19 @@ function handleRowClick(item: T, event: MouseEvent) {
   if (target.closest('button, a, input, select, textarea, [role="button"], [role="combobox"]')) return
   if (editingCell.value) return
   emit('row-click', item, event)
+}
+
+function handleRowDoubleClick(item: T, event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (target.closest('button, a, input, select, textarea, [role="button"], [role="combobox"]')) return
+  if (editingCell.value) return
+  emit('row-dblclick', item, event)
+}
+
+function handleRowContextMenu(item: T, event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (target.closest('input, select, textarea')) return
+  emit('row-contextmenu', item, event)
 }
 
 function handleRowKeydown(item: T, event: KeyboardEvent) {
@@ -547,6 +562,8 @@ defineExpose({ startEditing, closeEditor })
           :tabindex="rowClickable ? 0 : undefined"
           :aria-selected="showSelectableColumn ? isSelected(item.id) : undefined"
           @click="handleRowClick(item, $event)"
+          @dblclick="handleRowDoubleClick(item, $event)"
+          @contextmenu="handleRowContextMenu(item, $event)"
           @keydown="handleRowKeydown(item, $event)"
           @dragstart.stop="handleDragStart(item, $event)"
           @dragover="handleDragOver(item, $event)"
@@ -567,8 +584,8 @@ defineExpose({ startEditing, closeEditor })
               <input
                 v-if="isSelectable(item)"
                 type="checkbox"
-                class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-0 transition-opacity focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950 group-hover:opacity-100"
-                :class="{ 'opacity-100': anySelected || isSelected(item.id) }"
+                class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950 sm:opacity-0 sm:group-hover:opacity-100"
+                :class="{ 'sm:!opacity-100': anySelected || isSelected(item.id) }"
                 :checked="isSelected(item.id)"
                 :aria-label="`${isSelected(item.id) ? 'Deselect' : 'Select'} row`"
                 @click.stop="toggleSelection(item.id, $event)"
