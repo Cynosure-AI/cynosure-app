@@ -14,6 +14,14 @@ interface NamespaceGroup {
   tools: ToolInfo[]
 }
 
+const BUILT_IN_NAMESPACE_DESCRIPTIONS: Record<string, string> = {
+  'builtin:memory': 'Search, create, update, and organize persistent memory and knowledge.',
+  'builtin:scheduling': 'Create, review, update, and remove scheduled agent tasks.',
+  'builtin:notifications': 'Send notifications in Cynosure or through connected channels.',
+  'builtin:utility': 'Work with attachments, MCP tools, planning, and sub-agent delegation.',
+  builtin: 'Tools provided directly by Cynosure.',
+}
+
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 const { servers, loadServers } = useMcpServers()
@@ -110,8 +118,10 @@ function namespaceIcon(namespaceId: string): string | null {
   return servers.value.find((server) => server.id === id)?.icon_url ?? null
 }
 
-function namespaceDescription(namespaceId: string): string | undefined {
-  const id = serverId(namespaceId)
+function namespaceDescription(namespace: ToolNamespace): string | undefined {
+  if (namespace.description?.trim()) return namespace.description.trim()
+  if (isBuiltInNamespaceId(namespace.id)) return BUILT_IN_NAMESPACE_DESCRIPTIONS[namespace.id] ?? BUILT_IN_NAMESPACE_DESCRIPTIONS.builtin
+  const id = serverId(namespace.id)
   if (!id) return undefined
   const server = servers.value.find((item) => item.id === id)
   return server?.description?.trim() || server?.serverInfo?.description?.trim() || undefined
@@ -312,7 +322,7 @@ onBeforeUnmount(() => {
             <div
               v-for="group in groups"
               :key="group.namespace.id"
-              :title="namespaceDescription(group.namespace.id)"
+              :title="namespaceDescription(group.namespace)"
               class="group cursor-pointer flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-theme-300 transition-colors hover:bg-theme-800/70 hover:text-theme-100"
               role="menuitem"
               tabindex="0"

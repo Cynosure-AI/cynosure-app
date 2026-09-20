@@ -183,6 +183,8 @@ describe('ToolSelectorPopover', () => {
       'Open Calendar MCP tools',
       'Open Linear MCP tools',
     ])
+    expect(document.body.querySelector('[aria-label="Toggle all tools in Built-In"]')?.closest('[role="menuitem"]')?.getAttribute('title'))
+      .toBe('Work with attachments, MCP tools, planning, and sub-agent delegation.')
 
     document.body.querySelector<HTMLButtonElement>('[aria-label="Toggle all tools in Calendar MCP"]')?.click()
     await nextTick()
