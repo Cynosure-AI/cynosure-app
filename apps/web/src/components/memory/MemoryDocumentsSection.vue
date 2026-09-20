@@ -18,6 +18,7 @@ const props = defineProps<{
   spacesLoading: boolean;
   selectedFolderId: string | null;
   selectedFolder: MemoryFolder | null;
+  activeSidebarView?: "folder" | "recent" | "trash";
   focusFile?: string;
 }>();
 
@@ -27,6 +28,7 @@ const emit = defineEmits<{
   "edit-folder": [space: MemoryFolder];
   "delete-folder": [space: MemoryFolder];
   "toggle-auto-memory-exclusion": [space: MemoryFolder];
+  "select-sidebar-view": [view: "folder" | "recent" | "trash"];
   "refresh-spaces": [];
   "folder-navigation": [];
 }>();
@@ -192,8 +194,15 @@ watch(() => props.focusFile, (focusFile) => {
 
 function selectSpace(folderId: string) {
   openFolderMenuId.value = null;
+  emit("select-sidebar-view", "folder");
   emit("update:selectedFolderId", folderId);
   emit("folder-navigation");
+  mobileDocumentsVisible.value = true;
+}
+
+function selectSpecialView(view: "recent" | "trash"): void {
+  openFolderMenuId.value = null;
+  emit("select-sidebar-view", view);
   mobileDocumentsVisible.value = true;
 }
 
@@ -316,8 +325,8 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
     <div class="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
       <div
         data-testid="memory-folder-pane"
-        class="rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
-        :class="mobileDocumentsVisible ? 'hidden md:block' : 'block'"
+        class="flex-col rounded-xl border border-theme-800 overflow-hidden bg-theme-950/45"
+        :class="mobileDocumentsVisible ? 'hidden md:flex' : 'flex'"
       >
         <div class="flex items-center justify-between px-4 py-3 border-b border-theme-800 bg-theme-900/50">
           <div class="text-xs font-medium uppercase tracking-wide text-theme-400">
@@ -353,7 +362,7 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
             :data-auto-memory-excluded="space.autoMemoryExcluded ? 'true' : 'false'"
             class="group flex items-center gap-2 px-3 py-2.5 border-b border-theme-900/70 last:border-b-0 transition-colors"
             :class="[
-              selectedFolderId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
+              (activeSidebarView ?? 'folder') === 'folder' && selectedFolderId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
               dropTargetSpaceId === space.id ? 'ring-1 ring-accent-500/70 ring-inset bg-accent-500/10' : '',
             ]"
             @dragenter.stop="onDragEnter($event, space.id)"
@@ -427,10 +436,38 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
             </span>
           </div>
         </div>
+        <div class="mt-auto border-t border-theme-700/80 p-1.5">
+          <button
+            type="button"
+            data-testid="memory-recent-view"
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors"
+            :class="activeSidebarView === 'recent' ? 'bg-accent-500/12 text-theme-100' : 'text-theme-300 hover:bg-theme-800/50 hover:text-theme-100'"
+            @click="selectSpecialView('recent')"
+          >
+            <Icon
+              icon="lucide:history"
+              class="h-4 w-4 shrink-0 text-accent-400"
+            />
+            <span class="font-medium">Recent</span>
+          </button>
+          <button
+            type="button"
+            data-testid="memory-trash-view"
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+            :class="{ 'bg-red-500/10 text-red-200': activeSidebarView === 'trash' }"
+            @click="selectSpecialView('trash')"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-4 w-4 shrink-0"
+            />
+            <span class="font-medium">Trash</span>
+          </button>
+        </div>
       </div>
 
       <div
-        v-if="selectedFolderId"
+        v-if="(activeSidebarView ?? 'folder') === 'folder' && selectedFolderId"
         data-testid="memory-document-drop-zone"
         class="relative min-w-0"
         :class="mobileDocumentsVisible ? 'block' : 'hidden md:block'"
@@ -480,6 +517,27 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
           @document-drag-state="setDocumentDragState"
           @open-global-document="openGlobalDocument"
         />
+      </div>
+      <div
+        v-else-if="activeSidebarView === 'recent' || activeSidebarView === 'trash'"
+        data-testid="memory-special-content"
+        class="min-w-0"
+        :class="mobileDocumentsVisible ? 'block' : 'hidden md:block'"
+      >
+        <button
+          type="button"
+          data-testid="memory-mobile-folder-back"
+          class="mb-3 inline-flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-900/70 px-3 py-2 text-sm font-medium text-theme-300 transition hover:border-theme-600 hover:text-theme-100 md:hidden"
+          aria-label="Back to memory folders"
+          @click="showMobileFolders"
+        >
+          <Icon
+            icon="lucide:arrow-left"
+            class="h-4 w-4"
+          />
+          Folders
+        </button>
+        <slot :name="activeSidebarView" />
       </div>
     </div>
 
