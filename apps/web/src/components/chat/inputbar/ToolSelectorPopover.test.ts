@@ -15,7 +15,7 @@ vi.mock('../../../composables/useMcpServers', async () => {
   const { ref } = await import('vue')
   return {
     useMcpServers: () => ({
-      servers: ref([{ id: 'github', icon_url: '/github.png' }]),
+      servers: ref([{ id: 'github', icon_url: '/github.png', description: 'GitHub repository tools' }]),
       loadServers: mocks.loadServers,
     }),
   }
@@ -59,6 +59,7 @@ describe('ToolSelectorPopover', () => {
     expect(document.body.textContent).toContain('GitHub MCP')
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(document.body.querySelector('img[src="/github.png"]')).not.toBeNull()
+    expect(document.body.querySelector('[role="menuitem"]')?.getAttribute('title')).toBe('GitHub repository tools')
     expect((document.body.querySelector('[aria-label="Tool access"]') as HTMLElement).style.maxHeight).toBe('484px')
 
     document.body.querySelector<HTMLButtonElement>('[aria-label="Open GitHub MCP tools"]')?.click()

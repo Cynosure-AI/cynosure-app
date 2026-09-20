@@ -110,6 +110,13 @@ function namespaceIcon(namespaceId: string): string | null {
   return servers.value.find((server) => server.id === id)?.icon_url ?? null
 }
 
+function namespaceDescription(namespaceId: string): string | undefined {
+  const id = serverId(namespaceId)
+  if (!id) return undefined
+  const server = servers.value.find((item) => item.id === id)
+  return server?.description?.trim() || server?.serverInfo?.description?.trim() || undefined
+}
+
 function markIconBroken(namespaceId: string): void {
   brokenIcons.value = new Set([...brokenIcons.value, namespaceId])
 }
@@ -305,6 +312,7 @@ onBeforeUnmount(() => {
             <div
               v-for="group in groups"
               :key="group.namespace.id"
+              :title="namespaceDescription(group.namespace.id)"
               class="group cursor-pointer flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-theme-300 transition-colors hover:bg-theme-800/70 hover:text-theme-100"
               role="menuitem"
               tabindex="0"
