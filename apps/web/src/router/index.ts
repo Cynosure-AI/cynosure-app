@@ -79,7 +79,7 @@ const router = createRouter({
     {
       path: '/memory-folders/:section(documents|visual-graph)',
       name: 'memory-folders',
-      component: () => import('@/views/MemoryFoldersView.vue')
+      component: () => import('@/views/MemoryView.vue')
     },
     {
       path: '/tools-policy',

@@ -5,12 +5,13 @@ import { Icon } from "@iconify/vue";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
-import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder, MemoryDiffSegment, MemoryRevisionSummary, RecentMemoryChange } from "../api/types";
+import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
-import MemoryDocumentsSection from "../components/memory/MemoryDocumentsSection.vue";
-import MemoryInlineDiff from "../components/memory/MemoryInlineDiff.vue";
+import MemoryDocumentSection from "../components/memory/MemoryDocumentSection.vue";
+import MemoryRecentChangesView from "../components/memory/MemoryRecentChangesView.vue";
+import MemoryTrashView from "../components/memory/MemoryTrashView.vue";
 import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vue";
 import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
@@ -77,20 +78,8 @@ const folderName = ref("");
 const folderDescription = ref("");
 const showDeleteConfirm = ref(false);
 const pendingDeleteFolder = ref<MemoryFolder | null>(null);
-type DeletedMemory = { documentRef: string; folderId: string; fileName: string; revision: string; deletedAt: number };
-const deletedMemories = ref<DeletedMemory[]>([]);
-const deletedLoading = ref(false);
-const deletedError = ref("");
-const restoringDocumentRef = ref("");
-const deletedHistoryRef = ref("");
-const deletedRevisions = ref<MemoryRevisionSummary[]>([]);
-const deletedSelectedRevisionId = ref("");
-const deletedRevisionDiff = ref<MemoryDiffSegment[]>([]);
-const recentChanges = ref<RecentMemoryChange[]>([]);
-const recentChangesLoading = ref(false);
-const recentChangesError = ref("");
 const activePanel = ref<MemoryPanel>("documents");
-const activeMemorySidebarView = ref<"folder" | "recent" | "trash">("folder");
+const activeDocumentView = ref<"folder" | "recent" | "trash">("folder");
 
 const graph = ref<KnowledgeGraph | null>(null);
 const graphLoading = ref(false);
@@ -128,105 +117,13 @@ let graphSuggestionRequest = 0;
 let graphRequest = 0;
 let inFlightGraphKey = "";
 
-async function openDeletedMemories() {
-  deletedHistoryRef.value = "";
-  deletedLoading.value = true;
-  deletedError.value = "";
-  try {
-    deletedMemories.value = await api.memoryFolders.listDeleted();
-  } catch (error) {
-    deletedError.value = (error as Error).message || "Failed to load deleted memories";
-  } finally {
-    deletedLoading.value = false;
-  }
-}
-
-async function openRecentChanges() {
-  recentChangesLoading.value = true;
-  recentChangesError.value = "";
-  try {
-    recentChanges.value = await api.memoryFolders.listRecentChanges();
-  } catch (error) {
-    recentChangesError.value = (error as Error).message || "Failed to load recent memory changes";
-  } finally {
-    recentChangesLoading.value = false;
-  }
-}
-
-function selectMemorySidebarView(view: "folder" | "recent" | "trash") {
-  activeMemorySidebarView.value = view;
-  if (view === "recent") void openRecentChanges();
-  if (view === "trash") void openDeletedMemories();
+function selectDocumentView(view: "folder" | "recent" | "trash") {
+  activeDocumentView.value = view;
 }
 
 function selectFolderView() {
-  activeMemorySidebarView.value = "folder";
+  activeDocumentView.value = "folder";
   clearDocumentLink();
-}
-
-function revisionSourceLabel(source: RecentMemoryChange["source"]): string {
-  if (source === "ai") return "Model";
-  if (source === "dream") return "Dream";
-  if (source === "user") return "User";
-  if (source === "filesystem") return "File system";
-  if (source === "restore") return "Restore";
-  return "Import";
-}
-
-function revisionSourceClass(source: RecentMemoryChange["source"]): string {
-  if (source === "dream") return "bg-amber-200/10 text-amber-200 ring-amber-200/20";
-  if (source === "ai") return "bg-emerald-500/10 text-emerald-300 ring-emerald-500/20";
-  if (source === "filesystem") return "bg-green-500/10 text-green-300 ring-green-500/20";
-  if (source === "user") return "bg-sky-500/10 text-sky-300 ring-sky-500/20";
-  if (source === "restore") return "bg-cyan-500/10 text-cyan-300 ring-cyan-500/20";
-  return "bg-violet-500/10 text-violet-300 ring-violet-500/20";
-}
-
-async function openDeletedHistory(memory: DeletedMemory) {
-  deletedHistoryRef.value = memory.documentRef;
-  deletedSelectedRevisionId.value = "";
-  deletedRevisionDiff.value = [];
-  deletedLoading.value = true;
-  try {
-    deletedRevisions.value = await api.memoryFolders.listRevisions(memory.documentRef);
-    if (deletedRevisions.value[0]) await selectDeletedRevision(deletedRevisions.value[0].id);
-  } catch (error) {
-    deletedError.value = (error as Error).message || "Failed to load revision history";
-  } finally {
-    deletedLoading.value = false;
-  }
-}
-
-async function selectDeletedRevision(revisionId: string) {
-  deletedSelectedRevisionId.value = revisionId;
-  const index = deletedRevisions.value.findIndex(revision => revision.id === revisionId);
-  const selected = deletedRevisions.value[index];
-  const previous = deletedRevisions.value[index + 1];
-  if (!selected) return;
-  if (previous) {
-    deletedRevisionDiff.value = (await api.memoryFolders.getRevisionDiff(deletedHistoryRef.value, previous.id, selected.id)).segments;
-  } else {
-    const revision = await api.memoryFolders.getRevision(deletedHistoryRef.value, selected.id);
-    deletedRevisionDiff.value = revision.content ? [{ type: "added", text: revision.content }] : [];
-  }
-}
-
-async function restoreDeletedMemory(memory: DeletedMemory) {
-  restoringDocumentRef.value = memory.documentRef;
-  deletedError.value = "";
-  try {
-    const revisions = deletedHistoryRef.value === memory.documentRef ? deletedRevisions.value : await api.memoryFolders.listRevisions(memory.documentRef);
-    const selected = revisions.find(revision => revision.id === deletedSelectedRevisionId.value) || revisions[0];
-    if (!selected) throw new Error("This memory has no restorable revision.");
-    await api.memoryFolders.restoreRevision(memory.documentRef, selected.id, "");
-    deletedMemories.value = deletedMemories.value.filter(item => item.documentRef !== memory.documentRef);
-    deletedHistoryRef.value = "";
-    await loadFolders();
-  } catch (error) {
-    deletedError.value = (error as Error).message || "Failed to restore memory";
-  } finally {
-    restoringDocumentRef.value = "";
-  }
 }
 
 const panelByRouteSegment: Record<string, MemoryPanel> = {
@@ -629,7 +526,7 @@ watch(
 watch(linkedFolderId, (folderId) => {
   if (folderId && spaces.value.some(space => space.id === folderId)) {
     selectedFolderId.value = folderId;
-    activeMemorySidebarView.value = "folder";
+    activeDocumentView.value = "folder";
   }
 });
 
@@ -724,13 +621,13 @@ onMounted(() => loadFolders());
           Loading folders...
         </div>
 
-        <MemoryDocumentsSection
+        <MemoryDocumentSection
           v-else-if="activePanel === 'documents'"
           v-model:selected-folder-id="selectedFolderId"
           :spaces="spaces"
           :spaces-loading="spacesLoading"
           :selected-folder="selectedFolder"
-          :active-sidebar-view="activeMemorySidebarView"
+          :active-view="activeDocumentView"
           :focus-file="linkedFileName"
           @create-folder="openCreateDialog"
           @edit-folder="openEditDialog"
@@ -738,216 +635,16 @@ onMounted(() => loadFolders());
           @toggle-auto-memory-exclusion="toggleAutoMemoryExclusion"
           @refresh-spaces="loadFolders"
           @folder-navigation="selectFolderView"
-          @select-sidebar-view="selectMemorySidebarView"
+          @select-view="selectDocumentView"
         >
           <template #recent>
-            <section class="overflow-hidden rounded-xl border border-theme-800 bg-theme-950/45">
-              <header class="flex items-center justify-between gap-3 border-b border-theme-800 bg-theme-900/50 px-4 py-3">
-                <div>
-                  <h2 class="text-sm font-semibold text-theme-100">
-                    Recent Memory Changes
-                  </h2>
-                  <p class="mt-0.5 text-xs text-theme-500">
-                    A timeline of changes across all memory folders.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  class="rounded-lg p-2 text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
-                  title="Refresh recent changes"
-                  @click="openRecentChanges"
-                >
-                  <Icon
-                    icon="lucide:refresh-cw"
-                    class="h-4 w-4"
-                    :class="{ 'animate-spin': recentChangesLoading }"
-                  />
-                </button>
-              </header>
-              <div class="p-4 sm:p-5">
-                <p
-                  v-if="recentChangesError"
-                  class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300"
-                >
-                  {{ recentChangesError }}
-                </p>
-                <div
-                  v-if="recentChangesLoading"
-                  class="flex items-center gap-2 py-8 text-theme-500"
-                >
-                  <Icon
-                    icon="lucide:loader-2"
-                    class="h-4 w-4 animate-spin"
-                  />
-                  Loading recent changes…
-                </div>
-                <p
-                  v-else-if="recentChanges.length === 0"
-                  class="py-8 text-sm text-theme-500"
-                >
-                  No memory changes have been recorded yet.
-                </p>
-                <ol
-                  v-else
-                  class="space-y-4"
-                >
-                  <li
-                    v-for="change in recentChanges"
-                    :key="change.id"
-                    class="relative pl-7 before:absolute before:bottom-[-1rem] before:left-[9px] before:top-5 before:w-px before:bg-theme-800 last:before:hidden"
-                  >
-                    <span class="absolute left-0 top-2 h-[19px] w-[19px] rounded-full border-4 border-theme-950 bg-accent-500" />
-                    <article class="overflow-hidden rounded-xl border border-theme-800 bg-theme-900/35">
-                      <header class="flex flex-wrap items-start justify-between gap-2 border-b border-theme-800 px-4 py-3">
-                        <div class="min-w-0">
-                          <h3 class="truncate text-sm font-medium text-theme-100">
-                            {{ change.fileName }}
-                          </h3>
-                          <p class="mt-0.5 text-xs text-theme-500">
-                            {{ new Date(change.createdAt).toLocaleString() }} · Revision {{ change.revisionNumber }}
-                          </p>
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                          <span
-                            v-if="change.status === 'deleted'"
-                            class="rounded-full bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-300"
-                          >Deleted</span>
-                          <span
-                            class="rounded-full px-2 py-1 text-[10px] font-medium ring-1 ring-inset"
-                            :class="revisionSourceClass(change.source)"
-                          >{{ revisionSourceLabel(change.source) }}</span>
-                        </div>
-                      </header>
-                      <MemoryInlineDiff
-                        :segments="change.segments"
-                        class="max-h-64 rounded-none border-0"
-                      />
-                    </article>
-                  </li>
-                </ol>
-              </div>
-            </section>
+            <MemoryRecentChangesView />
           </template>
 
           <template #trash>
-            <section class="overflow-hidden rounded-xl border border-red-500/20 bg-theme-950/45">
-              <header class="flex items-center justify-between gap-3 border-b border-theme-800 bg-theme-900/50 px-4 py-3">
-                <div>
-                  <h2 class="text-sm font-semibold text-red-300">
-                    Deleted Memories
-                  </h2>
-                  <p class="mt-0.5 text-xs text-theme-500">
-                    Review revision history or restore deleted documents.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  class="rounded-lg p-2 text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
-                  title="Refresh deleted memories"
-                  @click="openDeletedMemories"
-                >
-                  <Icon
-                    icon="lucide:refresh-cw"
-                    class="h-4 w-4"
-                    :class="{ 'animate-spin': deletedLoading }"
-                  />
-                </button>
-              </header>
-              <div class="space-y-3 p-4 sm:p-5">
-                <p
-                  v-if="deletedError"
-                  class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300"
-                >
-                  {{ deletedError }}
-                </p>
-                <div
-                  v-if="deletedLoading"
-                  class="flex items-center gap-2 py-6 text-theme-500"
-                >
-                  <Icon
-                    icon="lucide:loader-2"
-                    class="h-4 w-4 animate-spin"
-                  />
-                  Loading deleted memories…
-                </div>
-                <p
-                  v-else-if="deletedMemories.length === 0"
-                  class="py-6 text-sm text-theme-500"
-                >
-                  No deleted memories.
-                </p>
-                <template v-else-if="deletedHistoryRef">
-                  <button
-                    class="inline-flex items-center gap-1 text-xs text-theme-400 hover:text-theme-200"
-                    @click="deletedHistoryRef = ''"
-                  >
-                    <Icon
-                      icon="lucide:arrow-left"
-                      class="h-3.5 w-3.5"
-                    />
-                    All deleted memories
-                  </button>
-                  <div class="grid gap-3 lg:grid-cols-[16rem_minmax(0,1fr)]">
-                    <div class="space-y-1">
-                      <button
-                        v-for="revision in deletedRevisions"
-                        :key="revision.id"
-                        class="w-full rounded-lg border px-3 py-2 text-left text-xs"
-                        :class="deletedSelectedRevisionId === revision.id ? 'border-accent-500 bg-accent-500/10 text-theme-100' : 'border-theme-800 text-theme-400'"
-                        @click="selectDeletedRevision(revision.id)"
-                      >
-                        <div>Revision {{ revision.revisionNumber }} · {{ revision.source }}</div>
-                        <div class="mt-1 text-theme-600">
-                          {{ new Date(revision.createdAt).toLocaleString() }}
-                        </div>
-                      </button>
-                    </div>
-                    <MemoryInlineDiff
-                      :segments="deletedRevisionDiff"
-                      class="max-h-[32rem]"
-                    />
-                  </div>
-                  <button
-                    class="rounded-lg bg-accent-600 px-3 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:opacity-50"
-                    :disabled="!deletedSelectedRevisionId || Boolean(restoringDocumentRef)"
-                    @click="restoreDeletedMemory(deletedMemories.find(item => item.documentRef === deletedHistoryRef)!)"
-                  >
-                    Restore selected revision
-                  </button>
-                </template>
-                <div
-                  v-for="memory in (deletedHistoryRef ? [] : deletedMemories)"
-                  :key="memory.documentRef"
-                  class="flex flex-col gap-3 rounded-lg border border-theme-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div class="min-w-0">
-                    <div class="truncate text-sm font-medium text-theme-200">
-                      {{ memory.fileName }}
-                    </div>
-                    <div class="mt-0.5 text-xs text-theme-500">
-                      Deleted {{ new Date(memory.deletedAt).toLocaleString() }}
-                    </div>
-                  </div>
-                  <div class="flex shrink-0 gap-2">
-                    <button
-                      class="rounded-lg border border-theme-700 px-3 py-1.5 text-xs text-theme-300 hover:bg-theme-800"
-                      @click="openDeletedHistory(memory)"
-                    >
-                      History
-                    </button>
-                    <button
-                      :disabled="restoringDocumentRef === memory.documentRef"
-                      class="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-50"
-                      @click="restoreDeletedMemory(memory)"
-                    >
-                      {{ restoringDocumentRef === memory.documentRef ? "Restoring…" : "Restore" }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
+            <MemoryTrashView @restored="loadFolders" />
           </template>
-        </MemoryDocumentsSection>
+        </MemoryDocumentSection>
 
         <KnowledgeGraphSection
           v-else

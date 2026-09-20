@@ -2,14 +2,14 @@
 import { nextTick, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import type { MemoryFolder } from "../../api/types";
-import MemoryDocumentList from "./MemoryDocumentList.vue";
+import MemoryFileExplorer from "./MemoryFileExplorer.vue";
 
 const props = defineProps<{
   spaces: MemoryFolder[];
   spacesLoading: boolean;
   selectedFolderId: string | null;
   selectedFolder: MemoryFolder | null;
-  activeSidebarView?: "folder" | "recent" | "trash";
+  activeView?: "folder" | "recent" | "trash";
   focusFile?: string;
 }>();
 
@@ -19,29 +19,29 @@ const emit = defineEmits<{
   "edit-folder": [space: MemoryFolder];
   "delete-folder": [space: MemoryFolder];
   "toggle-auto-memory-exclusion": [space: MemoryFolder];
-  "select-sidebar-view": [view: "folder" | "recent" | "trash"];
+  "select-view": [view: "folder" | "recent" | "trash"];
   "refresh-spaces": [];
   "folder-navigation": [];
 }>();
 
-const docList = ref<InstanceType<typeof MemoryDocumentList> | null>(null);
+const fileExplorer = ref<InstanceType<typeof MemoryFileExplorer> | null>(null);
 const dragCounter = ref(0);
 
 function selectView(view: "folder" | "recent" | "trash"): void {
-  emit("select-sidebar-view", view);
+  emit("select-view", view);
 }
 
 function navigateToFolder(folderId: string): void {
   emit("update:selectedFolderId", folderId);
-  emit("select-sidebar-view", "folder");
+  emit("select-view", "folder");
   emit("folder-navigation");
 }
 
 async function openGlobalDocument(folderId: string, fileName: string): Promise<void> {
   if (folderId !== props.selectedFolderId) emit("update:selectedFolderId", folderId);
-  emit("select-sidebar-view", "folder");
+  emit("select-view", "folder");
   await nextTick();
-  docList.value?.openDocument(fileName);
+  fileExplorer.value?.openDocument(fileName);
 }
 
 function isFileDrag(event: DragEvent): boolean {
@@ -70,7 +70,7 @@ async function onFileDrop(event: DragEvent): Promise<void> {
   event.preventDefault();
   dragCounter.value = 0;
   const files = event.dataTransfer?.files;
-  if (files?.length) await docList.value?.ingestFiles(Array.from(files));
+  if (files?.length) await fileExplorer.value?.ingestFiles(Array.from(files));
 }
 </script>
 
@@ -84,7 +84,7 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         type="button"
         data-testid="memory-explorer-view"
         class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="(activeSidebarView ?? 'folder') === 'folder' ? 'bg-theme-800 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+        :class="(activeView ?? 'folder') === 'folder' ? 'bg-theme-800 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
         @click="selectView('folder')"
       >
         <Icon
@@ -97,7 +97,7 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         type="button"
         data-testid="memory-recent-view"
         class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="activeSidebarView === 'recent' ? 'bg-theme-800 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+        :class="activeView === 'recent' ? 'bg-theme-800 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
         @click="selectView('recent')"
       >
         <Icon
@@ -110,7 +110,7 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         type="button"
         data-testid="memory-trash-view"
         class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="activeSidebarView === 'trash' ? 'bg-red-500/10 text-red-200' : 'text-theme-400 hover:text-red-300'"
+        :class="activeView === 'trash' ? 'bg-red-500/10 text-red-200' : 'text-theme-400 hover:text-red-300'"
         @click="selectView('trash')"
       >
         <Icon
@@ -135,7 +135,7 @@ async function onFileDrop(event: DragEvent): Promise<void> {
     </nav>
 
     <div
-      v-if="(activeSidebarView ?? 'folder') === 'folder' && selectedFolderId"
+      v-if="(activeView ?? 'folder') === 'folder' && selectedFolderId"
       data-testid="memory-document-drop-zone"
       class="relative min-w-0"
       @dragenter="onDragEnter"
@@ -158,8 +158,8 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         </div>
       </div>
 
-      <MemoryDocumentList
-        ref="docList"
+      <MemoryFileExplorer
+        ref="fileExplorer"
         :folder-id="selectedFolderId"
         :spaces="spaces"
         :focus-file="focusFile"
@@ -176,11 +176,11 @@ async function onFileDrop(event: DragEvent): Promise<void> {
     </div>
 
     <div
-      v-else-if="activeSidebarView === 'recent' || activeSidebarView === 'trash'"
+      v-else-if="activeView === 'recent' || activeView === 'trash'"
       data-testid="memory-special-content"
       class="min-w-0"
     >
-      <slot :name="activeSidebarView" />
+      <slot :name="activeView" />
     </div>
   </div>
 </template>
