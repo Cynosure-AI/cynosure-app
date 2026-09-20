@@ -25,6 +25,7 @@ const search = ref('')
 const activeNamespaceId = ref<string | null>(null)
 const menuStyle = ref<CSSProperties>({})
 const brokenIcons = ref<Set<string>>(new Set())
+const selectedToolKeysAtOpen = ref<Set<string>>(new Set())
 
 const selectableTools = computed(() => agentStore.availableTools.filter(isSelectableTool))
 const selectedSet = computed(() => new Set(chatStore.selectedToolNames))
@@ -49,6 +50,11 @@ const groups = computed<NamespaceGroup[]>(() => {
     const aBuiltIn = isBuiltInNamespaceId(a.namespace.id)
     const bBuiltIn = isBuiltInNamespaceId(b.namespace.id)
     if (aBuiltIn !== bBuiltIn) return aBuiltIn ? -1 : 1
+    if (!aBuiltIn) {
+      const aSelected = a.tools.some((tool) => selectedToolKeysAtOpen.value.has(tool.key))
+      const bSelected = b.tools.some((tool) => selectedToolKeysAtOpen.value.has(tool.key))
+      if (aSelected !== bSelected) return aSelected ? -1 : 1
+    }
     return a.namespace.label.localeCompare(b.namespace.label)
   })
 })
@@ -146,11 +152,12 @@ function close(): void {
 }
 
 async function toggle(): Promise<void> {
-  open.value = !open.value
-  if (!open.value) {
+  if (open.value) {
     close()
     return
   }
+  selectedToolKeysAtOpen.value = new Set(chatStore.selectedToolNames)
+  open.value = true
   await nextTick()
   updateMenuPosition()
 }
