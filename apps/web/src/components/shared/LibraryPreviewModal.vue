@@ -71,12 +71,19 @@ const formattedDate = computed(() => props.createdAt
   >
     <template v-if="artifact">
       <div class="flex min-h-80 items-center justify-center overflow-hidden rounded-xl border border-theme-700/70 bg-theme-950/70">
-        <img
+        <a
           v-if="artifact.kind === 'image'"
-          :src="artifact.href"
-          :alt="artifact.label"
-          class="max-h-[62vh] w-full object-contain"
-        >
+          :href="artifact.href"
+          target="_blank"
+          rel="noopener noreferrer"
+        >        
+          <img
+            :src="artifact.href"
+            :alt="artifact.label"
+            class="max-h-[62vh] w-full object-contain"
+          >
+        </a>
+
 
         <video
           v-else-if="artifact.kind === 'video'"
@@ -171,19 +178,6 @@ const formattedDate = computed(() => props.createdAt
         >
           Close
         </button>
-        <a
-          v-if="artifact"
-          :href="artifact.href"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center justify-center gap-2 rounded-xl border border-theme-700 px-4 py-2.5 text-sm font-medium text-theme-300 transition-colors hover:border-theme-600 hover:bg-theme-800 hover:text-theme-100"
-        >
-          <Icon
-            icon="lucide:external-link"
-            class="h-4 w-4"
-          />
-          Open original
-        </a>
         <a
           v-if="artifact"
           :href="artifact.href"
