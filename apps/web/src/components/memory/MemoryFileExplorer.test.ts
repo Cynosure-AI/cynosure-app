@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import MemoryDocumentList from './MemoryDocumentList.vue'
+import MemoryFileExplorer from './MemoryFileExplorer.vue'
 
 const mocks = vi.hoisted(() => ({
   listFiles: vi.fn(),
@@ -38,7 +38,7 @@ const EditorStub = defineComponent({
 })
 
 function mountList(focusFile?: string) {
-  return mount(MemoryDocumentList, {
+  return mount(MemoryFileExplorer, {
     props: {
       folderId: 'category',
       spaces: [{
@@ -61,7 +61,7 @@ function mountList(focusFile?: string) {
   })
 }
 
-describe('MemoryDocumentList navigation and search', () => {
+describe('MemoryFileExplorer navigation and search', () => {
   beforeEach(() => {
     localStorage.clear()
     mocks.listFiles.mockResolvedValue([{
@@ -165,7 +165,7 @@ describe('MemoryDocumentList navigation and search', () => {
       folderPath: 'notes/projects', parentFolderPath: 'notes', sortOrder: 0,
       isUncategorized: false, createdAt: 2, fileCount: 3,
     }
-    const wrapper = mount(MemoryDocumentList, {
+    const wrapper = mount(MemoryFileExplorer, {
       props: {
         folderId: 'category',
         spaces: [{
@@ -255,7 +255,7 @@ describe('MemoryDocumentList navigation and search', () => {
       folderPath: 'notes/projects', parentFolderPath: 'notes', sortOrder: 0,
       isUncategorized: false, createdAt: 2, fileCount: 1,
     }
-    const wrapper = mount(MemoryDocumentList, {
+    const wrapper = mount(MemoryFileExplorer, {
       props: {
         folderId: 'category',
         spaces: [{
@@ -294,7 +294,7 @@ describe('MemoryDocumentList navigation and search', () => {
       ...current, id: 'target', name: 'Archive', directoryPath: '/archive',
       folderPath: 'archive', parentFolderPath: null, fileCount: 0,
     }
-    const wrapper = mount(MemoryDocumentList, {
+    const wrapper = mount(MemoryFileExplorer, {
       props: { folderId: 'category', spaces: [current, child, target] },
       global: {
         plugins: [createPinia()],

@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { MemoryFolder } from '../../api/types'
-import MemoryDocumentsSection from './MemoryDocumentsSection.vue'
+import MemoryDocumentSection from './MemoryDocumentSection.vue'
 
 const ingestFiles = vi.fn()
 
@@ -17,8 +17,8 @@ const spaces: MemoryFolder[] = [
   },
 ]
 
-const MemoryDocumentListStub = defineComponent({
-  name: 'MemoryDocumentList',
+const MemoryFileExplorerStub = defineComponent({
+  name: 'MemoryFileExplorer',
   emits: [
     'navigateFolder', 'createFolder', 'editFolder', 'deleteFolder',
     'toggleAutoMemoryExclusion', 'spacesChanged', 'openGlobalDocument',
@@ -29,20 +29,20 @@ const MemoryDocumentListStub = defineComponent({
   },
 })
 
-function mountSection(activeSidebarView: 'folder' | 'recent' | 'trash' = 'folder') {
-  return mount(MemoryDocumentsSection, {
+function mountSection(activeView: 'folder' | 'recent' | 'trash' = 'folder') {
+  return mount(MemoryDocumentSection, {
     props: {
       spaces,
       spacesLoading: false,
       selectedFolderId: 'uncategorized',
       selectedFolder: spaces[0],
-      activeSidebarView,
+      activeView,
     },
     slots: {
       recent: '<div data-testid="recent-content">Recent content</div>',
       trash: '<div data-testid="trash-content">Trash content</div>',
     },
-    global: { stubs: { MemoryDocumentList: MemoryDocumentListStub } },
+    global: { stubs: { MemoryFileExplorer: MemoryFileExplorerStub } },
   })
 }
 
@@ -54,7 +54,7 @@ function fileDrag(type: string, files: File[] = []): DragEvent {
   return event
 }
 
-describe('MemoryDocumentsSection explorer shell', () => {
+describe('MemoryDocumentSection explorer shell', () => {
   beforeEach(() => ingestFiles.mockReset())
 
   test('uses one full-width explorer and keeps Recent and Trash as compact views', async () => {
@@ -63,23 +63,23 @@ describe('MemoryDocumentsSection explorer shell', () => {
     expect(wrapper.find('[data-testid="memory-document-drop-zone"]').exists()).toBe(true)
 
     await wrapper.get('[data-testid="memory-recent-view"]').trigger('click')
-    expect(wrapper.emitted('select-sidebar-view')).toContainEqual(['recent'])
-    await wrapper.setProps({ activeSidebarView: 'recent' })
+    expect(wrapper.emitted('select-view')).toContainEqual(['recent'])
+    await wrapper.setProps({ activeView: 'recent' })
     expect(wrapper.get('[data-testid="recent-content"]').text()).toBe('Recent content')
 
     await wrapper.get('[data-testid="memory-trash-view"]').trigger('click')
-    expect(wrapper.emitted('select-sidebar-view')).toContainEqual(['trash'])
-    await wrapper.setProps({ activeSidebarView: 'trash' })
+    expect(wrapper.emitted('select-view')).toContainEqual(['trash'])
+    await wrapper.setProps({ activeView: 'trash' })
     expect(wrapper.get('[data-testid="trash-content"]').text()).toBe('Trash content')
   })
 
   test('forwards explorer folder navigation and clears a consumed deep link', async () => {
     const wrapper = mountSection()
-    wrapper.getComponent(MemoryDocumentListStub).vm.$emit('navigateFolder', 'archive')
+    wrapper.getComponent(MemoryFileExplorerStub).vm.$emit('navigateFolder', 'archive')
     await nextTick()
 
     expect(wrapper.emitted('update:selectedFolderId')).toContainEqual(['archive'])
-    expect(wrapper.emitted('select-sidebar-view')).toContainEqual(['folder'])
+    expect(wrapper.emitted('select-view')).toContainEqual(['folder'])
     expect(wrapper.emitted('folder-navigation')).toHaveLength(1)
   })
 
@@ -99,7 +99,7 @@ describe('MemoryDocumentsSection explorer shell', () => {
 
   test('forwards folder actions from the explorer', async () => {
     const wrapper = mountSection()
-    const list = wrapper.getComponent(MemoryDocumentListStub)
+    const list = wrapper.getComponent(MemoryFileExplorerStub)
     list.vm.$emit('createFolder', spaces[1])
     list.vm.$emit('editFolder', spaces[1])
     list.vm.$emit('deleteFolder', spaces[1])

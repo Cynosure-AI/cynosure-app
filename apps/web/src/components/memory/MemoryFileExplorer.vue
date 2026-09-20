@@ -2,12 +2,10 @@
 import { ref, computed, onMounted, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
-import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryDocumentKnowledgePreview, MemoryIndexJob } from "../../api/types";
+import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import DataTable, { type Column } from "../shared/DataTable.vue";
-import HoverTooltip from "../shared/HoverTooltip.vue";
-import SplitButton from "../shared/SplitButton.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
@@ -69,10 +67,6 @@ function supportsAnalysis(file: MemoryFileStatus): boolean {
   return file.status === "indexed" && (file.chunkCount || 0) <= analysisChunkLimit(file);
 }
 
-function exceedsAnalysisLimit(file: MemoryFileStatus): boolean {
-  return file.status === "indexed" && (file.chunkCount || 0) > analysisChunkLimit(file);
-}
-
 // --- State ---
 const files = ref<MemoryFileStatus[]>([]);
 const filesLoading = ref(false);
@@ -99,9 +93,7 @@ const contextMenu = ref<{
   x: number;
   y: number;
 } | null>(null);
-const knowledgePreviews = ref<Record<string, { status: "loading" | "ready" | "error"; data?: MemoryDocumentKnowledgePreview }>>({});
 const unsubscribeGraphReset = api.memory.onGraphReset(() => {
-  knowledgePreviews.value = {};
   files.value = files.value.map((file) => ({
     ...file,
     deepResearched: false,
@@ -389,13 +381,6 @@ const selectedExplorerIds = computed({
     selectedFiles.value = new Set(value.filter((id) => id.startsWith("file:")).map((id) => id.slice(5)));
   },
 });
-const selectedFileIds = computed({
-  get: () => Array.from(selectedFiles.value, (name) => `file:${name}`),
-  set: (value: string[]) => {
-    selectedFiles.value = new Set(value.map((id) => id.startsWith("file:") ? id.slice(5) : id));
-  },
-});
-const fileDocumentRows = computed(() => documentRows.value.filter((item): item is DocumentRow => item.kind === "file"));
 
 const columns: Column<ExplorerRow>[] = [
   { key: "name", label: "Name", minWidth: "220px", grow: 3, sortable: true, sortValue: (item) => item.name },
@@ -404,7 +389,6 @@ const columns: Column<ExplorerRow>[] = [
   { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (item) => item.kind === "file" && item.deepResearched },
   { key: "status", label: "Type / Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (item) => item.status },
 ];
-const legacyColumns = columns as unknown as Column<DocumentRow>[];
 
 const globalColumns: Column<GlobalDocumentRow>[] = [
   { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
@@ -465,7 +449,6 @@ const selectedSearchIndexIdleCount = computed(() =>
 // --- Data loading ---
 async function loadFiles() {
   filesLoading.value = true;
-  knowledgePreviews.value = {};
   try {
     files.value = await api.memoryFolders.listFiles(props.folderId);
   } catch {
@@ -476,10 +459,7 @@ async function loadFiles() {
 
 const {
   runningJobs,
-  activeJob: runningJob,
   isJobActive,
-  isJobRunning,
-  resumableJob,
   failedJobs,
   dismissFailure,
   dismissAllFailures,
@@ -488,11 +468,7 @@ const {
   reindexFile,
   extractKnowledgeFromFile,
   reindexAll: reindexAllNow,
-  cancelJob,
-  discardJob,
   reset: resetJobs,
-  deepResearchProgress,
-  searchIndexProgress,
 } = useMemoryDocumentJobs({
   folderId: toRef(props, "folderId"),
   files,
@@ -536,10 +512,6 @@ async function reindexAll(): Promise<void> {
   await indexWithWarning(candidates, reindexAllNow);
 }
 
-async function reindexDocument(file: MemoryFileStatus): Promise<void> {
-  await indexWithWarning([file], () => reindexFile(file.fileName));
-}
-
 function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
   if (kind === "deep-research") return "Deep Research";
   if (kind === "tool-embeddings") return "Tool indexing";
@@ -574,26 +546,6 @@ async function makeSearchableSelected(): Promise<void> {
       }
     }
   });
-}
-
-async function loadKnowledgePreview(fileName: string) {
-  if (knowledgePreviews.value[fileName]) return;
-  knowledgePreviews.value = {
-    ...knowledgePreviews.value,
-    [fileName]: { status: "loading" },
-  };
-  try {
-    const data = await api.memoryFolders.getDocumentKnowledgePreview(props.folderId, fileName);
-    knowledgePreviews.value = {
-      ...knowledgePreviews.value,
-      [fileName]: { status: "ready", data },
-    };
-  } catch {
-    knowledgePreviews.value = {
-      ...knowledgePreviews.value,
-      [fileName]: { status: "error" },
-    };
-  }
 }
 
 function selectAllOnPage() {
@@ -848,7 +800,6 @@ watch(
   () => props.folderId,
   async (folderId) => {
     files.value = [];
-    knowledgePreviews.value = {};
     clearSelection();
     resetJobs();
     showEditorModal.value = false;
@@ -1677,377 +1628,6 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </template>
     </DataTable>
 
-    <!-- Legacy rich file rows retained for their detailed controls while the
-         unified list settles; they are intentionally not rendered. -->
-    <DataTable
-      v-if="false"
-      v-model:selected-ids="selectedFileIds"
-      v-model:page="page"
-      :items="fileDocumentRows"
-      :columns="legacyColumns"
-      :show-header="false"
-      :selectable="true"
-      :row-selectable="(file) => file.supported"
-      :row-clickable="true"
-      :row-draggable="true"
-      :row-class="(file) => !file.supported ? 'opacity-50' : file.textDirect ? 'cursor-pointer' : undefined"
-      :pagination="true"
-      :page-size="FILES_PAGE_SIZE"
-      pagination-position="both"
-      initial-sort-key="modifiedAt"
-      initial-sort-direction="desc"
-      empty-message="No files in this folder yet."
-      @row-click="openDocumentRow"
-      @row-dblclick="(file) => openEditorModal(file.fileName)"
-      @row-contextmenu="(file, event) => openContextMenu('document', event, file)"
-      @row-dragstart="(file, event) => startDocumentDrag(event, file.fileName)"
-      @row-dragend="endDocumentDrag"
-      @visible-items-change="visibleDocumentRows = $event"
-    >
-      <template #col-fileName="{ item: file }">
-        <div class="flex min-w-0 items-center gap-3">
-          <Icon
-            :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-            class="h-4 w-4 shrink-0"
-            :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
-          />
-          <div class="min-w-0">
-            <div
-              class="flex items-center gap-1.5 truncate text-sm"
-              :class="hasRecentDreamUpdate(file) ? 'text-violet-400' : file.supported ? 'text-theme-200' : 'text-theme-500'"
-            >
-              <Icon
-                v-if="hasRecentDreamUpdate(file)"
-                icon="lucide:moon-star"
-                class="h-3.5 w-3.5 shrink-0"
-                title="Created or updated by Dream in the last 2 days"
-                aria-label="Created or updated by Dream in the last 2 days"
-              />
-              <span class="truncate">{{ file.fileName }}</span>
-            </div>
-            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-theme-600">
-              <span>{{ formatFileSize(file.size) }}</span>
-              <span
-                v-for="tag in (file.tags || []).slice(0, 4)"
-                :key="tag"
-                class="rounded border border-theme-700/80 bg-theme-900/70 px-1.5 py-0.5 text-[10px] text-theme-400"
-              >{{ tag }}</span>
-              <span
-                v-if="(file.tags || []).length > 4"
-                :title="(file.tags || []).slice(4).join(', ')"
-                class="text-[10px] text-theme-500"
-              >+{{ (file.tags || []).length - 4 }}</span>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <template #col-modifiedAt="{ item: file }">
-        <span class="text-xs text-theme-500">
-          {{ new Date(file.modifiedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) }}
-        </span>
-      </template>
-
-      <template #col-chunkCount="{ item: file }">
-        <span
-          v-if="file.supported && file.status === 'indexed'"
-          class="text-xs text-theme-400"
-        >
-          {{ file.chunkCount || 0 }}
-        </span>
-        <span
-          v-else-if="file.supported && file.estimatedChunkCount !== undefined"
-          class="text-xs text-theme-600"
-          title="Estimated from file size and current chunking settings"
-        >
-          ~{{ file.estimatedChunkCount }}
-        </span>
-        <span
-          v-else
-          class="text-xs text-theme-700"
-        >
-          —
-        </span>
-      </template>
-
-      <template #col-deepResearched="{ item: file }">
-        <div
-          v-if="file.supported"
-          class="flex items-center gap-1.5"
-          :title="!isJobRunning('deep-research', file.fileName) && !file.deepResearched ? (file.status === 'indexed' ? (file.analysisStatus === 'needs_refresh' ? 'Analysis needs to be refreshed' : 'Facts not extracted') : 'Deep Research requires a search index first') : undefined"
-        >
-          <button
-            v-if="isJobRunning('deep-research', file.fileName)"
-            type="button"
-            class="job-cancel-control inline-flex items-center rounded-md px-2 py-1 text-[11px] text-accent-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
-            title="Cancel Deep Research"
-            @click.stop="cancelJob(runningJob('deep-research', file.fileName))"
-          >
-            <span class="job-progress inline-flex items-center gap-1.5">
-              <Icon
-                icon="lucide:loader-2"
-                class="h-3.5 w-3.5 animate-spin"
-              />
-              {{ deepResearchProgress(file.fileName) }}
-            </span>
-            <span class="job-cancel items-center gap-1.5 font-medium">
-              <Icon
-                icon="lucide:x"
-                class="h-3.5 w-3.5"
-              />
-              Cancel
-            </span>
-          </button>
-          <HoverTooltip
-            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && file.deepResearched"
-            :max-width="380"
-            @show="loadKnowledgePreview(file.fileName)"
-          >
-            <span
-              class="inline-flex overflow-hidden rounded-md border"
-              :class="file.analysisStatus === 'needs_refresh'
-                ? 'border-amber-500/25 bg-amber-500/10'
-                : 'border-green-500/15 bg-green-500/5'"
-            >
-              <span
-                class="inline-flex cursor-help items-center gap-1.5 px-2 py-1 text-[11px]"
-                :class="file.analysisStatus === 'needs_refresh' ? 'text-amber-300' : 'text-green-400'"
-              >
-                <Icon
-                  :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:triangle-alert' : 'lucide:check-circle'"
-                  class="h-3.5 w-3.5"
-                />
-                {{ file.analysisStatus === 'needs_refresh' ? 'Analysis outdated' : 'Deep Research' }}
-              </span>
-              <button
-                v-if="supportsAnalysis(file)"
-                type="button"
-                class="inline-flex items-center border-l px-1.5 transition-colors"
-                :class="file.analysisStatus === 'needs_refresh'
-                  ? 'border-amber-500/25 text-amber-300 hover:bg-amber-500/15 hover:text-amber-200'
-                  : 'border-green-500/15 text-green-500 hover:bg-accent-500/10 hover:text-accent-300'"
-                :title="file.analysisStatus === 'needs_refresh' ? 'Update outdated analysis' : 'Run Deep Research again'"
-                :aria-label="file.analysisStatus === 'needs_refresh' ? 'Update outdated analysis' : 'Run Deep Research again'"
-                @click.stop="extractKnowledgeFromFile(file.fileName)"
-              >
-                <Icon
-                  :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:circle-arrow-up' : 'lucide:refresh-cw'"
-                  class="h-3.5 w-3.5"
-                />
-              </button>
-            </span>
-            <template #content>
-              <div class="w-[340px] max-w-full">
-                <div class="mb-2 font-medium text-theme-200">
-                  Extracted information
-                </div>
-                <div
-                  v-if="file.analysisStatus === 'needs_refresh'"
-                  class="mb-2 flex items-start gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-amber-200"
-                >
-                  <Icon
-                    icon="lucide:triangle-alert"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0"
-                  />
-                  <span>The document changed after this analysis was created. Update it to refresh the extracted information.</span>
-                </div>
-                <div
-                  v-if="knowledgePreviews[file.fileName]?.status === 'loading'"
-                  class="flex items-center gap-2 text-theme-500"
-                >
-                  <Icon
-                    icon="lucide:loader-2"
-                    class="h-3.5 w-3.5 animate-spin"
-                  />
-                  Loading…
-                </div>
-                <div
-                  v-else-if="knowledgePreviews[file.fileName]?.status === 'error'"
-                  class="text-red-400"
-                >
-                  Could not load extracted information.
-                </div>
-                <div
-                  v-else-if="knowledgePreviews[file.fileName]?.data?.items.length"
-                  class="space-y-1.5"
-                >
-                  <div
-                    v-for="(item, index) in knowledgePreviews[file.fileName]?.data?.items"
-                    :key="`${item.kind}-${index}-${item.label}`"
-                    class="flex items-start gap-2 text-theme-300"
-                  >
-                    <Icon
-                      :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:user-round'"
-                      class="mt-0.5 h-3 w-3 shrink-0 text-theme-500"
-                    />
-                    <span class="break-words">{{ item.label }}</span>
-                  </div>
-                  <div
-                    v-if="(knowledgePreviews[file.fileName]?.data?.total || 0) > 15"
-                    class="pt-1 text-theme-500"
-                  >
-                    +{{ (knowledgePreviews[file.fileName]?.data?.total || 0) - 15 }} more
-                  </div>
-                </div>
-                <div
-                  v-else
-                  class="text-theme-500"
-                >
-                  No durable knowledge was extracted.
-                </div>
-              </div>
-            </template>
-          </HoverTooltip>
-          <SplitButton
-            v-if="!isJobRunning('deep-research', file.fileName) && supportsAnalysis(file) && resumableJob(file.fileName)"
-            :primary-label="`Resume Deep Research of ${file.fileName}`"
-            :menu-label="`Deep Research options for ${file.fileName}`"
-            title="Continue running Deep Research on the remaining document parts"
-            placement="above"
-            @primary="extractKnowledgeFromFile(file.fileName)"
-          >
-            <Icon
-              icon="lucide:play"
-              class="h-3.5 w-3.5"
-            />
-            <span class="text-[11px] font-medium">
-              Resume {{ resumableJob(file.fileName)?.progressCurrent }}/{{ resumableJob(file.fileName)?.progressTotal }}
-            </span>
-            <template #menu="{ close }">
-              <button
-                type="button"
-                class="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left text-red-300 transition-colors hover:bg-red-500/10 focus:outline-none focus-visible:bg-red-500/10"
-                role="menuitem"
-                @click.stop="close(); discardJob(resumableJob(file.fileName))"
-              >
-                <Icon
-                  icon="lucide:x"
-                  class="mt-0.5 h-4 w-4 shrink-0"
-                />
-                <span>
-                  <span class="block text-xs font-medium">Cancel</span>
-                  <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Discard saved Deep Research progress and start over next time.</span>
-                </span>
-              </button>
-            </template>
-          </SplitButton>
-          <span
-            v-if="!isJobRunning('deep-research', file.fileName) && !file.deepResearched && file.status !== 'indexed'"
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
-          >
-            <Icon
-              icon="lucide:circle-dashed"
-              class="h-3.5 w-3.5"
-            />
-            Not researched
-          </span>
-          <button
-            v-if="!isJobRunning('deep-research', file.fileName) && !resumableJob(file.fileName) && !file.deepResearched && supportsAnalysis(file)"
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/15 bg-accent-500/10 px-2 py-1 text-[11px] text-accent-300 transition-colors hover:bg-accent-500/20"
-            title="Extract and classify facts from this document"
-            @click.stop="extractKnowledgeFromFile(file.fileName)"
-          >
-            <Icon
-              :icon="file.analysisStatus === 'needs_refresh' ? 'lucide:refresh-cw' : 'lucide:network'"
-              class="h-3.5 w-3.5"
-            />
-            {{ file.analysisStatus === 'needs_refresh' ? 'Refresh analysis' : 'Run Deep Research' }}
-          </button>
-          <span
-            v-if="!isJobRunning('deep-research', file.fileName) && exceedsAnalysisLimit(file)"
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-500"
-            :title="`Analysis is limited to ${analysisChunkLimit(file)} chunks; this document has ${file.chunkCount}.`"
-          >
-            <Icon
-              icon="lucide:ban"
-              class="h-3.5 w-3.5"
-            />
-            Too large to analyze
-          </span>
-        </div>
-      </template>
-
-      <template #col-status="{ item: file }">
-        <button
-          v-if="file.supported && isJobRunning('reindex', file.fileName)"
-          type="button"
-          class="job-cancel-control inline-flex items-center rounded-md px-2 py-1 text-[11px] text-accent-400 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:bg-red-500/10 focus-visible:text-red-400"
-          title="Cancel search indexing"
-          @click.stop="cancelJob(runningJob('reindex', file.fileName))"
-        >
-          <span class="job-progress inline-flex items-center gap-1.5">
-            <Icon
-              icon="lucide:loader-2"
-              class="h-3.5 w-3.5 animate-spin"
-            />
-            {{ searchIndexProgress(file.fileName) }}
-          </span>
-          <span class="job-cancel items-center gap-1.5 font-medium">
-            <Icon
-              icon="lucide:x"
-              class="h-3.5 w-3.5"
-            />
-            Cancel
-          </span>
-        </button>
-        <div
-          v-else
-          class="flex items-center gap-1.5"
-          :title="statusLabel(file.status)"
-        >
-          <div
-            v-if="file.status === 'indexed'"
-            class="inline-flex overflow-hidden rounded-md border border-green-500/15 bg-green-500/5"
-          >
-            <span class="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] text-green-400">
-              <Icon
-                icon="lucide:check-circle"
-                class="h-3.5 w-3.5"
-              />
-              Searchable
-            </span>
-            <button
-              type="button"
-              class="inline-flex items-center border-l border-green-500/15 px-1.5 text-green-500 transition-colors hover:bg-accent-500/10 hover:text-accent-300"
-              title="Re-index semantic search vectors"
-              aria-label="Re-index semantic search vectors"
-              @click.stop="reindexDocument(file)"
-            >
-              <Icon
-                icon="lucide:refresh-cw"
-                class="h-3.5 w-3.5"
-              />
-            </button>
-          </div>
-          <button
-            v-else-if="file.supported"
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors"
-            :class="file.status === 'needs_reindex' ? 'border-orange-500/15 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20' : 'border-accent-500/15 bg-accent-500/10 text-accent-300 hover:bg-accent-500/20'"
-            :title="file.status === 'needs_reindex' ? 'Re-index semantic search vectors' : 'Build semantic search vectors for this document'"
-            @click.stop="reindexDocument(file)"
-          >
-            <Icon
-              :icon="statusIcon(file.status)"
-              class="h-3.5 w-3.5"
-            />
-            <span v-if="file.status === 'needs_reindex'">Re-index</span>
-            <span v-else>Make searchable</span>
-          </button>
-          <span
-            v-else
-            class="inline-flex items-center gap-1.5 rounded-md border border-theme-700/60 bg-theme-900/40 px-2 py-1 text-[11px] text-theme-600"
-          >
-            <Icon
-              icon="lucide:slash"
-              class="h-3.5 w-3.5"
-            />
-            Not supported
-          </span>
-        </div>
-      </template>
-    </DataTable>
 
     <Teleport to="body">
       <div
