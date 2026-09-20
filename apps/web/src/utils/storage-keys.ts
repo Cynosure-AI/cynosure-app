@@ -6,7 +6,6 @@
 // ── UI preferences (synced to Electron JSON file) ──────────────────────────────
 export const SK_THEME = 'cy-theme'
 export const SK_AUTO_EXPAND = 'cy-auto-expand'
-export const SK_AUTO_EXPAND_TOOLS = 'cy-auto-expand-tools'
 export const SK_DEBUG_MODE = 'cy-debug-mode'
 export const SK_GENERATE_TITLE = 'cy-generate-title'
 export const SK_QUICK_RESPONSES = 'cy-quick-responses'
@@ -59,7 +58,6 @@ export const SK_CHAT_DRAFT_PREFIX = 'cy-chat-draft:'
 export const ELECTRON_SYNCED_KEYS = [
     SK_THEME,
     SK_AUTO_EXPAND,
-    SK_AUTO_EXPAND_TOOLS,
     SK_DEBUG_MODE,
     SK_GENERATE_TITLE,
     SK_QUICK_RESPONSES,

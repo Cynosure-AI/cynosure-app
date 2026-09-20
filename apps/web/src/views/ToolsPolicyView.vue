@@ -7,6 +7,7 @@ import DataTable, { type Column } from '../components/shared/DataTable.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ToolBehaviorBadges from '../components/shared/ToolBehaviorBadges.vue'
 import { isBuiltInNamespaceId } from '../utils/internal-tools'
+import { toolInjectionCondition } from '../utils/tool-injection-condition'
 
 interface NamespaceGroup {
   id: string
@@ -69,7 +70,7 @@ const filteredTools = computed(() => {
     tool.name.toLowerCase().includes(query) ||
     displayDescription(tool).toLowerCase().includes(query) ||
     tool.namespace.label.toLowerCase().includes(query) ||
-    toolCategory(tool).toLowerCase().includes(query)
+    toolInjectionCondition(tool.name, tool.namespace.id).toLowerCase().includes(query)
   )
 })
 
@@ -171,16 +172,6 @@ function stateClass(state: ApprovalState): string {
   if (state === 'defaults') return 'bg-sky-500/15 text-sky-400 hover:bg-sky-500/25'
   if (state === 'none') return 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
   return 'bg-accent-500/15 text-accent-300 hover:bg-accent-500/25'
-}
-
-function toolCategory(tool: ToolInfo): string {
-  const name = tool.name
-  if (tool.namespace.id.startsWith('mcp:')) return 'MCP'
-  if (name.startsWith('memory_')) return 'Memory'
-  if (name.startsWith('knowledge_')) return 'Knowledge'
-  if (name.startsWith('todo_')) return 'Planning'
-  if (name.startsWith('attachment_')) return 'Attachment'
-  return 'Built-In'
 }
 
 function toolParams(tool: ToolInfo): ToolParam[] {
@@ -461,7 +452,7 @@ onMounted(loadPolicyTools)
                           :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : 'text-theme-200'"
                         >{{ displayName(tool) }}</span>
                         <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
-                          {{ toolCategory(tool) }}
+                          {{ toolInjectionCondition(tool.name, tool.namespace.id) }}
                         </span>
                         <ToolBehaviorBadges :annotations="tool.annotations" />
                       </div>

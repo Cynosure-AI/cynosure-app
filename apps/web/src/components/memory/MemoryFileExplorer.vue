@@ -154,13 +154,13 @@ let pathCopiedTimer: number | null = null;
 
 const pathSegments = computed(() => {
   const path = currentSpace.value?.directoryPath || "";
-  return path.split(/[\\/]+/).filter(Boolean).map((label, index, segments) => ({
-    label,
-    folderId: props.spaces.find((space) => {
+  return path.split(/[\\/]+/).filter(Boolean).map((label, index, segments) => {
+    const folderId = props.spaces.find((space) => {
       const candidate = (space.directoryPath || "").split(/[\\/]+/).filter(Boolean);
       return candidate.length === index + 1 && candidate.every((part, partIndex) => part === segments[partIndex]);
-    })?.id,
-  }));
+    })?.id;
+    return { label, folderId };
+  }).filter((segment): segment is { label: string; folderId: string } => Boolean(segment.folderId));
 });
 
 async function copyCurrentFolderPath(): Promise<void> {

@@ -4,8 +4,6 @@ import { api } from '../../../api/client'
 import type { McpRegistryServer } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
-import DataTable from '../../shared/DataTable.vue'
-import type { Column } from '../../shared/DataTable.vue'
 
 const emit = defineEmits<{
   goToInstalled: []
@@ -15,14 +13,18 @@ const { servers, actionError, isLoading, setLoading, authInProgress, refreshAll 
 
 const registryServers = ref<McpRegistryServer[]>([])
 const registrySearch = ref('')
-const registrySource = ref<'recommended' | 'official' | 'smithery' | 'glama'>('recommended')
+const registrySource = ref<'recommended' | 'official' | 'smithery'>('recommended')
 const selectedRegistryServer = ref<McpRegistryServer | null>(null)
 const registryPage = ref(1)
 const registryPageCursors = ref<Array<string | undefined>>([undefined])
 const registryNextCursor = ref<string | undefined>(undefined)
+const registryResultCount = ref(0)
 const registryLoading = ref(false)
 const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
+const selectedCategory = ref('all')
+const viewMode = ref<'grid' | 'list'>('grid')
+const catalogRef = ref<HTMLElement | null>(null)
 
 type RegistryRow = McpRegistryServer & { id: string }
 type InstallInfo = {
@@ -42,11 +44,35 @@ const registryRows = computed<RegistryRow[]>(() =>
 const registryHasPrevious = computed(() => registryPage.value > 1)
 const registryHasNext = computed(() => Boolean(registryNextCursor.value))
 
-const registryTableColumns: Column<RegistryRow>[] = [
-  { key: 'server', label: 'Server', width: 'minmax(0,4fr)', sortable: true, sortValue: item => getDisplayName(item.server) },
-  { key: 'type', label: 'Type', width: 'minmax(180px,1fr)', sortable: true, sortValue: item => getTypeTags(item.server).join(' ') },
-  { key: 'actions', label: 'Actions', width: 'minmax(200px,1fr)', sortable: true, sortValue: item => isInstalled(item.server) ? 2 : getInstallInfo(item.server) ? 1 : 0 },
+type RegistrySource = {
+  id: 'recommended' | 'official' | 'smithery'
+  label: string
+  detail: string
+  icon: string
+  badge?: string
+}
+
+const registrySources: RegistrySource[] = [
+  { id: 'recommended', label: 'Recommended', detail: 'Curated by Cynosure', icon: 'lucide:star', badge: 'Curated' },
+  { id: 'official', label: 'Official', detail: 'MCP Registry', icon: 'lucide:badge-check' },
+  { id: 'smithery', label: 'Smithery', detail: 'smithery.ai', icon: 'lucide:sparkles' },
 ]
+
+const categories = [
+  { id: 'all', label: 'All', icon: 'lucide:layout-grid' },
+  { id: 'productivity', label: 'Productivity', icon: 'lucide:briefcase-business' },
+  { id: 'development', label: 'Development', icon: 'lucide:code-2' },
+  { id: 'files', label: 'Files & System', icon: 'lucide:folder' },
+  { id: 'web', label: 'Web & Data', icon: 'lucide:globe-2' },
+  { id: 'media', label: 'Media', icon: 'lucide:play' },
+  { id: 'ai', label: 'AI & LLM', icon: 'lucide:sparkles' },
+  { id: 'communication', label: 'Communication', icon: 'lucide:messages-square' },
+  { id: 'utilities', label: 'Utilities', icon: 'lucide:wrench' },
+] as const
+
+const visibleRegistryRows = computed(() => selectedCategory.value === 'all'
+  ? registryRows.value
+  : registryRows.value.filter(item => getCategory(item.server) === selectedCategory.value))
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let currentAbortController: AbortController | null = null
@@ -58,6 +84,7 @@ function resetRegistry(): void {
   registryPage.value = 1
   registryPageCursors.value = [undefined]
   registryNextCursor.value = undefined
+  registryResultCount.value = 0
 }
 
 watch(registrySearch, () => {
@@ -69,6 +96,7 @@ watch(registrySearch, () => {
 })
 
 watch(registrySource, () => {
+  selectedCategory.value = 'all'
   resetRegistry()
   loadRegistry()
 })
@@ -83,12 +111,13 @@ async function loadRegistry(page = 1, cursor?: string): Promise<void> {
     const data = await api.mcp.searchRegistry({
       search: registrySearch.value || undefined,
       cursor,
-      limit: 20,
+      limit: registrySource.value === 'smithery' ? 12 : 20,
       registry: registrySource.value,
       signal,
     })
     if (signal.aborted) return
     registryServers.value = data.servers
+    registryResultCount.value = data.metadata.count
     registryPage.value = page
     registryPageCursors.value[page - 1] = cursor
     registryPageCursors.value = registryPageCursors.value.slice(0, page)
@@ -194,6 +223,43 @@ function getTypeTags(srv: McpRegistryServer['server']): string[] {
   return [...tags]
 }
 
+function getCategory(srv: McpRegistryServer['server']): string {
+  const haystack = `${srv.name} ${srv.title || ''} ${srv.description || ''}`.toLowerCase()
+  if (/mail|gmail|imap|slack|telegram|notification|message/.test(haystack)) return 'communication'
+  if (/image|video|media|music|audio|webcam|youtube|chart|mermaid/.test(haystack)) return 'media'
+  if (/file|document|sftp|ssh|terminal|computer|system/.test(haystack)) return 'files'
+  if (/web|fetch|browser|weather|search|data/.test(haystack)) return 'web'
+  if (/code|github|git|devtool|developer/.test(haystack)) return 'development'
+  if (/ai|llm|stability|model/.test(haystack)) return 'ai'
+  if (/clock|time|calendar|task|productiv/.test(haystack)) return 'productivity'
+  return 'utilities'
+}
+
+function getCardTags(srv: McpRegistryServer['server']): string[] {
+  const category = categories.find(item => item.id === getCategory(srv))?.label.toLowerCase() || 'utility'
+  return [category, ...getTypeTags(srv)].slice(0, 3)
+}
+
+function getPublisher(): string {
+  if (registrySource.value === 'recommended') return 'Cynosure'
+  if (registrySource.value === 'official') return 'Official registry'
+  return 'Smithery'
+}
+
+function selectSource(source: RegistrySource['id']): void {
+  registrySource.value = source
+}
+
+function clearSearchAndFilters(): void {
+  registrySearch.value = ''
+  selectedCategory.value = 'all'
+}
+
+function browseRecommendations(): void {
+  selectedCategory.value = 'all'
+  catalogRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
   const install = getInstallInfo(srv.server)
   if (!install) return
@@ -279,272 +345,393 @@ function isInstalled(srv: McpRegistryServer['server']): boolean {
   return servers.value.some(s => s.args.some(a => packageIdentifiersMatch(a, identifier)))
 }
 
-function registryRowClass(item: RegistryRow): string | undefined {
-  return isInstalled(item.server) ? 'opacity-60' : undefined
-}
-
 onMounted(() => {
   loadRegistry()
 })
 </script>
 
 <template>
-  <!-- Search -->
-  <div class="flex gap-2 mb-4">
-    <div class="relative flex-1">
+  <section
+    class="space-y-4"
+    aria-label="MCP server marketplace"
+  >
+    <div
+      class="grid grid-cols-2 gap-2 lg:grid-cols-4"
+      role="tablist"
+      aria-label="Registry source"
+    >
+      <button
+        v-for="source in registrySources"
+        :key="source.id"
+        type="button"
+        role="tab"
+        :aria-selected="registrySource === source.id"
+        :data-source="source.id"
+        class="group flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left transition"
+        :class="registrySource === source.id
+          ? 'border-accent-500 bg-accent-500/8 shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-accent-500)_12%,transparent)]'
+          : 'border-theme-800 bg-theme-900/55 hover:border-theme-700 hover:bg-theme-900'"
+        @click="selectSource(source.id)"
+      >
+        <span
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+          :class="registrySource === source.id ? 'bg-accent-500/15 text-accent-400' : 'bg-theme-800 text-theme-400 group-hover:text-theme-200'"
+        >
+          <Icon
+            :icon="source.icon"
+            class="h-5 w-5"
+          />
+        </span>
+        <span class="min-w-0">
+          <span class="flex items-center gap-2 text-sm font-semibold text-theme-100">
+            {{ source.label }}
+            <span
+              v-if="source.badge"
+              class="rounded bg-accent-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+            >{{ source.badge }}</span>
+          </span>
+          <span class="block truncate text-[11px] text-theme-500">{{ source.detail }}</span>
+        </span>
+      </button>
+    </div>
+
+    <div class="relative">
       <Icon
         icon="lucide:search"
-        class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-500"
+        class="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
       />
       <input
         v-model="registrySearch"
-        type="text"
+        type="search"
         placeholder="Search MCP servers..."
-        class="w-full pl-9 pr-3 py-2 bg-theme-800 border border-theme-700 text-theme-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+        class="h-11 w-full rounded-xl border border-theme-800 bg-theme-900/65 pl-10 pr-4 text-sm text-theme-200 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
       >
     </div>
-    <select
-      v-model="registrySource"
-      class="bg-theme-800 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+
+    <div
+      v-if="registrySource === 'recommended' && !registrySearch"
+      class="mcp-store-hero relative isolate overflow-hidden rounded-2xl border border-accent-500/20 px-5 py-6 sm:px-7"
     >
-      <option value="recommended">
-        Recommended
-      </option>
-      <option value="official">
-        Official Registry
-      </option>
-      <option value="smithery">
-        Smithery.ai
-      </option>
-      <option value="glama">
-        Glama.ai
-      </option>
-    </select>
-  </div>
-
-  <!-- Registry list -->
-  <DataTable
-    :items="registryRows"
-    :columns="registryTableColumns"
-    :row-class="registryRowClass"
-    :loading="registryLoading && registryRows.length === 0"
-    empty-message="No servers found"
-  >
-    <template #col-server="{ item }">
-      <div class="min-w-0 flex items-start gap-3">
-        <div class="w-10 h-10 rounded-lg bg-theme-700/70 flex items-center justify-center shrink-0 overflow-hidden">
-          <img
-            v-if="item.server.icons?.length"
-            :src="item.server.icons[0].src"
-            class="w-full h-full object-cover"
-            @error="($event.target as HTMLImageElement).style.display = 'none'"
-          >
-          <Icon
-            v-else
-            icon="lucide:puzzle"
-            class="w-5 h-5 text-theme-400"
-          />
-        </div>
-
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2 flex-wrap">
-            <button
-              class="font-medium text-theme-100 text-sm hover:underline hover:text-theme-50 transition-colors text-left"
-              @click="selectedRegistryServer = item"
-            >
-              {{ getDisplayName(item.server) }}
-            </button>
-            <span class="text-xs text-theme-500">v{{ item.server.version }}</span>
-          </div>
-          <p class="text-xs text-theme-400 mt-1 line-clamp-2">
-            {{ item.server.description || 'No description' }}
-          </p>
-          <div class="flex items-center gap-3 mt-2 text-xs text-theme-600">
-            <span class="truncate">{{ item.server.name }}</span>
-            <a
-              v-if="item.server.repository?.url"
-              :href="item.server.repository.url"
-              target="_blank"
-              rel="noopener"
-              class="flex items-center gap-1 text-theme-500 hover:text-theme-300 transition-colors shrink-0"
-            >
-              <Icon
-                icon="lucide:github"
-                class="w-3 h-3"
-              /> Repo
-            </a>
-          </div>
-
-          <div
-            v-if="actionError[entryId(item.server)]"
-            class="mt-2 text-xs text-red-400"
-          >
-            {{ actionError[entryId(item.server)] }}
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <template #col-type="{ item }">
-      <div class="flex flex-wrap items-center gap-1.5 md:pt-1">
-        <span
-          v-for="tag in getTypeTags(item.server)"
-          :key="tag"
-          class="mcp-registry-label text-[11px] px-2 py-1 rounded-md"
-          :class="tag === 'npm'
-            ? 'bg-sky-500/15 text-sky-300'
-            : tag === 'pypi'
-              ? 'bg-indigo-500/15 text-indigo-300'
-              : tag === 'smithery'
-                ? 'bg-accent-500/15 text-accent-300'
-                : tag === 'local'
-                  ? 'bg-emerald-500/15 text-emerald-300'
-                  : tag === 'remote'
-                    ? 'bg-violet-500/15 text-violet-300'
-                    : 'bg-theme-700/60 text-theme-400'"
+      <div class="relative z-10 max-w-xl">
+        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-400">
+          Featured
+        </p>
+        <h2 class="mt-2 text-xl font-bold text-theme-50 sm:text-2xl">
+          Supercharge your workflow
+        </h2>
+        <p class="mt-1.5 text-sm text-theme-300">
+          Explore MCP servers built and handpicked by Cynosure to expand what your agents can do.
+        </p>
+        <button
+          type="button"
+          class="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-accent-500"
+          @click="browseRecommendations"
         >
-          {{ tag }}
+          Explore recommendations
+          <Icon
+            icon="lucide:arrow-right"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+      </div>
+      <div class="pointer-events-none absolute -right-8 top-1/2 hidden -translate-y-1/2 items-center gap-2 opacity-80 md:flex">
+        <span
+          v-for="icon in ['lucide:github', 'lucide:globe-2', 'lucide:terminal', 'lucide:file-text']"
+          :key="icon"
+          class="flex h-16 w-16 -skew-x-6 items-center justify-center rounded-xl border border-accent-500/20 bg-theme-950/75 shadow-xl"
+        >
+          <Icon
+            :icon="icon"
+            class="h-7 w-7 skew-x-6 text-theme-200"
+          />
         </span>
       </div>
-    </template>
+    </div>
 
-    <template #col-actions="{ item }">
-      <div class="flex items-center gap-2 md:justify-start md:pt-0.5">
-        <button
-          class="px-3 py-1.5 text-xs bg-theme-800 hover:bg-theme-700 text-theme-300 border border-theme-700 rounded-md transition-colors"
-          @click="selectedRegistryServer = item"
-        >
-          Details
-        </button>
-        <template v-if="isInstalled(item.server)">
-          <span class="text-xs text-theme-500 flex items-center gap-1">
-            <Icon
-              icon="lucide:check"
-              class="w-3.5 h-3.5"
-            /> Added
-          </span>
-        </template>
-        <template v-else-if="getInstallInfo(item.server)">
-          <button
-            :disabled="isLoading(entryId(item.server))"
-            class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
-            @click="addFromRegistry(item)"
-          >
-            {{ isLoading(entryId(item.server)) ? 'Adding...' : 'Add' }}
-          </button>
-        </template>
-        <template v-else>
-          <span class="text-xs text-theme-600">Not installable</span>
-        </template>
+    <div ref="catalogRef">
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <h2 class="text-sm font-semibold text-theme-200">
+          Browse by category
+        </h2>
+        <div class="flex items-center gap-2">
+          <span class="hidden text-xs text-theme-500 sm:inline">{{ registryResultCount }} {{ registryResultCount === 1 ? 'server' : 'servers' }}</span>
+          <div class="flex rounded-lg border border-theme-800 bg-theme-900/70 p-1">
+            <button
+              type="button"
+              aria-label="Grid view"
+              class="rounded-md p-1.5 transition"
+              :class="viewMode === 'grid' ? 'bg-accent-500/15 text-accent-400' : 'text-theme-500 hover:text-theme-200'"
+              @click="viewMode = 'grid'"
+            >
+              <Icon
+                icon="lucide:grid-2x2"
+                class="h-4 w-4"
+              />
+            </button>
+            <button
+              type="button"
+              aria-label="List view"
+              class="rounded-md p-1.5 transition"
+              :class="viewMode === 'list' ? 'bg-accent-500/15 text-accent-400' : 'text-theme-500 hover:text-theme-200'"
+              @click="viewMode = 'list'"
+            >
+              <Icon
+                icon="lucide:list"
+                class="h-4 w-4"
+              />
+            </button>
+          </div>
+        </div>
       </div>
-    </template>
+      <div class="flex gap-2 overflow-x-auto pb-1">
+        <button
+          v-for="category in categories"
+          :key="category.id"
+          type="button"
+          class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition"
+          :class="selectedCategory === category.id ? 'border-accent-500 bg-accent-500/12 text-accent-300' : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
+          @click="selectedCategory = category.id"
+        >
+          <Icon
+            :icon="category.icon"
+            class="h-3.5 w-3.5"
+          />
+          {{ category.label }}
+        </button>
+      </div>
+    </div>
 
-    <template #row-expand="{ item }">
-      <div
-        v-if="addingRegistryId === item.id && getInstallInfo(item.server)?.envVars.length"
-        class="px-5 pb-4 border-t border-theme-700/50"
+    <div
+      v-if="visibleRegistryRows.length"
+      class="grid gap-3"
+      :class="viewMode === 'grid' ? 'sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'"
+    >
+      <article
+        v-for="item in visibleRegistryRows"
+        :key="item.id"
+        class="group flex min-w-0 flex-col rounded-xl border border-theme-800 bg-theme-900/55 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-theme-700 hover:bg-theme-900 hover:shadow-lg"
+        :class="{ 'opacity-65': isInstalled(item.server) }"
       >
-        <div class="mt-3 p-3 border border-theme-700 rounded-lg bg-theme-900/60 space-y-2">
-          <p class="text-xs text-theme-400 mb-1">
-            Required configuration:
+        <div class="flex min-w-0 items-start gap-3">
+          <button
+            type="button"
+            class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-theme-800"
+            @click="selectedRegistryServer = item"
+          >
+            <img
+              v-if="item.server.icons?.length"
+              :src="item.server.icons[0].src"
+              :alt="`${getDisplayName(item.server)} icon`"
+              class="h-full w-full object-cover"
+              @error="($event.target as HTMLImageElement).style.display = 'none'"
+            >
+            <Icon
+              v-else
+              icon="lucide:package"
+              class="h-5 w-5 text-theme-400"
+            />
+          </button>
+          <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-center gap-1.5">
+              <button
+                type="button"
+                class="truncate text-left text-sm font-semibold text-theme-100 transition hover:text-accent-300"
+                @click="selectedRegistryServer = item"
+              >
+                {{ getDisplayName(item.server) }}
+              </button>
+              <Icon
+                v-if="registrySource === 'recommended'"
+                icon="lucide:badge-check"
+                class="h-3.5 w-3.5 shrink-0 text-sky-400"
+                aria-label="Verified by Cynosure"
+              />
+            </div>
+            <p class="mt-0.5 truncate text-[11px] text-theme-500">
+              {{ getPublisher() }} · v{{ item.server.version }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="rounded-md p-1 text-theme-600 transition hover:bg-theme-800 hover:text-theme-300"
+            aria-label="Show server details"
+            @click="selectedRegistryServer = item"
+          >
+            <Icon
+              icon="lucide:ellipsis-vertical"
+              class="h-4 w-4"
+            />
+          </button>
+        </div>
+
+        <p class="mt-3 line-clamp-2 min-h-10 text-xs leading-relaxed text-theme-400">
+          {{ item.server.description || 'No description available.' }}
+        </p>
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <span
+            v-for="tag in getCardTags(item.server)"
+            :key="tag"
+            class="rounded-md bg-theme-800 px-2 py-1 text-[10px] text-theme-400"
+          >{{ tag }}</span>
+        </div>
+
+        <div
+          v-if="actionError[entryId(item.server)]"
+          class="mt-3 text-xs text-red-400"
+        >
+          {{ actionError[entryId(item.server)] }}
+        </div>
+
+        <div
+          v-if="addingRegistryId === item.id && getInstallInfo(item.server)?.envVars.length"
+          class="mt-4 space-y-2 border-t border-theme-800 pt-3"
+        >
+          <p class="text-xs font-medium text-theme-300">
+            Configure before installing
           </p>
           <div
             v-for="ev in getInstallInfo(item.server)!.envVars"
             :key="ev.name"
           >
-            <label class="block text-xs text-theme-400 mb-1">
-              {{ ev.name }}
-              <span
-                v-if="ev.required"
-                class="text-red-400"
-              >*</span>
-              <span
-                v-if="ev.description"
-                class="text-theme-600 ml-1"
-              >- {{ ev.description }}</span>
-            </label>
+            <label class="mb-1 block text-[11px] text-theme-400">{{ ev.name }} <span
+              v-if="ev.required"
+              class="text-red-400"
+            >*</span></label>
             <input
               v-model="registryEnv[ev.name]"
-              type="text"
-              :placeholder="ev.name"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              :type="ev.name.includes('KEY') || ev.name.includes('PASSWORD') ? 'password' : 'text'"
+              :placeholder="ev.description || ev.name"
+              class="w-full rounded-lg border border-theme-700 bg-theme-950 px-2.5 py-2 text-xs text-theme-200 outline-none placeholder:text-theme-600 focus:border-accent-500/60"
             >
           </div>
-          <div class="flex gap-2 justify-end mt-2">
+          <div class="flex justify-end gap-2 pt-1">
             <button
-              class="px-3 py-1.5 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
+              type="button"
+              class="rounded-md px-3 py-1.5 text-xs text-theme-400 hover:bg-theme-800"
               @click="cancelRegistryAdd"
             >
               Cancel
             </button>
             <button
+              type="button"
               :disabled="isLoading(item.id) || getInstallInfo(item.server)!.envVars.some(v => v.required && !registryEnv[v.name])"
-              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
+              class="rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-60"
               @click="addFromRegistry(item)"
             >
-              {{ isLoading(item.id) ? 'Adding...' : 'Confirm & Add' }}
+              {{ isLoading(item.id) ? 'Installing...' : 'Confirm & install' }}
             </button>
           </div>
         </div>
-      </div>
-    </template>
-  </DataTable>
 
-  <!-- Registry pagination / Loading -->
-  <div class="flex justify-center py-6">
-    <div
-      v-if="registryLoading && registryRows.length === 0"
-      class="flex items-center gap-2 text-theme-500 text-sm"
-    >
-      <Icon
-        icon="lucide:loader-2"
-        class="w-4 h-4 animate-spin"
-      />
-      Loading...
+        <div
+          class="mt-auto flex items-center gap-2 border-t border-theme-800/80 pt-3"
+          :class="addingRegistryId === item.id ? 'mt-3' : 'mt-4'"
+        >
+          <span class="min-w-0 flex-1 truncate font-mono text-[10px] text-theme-600">{{ item.server.name }}</span>
+          <a
+            v-if="item.server.repository?.url"
+            :href="item.server.repository.url"
+            target="_blank"
+            rel="noopener"
+            class="p-1 text-theme-500 transition hover:text-theme-200"
+            aria-label="Open repository"
+          ><Icon
+            icon="lucide:github"
+            class="h-3.5 w-3.5"
+          /></a>
+          <span
+            v-if="isInstalled(item.server)"
+            class="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400"
+          ><Icon
+            icon="lucide:check"
+            class="h-3.5 w-3.5"
+          /> Installed</span>
+          <button
+            v-else-if="getInstallInfo(item.server)"
+            type="button"
+            :disabled="isLoading(item.id)"
+            class="rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-500 disabled:opacity-60"
+            @click="addFromRegistry(item)"
+          >
+            {{ isLoading(item.id) ? 'Installing...' : 'Install' }}
+          </button>
+          <span
+            v-else
+            class="text-[11px] text-theme-600"
+          >Not installable</span>
+        </div>
+      </article>
     </div>
-    <p
-      v-else-if="registryServers.length === 0"
-      class="text-theme-500 text-sm"
-    >
-      No servers found{{ registrySearch ? ` for "${registrySearch}"` : '' }}
-    </p>
-    <div
-      v-else-if="registryHasPrevious || registryHasNext"
-      class="flex items-center gap-3"
-      aria-label="Registry pagination"
-    >
-      <button
-        :disabled="!registryHasPrevious || registryLoading"
-        class="px-3 py-2 bg-theme-800 hover:bg-theme-700 disabled:opacity-40 disabled:cursor-not-allowed text-theme-300 text-sm rounded-lg transition-colors"
-        aria-label="Previous registry page"
-        @click="loadPreviousRegistryPage"
+
+    <div class="flex justify-center py-8">
+      <div
+        v-if="registryLoading && registryRows.length === 0"
+        class="flex items-center gap-2 text-theme-500 text-sm"
       >
-        Previous
-      </button>
-      <span class="min-w-16 text-center text-theme-500 text-sm">
         <Icon
-          v-if="registryLoading"
           icon="lucide:loader-2"
-          class="inline-block w-4 h-4 animate-spin"
+          class="w-4 h-4 animate-spin"
         />
-        <template v-else>Page {{ registryPage }}</template>
-      </span>
-      <button
-        :disabled="!registryHasNext || registryLoading"
-        class="px-3 py-2 bg-theme-800 hover:bg-theme-700 disabled:opacity-40 disabled:cursor-not-allowed text-theme-300 text-sm rounded-lg transition-colors"
-        aria-label="Next registry page"
-        @click="loadNextRegistryPage"
+        Loading...
+      </div>
+      <div
+        v-else-if="visibleRegistryRows.length === 0"
+        class="flex flex-col items-center text-center"
       >
-        Next
-      </button>
+        <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-theme-900 text-theme-500"><Icon
+          icon="lucide:package-search"
+          class="h-6 w-6"
+        /></span>
+        <p class="mt-3 text-sm font-medium text-theme-300">
+          No servers found{{ registrySearch ? ` for "${registrySearch}"` : '' }}
+        </p>
+        <button
+          v-if="registrySearch || selectedCategory !== 'all'"
+          type="button"
+          class="mt-2 text-xs text-accent-400 hover:text-accent-300"
+          @click="clearSearchAndFilters"
+        >
+          Clear search and filters
+        </button>
+      </div>
+      <div
+        v-else-if="registryHasPrevious || registryHasNext"
+        class="flex items-center gap-3"
+        aria-label="Registry pagination"
+      >
+        <button
+          :disabled="!registryHasPrevious || registryLoading"
+          class="px-3 py-2 bg-theme-800 hover:bg-theme-700 disabled:opacity-40 disabled:cursor-not-allowed text-theme-300 text-sm rounded-lg transition-colors"
+          aria-label="Previous registry page"
+          @click="loadPreviousRegistryPage"
+        >
+          Previous
+        </button>
+        <span class="min-w-16 text-center text-theme-500 text-sm">
+          <Icon
+            v-if="registryLoading"
+            icon="lucide:loader-2"
+            class="inline-block w-4 h-4 animate-spin"
+          />
+          <template v-else>Page {{ registryPage }}</template>
+        </span>
+        <button
+          :disabled="!registryHasNext || registryLoading"
+          class="px-3 py-2 bg-theme-800 hover:bg-theme-700 disabled:opacity-40 disabled:cursor-not-allowed text-theme-300 text-sm rounded-lg transition-colors"
+          aria-label="Next registry page"
+          @click="loadNextRegistryPage"
+        >
+          Next
+        </button>
+      </div>
+      <p
+        v-else
+        class="text-theme-600 text-xs"
+      >
+        End of results
+      </p>
     </div>
-    <p
-      v-else
-      class="text-theme-600 text-xs"
-    >
-      End of results
-    </p>
-  </div>
+  </section>
 
   <!-- Server Details Modal -->
   <div
@@ -699,3 +886,19 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.mcp-store-hero {
+  background:
+    radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--color-accent-500) 24%, transparent), transparent 30%),
+    linear-gradient(115deg, color-mix(in srgb, var(--color-accent-950) 45%, var(--color-theme-900)), var(--color-theme-900) 70%);
+}
+
+.mcp-store-hero::after {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(120deg, transparent 25%, color-mix(in srgb, var(--color-accent-400) 8%, transparent) 50%, transparent 70%);
+  content: '';
+  pointer-events: none;
+}
+</style>

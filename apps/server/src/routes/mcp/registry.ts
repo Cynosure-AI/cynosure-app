@@ -6,8 +6,20 @@ type RegistryServerEntry = {
     _meta?: Record<string, unknown>
 }
 
+const CYNOSURE_NPM_NAMESPACE = '@cynosure'
+
+function isCynosureServer(entry: RegistryServerEntry): boolean {
+    const name = String(entry.server.name || '')
+    // The currently published packages use the @cynosure-mcp scope. Keep the
+    // prefix check compatible with a future @cynosure/ scope migration while
+    // excluding every unrelated namespace from the curated storefront.
+    return name === CYNOSURE_NPM_NAMESPACE
+        || name.startsWith(`${CYNOSURE_NPM_NAMESPACE}/`)
+        || name.startsWith(`${CYNOSURE_NPM_NAMESPACE}-mcp/`)
+}
+
 export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<void> {
-    // GET /api/mcp/registry — browse MCP sources (recommended, official, smithery, glama)
+    // GET /api/mcp/registry — browse MCP sources (recommended, official, smithery)
     app.get<{
         Querystring: { search?: string; cursor?: string; limit?: string; registry?: string; }
     }>('/registry', async (req, reply) => {
@@ -19,8 +31,9 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
         try {
             if (registrySource === 'recommended') {
                 const query = search?.trim().toLowerCase()
+                const cynosureServers = recommendedServers.filter(isCynosureServer)
                 const servers = query
-                    ? recommendedServers.filter((entry) => {
+                    ? cynosureServers.filter((entry) => {
                         const server = entry.server
                         return [
                             server.name,
@@ -31,7 +44,7 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
                                 : []),
                         ].some((value) => String(value || '').toLowerCase().includes(query))
                     })
-                    : recommendedServers
+                    : cynosureServers
 
                 return { servers, metadata: { count: servers.length } }
             }
@@ -41,6 +54,7 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
                 if (search) params.set('q', search)
                 const pageNum = parseInt(currentCursor || '1', 10)
                 params.set('page', pageNum.toString())
+                params.set('pageSize', String(targetLimit))
 
                 const url = `https://api.smithery.ai/servers?${params}`
                 const res = await fetch(url)
@@ -96,64 +110,6 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
                 return { servers: collectedServers, metadata: { nextCursor: next, count: collectedServers.length } }
             }
 
-            // ── Glama.ai registry ──
-            if (registrySource === 'glama') {
-                const params = new URLSearchParams()
-                params.set('first', String(targetLimit))
-                if (search) params.set('query', search)
-                if (currentCursor) params.set('after', currentCursor)
-
-                const url = `https://glama.ai/api/mcp/v1/servers?${params}`
-                const res = await fetch(url)
-
-                if (!res.ok) return reply.status(res.status).send({ error: `Glama Registry returned ${res.status}` })
-
-                const data = await res.json()
-                if (data.servers && Array.isArray(data.servers)) {
-                    for (const s of data.servers) {
-                        const isRemote = (s.attributes || []).some((a: string) => a === 'hosting:remote-capable')
-                        const isLocal = (s.attributes || []).some((a: string) => a === 'hosting:local-only')
-
-                        // Build env vars from JSON Schema
-                        const envVars: { name: string; description?: string; isRequired: boolean }[] = []
-                        if (s.environmentVariablesJsonSchema?.properties) {
-                            const schema = s.environmentVariablesJsonSchema
-                            const required: string[] = schema.required || []
-                            for (const [name, prop] of Object.entries(schema.properties as Record<string, { description?: string }>)) {
-                                envVars.push({
-                                    name,
-                                    description: prop.description,
-                                    isRequired: required.includes(name)
-                                })
-                            }
-                        }
-
-                        collectedServers.push({
-                            server: {
-                                name: `${s.namespace}/${s.slug}`,
-                                title: s.name,
-                                description: s.description || '',
-                                version: 'latest',
-                                repository: s.repository,
-                                websiteUrl: s.url,
-                                isRemote,
-                                isLocal,
-                                packages: [{
-                                    registryType: 'npm',
-                                    identifier: s.slug,
-                                    version: 'latest',
-                                    transport: { type: 'stdio' },
-                                    environmentVariables: envVars
-                                }]
-                            }
-                        })
-                    }
-                }
-
-                const nextCursor = data.pageInfo?.hasNextPage ? data.pageInfo.endCursor : undefined
-                return { servers: collectedServers, metadata: { nextCursor, count: collectedServers.length } }
-            }
-
             // ── Official MCP registry (default) ──
             while (collectedServers.length < targetLimit) {
                 const params = new URLSearchParams()
@@ -174,8 +130,11 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
 
                 for (const s of data.servers) {
                     const isLatest = s._meta?.['io.modelcontextprotocol.registry/official']?.isLatest !== false
-                    const hasPackages = s.server?.packages && Array.isArray(s.server.packages) && s.server.packages.length > 0
-                    if (isLatest && hasPackages) {
+                    const hasSupportedPackage = Array.isArray(s.server?.packages) && s.server.packages.some((pkg: { registryType?: string; transport?: { type?: string } }) =>
+                        pkg.transport?.type === 'stdio' && (pkg.registryType === 'npm' || pkg.registryType === 'pypi'))
+                    const hasSupportedRemote = Array.isArray(s.server?.remotes) && s.server.remotes.some((remote: { type?: string; url?: string }) =>
+                        (remote.type === 'streamable-http' || remote.type === 'http') && /^https?:\/\//.test(remote.url || ''))
+                    if (isLatest && (hasSupportedPackage || hasSupportedRemote)) {
                         const name = s.server?.name
                         if (name && !collectedServers.find(x => x.server?.name === name)) {
                             collectedServers.push(s)
@@ -184,7 +143,7 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
                     }
                 }
 
-                currentCursor = data.nextCursor
+                currentCursor = data.metadata?.nextCursor || data.nextCursor || ''
                 if (!currentCursor) break
             }
 
