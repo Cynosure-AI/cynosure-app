@@ -49,7 +49,7 @@ describe('McpBrowseTab registry pagination', () => {
     })
     await flushPromises()
 
-    await wrapper.get('select').setValue('official')
+    await wrapper.get('[data-source="official"]').trigger('click')
     await flushPromises()
     await wrapper.get('input[placeholder="Search MCP servers..."]').setValue('weather')
     await new Promise(resolve => setTimeout(resolve, 450))
@@ -77,6 +77,26 @@ describe('McpBrowseTab registry pagination', () => {
       registry: 'official', search: 'weather', cursor: 'page-2',
     }))
     expect(wrapper.text()).toContain('Weather page 2')
+
+    wrapper.unmount()
+  })
+
+  test('presents registry sources and servers as a storefront', async () => {
+    const wrapper = mount(McpBrowseTab, {
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[aria-label="MCP server marketplace"]').element.tagName).toBe('SECTION')
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(3)
+    expect(wrapper.text()).toContain('Supercharge your workflow')
+    expect(wrapper.text()).toContain('Browse by category')
+    expect(wrapper.text()).toContain('Recommended description')
+    expect(apiMocks.searchRegistry).toHaveBeenCalledWith(expect.objectContaining({ registry: 'recommended' }))
+
+    await wrapper.get('[data-source="smithery"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.searchRegistry).toHaveBeenLastCalledWith(expect.objectContaining({ registry: 'smithery', limit: 12 }))
 
     wrapper.unmount()
   })

@@ -37,7 +37,7 @@ const tabs = computed<TabDef<McpPanel>[]>(() => sections.map((section) => ({
     <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 px-5 pt-5 backdrop-blur-sm md:px-8 md:pt-6">
       <div class="mx-auto max-w-7xl">
         <h1 class="text-2xl font-bold text-theme-100">
-          MCP Servers
+          {{ activePanel === 'browse' ? 'Browse MCP Servers' : 'MCP Servers' }}
         </h1>
         <p class="mt-1 text-sm leading-relaxed text-theme-500">
           {{ activeSection.description }}
