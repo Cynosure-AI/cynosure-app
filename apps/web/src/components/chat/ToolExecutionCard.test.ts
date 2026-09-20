@@ -32,6 +32,25 @@ describe('ToolExecutionCard', () => {
     setActivePinia(createPinia())
   })
 
+  test('starts collapsed even when the removed preference remains in local storage', () => {
+    localStorage.setItem('cy-auto-expand-tools', 'true')
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1,
+        isActive: false,
+        steps: [{
+          iteration: 1,
+          status: 'executing',
+          timestamp: Date.now(),
+          toolCalls: [{ name: 'example_tool', arguments: JSON.stringify({ hiddenArgument: 'value' }) }],
+        }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    expect(wrapper.text()).not.toContain('hiddenArgument')
+  })
+
   test('summarizes gathered memory with unique file names and omits space names', () => {
     const memoryArguments = (chunkIndex: number) => JSON.stringify({
       type: 'memory',

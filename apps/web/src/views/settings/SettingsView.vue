@@ -285,13 +285,6 @@ const sections: SettingsSection[] = [
     terms: ['auto expand thinking', 'thinking', 'reasoning', 'reasoning blocks', 'expand steps']
   },
   {
-    id: 'auto-expand-tool-calls',
-    categoryId: 'general',
-    label: 'Auto-expand Tool Calls',
-    description: 'Automatically expand tool call details in chat.',
-    terms: ['auto expand tool calls', 'tool calls', 'tool details', 'expand tools']
-  },
-  {
     id: 'setup-guide',
     categoryId: 'general',
     label: 'Setup Guide',
