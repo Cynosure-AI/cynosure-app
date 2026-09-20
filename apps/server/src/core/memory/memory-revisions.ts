@@ -147,6 +147,19 @@ export function purgeDeletedMemoryDocuments(): number {
   })()
 }
 
+/** Permanently remove one deleted document and all database-backed history. */
+export function purgeDeletedMemoryDocument(documentRef: string): boolean {
+  const db = getDb()
+  return db.transaction(() => {
+    const row = db.prepare("SELECT document_id FROM memory_documents WHERE document_ref = ? AND status = 'deleted'")
+      .get(documentRef) as { document_id: string } | undefined
+    if (!row) return false
+    db.prepare('DELETE FROM memory_knowledge_index_runs WHERE document_id = ?').run(row.document_id)
+    db.prepare('DELETE FROM memory_file_index WHERE document_id = ?').run(row.document_id)
+    return db.prepare('DELETE FROM memory_documents WHERE document_id = ?').run(row.document_id).changes === 1
+  })()
+}
+
 export function listMemoryRevisions(documentRef: string): MemoryRevisionSummary[] {
   return (getDb().prepare(`
     SELECT r.* FROM memory_document_revisions r

@@ -55,7 +55,7 @@ import {
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
-import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryFoldersDeleted, purgeDeletedMemoryDocuments, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
+import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryFoldersDeleted, purgeDeletedMemoryDocument, purgeDeletedMemoryDocuments, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -399,6 +399,12 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const deleted = purgeDeletedMemoryDocuments()
         emptyMemoryTrashDirectories(directoryPaths)
         return { success: true, deleted }
+    })
+
+    app.delete<{ Params: { documentRef: string } }>('/deleted/:documentRef', async (req, reply) => {
+        const deleted = purgeDeletedMemoryDocument(req.params.documentRef)
+        if (!deleted) return reply.status(404).send({ error: 'Deleted memory not found' })
+        return { success: true }
     })
 
     app.get<{ Querystring: { limit?: string } }>('/recent-changes', async (req) => {

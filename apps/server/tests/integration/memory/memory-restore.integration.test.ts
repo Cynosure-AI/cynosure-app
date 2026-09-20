@@ -91,4 +91,34 @@ describe('deleted memory restore', () => {
     await expect(access(trashDirectory)).rejects.toThrow()
     await app.close()
   })
+
+  test('permanently deletes one trash entry without deleting the others', async () => {
+    const { getDb } = await import('../../../src/db/database.js')
+    const { recordMemoryRevision, markMemoryDocumentDeleted } = await import('../../../src/core/memory/memory-revisions.js')
+    const { registerMemoryFoldersRoutes } = await import('../../../src/routes/memory-folders.js')
+    const db = getDb()
+    for (const id of ['one', 'two']) {
+      recordMemoryRevision({
+        documentId: id,
+        documentRef: `deleted#${id}`,
+        folderId: 'uncategorized',
+        fileName: `${id}.md`,
+        content: id,
+        context: { source: 'user' },
+      })
+      markMemoryDocumentDeleted(id)
+    }
+
+    const app = Fastify()
+    await app.register(registerMemoryFoldersRoutes, { prefix: '/api/memory-folders' })
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/memory-folders/deleted/${encodeURIComponent('deleted#one')}`,
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ success: true })
+    expect(db.prepare('SELECT document_ref FROM memory_documents').pluck().all()).toEqual(['deleted#two'])
+    await app.close()
+  })
 })

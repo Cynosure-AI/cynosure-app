@@ -3,6 +3,7 @@ import { nextTick, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import type { MemoryFolder } from "../../api/types";
 import MemoryFileExplorer from "./MemoryFileExplorer.vue";
+import MemoryVirtualExplorer from "./MemoryVirtualExplorer.vue";
 
 const props = defineProps<{
   spaces: MemoryFolder[];
@@ -33,6 +34,13 @@ function selectView(view: "folder" | "recent" | "trash"): void {
 
 function navigateToFolder(folderId: string): void {
   emit("update:selectedFolderId", folderId);
+  emit("select-view", "folder");
+  emit("folder-navigation");
+}
+
+function navigateHome(): void {
+  const root = props.spaces.find(space => space.isUncategorized) || props.spaces[0];
+  if (root) emit("update:selectedFolderId", root.id);
   emit("select-view", "folder");
   emit("folder-navigation");
 }
@@ -76,64 +84,6 @@ async function onFileDrop(event: DragEvent): Promise<void> {
 
 <template>
   <div class="p-4 sm:p-6 lg:p-8">
-    <nav
-      class="mb-4 flex items-center gap-1 overflow-x-auto rounded-xl border border-theme-800 bg-theme-950/45 p-1"
-      aria-label="Memory views"
-    >
-      <button
-        type="button"
-        data-testid="memory-explorer-view"
-        class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="(activeView ?? 'folder') === 'folder' ? 'bg-theme-800 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
-        @click="selectView('folder')"
-      >
-        <Icon
-          icon="lucide:folder-tree"
-          class="h-4 w-4 text-amber-400"
-        />
-        Explorer
-      </button>
-      <button
-        type="button"
-        data-testid="memory-recent-view"
-        class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="activeView === 'recent' ? 'bg-theme-800 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
-        @click="selectView('recent')"
-      >
-        <Icon
-          icon="lucide:history"
-          class="h-4 w-4 text-accent-400"
-        />
-        Recent
-      </button>
-      <button
-        type="button"
-        data-testid="memory-trash-view"
-        class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="activeView === 'trash' ? 'bg-red-500/10 text-red-200' : 'text-theme-400 hover:text-red-300'"
-        @click="selectView('trash')"
-      >
-        <Icon
-          icon="lucide:trash-2"
-          class="h-4 w-4"
-        />
-        Trash
-      </button>
-      <button
-        type="button"
-        class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
-        title="Refresh memory folders"
-        aria-label="Refresh memory folders"
-        @click="emit('refresh-spaces')"
-      >
-        <Icon
-          icon="lucide:refresh-cw"
-          class="h-4 w-4"
-          :class="{ 'animate-spin': spacesLoading }"
-        />
-      </button>
-    </nav>
-
     <div
       v-if="(activeView ?? 'folder') === 'folder' && selectedFolderId"
       data-testid="memory-document-drop-zone"
@@ -172,15 +122,18 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         @spaces-changed="emit('refresh-spaces')"
         @navigate-folder="navigateToFolder"
         @open-global-document="openGlobalDocument"
+        @select-view="selectView"
       />
     </div>
 
-    <div
+    <MemoryVirtualExplorer
       v-else-if="activeView === 'recent' || activeView === 'trash'"
       data-testid="memory-special-content"
-      class="min-w-0"
-    >
-      <slot :name="activeView" />
-    </div>
+      :mode="activeView"
+      :spaces="spaces"
+      @home="navigateHome"
+      @open-document="openGlobalDocument"
+      @restored="emit('refresh-spaces')"
+    />
   </div>
 </template>

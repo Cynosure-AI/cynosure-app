@@ -21,12 +21,19 @@ const MemoryFileExplorerStub = defineComponent({
   name: 'MemoryFileExplorer',
   emits: [
     'navigateFolder', 'createFolder', 'editFolder', 'deleteFolder',
-    'toggleAutoMemoryExclusion', 'spacesChanged', 'openGlobalDocument',
+    'toggleAutoMemoryExclusion', 'spacesChanged', 'openGlobalDocument', 'selectView',
   ],
   setup(_, { expose }) {
     expose({ ingestFiles, openDocument: vi.fn() })
     return () => null
   },
+})
+
+const MemoryVirtualExplorerStub = defineComponent({
+  name: 'MemoryVirtualExplorer',
+  props: { mode: String },
+  emits: ['home', 'openDocument', 'restored'],
+  template: '<div data-testid="virtual-explorer">{{ mode }}</div>',
 })
 
 function mountSection(activeView: 'folder' | 'recent' | 'trash' = 'folder') {
@@ -38,11 +45,10 @@ function mountSection(activeView: 'folder' | 'recent' | 'trash' = 'folder') {
       selectedFolder: spaces[0],
       activeView,
     },
-    slots: {
-      recent: '<div data-testid="recent-content">Recent content</div>',
-      trash: '<div data-testid="trash-content">Trash content</div>',
-    },
-    global: { stubs: { MemoryFileExplorer: MemoryFileExplorerStub } },
+    global: { stubs: {
+      MemoryFileExplorer: MemoryFileExplorerStub,
+      MemoryVirtualExplorer: MemoryVirtualExplorerStub,
+    } },
   })
 }
 
@@ -57,20 +63,29 @@ function fileDrag(type: string, files: File[] = []): DragEvent {
 describe('MemoryDocumentSection explorer shell', () => {
   beforeEach(() => ingestFiles.mockReset())
 
-  test('uses one full-width explorer and keeps Recent and Trash as compact views', async () => {
+  test('opens Recent and Trash from virtual folders in the full-width explorer', async () => {
     const wrapper = mountSection()
     expect(wrapper.find('[data-testid="memory-folder-pane"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="memory-document-drop-zone"]').exists()).toBe(true)
 
-    await wrapper.get('[data-testid="memory-recent-view"]').trigger('click')
+    wrapper.getComponent(MemoryFileExplorerStub).vm.$emit('selectView', 'recent')
+    await nextTick()
     expect(wrapper.emitted('select-view')).toContainEqual(['recent'])
     await wrapper.setProps({ activeView: 'recent' })
-    expect(wrapper.get('[data-testid="recent-content"]').text()).toBe('Recent content')
+    expect(wrapper.get('[data-testid="memory-special-content"]').text()).toBe('recent')
 
-    await wrapper.get('[data-testid="memory-trash-view"]').trigger('click')
-    expect(wrapper.emitted('select-view')).toContainEqual(['trash'])
     await wrapper.setProps({ activeView: 'trash' })
-    expect(wrapper.get('[data-testid="trash-content"]').text()).toBe('Trash content')
+    expect(wrapper.get('[data-testid="memory-special-content"]').text()).toBe('trash')
+  })
+
+  test('returns virtual views to the memory root', async () => {
+    const wrapper = mountSection('recent')
+    wrapper.getComponent(MemoryVirtualExplorerStub).vm.$emit('home')
+    await nextTick()
+
+    expect(wrapper.emitted('update:selectedFolderId')).toContainEqual(['uncategorized'])
+    expect(wrapper.emitted('select-view')).toContainEqual(['folder'])
+    expect(wrapper.emitted('folder-navigation')).toHaveLength(1)
   })
 
   test('forwards explorer folder navigation and clears a consumed deep link', async () => {
