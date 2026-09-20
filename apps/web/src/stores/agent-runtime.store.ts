@@ -7,6 +7,7 @@ import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/int
 export interface ToolNamespace {
   id: string
   label: string
+  description?: string
 }
 
 export interface ToolBehaviorAnnotations {

@@ -69,10 +69,26 @@ export const BUILTIN_NAMESPACE_IDS = {
 } as const;
 
 export const BUILTIN_NAMESPACES = {
-    memory: { id: BUILTIN_NAMESPACE_IDS.memory, label: "Built-In: Memory" },
-    scheduling: { id: BUILTIN_NAMESPACE_IDS.scheduling, label: "Built-In: Scheduling" },
-    notifications: { id: BUILTIN_NAMESPACE_IDS.notifications, label: "Built-In: Notifications" },
-    utility: { id: BUILTIN_NAMESPACE_IDS.utility, label: "Built-In: Utility" },
+    memory: {
+        id: BUILTIN_NAMESPACE_IDS.memory,
+        label: "Built-In: Memory",
+        description: "Search, create, update, and organize persistent memory and knowledge.",
+    },
+    scheduling: {
+        id: BUILTIN_NAMESPACE_IDS.scheduling,
+        label: "Built-In: Scheduling",
+        description: "Create, review, update, and remove scheduled agent tasks.",
+    },
+    notifications: {
+        id: BUILTIN_NAMESPACE_IDS.notifications,
+        label: "Built-In: Notifications",
+        description: "Send notifications in Cynosure or through connected channels.",
+    },
+    utility: {
+        id: BUILTIN_NAMESPACE_IDS.utility,
+        label: "Built-In: Utility",
+        description: "Work with attachments, MCP tools, planning, and sub-agent delegation.",
+    },
 } as const satisfies Record<string, ToolNamespace>;
 
 type BuiltInToolSpec = Pick<
