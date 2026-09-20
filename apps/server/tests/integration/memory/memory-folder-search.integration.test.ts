@@ -73,6 +73,26 @@ describe('global memory file search', () => {
     const recursiveMatch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=nested-plan&folderId=folder-a' })
     expect(recursiveMatch.json()).toEqual([expect.objectContaining({ fileName: 'nested-plan.md', folderId: 'folder-c' })])
 
+    const { getEmbeddingProvider } = await import('../../../src/core/memory/embedding.js')
+    const { getRAGStore } = await import('../../../src/core/memory/rag.js')
+    const embed = vi.spyOn(getEmbeddingProvider(), 'embed').mockResolvedValue({ vector: [1, 0], model: 'test', dimensions: 2 })
+    const vectorSearch = vi.spyOn(getRAGStore(), 'search').mockResolvedValue([{
+      id: 'chunk-alpha', text: 'Plain source wording.', source: 'memory', sourceFile: 'alpha.md',
+      folderId: 'folder-a', chunkIndex: 0, score: 0.82, denseScore: 0.82, scoreType: 'dense', createdAt: now,
+    }])
+    const semanticResponse = await app.inject({
+      method: 'GET',
+      url: '/api/memory-folders/file-search?query=space%20architecture&folderId=folder-a&semantic=true',
+    })
+    expect(semanticResponse.statusCode).toBe(200)
+    expect(semanticResponse.json()).toEqual([
+      expect.objectContaining({ fileName: 'alpha.md', folderId: 'folder-a', matchedFields: ['content'], similarity: 0.82 }),
+    ])
+    expect(embed).toHaveBeenCalledWith('space architecture')
+    expect(vectorSearch).toHaveBeenCalledWith(expect.any(String), [1, 0], 500, expect.stringContaining("'folder-a'"))
+    embed.mockRestore()
+    vectorSearch.mockRestore()
+
     const analysisResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-a/files/alpha.md/analysis' })
     expect(analysisResponse.json()).toEqual(expect.objectContaining({
       status: 'current',

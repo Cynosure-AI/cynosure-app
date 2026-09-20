@@ -411,6 +411,8 @@ export interface MemoryFileSearchResult extends MemoryFileStatus {
     folderName: string
     folderPath: string
     matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary' | 'content'>
+    /** Best cosine similarity among the document's matching chunks (0–1). */
+    similarity?: number
 }
 
 export interface MemoryRevisionSummary {

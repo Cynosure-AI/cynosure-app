@@ -4,6 +4,8 @@ import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { getActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { andLanceDbFilters, lanceDbEqFilter } from '../core/memory/lancedb-filter.js'
+import { getEmbeddingProvider } from '../core/memory/embedding.js'
+import { buildMemoryFolderFilter } from '../core/memory/memory-folder-scope.js'
 import {
     ensureFolder,
     listFilesInFolder,
@@ -111,6 +113,8 @@ export interface MemoryFileSearchResult extends MemoryFileStatus {
     folderName: string
     folderPath: string
     matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary' | 'content'>
+    /** Best cosine similarity among this document's matching chunks. */
+    similarity?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +223,7 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
 
 export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise<void> {
 
-    app.get<{ Querystring: { query?: string; folderId?: string } }>('/file-search', async (req, reply) => {
+    app.get<{ Querystring: { query?: string; folderId?: string; semantic?: string } }>('/file-search', async (req, reply) => {
         const query = (req.query.query || '').normalize('NFKC').trim().toLocaleLowerCase().slice(0, 200)
         if (!query) return []
         const terms = query.split(/\s+/).filter(Boolean)
@@ -235,6 +239,45 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 const folderPath = memoryFolderDirectoryData(row).folderPath
                 return row.id === requestedRow.id || folderPath.startsWith(`${requestedPath}/`)
             })
+        if (req.query.semantic === 'true') {
+            const { vector } = await getEmbeddingProvider().embed(query)
+            const chunks = await getRAGStore().search(
+                getActivePermanentMemoryTableName(),
+                vector,
+                500,
+                buildMemoryFolderFilter(rows),
+            )
+            const bestSimilarityByFile = new Map<string, number>()
+            for (const chunk of chunks) {
+                if (!chunk.folderId || !chunk.sourceFile) continue
+                const key = `${chunk.folderId}\0${chunk.sourceFile}`
+                bestSimilarityByFile.set(key, Math.max(bestSimilarityByFile.get(key) ?? -1, chunk.denseScore ?? chunk.score))
+            }
+            const results: MemoryFileSearchResult[] = []
+            for (const row of rows) {
+                const matches = new Set<string>()
+                for (const key of bestSimilarityByFile.keys()) {
+                    const [folderId, fileName] = key.split('\0')
+                    if (folderId === row.id && fileName) matches.add(fileName)
+                }
+                const folderData = memoryFolderDirectoryData(row)
+                for (const file of listMemoryFiles(row, matches)) {
+                    const similarity = bestSimilarityByFile.get(`${row.id}\0${file.fileName}`)
+                    if (similarity === undefined) continue
+                    results.push({
+                        ...file,
+                        folderId: row.id,
+                        folderName: row.name,
+                        folderPath: folderData.folderPath,
+                        matchedFields: ['content'],
+                        similarity: Math.max(0, Math.min(1, similarity)),
+                    })
+                }
+            }
+            return results
+                .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0) || a.fileName.localeCompare(b.fileName))
+                .slice(0, 100)
+        }
         const summaries = getDb().prepare(`
             SELECT r.category_id, r.file_name, GROUP_CONCAT(tu.summary, ' ') AS summaries
             FROM memory_knowledge_index_runs r
