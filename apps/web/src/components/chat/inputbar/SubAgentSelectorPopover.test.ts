@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { h, nextTick } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
@@ -57,7 +57,7 @@ describe('SubAgentSelectorPopover', () => {
     wrapper.unmount()
   })
 
-  test('lists enabled sub-agents before the remaining agents', async () => {
+  test('orders enabled sub-agents when opened without reordering while open', async () => {
     const agentDefs = useAgentDefinitionsStore()
     const chatStore = useChatStore()
     agentDefs.agents = [
@@ -65,6 +65,8 @@ describe('SubAgentSelectorPopover', () => {
       agent('writer', 'Writer', 'Drafts final copy'),
       agent('reviewer', 'Reviewer', 'Checks the result'),
     ]
+    await flushPromises()
+
     const wrapper = mount(SubAgentSelectorPopover, {
       attachTo: document.body,
       slots: {
@@ -73,19 +75,33 @@ describe('SubAgentSelectorPopover', () => {
       global: { stubs: { Icon: true } },
     })
 
-    chatStore.freeChatSubAgentIds.splice(0)
+    // Selection can be hydrated after the component itself mounts.
+    chatStore.freeChatSubAgentIds.push('writer')
     await wrapper.get('[data-test="trigger"]').trigger('click')
     await nextTick()
 
     const menus = document.body.querySelectorAll<HTMLElement>('[role="menu"][aria-label="Sub-agents"]')
     const menu = menus.item(menus.length - 1)
-    menu.querySelector<HTMLButtonElement>('[aria-label="Toggle Writer"]')?.click()
+    const labels = () => [...menu.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')]
+      .map((element) => element.getAttribute('aria-label'))
+
+    expect(labels()).toEqual(['Toggle Writer', 'Toggle Researcher', 'Toggle Reviewer'])
+
     menu.querySelector<HTMLButtonElement>('[aria-label="Toggle Reviewer"]')?.click()
     await nextTick()
 
-    const labels = [...menu.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')]
+    expect(chatStore.freeChatSubAgentIds).toEqual(['writer', 'reviewer'])
+    expect(labels()).toEqual(['Toggle Writer', 'Toggle Researcher', 'Toggle Reviewer'])
+
+    await wrapper.get('[data-test="trigger"]').trigger('click')
+    await wrapper.get('[data-test="trigger"]').trigger('click')
+    await nextTick()
+
+    const reopenedMenus = document.body.querySelectorAll<HTMLElement>('[role="menu"][aria-label="Sub-agents"]')
+    const reopenedMenu = reopenedMenus.item(reopenedMenus.length - 1)
+    const reopenedLabels = [...reopenedMenu.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')]
       .map((element) => element.getAttribute('aria-label'))
-    expect(labels).toEqual(['Toggle Writer', 'Toggle Reviewer', 'Toggle Researcher'])
+    expect(reopenedLabels).toEqual(['Toggle Writer', 'Toggle Reviewer', 'Toggle Researcher'])
 
     wrapper.unmount()
   })
