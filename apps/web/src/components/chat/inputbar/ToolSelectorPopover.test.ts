@@ -149,6 +149,61 @@ describe('ToolSelectorPopover', () => {
 
     wrapper.unmount()
   })
+
+  test('orders selected namespaces when opened without moving built-ins or reordering while open', async () => {
+    const agentStore = useAgentStore()
+    const chatStore = useChatStore()
+    agentStore.availableTools = [
+      namespacedTool('builtin:utility', 'Built-In', 'builtin:utility::read', 'read'),
+      namespacedTool('mcp:calendar', 'Calendar MCP', 'mcp:calendar::events', 'events'),
+      namespacedTool('mcp:github', 'GitHub MCP', 'mcp:github::search', 'search'),
+      namespacedTool('mcp:linear', 'Linear MCP', 'mcp:linear::issues', 'issues'),
+    ]
+
+    const wrapper = mount(ToolSelectorPopover, {
+      attachTo: document.body,
+      slots: {
+        trigger: ({ toggle }: { toggle: () => void }) => h('button', { 'data-test': 'trigger', onClick: toggle }, 'Tools'),
+      },
+      global: { stubs: { Icon: true, ToggleSwitch: true } },
+    })
+
+    await flushPromises()
+    chatStore.setSelectedToolNames(['mcp:github::search'])
+    await wrapper.get('[data-test="trigger"]').trigger('click')
+    await nextTick()
+
+    const namespaceLabels = () => [...document.body.querySelectorAll<HTMLButtonElement>('[aria-label^="Open "][aria-label$=" tools"]')]
+      .map((element) => element.getAttribute('aria-label'))
+
+    expect(namespaceLabels()).toEqual([
+      'Open Built-In tools',
+      'Open GitHub MCP tools',
+      'Open Calendar MCP tools',
+      'Open Linear MCP tools',
+    ])
+
+    document.body.querySelector<HTMLButtonElement>('[aria-label="Toggle all tools in Calendar MCP"]')?.click()
+    await nextTick()
+    expect(namespaceLabels()).toEqual([
+      'Open Built-In tools',
+      'Open GitHub MCP tools',
+      'Open Calendar MCP tools',
+      'Open Linear MCP tools',
+    ])
+
+    await wrapper.get('[data-test="trigger"]').trigger('click')
+    await wrapper.get('[data-test="trigger"]').trigger('click')
+    await nextTick()
+    expect(namespaceLabels()).toEqual([
+      'Open Built-In tools',
+      'Open Calendar MCP tools',
+      'Open GitHub MCP tools',
+      'Open Linear MCP tools',
+    ])
+
+    wrapper.unmount()
+  })
 })
 
 function tool(key: string, name: string, description: string): ToolInfo {
@@ -162,5 +217,12 @@ function tool(key: string, name: string, description: string): ToolInfo {
     usesDefaultApproval: true,
     namespace: { id: 'mcp:github', label: 'GitHub MCP' },
     ambiguous: false,
+  }
+}
+
+function namespacedTool(namespaceId: string, namespaceLabel: string, key: string, name: string): ToolInfo {
+  return {
+    ...tool(key, name, `${name} description`),
+    namespace: { id: namespaceId, label: namespaceLabel },
   }
 }
