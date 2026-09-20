@@ -900,7 +900,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             @click="copyCurrentFolderPath"
           >
             <Icon
-              :icon="pathCopied ? 'lucide:check' : 'lucide:folder'"
+              :icon="pathCopied ? 'lucide:check' : 'lucide:clipboard'"
               class="h-3.5 w-3.5"
             />
           </button>
@@ -917,7 +917,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
               type="button"
               :disabled="!segment.folderId || segment.folderId === folderId"
               class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:hover:bg-theme-800 disabled:cursor-default"
-              :class="segment.folderId && segment.folderId !== folderId ? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
+              :class="segment.folderId ? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
               @click="navigateBreadcrumb(segment.folderId)"
             >
               {{ segment.label }}
