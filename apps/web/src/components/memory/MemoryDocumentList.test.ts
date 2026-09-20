@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   listJobs: vi.fn(),
   searchFiles: vi.fn(),
   startReindexFile: vi.fn(),
+  updateFolder: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -22,6 +23,7 @@ vi.mock('../../api/client', () => ({
       listJobs: mocks.listJobs,
       searchFiles: mocks.searchFiles,
       startReindexFile: mocks.startReindexFile,
+      update: mocks.updateFolder,
     },
   },
 }))
@@ -73,6 +75,7 @@ describe('MemoryDocumentList navigation and search', () => {
       id: 'job-1', kind: 'reindex', folderId: 'category', fileName: 'notes.md',
       status: 'queued', progressCurrent: 0, progressTotal: 0, createdAt: 1, updatedAt: 1,
     })
+    mocks.updateFolder.mockResolvedValue({})
   })
 
   test('opens a linked document while leaving the always-visible search empty', async () => {
@@ -181,16 +184,24 @@ describe('MemoryDocumentList navigation and search', () => {
     await flushPromises()
 
     await wrapper.get('[aria-label="Grid view"]').trigger('click')
-    expect(wrapper.get('[data-testid="memory-explorer-grid"]').text()).toContain('Projects')
+    const grid = wrapper.get('[data-testid="memory-explorer-grid"]')
+    expect(grid.text()).toContain('Projects')
     expect(localStorage.getItem('cy-memory-explorer-view')).toBe('grid')
+    const folderCheckbox = grid.get('input[aria-label="Select Projects"]')
+    await folderCheckbox.trigger('click')
+    expect(wrapper.text()).toContain('1 selected')
+    await folderCheckbox.trigger('click')
     await wrapper.get('[aria-label="List view"]').trigger('click')
 
-    const folderRow = wrapper.get('[data-testid="memory-explorer-folders"] button')
-    expect(folderRow.text()).toContain('Projects')
-    await folderRow.trigger('click')
+    const table = wrapper.getComponent({ name: 'DataTable' })
+    const rows = table.props('items') as Array<{ kind: string; folder?: typeof child }>
+    expect(rows.map((row) => row.kind)).toEqual(['folder', 'file'])
+    table.vm.$emit('row-click', rows[0], new MouseEvent('click'))
+    await flushPromises()
     expect(wrapper.emitted('navigateFolder')).toEqual([['child']])
 
-    await folderRow.trigger('contextmenu', { clientX: 20, clientY: 20 })
+    table.vm.$emit('row-contextmenu', rows[0], new MouseEvent('contextmenu', { clientX: 20, clientY: 20 }))
+    await flushPromises()
     const settings = [...document.body.querySelectorAll('[data-memory-context-menu] button')]
       .find((button) => button.textContent?.includes('Folder settings')) as HTMLButtonElement
     settings.click()
@@ -225,5 +236,82 @@ describe('MemoryDocumentList navigation and search', () => {
     await checkboxes[0].trigger('click')
     await checkboxes[1].trigger('click', { shiftKey: true })
     expect(wrapper.text()).toContain('2 selected')
+  })
+
+  test('applies indexing recursively to files inside a selected folder', async () => {
+    const currentFile = {
+      fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
+      supported: true, textDirect: true, status: 'indexed' as const, chunkCount: 1,
+      deepResearched: false, analysisStatus: 'not_analyzed' as const, analysisChunkLimit: 100, tags: [],
+    }
+    const nestedFile = {
+      fileName: 'nested.md', extension: '.md', size: 12, modifiedAt: 2,
+      supported: true, textDirect: true, status: 'not_indexed' as const, estimatedChunkCount: 1,
+      deepResearched: false, analysisStatus: 'not_analyzed' as const, analysisChunkLimit: 100, tags: [],
+    }
+    mocks.listFiles.mockImplementation((folderId: string) => Promise.resolve(folderId === 'child' ? [nestedFile] : [currentFile]))
+    const child = {
+      id: 'child', name: 'Projects', description: '', directoryPath: '/notes/projects',
+      folderPath: 'notes/projects', parentFolderPath: 'notes', sortOrder: 0,
+      isUncategorized: false, createdAt: 2, fileCount: 1,
+    }
+    const wrapper = mount(MemoryDocumentList, {
+      props: {
+        folderId: 'category',
+        spaces: [{
+          id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
+          folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 1,
+        }, child],
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[aria-label="Grid view"]').trigger('click')
+    await wrapper.get('input[aria-label="Select Projects"]').trigger('click')
+    const indexButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Index files')
+    await indexButton?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.startReindexFile).toHaveBeenCalledWith('child', 'nested.md')
+  })
+
+  test('moves a selected folder as a folder and preserves its hierarchy', async () => {
+    const current = {
+      id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
+      folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 1,
+    }
+    const child = {
+      ...current, id: 'child', name: 'Projects', directoryPath: '/notes/projects',
+      folderPath: 'notes/projects', parentFolderPath: 'notes', fileCount: 0,
+    }
+    const target = {
+      ...current, id: 'target', name: 'Archive', directoryPath: '/archive',
+      folderPath: 'archive', parentFolderPath: null, fileCount: 0,
+    }
+    const wrapper = mount(MemoryDocumentList, {
+      props: { folderId: 'category', spaces: [current, child, target] },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[aria-label="Grid view"]').trigger('click')
+    await wrapper.get('input[aria-label="Select Projects"]').trigger('click')
+    const moveButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Move')
+    await moveButton?.trigger('click')
+    wrapper.getComponent({ name: 'MemoryDocumentMoveDialog' }).vm.$emit('move', 'target')
+    await flushPromises()
+
+    expect(mocks.updateFolder).toHaveBeenCalledWith('child', { folderPath: 'archive/Projects' })
   })
 })
