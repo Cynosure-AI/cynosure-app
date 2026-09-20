@@ -16,6 +16,7 @@ export interface MemoryFolderDirectoryRow {
     directory_path: string
     sort_order: number
     is_uncategorized: number
+    auto_memory_excluded: number
     created_at: number
 }
 
@@ -160,12 +161,15 @@ export function syncMemoryFoldersFromFolders(db: Database.Database): MemoryFolde
 
     const now = Date.now()
     const insert = db.prepare(`
-        INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, auto_memory_excluded, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const folderPath of discovered) {
         if (existingByRelative.has(folderPath)) continue
-        insert.run(idForRelativePath(folderPath), nameForRelativePath(folderPath), '', directoryPathForRelative(folderPath), 0, 0, now)
+        const parentPath = folderPath.includes('/') ? folderPath.slice(0, folderPath.lastIndexOf('/')) : ''
+        const parent = db.prepare('SELECT auto_memory_excluded FROM memory_folders WHERE directory_path = ?')
+            .get(directoryPathForRelative(parentPath)) as { auto_memory_excluded: number } | undefined
+        insert.run(idForRelativePath(folderPath), nameForRelativePath(folderPath), '', directoryPathForRelative(folderPath), 0, 0, parent?.auto_memory_excluded ?? 0, now)
     }
 
     const rows = db.prepare('SELECT * FROM memory_folders ORDER BY is_uncategorized DESC, sort_order ASC, directory_path ASC').all() as MemoryFolderDirectoryRow[]
@@ -176,20 +180,22 @@ export function syncMemoryFoldersFromFolders(db: Database.Database): MemoryFolde
     return rows
 }
 
-export function listAllMemoryFolderRefs(db: Database.Database): { id: string; name: string; description?: string; folderPath: string }[] {
+export function listAllMemoryFolderRefs(db: Database.Database): { id: string; name: string; description?: string; folderPath: string; autoMemoryExcluded: boolean }[] {
     syncMemoryFoldersFromFolders(db)
-    const rows = db.prepare('SELECT id, name, description, directory_path, is_uncategorized FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as {
+    const rows = db.prepare('SELECT id, name, description, directory_path, is_uncategorized, auto_memory_excluded FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as {
         id: string
         name: string
         description: string
         directory_path: string
         is_uncategorized: number
+        auto_memory_excluded: number
     }[]
     return rows.map((row) => ({
         id: row.id,
         name: row.name,
         ...(row.description?.trim() ? { description: row.description.trim() } : {}),
         folderPath: row.is_uncategorized === 1 ? '' : folderPathForDirectory(row.directory_path),
+        autoMemoryExcluded: row.auto_memory_excluded === 1,
     }))
 }
 
@@ -275,8 +281,10 @@ export function ensureMemoryFolderPath(db: Database.Database, requestedPath: str
                     createdDirectories.push(directoryPath)
                 }
                 const id = newMemoryFolderId()
-                db.prepare('INSERT INTO memory_folders(id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)')
-                    .run(id, segment, '', directoryPath, Date.now())
+                const parent = db.prepare('SELECT auto_memory_excluded FROM memory_folders WHERE directory_path = ?')
+                    .get(directoryPathForRelative(current.includes('/') ? current.slice(0, current.lastIndexOf('/')) : '')) as { auto_memory_excluded: number } | undefined
+                db.prepare('INSERT INTO memory_folders(id, name, description, directory_path, sort_order, is_uncategorized, auto_memory_excluded, created_at) VALUES (?, ?, ?, ?, 0, 0, ?, ?)')
+                    .run(id, segment, '', directoryPath, parent?.auto_memory_excluded ?? 0, Date.now())
                 createdRows.push({ id, directoryPath })
             }
         })()

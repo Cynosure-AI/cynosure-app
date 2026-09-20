@@ -166,6 +166,7 @@ describe('MemoryDocumentsSection drag targets', () => {
     await archive.get('[aria-label="Folder options"]').trigger('click')
     const menu = document.body.querySelector('[data-testid="memory-folder-menu"]')
     expect(menu?.textContent).toContain('Add subfolder')
+    expect(menu?.textContent).toContain('Exclude from Auto Memory Router')
     expect(menu?.textContent).toContain('Rename')
     expect(menu?.textContent).toContain('Delete')
 
@@ -173,6 +174,21 @@ describe('MemoryDocumentsSection drag targets', () => {
     deleteButton.click()
     await nextTick()
     expect(wrapper.emitted('delete-folder')).toEqual([[spaces[1]]])
+  })
+
+  test('toggles auto-memory exclusion and shows a folder-x indicator when excluded', async () => {
+    const excludedArchive = { ...spaces[1], autoMemoryExcluded: true }
+    const wrapper = mountSection([spaces[0], excludedArchive])
+    const archive = wrapper.get('[data-space-id="archive"]')
+    expect(archive.attributes('data-auto-memory-excluded')).toBe('true')
+
+    await archive.get('[aria-label="Folder options"]').trigger('click')
+    const toggle = document.body.querySelector('[data-testid="toggle-auto-memory-exclusion"]') as HTMLButtonElement
+    expect(toggle.textContent).toContain('Include in Auto Memory Router')
+    toggle.click()
+    await nextTick()
+
+    expect(wrapper.emitted('toggle-auto-memory-exclusion')).toEqual([[excludedArchive]])
   })
 
   test('does not allow the Uncategorized folder to be renamed', async () => {

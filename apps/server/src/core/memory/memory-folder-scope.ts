@@ -3,16 +3,9 @@ import type Database from 'better-sqlite3'
 import { lanceDbInFilter } from './lancedb-filter.js'
 import { listAllMemoryFolderRefs, folderPathForDirectory } from './memory-folder-directories.js'
 
-export type MemoryFolderRef = { id: string; name: string; description?: string; folderPath?: string }
+export type MemoryFolderRef = { id: string; name: string; description?: string; folderPath?: string; autoMemoryExcluded?: boolean }
 
 const UNCATEGORIZED_CATEGORY_ID = 'uncategorized'
-const AUTO_EXCLUDED_MEMORY_FOLDER_NAMES = new Set(['archive', 'subconscious', 'secret', 'hidden'])
-
-export function isAutoExcludedMemoryFolderPath(folderPath: string): boolean {
-    return folderPath
-        .split('/')
-        .some((segment) => AUTO_EXCLUDED_MEMORY_FOLDER_NAMES.has(segment.toLowerCase()))
-}
 
 /**
  * Resolve the default memory folder.
@@ -79,16 +72,21 @@ export function expandMemoryFolderScope(folders: MemoryFolderRef[], db: Database
         const all = listAllMemoryFolderRefs(db)
         const paths = folders.map(item => item.folderPath ?? '')
         return all.filter(item => {
-            const itemIsAutoExcluded = isAutoExcludedMemoryFolderPath(item.folderPath)
+            const itemIsAutoExcluded = item.autoMemoryExcluded === true
             return paths.some(path => {
                 const withinScope = !path || item.folderPath === path || item.folderPath.startsWith(`${path}/`)
                 if (!withinScope) return false
-                // The root is the automatic/default selection. Special folders are
+                // The root is the automatic/default selection. Opted-out folders are
                 // omitted from that default, but any explicit folder grant behaves
                 // normally and includes all of its descendants.
                 return Boolean(path) || !itemIsAutoExcluded
             })
-        })
+        }).map(item => ({
+            id: item.id,
+            name: item.name,
+            ...(item.description ? { description: item.description } : {}),
+            folderPath: item.folderPath,
+        }))
     } catch {
         return folders
     }

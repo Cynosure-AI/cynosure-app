@@ -86,6 +86,39 @@ const MIGRATIONS: SchemaMigration[] = [
             db.exec('CREATE INDEX IF NOT EXISTS idx_staged_chat_attachments_status ON staged_chat_attachments(status, updated_at)')
         },
     },
+    {
+        version: 6,
+        description: 'Add user-controlled auto-memory folder exclusions',
+        up: (db) => {
+            const columns = db.pragma('table_info(memory_folders)') as Array<{ name: string }>
+            if (!columns.some((column) => column.name === 'auto_memory_excluded')) {
+                db.exec(`
+                    ALTER TABLE memory_folders
+                    ADD COLUMN auto_memory_excluded INTEGER NOT NULL DEFAULT 0
+                `)
+            }
+
+            // Preserve the behavior users had before exclusions became configurable.
+            // Mark the named folder and its existing descendants; future folders are
+            // governed only by this persisted setting.
+            const rows = db.prepare('SELECT id, name, directory_path FROM memory_folders').all() as Array<{
+                id: string
+                name: string
+                directory_path: string
+            }>
+            const legacyNames = new Set(['archive', 'subconscious', 'secret', 'hidden'])
+            const excludedPaths = rows
+                .filter((row) => legacyNames.has(row.name.toLowerCase()))
+                .map((row) => row.directory_path.replace(/\\/g, '/').replace(/\/$/, ''))
+            const update = db.prepare('UPDATE memory_folders SET auto_memory_excluded = 1 WHERE id = ?')
+            for (const row of rows) {
+                const path = row.directory_path.replace(/\\/g, '/').replace(/\/$/, '')
+                if (excludedPaths.some((excluded) => path === excluded || path.startsWith(`${excluded}/`))) {
+                    update.run(row.id)
+                }
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

@@ -67,6 +67,7 @@ interface MemoryFolderRow {
     directory_path: string
     sort_order: number
     is_uncategorized: number
+    auto_memory_excluded: number
     created_at: number
 }
 
@@ -80,6 +81,7 @@ interface MemoryFolderData {
     parentFolderPath: string | null
     sortOrder: number
     isUncategorized: boolean
+    autoMemoryExcluded: boolean
     createdAt: number
     fileCount: number
     descendantFileCount: number
@@ -133,6 +135,7 @@ function rowToData(row: MemoryFolderRow, fileCount: number, descendantFileCount 
         parentFolderPath: folderData.parentFolderPath,
         sortOrder: row.sort_order,
         isUncategorized: row.is_uncategorized === 1,
+        autoMemoryExcluded: row.auto_memory_excluded === 1,
         createdAt: row.created_at,
         fileCount,
         descendantFileCount,
@@ -469,10 +472,13 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const id = newMemoryFolderId()
         const now = Date.now()
         ensureFolder(resolvedFolder)
-        db.prepare('INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(id, trimmedName, description || '', resolvedFolder, 0, 0, now)
+        const parent = db.prepare('SELECT auto_memory_excluded FROM memory_folders WHERE directory_path = ?')
+            .get(directoryPathForRelative(parentFolderPath || '')) as { auto_memory_excluded: number } | undefined
+        const autoMemoryExcluded = parent?.auto_memory_excluded ?? 0
+        db.prepare('INSERT INTO memory_folders (id, name, description, directory_path, sort_order, is_uncategorized, auto_memory_excluded, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(id, trimmedName, description || '', resolvedFolder, 0, 0, autoMemoryExcluded, now)
         watchMemoryFolder(id, resolvedFolder)
-        return rowToData({ id, name: trimmedName, description: description || '', directory_path: resolvedFolder, sort_order: 0, is_uncategorized: 0, created_at: now }, 0)
+        return rowToData({ id, name: trimmedName, description: description || '', directory_path: resolvedFolder, sort_order: 0, is_uncategorized: 0, auto_memory_excluded: autoMemoryExcluded, created_at: now }, 0)
     })
 
     // PUT /api/memory-folders/reorder — update sort order
@@ -489,7 +495,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
     })
 
     // PUT /api/memory-folders/:id — update name/description/folderPath
-    app.put<{ Params: { id: string }; Body: { name?: string; description?: string; folderPath?: string } }>('/:id', async (req, reply) => {
+    app.put<{ Params: { id: string }; Body: { name?: string; description?: string; folderPath?: string; autoMemoryExcluded?: boolean } }>('/:id', async (req, reply) => {
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
         const folderId = decodeFolderIdParam(req.params.id)
@@ -540,10 +546,22 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             }
         }
 
-        db.prepare('UPDATE memory_folders SET name = ?, description = ?, directory_path = ? WHERE id = ?').run(nextName, description, directoryPath, row.id)
+        const autoMemoryExcluded = req.body.autoMemoryExcluded === undefined
+            ? row.auto_memory_excluded
+            : (req.body.autoMemoryExcluded ? 1 : 0)
+        const updateFolder = db.prepare('UPDATE memory_folders SET auto_memory_excluded = ? WHERE id = ?')
+        db.transaction(() => {
+            db.prepare('UPDATE memory_folders SET name = ?, description = ?, directory_path = ? WHERE id = ?').run(nextName, description, directoryPath, row.id)
+            if (req.body.autoMemoryExcluded !== undefined) {
+                updateFolder.run(autoMemoryExcluded, row.id)
+                const prefix = `${directoryPath}${directoryPath.endsWith(sep) ? '' : sep}%`
+                const descendants = db.prepare('SELECT id FROM memory_folders WHERE id != ? AND directory_path LIKE ?').all(row.id, prefix) as Array<{ id: string }>
+                for (const descendant of descendants) updateFolder.run(autoMemoryExcluded, descendant.id)
+            }
+        })()
         watchMemoryFolder(row.id, directoryPath)
         const files = listFilesInFolder(directoryPath).filter(f => f.supported)
-        return rowToData({ ...row, name: nextName, description, directory_path: directoryPath }, files.length)
+        return rowToData({ ...row, name: nextName, description, directory_path: directoryPath, auto_memory_excluded: autoMemoryExcluded }, files.length)
     })
 
     // DELETE /api/memory-folders/:id — archive folder + delete vectors/index

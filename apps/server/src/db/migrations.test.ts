@@ -24,13 +24,15 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2, 3, 4, 5])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect((db.prepare(`PRAGMA table_info(memory_knowledge_text_units)`).all() as Array<{ name: string }>).map((column) => column.name)).toContain('summary')
         expect((db.prepare(`PRAGMA table_info(agents)`).all() as Array<{ name: string }>).map((column) => column.name)).not.toContain('tags_json')
         expect((db.prepare(`PRAGMA table_info(staged_chat_attachments)`).all() as Array<{ name: string }>).map((column) => column.name))
             .toEqual(expect.arrayContaining(['client_id', 'status', 'progress_current', 'progress_total', 'error', 'updated_at']))
+        expect((db.prepare(`PRAGMA table_info(memory_folders)`).all() as Array<{ name: string }>).map((column) => column.name))
+            .toContain('auto_memory_excluded')
         db.close()
     })
 
@@ -86,7 +88,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -98,7 +100,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
         db.close()
     })
 
@@ -122,13 +124,39 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([3, 4, 5])
+        expect(result.applied).toEqual([3, 4, 5, 6])
         expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
             .toContain('builtin:notifications::notify_user_in_app')
         expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
             .toContain('builtin:notifications::notify_user_in_app')
         expect((db.prepare("SELECT execution_config_json FROM cron_jobs WHERE id = 'cron-1'").get() as { execution_config_json: string }).execution_config_json)
             .toContain('builtin:notifications::notify_user_in_app')
+        db.close()
+    })
+
+    test('preserves legacy automatic-memory exclusions when adding the folder setting', () => {
+        const db = memoryDb()
+        db.exec(BASELINE_SCHEMA)
+        db.pragma('user_version = 5')
+        const now = Date.now()
+        const insert = db.prepare(`
+            INSERT INTO memory_folders (id, name, directory_path, created_at)
+            VALUES (?, ?, ?, ?)
+        `)
+        insert.run('archive', 'Archive', '/memory/Archive', now)
+        insert.run('archive-child', '2024', '/memory/Archive/2024', now)
+        insert.run('ordinary', 'Projects', '/memory/Projects', now)
+
+        expect(applySchemaMigrations(db).applied).toEqual([6])
+        const rows = db.prepare('SELECT id, auto_memory_excluded FROM memory_folders ORDER BY id').all() as Array<{
+            id: string
+            auto_memory_excluded: number
+        }>
+        expect(rows).toEqual([
+            { id: 'archive', auto_memory_excluded: 1 },
+            { id: 'archive-child', auto_memory_excluded: 1 },
+            { id: 'ordinary', auto_memory_excluded: 0 },
+        ])
         db.close()
     })
 

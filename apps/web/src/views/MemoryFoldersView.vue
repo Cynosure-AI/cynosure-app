@@ -15,7 +15,6 @@ import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vu
 import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
 import { selectConnectedGraph } from "../utils/knowledge-graph-selection";
-import { AUTO_EXCLUDED_MEMORY_FOLDER_NAMES } from "../utils/memory-folder-selection";
 import { KNOWLEDGE_GRAPH_FLOW_ID as KNOWLEDGE_FLOW_ID, useKnowledgeGraphLayout } from "../composables/useKnowledgeGraphLayout";
 import { SK_KNOWLEDGE_GRAPH_EDGE_LABELS, SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE, SK_KNOWLEDGE_GRAPH_NODE_SPACING } from "../utils/storage-keys";
 
@@ -365,6 +364,15 @@ async function deleteSpace(space: MemoryFolder) {
     await loadFolders();
   } catch {
     /* ignore */
+  }
+}
+
+async function toggleAutoMemoryExclusion(space: MemoryFolder) {
+  try {
+    await api.memoryFolders.update(space.id, { autoMemoryExcluded: !space.autoMemoryExcluded });
+    await loadFolders();
+  } catch {
+    /* surface errors later with shared notifications */
   }
 }
 
@@ -738,6 +746,7 @@ onMounted(() => loadFolders());
           @create-folder="openCreateDialog"
           @edit-folder="openEditDialog"
           @delete-folder="confirmDeleteSpace"
+          @toggle-auto-memory-exclusion="toggleAutoMemoryExclusion"
           @refresh-spaces="loadFolders"
           @folder-navigation="clearDocumentLink"
         />
@@ -805,7 +814,7 @@ onMounted(() => loadFolders());
                     class="mt-0.5 h-3 w-3 shrink-0"
                   />
                   <span>
-                    Folders named {{ AUTO_EXCLUDED_MEMORY_FOLDER_NAMES.join(", ") }} are excluded from automatic memory selection, regardless of capitalization. They remain available for manual selection.
+                    New folders are included in automatic memory routing by default. You can exclude them from the folder menu at any time.
                   </span>
                 </div>
               </div>

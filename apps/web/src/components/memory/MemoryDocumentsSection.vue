@@ -26,6 +26,7 @@ const emit = defineEmits<{
   "create-folder": [parent?: MemoryFolder];
   "edit-folder": [space: MemoryFolder];
   "delete-folder": [space: MemoryFolder];
+  "toggle-auto-memory-exclusion": [space: MemoryFolder];
   "refresh-spaces": [];
   "folder-navigation": [];
 }>();
@@ -51,7 +52,7 @@ function toggleFolderMenu(space: MemoryFolder, event: MouseEvent): void {
   }
 
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  const menuHeight = 106;
+  const menuHeight = 146;
   const viewportGap = 8;
   const anchorGap = 4;
   const openAbove = rect.bottom + anchorGap + menuHeight > window.innerHeight - viewportGap;
@@ -84,6 +85,13 @@ function deleteFolderFromMenu(): void {
   if (!space) return;
   openFolderMenuId.value = null;
   emit("delete-folder", space);
+}
+
+function toggleAutoMemoryExclusionFromMenu(): void {
+  const space = openFolderMenuSpace.value;
+  if (!space) return;
+  openFolderMenuId.value = null;
+  emit("toggle-auto-memory-exclusion", space);
 }
 
 const sortedSpaces = computed(() =>
@@ -342,6 +350,7 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
             :key="space.id"
             :data-space-id="space.id"
             :data-folder-depth="folderDepth(space)"
+            :data-auto-memory-excluded="space.autoMemoryExcluded ? 'true' : 'false'"
             class="group flex items-center gap-2 px-3 py-2.5 border-b border-theme-900/70 last:border-b-0 transition-colors"
             :class="[
               selectedFolderId === space.id ? 'bg-accent-500/12 text-theme-100' : 'hover:bg-theme-800/35 text-theme-300',
@@ -383,9 +392,10 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
               @click="selectSpace(space.id)"
             >
               <Icon
-                :icon="space.isUncategorized ? 'lucide:hard-drive' : isCollapsed(space) ? 'lucide:folder' : 'lucide:folder-open'"
+                :icon="space.isUncategorized ? 'lucide:hard-drive' : space.autoMemoryExcluded ? 'lucide:folder-x' : isCollapsed(space) ? 'lucide:folder' : 'lucide:folder-open'"
                 class="w-4 h-4 shrink-0"
-                :class="space.isUncategorized ? 'text-accent-400' : 'text-amber-400'"
+                :class="space.autoMemoryExcluded ? 'text-orange-400' : space.isUncategorized ? 'text-accent-400' : 'text-amber-400'"
+                :title="space.autoMemoryExcluded ? 'Excluded from Auto Memory Router' : undefined"
               />
               <span
                 class="truncate text-sm font-medium"
@@ -477,7 +487,7 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
       <div
         v-if="openFolderMenuSpace"
         data-testid="memory-folder-menu"
-        class="z-50 w-40 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+        class="z-50 w-64 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
         :style="folderMenuStyle"
         @click.stop
       >
@@ -491,6 +501,20 @@ async function onFileDrop(e: DragEvent, targetFolderId?: string) {
             class="h-3.5 w-3.5 text-accent-400"
           />
           Add subfolder
+        </button>
+        <button
+          v-if="!openFolderMenuSpace.isUncategorized"
+          type="button"
+          data-testid="toggle-auto-memory-exclusion"
+          class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+          @click="toggleAutoMemoryExclusionFromMenu"
+        >
+          <Icon
+            :icon="openFolderMenuSpace.autoMemoryExcluded ? 'lucide:folder-check' : 'lucide:folder-x'"
+            class="h-3.5 w-3.5"
+            :class="openFolderMenuSpace.autoMemoryExcluded ? 'text-emerald-400' : 'text-orange-400'"
+          />
+          {{ openFolderMenuSpace.autoMemoryExcluded ? "Include in Auto Memory Router" : "Exclude from Auto Memory Router" }}
         </button>
         <button
           type="button"
