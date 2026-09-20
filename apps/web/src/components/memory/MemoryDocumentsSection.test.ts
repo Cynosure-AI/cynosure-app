@@ -139,7 +139,7 @@ describe('MemoryDocumentsSection drag targets', () => {
 
   test('uses folder-first navigation with a back button on mobile', async () => {
     const wrapper = mountSection()
-    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('block')
+    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('flex')
     expect(wrapper.get('[data-testid="memory-document-drop-zone"]').classes()).toContain('hidden')
 
     await wrapper.get('[data-space-id="archive"] button.min-w-0').trigger('click')
@@ -147,8 +147,44 @@ describe('MemoryDocumentsSection drag targets', () => {
     expect(wrapper.get('[data-testid="memory-document-drop-zone"]').classes()).toContain('block')
 
     await wrapper.get('[data-testid="memory-mobile-folder-back"]').trigger('click')
-    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('block')
+    expect(wrapper.get('[data-testid="memory-folder-pane"]').classes()).toContain('flex')
     expect(wrapper.get('[data-testid="memory-document-drop-zone"]').classes()).toContain('hidden')
+  })
+
+  test('shows Recent and Trash below the folder list and swaps the content pane', async () => {
+    const wrapper = mount(MemoryDocumentsSection, {
+      props: {
+        spaces,
+        spacesLoading: false,
+        selectedFolderId: 'uncategorized',
+        selectedFolder: spaces[0],
+        activeSidebarView: 'folder',
+      },
+      slots: {
+        recent: '<div data-testid="recent-content">Recent content</div>',
+        trash: '<div data-testid="trash-content">Trash content</div>',
+      },
+      global: {
+        stubs: { MemoryDocumentList: MemoryDocumentListStub },
+      },
+    })
+
+    const recent = wrapper.get('[data-testid="memory-recent-view"]')
+    const trash = wrapper.get('[data-testid="memory-trash-view"]')
+    expect(recent.text()).toContain('Recent')
+    expect(trash.text()).toContain('Trash')
+    expect(trash.classes()).toContain('text-red-300')
+
+    await recent.trigger('click')
+    expect(wrapper.emitted('select-sidebar-view')).toContainEqual(['recent'])
+    await wrapper.setProps({ activeSidebarView: 'recent' })
+    expect(wrapper.get('[data-testid="recent-content"]').text()).toBe('Recent content')
+    expect(wrapper.findComponent(MemoryDocumentListStub).exists()).toBe(false)
+
+    await trash.trigger('click')
+    expect(wrapper.emitted('select-sidebar-view')).toContainEqual(['trash'])
+    await wrapper.setProps({ activeSidebarView: 'trash' })
+    expect(wrapper.get('[data-testid="trash-content"]').text()).toBe('Trash content')
   })
 
   test('opens the document pane immediately for a linked file', () => {
