@@ -98,6 +98,7 @@ let pendingIndexAction: (() => Promise<void>) | null = null;
 
 // Search + pagination
 const searchQuery = ref("");
+const semanticSearch = ref(false);
 const page = ref(0);
 const visibleDocumentRows = ref<DocumentRow[]>([]);
 const globalSearchResults = ref<MemoryFileSearchResult[]>([]);
@@ -205,7 +206,17 @@ const globalColumns: Column<GlobalDocumentRow>[] = [
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "status", label: "Searchable", minWidth: "150px", grow: 1, sortable: true, sortValue: (file) => file.status },
 ];
-const searchColumns = globalColumns;
+const semanticMatchColumn: Column<GlobalDocumentRow> = {
+  key: "similarity",
+  label: "Match",
+  minWidth: "82px",
+  grow: 0,
+  sortable: true,
+  sortValue: (file) => file.similarity ?? 0,
+};
+const searchColumns = computed(() => semanticSearch.value
+  ? [...globalColumns.slice(0, 2), semanticMatchColumn, ...globalColumns.slice(2)]
+  : globalColumns);
 
 const allFilteredSelected = computed(
   () =>
@@ -574,7 +585,7 @@ watch(() => props.focusFile, (fileName) => {
   if (fileName) openEditorModal(fileName);
 });
 
-watch([searchQuery, () => props.folderId], ([query]) => {
+watch([searchQuery, () => props.folderId, semanticSearch], ([query]) => {
   page.value = 0;
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   const trimmed = query.trim();
@@ -590,6 +601,7 @@ watch([searchQuery, () => props.folderId], ([query]) => {
     try {
       const results = await api.memoryFolders.searchFiles(trimmed, {
         folderId: props.folderId,
+        semantic: semanticSearch.value,
       });
       if (sequence === globalSearchSequence) globalSearchResults.value = results;
     } catch {
@@ -763,35 +775,54 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       id="memory-document-search"
       class="mb-3 rounded-lg border border-theme-800 bg-theme-950/30 p-2"
     >
-      <div class="relative min-w-0 flex-1">
-        <Icon
-          icon="lucide:search"
-          class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
-        />
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search this folder and subfolders…"
-          class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder-theme-500 transition-colors focus:border-theme-600 focus:outline-none"
-          @input="page = 0"
-        >
-        <Icon
-          v-if="globalSearchLoading"
-          icon="lucide:loader-2"
-          class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
-        />
+      <div class="flex min-w-0 items-center gap-2">
+        <div class="relative min-w-0 flex-1">
+          <Icon
+            icon="lucide:search"
+            class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
+          />
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search this folder and subfolders…"
+            class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder-theme-500 transition-colors focus:border-theme-600 focus:outline-none"
+            @input="page = 0"
+          >
+          <Icon
+            v-if="globalSearchLoading"
+            icon="lucide:loader-2"
+            class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
+          />
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+            title="Clear search"
+            aria-label="Clear document search"
+            @click="searchQuery = ''"
+          >
+            <Icon
+              icon="lucide:x"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+        </div>
         <button
-          v-if="searchQuery"
           type="button"
-          class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-          title="Clear search"
-          aria-label="Clear document search"
-          @click="searchQuery = ''"
+          :aria-pressed="semanticSearch"
+          aria-label="Toggle semantic search"
+          class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors"
+          :class="semanticSearch
+            ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
+            : 'border-theme-800 bg-theme-900/60 text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
+          :title="semanticSearch ? 'Semantic search is on' : 'Search document vectors by meaning'"
+          @click="semanticSearch = !semanticSearch"
         >
           <Icon
-            icon="lucide:x"
+            icon="lucide:sparkles"
             class="h-3.5 w-3.5"
           />
+          <span class="hidden sm:inline">Semantic</span>
         </button>
       </div>
     </div>
@@ -1076,6 +1107,14 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </template>
       <template #col-modifiedAt="{ item: file }">
         <span class="text-xs text-theme-500">{{ new Date(file.modifiedAt).toLocaleDateString() }}</span>
+      </template>
+      <template #col-similarity="{ item: file }">
+        <span
+          class="inline-flex rounded-full border border-accent-500/25 bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-300"
+          :title="`Best chunk cosine similarity: ${((file.similarity || 0) * 100).toFixed(1)}%`"
+        >
+          {{ Math.round((file.similarity || 0) * 100) }}%
+        </span>
       </template>
       <template #col-status="{ item: file }">
         <span

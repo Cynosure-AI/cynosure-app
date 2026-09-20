@@ -98,6 +98,24 @@ describe('MemoryDocumentList navigation and search', () => {
     expect(wrapper.text()).toContain('1 file')
   })
 
+  test('reruns the current query as semantic search when the toggle is enabled', async () => {
+    const wrapper = mountList()
+    await flushPromises()
+    const toggle = wrapper.get('[aria-label="Toggle semantic search"]')
+
+    expect(toggle.attributes('aria-pressed')).toBe('false')
+    await toggle.trigger('click')
+    await wrapper.get('input[placeholder="Search this folder and subfolders…"]').setValue('deployment guidance')
+    await new Promise((resolve) => window.setTimeout(resolve, 250))
+    await flushPromises()
+
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+    expect(mocks.searchFiles).toHaveBeenLastCalledWith('deployment guidance', {
+      folderId: 'category',
+      semantic: true,
+    })
+  })
+
   test('warns before indexing a file estimated above 100 chunks and proceeds after confirmation', async () => {
     mocks.listFiles.mockResolvedValue([{
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
