@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, type Dirent } from 'fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, rmdirSync, statSync, type Dirent } from 'fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import { nanoid } from 'nanoid'
 import { getMemoryFoldersRootDir } from '../data-dir.js'
@@ -225,6 +225,21 @@ export function archiveMemoryFolderDirectory(row: MemoryFolderDirectoryRow): str
     renameSync(row.directory_path, dest)
     stopWatchingMemoryFolder(row.id)
     return dest
+}
+
+/** Permanently clear folder and document archives after the user empties trash. */
+export function emptyMemoryTrashDirectories(directoryPaths: string[]): void {
+    const root = resolve(memoryRootDir())
+    const targets = new Set([join(root, '.trash')])
+    for (const directoryPath of directoryPaths) {
+        const directory = resolve(directoryPath)
+        if (directory === root || directory.startsWith(root + sep)) targets.add(join(directory, '.trash'))
+    }
+    for (const target of targets) {
+        const resolvedTarget = resolve(target)
+        if (resolvedTarget !== join(root, '.trash') && !resolvedTarget.startsWith(root + sep)) continue
+        if (existsSync(resolvedTarget)) rmSync(resolvedTarget, { recursive: true, force: true })
+    }
 }
 
 export function removeFolderIfEmpty(directoryPath: string): void {

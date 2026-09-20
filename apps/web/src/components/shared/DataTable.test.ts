@@ -247,4 +247,18 @@ describe('DataTable', () => {
     expect(wrapper.emitted('cell-edit-start')?.[0]?.[2]).toHaveLength(2)
     wrapper.unmount()
   })
+
+  test('exposes double-click and context-menu row interactions', async () => {
+    const item = { id: 'a', name: 'Alpha', enabled: true }
+    const wrapper = mount(DataTable<Item>, {
+      props: { items: [item], columns, rowClickable: true },
+    })
+    const row = wrapper.find('.group.border-b')
+
+    await row.trigger('dblclick')
+    await row.trigger('contextmenu')
+
+    expect(wrapper.emitted('row-dblclick')?.[0]?.[0]).toEqual(item)
+    expect(wrapper.emitted('row-contextmenu')?.[0]?.[0]).toEqual(item)
+  })
 })

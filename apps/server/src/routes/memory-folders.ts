@@ -22,6 +22,7 @@ import { existsSync, renameSync, writeFileSync } from 'fs'
 import { watchMemoryFolder, stopWatchingMemoryFolder } from '../core/memory/memory-folder-watcher.js'
 import {
     archiveMemoryFolderDirectory,
+    emptyMemoryTrashDirectories,
     directoryPathForRelative,
     makeChildFolderPath,
     memoryFolderDirectoryData,
@@ -54,7 +55,7 @@ import {
 } from '../core/memory/memory-index-jobs.js'
 import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION } from '../core/memory/memory-knowledge.js'
 import { estimateChunkCountFromFileSize, getMemoryParser } from '../core/memory/parser.js'
-import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryFoldersDeleted, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
+import { getMemoryDocument, getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, listRecentMemoryChanges, markMemoryFoldersDeleted, purgeDeletedMemoryDocuments, recordMemoryRevision, unifiedMemoryDiff, updateMemoryDocumentLocation } from '../core/memory/memory-revisions.js'
 
 // ---------------------------------------------------------------------------
 // Row / response types
@@ -390,6 +391,15 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
       SELECT document_ref AS documentRef, category_id AS folderId, file_name AS fileName, current_hash AS revision, deleted_at AS deletedAt
       FROM memory_documents WHERE status = 'deleted' ORDER BY deleted_at DESC
     `).all())
+
+    app.delete('/deleted', async () => {
+        const db = getDb()
+        const directoryPaths = (db.prepare('SELECT directory_path FROM memory_folders').all() as Array<{ directory_path: string }>)
+            .map(row => row.directory_path)
+        const deleted = purgeDeletedMemoryDocuments()
+        emptyMemoryTrashDirectories(directoryPaths)
+        return { success: true, deleted }
+    })
 
     app.get<{ Querystring: { limit?: string } }>('/recent-changes', async (req) => {
         const requestedLimit = Number.parseInt(req.query.limit || '20', 10)
