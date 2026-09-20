@@ -7,6 +7,7 @@ export type { LLMProviderConfig }
 
 export const useProviderStore = defineStore('provider', () => {
   const providers = ref<LLMProviderConfig[]>([])
+  const providersLoaded = ref(false)
   const lastUsedProviderId = ref<string>('')
   const connectionStatus = ref<Map<string, 'connected' | 'disconnected' | 'error'>>(new Map())
 
@@ -15,9 +16,13 @@ export const useProviderStore = defineStore('provider', () => {
   )
 
   async function loadProviders(): Promise<void> {
-    await api.provider.loadSaved()
-    providers.value = await api.provider.list()
-    lastUsedProviderId.value = await api.provider.getLastUsed()
+    try {
+      await api.provider.loadSaved()
+      providers.value = await api.provider.list()
+      lastUsedProviderId.value = await api.provider.getLastUsed()
+    } finally {
+      providersLoaded.value = true
+    }
   }
 
   async function addProvider(config: LLMProviderConfig): Promise<string> {
@@ -58,6 +63,7 @@ export const useProviderStore = defineStore('provider', () => {
 
   return {
     providers,
+    providersLoaded,
     lastUsedProviderId,
     connectionStatus,
     lastUsedProvider,
