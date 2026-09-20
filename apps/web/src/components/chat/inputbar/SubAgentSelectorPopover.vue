@@ -18,6 +18,7 @@ const menu = ref<HTMLElement | null>(null)
 const open = ref(false)
 const search = ref('')
 const menuStyle = ref<CSSProperties>({})
+const selectedIdsAtOpen = ref<Set<string>>(new Set())
 
 const selectedSet = computed(() => new Set(chatStore.freeChatSubAgentIds))
 const filteredAgents = computed(() => {
@@ -31,8 +32,8 @@ const filteredAgents = computed(() => {
     : agentDefs.agents
 
   return [...matchingAgents].sort((left, right) =>
-    Number(chatStore.freeChatSubAgentIds.includes(right.id))
-    - Number(chatStore.freeChatSubAgentIds.includes(left.id)),
+    Number(selectedIdsAtOpen.value.has(right.id))
+    - Number(selectedIdsAtOpen.value.has(left.id)),
   )
 })
 const missingCount = computed(() =>
@@ -85,11 +86,12 @@ function close(): void {
 }
 
 async function toggle(): Promise<void> {
-  open.value = !open.value
-  if (!open.value) {
+  if (open.value) {
     close()
     return
   }
+  selectedIdsAtOpen.value = new Set(chatStore.freeChatSubAgentIds)
+  open.value = true
   await nextTick()
   updatePosition()
 }
