@@ -61,6 +61,7 @@ function mountList(focusFile?: string) {
 
 describe('MemoryDocumentList navigation and search', () => {
   beforeEach(() => {
+    localStorage.clear()
     mocks.listFiles.mockResolvedValue([{
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
@@ -153,5 +154,76 @@ describe('MemoryDocumentList navigation and search', () => {
 
     expect(document.body.textContent).not.toContain('Index a large document?')
     expect(mocks.startReindexFile).toHaveBeenCalledWith('category', 'notes.md')
+  })
+
+  test('shows immediate subfolders in the explorer and opens them on click', async () => {
+    const child = {
+      id: 'child', name: 'Projects', description: '', directoryPath: '/notes/projects',
+      folderPath: 'notes/projects', parentFolderPath: 'notes', sortOrder: 0,
+      isUncategorized: false, createdAt: 2, fileCount: 3,
+    }
+    const wrapper = mount(MemoryDocumentList, {
+      props: {
+        folderId: 'category',
+        spaces: [{
+          id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
+          folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 1,
+        }, child],
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[aria-label="Grid view"]').trigger('click')
+    expect(wrapper.get('[data-testid="memory-explorer-grid"]').text()).toContain('Projects')
+    expect(localStorage.getItem('cy-memory-explorer-view')).toBe('grid')
+    await wrapper.get('[aria-label="List view"]').trigger('click')
+
+    const folderRow = wrapper.get('[data-testid="memory-explorer-folders"] button')
+    expect(folderRow.text()).toContain('Projects')
+    await folderRow.trigger('click')
+    expect(wrapper.emitted('navigateFolder')).toEqual([['child']])
+
+    await folderRow.trigger('contextmenu', { clientX: 20, clientY: 20 })
+    const settings = [...document.body.querySelectorAll('[data-memory-context-menu] button')]
+      .find((button) => button.textContent?.includes('Folder settings')) as HTMLButtonElement
+    settings.click()
+    await flushPromises()
+    expect(wrapper.emitted('editFolder')).toEqual([[child]])
+    wrapper.unmount()
+  })
+
+  test('opens grid documents on item click and selects only through checkboxes with shift ranges', async () => {
+    mocks.listFiles.mockResolvedValue([
+      {
+        fileName: 'alpha.md', extension: '.md', size: 12, modifiedAt: 2,
+        supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
+        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
+      },
+      {
+        fileName: 'bravo.md', extension: '.md', size: 12, modifiedAt: 1,
+        supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
+        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
+      },
+    ])
+    const wrapper = mountList()
+    await flushPromises()
+    await wrapper.get('[aria-label="Grid view"]').trigger('click')
+
+    const cards = wrapper.findAll('[data-testid="memory-explorer-grid"] [role="button"]')
+    await cards[0].trigger('click')
+    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('true:alpha.md')
+    expect(wrapper.text()).not.toContain('1 selected')
+
+    const checkboxes = wrapper.findAll('[data-testid="memory-explorer-grid"] input[type="checkbox"]')
+    await checkboxes[0].trigger('click')
+    await checkboxes[1].trigger('click', { shiftKey: true })
+    expect(wrapper.text()).toContain('2 selected')
   })
 })
