@@ -1,6 +1,6 @@
 {
   "name": "cynosure",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "packageManager": "pnpm@11.1.2",
   "private": true,
   "pnpm": {
