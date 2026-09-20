@@ -28,7 +28,17 @@ type FolderRow = {
   deepResearched: false;
   status: "folder";
 };
-type ExplorerRow = DocumentRow | FolderRow;
+type VirtualFolderRow = {
+  id: string;
+  kind: "virtual";
+  name: string;
+  virtualView: "recent" | "trash";
+  modifiedAt: number;
+  chunkCount?: number;
+  deepResearched: false;
+  status: "virtual";
+};
+type ExplorerRow = DocumentRow | FolderRow | VirtualFolderRow;
 type GlobalDocumentRow = MemoryFileSearchResult & { id: string };
 
 const props = defineProps<{
@@ -48,6 +58,7 @@ const emit = defineEmits<{
   navigateFolder: [folderId: string];
   documentDragState: [active: boolean, payload?: DocumentDragPayload];
   openGlobalDocument: [folderId: string, fileName: string];
+  selectView: [view: "recent" | "trash"];
 }>();
 
 // --- Constants ---
@@ -145,6 +156,27 @@ const childFolders = computed(() => {
     })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
 });
+const virtualFolders = computed<VirtualFolderRow[]>(() => currentSpace.value?.isUncategorized ? [
+  {
+    id: "virtual:recent",
+    kind: "virtual",
+    name: "Recent documents",
+    virtualView: "recent",
+    modifiedAt: Number.MAX_SAFE_INTEGER,
+    deepResearched: false,
+    status: "virtual",
+  },
+  {
+    id: "virtual:trash",
+    kind: "virtual",
+    name: "Trash",
+    virtualView: "trash",
+    modifiedAt: Number.MAX_SAFE_INTEGER - 1,
+    deepResearched: false,
+    status: "virtual",
+  },
+] : []);
+const rootFolder = computed(() => props.spaces.find((space) => space.isUncategorized) || props.spaces[0]);
 const folderHistory = ref<string[]>([props.folderId]);
 const folderHistoryIndex = ref(0);
 const canNavigateBack = computed(() => folderHistoryIndex.value > 0);
@@ -199,6 +231,10 @@ function navigateHistory(offset: -1 | 1): void {
   emit("navigateFolder", folderId);
 }
 
+function navigateHome(): void {
+  if (rootFolder.value && rootFolder.value.id !== props.folderId) emit("navigateFolder", rootFolder.value.id);
+}
+
 function navigateBreadcrumb(folderId?: string): void {
   if (folderId && folderId !== props.folderId) emit("navigateFolder", folderId);
 }
@@ -220,12 +256,13 @@ function openDocumentRow(file: DocumentRow): void {
 
 function openExplorerRow(item: ExplorerRow): void {
   if (item.kind === "folder") openFolder(item.folder);
+  else if (item.kind === "virtual") emit("selectView", item.virtualView);
   else openDocumentRow(item);
 }
 
 function openExplorerContextMenu(item: ExplorerRow, event: MouseEvent): void {
   if (item.kind === "folder") openContextMenu("folder", event, item.folder);
-  else openContextMenu("document", event, item);
+  else if (item.kind === "file") openContextMenu("document", event, item);
 }
 
 function startExplorerDrag(item: ExplorerRow, event: DragEvent): void {
@@ -245,7 +282,7 @@ function dropOnExplorerRow(item: ExplorerRow, event: DragEvent): void {
 }
 
 function isExplorerRowSelectable(item: ExplorerRow): boolean {
-  return item.kind === "folder" || item.supported;
+  return item.kind === "folder" || (item.kind === "file" && item.supported);
 }
 
 function toggleGridSelection(item: ExplorerRow, event: MouseEvent): void {
@@ -349,6 +386,7 @@ const filteredFiles = computed(() => {
 });
 
 const documentRows = computed<ExplorerRow[]>(() => [
+  ...virtualFolders.value,
   ...childFolders.value.map((folder): FolderRow => ({
     id: `folder:${folder.id}`,
     kind: "folder",
@@ -385,7 +423,7 @@ const selectedExplorerIds = computed({
 const columns: Column<ExplorerRow>[] = [
   { key: "name", label: "Name", minWidth: "220px", grow: 3, sortable: true, sortValue: (item) => item.name },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
-  { key: "chunkCount", label: "Items / Chunks", minWidth: "90px", grow: 0, sortable: true, sortValue: (item) => item.kind === "folder" ? item.chunkCount : item.status === "indexed" ? (item.chunkCount || 0) : (item.estimatedChunkCount || 0) },
+  { key: "chunkCount", label: "Items / Chunks", minWidth: "90px", grow: 0, sortable: true, sortValue: (item) => item.kind !== "file" ? item.chunkCount : item.status === "indexed" ? (item.chunkCount || 0) : (item.estimatedChunkCount || 0) },
   { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (item) => item.kind === "file" && item.deepResearched },
   { key: "status", label: "Type / Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (item) => item.status },
 ];
@@ -413,7 +451,7 @@ const allFilteredSelected = computed(
     const selectable = documentRows.value.filter(isExplorerRowSelectable);
     return selectable.length > 0 && selectable.every((item) => item.kind === "folder"
       ? selectedFolders.value.has(item.folder.id)
-      : selectedFiles.value.has(item.fileName));
+      : item.kind === "file" && selectedFiles.value.has(item.fileName));
   },
 );
 const selectedItemCount = computed(() => selectedFiles.value.size + selectedFolders.value.size);
@@ -966,6 +1004,19 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <div class="flex shrink-0 items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5">
           <button
             type="button"
+            :disabled="!rootFolder || rootFolder.id === folderId"
+            class="flex h-7 w-7 items-center justify-center rounded-md text-accent-400 transition-colors hover:bg-accent-500/10 hover:text-accent-300 disabled:cursor-not-allowed disabled:opacity-30"
+            title="Home"
+            aria-label="Go to memory root"
+            @click="navigateHome"
+          >
+            <Icon
+              icon="lucide:house"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+          <button
+            type="button"
             :disabled="!canNavigateBack"
             class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
             title="Back to previous folder"
@@ -1183,7 +1234,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           in {{ currentSpace?.name || "this folder" }} and subfolders
         </template>
         <template v-else>
-          {{ childFolders.length }} folder{{ childFolders.length !== 1 ? "s" : "" }} ·
+          {{ childFolders.length + virtualFolders.length }} folder{{ childFolders.length + virtualFolders.length !== 1 ? "s" : "" }} ·
           {{ files.length }} file{{ files.length !== 1 ? "s" : "" }}
         </template>
         <template v-if="runningJobs.length > 0">
@@ -1428,7 +1479,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 
     <!-- Empty states -->
     <div
-      v-else-if="files.length === 0 && childFolders.length === 0 && !filesLoading"
+      v-else-if="files.length === 0 && childFolders.length === 0 && virtualFolders.length === 0 && !filesLoading"
       class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
     >
       No files in this folder yet. Upload files to get started.
@@ -1439,6 +1490,23 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       class="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3"
       data-testid="memory-explorer-grid"
     >
+      <div
+        v-for="virtualFolder in virtualFolders"
+        :key="virtualFolder.id"
+        role="button"
+        tabindex="0"
+        class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+        @click="emit('selectView', virtualFolder.virtualView)"
+        @keydown.enter="emit('selectView', virtualFolder.virtualView)"
+      >
+        <Icon
+          :icon="virtualFolder.virtualView === 'recent' ? 'lucide:history' : 'lucide:trash-2'"
+          class="mb-3 h-11 w-11"
+          :class="virtualFolder.virtualView === 'recent' ? 'text-accent-400' : 'text-red-400'"
+        />
+        <span class="w-full truncate text-sm font-medium text-theme-200">{{ virtualFolder.name }}</span>
+        <span class="mt-1 text-[11px] text-theme-600">Virtual folder</span>
+      </div>
       <div
         v-for="folder in childFolders"
         :key="folder.id"
@@ -1530,7 +1598,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :row-selectable="isExplorerRowSelectable"
       :row-clickable="true"
       :row-draggable="(item) => item.kind === 'file'"
-      :row-class="(item) => item.kind === 'folder' ? (dropTargetFolderId === item.folder.id ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/60' : 'cursor-pointer') : !item.supported ? 'opacity-50' : 'cursor-pointer'"
+      :row-class="(item) => item.kind === 'folder' ? (dropTargetFolderId === item.folder.id ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/60' : 'cursor-pointer') : item.kind === 'virtual' ? 'cursor-pointer' : !item.supported ? 'opacity-50' : 'cursor-pointer'"
       :pagination="true"
       :page-size="FILES_PAGE_SIZE"
       pagination-position="both"
@@ -1549,20 +1617,27 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       <template #col-name="{ item }">
         <div class="flex min-w-0 items-center gap-3">
           <Icon
-            :icon="item.kind === 'folder'
-              ? item.folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'
-              : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+            :icon="item.kind === 'virtual'
+              ? item.virtualView === 'recent' ? 'lucide:history' : 'lucide:trash-2'
+              : item.kind === 'folder'
+                ? item.folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'
+                : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
             class="h-5 w-5 shrink-0"
-            :class="item.kind === 'folder'
-              ? item.folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'
-              : item.supported ? 'text-theme-400' : 'text-theme-600'"
+            :class="item.kind === 'virtual'
+              ? item.virtualView === 'recent' ? 'text-accent-400' : 'text-red-400'
+              : item.kind === 'folder'
+                ? item.folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'
+                : item.supported ? 'text-theme-400' : 'text-theme-600'"
           />
           <div class="min-w-0">
             <div class="truncate text-sm font-medium text-theme-200">
               {{ item.name }}
             </div>
             <div class="mt-0.5 truncate text-[11px] text-theme-600">
-              <template v-if="item.kind === 'folder'">
+              <template v-if="item.kind === 'virtual'">
+                Virtual folder
+              </template>
+              <template v-else-if="item.kind === 'folder'">
                 {{ item.folder.fileCount }} direct · {{ item.folder.descendantFileCount || 0 }} nested
               </template>
               <template v-else>
@@ -1581,7 +1656,8 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </template>
       <template #col-chunkCount="{ item }">
         <span class="text-xs text-theme-400">
-          <template v-if="item.kind === 'folder'">{{ item.chunkCount || 0 }} items</template>
+          <template v-if="item.kind === 'virtual'">—</template>
+          <template v-else-if="item.kind === 'folder'">{{ item.chunkCount || 0 }} items</template>
           <template v-else-if="item.status === 'indexed'">{{ item.chunkCount || 0 }}</template>
           <template v-else-if="item.estimatedChunkCount !== undefined">~{{ item.estimatedChunkCount }}</template>
           <template v-else>—</template>
@@ -1589,7 +1665,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </template>
       <template #col-deepResearched="{ item }">
         <span
-          v-if="item.kind === 'folder'"
+          v-if="item.kind !== 'file'"
           class="text-xs text-theme-600"
         >Recursive</span>
         <span
@@ -1606,13 +1682,14 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </template>
       <template #col-status="{ item }">
         <span
-          v-if="item.kind === 'folder'"
-          class="inline-flex items-center gap-1.5 text-xs text-amber-400"
+          v-if="item.kind !== 'file'"
+          class="inline-flex items-center gap-1.5 text-xs"
+          :class="item.kind === 'virtual' ? 'text-accent-400' : 'text-amber-400'"
         >
           <Icon
-            icon="lucide:folder"
+            :icon="item.kind === 'virtual' ? 'lucide:folder-symlink' : 'lucide:folder'"
             class="h-3.5 w-3.5"
-          /> Folder
+          /> {{ item.kind === 'virtual' ? 'Virtual folder' : 'Folder' }}
         </span>
         <span
           v-else

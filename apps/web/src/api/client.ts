@@ -488,6 +488,8 @@ export const api = {
       get<Array<{ documentRef: string; folderId: string; fileName: string; revision: string; deletedAt: number }>>('/api/memory-folders/deleted'),
     emptyTrash: () =>
       del<{ success: boolean; deleted: number }>('/api/memory-folders/deleted'),
+    permanentlyDelete: (documentRef: string) =>
+      del<{ success: boolean }>(`/api/memory-folders/deleted/${encodeURIComponent(documentRef)}`),
     listRecentChanges: (limit = 20) =>
       get<import('./types').RecentMemoryChange[]>(`/api/memory-folders/recent-changes?limit=${limit}`),
     ingestFile: (folderId: string, fileName: string, content: string) =>

@@ -10,8 +10,6 @@ import ModalDialog from "../components/shared/ModalDialog.vue";
 import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentSection from "../components/memory/MemoryDocumentSection.vue";
-import MemoryRecentChangesView from "../components/memory/MemoryRecentChangesView.vue";
-import MemoryTrashView from "../components/memory/MemoryTrashView.vue";
 import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vue";
 import type { GraphEdgePathType } from "../components/memory/knowledge-graph-types";
 import { syncPrefsToElectron } from "../utils/electron-prefs";
@@ -625,15 +623,7 @@ onMounted(() => loadFolders());
           @refresh-spaces="loadFolders"
           @folder-navigation="selectFolderView"
           @select-view="selectDocumentView"
-        >
-          <template #recent>
-            <MemoryRecentChangesView />
-          </template>
-
-          <template #trash>
-            <MemoryTrashView @restored="loadFolders" />
-          </template>
-        </MemoryDocumentSection>
+        />
 
         <KnowledgeGraphSection
           v-else

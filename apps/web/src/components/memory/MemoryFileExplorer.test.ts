@@ -246,6 +246,39 @@ describe('MemoryFileExplorer navigation and search', () => {
 
     await breadcrumbs.get('[aria-label="Copy current folder path"]').trigger('click')
     expect(writeText).toHaveBeenCalledWith('/home/user/Cynosure/memory/Projects')
+
+    await wrapper.get('[aria-label="Go to memory root"]').trigger('click')
+    expect(wrapper.emitted('navigateFolder')).toContainEqual(['root'])
+  })
+
+  test('shows Recent documents and Trash as virtual folders at the memory root', async () => {
+    const wrapper = mount(MemoryFileExplorer, {
+      props: {
+        folderId: 'root',
+        spaces: [{
+          id: 'root', name: 'Memory', description: '', directoryPath: '/memory',
+          folderPath: '', sortOrder: 0, isUncategorized: true, createdAt: 1, fileCount: 1,
+        }],
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+
+    const table = wrapper.getComponent({ name: 'DataTable' })
+    const rows = table.props('items') as Array<{ kind: string; name: string; virtualView?: string }>
+    expect(rows.slice(0, 2)).toMatchObject([
+      { kind: 'virtual', name: 'Recent documents', virtualView: 'recent' },
+      { kind: 'virtual', name: 'Trash', virtualView: 'trash' },
+    ])
+    table.vm.$emit('row-click', rows[0], new MouseEvent('click'))
+    await flushPromises()
+    expect(wrapper.emitted('selectView')).toEqual([['recent']])
   })
 
   test('opens grid documents on item click and selects only through checkboxes with shift ranges', async () => {

@@ -11,6 +11,7 @@ import {
   markMemoryDocumentDeleted,
   markMemoryFoldersDeleted,
   purgeDeletedMemoryDocuments,
+  purgeDeletedMemoryDocument,
   recordMemoryRevision,
   inlineMemoryDiff,
   unifiedMemoryDiff,
@@ -126,6 +127,21 @@ describe('memory revision snapshots', () => {
     expect(getMemoryDocument('deleted#stable')).toBeUndefined()
     expect(listMemoryRevisions('deleted#stable')).toEqual([])
     expect(getMemoryDocument('active#stable')).toBeDefined()
+  })
+
+  test('permanently purges one deleted document without touching other trash entries', () => {
+    for (const id of ['one', 'two']) {
+      recordMemoryRevision({
+        documentId: id, documentRef: `deleted#${id}`, folderId: 'uncategorized',
+        fileName: `${id}.md`, content: id, context: { source: 'user' },
+      })
+      markMemoryDocumentDeleted(id)
+    }
+
+    expect(purgeDeletedMemoryDocument('deleted#one')).toBe(true)
+    expect(getMemoryDocument('deleted#one')).toBeUndefined()
+    expect(getMemoryDocument('deleted#two')).toBeDefined()
+    expect(purgeDeletedMemoryDocument('deleted#missing')).toBe(false)
   })
 
   test('records documents deleted through a folder cascade', () => {
