@@ -252,7 +252,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showAnySection(['auto-expand-thinking', 'auto-expand-tool-calls'])"
+      v-if="showAnySection(['auto-expand-thinking'])"
       label="Chat Display"
     />
 
@@ -281,35 +281,6 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         <ToggleSwitch
           v-model="prefs.autoExpandSteps"
           label="Auto-expand thinking"
-        />
-      </div>
-    </BaseCard>
-
-    <!-- Auto-expand Tool Calls -->
-    <BaseCard
-      v-if="showSection('auto-expand-tool-calls')"
-      class="p-5"
-    >
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
-            <Icon
-              icon="lucide:terminal"
-              class="w-5 h-5 text-theme-400"
-            />
-          </div>
-          <div>
-            <h3 class="text-sm font-medium text-theme-200">
-              Auto-expand Tool Calls
-            </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
-              Automatically expand tool call details in the chat
-            </p>
-          </div>
-        </div>
-        <ToggleSwitch
-          v-model="prefs.autoExpandToolCalls"
-          label="Auto-expand tool calls"
         />
       </div>
     </BaseCard>
