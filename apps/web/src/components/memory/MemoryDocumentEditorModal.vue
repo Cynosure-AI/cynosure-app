@@ -355,9 +355,8 @@ onBeforeUnmount(() => {
 <template>
   <ModalDialog
     :show="show && Boolean(sourceFile)"
-    :title="titleToFileName(editableTitle) || sourceFile"
-    icon="lucide:edit-3"
-    icon-color="accent"
+    title="Edit memory document"
+    hide-header
     max-width="max-w-7xl"
     max-height="h-[88vh]"
     body-overflow-hidden
@@ -368,11 +367,11 @@ onBeforeUnmount(() => {
         <label class="text-xs text-theme-500 shrink-0">Name</label>
         <input
           v-model="editableTitle"
+          aria-label="Document name"
           class="flex-1 min-w-0 bg-theme-950 border border-theme-700 rounded-lg px-3 py-1.5 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
           :disabled="loading || saving"
           @keydown.enter.prevent="saveContent"
         >
-        <span class="text-sm text-theme-500 shrink-0">{{ splitFileName(currentFileName || sourceFile).ext }}</span>
       </div>
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">

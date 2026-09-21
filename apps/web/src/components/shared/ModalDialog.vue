@@ -7,6 +7,8 @@ const props = defineProps<{
   show: boolean
   /** Title shown in header */
   title: string
+  /** Hide the visual header while retaining the title as the dialog's accessible name. */
+  hideHeader?: boolean
   /** Iconify icon name for the header badge */
   icon?: string
   /** Color theme for the icon badge: 'accent' | 'red' | 'amber' */
@@ -106,7 +108,8 @@ onBeforeUnmount(() => {
         v-bind="$attrs"
         role="dialog"
         aria-modal="true"
-        :aria-labelledby="titleId"
+        :aria-labelledby="hideHeader ? undefined : titleId"
+        :aria-label="hideHeader ? title : undefined"
         tabindex="-1"
         class="bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl w-full flex flex-col"
         :class="[
@@ -119,7 +122,10 @@ onBeforeUnmount(() => {
           class="p-6 flex flex-col min-h-0 flex-1"
         >
           <!-- Header -->
-          <div class="flex items-center gap-3 mb-4 shrink-0">
+          <div
+            v-if="!hideHeader"
+            class="flex items-center gap-3 mb-4 shrink-0"
+          >
             <div
               v-if="icon"
               class="p-2 rounded-lg"

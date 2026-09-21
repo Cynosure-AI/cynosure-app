@@ -2,9 +2,10 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
-import type { MemoryFileSearchResult, MemoryFolder } from "../../api/types";
+import type { MemoryDiffSegment, MemoryFileSearchResult, MemoryFolder, MemoryRevisionSummary } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
+import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 
 type DeletedMemory = { documentRef: string; folderId: string; fileName: string; revision: string; deletedAt: number };
 type RecentRow = MemoryFileSearchResult & { id: string };
@@ -18,7 +19,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   home: [];
-  openDocument: [folderId: string, fileName: string];
   restored: [];
 }>();
 
@@ -35,6 +35,11 @@ const deletingRef = ref("");
 const pendingDelete = ref<TrashRow | null>(null);
 const showEmptyConfirmation = ref(false);
 const emptying = ref(false);
+const diffDocument = ref<RecentRow | null>(null);
+const diffRevision = ref<MemoryRevisionSummary | null>(null);
+const diffSegments = ref<MemoryDiffSegment[]>([]);
+const diffLoading = ref(false);
+const diffError = ref("");
 
 const title = computed(() => props.mode === "recent" ? "Recent documents" : "Trash");
 const rows = computed<VirtualRow[]>(() => {
@@ -95,9 +100,32 @@ async function load(): Promise<void> {
   }
 }
 
-function open(row: VirtualRow): void {
-  if (props.mode === "recent" && "modifiedAt" in row && row.textDirect) {
-    emit("openDocument", row.folderId, row.fileName);
+async function open(row: VirtualRow): Promise<void> {
+  if (props.mode !== "recent" || !("modifiedAt" in row) || !row.textDirect) return;
+  diffDocument.value = row;
+  diffRevision.value = null;
+  diffSegments.value = [];
+  diffError.value = "";
+  diffLoading.value = true;
+  try {
+    const content = await api.memoryFolders.getFileContent(row.folderId, row.fileName);
+    const targetDocumentRef = content.documentRef;
+    if (!targetDocumentRef) throw new Error("This memory has no revision history.");
+    const revisions = await api.memoryFolders.listRevisions(targetDocumentRef);
+    const latest = revisions[0];
+    const previous = revisions[1];
+    if (!latest) throw new Error("This memory has no revision history.");
+    diffRevision.value = latest;
+    if (previous) {
+      diffSegments.value = (await api.memoryFolders.getRevisionDiff(targetDocumentRef, previous.id, latest.id)).segments;
+    } else {
+      const revision = await api.memoryFolders.getRevision(targetDocumentRef, latest.id);
+      diffSegments.value = revision.content ? [{ type: "added", text: revision.content }] : [];
+    }
+  } catch (cause) {
+    diffError.value = (cause as Error).message || "Failed to load the latest change";
+  } finally {
+    diffLoading.value = false;
   }
 }
 
@@ -309,7 +337,7 @@ onMounted(load);
         :key="row.id"
         class="group relative flex min-h-40 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
         :class="mode === 'recent' && 'cursor-pointer'"
-        @dblclick="open(row)"
+        @click="open(row)"
       >
         <Icon
           :icon="mode === 'trash' ? 'lucide:file-x-2' : row.fileName.endsWith('.md') ? 'lucide:file-text' : 'lucide:file'"
@@ -338,7 +366,7 @@ onMounted(load);
           <button
             v-else
             class="rounded-lg border border-theme-700 px-2.5 py-1.5 text-xs text-theme-300 hover:bg-theme-800"
-            @click="open(row)"
+            @click.stop="open(row)"
           >
             Open
           </button>
@@ -404,6 +432,50 @@ onMounted(load);
         </div>
       </template>
     </DataTable>
+
+    <ModalDialog
+      :show="Boolean(diffDocument)"
+      :title="diffDocument ? `Latest change to ${diffDocument.fileName.replace(/\.[^.]+$/, '')}` : 'Latest change'"
+      icon="lucide:file-diff"
+      icon-color="accent"
+      max-width="max-w-4xl"
+      max-height="h-[80vh]"
+      body-overflow-hidden
+      @close="diffDocument = null"
+    >
+      <div class="flex h-[60vh] min-h-0 flex-col">
+        <div
+          v-if="diffRevision"
+          class="mb-3 flex shrink-0 flex-wrap items-center gap-2 text-xs text-theme-500"
+        >
+          <span>{{ folderFor(diffDocument?.folderId || '')?.name || 'Removed folder' }}</span>
+          <span aria-hidden="true">·</span>
+          <span>{{ new Date(diffRevision.createdAt).toLocaleString() }}</span>
+          <span aria-hidden="true">·</span>
+          <span>Revision {{ diffRevision.revisionNumber }}</span>
+        </div>
+        <div
+          v-if="diffLoading"
+          class="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-theme-500"
+        >
+          <Icon
+            icon="lucide:loader-2"
+            class="h-4 w-4 animate-spin"
+          /> Loading latest change…
+        </div>
+        <p
+          v-else-if="diffError"
+          class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300"
+        >
+          {{ diffError }}
+        </p>
+        <MemoryInlineDiff
+          v-else
+          :segments="diffSegments"
+          class="min-h-0 flex-1"
+        />
+      </div>
+    </ModalDialog>
 
     <ModalDialog
       :show="Boolean(pendingDelete)"
