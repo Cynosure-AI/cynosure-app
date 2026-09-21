@@ -312,6 +312,10 @@ describe('MemoryFileExplorer navigation and search', () => {
     const table = wrapper.getComponent({ name: 'DataTable' })
     expect(table.props('initialSortKey')).toBe('modifiedAt')
     expect(table.props('initialSortDirection')).toBe('desc')
+    const groupValue = table.props('sortGroupValue') as (item: { kind: string }) => number
+    expect(groupValue({ kind: 'virtual' })).toBe(0)
+    expect(groupValue({ kind: 'folder' })).toBe(1)
+    expect(groupValue({ kind: 'file' })).toBe(2)
   })
 
   test('applies indexing recursively to files inside a selected folder', async () => {

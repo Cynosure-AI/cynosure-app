@@ -94,6 +94,26 @@ describe('DataTable', () => {
     expect(wrapper.get('.dt-content').text()).toContain('1 / 2')
   })
 
+  test('keeps item groups together while sorting within each group', () => {
+    const wrapper = mount(DataTable<Item>, {
+      props: {
+        items: [
+          { id: 'file-a', name: 'Alpha', enabled: true },
+          { id: 'folder-z', name: 'Zulu', enabled: false },
+          { id: 'folder-b', name: 'Bravo', enabled: false },
+        ],
+        columns,
+        initialSortKey: 'name',
+        sortGroupValue: item => item.enabled ? 1 : 0,
+      },
+      slots: {
+        'col-name': '<template #col-name="{ item }"><span data-testid="name">{{ item.name }}</span></template>',
+      },
+    })
+
+    expect(renderedNames(wrapper)).toEqual(['Bravo', 'Zulu', 'Alpha'])
+  })
+
   test('applies column classes to slotted cells and spans the column minimum width', () => {
     const wrapper = mount(DataTable<Item>, {
       props: {
