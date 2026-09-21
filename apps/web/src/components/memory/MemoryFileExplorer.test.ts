@@ -304,6 +304,53 @@ describe('MemoryFileExplorer navigation and search', () => {
     expect(wrapper.emitted('navigateFolder')).toContainEqual(['root'])
   })
 
+  test('disables editing and removal actions in the memory root', async () => {
+    const root = {
+      id: 'root', name: 'Memory', description: '', directoryPath: '/memory',
+      folderPath: '', sortOrder: 0, isUncategorized: true, createdAt: 1, fileCount: 0,
+    }
+    const wrapper = mount(MemoryFileExplorer, {
+      props: { folderId: 'root', spaces: [root] },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[aria-label="Memory root cannot be edited"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[aria-label="Uncategorized memory cannot be removed"]').attributes('disabled')).toBeDefined()
+  })
+
+  test('marks documents affected by a dream within the last 24 hours', async () => {
+    localStorage.setItem('cy-memory-explorer-view', 'grid')
+    mocks.listFiles.mockResolvedValue([
+      {
+        fileName: 'recent.md', extension: '.md', size: 12, modifiedAt: 2,
+        supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
+        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100,
+        tags: [], dreamedAt: Date.now() - 23 * 60 * 60 * 1000,
+      },
+      {
+        fileName: 'old.md', extension: '.md', size: 12, modifiedAt: 1,
+        supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
+        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100,
+        tags: [], dreamedAt: Date.now() - 25 * 60 * 60 * 1000,
+      },
+    ])
+    const wrapper = mountList()
+    await flushPromises()
+
+    const moon = wrapper.get('[aria-label="Updated by a dream within the last 24 hours"]')
+    expect(moon.attributes('icon')).toBe('lucide:moon')
+    expect(moon.element.parentElement?.textContent).toContain('recent.md')
+    expect(moon.element.parentElement?.className).toContain('text-[#f4c072]')
+    expect(wrapper.findAll('[aria-label="Updated by a dream within the last 24 hours"]')).toHaveLength(1)
+  })
+
   test('does not mix Recent documents and Trash into the memory root contents', async () => {
     const wrapper = mount(MemoryFileExplorer, {
       props: {

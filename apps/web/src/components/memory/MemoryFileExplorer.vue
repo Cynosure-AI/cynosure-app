@@ -105,7 +105,7 @@ const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   void loadFiles();
 });
 const unsubscribeDreamUpdate = api.memory.onDreamUpdated(() => void loadFiles());
-const DREAM_INDICATOR_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
+const DREAM_INDICATOR_DURATION_MS = 24 * 60 * 60 * 1000;
 const dreamIndicatorNow = ref(Date.now());
 const dreamIndicatorTimer = window.setInterval(() => {
   dreamIndicatorNow.value = Date.now();
@@ -959,9 +959,10 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </button>
         <button
           type="button"
-          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-          title="Edit folder"
-          :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
+          :disabled="currentSpace?.isUncategorized"
+          :title="currentSpace?.isUncategorized ? 'Cannot edit memory root' : 'Edit folder'"
+          :aria-label="currentSpace?.isUncategorized ? 'Memory root cannot be edited' : `Edit ${currentSpace?.name || 'folder'}`"
+          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('editSpace')"
         >
           <Icon
@@ -1501,9 +1502,20 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <Icon
           :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
           class="mb-3 h-10 w-10"
-          :class="hasRecentDreamUpdate(file) ? 'text-violet-400' : file.supported ? 'text-theme-400' : 'text-theme-600'"
+          :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
         />
-        <span class="w-full truncate text-sm font-medium text-theme-200">{{ file.fileName }}</span>
+        <span
+          class="flex w-full items-center justify-center gap-1 truncate text-sm font-medium"
+          :class="hasRecentDreamUpdate(file) ? 'text-[#f4c072]' : 'text-theme-200'"
+        >
+          <Icon
+            v-if="hasRecentDreamUpdate(file)"
+            icon="lucide:moon"
+            class="h-3.5 w-3.5 shrink-0"
+            aria-label="Updated by a dream within the last 24 hours"
+          />
+          <span class="truncate">{{ file.fileName }}</span>
+        </span>
         <span class="mt-1 text-[11px] text-theme-600">{{ formatFileSize(file.size) }}</span>
         <span
           class="mt-2 inline-flex items-center gap-1 text-[10px]"
@@ -1557,7 +1569,16 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
               : item.supported ? 'text-theme-400' : 'text-theme-600'"
           />
           <div class="min-w-0">
-            <div class="truncate text-sm font-medium text-theme-200">
+            <div
+              class="flex items-center gap-1 truncate text-sm font-medium"
+              :class="item.kind === 'file' && hasRecentDreamUpdate(item) ? 'text-[#f4c072]' : 'text-theme-200'"
+            >
+              <Icon
+                v-if="item.kind === 'file' && hasRecentDreamUpdate(item)"
+                icon="lucide:moon"
+                class="h-3.5 w-3.5 shrink-0"
+                aria-label="Updated by a dream within the last 24 hours"
+              />
               {{ item.name }}
             </div>
             <div class="mt-0.5 truncate text-[11px] text-theme-600">
