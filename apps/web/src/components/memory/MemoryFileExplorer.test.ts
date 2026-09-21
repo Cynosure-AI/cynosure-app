@@ -40,7 +40,7 @@ const EditorStub = defineComponent({
 const StatusColumnTableStub = {
   name: 'DataTable',
   props: { items: { type: Array, default: () => [] } },
-  template: '<div><div v-for="item in items" :key="item.id"><slot name="col-status" :item="item" /></div></div>',
+  template: '<div><div v-for="item in items" :key="item.id"><slot name="col-deepResearched" :item="item" /><slot name="col-status" :item="item" /></div></div>',
 }
 
 function mountList(focusFile?: string) {
@@ -261,6 +261,44 @@ describe('MemoryFileExplorer navigation and search', () => {
       spaces: [wrapper.props('spaces')[0], { ...folder, indexedFileCount: 0, descendantIndexedFileCount: 0 }],
     })
     expect(wrapper.text()).toContain('Not Indexed')
+  })
+
+  test('shows live indexing and Deep Research progress on document rows', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 'index-job', kind: 'reindex', folderId: 'category', fileName: 'notes.md',
+        status: 'running', createdAt: 1, updatedAt: 2, attempt: 1, maxAttempts: 1,
+      },
+      {
+        id: 'research-job', kind: 'deep-research', folderId: 'category', fileName: 'notes.md',
+        status: 'running', progressCurrent: 4, progressTotal: 31,
+        createdAt: 1, updatedAt: 2, attempt: 1, maxAttempts: 1,
+      },
+    ])
+    const wrapper = mount(MemoryFileExplorer, {
+      props: {
+        folderId: 'category',
+        spaces: [{
+          id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
+          folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 1,
+        }],
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: StatusColumnTableStub, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Indexing…')
+    expect(wrapper.text()).toContain('Analysing (4 / 31)')
+    const spinners = wrapper.findAll('icon-stub[icon="lucide:loader-2"]')
+    expect(spinners).toHaveLength(2)
+    expect(spinners.every((spinner) => spinner.classes().includes('animate-spin'))).toBe(true)
+    wrapper.unmount()
   })
 
   test('shows only navigable memory-root breadcrumbs while copying the absolute path', async () => {
