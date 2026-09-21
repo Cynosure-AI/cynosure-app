@@ -63,14 +63,11 @@ function fileDrag(type: string, files: File[] = []): DragEvent {
 describe('MemoryDocumentSection explorer shell', () => {
   beforeEach(() => ingestFiles.mockReset())
 
-  test('opens Recent and Trash from virtual folders in the full-width explorer', async () => {
+  test('renders a parent-selected Recent or Trash view in the full-width explorer', async () => {
     const wrapper = mountSection()
     expect(wrapper.find('[data-testid="memory-folder-pane"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="memory-document-drop-zone"]').exists()).toBe(true)
 
-    wrapper.getComponent(MemoryFileExplorerStub).vm.$emit('selectView', 'recent')
-    await nextTick()
-    expect(wrapper.emitted('select-view')).toContainEqual(['recent'])
     await wrapper.setProps({ activeView: 'recent' })
     expect(wrapper.get('[data-testid="memory-special-content"]').text()).toBe('recent')
 

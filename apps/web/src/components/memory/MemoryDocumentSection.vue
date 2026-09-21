@@ -28,10 +28,6 @@ const emit = defineEmits<{
 const fileExplorer = ref<InstanceType<typeof MemoryFileExplorer> | null>(null);
 const dragCounter = ref(0);
 
-function selectView(view: "folder" | "recent" | "trash"): void {
-  emit("select-view", view);
-}
-
 function navigateToFolder(folderId: string): void {
   emit("update:selectedFolderId", folderId);
   emit("select-view", "folder");
@@ -122,7 +118,6 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         @spaces-changed="emit('refresh-spaces')"
         @navigate-folder="navigateToFolder"
         @open-global-document="openGlobalDocument"
-        @select-view="selectView"
       />
     </div>
 

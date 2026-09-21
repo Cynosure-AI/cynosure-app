@@ -251,7 +251,7 @@ describe('MemoryFileExplorer navigation and search', () => {
     expect(wrapper.emitted('navigateFolder')).toContainEqual(['root'])
   })
 
-  test('shows Recent documents and Trash as virtual folders at the memory root', async () => {
+  test('does not mix Recent documents and Trash into the memory root contents', async () => {
     const wrapper = mount(MemoryFileExplorer, {
       props: {
         folderId: 'root',
@@ -271,14 +271,10 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
 
     const table = wrapper.getComponent({ name: 'DataTable' })
-    const rows = table.props('items') as Array<{ kind: string; name: string; virtualView?: string }>
-    expect(rows.slice(0, 2)).toMatchObject([
-      { kind: 'virtual', name: 'Recent documents', virtualView: 'recent' },
-      { kind: 'virtual', name: 'Trash', virtualView: 'trash' },
-    ])
-    table.vm.$emit('row-click', rows[0], new MouseEvent('click'))
-    await flushPromises()
-    expect(wrapper.emitted('selectView')).toEqual([['recent']])
+    const rows = table.props('items') as Array<{ kind: string; name: string }>
+    expect(rows.some(row => row.kind === 'virtual')).toBe(false)
+    expect(wrapper.text()).not.toContain('Recent documents')
+    expect(wrapper.text()).not.toContain('Trash')
   })
 
   test('opens grid documents on item click and selects only through checkboxes with shift ranges', async () => {
@@ -313,9 +309,8 @@ describe('MemoryFileExplorer navigation and search', () => {
     expect(table.props('initialSortKey')).toBe('modifiedAt')
     expect(table.props('initialSortDirection')).toBe('desc')
     const groupValue = table.props('sortGroupValue') as (item: { kind: string }) => number
-    expect(groupValue({ kind: 'virtual' })).toBe(0)
-    expect(groupValue({ kind: 'folder' })).toBe(1)
-    expect(groupValue({ kind: 'file' })).toBe(2)
+    expect(groupValue({ kind: 'folder' })).toBe(0)
+    expect(groupValue({ kind: 'file' })).toBe(1)
   })
 
   test('applies indexing recursively to files inside a selected folder', async () => {
