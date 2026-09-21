@@ -929,10 +929,10 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @forward="navigateHistory(1)"
       @segment-click="navigateBreadcrumb(pathSegments[$event]?.folderId)"
     >
-      <template #leading>
+      <template #path-actions>
         <button
           type="button"
-          class="mr-1.5 shrink-0 rounded p-0.5 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="ml-1 shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
           :title="pathCopied ? 'Path copied' : 'Copy folder path'"
           aria-label="Copy current folder path"
           @click="copyCurrentFolderPath"
@@ -942,11 +942,9 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             class="h-3.5 w-3.5"
           />
         </button>
-      </template>
-      <template #path-actions>
         <button
           type="button"
-          class="ml-1 shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
           title="Edit folder"
           :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
           @click="emit('editSpace')"
