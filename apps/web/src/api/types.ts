@@ -382,6 +382,10 @@ export interface MemoryFolder {
     fileCount: number
     /** Direct files contained by descendant folders (excluding this folder). */
     descendantFileCount?: number
+    /** Direct files whose current contents are present in the search index. */
+    indexedFileCount?: number
+    /** Indexed files contained by descendant folders (excluding this folder). */
+    descendantIndexedFileCount?: number
 }
 
 export interface MemoryFileStatus {

@@ -37,6 +37,12 @@ const EditorStub = defineComponent({
   template: '<div data-testid="editor-state">{{ show }}:{{ sourceFile }}</div>',
 })
 
+const StatusColumnTableStub = {
+  name: 'DataTable',
+  props: { items: { type: Array, default: () => [] } },
+  template: '<div><div v-for="item in items" :key="item.id"><slot name="col-status" :item="item" /></div></div>',
+}
+
 function mountList(focusFile?: string) {
   return mount(MemoryFileExplorer, {
     props: {
@@ -216,6 +222,45 @@ describe('MemoryFileExplorer navigation and search', () => {
     expect(documentMenu.textContent).toContain('Open')
     expect(wrapper.text()).not.toContain('1 selected')
     wrapper.unmount()
+  })
+
+  test('summarizes recursive folder indexing in the Type / Searchable column', async () => {
+    mocks.listFiles.mockResolvedValue([])
+    const folder = {
+      id: 'child', name: 'Projects', description: '', directoryPath: '/notes/projects',
+      folderPath: 'notes/projects', parentFolderPath: 'notes', sortOrder: 0,
+      isUncategorized: false, createdAt: 2, fileCount: 1, descendantFileCount: 3,
+      indexedFileCount: 1, descendantIndexedFileCount: 1,
+    }
+    const wrapper = mount(MemoryFileExplorer, {
+      props: {
+        folderId: 'category',
+        spaces: [{
+          id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
+          folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 0,
+        }, folder],
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: StatusColumnTableStub, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2/4 Partially Indexed')
+
+    await wrapper.setProps({
+      spaces: [wrapper.props('spaces')[0], { ...folder, indexedFileCount: 1, descendantIndexedFileCount: 3 }],
+    })
+    expect(wrapper.text()).toContain('Indexed')
+
+    await wrapper.setProps({
+      spaces: [wrapper.props('spaces')[0], { ...folder, indexedFileCount: 0, descendantIndexedFileCount: 0 }],
+    })
+    expect(wrapper.text()).toContain('Not Indexed')
   })
 
   test('shows only navigable memory-root breadcrumbs while copying the absolute path', async () => {
