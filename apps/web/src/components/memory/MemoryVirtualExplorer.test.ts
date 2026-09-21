@@ -73,6 +73,9 @@ describe('MemoryVirtualExplorer', () => {
 
     expect(wrapper.get('[data-testid="table"]').text()).toBe('newer.md,older.md')
     expect(mocks.listFiles).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('h2').exists()).toBe(false)
+    expect(wrapper.get('nav[aria-label="Memory folder path"]').findAll('button').map(button => button.text()))
+      .toEqual(['memory', 'Recent documents'])
 
     const table = wrapper.getComponent({ name: 'DataTable' })
     const rows = table.props('items') as Array<ReturnType<typeof file> & { folderId: string }>

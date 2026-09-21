@@ -6,6 +6,7 @@ import type { MemoryDiffSegment, MemoryFileSearchResult, MemoryFolder, MemoryRev
 import DataTable, { type Column } from "../shared/DataTable.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 import MemoryInlineDiff from "./MemoryInlineDiff.vue";
+import MemoryExplorerHeader from "./MemoryExplorerHeader.vue";
 
 type DeletedMemory = { documentRef: string; folderId: string; fileName: string; revision: string; deletedAt: number };
 type RecentRow = MemoryFileSearchResult & { id: string };
@@ -42,6 +43,11 @@ const diffLoading = ref(false);
 const diffError = ref("");
 
 const title = computed(() => props.mode === "recent" ? "Recent documents" : "Trash");
+const rootLabel = computed(() => {
+  const root = props.spaces.find(folder => folder.isUncategorized) || props.spaces[0];
+  const pathParts = root?.directoryPath.split(/[\\/]+/).filter(Boolean) || [];
+  return pathParts.at(-1) || root?.name || "Memory";
+});
 const rows = computed<VirtualRow[]>(() => {
   const source: VirtualRow[] = props.mode === "recent" ? recent.value : trash.value;
   const term = query.value.trim().toLocaleLowerCase();
@@ -184,79 +190,27 @@ onMounted(load);
 
 <template>
   <div class="min-w-0">
-    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-2">
-        <Icon
-          :icon="mode === 'recent' ? 'lucide:history' : 'lucide:trash-2'"
-          class="h-5 w-5"
-          :class="mode === 'recent' ? 'text-accent-400' : 'text-red-400'"
-        />
-        <h2 class="text-lg font-medium text-theme-200">
-          {{ title }}
-        </h2>
-      </div>
-      <button
-        v-if="mode === 'trash' && trash.length"
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/10"
-        @click="showEmptyConfirmation = true"
-      >
-        <Icon
-          icon="lucide:trash-2"
-          class="h-3.5 w-3.5"
-        /> Empty trash
-      </button>
-    </div>
-
-    <div class="mb-3 flex min-w-0 items-center gap-2">
-      <div class="flex shrink-0 items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5">
+    <MemoryExplorerHeader
+      :segments="[{ label: rootLabel }, { label: title, disabled: true }]"
+      can-go-back
+      @home="emit('home')"
+      @back="emit('home')"
+      @segment-click="$event === 0 && emit('home')"
+    >
+      <template #actions>
         <button
+          v-if="mode === 'trash' && trash.length"
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-accent-400 transition hover:bg-accent-500/10 hover:text-accent-300"
-          title="Home"
-          aria-label="Go to memory root"
-          @click="emit('home')"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/10"
+          @click="showEmptyConfirmation = true"
         >
           <Icon
-            icon="lucide:house"
+            icon="lucide:trash-2"
             class="h-3.5 w-3.5"
-          />
+          /> Empty trash
         </button>
-        <button
-          type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
-          title="Back to memory root"
-          aria-label="Back to memory root"
-          @click="emit('home')"
-        >
-          <Icon
-            icon="lucide:arrow-left"
-            class="h-3.5 w-3.5"
-          />
-        </button>
-        <button
-          type="button"
-          disabled
-          class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 opacity-30"
-          title="Forward"
-          aria-label="Forward"
-        >
-          <Icon
-            icon="lucide:arrow-right"
-            class="h-3.5 w-3.5"
-          />
-        </button>
-      </div>
-      <div class="flex min-w-0 flex-1 items-center rounded-lg border border-theme-800 bg-theme-900/40 px-3 py-2 text-xs text-theme-400">
-        <Icon
-          icon="lucide:folder"
-          class="mr-2 h-3.5 w-3.5 text-accent-400"
-        /> Memory <Icon
-          icon="lucide:chevron-right"
-          class="mx-1 h-3 w-3 text-theme-700"
-        /> <span class="text-accent-300">{{ title }}</span>
-      </div>
-    </div>
+      </template>
+    </MemoryExplorerHeader>
 
     <div class="mb-3 flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-950/30 p-2">
       <div class="relative min-w-0 flex-1">
