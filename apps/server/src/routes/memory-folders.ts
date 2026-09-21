@@ -86,6 +86,8 @@ interface MemoryFolderData {
     createdAt: number
     fileCount: number
     descendantFileCount: number
+    indexedFileCount: number
+    descendantIndexedFileCount: number
 }
 
 export interface MemoryFileStatus {
@@ -124,7 +126,13 @@ export interface MemoryFileSearchResult extends MemoryFileStatus {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function rowToData(row: MemoryFolderRow, fileCount: number, descendantFileCount = 0): MemoryFolderData {
+function rowToData(
+    row: MemoryFolderRow,
+    fileCount: number,
+    descendantFileCount = 0,
+    indexedFileCount = 0,
+    descendantIndexedFileCount = 0,
+): MemoryFolderData {
     const folderData: MemoryFolderDirectoryData = memoryFolderDirectoryData(row)
     return {
         id: row.id,
@@ -140,6 +148,8 @@ function rowToData(row: MemoryFolderRow, fileCount: number, descendantFileCount 
         createdAt: row.created_at,
         fileCount,
         descendantFileCount,
+        indexedFileCount,
+        descendantIndexedFileCount,
     }
 }
 
@@ -451,20 +461,38 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const db = getDb()
         syncMemoryFoldersFromFolders(db)
         const rows = db.prepare('SELECT * FROM memory_folders ORDER BY is_uncategorized DESC, directory_path ASC').all() as MemoryFolderRow[]
-        const directCounts = new Map(rows.map(row => [
-            row.id,
-            listFilesInFolder(row.directory_path).filter(file => file.supported).length,
-        ]))
+        const memory = getAgentMemory()
+        const directCounts = new Map(rows.map(row => {
+            const files = listFilesInFolder(row.directory_path).filter(file => file.supported)
+            const fileIndex = memory.getFileIndex(row.id)
+            const indexedFileCount = files.reduce((total, file) => {
+                const indexed = fileIndex.get(file.fileName)
+                return total + (indexed && computeFileHash(file.filePath) === indexed.contentHash ? 1 : 0)
+            }, 0)
+            return [row.id, { fileCount: files.length, indexedFileCount }] as const
+        }))
         const folderData = new Map(rows.map(row => [row.id, memoryFolderDirectoryData(row)]))
         return rows.map(row => {
             const path = folderData.get(row.id)?.folderPath || ''
-            const descendantFileCount = rows.reduce((total, candidate) => {
-                if (candidate.id === row.id) return total
+            const descendantCounts = rows.reduce((totals, candidate) => {
+                if (candidate.id === row.id) return totals
                 const candidatePath = folderData.get(candidate.id)?.folderPath || ''
                 const isDescendant = path ? candidatePath.startsWith(`${path}/`) : Boolean(candidatePath)
-                return isDescendant ? total + (directCounts.get(candidate.id) || 0) : total
-            }, 0)
-            return rowToData(row, directCounts.get(row.id) || 0, descendantFileCount)
+                const counts = directCounts.get(candidate.id)
+                if (isDescendant && counts) {
+                    totals.fileCount += counts.fileCount
+                    totals.indexedFileCount += counts.indexedFileCount
+                }
+                return totals
+            }, { fileCount: 0, indexedFileCount: 0 })
+            const direct = directCounts.get(row.id) || { fileCount: 0, indexedFileCount: 0 }
+            return rowToData(
+                row,
+                direct.fileCount,
+                descendantCounts.fileCount,
+                direct.indexedFileCount,
+                descendantCounts.indexedFileCount,
+            )
         })
     })
 

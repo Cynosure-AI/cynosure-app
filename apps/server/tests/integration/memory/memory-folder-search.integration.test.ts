@@ -93,6 +93,26 @@ describe('global memory file search', () => {
     embed.mockRestore()
     vectorSearch.mockRestore()
 
+    const folderSummaries = (await app.inject('/api/memory-folders')).json() as Array<{
+      id: string
+      fileCount: number
+      descendantFileCount: number
+      indexedFileCount: number
+      descendantIndexedFileCount: number
+    }>
+    expect(folderSummaries.find(folder => folder.id === 'folder-a')).toMatchObject({
+      fileCount: 1,
+      descendantFileCount: 1,
+      indexedFileCount: 1,
+      descendantIndexedFileCount: 0,
+    })
+    expect(folderSummaries.find(folder => folder.id === 'folder-b')).toMatchObject({
+      fileCount: 1,
+      descendantFileCount: 0,
+      indexedFileCount: 0,
+      descendantIndexedFileCount: 0,
+    })
+
     const analysisResponse = await app.inject({ method: 'GET', url: '/api/memory-folders/folder-a/files/alpha.md/analysis' })
     expect(analysisResponse.json()).toEqual(expect.objectContaining({
       status: 'current',
@@ -129,6 +149,8 @@ describe('global memory file search', () => {
     expect(staleAnalysis.json()).toEqual(expect.objectContaining({ status: 'needs_refresh' }))
     const staleSummarySearch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=quasar' })
     expect(staleSummarySearch.json()).toEqual([])
+    const staleFolders = (await app.inject('/api/memory-folders')).json() as Array<{ id: string; indexedFileCount: number }>
+    expect(staleFolders.find(folder => folder.id === 'folder-a')?.indexedFileCount).toBe(0)
     await app.close()
   })
 

@@ -379,7 +379,14 @@ const columns: Column<ExplorerRow>[] = [
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "chunkCount", label: "Items / Chunks", minWidth: "90px", grow: 0, sortable: true, sortValue: (item) => item.kind !== "file" ? item.chunkCount : item.status === "indexed" ? (item.chunkCount || 0) : (item.estimatedChunkCount || 0) },
   { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (item) => item.kind === "file" && item.deepResearched },
-  { key: "status", label: "Type / Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (item) => item.status },
+  {
+    key: "status",
+    label: "Indexed",
+    minWidth: "220px",
+    grow: 1.15,
+    sortable: true,
+    sortValue: (item) => item.kind === "folder" ? folderIndexSummary(item.folder).ratio : item.status === "indexed" ? 1 : 0,
+  },
 ];
 
 function explorerSortGroup(item: ExplorerRow): number {
@@ -818,6 +825,28 @@ function statusLabel(status: MemoryFileStatus["status"]) {
     case "not_indexed": return "Not searchable";
     default: return "Not supported";
   }
+}
+
+function folderIndexSummary(folder: MemoryFolder): {
+  label: string;
+  icon: string;
+  colorClass: string;
+  ratio: number;
+} {
+  const total = folder.fileCount + (folder.descendantFileCount || 0);
+  const indexed = (folder.indexedFileCount || 0) + (folder.descendantIndexedFileCount || 0);
+  if (total > 0 && indexed >= total) {
+    return { label: "Indexed", icon: "lucide:check-circle", colorClass: "text-green-400", ratio: 1 };
+  }
+  if (indexed > 0) {
+    return {
+      label: `${indexed}/${total} Partially Indexed`,
+      icon: "lucide:alert-circle",
+      colorClass: "text-amber-400",
+      ratio: indexed / total,
+    };
+  }
+  return { label: "Not Indexed", icon: "lucide:circle-dashed", colorClass: "text-theme-500", ratio: 0 };
 }
 
 function formatFileSize(bytes: number): string {
@@ -1577,12 +1606,13 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       <template #col-status="{ item }">
         <span
           v-if="item.kind !== 'file'"
-          class="inline-flex items-center gap-1.5 text-xs text-amber-400"
+          class="inline-flex items-center gap-1.5 text-xs"
+          :class="folderIndexSummary(item.folder).colorClass"
         >
           <Icon
-            icon="lucide:folder"
+            :icon="folderIndexSummary(item.folder).icon"
             class="h-3.5 w-3.5"
-          /> Folder
+          /> {{ folderIndexSummary(item.folder).label }}
         </span>
         <span
           v-else
