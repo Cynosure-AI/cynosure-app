@@ -78,6 +78,7 @@ const deleting = ref(false);
 const forgettingMemories = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
+const moveContextFile = ref<MemoryFileStatus | null>(null);
 const savedExplorerView = localStorage.getItem(EXPLORER_VIEW_KEY);
 const explorerView = ref<"list" | "grid">(
   savedExplorerView === "grid" || savedExplorerView === "list"
@@ -310,21 +311,6 @@ function openContextMenu(
   item: MemoryFolder | MemoryFileStatus,
 ): void {
   event.preventDefault();
-  if (kind === "folder") {
-    const folder = item as MemoryFolder;
-    highlightedFolderId.value = folder.id;
-    if (!selectedFolders.value.has(folder.id)) {
-      clearSelection();
-      selectedFolders.value = new Set([folder.id]);
-    }
-  } else {
-    const file = item as MemoryFileStatus;
-    highlightedFolderId.value = null;
-    if (!selectedFiles.value.has(file.fileName)) {
-      clearSelection();
-      selectedFiles.value = file.supported ? new Set([file.fileName]) : new Set();
-    }
-  }
   const menuWidth = 240;
   const menuHeight = kind === "folder" ? 248 : 286;
   contextMenu.value = {
@@ -529,8 +515,8 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
   return "Search indexing";
 }
 
-async function deepResearchSelected(): Promise<void> {
-  const groups = await resolveSelectedFileGroups();
+async function deepResearchSelected(targetFile?: MemoryFileStatus): Promise<void> {
+  const groups = await resolveSelectedFileGroups(targetFile);
   for (const [folderId, groupFiles] of groups) {
     for (const file of groupFiles.filter((candidate) => supportsAnalysis(candidate))) {
       if (folderId === props.folderId) {
@@ -542,8 +528,8 @@ async function deepResearchSelected(): Promise<void> {
   }
 }
 
-async function makeSearchableSelected(): Promise<void> {
-  const groups = await resolveSelectedFileGroups();
+async function makeSearchableSelected(targetFile?: MemoryFileStatus): Promise<void> {
+  const groups = await resolveSelectedFileGroups(targetFile);
   const candidates = [...groups.values()].flat().filter((file) =>
     file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"),
   );
@@ -581,8 +567,12 @@ function selectedFolderScope(): MemoryFolder[] {
   ));
 }
 
-async function resolveSelectedFileGroups(): Promise<Map<string, MemoryFileStatus[]>> {
+async function resolveSelectedFileGroups(targetFile?: MemoryFileStatus): Promise<Map<string, MemoryFileStatus[]>> {
   const groups = new Map<string, MemoryFileStatus[]>();
+  if (targetFile) {
+    groups.set(props.folderId, [targetFile]);
+    return groups;
+  }
   const direct = files.value.filter((file) => selectedFiles.value.has(file.fileName));
   if (direct.length) groups.set(props.folderId, direct);
   await Promise.all(selectedFolderScope().map(async (folder) => {
@@ -593,6 +583,7 @@ async function resolveSelectedFileGroups(): Promise<Map<string, MemoryFileStatus
 }
 
 const moveTargetSpaces = computed(() => {
+  if (moveContextFile.value) return props.spaces.filter((candidate) => candidate.id !== props.folderId);
   const selected = props.spaces.filter((folder) => selectedFolders.value.has(folder.id));
   return props.spaces.filter((candidate) => candidate.id !== props.folderId && !selected.some((folder) =>
     candidate.id === folder.id || Boolean(folder.folderPath && candidate.folderPath.startsWith(`${folder.folderPath}/`)),
@@ -600,19 +591,27 @@ const moveTargetSpaces = computed(() => {
 });
 
 // --- Bulk removal ---
-async function deleteSelectedFiles() {
-  if (selectedItemCount.value === 0) return;
+async function deleteSelectedFiles(targetFile?: MemoryFileStatus) {
+  if (!targetFile && selectedItemCount.value === 0) return;
   deleting.value = true;
   try {
-    if (selectedFiles.value.size) {
+    if (targetFile) {
+      await api.memoryFolders.deleteDocuments(props.folderId, [targetFile.fileName]);
+    } else if (selectedFiles.value.size) {
       await api.memoryFolders.deleteDocuments(props.folderId, Array.from(selectedFiles.value));
     }
-    for (const folder of props.spaces.filter((item) => selectedFolders.value.has(item.id))) {
-      await api.memoryFolders.remove(folder.id);
+    if (!targetFile) {
+      for (const folder of props.spaces.filter((item) => selectedFolders.value.has(item.id))) {
+        await api.memoryFolders.remove(folder.id);
+      }
     }
-    const deleted = selectedFiles.value;
-    clearSelection();
-    files.value = files.value.filter((f) => !deleted.has(f.fileName));
+    const deleted = targetFile ? new Set([targetFile.fileName]) : selectedFiles.value;
+    if (targetFile) {
+      selectedFiles.value = new Set([...selectedFiles.value].filter((fileName) => fileName !== targetFile.fileName));
+    } else {
+      clearSelection();
+    }
+    files.value = files.value.filter((file) => !deleted.has(file.fileName));
     emit("spacesChanged");
   } catch {
     /* error */
@@ -620,8 +619,8 @@ async function deleteSelectedFiles() {
   deleting.value = false;
 }
 
-async function forgetSelectedMemories() {
-  const groups = await resolveSelectedFileGroups();
+async function forgetSelectedMemories(targetFile?: MemoryFileStatus) {
+  const groups = await resolveSelectedFileGroups(targetFile);
   if (groups.size === 0) return;
   forgettingMemories.value = true;
   try {
@@ -631,7 +630,7 @@ async function forgetSelectedMemories() {
         .map((file) => file.fileName);
       if (sourceFiles.length) await api.memoryFolders.forgetMemories(folderId, sourceFiles);
     }
-    clearSelection();
+    if (!targetFile) clearSelection();
     await loadFiles();
     await loadJobs();
     emit("spacesChanged");
@@ -643,27 +642,48 @@ async function forgetSelectedMemories() {
 
 // --- Move ---
 async function moveSelectedFiles(targetFolderId: string) {
-  if (selectedItemCount.value === 0 || targetFolderId === props.folderId) return;
+  const targetFile = moveContextFile.value;
+  if ((!targetFile && selectedItemCount.value === 0) || targetFolderId === props.folderId) return;
   const target = props.spaces.find((folder) => folder.id === targetFolderId);
   if (!target) return;
   moving.value = true;
   try {
-    if (selectedFiles.value.size) {
+    if (targetFile) {
+      await api.memoryFolders.moveDocuments(props.folderId, [targetFile.fileName], targetFolderId);
+    } else if (selectedFiles.value.size) {
       await api.memoryFolders.moveDocuments(props.folderId, Array.from(selectedFiles.value), targetFolderId);
     }
-    for (const folder of props.spaces.filter((item) => selectedFolders.value.has(item.id))) {
-      const folderPath = target.folderPath ? `${target.folderPath}/${folder.name}` : folder.name;
-      await api.memoryFolders.update(folder.id, { folderPath });
+    if (!targetFile) {
+      for (const folder of props.spaces.filter((item) => selectedFolders.value.has(item.id))) {
+        const folderPath = target.folderPath ? `${target.folderPath}/${folder.name}` : folder.name;
+        await api.memoryFolders.update(folder.id, { folderPath });
+      }
     }
-    const moved = selectedFiles.value;
-    clearSelection();
-    files.value = files.value.filter((f) => !moved.has(f.fileName));
+    const moved = targetFile ? new Set([targetFile.fileName]) : selectedFiles.value;
+    if (targetFile) {
+      selectedFiles.value = new Set([...selectedFiles.value].filter((fileName) => fileName !== targetFile.fileName));
+    } else {
+      clearSelection();
+    }
+    files.value = files.value.filter((file) => !moved.has(file.fileName));
     showMoveDialog.value = false;
+    moveContextFile.value = null;
     emit("spacesChanged");
   } catch {
     /* error */
   }
   moving.value = false;
+}
+
+function openContextMove(file: MemoryFileStatus): void {
+  moveContextFile.value = file;
+  showMoveDialog.value = true;
+  closeContextMenu();
+}
+
+function closeMoveDialog(): void {
+  showMoveDialog.value = false;
+  moveContextFile.value = null;
 }
 
 async function moveDocumentsToFolder(targetFolderId: string, sourceFiles: string[]) {
@@ -1238,7 +1258,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
           title="Build or refresh semantic search vectors for the selected documents"
-          @click="makeSearchableSelected"
+          @click="makeSearchableSelected()"
         >
           <Icon
             :icon="selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0 ? 'lucide:loader-2' : 'lucide:search-check'"
@@ -1252,7 +1272,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
           title="Extract and classify facts from the selected searchable documents"
-          @click="deepResearchSelected"
+          @click="deepResearchSelected()"
         >
           <Icon
             :icon="selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
@@ -1266,7 +1286,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="forgettingMemories"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
           title="Remove semantic search vectors and extracted facts while keeping the source files"
-          @click="forgetSelectedMemories"
+          @click="forgetSelectedMemories()"
         >
           <Icon
             :icon="forgettingMemories ? 'lucide:loader-2' : 'lucide:brain-circuit'"
@@ -1279,7 +1299,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="deleting"
           class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
           title="Remove the selected source files and their indexes"
-          @click="deleteSelectedFiles"
+          @click="deleteSelectedFiles()"
         >
           <Icon
             :icon="deleting ? 'lucide:loader-2' : 'lucide:trash-2'"
@@ -1650,10 +1670,10 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </template>
         <template v-else-if="contextMenu.kind === 'document' && contextMenu.file">
           <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-theme-500">
-            {{ selectedItemCount }} item{{ selectedItemCount !== 1 ? 's' : '' }} selected
+            {{ contextMenu.file.fileName }}
           </div>
           <button
-            v-if="selectedItemCount === 1 && selectedFiles.size === 1 && contextMenu.file.textDirect"
+            v-if="contextMenu.file.textDirect"
             type="button"
             class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
             role="menuitem"
@@ -1665,11 +1685,11 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             /> Open
           </button>
           <button
-            v-if="spaces.length > 1 && selectedItemCount > 0"
+            v-if="spaces.length > 1"
             type="button"
             class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
             role="menuitem"
-            @click="showMoveDialog = true; closeContextMenu()"
+            @click="openContextMove(contextMenu.file)"
           >
             <Icon
               icon="lucide:folder-input"
@@ -1677,11 +1697,11 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             /> Move
           </button>
           <button
-            v-if="selectedSearchIndexFiles.length > 0 || selectedFolders.size > 0"
+            v-if="contextMenu.file.supported && (contextMenu.file.status === 'needs_reindex' || contextMenu.file.status === 'not_indexed')"
             type="button"
             class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
             role="menuitem"
-            @click="makeSearchableSelected(); closeContextMenu()"
+            @click="makeSearchableSelected(contextMenu.file); closeContextMenu()"
           >
             <Icon
               icon="lucide:search-check"
@@ -1689,11 +1709,11 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             /> Index files
           </button>
           <button
-            v-if="selectedDeepResearchFiles.length > 0 || selectedFolders.size > 0"
+            v-if="contextMenu.file.supported && supportsAnalysis(contextMenu.file)"
             type="button"
             class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-emerald-300 hover:bg-emerald-500/10"
             role="menuitem"
-            @click="deepResearchSelected(); closeContextMenu()"
+            @click="deepResearchSelected(contextMenu.file); closeContextMenu()"
           >
             <Icon
               icon="lucide:network"
@@ -1701,11 +1721,11 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             /> Deep Research
           </button>
           <button
-            v-if="selectedRememberedFiles.length > 0 || selectedFolders.size > 0"
+            v-if="contextMenu.file.supported && (contextMenu.file.status !== 'not_indexed' || contextMenu.file.deepResearched)"
             type="button"
             class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
             role="menuitem"
-            @click="forgetSelectedMemories(); closeContextMenu()"
+            @click="forgetSelectedMemories(contextMenu.file); closeContextMenu()"
           >
             <Icon
               icon="lucide:brain-circuit"
@@ -1713,11 +1733,10 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             /> Drop Index
           </button>
           <button
-            v-if="selectedItemCount > 0"
             type="button"
             class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
             role="menuitem"
-            @click="deleteSelectedFiles(); closeContextMenu()"
+            @click="deleteSelectedFiles(contextMenu.file); closeContextMenu()"
           >
             <Icon
               icon="lucide:trash-2"
@@ -1787,10 +1806,10 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
     <MemoryDocumentMoveDialog
       :show="showMoveDialog"
       :source-folder-id="folderId"
-      :selected-count="selectedItemCount"
+      :selected-count="moveContextFile ? 1 : selectedItemCount"
       :spaces="moveTargetSpaces"
       :moving="moving"
-      @close="showMoveDialog = false"
+      @close="closeMoveDialog"
       @move="moveSelectedFiles"
     />
   </div>

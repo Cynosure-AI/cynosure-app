@@ -202,11 +202,19 @@ describe('MemoryFileExplorer navigation and search', () => {
 
     table.vm.$emit('row-contextmenu', rows[0], new MouseEvent('contextmenu', { clientX: 20, clientY: 20 }))
     await flushPromises()
+    expect(wrapper.text()).not.toContain('1 selected')
     const settings = [...document.body.querySelectorAll('[data-memory-context-menu] button')]
       .find((button) => button.textContent?.includes('Folder settings')) as HTMLButtonElement
     settings.click()
     await flushPromises()
     expect(wrapper.emitted('editFolder')).toEqual([[child]])
+
+    table.vm.$emit('row-contextmenu', rows[1], new MouseEvent('contextmenu', { clientX: 20, clientY: 20 }))
+    await flushPromises()
+    const documentMenu = document.body.querySelector('[data-memory-context-menu]') as HTMLElement
+    expect(documentMenu.textContent).toContain('notes.md')
+    expect(documentMenu.textContent).toContain('Open')
+    expect(wrapper.text()).not.toContain('1 selected')
     wrapper.unmount()
   })
 
