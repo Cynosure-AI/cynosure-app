@@ -379,10 +379,10 @@ watch(() => props.folderId, (folderId) => {
 
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return files.value;
-  return files.value.filter((f) =>
+  const matching = q ? files.value.filter((f) =>
     f.fileName.toLowerCase().includes(q) || (f.tags || []).some((tag) => tag.includes(q)),
-  );
+  ) : files.value;
+  return [...matching].sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName));
 });
 
 const documentRows = computed<ExplorerRow[]>(() => [
@@ -912,93 +912,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 
 <template>
   <div class="memory-document-list min-w-0">
-    <!-- Folder header -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-2">
-        <h2 class="text-lg font-medium text-theme-200">
-          {{ currentSpace?.name }}
-        </h2>
-        <button
-          type="button"
-          class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
-          title="Edit folder"
-          :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
-          @click="emit('editSpace')"
-        >
-          <Icon
-            icon="lucide:pencil"
-            class="w-3.5 h-3.5"
-          />
-        </button>
-        <button
-          type="button"
-          :disabled="currentSpace?.isUncategorized"
-          :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
-          :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
-          class="p-1 text-theme-500 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-theme-500"
-          @click="emit('deleteSpace')"
-        >
-          <Icon
-            icon="lucide:trash-2"
-            class="w-3.5 h-3.5"
-          />
-        </button>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          v-if="currentSpace"
-          type="button"
-          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
-          @click="emit('createFolder', currentSpace)"
-        >
-          <Icon
-            icon="lucide:folder-plus"
-            class="h-4 w-4 text-amber-400"
-          />
-          New folder
-        </button>
-        <button
-          v-if="needsAttentionCount > 0"
-          title="Indexing files makes them available for semantic searching."
-          class="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm transition-colors flex items-center gap-2"
-          @click="reindexAll"
-        >
-          <Icon
-            icon="lucide:refresh-cw"
-            class="w-4 h-4"
-          />
-          Index all {{ needsAttentionCount }} files
-        </button>
-        <button
-          :disabled="uploading"
-          class="px-3 py-1.5 bg-theme-900/60 hover:bg-theme-800/60 border border-theme-800 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
-          @click="fileInput?.click()"
-        >
-          <Icon
-            :icon="uploading ? 'lucide:loader-2' : 'lucide:upload'"
-            class="w-4 h-4"
-            :class="{ 'animate-spin': uploading }"
-          />
-          Upload
-        </button>
-      </div>
-    </div>
-
-    <!-- Folder description -->
-    <p
-      v-if="currentSpace?.description"
-      class="mb-3 text-sm text-theme-500"
-    >
-      {{ currentSpace.description }}
-    </p>
-    <p
-      v-else
-      class="mb-3 text-sm text-theme-600 italic"
-    >
-      No description set
-    </p>
-
-    <!-- Explorer toolbar -->
+    <!-- Compact folder path, title actions, and primary actions -->
     <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
       <div class="flex min-w-0 items-center gap-2">
         <div class="flex shrink-0 items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5">
@@ -1073,16 +987,86 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
               type="button"
               :disabled="!segment.folderId || segment.folderId === folderId"
               class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:hover:bg-theme-800 disabled:cursor-default"
-              :class="segment.folderId ? 'text-accent-300 enabled:hover:text-accent-200' : 'text-theme-300'"
+              :class="segment.folderId === folderId ? 'font-medium text-theme-200' : 'text-accent-300 enabled:hover:text-accent-200'"
               @click="navigateBreadcrumb(segment.folderId)"
             >
               {{ segment.label }}
             </button>
           </template>
+          <button
+            type="button"
+            class="ml-1 shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+            title="Edit folder"
+            :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
+            @click="emit('editSpace')"
+          >
+            <Icon
+              icon="lucide:pencil"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+          <button
+            type="button"
+            :disabled="currentSpace?.isUncategorized"
+            :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
+            :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
+            class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30"
+            @click="emit('deleteSpace')"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-3.5 w-3.5"
+            />
+          </button>
         </nav>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <button
+          v-if="currentSpace"
+          type="button"
+          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          @click="emit('createFolder', currentSpace)"
+        >
+          <Icon
+            icon="lucide:folder-plus"
+            class="h-4 w-4 text-amber-400"
+          />
+          New folder
+        </button>
+        <button
+          v-if="needsAttentionCount > 0"
+          title="Indexing files makes them available for semantic searching."
+          class="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm transition-colors flex items-center gap-2"
+          @click="reindexAll"
+        >
+          <Icon
+            icon="lucide:refresh-cw"
+            class="w-4 h-4"
+          />
+          Index all {{ needsAttentionCount }} files
+        </button>
+        <button
+          :disabled="uploading"
+          class="px-3 py-1.5 bg-theme-900/60 hover:bg-theme-800/60 border border-theme-800 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+          @click="fileInput?.click()"
+        >
+          <Icon
+            :icon="uploading ? 'lucide:loader-2' : 'lucide:upload'"
+            class="w-4 h-4"
+            :class="{ 'animate-spin': uploading }"
+          />
+          Upload
+        </button>
       </div>
     </div>
 
+    <!-- Omit unset descriptions to keep the explorer vertically dense. -->
+    <p
+      v-if="currentSpace?.description"
+      class="mb-3 text-sm text-theme-500"
+    >
+      {{ currentSpace.description }}
+    </p>
     <div
       id="memory-document-search"
       class="mb-3 rounded-lg border border-theme-800 bg-theme-950/30 p-2"
@@ -1602,8 +1586,8 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :pagination="true"
       :page-size="FILES_PAGE_SIZE"
       pagination-position="both"
-      initial-sort-key="name"
-      initial-sort-direction="asc"
+      initial-sort-key="modifiedAt"
+      initial-sort-direction="desc"
       empty-message="No folders or files here yet."
       @row-click="openExplorerRow"
       @row-contextmenu="openExplorerContextMenu"

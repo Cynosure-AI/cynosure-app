@@ -132,7 +132,6 @@ async function onFileDrop(event: DragEvent): Promise<void> {
       :mode="activeView"
       :spaces="spaces"
       @home="navigateHome"
-      @open-document="openGlobalDocument"
       @restored="emit('refresh-spaces')"
     />
   </div>

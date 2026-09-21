@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   restoreRevision: vi.fn(),
   permanentlyDelete: vi.fn(),
   emptyTrash: vi.fn(),
+  getFileContent: vi.fn(),
+  getRevision: vi.fn(),
+  getRevisionDiff: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -49,10 +52,19 @@ describe('MemoryVirtualExplorer', () => {
       ? [file('older.md', 10)]
       : [file('newer.md', 20)])
     mocks.listDeleted.mockResolvedValue([])
+    mocks.getFileContent.mockResolvedValue({ content: 'after', revision: 'hash', documentRef: 'newer#ref' })
+    mocks.listRevisions.mockResolvedValue([
+      { id: 'latest', revisionNumber: 2, contentHash: 'two', source: 'user', messageIds: [], createdAt: 20 },
+      { id: 'previous', revisionNumber: 1, contentHash: 'one', source: 'filesystem', messageIds: [], createdAt: 10 },
+    ])
+    mocks.getRevisionDiff.mockResolvedValue({ segments: [
+      { type: 'removed', text: 'before' },
+      { type: 'added', text: 'after' },
+    ] })
     mocks.permanentlyDelete.mockResolvedValue({ success: true })
   })
 
-  test('lists every document newest first and opens it in its source folder', async () => {
+  test('lists every document newest first and opens its latest diff without leaving Recent', async () => {
     const wrapper = mount(MemoryVirtualExplorer, {
       props: { mode: 'recent', spaces: folders },
       global: { stubs: { Icon: true, DataTable: DataTableStub, ModalDialog: ModalStub } },
@@ -61,6 +73,17 @@ describe('MemoryVirtualExplorer', () => {
 
     expect(wrapper.get('[data-testid="table"]').text()).toBe('newer.md,older.md')
     expect(mocks.listFiles).toHaveBeenCalledTimes(2)
+
+    const table = wrapper.getComponent({ name: 'DataTable' })
+    const rows = table.props('items') as Array<ReturnType<typeof file> & { folderId: string }>
+    table.vm.$emit('row-click', rows[0], new MouseEvent('click'))
+    await flushPromises()
+
+    expect(mocks.getFileContent).toHaveBeenCalledWith('work', 'newer.md')
+    expect(mocks.getRevisionDiff).toHaveBeenCalledWith('newer#ref', 'previous', 'latest')
+    expect(wrapper.text()).toContain('before')
+    expect(wrapper.text()).toContain('after')
+    expect(wrapper.emitted('openDocument')).toBeUndefined()
   })
 
   test('offers restore and permanent delete actions for trash entries', async () => {

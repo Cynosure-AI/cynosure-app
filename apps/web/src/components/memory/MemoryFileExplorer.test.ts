@@ -284,12 +284,12 @@ describe('MemoryFileExplorer navigation and search', () => {
   test('opens grid documents on item click and selects only through checkboxes with shift ranges', async () => {
     mocks.listFiles.mockResolvedValue([
       {
-        fileName: 'alpha.md', extension: '.md', size: 12, modifiedAt: 2,
+        fileName: 'bravo.md', extension: '.md', size: 12, modifiedAt: 1,
         supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
         deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
       },
       {
-        fileName: 'bravo.md', extension: '.md', size: 12, modifiedAt: 1,
+        fileName: 'alpha.md', extension: '.md', size: 12, modifiedAt: 2,
         supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
         deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
       },
@@ -307,6 +307,11 @@ describe('MemoryFileExplorer navigation and search', () => {
     await checkboxes[0].trigger('click')
     await checkboxes[1].trigger('click', { shiftKey: true })
     expect(wrapper.text()).toContain('2 selected')
+
+    await wrapper.get('[aria-label="List view"]').trigger('click')
+    const table = wrapper.getComponent({ name: 'DataTable' })
+    expect(table.props('initialSortKey')).toBe('modifiedAt')
+    expect(table.props('initialSortDirection')).toBe('desc')
   })
 
   test('applies indexing recursively to files inside a selected folder', async () => {

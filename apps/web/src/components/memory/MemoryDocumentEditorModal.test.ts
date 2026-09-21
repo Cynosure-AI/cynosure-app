@@ -75,6 +75,8 @@ describe('MemoryDocumentEditorModal', () => {
     await vi.waitFor(() => expect(mocks.setContent).toHaveBeenCalledOnce())
 
     expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(true)
+    expect((wrapper.get('input[aria-label="Document name"]').element as HTMLInputElement).value).toBe('large')
+    expect(wrapper.text()).not.toContain('large.md')
     expect(wrapper.find('textarea[aria-label="Large memory document content"]').exists()).toBe(false)
     expect(wrapper.get('[title="Extracted facts and entities"]').classes()).not.toContain('bg-accent-500/15')
     expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('hidden')
