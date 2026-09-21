@@ -9,6 +9,7 @@ import DataTable, { type Column } from "../shared/DataTable.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
+import MemoryExplorerHeader from "./MemoryExplorerHeader.vue";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
 
@@ -918,115 +919,58 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 
 <template>
   <div class="memory-document-list min-w-0">
-    <!-- Compact folder path, title actions, and primary actions -->
-    <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-      <div class="flex min-w-0 items-center gap-2">
-        <div class="flex shrink-0 items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5">
-          <button
-            type="button"
-            :disabled="!rootFolder || rootFolder.id === folderId"
-            class="flex h-7 w-7 items-center justify-center rounded-md text-accent-400 transition-colors hover:bg-accent-500/10 hover:text-accent-300 disabled:cursor-not-allowed disabled:opacity-30"
-            title="Home"
-            aria-label="Go to memory root"
-            @click="navigateHome"
-          >
-            <Icon
-              icon="lucide:house"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-          <button
-            type="button"
-            :disabled="!canNavigateBack"
-            class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
-            title="Back to previous folder"
-            aria-label="Back to previous folder"
-            @click="navigateHistory(-1)"
-          >
-            <Icon
-              icon="lucide:arrow-left"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-          <button
-            type="button"
-            :disabled="!canNavigateForward"
-            class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
-            title="Forward to next folder"
-            aria-label="Forward to next folder"
-            @click="navigateHistory(1)"
-          >
-            <Icon
-              icon="lucide:arrow-right"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-        </div>
-
-        <nav
-          v-if="pathSegments.length"
-          class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-800 bg-theme-900/40 px-2 py-1.5 text-xs"
-          aria-label="Memory folder path"
+    <MemoryExplorerHeader
+      :segments="pathSegments.map((segment) => ({ label: segment.label, disabled: segment.folderId === folderId }))"
+      :home-disabled="!rootFolder || rootFolder.id === folderId"
+      :can-go-back="canNavigateBack"
+      :can-go-forward="canNavigateForward"
+      @home="navigateHome"
+      @back="navigateHistory(-1)"
+      @forward="navigateHistory(1)"
+      @segment-click="navigateBreadcrumb(pathSegments[$event]?.folderId)"
+    >
+      <template #leading>
+        <button
+          type="button"
+          class="mr-1.5 shrink-0 rounded p-0.5 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          :title="pathCopied ? 'Path copied' : 'Copy folder path'"
+          aria-label="Copy current folder path"
+          @click="copyCurrentFolderPath"
         >
-          <button
-            type="button"
-            class="mr-1.5 shrink-0 rounded p-0.5 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-            :title="pathCopied ? 'Path copied' : 'Copy folder path'"
-            aria-label="Copy current folder path"
-            @click="copyCurrentFolderPath"
-          >
-            <Icon
-              :icon="pathCopied ? 'lucide:check' : 'lucide:clipboard'"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-          <template
-            v-for="(segment, index) in pathSegments"
-            :key="`${segment.label}-${index}`"
-          >
-            <Icon
-              v-if="index > 0"
-              icon="lucide:chevron-right"
-              class="h-3 w-3 shrink-0 text-theme-700"
-            />
-            <button
-              type="button"
-              :disabled="!segment.folderId || segment.folderId === folderId"
-              class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:hover:bg-theme-800 disabled:cursor-default"
-              :class="segment.folderId === folderId ? 'font-medium text-theme-200' : 'text-accent-300 enabled:hover:text-accent-200'"
-              @click="navigateBreadcrumb(segment.folderId)"
-            >
-              {{ segment.label }}
-            </button>
-          </template>
-          <button
-            type="button"
-            class="ml-1 shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-            title="Edit folder"
-            :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
-            @click="emit('editSpace')"
-          >
-            <Icon
-              icon="lucide:pencil"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-          <button
-            type="button"
-            :disabled="currentSpace?.isUncategorized"
-            :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
-            :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
-            class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30"
-            @click="emit('deleteSpace')"
-          >
-            <Icon
-              icon="lucide:trash-2"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-        </nav>
-      </div>
-      <div class="flex shrink-0 items-center gap-2">
+          <Icon
+            :icon="pathCopied ? 'lucide:check' : 'lucide:clipboard'"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+      </template>
+      <template #path-actions>
+        <button
+          type="button"
+          class="ml-1 shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          title="Edit folder"
+          :aria-label="`Edit ${currentSpace?.name || 'folder'}`"
+          @click="emit('editSpace')"
+        >
+          <Icon
+            icon="lucide:pencil"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+        <button
+          type="button"
+          :disabled="currentSpace?.isUncategorized"
+          :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
+          :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
+          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30"
+          @click="emit('deleteSpace')"
+        >
+          <Icon
+            icon="lucide:trash-2"
+            class="h-3.5 w-3.5"
+          />
+        </button>
+      </template>
+      <template #actions>
         <button
           v-if="currentSpace"
           type="button"
@@ -1063,8 +1007,8 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           />
           Upload
         </button>
-      </div>
-    </div>
+      </template>
+    </MemoryExplorerHeader>
 
     <!-- Omit unset descriptions to keep the explorer vertically dense. -->
     <p
