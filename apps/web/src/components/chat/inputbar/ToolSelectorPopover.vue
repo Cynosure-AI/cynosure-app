@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
               Auto Tool Selection
             </div>
             <div class="text-[10px] text-theme-500">
-              Toggle to let the AI decide which tools to use for a task. You can still manually select tools below.
+              Enable the auto tool mode to let the AI decide which tools to use for a task. You can still manually select tools below.
             </div>
           </div>
           <ToggleSwitch
