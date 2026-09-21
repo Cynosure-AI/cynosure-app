@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { estimateChunkCountFromFileSize, MemoryParser } from './parser.js'
+import { MEMORY_CHUNK_OVERLAP_TOKENS, MEMORY_CHUNK_SIZE_TOKENS } from '../runtime-limits.js'
 
 describe('estimateChunkCountFromFileSize', () => {
   const config = { chunkSize: 512, chunkOverlap: 64 }
@@ -18,6 +19,15 @@ describe('estimateChunkCountFromFileSize', () => {
 
   test('uses the configured chunk size and overlap', () => {
     expect(estimateChunkCountFromFileSize(6_900, { chunkSize: 256, chunkOverlap: 128 })).toBe(13)
+  })
+})
+
+describe('MemoryParser chunking policy', () => {
+  test('uses the code-level chunk size and overlap constants', () => {
+    expect(new MemoryParser().getConfig()).toEqual({
+      chunkSize: MEMORY_CHUNK_SIZE_TOKENS,
+      chunkOverlap: MEMORY_CHUNK_OVERLAP_TOKENS,
+    })
   })
 })
 

@@ -5,8 +5,7 @@ import { getEmbeddingProvider } from './embedding.js'
 import { getRAGStore, type VectorDocument } from './rag.js'
 import type { SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
-import { getDb } from '../../db/database.js'
-import { CHUNKING_LIMITS } from '../runtime-limits.js'
+import { MEMORY_CHUNK_OVERLAP_TOKENS, MEMORY_CHUNK_SIZE_TOKENS } from '../runtime-limits.js'
 
 export interface DocumentMeta {
   source: string
@@ -101,21 +100,8 @@ export class MemoryParser {
   private chunkOverlap: number
 
   constructor(opts?: { chunkSize?: number; chunkOverlap?: number }) {
-    this.chunkSize = opts?.chunkSize ?? CHUNKING_LIMITS.defaultChunkSize
-    this.chunkOverlap = opts?.chunkOverlap ?? CHUNKING_LIMITS.defaultChunkOverlap
-  }
-
-  /** Reload chunk config from DB settings. */
-  refreshConfig(): void {
-    try {
-      const db = getDb()
-      const row = db.prepare("SELECT value_json FROM settings WHERE key = 'chunking'").get() as { value_json: string } | undefined
-      if (row) {
-        const cfg = JSON.parse(row.value_json) as { chunkSize?: number; chunkOverlap?: number }
-        if (cfg.chunkSize && cfg.chunkSize >= CHUNKING_LIMITS.minChunkSize) this.chunkSize = cfg.chunkSize
-        if (cfg.chunkOverlap !== undefined && cfg.chunkOverlap >= 0) this.chunkOverlap = cfg.chunkOverlap
-      }
-    } catch { /* DB not ready yet — use defaults */ }
+    this.chunkSize = opts?.chunkSize ?? MEMORY_CHUNK_SIZE_TOKENS
+    this.chunkOverlap = opts?.chunkOverlap ?? MEMORY_CHUNK_OVERLAP_TOKENS
   }
 
   getConfig(): { chunkSize: number; chunkOverlap: number } {
@@ -524,7 +510,6 @@ let parserInstance: MemoryParser | null = null
 export function getMemoryParser(): MemoryParser {
   if (!parserInstance) {
     parserInstance = new MemoryParser()
-    parserInstance.refreshConfig()
   }
   return parserInstance
 }

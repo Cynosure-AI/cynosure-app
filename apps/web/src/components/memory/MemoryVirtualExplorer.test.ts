@@ -90,6 +90,27 @@ describe('MemoryVirtualExplorer', () => {
     expect(wrapper.emitted('openDocument')).toBeUndefined()
   })
 
+  test('uses Dream title styling for recently dreamed documents', async () => {
+    localStorage.setItem('cy-memory-explorer-view', 'grid')
+    mocks.listFiles.mockImplementation(async (folderId: string) => folderId === 'root'
+      ? [{ ...file('dreamed.md', 10), dreamedAt: Date.now() }]
+      : [file('regular.md', 20)])
+
+    const wrapper = mount(MemoryVirtualExplorer, {
+      props: { mode: 'recent', spaces: folders },
+      global: { stubs: { Icon: true, DataTable: DataTableStub, ModalDialog: ModalStub } },
+    })
+    await flushPromises()
+
+    const dreamedCard = wrapper.findAll('article').find(card => card.text().includes('dreamed.md'))!
+    expect(dreamedCard.find('[icon="lucide:moon"]').exists()).toBe(true)
+    expect(dreamedCard.find('span.text-\\[\\#f4c072\\]').text()).toBe('dreamed.md')
+    const regularCard = wrapper.findAll('article').find(card => card.text().includes('regular.md'))!
+    expect(regularCard.find('[icon="lucide:moon"]').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
   test('offers restore and permanent delete actions for trash entries', async () => {
     mocks.listDeleted.mockResolvedValue([{
       documentRef: 'deleted#one', folderId: 'work', fileName: 'deleted.md', revision: 'hash', deletedAt: 20,

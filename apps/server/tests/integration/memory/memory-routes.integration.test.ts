@@ -83,26 +83,6 @@ describe('memory search routes', () => {
     await app.close()
   })
 
-  test('rejects chunk sizes outside the canonical bounds', async () => {
-    const { CHUNKING_LIMITS } = await import('../../../src/core/runtime-limits.js')
-    const app = await createApp()
-
-    const tooSmall = await app.inject({
-      method: 'POST',
-      url: '/api/memory/chunking/configure',
-      payload: { chunkSize: CHUNKING_LIMITS.minChunkSize - 1, chunkOverlap: 0 },
-    })
-    const tooLarge = await app.inject({
-      method: 'POST',
-      url: '/api/memory/chunking/configure',
-      payload: { chunkSize: CHUNKING_LIMITS.maxChunkSize + 1, chunkOverlap: 0 },
-    })
-
-    expect(tooSmall.statusCode).toBe(400)
-    expect(tooLarge.statusCode).toBe(400)
-    await app.close()
-  })
-
   test('deletes a literal fact-value node instead of treating it as an entity', async () => {
     const { getDb } = await import('../../../src/db/database.js')
     const { getMemoryKnowledgeStore } = await import('../../../src/core/memory/memory-knowledge.js')

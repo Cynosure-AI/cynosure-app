@@ -7,17 +7,9 @@
  */
 export const MAX_ANALYSIS_CHUNKS: number = 20
 
-export const CHUNKING_LIMITS: Readonly<{
-  minChunkSize: number
-  maxChunkSize: number
-  defaultChunkSize: number
-  defaultChunkOverlap: number
-}> = {
-  minChunkSize: 64,
-  maxChunkSize: 4096,
-  defaultChunkSize: 512,
-  defaultChunkOverlap: 64,
-}
+/** Document chunking policy. Change these constants to tune all new indexing. */
+export const MEMORY_CHUNK_SIZE_TOKENS: number = 512
+export const MEMORY_CHUNK_OVERLAP_TOKENS: number = 64
 
 export const RERANKER_LIMITS: Readonly<{
   minCandidateCount: number
@@ -62,7 +54,6 @@ export const GRAPH_LIMITS: Readonly<{
 
 export interface RuntimeLimits {
   readonly analysisChunkLimit: number
-  readonly chunking: typeof CHUNKING_LIMITS
   readonly reranker: typeof RERANKER_LIMITS
   readonly attachments: typeof ATTACHMENT_TEXT_LIMITS
   readonly chunkReadLimit: number
@@ -71,7 +62,6 @@ export interface RuntimeLimits {
 
 export const RUNTIME_LIMITS: RuntimeLimits = {
   analysisChunkLimit: MAX_ANALYSIS_CHUNKS,
-  chunking: CHUNKING_LIMITS,
   reranker: RERANKER_LIMITS,
   attachments: ATTACHMENT_TEXT_LIMITS,
   chunkReadLimit: MAX_CHUNK_READ,
