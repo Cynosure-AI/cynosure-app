@@ -163,12 +163,14 @@ export function useMemoryDocumentJobs(options: {
 
   function deepResearchProgress(fileName: string): string {
     const job = activeJob("deep-research", fileName);
-    if (job?.status === "queued") return "Queued";
-    return job?.progressCurrent && job.progressTotal ? `Batch ${job.progressCurrent}/${job.progressTotal}` : "Researching";
+    if (job && typeof job.progressCurrent === "number" && typeof job.progressTotal === "number" && job.progressTotal > 0) {
+      return `Analysing (${job.progressCurrent} / ${job.progressTotal})`;
+    }
+    return "Analysing…";
   }
 
-  function searchIndexProgress(fileName: string): string {
-    return activeJob("reindex", fileName)?.status === "queued" ? "Queued" : "Indexing";
+  function searchIndexProgress(_fileName: string): string {
+    return "Indexing…";
   }
 
   onUnmounted(stopPolling);

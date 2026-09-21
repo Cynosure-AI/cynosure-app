@@ -473,6 +473,8 @@ const {
   extractKnowledgeFromFile,
   reindexAll: reindexAllNow,
   reset: resetJobs,
+  deepResearchProgress,
+  searchIndexProgress,
 } = useMemoryDocumentJobs({
   folderId: toRef(props, "folderId"),
   files,
@@ -1519,13 +1521,24 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <span class="mt-1 text-[11px] text-theme-600">{{ formatFileSize(file.size) }}</span>
         <span
           class="mt-2 inline-flex items-center gap-1 text-[10px]"
-          :class="file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+          :class="isJobActive('reindex', file.fileName) ? 'text-orange-400' : file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
         >
           <Icon
-            :icon="statusIcon(file.status)"
+            :icon="isJobActive('reindex', file.fileName) ? 'lucide:loader-2' : statusIcon(file.status)"
             class="h-3 w-3"
+            :class="{ 'animate-spin': isJobActive('reindex', file.fileName) }"
           />
-          {{ statusLabel(file.status) }}
+          {{ isJobActive('reindex', file.fileName) ? searchIndexProgress(file.fileName) : statusLabel(file.status) }}
+        </span>
+        <span
+          v-if="isJobActive('deep-research', file.fileName)"
+          class="mt-1 inline-flex items-center gap-1 text-[10px] text-emerald-400"
+        >
+          <Icon
+            icon="lucide:loader-2"
+            class="h-3 w-3 animate-spin"
+          />
+          {{ deepResearchProgress(file.fileName) }}
         </span>
       </div>
     </div>
@@ -1613,6 +1626,16 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           class="text-xs text-theme-600"
         >Recursive</span>
         <span
+          v-else-if="isJobActive('deep-research', item.fileName)"
+          class="inline-flex items-center gap-1.5 text-xs text-emerald-400"
+        >
+          <Icon
+            icon="lucide:loader-2"
+            class="h-3.5 w-3.5 animate-spin"
+          />
+          {{ deepResearchProgress(item.fileName) }}
+        </span>
+        <span
           v-else
           class="inline-flex items-center gap-1.5 text-xs"
           :class="item.deepResearched ? 'text-green-400' : 'text-theme-500'"
@@ -1634,6 +1657,16 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             :icon="folderIndexSummary(item.folder).icon"
             class="h-3.5 w-3.5"
           /> {{ folderIndexSummary(item.folder).label }}
+        </span>
+        <span
+          v-else-if="isJobActive('reindex', item.fileName)"
+          class="inline-flex items-center gap-1.5 text-xs text-orange-400"
+        >
+          <Icon
+            icon="lucide:loader-2"
+            class="h-3.5 w-3.5 animate-spin"
+          />
+          {{ searchIndexProgress(item.fileName) }}
         </span>
         <span
           v-else
