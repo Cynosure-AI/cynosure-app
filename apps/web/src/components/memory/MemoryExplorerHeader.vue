@@ -63,15 +63,9 @@ const emit = defineEmits<{
 
       <nav
         v-if="segments.length"
-        class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-800 bg-theme-900/40 px-2 py-1.5 text-xs"
+        class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-800 bg-theme-900/40 px-3 py-1.5 text-xs"
         aria-label="Memory folder path"
       >
-        <slot name="leading">
-          <Icon
-            icon="lucide:folder"
-            class="mr-1.5 h-3.5 w-3.5 shrink-0 text-accent-400"
-          />
-        </slot>
         <template
           v-for="(segment, index) in segments"
           :key="`${segment.label}-${index}`"
