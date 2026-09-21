@@ -8,6 +8,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProviderStore } from '../../stores/provider.store'
+import { wsConnected } from '../../api/http'
 import { Icon } from '@iconify/vue'
 
 const chatStore = useChatStore()
@@ -162,7 +163,15 @@ watch(
         @drop="onDrop"
       >
         <div
-          v-if="!providerStore.providersLoaded"
+          v-if="!wsConnected"
+          class="flex flex-1 min-h-0 flex-col"
+          data-testid="chat-initialising"
+        >
+          <ChatPanel />
+        </div>
+
+        <div
+          v-else-if="!providerStore.providersLoaded"
           class="flex flex-1 items-center justify-center text-theme-500"
           aria-label="Loading AI providers"
         >

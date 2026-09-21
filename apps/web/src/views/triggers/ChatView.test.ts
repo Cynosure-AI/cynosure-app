@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   },
   agentStore: { planningState: null },
   route: { params: {}, name: 'triggers-chat' },
+  wsConnected: { __v_isRef: true, value: true },
 }))
 
 vi.mock('vue-router', () => ({
@@ -29,12 +30,14 @@ vi.mock('vue-router', () => ({
 vi.mock('../../stores/chat.store', () => ({ useChatStore: () => mocks.chatStore }))
 vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => mocks.agentStore }))
 vi.mock('../../stores/provider.store', () => ({ useProviderStore: () => mocks.providerStore }))
+vi.mock('../../api/http', () => ({ wsConnected: mocks.wsConnected }))
 
 describe('ChatView provider availability', () => {
   beforeEach(() => {
     mocks.push.mockReset()
     mocks.providerStore.providers = []
     mocks.providerStore.providersLoaded = true
+    mocks.wsConnected.value = true
   })
 
   test('replaces the chat and composer with provider setup guidance', async () => {
@@ -55,5 +58,14 @@ describe('ChatView provider availability', () => {
     expect(wrapper.find('[data-testid="chat-no-providers"]').exists()).toBe(false)
     expect(wrapper.findComponent(InputBar).exists()).toBe(true)
     expect(wrapper.findComponent(ChatPanel).exists()).toBe(true)
+  })
+
+  test('shows initialising until the server connects, even when providers appear empty', () => {
+    mocks.wsConnected.value = false
+    const wrapper = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+
+    expect(wrapper.get('[data-testid="chat-initialising"]').findComponent(ChatPanel).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chat-no-providers"]').exists()).toBe(false)
+    expect(wrapper.findComponent(InputBar).exists()).toBe(false)
   })
 })
