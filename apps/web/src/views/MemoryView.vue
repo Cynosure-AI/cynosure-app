@@ -7,7 +7,6 @@ import { api } from "../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphNodeType, KnowledgeGraph, MemoryFolder } from "../api/types";
 import ModalDialog from "../components/shared/ModalDialog.vue";
-import MultiSelect, { type MultiSelectOption } from "../components/shared/MultiSelect.vue";
 import TabBar, { type TabDef } from "../components/shared/TabBar.vue";
 import MemoryDocumentSection from "../components/memory/MemoryDocumentSection.vue";
 import KnowledgeGraphSection from "../components/memory/KnowledgeGraphSection.vue";
@@ -67,8 +66,6 @@ const memoryTabs: TabDef<MemoryPanel>[] = memorySections.map((section) => ({
 const spaces = ref<MemoryFolder[]>([]);
 const spacesLoading = ref(false);
 const selectedFolderId = ref<string | null>(null);
-const graphSelectedFolderIds = ref<string[]>([]);
-const graphFolderSelectionInitialized = ref(false);
 const showCreateDialog = ref(false);
 const editingFolder = ref<MemoryFolder | null>(null);
 const parentForCreate = ref<MemoryFolder | null>(null);
@@ -145,11 +142,6 @@ const activeGraph = computed(() =>
 const selectedFolder = computed(() =>
   spaces.value.find((s) => s.id === selectedFolderId.value) || null,
 );
-const graphFolderOptions = computed<MultiSelectOption[]>(() => spaces.value.map((space) => ({
-  value: space.id,
-  label: space.name,
-})));
-
 const visualGraph = computed(() => activePanel.value === "visual" ? activeGraph.value : null);
 const {
   flowNodes: graphFlowNodes,
@@ -171,9 +163,6 @@ watch([nodeSpacing, showGraphEdgeLabels, graphEdgePathType], () => {
 async function loadFolders() {
   spacesLoading.value = true;
   try {
-    const previousSpaceIds = spaces.value.map((space) => space.id);
-    const previouslySelectedAll = !graphFolderSelectionInitialized.value
-      || (previousSpaceIds.length > 0 && previousSpaceIds.every((id) => graphSelectedFolderIds.value.includes(id)));
     const loaded = await api.memoryFolders.list();
     spaces.value = [...loaded].sort((a, b) => {
       if (a.isUncategorized) return -1;
@@ -183,10 +172,6 @@ async function loadFolders() {
     if (linkedFolderId.value && spaces.value.some(space => space.id === linkedFolderId.value)) {
       selectedFolderId.value = linkedFolderId.value;
     }
-    graphSelectedFolderIds.value = previouslySelectedAll
-      ? spaces.value.map((space) => space.id)
-      : graphSelectedFolderIds.value.filter((id) => spaces.value.some((space) => space.id === id));
-    graphFolderSelectionInitialized.value = true;
     if (!selectedFolderId.value && spaces.value.length > 0) selectedFolderId.value = spaces.value[0].id;
     if (selectedFolderId.value && !spaces.value.some((s) => s.id === selectedFolderId.value)) {
       selectedFolderId.value = spaces.value[0]?.id || null;
@@ -294,7 +279,6 @@ function capVisualGraph(nextGraph: KnowledgeGraph, view: GraphViewMode): Knowled
 async function loadGraph(
   query = graphQuery.value,
   nodeIds = graphSelectedNodes.value.map((node) => node.id),
-  folderIds = graphSelectedFolderIds.value,
 ) {
   const trimmedQuery = query.trim();
   const limit = graphEntityLimit.value === null
@@ -302,7 +286,7 @@ async function loadGraph(
     : Math.max(VISUAL_GRAPH_RELATION_LIMIT, graphEntityLimit.value);
   const view = activeGraphView.value || "visual";
   const minImportance = view === "visual" ? graphFactLevel.value : null;
-  const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${[...folderIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
+  const requestKey = `${view}:${trimmedQuery}:${[...nodeIds].sort().join(",")}:${limit}:${minImportance ?? "all"}`;
   if (graphLoading.value && inFlightGraphKey === requestKey) return;
   const requestId = ++graphRequest;
   inFlightGraphKey = requestKey;
@@ -315,7 +299,6 @@ async function loadGraph(
       view,
       nodeIds,
       minImportance,
-      graphFolderSelectionInitialized.value ? folderIds : undefined,
     );
     if (requestId !== graphRequest) return;
     focusedGraphNodeId.value = null;
@@ -334,12 +317,6 @@ async function loadGraph(
       inFlightGraphKey = "";
     }
   }
-}
-
-async function updateGraphSpaceSelection(folderIds: string[]) {
-  graphSelectedFolderIds.value = folderIds;
-  graphSelectedNodes.value = [];
-  await loadGraph(graphQuery.value, [], folderIds);
 }
 
 async function clearGraphWalk() {
@@ -365,11 +342,7 @@ async function loadGraphSuggestions(query = graphQuery.value) {
 
   const requestId = ++graphSuggestionRequest;
   try {
-    const result = await api.memory.getGraphSuggestions(
-      trimmed,
-      8,
-      graphFolderSelectionInitialized.value ? graphSelectedFolderIds.value : undefined,
-    );
+    const result = await api.memory.getGraphSuggestions(trimmed, 8);
     if (requestId !== graphSuggestionRequest) return;
     graphSuggestions.value = result.suggestions;
   } catch {
@@ -546,16 +519,36 @@ onMounted(() => loadFolders());
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-2 self-start">
-              <MultiSelect
-                v-if="activePanel === 'visual'"
-                :model-value="graphSelectedFolderIds"
-                :options="graphFolderOptions"
-                placeholder="No memory folders"
-                all-selected-label="All memory folders"
-                show-bulk-actions
-                class="min-w-64"
-                @update:model-value="updateGraphSpaceSelection"
-              />
+              <template v-if="activePanel === 'documents'">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+                  :class="activeDocumentView === 'recent'
+                    ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
+                    : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
+                  @click="selectDocumentView('recent')"
+                >
+                  <Icon
+                    icon="lucide:history"
+                    class="h-4 w-4"
+                  />
+                  Recent Documents
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+                  :class="activeDocumentView === 'trash'
+                    ? 'border-red-500/35 bg-red-500/10 text-red-300'
+                    : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
+                  @click="selectDocumentView('trash')"
+                >
+                  <Icon
+                    icon="lucide:trash-2"
+                    class="h-4 w-4"
+                  />
+                  Trash
+                </button>
+              </template>
               <button
                 v-if="activePanel === 'visual'"
                 class="p-2 text-theme-500 transition-colors hover:text-theme-200"

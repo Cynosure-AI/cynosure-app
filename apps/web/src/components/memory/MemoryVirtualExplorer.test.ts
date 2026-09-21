@@ -61,6 +61,7 @@ describe('MemoryVirtualExplorer', () => {
       { type: 'removed', text: 'before' },
       { type: 'added', text: 'after' },
     ] })
+    mocks.getRevision.mockResolvedValue({ content: 'after' })
     mocks.permanentlyDelete.mockResolvedValue({ success: true })
   })
 
@@ -101,5 +102,14 @@ describe('MemoryVirtualExplorer', () => {
 
     expect(wrapper.text()).toContain('Empty trash')
     expect(wrapper.get('[data-testid="table"]').text()).toContain('deleted.md')
+
+    const table = wrapper.getComponent({ name: 'DataTable' })
+    const rows = table.props('items') as Array<{ documentRef: string; fileName: string }>
+    table.vm.$emit('row-click', rows[0], new MouseEvent('click'))
+    await flushPromises()
+
+    expect(mocks.listRevisions).toHaveBeenCalledWith('deleted#one')
+    expect(mocks.getRevision).toHaveBeenCalledWith('deleted#one', 'latest')
+    expect(wrapper.text()).toContain('after')
   })
 })
