@@ -428,6 +428,12 @@ const columns: Column<ExplorerRow>[] = [
   { key: "status", label: "Type / Searchable", minWidth: "220px", grow: 1.15, sortable: true, sortValue: (item) => item.status },
 ];
 
+function explorerSortGroup(item: ExplorerRow): number {
+  if (item.kind === "virtual") return 0;
+  if (item.kind === "folder") return 1;
+  return 2;
+}
+
 const globalColumns: Column<GlobalDocumentRow>[] = [
   { key: "fileName", label: "File", minWidth: "220px", grow: 3, sortable: true, sortValue: (file) => file.fileName },
   { key: "folderName", label: "Folder", minWidth: "150px", grow: 1.5, sortable: true, sortValue: (file) => file.folderPath || file.folderName },
@@ -1578,6 +1584,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       v-model:page="page"
       :items="documentRows"
       :columns="columns"
+      :sort-group-value="explorerSortGroup"
       :selectable="true"
       :row-selectable="isExplorerRowSelectable"
       :row-clickable="true"

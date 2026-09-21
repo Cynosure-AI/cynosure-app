@@ -34,6 +34,8 @@ interface Props<TItem> {
   initialSortKey?: string | null
   initialSortDirection?: 'asc' | 'desc'
   initialSortOnce?: boolean
+  /** Keep broad item groups together while sorting within each group. */
+  sortGroupValue?: (item: TItem) => string | number | boolean | null | undefined
   showHeader?: boolean
   emptyMessage?: string
   loading?: boolean
@@ -55,6 +57,7 @@ const props = withDefaults(defineProps<Props<T>>(), {
   initialSortKey: null,
   initialSortDirection: 'asc',
   initialSortOnce: false,
+  sortGroupValue: undefined,
   selectionColumn: () => ({
     width: '40px',
   }),
@@ -352,7 +355,12 @@ const sortedItems = computed(() => {
   if (!column?.sortable) return baseItems
 
   const direction = sortDirection.value === 'asc' ? 1 : -1
-  return baseItems.sort((a, b) => compareForSort(valueForSort(a, column), valueForSort(b, column), direction))
+  return baseItems.sort((a, b) => {
+    const groupComparison = props.sortGroupValue
+      ? compareForSort(props.sortGroupValue(a), props.sortGroupValue(b), 1)
+      : 0
+    return groupComparison || compareForSort(valueForSort(a, column), valueForSort(b, column), direction)
+  })
 })
 
 const normalizedPageSize = computed(() => Math.max(1, Math.floor(props.pageSize)))
