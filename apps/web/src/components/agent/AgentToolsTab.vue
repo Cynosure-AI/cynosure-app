@@ -19,7 +19,7 @@ const hasSelectableExecutionTools = computed(() => props.agent.tools.length > 0 
 const usesSelectionCapRouting = computed(() => props.agent.tools.length > DIRECT_TOOL_SELECTION_LIMIT)
 
 const automaticToolStates = computed(() => ({
-  todo_write: {
+  todo_update: {
     active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
     criteria: 'thinking mode and visible execution tools',
   },

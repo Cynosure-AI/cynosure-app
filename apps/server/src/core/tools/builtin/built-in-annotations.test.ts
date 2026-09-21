@@ -6,6 +6,21 @@ import { makeSearchAvailableMcpToolsTool } from './expand-available-toolset.js'
 import { makeManageMcpTool } from './manage-mcp.js'
 
 describe('internal tool behavior annotations', () => {
+    test('exposes the atomic planning tool contract', () => {
+        const [tool] = makePlanningTools('run')
+
+        expect(tool.name).toBe('todo_update')
+        expect(tool.parameters).toMatchObject({
+            type: 'object',
+            additionalProperties: false,
+            required: ['op'],
+            properties: {
+                op: { enum: ['set', 'add', 'update', 'remove', 'clear'] },
+                afterTaskId: { type: 'string' },
+            },
+        })
+    })
+
     test('exposes the consolidated attachment tool contract', () => {
         const tools = makeAttachmentTools('conversation')
 

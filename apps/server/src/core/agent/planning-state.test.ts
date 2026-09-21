@@ -9,6 +9,7 @@ vi.mock('../../db/database.js', () => ({
 }))
 
 import {
+  applyTodoUpdate,
   buildPlanningStateContext,
   closePlanningRun,
   createPlanningRun,
@@ -17,8 +18,6 @@ import {
   interruptPlanningRun,
   reconcilePlanningAfterToolBatch,
   resumeOrCreatePlanningRun,
-  upsertTodoItem,
-  writeTodoList,
 } from './planning-state.js'
 
 describe('visible planning state', () => {
@@ -50,7 +49,8 @@ describe('visible planning state', () => {
     const run = createPlanningRun('conversation', '  Ship the release  ')
 
     expect(run.objective).toBe('Ship the release')
-    expect(writeTodoList(run.runId, {
+    expect(applyTodoUpdate(run.runId, {
+      op: 'set',
       tasks: [
         { title: 'Build artifacts', status: 'pending' },
         { title: 'Publish release', status: 'pending' },
@@ -61,7 +61,7 @@ describe('visible planning state', () => {
       { id: '02', status: 'pending' },
     ])
 
-    expect(upsertTodoItem(run.runId, { taskId: '1', status: 'completed', note: 'built' }).success).toBe(true)
+    expect(applyTodoUpdate(run.runId, { op: 'update', taskId: '1', status: 'completed', note: 'built' }).success).toBe(true)
     expect(getPlanningState(run.runId)?.items.map(({ status }) => status)).toEqual(['completed', 'in_progress'])
     expect(reconcilePlanningAfterToolBatch(run.runId, { success: true })?.items.map(({ status }) => status))
       .toEqual(['completed', 'completed'])
@@ -74,7 +74,8 @@ describe('visible planning state', () => {
 
   test('keeps a run open when completion is requested with pending work', () => {
     const run = createPlanningRun('conversation', 'Do both steps')
-    writeTodoList(run.runId, {
+    applyTodoUpdate(run.runId, {
+      op: 'set',
       tasks: [
         { title: 'First', status: 'in_progress' },
         { title: 'Second', status: 'pending' },
@@ -89,7 +90,7 @@ describe('visible planning state', () => {
 
   test('records interruption and tool failure on the active task', () => {
     const run = createPlanningRun('conversation', 'Investigate failure')
-    writeTodoList(run.runId, { tasks: [{ title: 'Inspect logs' }, { title: 'Apply fix' }] })
+    applyTodoUpdate(run.runId, { op: 'set', tasks: [{ title: 'Inspect logs' }, { title: 'Apply fix' }] })
 
     const interrupted = interruptPlanningRun(run.runId, { error: 'User stopped the run' })
     expect(interrupted?.items[0]).toMatchObject({
@@ -101,27 +102,65 @@ describe('visible planning state', () => {
     expect(failed?.items[0].note).toBe('Logs unavailable')
   })
 
-  test('validates list and append requests and exposes planning context', () => {
+  test('validates atomic operations and exposes planning context', () => {
     const run = createPlanningRun('conversation', 'Plan')
 
-    expect(writeTodoList(run.runId, { tasks: [{ title: '   ' }] })).toEqual({
+    expect(applyTodoUpdate(run.runId, { op: 'set', tasks: [{ title: '   ' }] })).toEqual({
       success: false,
       output: 'At least one task with a title is required.',
     })
-    expect(upsertTodoItem(run.runId, {})).toEqual({
+    expect(applyTodoUpdate(run.runId, { op: 'add' })).toEqual({
       success: false,
-      output: 'No task matches taskId (missing). A title is required to append a new planning task.',
+      output: '`add` requires a non-empty `title`.',
     })
-    upsertTodoItem(run.runId, { title: 'New task', status: 'not-a-status' })
+    expect(applyTodoUpdate(run.runId, { op: 'add', title: 'New task', status: 'not-a-status' })).toEqual({
+      success: false,
+      output: 'Invalid task status "not-a-status".',
+    })
+    applyTodoUpdate(run.runId, { op: 'add', title: 'New task' })
     const state = getPlanningState(run.runId)!
     expect(state.items[0]).toMatchObject({ id: '01', title: 'New task', status: 'in_progress' })
     expect(buildPlanningStateContext(state)).toContain('id=01; status=in_progress; title=New task')
     expect(buildPlanningStateContext({ ...state, items: [] })).toBeNull()
     // Update by taskId only: title stays unchanged.
-    expect(upsertTodoItem(run.runId, { taskId: '1', status: 'completed' }).success).toBe(true)
+    expect(applyTodoUpdate(run.runId, { op: 'update', taskId: '1', status: 'completed' }).success).toBe(true)
     expect(getPlanningState(run.runId)?.items[0]).toMatchObject({ id: '01', title: 'New task', status: 'completed' })
-    // Append requires a title when no taskId matches.
-    expect(upsertTodoItem(run.runId, { taskId: '99', status: 'pending' }).success).toBe(false)
+    // Update never falls back to creating a task.
+    expect(applyTodoUpdate(run.runId, { op: 'update', taskId: '99', status: 'pending' })).toEqual({
+      success: false,
+      output: 'No task matches taskId "99".',
+    })
+    expect(applyTodoUpdate(run.runId, { op: 'clear', title: 'ambiguous' })).toEqual({
+      success: false,
+      output: 'Field "title" is not valid for operation "clear".',
+    })
+  })
+
+  test('adds at a requested position, removes by id, and clears the list', () => {
+    const run = createPlanningRun('conversation', 'Edit the plan')
+    applyTodoUpdate(run.runId, {
+      op: 'set',
+      objective: 'Edited objective',
+      tasks: [{ title: 'First' }, { title: 'Third' }],
+    })
+
+    expect(applyTodoUpdate(run.runId, { op: 'add', title: 'Second', afterTaskId: '01' }).success).toBe(true)
+    expect(getPlanningState(run.runId)).toMatchObject({
+      objective: 'Edited objective',
+      items: [
+        { id: '01', title: 'First', status: 'in_progress' },
+        { id: '02', title: 'Second', status: 'pending' },
+        { id: '03', title: 'Third', status: 'pending' },
+      ],
+    })
+
+    expect(applyTodoUpdate(run.runId, { op: 'remove', taskId: '01' }).success).toBe(true)
+    expect(getPlanningState(run.runId)?.items.map(({ id, title, status }) => ({ id, title, status }))).toEqual([
+      { id: '01', title: 'Second', status: 'in_progress' },
+      { id: '02', title: 'Third', status: 'pending' },
+    ])
+    expect(applyTodoUpdate(run.runId, { op: 'clear' }).success).toBe(true)
+    expect(getPlanningState(run.runId)).toMatchObject({ items: [], currentTaskId: undefined })
   })
 
   test('deletes an empty run on close and skips corrupt persisted rows', () => {

@@ -7,7 +7,7 @@ vi.mock('../../db/database.js', () => ({
 }))
 
 import { AgentExecutor } from './agent-executor.js'
-import { createPlanningRun, getPlanningState, writeTodoList } from './planning-state.js'
+import { applyTodoUpdate, createPlanningRun, getPlanningState } from './planning-state.js'
 import { makePlanningTools } from '../tools/builtin/planning-tools.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { StreamChunk, ToolDefinition } from '../gateway/providers/base.provider.js'
@@ -34,7 +34,7 @@ describe('AgentExecutor planning recovery', () => {
 
   test('allows more than one consecutive continuation before the plan resumes', async () => {
     const run = createPlanningRun('planning-retries', 'Finish the task')
-    writeTodoList(run.runId, { tasks: [{ title: 'Finish it', status: 'in_progress' }] })
+    applyTodoUpdate(run.runId, { op: 'set', tasks: [{ title: 'Finish it', status: 'in_progress' }] })
     let call = 0
     const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
       call++
@@ -43,7 +43,7 @@ describe('AgentExecutor planning recovery', () => {
           toolCalls: [{
             id: 'finish-plan',
             type: 'function',
-            function: { name: 'todo_write', arguments: '{"taskId":"01","status":"completed"}' },
+            function: { name: 'todo_update', arguments: '{"op":"update","taskId":"01","status":"completed"}' },
           }],
           done: true,
         }
@@ -70,7 +70,7 @@ describe('AgentExecutor planning recovery', () => {
 
   test('refreshes the continuation budget after resumed tool work', async () => {
     const run = createPlanningRun('planning-reset', 'Finish both tasks')
-    writeTodoList(run.runId, { tasks: [{ title: 'Look up data' }, { title: 'Close the plan' }] })
+    applyTodoUpdate(run.runId, { op: 'set', tasks: [{ title: 'Look up data' }, { title: 'Close the plan' }] })
     const lookup: ToolDefinition = {
       name: 'lookup',
       description: 'Looks up data',
@@ -90,7 +90,7 @@ describe('AgentExecutor planning recovery', () => {
           toolCalls: [{
             id: 'finish-plan',
             type: 'function',
-            function: { name: 'todo_write', arguments: '{"taskId":"02","status":"completed"}' },
+            function: { name: 'todo_update', arguments: '{"op":"update","taskId":"02","status":"completed"}' },
           }],
           done: true,
         }
