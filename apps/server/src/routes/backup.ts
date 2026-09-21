@@ -11,7 +11,6 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { writeFileSync } from 'fs'
 import { extractFilePathFromFileUrl, getConversationArtifactsDir, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { getRAGStore } from '../core/memory/rag.js'
-import { getMemoryParser } from '../core/memory/parser.js'
 import { getEmbeddingProvider } from '../core/memory/embedding.js'
 import { basename, dirname, join } from 'path'
 import {
@@ -922,10 +921,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             }
             results.settings = res
 
-            // Reload embedding provider & parser config from freshly restored settings
-            // so subsequent user-triggered indexing uses the restored configuration.
+            // Reload the embedding provider from freshly restored settings.
             getEmbeddingProvider().loadFromDb()
-            getMemoryParser().refreshConfig()
             emitRestoreProgress('settings', res.errors.length > 0 ? 'failed' : 'completed')
         }
 

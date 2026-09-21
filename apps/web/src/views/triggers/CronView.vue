@@ -167,7 +167,8 @@ function matchesCronFilter(job: CronJob, q: string): boolean {
 }
 
 const tableColumns: Column<CronJob>[] = [
-  { key: 'job', label: 'Job', width: 'minmax(0,1.7fr)', sortable: true, sortValue: job => job.name || job.agentName },
+  { key: 'agent', label: 'Agent', width: 'minmax(50px,0.3fr)', sortable: true, sortValue: job => job.agentName, filterValue: job => job.agentName },
+  { key: 'job', label: 'Job', width: 'minmax(0,1.4fr)', sortable: true, sortValue: job => job.name || job.agentName },
   { key: 'schedule', label: 'Schedule', width: 'minmax(0,1.3fr)', sortable: true, sortValue: job => job.nextRunAt ?? Number.MAX_SAFE_INTEGER },
   { key: 'status', label: 'Status', width: '140px', sortable: true, sortValue: job => job.isRunning ? 2 : job.enabled ? 1 : 0 },
   { key: 'actions', label: 'Actions', width: '200px' },
@@ -320,15 +321,15 @@ onUnmounted(() => {
           :empty-message="cronFilter.trim() ? 'No jobs match the current filter' : 'No cron jobs'"
           @row-click="openCronJob"
         >
-          <template #col-job="{ item: job }">
-            <div class="flex items-start gap-3 min-w-0">
-              <button
-                type="button"
-                class="w-9 h-9 rounded-full bg-theme-700 flex items-center justify-center shrink-0 overflow-hidden mt-0.5 hover:ring-2 hover:ring-accent-500/60 transition-shadow"
-                :title="`Open ${job.agentName} agent details`"
-                :aria-label="`Open ${job.agentName} agent details`"
-                @click.stop="openAgentDetails(job.agentId)"
-              >
+          <template #col-agent="{ item: job }">
+            <button
+              type="button"
+              class="flex min-w-0 items-center gap-2 text-left hover:text-accent-300"
+              :title="`Open ${job.agentName} agent details`"
+              :aria-label="`Open ${job.agentName} agent details`"
+              @click.stop="openAgentDetails(job.agentId)"
+            >
+              <span class="w-9 h-9 rounded-full bg-theme-700 flex items-center justify-center shrink-0 overflow-hidden hover:ring-2 hover:ring-accent-500/60 transition-shadow">
                 <img
                   v-if="job.agentIconUrl"
                   :src="job.agentIconUrl"
@@ -340,28 +341,25 @@ onUnmounted(() => {
                   icon="lucide:bot"
                   class="w-4 h-4 text-theme-400"
                 />
-              </button>
-              <div class="min-w-0">
-                <div class="font-medium text-theme-100 truncate">
-                  {{ job.name || 'Unnamed job' }}
-                </div>
-                <div class="mt-0.5 text-xs text-theme-400 flex items-center gap-1.5">
-                  <Icon
-                    icon="lucide:bot"
-                    class="w-3 h-3"
-                  />
-                  <span class="truncate">{{ job.agentName }}</span>
-                </div>
-                <div
-                  v-if="job.prompt"
-                  class="mt-0.5 text-xs text-theme-500 flex items-center gap-1.5"
-                >
-                  <Icon
-                    icon="lucide:message-square"
-                    class="w-3 h-3"
-                  />
-                  <span class="truncate">{{ job.prompt }}</span>
-                </div>
+              </span>
+              <!--<span class="truncate text-xs text-theme-300">{{ job.agentName }}</span>-->
+            </button>
+          </template>
+
+          <template #col-job="{ item: job }">
+            <div class="min-w-0">
+              <div class="font-medium text-theme-100 truncate">
+                {{ job.name || 'Unnamed job' }}
+              </div>
+              <div
+                v-if="job.prompt"
+                class="mt-0.5 text-xs text-theme-500 flex items-center gap-1.5"
+              >
+                <Icon
+                  icon="lucide:message-square"
+                  class="w-3 h-3"
+                />
+                <span class="truncate">{{ job.prompt }}</span>
               </div>
             </div>
           </template>

@@ -339,10 +339,6 @@ export const api = {
       post<{ success: boolean }>('/api/memory/embeddings/drop', {}),
     probeEmbedding: (opts: { providerId?: string; model: string }) =>
       post<{ dimensions: number }>('/api/memory/embeddings/probe', opts),
-    getChunkingConfig: () =>
-      get<{ chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/config'),
-    configureChunking: (opts: { chunkSize: number; chunkOverlap: number }) =>
-      post<{ success: boolean; chunkSize: number; chunkOverlap: number }>('/api/memory/chunking/configure', opts),
     getRerankerConfig: () =>
       get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
     configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>

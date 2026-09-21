@@ -85,13 +85,6 @@ const embStatus = ref<SettingsPersistenceState>('idle')
 const embProbing = ref(false)
 const loadingEmbeddingConfig = ref(true)
 
-// Chunking state
-const chunkSize = ref(RUNTIME_LIMITS.chunking.defaultChunkSize)
-const chunkOverlap = ref(RUNTIME_LIMITS.chunking.defaultChunkOverlap)
-const chunkSaving = ref(false)
-const savedChunking = ref({ chunkSize: RUNTIME_LIMITS.chunking.defaultChunkSize, chunkOverlap: RUNTIME_LIMITS.chunking.defaultChunkOverlap })
-const chunkStatus = ref<SettingsPersistenceState>('idle')
-
 // Reranker state
 const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
@@ -110,9 +103,6 @@ const deepResearchStatus = ref<SettingsPersistenceState>('idle')
 const embDirty = computed(() =>
   embProviderId.value !== savedEmbedding.value.providerId || embModel.value !== savedEmbedding.value.model
 )
-const chunkDirty = computed(() =>
-  chunkSize.value !== savedChunking.value.chunkSize || chunkOverlap.value !== savedChunking.value.chunkOverlap
-)
 const rerankDirty = computed(() =>
   rerankEnabled.value !== savedReranker.value.enabled ||
   rerankProviderId.value !== savedReranker.value.providerId ||
@@ -129,7 +119,7 @@ const dreamSelectionValid = computed(() => {
   if (dreamModel.value) return true
   return Boolean(providerStore.providers.find(provider => provider.id === dreamProviderId.value)?.defaultModel)
 })
-const manualDirty = computed(() => embDirty.value || chunkDirty.value || rerankDirty.value || dreamDirty.value)
+const manualDirty = computed(() => embDirty.value || rerankDirty.value || dreamDirty.value)
 
 watch(manualDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
@@ -170,7 +160,6 @@ onMounted(async () => {
   await loadDreamConfig()
   await loadEmbeddingConfig()
   await loadDeepResearchConfig()
-  await loadChunkingConfig()
   await loadRerankerConfig()
 })
 
@@ -190,33 +179,6 @@ async function loadEmbeddingConfig() {
   }
   savedEmbedding.value = { providerId: embProviderId.value, model: embModel.value }
   loadingEmbeddingConfig.value = false
-}
-
-async function loadChunkingConfig() {
-  try {
-    const config = await api.memory.getChunkingConfig()
-    chunkSize.value = config.chunkSize
-    chunkOverlap.value = config.chunkOverlap
-    savedChunking.value = { chunkSize: config.chunkSize, chunkOverlap: config.chunkOverlap }
-  } catch { /* defaults */ }
-}
-
-async function saveChunking() {
-  chunkSaving.value = true
-  chunkStatus.value = 'saving'
-  try {
-    const config = await api.memory.configureChunking({
-      chunkSize: chunkSize.value,
-      chunkOverlap: chunkOverlap.value
-    })
-    chunkSize.value = config.chunkSize
-    chunkOverlap.value = config.chunkOverlap
-    savedChunking.value = { chunkSize: config.chunkSize, chunkOverlap: config.chunkOverlap }
-    chunkStatus.value = 'saved'
-  } catch {
-    chunkStatus.value = 'error'
-  }
-  chunkSaving.value = false
 }
 
 async function loadRerankerConfig() {
@@ -706,75 +668,6 @@ function cancelDrop() {
       </div>
     </BaseCard>
     
-    <SettingsSubheading
-      v-if="showSection('chunking')"
-      label="Document Processing"
-    />
-
-    <!-- Chunking -->
-    <BaseCard
-      v-if="showSection('chunking')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
-          <Icon
-            icon="lucide:scissors"
-            class="w-5 h-5 text-theme-400"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Chunking
-          </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
-            Controls how documents are split before embedding. Larger chunks retain more context,
-            smaller chunks improve retrieval precision. Overlap ensures context isn't lost at chunk boundaries.
-          </p>
-        </div>
-      </div>
-
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs text-theme-400 mb-1">Chunk Size (tokens)</label>
-          <input
-            v-model.number="chunkSize"
-            type="number"
-            :min="RUNTIME_LIMITS.chunking.minChunkSize"
-            :max="RUNTIME_LIMITS.chunking.maxChunkSize"
-            step="64"
-            class="w-40 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          >
-        </div>
-        <div>
-          <label class="block text-xs text-theme-400 mb-1">Chunk Overlap (tokens)</label>
-          <input
-            v-model.number="chunkOverlap"
-            type="number"
-            min="0"
-            :max="chunkSize - 1"
-            step="16"
-            class="w-40 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          >
-        </div>
-      </div>
-
-      <div class="flex items-center justify-between gap-3">
-        <SettingsPersistenceStatus
-          mode="manual"
-          :state="chunkStatus === 'error' ? 'error' : chunkSaving ? 'saving' : chunkDirty ? 'dirty' : chunkStatus"
-        />
-        <button
-          :disabled="chunkSaving || !chunkDirty"
-          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
-          @click="saveChunking"
-        >
-          <span v-if="chunkSaving">Saving...</span>
-          <span v-else>Save changes</span>
-        </button>
-      </div>
-    </BaseCard>
-
     <!-- Model change confirmation modal -->
     <ModalDialog
       :show="showDropConfirm"

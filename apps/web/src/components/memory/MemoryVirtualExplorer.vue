@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
 import type { MemoryDiffSegment, MemoryFileSearchResult, MemoryFolder, MemoryRevisionSummary } from "../../api/types";
@@ -42,6 +42,15 @@ const diffSegments = ref<MemoryDiffSegment[]>([]);
 const previewContent = ref("");
 const diffLoading = ref(false);
 const diffError = ref("");
+const DREAM_INDICATOR_DURATION_MS = 24 * 60 * 60 * 1000;
+const dreamIndicatorNow = ref(Date.now());
+let dreamIndicatorTimer: number | undefined;
+
+function hasRecentDreamUpdate(row: VirtualRow): boolean {
+  return props.mode === "recent"
+    && "dreamedAt" in row
+    && Boolean(row.dreamedAt && dreamIndicatorNow.value - row.dreamedAt < DREAM_INDICATOR_DURATION_MS);
+}
 
 const title = computed(() => props.mode === "recent" ? "Recent documents" : "Trash");
 const rootLabel = computed(() => {
@@ -190,7 +199,15 @@ watch(() => props.mode, () => {
   query.value = "";
   void load();
 });
-onMounted(load);
+onMounted(() => {
+  dreamIndicatorTimer = window.setInterval(() => {
+    dreamIndicatorNow.value = Date.now();
+  }, 60_000);
+  void load();
+});
+onUnmounted(() => {
+  if (dreamIndicatorTimer !== undefined) window.clearInterval(dreamIndicatorTimer);
+});
 </script>
 
 <template>
@@ -298,11 +315,14 @@ onMounted(load);
         @click="open(row)"
       >
         <Icon
-          :icon="mode === 'trash' ? 'lucide:file-x-2' : row.fileName.endsWith('.md') ? 'lucide:file-text' : 'lucide:file'"
+          :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : row.fileName.endsWith('.md') ? 'lucide:file-text' : 'lucide:file'"
           class="mb-3 h-10 w-10"
-          :class="mode === 'trash' ? 'text-red-400' : 'text-theme-400'"
+          :class="mode === 'trash' ? 'text-red-400' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
         />
-        <span class="w-full truncate text-sm font-medium text-theme-200">{{ row.fileName }}</span>
+        <span
+          class="w-full truncate text-sm font-medium"
+          :class="hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-200'"
+        >{{ row.fileName }}</span>
         <span class="mt-1 w-full truncate text-[11px] text-theme-600">{{ row.folderName }}</span>
         <span class="mt-1 text-[11px] text-theme-500">{{ new Date('deletedAt' in row ? row.deletedAt : row.modifiedAt).toLocaleString() }}</span>
         <div class="mt-3 flex gap-2">
@@ -354,10 +374,13 @@ onMounted(load);
       <template #col-fileName="{ item: row }">
         <div class="flex min-w-0 items-center gap-3">
           <Icon
-            :icon="mode === 'trash' ? 'lucide:file-x-2' : 'lucide:file-text'"
+            :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : 'lucide:file-text'"
             class="h-5 w-5 shrink-0"
-            :class="mode === 'trash' ? 'text-red-400' : 'text-theme-400'"
-          /><span class="truncate text-sm font-medium text-theme-200">{{ row.fileName }}</span>
+            :class="mode === 'trash' ? 'text-red-400' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
+          /><span
+            class="truncate text-sm font-medium"
+            :class="hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-200'"
+          >{{ row.fileName }}</span>
         </div>
       </template>
       <template #col-folderName="{ item: row }">

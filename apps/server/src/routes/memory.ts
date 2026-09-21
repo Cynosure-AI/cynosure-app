@@ -5,7 +5,6 @@ import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryAggregator } from '../core/memory/memory-aggregator.js'
 import { getHistoryStore } from '../core/memory/history.js'
 import { EmbeddingProvider, getEmbeddingProvider } from '../core/memory/embedding.js'
-import { getMemoryParser } from '../core/memory/parser.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemoryFolderFilter, getAllMemoryFolders } from '../core/memory/memory-folder-scope.js'
@@ -17,7 +16,7 @@ import { getMemoryKnowledgeStore, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOW
 import { activatePermanentMemoryIndex, DEFAULT_PERMANENT_MEMORY_TABLE, getActivePermanentMemoryTableName, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { beginMemoryReembedding, finishMemoryReembedding } from '../core/memory/reembedding-operation.js'
 import { getGateway } from '../core/gateway/gateway.js'
-import { CHUNKING_LIMITS, GRAPH_LIMITS, MEMORY_LIMITS } from '../core/runtime-limits.js'
+import { GRAPH_LIMITS, MEMORY_LIMITS } from '../core/runtime-limits.js'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 
@@ -522,32 +521,6 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     } catch (err) {
       return reply.status(500).send({ error: (err as Error).message })
     }
-  })
-
-  // GET /api/memory/chunking/config — get chunking config
-  app.get('/chunking/config', async () => {
-    const parser = getMemoryParser()
-    return parser.getConfig()
-  })
-
-  // POST /api/memory/chunking/configure — set chunking config
-  app.post<{
-    Body: { chunkSize: number; chunkOverlap: number }
-  }>('/chunking/configure', async (req, reply) => {
-    const { chunkSize, chunkOverlap } = req.body
-    if (!chunkSize || chunkSize < CHUNKING_LIMITS.minChunkSize || chunkSize > CHUNKING_LIMITS.maxChunkSize) {
-      return reply.status(400).send({ error: `chunkSize must be between ${CHUNKING_LIMITS.minChunkSize} and ${CHUNKING_LIMITS.maxChunkSize} tokens` })
-    }
-    if (chunkOverlap === undefined || chunkOverlap < 0 || chunkOverlap >= chunkSize) {
-      return reply.status(400).send({ error: 'chunkOverlap must be >= 0 and < chunkSize' })
-    }
-    const db = getDb()
-    db.prepare(
-      "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('chunking', ?)"
-    ).run(JSON.stringify({ chunkSize, chunkOverlap }))
-    const parser = getMemoryParser()
-    parser.refreshConfig()
-    return { success: true, chunkSize, chunkOverlap }
   })
 
   // GET /api/memory/reranker/config — get optional external reranker config

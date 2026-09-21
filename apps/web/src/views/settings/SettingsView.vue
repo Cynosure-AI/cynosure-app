@@ -66,7 +66,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'memory',
     label: 'Memory',
-    description: 'Tune embeddings, Deep Research, reranking, chunking, and vector storage.',
+    description: 'Tune embeddings, Deep Research, reranking, and vector storage.',
     icon: 'lucide:brain',
     component: MemorySettings
   },
@@ -157,13 +157,6 @@ const sections: SettingsSection[] = [
     label: 'Retrieval Reranker',
     description: 'Configure OpenRouter reranking for memory retrieval candidates.',
     terms: ['reranker', 'reranking', 'retrieval', 'candidate pool', 'cohere', 'openrouter', 'rank', 'relevance']
-  },
-  {
-    id: 'chunking',
-    categoryId: 'memory',
-    label: 'Chunking',
-    description: 'Control document chunk size and overlap before embedding.',
-    terms: ['chunking', 'chunk size', 'chunk overlap', 'tokens', 'documents', 'split documents']
   },
   {
     id: 'generated-titles',
