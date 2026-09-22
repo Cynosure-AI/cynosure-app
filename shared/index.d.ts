@@ -209,7 +209,72 @@ export interface ConversationListItemDto {
   last_user_message: string | null
 }
 
+/**
+ * Provider-neutral persisted/display content. Provider request parts are adapted
+ * at the gateway boundary and must never be stored as this format.
+ */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'reasoning'; text: string }
+  | { type: 'image' | 'video' | 'audio'; artifactId?: string; url: string }
+  | { type: 'file'; artifactId?: string; name: string; url?: string }
+  | { type: 'structured'; value: unknown }
+
+export interface MessageItem {
+  type: 'message'
+  id: string
+  conversationId: string
+  role: ChatRole
+  blocks: ContentBlock[]
+  createdAt: number
+  agentId?: string
+  invocationId?: string
+  provider?: string | null
+  model?: string | null
+}
+
+export interface ToolCallItem {
+  type: 'tool-call'
+  id: string
+  conversationId: string
+  callId: string
+  name: string
+  arguments: unknown
+  createdAt: number
+  invocationId?: string
+}
+
+export interface ToolResultItem {
+  type: 'tool-result'
+  id: string
+  conversationId: string
+  callId: string
+  blocks: ContentBlock[]
+  createdAt: number
+  invocationId?: string
+}
+
+export interface ExecutionMarkerItem {
+  type: 'execution-marker'
+  id: string
+  conversationId: string
+  executionId: string
+  status: 'started' | 'completed' | 'cancelled' | 'failed'
+  createdAt: number
+  parentInvocationId?: string
+}
+
+/** Snapshot items and live events share the same item types. */
+export type TranscriptItem = MessageItem | ToolCallItem | ToolResultItem | ExecutionMarkerItem
+
+export type ChatEvent =
+  | { version: 1; type: 'item.appended'; conversationId: string; executionId: string; sequence: number; item: TranscriptItem }
+  | { version: 1; type: 'content.delta'; conversationId: string; executionId: string; sequence: number; itemId: string; block: Extract<ContentBlock, { type: 'text' | 'reasoning' }> }
+  | { version: 1; type: 'execution.marker'; conversationId: string; executionId: string; sequence: number; item: ExecutionMarkerItem }
+
 export interface StoredMessageDto {
+  /** Canonical blocks; legacy columns remain during the staged migration. */
+  blocks?: ContentBlock[]
   id: string
   conversationId: string
   role: ChatRole | string
@@ -242,6 +307,8 @@ export interface StoredMessageDto {
 export interface ConversationMessagesResponse {
   conversationAgentId: string | null
   messages: StoredMessageDto[]
+  /** Canonical projection in persisted order; includes tool calls and results. */
+  transcript: TranscriptItem[]
   lastContextTokens: number | null
   executionConfig: ConversationExecutionConfig
 }
