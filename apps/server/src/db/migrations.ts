@@ -119,6 +119,13 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 7,
+        description: 'Store provider-neutral chat content beside legacy media columns',
+        up: (db) => {
+            db.exec('ALTER TABLE messages ADD COLUMN content_blocks_json TEXT')
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */
