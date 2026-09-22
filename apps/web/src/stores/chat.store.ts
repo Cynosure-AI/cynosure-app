@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
-import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto, StoredMessageDto } from '@shared/types'
+import type { ChatQueueDelivery, ContentBlock, ContextEvidence, QueuedChatMessageDto, StoredMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -26,6 +26,8 @@ export interface DisplayMessage {
   id: string
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
+  /** Canonical content; legacy display properties are projections during migration. */
+  blocks?: ContentBlock[]
   thinking?: string
   imageDataUrls?: string[]
   videoDataUrls?: string[]
@@ -292,17 +294,25 @@ export const useChatStore = defineStore('chat', () => {
       const lastContextTokens = response.lastContextTokens
       const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
       messages.value = rows.map((r: StoredMessageDto) => {
+        const blocks = r.blocks
+        const media = (type: 'image' | 'video' | 'audio') => blocks?.flatMap(block =>
+          block.type === type ? [block.url] : [])
         const base: DisplayMessage = {
           id: r.id,
           role: r.role as DisplayMessage['role'],
-          content: r.content,
-          thinking: r.thinking || undefined,
-          imageDataUrls: r.imageDataUrls || undefined,
-          videoDataUrls: r.videoDataUrls || undefined,
-          audioDataUrls: r.audioDataUrls || undefined,
-          structuredContent: r.structuredContent,
+          content: blocks ? blocks.flatMap(block => block.type === 'text' ? [block.text] : []).join('') : r.content,
+          blocks,
+          thinking: blocks ? blocks.flatMap(block => block.type === 'reasoning' ? [block.text] : []).join('') || undefined : r.thinking || undefined,
+          imageDataUrls: media('image') ?? r.imageDataUrls ?? undefined,
+          videoDataUrls: media('video') ?? r.videoDataUrls ?? undefined,
+          audioDataUrls: media('audio') ?? r.audioDataUrls ?? undefined,
+          structuredContent: blocks?.find(block => block.type === 'structured')?.type === 'structured'
+            ? (blocks.find(block => block.type === 'structured') as Extract<ContentBlock, { type: 'structured' }>).value
+            : r.structuredContent,
           contextEvidence: r.contextEvidence,
-          fileAttachments: r.fileAttachments || undefined,
+          fileAttachments: blocks
+            ? blocks.flatMap(block => block.type === 'file' ? [{ name: block.name, href: block.url }] : [])
+            : r.fileAttachments || undefined,
           agentId: r.agentId || undefined,
           agentName: r.agentName || undefined,
           agentIconUrl: r.agentIconUrl ?? undefined,
