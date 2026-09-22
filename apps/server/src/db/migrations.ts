@@ -126,6 +126,22 @@ const MIGRATIONS: SchemaMigration[] = [
             db.exec('ALTER TABLE messages ADD COLUMN content_blocks_json TEXT')
         },
     },
+    {
+        version: 8,
+        description: 'Persist ordered canonical chat events for replay',
+        up: (db) => db.exec(`
+            CREATE TABLE chat_events (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                execution_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX idx_chat_events_conversation_sequence
+                ON chat_events(conversation_id, sequence);
+        `),
+    },
 ]
 
 /** The schema version this build produces and expects. */
