@@ -11,6 +11,21 @@ function parseArray(value: string | null): string[] | undefined {
   } catch { return undefined }
 }
 
+type PendingChatEvent = ChatEvent extends infer Event
+  ? Event extends ChatEvent ? Omit<Event, 'sequence'> : never
+  : never
+
+/** The caller owns the surrounding transaction and broadcasts only after commit. */
+export function appendChatEvent(db: Database.Database, event: PendingChatEvent): ChatEvent | null {
+  const itemId = event.type === 'item.appended' ? event.payload.item.id : null
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO chat_events (conversation_id, execution_id, event_type, item_id, payload_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(event.conversationId, event.executionId, event.type, itemId, JSON.stringify(event.payload), Date.now())
+  if (insert.changes === 0) return null
+  return { ...event, sequence: Number(insert.lastInsertRowid) } as ChatEvent
+}
+
 /** Append only after a message has been committed. Missing/deleted messages emit nothing. */
 export function appendMessageEvents(
   db: Database.Database,
@@ -74,15 +89,11 @@ export function appendMessageEvents(
   }
   message.blocks = readContentBlocks(row.content_blocks_json, message)
 
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO chat_events (conversation_id, execution_id, event_type, item_id, payload_json, created_at)
-    VALUES (?, ?, 'item.appended', ?, ?, ?)
-  `)
   return db.transaction(() => toTranscriptItems(message).flatMap((item): ChatEvent[] => {
-    const result = insert.run(conversationId, executionId, item.id, JSON.stringify({ item }), Date.now())
-    if (result.changes === 0) return []
-    const sequence = Number(result.lastInsertRowid)
-    return [{ version: 1, type: 'item.appended', conversationId, executionId, sequence, payload: { item } }]
+    const event = appendChatEvent(db, {
+      version: 1, type: 'item.appended', conversationId, executionId, payload: { item },
+    })
+    return event ? [event] : []
   }))()
 }
 
@@ -99,14 +110,23 @@ export function listChatEvents(
   return rows.flatMap((row): ChatEvent[] => {
     try {
       const payload: unknown = JSON.parse(row.payload_json)
-      if (row.event_type === 'item.appended' && payload && typeof payload === 'object' && 'item' in payload) {
-        return [{
-          version: 1, type: 'item.appended', conversationId, executionId: row.execution_id,
-          sequence: row.sequence, payload: { item: payload.item as TranscriptItem },
-        }]
+      if (!payload || typeof payload !== 'object') return []
+      const envelope = {
+        version: 1 as const, conversationId, executionId: row.execution_id,
+        sequence: row.sequence,
       }
-    } catch { /* Skip an invalid event rather than breaking conversation loading. */ }
-    return []
+      switch (row.event_type) {
+        case 'item.appended':
+          return 'item' in payload ? [{ ...envelope, type: 'item.appended', payload: { item: payload.item as TranscriptItem } }] : []
+        case 'execution.marker':
+          return 'item' in payload ? [{ ...envelope, type: 'execution.marker', payload: { item: payload.item as Extract<TranscriptItem, { type: 'execution-marker' }> } }] : []
+        case 'content.delta':
+          return 'itemId' in payload && 'block' in payload
+            ? [{ ...envelope, type: 'content.delta', payload: { itemId: payload.itemId as string, block: payload.block as Extract<import('@shared/types').ContentBlock, { type: 'text' | 'reasoning' }> } }]
+            : []
+        default: return []
+      }
+    } catch { return [] }
   })
 }
 
