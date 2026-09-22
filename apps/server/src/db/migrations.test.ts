@@ -24,7 +24,7 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect((db.prepare(`PRAGMA table_info(memory_knowledge_text_units)`).all() as Array<{ name: string }>).map((column) => column.name)).toContain('summary')
@@ -33,6 +33,8 @@ describe('schema migrations', () => {
             .toEqual(expect.arrayContaining(['client_id', 'status', 'progress_current', 'progress_total', 'error', 'updated_at']))
         expect((db.prepare(`PRAGMA table_info(memory_folders)`).all() as Array<{ name: string }>).map((column) => column.name))
             .toContain('auto_memory_excluded')
+        expect((db.prepare('PRAGMA table_info(messages)').all() as Array<{ name: string }>).map((column) => column.name))
+            .toContain('content_blocks_json')
         db.close()
     })
 
@@ -88,7 +90,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -100,7 +102,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7])
         db.close()
     })
 
@@ -124,7 +126,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([3, 4, 5, 6])
+        expect(result.applied).toEqual([3, 4, 5, 6, 7])
         expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
             .toContain('builtin:notifications::notify_user_in_app')
         expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
@@ -147,7 +149,7 @@ describe('schema migrations', () => {
         insert.run('archive-child', '2024', '/memory/Archive/2024', now)
         insert.run('ordinary', 'Projects', '/memory/Projects', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([6])
+        expect(applySchemaMigrations(db).applied).toEqual([6, 7])
         const rows = db.prepare('SELECT id, auto_memory_excluded FROM memory_folders ORDER BY id').all() as Array<{
             id: string
             auto_memory_excluded: number
