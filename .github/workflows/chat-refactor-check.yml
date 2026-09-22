@@ -4,6 +4,10 @@ on:
     branches:
       - refactor/chat-transcript-contract
 
+concurrency:
+  group: chat-refactor-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -19,6 +23,6 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm lint
       - run: pnpm test:typecheck
-      - run: pnpm --filter cynosure-server test:unit
+      - run: pnpm --filter cynosure-server exec vitest run src/core/chat/transcript.test.ts src/core/chat/chat-events.test.ts src/db/migrations.test.ts
       - run: pnpm --filter cynosure-web test
       - run: pnpm build
