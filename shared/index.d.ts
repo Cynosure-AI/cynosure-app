@@ -228,9 +228,13 @@ export interface MessageItem {
   blocks: ContentBlock[]
   createdAt: number
   agentId?: string
+  agentName?: string
+  agentIconUrl?: string | null
   invocationId?: string
   provider?: string | null
   model?: string | null
+  contextEvidence?: ContextEvidence[]
+  usage?: { promptTokens?: number | null; completionTokens?: number | null; contextTokens?: number | null; latencyMs?: number | null }
 }
 
 export interface ToolCallItem {
