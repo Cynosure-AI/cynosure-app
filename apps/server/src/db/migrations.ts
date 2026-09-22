@@ -123,14 +123,17 @@ const MIGRATIONS: SchemaMigration[] = [
         version: 7,
         description: 'Store provider-neutral chat content beside legacy media columns',
         up: (db) => {
-            db.exec('ALTER TABLE messages ADD COLUMN content_blocks_json TEXT')
+            const columns = db.pragma('table_info(messages)') as Array<{ name: string }>
+            if (!columns.some((column) => column.name === 'content_blocks_json')) {
+                db.exec('ALTER TABLE messages ADD COLUMN content_blocks_json TEXT')
+            }
         },
     },
     {
         version: 8,
         description: 'Persist ordered canonical chat events for replay',
         up: (db) => db.exec(`
-            CREATE TABLE chat_events (
+            CREATE TABLE IF NOT EXISTS chat_events (
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                 conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                 execution_id TEXT NOT NULL,
@@ -139,9 +142,9 @@ const MIGRATIONS: SchemaMigration[] = [
                 payload_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL
             );
-            CREATE INDEX idx_chat_events_conversation_sequence
+            CREATE INDEX IF NOT EXISTS idx_chat_events_conversation_sequence
                 ON chat_events(conversation_id, sequence);
-            CREATE UNIQUE INDEX idx_chat_events_item
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_events_item
                 ON chat_events(conversation_id, item_id) WHERE event_type = 'item.appended';
         `),
     },
