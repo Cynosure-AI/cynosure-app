@@ -135,11 +135,14 @@ const MIGRATIONS: SchemaMigration[] = [
                 conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                 execution_id TEXT NOT NULL,
                 event_type TEXT NOT NULL,
+                item_id TEXT,
                 payload_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL
             );
             CREATE INDEX idx_chat_events_conversation_sequence
                 ON chat_events(conversation_id, sequence);
+            CREATE UNIQUE INDEX idx_chat_events_item
+                ON chat_events(conversation_id, item_id) WHERE event_type = 'item.appended';
         `),
     },
 ]
