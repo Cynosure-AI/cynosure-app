@@ -247,6 +247,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         : data
       const terminalEvent = event.endsWith('-end') || event.endsWith('-error')
       if (abortController.signal.aborted && !terminalEvent) return
+      broadcast(event, payload)
       if (event === 'chat:new-message' && payload && typeof payload === 'object') {
         const message = (payload as { message?: { id?: string } }).message
         if (message?.id) {
@@ -260,7 +261,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           }
         }
       }
-      broadcast(event, payload)
     }
 
     // Registration happens before the conversation lock and before any async
