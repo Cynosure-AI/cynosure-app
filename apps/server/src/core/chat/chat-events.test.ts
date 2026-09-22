@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
-import { appendMessageEvents, lastChatEventSequence, listChatEvents } from './chat-events.js'
+import { appendChatEvent, appendMessageEvents, lastChatEventSequence, listChatEvents } from './chat-events.js'
 
 describe('canonical chat event replay', () => {
   test('persists order and idempotency across conversation boundaries', () => {
@@ -37,6 +37,15 @@ describe('canonical chat event replay', () => {
     expect(last[0].sequence).toBeGreaterThan(first[0].sequence)
     expect(lastChatEventSequence(db, 'a')).toBe(last[0].sequence)
     expect(listChatEvents(db, 'b', 0).filter(event => event.type === 'item.appended').map(event => event.payload.item.id)).toEqual(['m2'])
+    const marker = appendChatEvent(db, {
+      version: 1, type: 'execution.marker', conversationId: 'a', executionId: 'execution-1',
+      payload: { item: { type: 'execution-marker', id: 'marker-1', conversationId: 'a',
+        executionId: 'execution-1', status: 'completed', createdAt: 4 } },
+    })
+    expect(marker?.sequence).toBeGreaterThan(last[0].sequence)
+    expect(listChatEvents(db, 'a', last[0].sequence)).toMatchObject([
+      { type: 'execution.marker', payload: { item: { status: 'completed' } } },
+    ])
     db.close()
   })
 })
