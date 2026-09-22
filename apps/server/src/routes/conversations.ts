@@ -561,6 +561,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         // Fetch conversation-level metadata (context tokens + execution config)
         const convRow = db.prepare('SELECT agent_id, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; last_context_tokens: number | null; execution_config_json: string } | undefined
 
+        // Capture the cursor before reading rows so replay cannot miss a concurrent append.
+        const snapshotSequence = lastChatEventSequence(db, req.params.id)
         const rows = db
             .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
             .all(req.params.id) as {
@@ -681,7 +683,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             executionConfig,
             messages,
             transcript: messages.flatMap(toTranscriptItems),
-            lastEventSequence: lastChatEventSequence(db, req.params.id),
+            lastEventSequence: snapshotSequence,
         }
     })
 
