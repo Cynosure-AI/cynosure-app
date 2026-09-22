@@ -614,9 +614,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                         }
                     } catch { /* agent not found — ignore */ }
                 }
-                let toolCalls: unknown | undefined
+                let toolCalls: unknown[] | undefined
                 try {
-                    toolCalls = row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined
+                    const parsed = row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined
+                    toolCalls = Array.isArray(parsed) ? parsed : undefined
                 } catch { /* malformed JSON — ignore */ }
                 let imageDataUrls: string[] | undefined
                 try {
