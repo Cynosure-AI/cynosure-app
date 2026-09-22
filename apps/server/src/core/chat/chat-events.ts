@@ -15,14 +15,15 @@ type PendingChatEvent = ChatEvent extends infer Event
   ? Event extends ChatEvent ? Omit<Event, 'sequence'> : never
   : never
 
-/** The caller owns the surrounding transaction and broadcasts only after commit. */
+/** Persist an event and allocate its conversation sequence atomically. Broadcast only after commit. */
 export function appendChatEvent(db: Database.Database, event: PendingChatEvent): ChatEvent | null {
   return db.transaction(() => {
     const itemId = event.type === 'item.appended' ? event.payload.item.id : null
     const sequence = lastChatEventSequence(db, event.conversationId) + 1
     const insert = db.prepare(`
-      INSERT OR IGNORE INTO chat_events (conversation_id, sequence, execution_id, event_type, item_id, payload_json, created_at)
+      INSERT INTO chat_events (conversation_id, sequence, execution_id, event_type, item_id, payload_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(conversation_id, item_id) WHERE event_type = 'item.appended' DO NOTHING
     `).run(event.conversationId, sequence, event.executionId, event.type, itemId, JSON.stringify(event.payload), Date.now())
     if (insert.changes === 0) return null
     return { ...event, sequence } as ChatEvent
