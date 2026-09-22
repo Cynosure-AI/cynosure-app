@@ -1,4 +1,5 @@
 import { shallowMount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import InputBar from '../../components/chat/InputBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   chatStore: {
     activeConversationId: null as string | null,
     loadingMessages: false,
-    messages: [],
+    messages: [] as Array<{ role: string; content: string }>,
     activeAgentId: null,
     conversations: [],
     markConversationRead: vi.fn(),
@@ -38,6 +39,7 @@ describe('ChatView provider availability', () => {
     mocks.providerStore.providers = []
     mocks.providerStore.providersLoaded = true
     mocks.wsConnected.value = true
+    mocks.chatStore.messages = []
   })
 
   test('replaces the chat and composer with provider setup guidance', async () => {
@@ -67,5 +69,31 @@ describe('ChatView provider availability', () => {
     expect(wrapper.get('[data-testid="chat-initialising"]').findComponent(ChatPanel).exists()).toBe(true)
     expect(wrapper.find('[data-testid="chat-no-providers"]').exists()).toBe(false)
     expect(wrapper.findComponent(InputBar).exists()).toBe(false)
+  })
+
+  test('opens chat search with Ctrl+F when the conversation has searchable content', async () => {
+    mocks.providerStore.providers = [{ id: 'provider-1' }]
+    mocks.chatStore.messages = [{ role: 'user', content: 'Find this message' }]
+    const wrapper = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    const event = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, cancelable: true })
+
+    document.dispatchEvent(event)
+    await nextTick()
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(wrapper.findComponent(ChatPanel).props('searchOpen')).toBe(true)
+  })
+
+  test('leaves Ctrl+F to the browser when the conversation has no searchable content', async () => {
+    mocks.providerStore.providers = [{ id: 'provider-1' }]
+    mocks.chatStore.messages = [{ role: 'system', content: 'Internal context' }]
+    const wrapper = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    const event = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, cancelable: true })
+
+    document.dispatchEvent(event)
+    await nextTick()
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(wrapper.findComponent(ChatPanel).props('searchOpen')).toBe(false)
   })
 })

@@ -3,7 +3,7 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
@@ -48,6 +48,28 @@ const latestAgentChats = computed(() => {
 })
 
 const hasPlanningTasks = computed(() => Boolean(agentStore.planningState?.items.length))
+const hasSearchableMessages = computed(() => chatStore.messages.some(message =>
+  message.role !== 'system'
+  && message.role !== 'tool'
+  && message.content.trim().length > 0
+))
+
+function onChatSearchShortcut(event: KeyboardEvent): void {
+  if (
+    event.key.toLocaleLowerCase() !== 'f'
+    || (!event.ctrlKey && !event.metaKey)
+    || event.altKey
+    || event.shiftKey
+    || !hasSearchableMessages.value
+  ) return
+
+  event.preventDefault()
+  chatSearchOpen.value = true
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', onChatSearchShortcut)
+})
 
 watch(
   () => agentStore.planningState?.runId,
@@ -97,6 +119,7 @@ async function openRecentChat(conversation: Conversation): Promise<void> {
 }
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', onChatSearchShortcut)
   const conversationId = chatStore.activeConversationId
   if (conversationId) chatStore.markConversationRead(conversationId)
 })
