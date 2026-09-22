@@ -39,7 +39,8 @@ import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAt
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
-import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
+import type { ChatSendRequest, ConversationExecutionConfig, StoredMessageDto } from '@shared/types'
+import { blocksFromStoredMessage } from '../core/chat/transcript.js'
 import type { ChatQueueRequest } from '@shared/types'
 import {
   configureChatQueue,
@@ -58,6 +59,11 @@ import {
 } from '../core/chat/message-queue.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
+
+function persistMessageBlocks(db: ReturnType<typeof getDb>, message: StoredMessageDto): void {
+  db.prepare('UPDATE messages SET content_blocks_json = ? WHERE id = ?')
+    .run(JSON.stringify(blocksFromStoredMessage(message)), message.id)
+}
 
 function audioInputFromDataUrl(dataUrl: string): { data: string; format?: string } {
   const match = /^data:audio\/([^;,]+)(?:;[^,]*)?;base64,(.+)$/i.exec(dataUrl)
@@ -396,6 +402,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
            VALUES (?, ?, ?, ?, ?, ?, ?)`
         ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, storedAudioUrls?.length ? JSON.stringify(storedAudioUrls) : null, now)
         persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
+        persistMessageBlocks(db, {
+          id: userMsgId, conversationId, role: 'user', content: normalizedContent, createdAt: now,
+          imageDataUrls: storedImageUrls,
+          audioDataUrls: storedAudioUrls,
+          fileAttachments: storedFileAttachments.map(file => ({ name: file.name, href: toFileUrl(file.originalPath, file.name) })),
+        })
         releaseStagedChatAttachments(conversationId, stagedIds, false)
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
         if (request.fromQueue) markQueuedMessagePromoted(conversationId, userMsgId)
@@ -661,6 +673,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             assistantNow - now,
             assistantNow
           )
+          persistMessageBlocks(db, {
+            id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent,
+            videoDataUrls: videoUrls, createdAt: assistantNow,
+          })
           executionBroadcast('chat:new-message', {
             conversationId, streamId,
             message: { id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow, agentId },
@@ -747,6 +763,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             assistantNow - now,
             assistantNow
           )
+          persistMessageBlocks(db, {
+            id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow,
+          })
           executionBroadcast('chat:new-message', {
             conversationId, streamId,
             message: { id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow, agentId },
@@ -900,6 +919,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         )
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
 
+        persistMessageBlocks(db, {
+          id: assistantMsgId, conversationId, role: 'assistant', content: result.content,
+          thinking: result.thinking, imageDataUrls: result.images, createdAt: assistantNow,
+        })
         executionBroadcast('chat:new-message', {
           conversationId, streamId,
           message: { id: assistantMsgId, conversationId, role: 'assistant', content: result.content, createdAt: assistantNow, agentId },
