@@ -355,10 +355,6 @@ onUnmounted(() => {
                 v-if="job.prompt"
                 class="mt-0.5 text-xs text-theme-500 flex items-center gap-1.5"
               >
-                <Icon
-                  icon="lucide:message-square"
-                  class="w-3 h-3"
-                />
                 <span class="truncate">{{ job.prompt }}</span>
               </div>
             </div>
