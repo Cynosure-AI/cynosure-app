@@ -106,7 +106,7 @@ export const useChatStore = defineStore('chat', () => {
     const text = blocks.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     const reasoning = blocks.flatMap(block => block.type === 'reasoning' ? [block.text] : []).join('')
     const media = (type: 'image' | 'video' | 'audio') =>
-      blocks.flatMap(block => block.type === type ? [block.url] : [])
+      blocks.flatMap(block => (block.type === 'image' || block.type === 'video' || block.type === 'audio') && block.type === type ? [block.url] : [])
     let msg = messages.value.find(existing => existing.id === item.id)
     if (!msg) {
       msg = {
@@ -360,7 +360,7 @@ export const useChatStore = defineStore('chat', () => {
       messages.value = rows.map((r: StoredMessageDto) => {
         const blocks = r.blocks
         const media = (type: 'image' | 'video' | 'audio') => blocks?.flatMap(block =>
-          block.type === type ? [block.url] : [])
+          (block.type === 'image' || block.type === 'video' || block.type === 'audio') && block.type === type ? [block.url] : [])
         const base: DisplayMessage = {
           id: r.id,
           role: r.role as DisplayMessage['role'],
