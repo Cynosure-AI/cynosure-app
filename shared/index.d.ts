@@ -309,6 +309,8 @@ export interface ConversationMessagesResponse {
   messages: StoredMessageDto[]
   /** Canonical projection in persisted order; includes tool calls and results. */
   transcript: TranscriptItem[]
+  /** Cursor captured before reading messages; fetch subsequent events to close the race. */
+  lastEventSequence: number
   lastContextTokens: number | null
   executionConfig: ConversationExecutionConfig
 }
