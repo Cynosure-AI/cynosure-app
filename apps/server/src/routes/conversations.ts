@@ -18,7 +18,8 @@ import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, p
 import { listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
-import type { ConversationExecutionConfig } from '@shared/types'
+import type { ConversationExecutionConfig, StoredMessageDto } from '@shared/types'
+import { readContentBlocks, toTranscriptItems } from '../core/chat/transcript.js'
 import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
@@ -573,6 +574,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 video_urls_json: string | null
                 audio_urls_json: string | null
                 structured_content_json: string | null
+                content_blocks_json: string | null
                 memory_sources_json: string | null
                 agent_id: string | null
                 ma_codename: string | null
@@ -600,11 +602,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         const executionConfig = parseExecutionConfig(convRow?.execution_config_json)
 
-        return {
-            conversationAgentId: convRow?.agent_id ?? null,
-            lastContextTokens: convRow?.last_context_tokens ?? null,
-            executionConfig,
-            messages: rows.map((row) => {
+        const messages = rows.map((row): StoredMessageDto => {
                 let agentName: string | undefined
                 let agentIconUrl: string | null | undefined
                 if (row.agent_id) {
@@ -644,7 +642,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     name: file.name,
                     href: toFileUrl(file.originalPath, file.name),
                 }))
-                return {
+                const message: StoredMessageDto = {
                     id: row.id,
                     conversationId: row.conversation_id,
                     role: row.role,
@@ -656,7 +654,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     videoDataUrls,
                     audioDataUrls,
                     structuredContent,
-                    contextEvidence,
+                    contextEvidence: contextEvidence as StoredMessageDto['contextEvidence'],
                     fileAttachments,
                     agentId: row.agent_id || undefined,
                     agentName,
@@ -672,7 +670,15 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     latencyMs: row.latency_ms,
                     createdAt: row.created_at
                 }
-            }),
+                message.blocks = readContentBlocks(row.content_blocks_json, message)
+                return message
+            })
+        return {
+            conversationAgentId: convRow?.agent_id ?? null,
+            lastContextTokens: convRow?.last_context_tokens ?? null,
+            executionConfig,
+            messages,
+            transcript: messages.flatMap(toTranscriptItems),
         }
     })
 
