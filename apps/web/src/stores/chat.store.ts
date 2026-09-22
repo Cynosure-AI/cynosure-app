@@ -134,8 +134,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function replayChatEvents(conversationId: string, after?: number): Promise<void> {
-    let cursor = after ?? eventCursors.get(conversationId)
-    if (cursor === undefined) return
+    let cursor = after ?? eventCursors.get(conversationId) ?? 0
     try {
       while (activeConversationId.value === conversationId) {
         const { events } = await api.chat.getChatEvents(conversationId, cursor)
@@ -161,6 +160,7 @@ export const useChatStore = defineStore('chat', () => {
   // conversation's context fill while its own state is being established.
   watch(activeConversationId, () => {
     streaming.lastUsage.value = null
+    transcript.value = []
   }, { flush: 'sync' })
 
   const liveConversationSubscriptions = computed(() => {
