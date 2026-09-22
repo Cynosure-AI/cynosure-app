@@ -134,7 +134,8 @@ const MIGRATIONS: SchemaMigration[] = [
         description: 'Persist ordered canonical chat events for replay',
         up: (db) => db.exec(`
             CREATE TABLE IF NOT EXISTS chat_events (
-                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sequence INTEGER NOT NULL,
                 conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                 execution_id TEXT NOT NULL,
                 event_type TEXT NOT NULL,
@@ -142,7 +143,7 @@ const MIGRATIONS: SchemaMigration[] = [
                 payload_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_chat_events_conversation_sequence
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_events_conversation_sequence
                 ON chat_events(conversation_id, sequence);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_events_item
                 ON chat_events(conversation_id, item_id) WHERE event_type = 'item.appended';
