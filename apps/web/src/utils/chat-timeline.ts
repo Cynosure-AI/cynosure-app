@@ -112,8 +112,19 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     }
   }
 
-  // Stable sorting preserves source order when events share a millisecond.
-  entries.sort((a, b) => a.ts - b.ts)
+  // New activity carries the server's persisted order. Older rows retain the
+  // timestamp fallback until they have canonical event sequences.
+  function sequenceOf(entry: TimelineEntry): number | undefined {
+    if (entry.type === 'message' || entry.type === 'tool-fallback' || entry.type === 'compact-event') return entry.msg.sequence
+    if (entry.type === 'tool-group') return entry.group.steps.find((step) => step.sequence !== undefined)?.sequence
+    if (entry.type === 'continuation') return entry.step.sequence
+    return undefined
+  }
+  entries.sort((a, b) => {
+    const left = sequenceOf(a)
+    const right = sequenceOf(b)
+    return left !== undefined && right !== undefined ? left - right : a.ts - b.ts
+  })
 
   // ── Group sub-agent entries by invocation ───────────────────────────────
 
@@ -163,6 +174,8 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
   function delegationsFrom(entry: TimelineEntry): Delegation[] {
     if (entry.type !== 'tool-group') return []
     const delegations: Delegation[] = []
+    const resultsByCallId = new Map(entry.group.steps.flatMap((step) => step.results || [])
+      .filter((result) => result.toolCallId).map((result) => [result.toolCallId!, result]))
     for (const step of entry.group.steps) {
       for (const call of step.toolCalls || []) {
         if (call.name !== 'spawn_subagent' && call.name !== 'continue_subagent') continue
@@ -172,11 +185,14 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
           const instructions = typeof args.instructions === 'string' ? args.instructions.trim() : ''
           const context = typeof args.context === 'string' ? args.context.trim() : ''
           const continued = call.name === 'continue_subagent'
+          const result = call.id ? resultsByCallId.get(call.id) : undefined
+          const resultInvocationId = result?.invocationId || (result?.structuredContent && typeof result.structuredContent === 'object'
+            ? (result.structuredContent as { invocationId?: string }).invocationId : undefined)
           const content = directContent || (context
             ? `${continued ? '## New Context' : '## Context'}\n${context}\n\n${continued ? '## Follow-up Task' : '## Task'}\n${instructions}`
             : instructions)
           delegations.push({
-            invocationId: typeof args.invocationId === 'string' ? args.invocationId : null,
+            invocationId: typeof args.invocationId === 'string' ? args.invocationId : resultInvocationId || null,
             codename: typeof args.internalName === 'string' ? args.internalName : null,
             content,
             continued,

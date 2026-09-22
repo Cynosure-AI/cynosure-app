@@ -71,4 +71,23 @@ describe('agent runtime hard-stop latch', () => {
     })
     expect(store.activeConversationIsExecuting).toBe(false)
   })
+
+  test('replayed step events deduplicate and tool updates patch the matching round', () => {
+    const store = useAgentStore()
+    store.setActiveViewConversation('conversation')
+    const step = (sequence: number, iteration: number) => store.handleExecutionUpdate({
+      event: 'step:status', data: { conversationId: 'conversation', taskId: 'task',
+        sequence, iteration, status: 'choosing-tools', timestamp: sequence },
+    })
+    step(10, 1)
+    step(20, 2)
+    step(10, 1)
+    store.handleExecutionUpdate({ event: 'step:tools-chosen', data: {
+      conversationId: 'conversation', taskId: 'task', iteration: 1,
+      toolCalls: [{ name: 'lookup', arguments: '{}' }],
+    } })
+    expect(store.executionSteps).toHaveLength(2)
+    expect(store.executionSteps[0].toolCalls?.[0].name).toBe('lookup')
+    expect(store.executionSteps[1].toolCalls).toBeUndefined()
+  })
 })

@@ -24,6 +24,7 @@ export interface Conversation {
 
 export interface DisplayMessage {
   id: string
+  sequence?: number
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   thinking?: string
@@ -64,6 +65,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversationId = ref<string | null>(null)
   const messages = ref<DisplayMessage[]>([])
   const loadingMessages = ref(false)
+  const lastLoadedEventCursor = ref<{ conversationId: string; sequence: number } | null>(null)
   const contextWindow = ref<number | null>(null)
   const modelCost = ref<{ input: number; output: number } | null>(null)
   const modelPricing = ref<ModelPricing | null>(null)
@@ -292,17 +294,19 @@ export const useChatStore = defineStore('chat', () => {
       const lastContextTokens = response.lastContextTokens
       const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
       messages.value = rows.map((r: StoredMessageDto) => {
+        const blocks = r.contentBlocks
         const base: DisplayMessage = {
           id: r.id,
+          sequence: r.sequence,
           role: r.role as DisplayMessage['role'],
-          content: r.content,
-          thinking: r.thinking || undefined,
-          imageDataUrls: r.imageDataUrls || undefined,
-          videoDataUrls: r.videoDataUrls || undefined,
-          audioDataUrls: r.audioDataUrls || undefined,
-          structuredContent: r.structuredContent,
+          content: blocks ? blocks.flatMap((block) => block.type === 'text' ? [block.text] : []).join('') : r.content,
+          thinking: blocks ? blocks.flatMap((block) => block.type === 'reasoning' ? [block.text] : []).join('') || undefined : r.thinking || undefined,
+          imageDataUrls: blocks ? blocks.flatMap((block) => block.type === 'image' ? [block.url] : []) : r.imageDataUrls || undefined,
+          videoDataUrls: blocks ? blocks.flatMap((block) => block.type === 'video' ? [block.url] : []) : r.videoDataUrls || undefined,
+          audioDataUrls: blocks ? blocks.flatMap((block) => block.type === 'audio' ? [block.url] : []) : r.audioDataUrls || undefined,
+          structuredContent: blocks ? blocks.flatMap((block) => block.type === 'structured' ? [block.value] : [])[0] : r.structuredContent,
           contextEvidence: r.contextEvidence,
-          fileAttachments: r.fileAttachments || undefined,
+          fileAttachments: blocks ? blocks.flatMap((block) => block.type === 'file' ? [{ name: block.name, href: block.url }] : []) : r.fileAttachments || undefined,
           agentId: r.agentId || undefined,
           agentName: r.agentName || undefined,
           agentIconUrl: r.agentIconUrl ?? undefined,
@@ -324,6 +328,7 @@ export const useChatStore = defineStore('chat', () => {
         }
         return base
       })
+      lastLoadedEventCursor.value = { conversationId: id, sequence: response.latestEventSequence }
 
       // Hydrate server-side post-action state
       try {
@@ -673,6 +678,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     messages,
     loadingMessages,
+    lastLoadedEventCursor,
     memoryFolders,
     queuedMessages,
     queuePaused,

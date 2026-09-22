@@ -145,31 +145,6 @@ export interface TranscriptionResponse {
     }
 }
 
-export interface StoredMessage {
-    id: string
-    conversationId: string
-    role: string
-    content: string
-    thinking?: string
-    toolCalls?: unknown[]
-    toolCallId?: string
-    imageDataUrls?: string[]
-    videoDataUrls?: string[]
-    audioDataUrls?: string[]
-    structuredContent?: unknown
-    fileAttachments?: { name: string; href?: string }[]
-    agentId?: string
-    agentName?: string
-    agentIconUrl?: string | null
-    provider?: string
-    model?: string
-    promptTokens?: number
-    completionTokens?: number
-    contextTokens?: number
-    latencyMs?: number
-    createdAt: number
-}
-
 // ── MCP ─────────────────────────────────────────────────────────────────────
 
 export interface McpServerInfo {
@@ -632,13 +607,14 @@ export interface CronJob {
 export interface ExecutionStepRecord {
     id: string
     conversationId: string
+    sequence?: number
     taskId?: string
     iteration: number
     status: string
     message?: string
     plan?: string
     toolCalls?: unknown[]
-    results?: { name: string; success: boolean; output: string; error?: string; images?: string[] }[]
+    results?: { toolCallId?: string; name: string; success: boolean; output: string; error?: string; images?: string[]; structuredContent?: unknown }[]
     evaluation?: { taskComplete: boolean; success: boolean; reasoning: string }
     maCodename?: string
     maAgentName?: string

@@ -119,6 +119,69 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 7,
+        description: 'Persist ordered canonical chat events',
+        up: (db) => db.exec(`
+            CREATE TABLE IF NOT EXISTS chat_events (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                execution_id TEXT NOT NULL,
+                event_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_chat_events_conversation_sequence
+                ON chat_events(conversation_id, sequence);
+        `),
+    },
+    {
+        version: 8,
+        description: 'Store provider-neutral message content blocks',
+        up: (db) => {
+            const columns = db.pragma('table_info(messages)') as Array<{ name: string }>
+            if (!columns.some((column) => column.name === 'content_blocks_json')) {
+                db.exec('ALTER TABLE messages ADD COLUMN content_blocks_json TEXT')
+            }
+            const contentBlocks = `(
+                SELECT COALESCE(json_group_array(json(block)), '[]') FROM (
+                    SELECT 0 AS bucket, 0 AS position, json_object('type', 'text', 'text', NEW.content) AS block
+                    WHERE NEW.content <> ''
+                    UNION ALL
+                    SELECT 1, 0, json_object('type', 'reasoning', 'text', NEW.thinking)
+                    WHERE NEW.thinking IS NOT NULL AND NEW.thinking <> ''
+                    UNION ALL
+                    SELECT 2, CAST(j.key AS INTEGER), json_object('type', 'image', 'artifactId', j.value, 'url', j.value)
+                    FROM json_each(CASE WHEN json_valid(NEW.image_urls_json) THEN NEW.image_urls_json ELSE '[]' END) AS j
+                    UNION ALL
+                    SELECT 3, CAST(j.key AS INTEGER), json_object('type', 'video', 'artifactId', j.value, 'url', j.value)
+                    FROM json_each(CASE WHEN json_valid(NEW.video_urls_json) THEN NEW.video_urls_json ELSE '[]' END) AS j
+                    UNION ALL
+                    SELECT 4, CAST(j.key AS INTEGER), json_object('type', 'audio', 'artifactId', j.value, 'url', j.value)
+                    FROM json_each(CASE WHEN json_valid(NEW.audio_urls_json) THEN NEW.audio_urls_json ELSE '[]' END) AS j
+                    UNION ALL
+                    SELECT 5, 0, json_object('type', 'structured', 'value',
+                        CASE WHEN json_valid(NEW.structured_content_json) THEN json(NEW.structured_content_json)
+                            ELSE NEW.structured_content_json END)
+                    WHERE NEW.structured_content_json IS NOT NULL
+                    ORDER BY bucket, position
+                )
+            )`
+            db.exec(`
+                CREATE TRIGGER IF NOT EXISTS message_content_blocks_insert AFTER INSERT ON messages
+                WHEN NEW.content_blocks_json IS NULL
+                BEGIN
+                    UPDATE messages SET content_blocks_json = ${contentBlocks} WHERE id = NEW.id;
+                END;
+                CREATE TRIGGER IF NOT EXISTS message_content_blocks_update
+                AFTER UPDATE OF content, thinking, image_urls_json, video_urls_json, audio_urls_json, structured_content_json ON messages
+                WHEN NEW.content_blocks_json IS OLD.content_blocks_json
+                BEGIN
+                    UPDATE messages SET content_blocks_json = ${contentBlocks} WHERE id = NEW.id;
+                END;
+            `)
+            db.exec('UPDATE messages SET content = content WHERE content_blocks_json IS NULL')
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

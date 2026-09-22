@@ -119,6 +119,30 @@ describe('conversation message attachment resolution', () => {
         }])
     })
 
+    test('returns a message snapshot cursor and explicit execution step order', async () => {
+        const db = getDb()
+        db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)')
+            .run('m1', 'c1', 'user', 'Hello', 1)
+        const insertEvent = db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
+        const messageEvent = insertEvent.run('c1', 'e1', JSON.stringify({ type: 'transcript-item', item: { type: 'message', id: 'm1' } }), 2)
+        const stepEvent = insertEvent.run('c1', 'e1', JSON.stringify({ type: 'execution-step', taskId: 't1', iteration: 1, status: 'executing' }), 3)
+        db.prepare('INSERT INTO execution_steps (id, conversation_id, task_id, iteration, status, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('s1', 'c1', 't1', 1, 'executing', 3)
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        try {
+            const messages = await app.inject({ method: 'GET', url: '/api/chat/conversations/c1/messages' })
+            expect(messages.statusCode).toBe(200)
+            expect(messages.json().latestEventSequence).toBe(Number(messageEvent.lastInsertRowid))
+            expect(messages.json().messages[0]).toMatchObject({ sequence: Number(messageEvent.lastInsertRowid), contentBlocks: [{ type: 'text', text: 'Hello' }] })
+            const steps = await app.inject({ method: 'GET', url: '/api/chat/conversations/c1/steps' })
+            expect(steps.json()[0].sequence).toBe(Number(stepEvent.lastInsertRowid))
+        } finally {
+            await app.close()
+        }
+    })
+
     test('lists persisted document uploads with their conversation metadata', async () => {
         const now = Date.now()
         const db = getDb()

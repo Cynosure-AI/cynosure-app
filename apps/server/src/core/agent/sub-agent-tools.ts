@@ -170,7 +170,13 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 )
                 broadcast('chat:new-message', {
                     conversationId, streamId: executor.lastStreamId,
-                    message: { id: messageId, conversationId, role: 'assistant', content: result.content, createdAt, agentId: agentData.id },
+                    message: {
+                        id: messageId, conversationId, role: 'assistant', content: result.content,
+                        thinking: result.thinking, imageDataUrls: result.images, createdAt,
+                        agentId: agentData.id, agentName: agentData.name, agentIconUrl: agentData.iconUrl || null,
+                        maCodename: eventMeta.maCodename, maAgentName: eventMeta.maAgentName,
+                        maInvocationId: invocationId,
+                    },
                 })
             }
 

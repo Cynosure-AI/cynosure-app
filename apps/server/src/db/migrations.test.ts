@@ -24,7 +24,7 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect((db.prepare(`PRAGMA table_info(memory_knowledge_text_units)`).all() as Array<{ name: string }>).map((column) => column.name)).toContain('summary')
@@ -49,6 +49,36 @@ describe('schema migrations', () => {
         db.close()
     })
 
+    test('backfills and maintains canonical content blocks for legacy message writes', () => {
+        const db = memoryDb()
+        db.exec(BASELINE_SCHEMA)
+        db.pragma('user_version = 1')
+        db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, image_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('old', 'c1', 'user', 'old text', '["/old.png"]', 1)
+        applySchemaMigrations(db)
+        const read = (id: string) => JSON.parse((db.prepare('SELECT content_blocks_json FROM messages WHERE id = ?').get(id) as { content_blocks_json: string }).content_blocks_json)
+        expect(read('old')).toEqual([
+            { type: 'text', text: 'old text' },
+            { type: 'image', artifactId: '/old.png', url: '/old.png' },
+        ])
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, audio_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('new', 'c1', 'user', 'new text', '["/new.wav"]', 2)
+        expect(read('new')).toEqual([
+            { type: 'text', text: 'new text' },
+            { type: 'audio', artifactId: '/new.wav', url: '/new.wav' },
+        ])
+        db.prepare('UPDATE messages SET thinking = ?, structured_content_json = ? WHERE id = ?')
+            .run('reasoned', '{"score":2}', 'new')
+        expect(read('new')).toEqual([
+            { type: 'text', text: 'new text' },
+            { type: 'reasoning', text: 'reasoned' },
+            { type: 'audio', artifactId: '/new.wav', url: '/new.wav' },
+            { type: 'structured', value: { score: 2 } },
+        ])
+        db.close()
+    })
+
     test('the baseline schema creates the expected core tables', () => {
         const db = memoryDb()
         applySchemaMigrations(db)
@@ -58,7 +88,7 @@ describe('schema migrations', () => {
             'agents', 'conversations', 'messages', 'providers', 'settings',
             'memory_folders', 'memory_file_index', 'memory_documents',
             'memory_knowledge_entities', 'memory_knowledge_assertions',
-            'dream_progress', 'memory_index_jobs', 'subagent_sessions',
+            'dream_progress', 'memory_index_jobs', 'subagent_sessions', 'chat_events',
         ]) {
             expect(names).toContain(expected)
         }
@@ -88,7 +118,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -100,7 +130,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
         db.close()
     })
 
@@ -124,7 +154,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([3, 4, 5, 6])
+        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8])
         expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
             .toContain('builtin:notifications::notify_user_in_app')
         expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
@@ -147,7 +177,7 @@ describe('schema migrations', () => {
         insert.run('archive-child', '2024', '/memory/Archive/2024', now)
         insert.run('ordinary', 'Projects', '/memory/Projects', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([6])
+        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8])
         const rows = db.prepare('SELECT id, auto_memory_excluded FROM memory_folders ORDER BY id').all() as Array<{
             id: string
             auto_memory_excluded: number

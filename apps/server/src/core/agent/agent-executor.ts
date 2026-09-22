@@ -368,7 +368,7 @@ export class AgentExecutor {
                     this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
                     this.emit('step:tools-chosen', {
                         taskId, conversationId, iteration: round + 1,
-                        toolCalls: visibleToolCalls.map(tc => ({ name: tc.function.name, arguments: tc.function.arguments }))
+                        toolCalls: visibleToolCalls.map(tc => ({ id: tc.id, name: tc.function.name, arguments: tc.function.arguments }))
                     })
                 }
 
@@ -416,6 +416,7 @@ export class AgentExecutor {
                     this.emit('step:executed', {
                         taskId, conversationId, iteration: round + 1,
                         results: visibleToolResults.map(tr => ({
+                            toolCallId: tr.toolCallId,
                             name: tr.name,
                             success: tr.success,
                             output: tr.output,
@@ -1211,7 +1212,9 @@ export class AgentExecutor {
         )
         this.config.broadcast('chat:new-message', {
             conversationId, streamId,
-            message: { id, conversationId, role: 'assistant', content: assistantContent || '', createdAt, agentId },
+            message: { id, conversationId, role: 'assistant', content: assistantContent || '',
+                thinking, createdAt, agentId, maCodename: meta?.maCodename,
+                maAgentName: meta?.maAgentName, maInvocationId: meta?.maInvocationId },
         })
     }
 

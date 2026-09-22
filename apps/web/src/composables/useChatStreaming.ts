@@ -60,7 +60,7 @@ export interface ChatStreamingState {
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
-    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
+    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; role: string; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
     handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
     handleCompactStart(data: { conversationId: string }): void
     handleCompactError(data: { conversationId: string; error: string }): void
@@ -826,8 +826,10 @@ export function useChatStreaming(
         message: {
             id: string
             conversationId: string
+            sequence?: number
             role: string
             content: string
+            thinking?: string
             createdAt: number
             imageDataUrls?: string[]
             videoDataUrls?: string[]
@@ -842,6 +844,21 @@ export function useChatStreaming(
             maInvocationId?: string
         }
     }): void {
+        function hydratePersisted(target: DisplayMessage): void {
+            if (data.message.sequence !== undefined) target.sequence = data.message.sequence
+            target.content = data.message.content
+            if (data.message.thinking !== undefined) target.thinking = data.message.thinking
+            if (data.message.imageDataUrls) target.imageDataUrls = data.message.imageDataUrls
+            if (data.message.videoDataUrls) target.videoDataUrls = data.message.videoDataUrls
+            if (data.message.audioDataUrls) target.audioDataUrls = data.message.audioDataUrls
+            if (data.message.structuredContent !== undefined) target.structuredContent = data.message.structuredContent
+            if (data.message.fileAttachments?.length) {
+                for (const attachment of target.fileAttachments || []) {
+                    if (attachment.href?.startsWith('blob:')) URL.revokeObjectURL(attachment.href)
+                }
+                target.fileAttachments = data.message.fileAttachments
+            }
+        }
         // Bump updatedAt so the conversation shows as recently updated / unread
         const conv = conversations.value.find(c => c.id === data.conversationId)
         if (conv) {
@@ -855,12 +872,7 @@ export function useChatStreaming(
         if (data.conversationId === activeConversationId.value) {
             const existing = messages.value.find(message => message.id === data.message.id)
             if (existing) {
-                if (data.message.fileAttachments?.length) {
-                    for (const attachment of existing.fileAttachments || []) {
-                        if (attachment.href?.startsWith('blob:')) URL.revokeObjectURL(attachment.href)
-                    }
-                    existing.fileAttachments = data.message.fileAttachments
-                }
+                hydratePersisted(existing)
                 return
             }
             // Replace the temporary round ID with the persisted ID before actions
@@ -869,14 +881,17 @@ export function useChatStreaming(
                 const round = findMsgByStreamId(data.streamId)
                 if (round) {
                     round.id = data.message.id
+                    hydratePersisted(round)
                     return
                 }
             }
             if (!messages.value.some(m => m.id === data.message.id)) {
                 messages.value.push({
                     id: data.message.id,
+                    sequence: data.message.sequence,
                     role: data.message.role as DisplayMessage['role'],
                     content: data.message.content,
+                    thinking: data.message.thinking,
                     imageDataUrls: data.message.imageDataUrls,
                     videoDataUrls: data.message.videoDataUrls,
                     audioDataUrls: data.message.audioDataUrls,

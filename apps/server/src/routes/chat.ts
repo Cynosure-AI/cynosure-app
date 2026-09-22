@@ -16,13 +16,10 @@ import type {
   ChatMessage,
   ContentPart,
   RegistryAwareToolDefinition,
-  VideoGenerationJob,
-  VideoGenerationModelInfo,
-  VideoGenerationRequest,
 } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
-import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, materializeMediaBuffer, toFileUrl } from '../core/artifacts/image-artifacts.js'
+import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
 import { listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
@@ -39,6 +36,9 @@ import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAt
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
+import { listChatEvents } from '../core/chat/transcript.js'
+import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
+import { executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
 import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 import type { ChatQueueRequest } from '@shared/types'
 import {
@@ -58,26 +58,6 @@ import {
 } from '../core/chat/message-queue.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
-
-function audioInputFromDataUrl(dataUrl: string): { data: string; format?: string } {
-  const match = /^data:audio\/([^;,]+)(?:;[^,]*)?;base64,(.+)$/i.exec(dataUrl)
-  if (!match) {
-    throw new Error('Attached audio must be a base64 audio data URL')
-  }
-  const rawFormat = match[1].toLowerCase()
-  const formatAliases: Record<string, string> = {
-    mpeg: 'mp3',
-    mp4: 'm4a',
-    'x-m4a': 'm4a',
-    'x-wav': 'wav',
-    wave: 'wav',
-    vorbis: 'ogg',
-  }
-  return {
-    format: formatAliases[rawFormat] || rawFormat,
-    data: match[2],
-  }
-}
 
 function usedToolKeysFromNames(
   tools: RegistryAwareToolDefinition[],
@@ -121,86 +101,22 @@ function clearPendingHITLForConversation(conversationId: string): void {
   getEventBus().emit('hitl:clear-conversation', { conversationId })
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'))
-      return
-    }
-    const timer = setTimeout(resolve, ms)
-    signal?.addEventListener('abort', () => {
-      clearTimeout(timer)
-      reject(new DOMException('Aborted', 'AbortError'))
-    }, { once: true })
-  })
-}
-
-function isTerminalVideoStatus(status: string): boolean {
-  return ['completed', 'failed', 'cancelled', 'expired'].includes(status.toLowerCase())
-}
-
-async function pollVideoGeneration(
-  gateway: ReturnType<typeof getGateway>,
-  providerId: string,
-  initialJob: VideoGenerationJob,
-  signal?: AbortSignal,
-): Promise<VideoGenerationJob> {
-  let job = initialJob
-  const deadline = Date.now() + 10 * 60 * 1000
-  while (!isTerminalVideoStatus(job.status) && Date.now() < deadline) {
-    await sleep(4_000, signal)
-    job = await gateway.getVideoGenerationJob(job.id, providerId)
-  }
-  if (!isTerminalVideoStatus(job.status)) {
-    throw new Error('Video generation did not finish before the polling timeout')
-  }
-  if (job.status.toLowerCase() !== 'completed') {
-    throw new Error(job.error || `Video generation ${job.status}`)
-  }
-  return job
-}
-
-function buildVideoGenerationRequest(input: {
-  model: string
-  prompt: string
-  imageDataUrls?: string[]
-  videoModel?: VideoGenerationModelInfo
-  signal?: AbortSignal
-}): VideoGenerationRequest {
-  const request: VideoGenerationRequest = {
-    model: input.model,
-    prompt: input.prompt,
-    signal: input.signal,
-  }
-  const images = (input.imageDataUrls || []).filter((url) => typeof url === 'string' && url.trim())
-  if (!images.length) return request
-
-  const supportedFrames = new Set(input.videoModel?.supported_frame_images || [])
-  if (supportedFrames.has('first_frame')) {
-    request.frame_images = [{
-      type: 'image_url',
-      image_url: { url: images[0] },
-      frame_type: 'first_frame',
-    }]
-    if (images[1] && supportedFrames.has('last_frame')) {
-      request.frame_images.push({
-        type: 'image_url',
-        image_url: { url: images[1] },
-        frame_type: 'last_frame',
-      })
-    }
-    return request
-  }
-
-  request.input_references = images.map((url) => ({
-    type: 'image_url',
-    image_url: { url },
-  }))
-  return request
-}
-
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
+
+  app.get<{ Params: { id: string }; Querystring: { after?: string; limit?: string } }>('/conversations/:id/events', async (req, reply) => {
+    const db = getDb()
+    if (!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(req.params.id)) {
+      return reply.status(404).send({ error: 'Conversation not found' })
+    }
+    const after = Number(req.query.after ?? 0)
+    const limit = Number(req.query.limit ?? 1000)
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 5000) {
+      return reply.status(400).send({ error: 'Invalid event cursor or limit' })
+    }
+    const latestSequence = (db.prepare('SELECT MAX(sequence) AS sequence FROM chat_events WHERE conversation_id = ?').get(req.params.id) as { sequence: number | null }).sequence ?? 0
+    return { events: listChatEvents(db, req.params.id, after, limit), latestSequence }
+  })
 
   // GET /api/chat/attachment-config — get attachment context settings
   app.get('/attachment-config', async () => {
@@ -413,7 +329,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           content: normalizedContent,
           imageDataUrls: storedImageUrls,
           audioDataUrls: storedAudioUrls,
-          fileAttachments: storedFileAttachments.map(file => ({ name: file.name, href: toFileUrl(file.originalPath, file.name) })),
+          fileAttachments: storedFileAttachments.map(file => ({ id: file.id, name: file.name, href: toFileUrl(file.originalPath, file.name) })),
           createdAt: now,
         },
       })
@@ -601,169 +517,51 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           ?.some((modality) => modality.toLowerCase() === 'video') === true
         const isTranscriptionOutputModel = resolvedModelInfo?.outputModalities
           ?.some((modality) => modality.toLowerCase() === 'transcription') === true
-        if (isVideoOutputModel) {
-          attemptedVideoOutput = true
-          executionBroadcast('chat:stream-start', {
-            streamId,
-            conversationId,
-            agentId: agentId || undefined,
-            agentName: chatAgentName,
-            agentIconUrl: chatAgentIconUrl,
-          })
-          executionBroadcast('chat:stream-chunk', {
-            streamId,
-            conversationId,
-            content: 'Generating video...',
-          })
-
-          const videoModel = await gateway.listVideoModels(responseProvider)
-            .then((models) => models.find((item) => item.id === responseModel || item.canonical_slug === responseModel))
-            .catch(() => undefined)
-          const submittedJob = await gateway.generateVideo(buildVideoGenerationRequest({
-            model: responseModel,
-            prompt: normalizedContent,
-            imageDataUrls: providerImageDataUrls,
-            videoModel,
-            signal: abortController.signal,
-          }), responseProvider)
-          const completedJob = await pollVideoGeneration(gateway, responseProvider, submittedJob, abortController.signal)
-          abortController.signal.throwIfAborted()
-          const videoContent = await gateway.getVideoGenerationContent(completedJob.id, 0, responseProvider)
-          abortController.signal.throwIfAborted()
-          const videoArtifact = materializeMediaBuffer(
-            videoContent.data,
-            videoContent.contentType,
-            conversationId,
-            'video',
-          )
-          const videoUrls = [videoArtifact.url]
-
-          executionBroadcast('chat:stream-videos', { streamId, conversationId, videos: videoUrls })
-          executionBroadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
-          abortController.signal.throwIfAborted()
-
-          const assistantMsgId = nanoid()
-          const assistantNow = Date.now()
-          const assistantContent = 'Generated video.'
-          db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, video_urls_json, generated_media, agent_id, provider, model, latency_ms, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).run(
-            assistantMsgId,
-            conversationId,
-            'assistant',
-            assistantContent,
-            JSON.stringify(videoUrls),
-            1,
-            agentId,
-            responseProvider,
-            responseModel,
-            assistantNow - now,
-            assistantNow
-          )
-          executionBroadcast('chat:new-message', {
-            conversationId, streamId,
-            message: { id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow, agentId },
-          })
-          db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
-
-          if (generateQuickResponsesPref === true) {
-            void generateQuickResponses({
-              conversationId,
-              messageId: assistantMsgId,
-              userMessage: normalizedContent,
-              assistantResponse: assistantContent,
-              broadcast,
-              providerId: responseProvider,
-            })
-          }
-
-          return { streamId, completed: true }
-        }
-
-        if (isTranscriptionOutputModel) {
-          if (!providerAudioDataUrls?.length) {
+        if (isVideoOutputModel || isTranscriptionOutputModel) {
+          if (isTranscriptionOutputModel && !providerAudioDataUrls?.length) {
             throw new Error('Transcription models require an attached audio file.')
           }
-
+          attemptedVideoOutput = isVideoOutputModel
           executionBroadcast('chat:stream-start', {
-            streamId,
-            conversationId,
-            agentId: agentId || undefined,
-            agentName: chatAgentName,
-            agentIconUrl: chatAgentIconUrl,
+            streamId, conversationId, agentId: agentId || undefined,
+            agentName: chatAgentName, agentIconUrl: chatAgentIconUrl,
           })
           executionBroadcast('chat:stream-chunk', {
-            streamId,
-            conversationId,
-            content: 'Transcribing audio...',
+            streamId, conversationId,
+            content: isVideoOutputModel ? 'Generating video...' : 'Transcribing audio...',
           })
 
-          const transcripts: string[] = []
-          let promptTokens = 0
-          let completionTokens = 0
-          let totalTokens = 0
-          for (const audioUrl of providerAudioDataUrls) {
-            abortController.signal.throwIfAborted()
-            const transcription = await gateway.transcribeAudio({
-              model: responseModel,
-              inputAudio: audioInputFromDataUrl(audioUrl),
-              signal: abortController.signal,
-            }, responseProvider)
-            abortController.signal.throwIfAborted()
-            if (transcription.text.trim()) transcripts.push(transcription.text.trim())
-            promptTokens += transcription.usage?.input_tokens ?? 0
-            completionTokens += transcription.usage?.output_tokens ?? 0
-            totalTokens += transcription.usage?.total_tokens ?? 0
+          const mediaInput = {
+            gateway, conversationId, model: responseModel, providerId: responseProvider,
+            prompt: normalizedContent, imageDataUrls: providerImageDataUrls,
+            audioDataUrls: providerAudioDataUrls, signal: abortController.signal,
           }
-
-          const assistantContent = transcripts.length
-            ? transcripts.join('\n\n')
-            : '(No transcription text returned.)'
-          executionBroadcast('chat:stream-chunk', {
-            streamId,
-            conversationId,
-            content: `\n\n${assistantContent}`,
-          })
+          const media = isVideoOutputModel
+            ? await executeVideoModel(mediaInput)
+            : await executeTranscriptionModel(mediaInput)
+          abortController.signal.throwIfAborted()
+          if (media.videos?.length) {
+            executionBroadcast('chat:stream-videos', { streamId, conversationId, videos: media.videos })
+          } else {
+            executionBroadcast('chat:stream-chunk', { streamId, conversationId, content: `\n\n${media.content}` })
+          }
           executionBroadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
           abortController.signal.throwIfAborted()
 
-          const assistantMsgId = nanoid()
-          const assistantNow = Date.now()
-          db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).run(
-            assistantMsgId,
-            conversationId,
-            'assistant',
-            assistantContent,
-            agentId,
-            responseProvider,
-            responseModel,
-            promptTokens || null,
-            completionTokens || null,
-            totalTokens || null,
-            assistantNow - now,
-            assistantNow
-          )
-          executionBroadcast('chat:new-message', {
-            conversationId, streamId,
-            message: { id: assistantMsgId, conversationId, role: 'assistant', content: assistantContent, createdAt: assistantNow, agentId },
+          const assistant = persistAssistantTurn(db, executionBroadcast, {
+            conversationId, streamId, content: media.content, videos: media.videos,
+            generatedMedia: Boolean(media.videos?.length), agentId,
+            provider: responseProvider, model: responseModel, startedAt: now,
+            promptTokens: media.promptTokens || null,
+            completionTokens: media.completionTokens || null,
+            contextTokens: media.contextTokens || null,
           })
-          db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
-
           if (generateQuickResponsesPref === true) {
             void generateQuickResponses({
-              conversationId,
-              messageId: assistantMsgId,
-              userMessage: normalizedContent,
-              assistantResponse: assistantContent,
-              broadcast,
-              providerId: responseProvider,
+              conversationId, messageId: assistant.id, userMessage: normalizedContent,
+              assistantResponse: media.content, broadcast, providerId: responseProvider,
             })
           }
-
           return { streamId, completed: true }
         }
 
@@ -874,41 +672,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           closePlanningRun(planningRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
 
-        // Save final assistant message with metadata
-        const assistantMsgId = nanoid()
-        const assistantNow = Date.now()
-        db.prepare(
-          `INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, generated_media, memory_sources_json, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(
-          assistantMsgId,
-          conversationId,
-          'assistant',
-          result.content,
-          result.thinking || null,
-          result.images.length ? JSON.stringify(result.images) : null,
-          result.images.length ? 1 : 0,
-          turnEvidence.length ? JSON.stringify(turnEvidence) : null,
-          agentId,
-          responseProvider,
-          responseModel,
-          result.usage?.promptTokens ?? null,
-          result.usage?.completionTokens ?? null,
-          result.contextTokens ?? null,
-          result.usage ? assistantNow - now : null,
-          assistantNow
-        )
-        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
-
-        executionBroadcast('chat:new-message', {
-          conversationId, streamId,
-          message: { id: assistantMsgId, conversationId, role: 'assistant', content: result.content, createdAt: assistantNow, agentId },
+        const assistant = persistAssistantTurn(db, executionBroadcast, {
+          conversationId, streamId, content: result.content, thinking: result.thinking,
+          images: result.images, generatedMedia: result.images.length > 0,
+          contextEvidence: turnEvidence, agentId, provider: responseProvider, model: responseModel,
+          promptTokens: result.usage?.promptTokens, completionTokens: result.usage?.completionTokens,
+          contextTokens: result.contextTokens, startedAt: result.usage ? now : undefined,
         })
 
         if (generateQuickResponsesPref === true) {
           void generateQuickResponses({
             conversationId,
-            messageId: assistantMsgId,
+            messageId: assistant.id,
             userMessage: normalizedContent,
             assistantResponse: result.content,
             broadcast,
@@ -937,22 +712,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           ? `Video generation failed: ${(err as Error).message}`
           : (err as Error).message
         if (attemptedVideoOutput) {
-          const assistantNow = Date.now()
-          db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, agent_id, provider, model, latency_ms, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).run(
-            nanoid(),
-            conversationId,
-            'assistant',
-            errorMessage,
-            agentId,
-            responseProvider,
-            responseModel,
-            assistantNow - now,
-            assistantNow
-          )
-          db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(assistantNow, conversationId)
+          persistAssistantTurn(db, executionBroadcast, {
+            conversationId, streamId, content: errorMessage, agentId,
+            provider: responseProvider, model: responseModel, startedAt: now,
+          })
         }
         broadcast('chat:stream-error', { streamId, conversationId, error: errorMessage })
         return { streamId }

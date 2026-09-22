@@ -224,6 +224,7 @@ async function resetConversations(db = getDb()): Promise<void> {
     db.prepare('DELETE FROM tasks').run()
     db.prepare('DELETE FROM execution_steps').run()
     db.prepare('DELETE FROM dream_runs').run()
+    db.prepare('DELETE FROM chat_events').run()
     db.prepare('DELETE FROM messages').run()
     db.prepare('DELETE FROM conversations').run()
     await dropConversationAttachmentIndex()
@@ -553,12 +554,14 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const db = getDb()
                 const conversations = db.prepare('SELECT * FROM conversations ORDER BY created_at').all()
                 const messages = db.prepare('SELECT * FROM messages ORDER BY created_at').all()
+                const chatEvents = db.prepare('SELECT * FROM chat_events ORDER BY sequence').all()
                 const subagentSessions = db.prepare('SELECT * FROM subagent_sessions ORDER BY created_at').all()
                 const messageAttachments = db.prepare('SELECT * FROM message_attachments ORDER BY created_at').all()
                 const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
                 archive.append(JSON.stringify(messages, null, 2), { name: 'conversations/messages.json' })
+                archive.append(JSON.stringify(chatEvents, null, 2), { name: 'conversations/chat_events.json' })
                 archive.append(JSON.stringify(subagentSessions, null, 2), { name: 'conversations/subagent_sessions.json' })
                 archive.append(JSON.stringify(messageAttachments, null, 2), { name: 'conversations/message_attachments.json' })
                 archive.append(JSON.stringify(tasks, null, 2), { name: 'conversations/tasks.json' })
@@ -1183,10 +1186,11 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                 `INSERT OR REPLACE INTO messages (
                                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                                     provider, model, prompt_tokens, completion_tokens, context_tokens,
-                                    latency_ms, image_urls_json, video_urls_json, agent_id, memory_sources_json, thinking,
-                                    audio_urls_json, structured_content_json, created_at
+                                    latency_ms, image_urls_json, video_urls_json, agent_id, ma_codename,
+                                    ma_agent_name, ma_invocation_id, generated_media, memory_sources_json, thinking,
+                                    audio_urls_json, structured_content_json, content_blocks_json, created_at
                                  )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 m.id, m.conversation_id, m.role, m.content,
                                 m.tool_calls_json || null, m.tool_call_id || null,
@@ -1194,14 +1198,36 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                 m.prompt_tokens ?? null, m.completion_tokens ?? null,
                                 m.context_tokens ?? null,
                                 m.latency_ms ?? null, m.image_urls_json || null, m.video_urls_json || null, m.agent_id || null,
-                                m.memory_sources_json || null, m.thinking || null,
+                                m.ma_codename || null, m.ma_agent_name || null, m.ma_invocation_id || null,
+                                m.generated_media ?? 0, m.memory_sources_json || null, m.thinking || null,
                                 m.audio_urls_json || null,
-                                m.structured_content_json || null,
+                                m.structured_content_json || null, m.content_blocks_json || null,
                                 m.created_at || Date.now()
                             )
                             importedMessageIds.add(m.id as string)
                         } catch (e) {
                             res.errors.push(`Message: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Canonical replay history; old archives without this file still restore messages.
+                const chatEventsEntry = zip.getEntry('conversations/chat_events.json')
+                if (chatEventsEntry) {
+                    const events = JSON.parse(chatEventsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    const clearEvents = db.prepare('DELETE FROM chat_events WHERE conversation_id = ?')
+                    for (const conversationId of importedConversationIds) clearEvents.run(conversationId)
+                    const insertEvent = db.prepare(`
+                        INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at)
+                        VALUES (?, ?, ?, ?)
+                    `)
+                    for (const event of events) {
+                        if (!importedConversationIds.has(event.conversation_id as string)) continue
+                        try {
+                            insertEvent.run(event.conversation_id, event.execution_id, event.event_json, event.created_at)
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Chat event: ${(e as Error).message}`)
                         }
                     }
                 }

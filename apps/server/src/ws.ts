@@ -1,4 +1,6 @@
 import type { WebSocket } from 'ws'
+import { getDb } from './db/database.js'
+import { appendChatEvent, legacyChatEvent } from './core/chat/transcript.js'
 
 /** Per-client subscription state */
 interface ClientState {
@@ -86,6 +88,12 @@ function canReceiveEvent(state: ClientState, event: string, data: unknown): bool
 
 /** Broadcast a typed event to connected clients, scoped by conversation when possible. */
 export function broadcast(event: string, data: unknown): void {
+  // Persist before delivery: reconnecting clients can resume after their last sequence.
+  if (event !== 'chat:event' && (event.startsWith('chat:') || event === 'agent:execution-update') && data && typeof data === 'object'
+    && legacyChatEvent(event, data as Record<string, unknown>)) {
+    const canonical = appendChatEvent(getDb(), event, data as Record<string, unknown>)
+    if (canonical) broadcast('chat:event', canonical)
+  }
   const msg = JSON.stringify({ event, data })
   for (const [ws, state] of clients) {
     if (!canReceiveEvent(state, event, data)) continue

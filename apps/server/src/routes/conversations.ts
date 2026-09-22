@@ -18,10 +18,11 @@ import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, p
 import { listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
-import type { ConversationExecutionConfig } from '@shared/types'
+import type { ContentBlock, ConversationExecutionConfig } from '@shared/types'
 import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
+import { messageContentBlocks } from '../core/chat/transcript.js'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
@@ -169,6 +170,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 thinking: string | null
                 audio_urls_json: string | null
                 structured_content_json: string | null
+                content_blocks_json: string | null
                 context_tokens: number | null
                 generated_media: number
                 created_at: number
@@ -573,6 +575,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 video_urls_json: string | null
                 audio_urls_json: string | null
                 structured_content_json: string | null
+                content_blocks_json: string | null
                 memory_sources_json: string | null
                 agent_id: string | null
                 ma_codename: string | null
@@ -588,13 +591,20 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             }[]
 
         const attachmentRows = db.prepare(
-            'SELECT message_id, name, original_path FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
-        ).all(req.params.id) as { message_id: string; name: string; original_path: string | null }[]
-        const attachmentsByMessage = new Map<string, { name: string; originalPath: string }[]>()
+            'SELECT id, message_id, name, original_path FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
+        ).all(req.params.id) as { id: string; message_id: string; name: string; original_path: string | null }[]
+        const sequencedMessageRows = db.prepare(`
+            SELECT sequence, json_extract(event_json, '$.item.id') AS message_id
+            FROM chat_events
+            WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
+              AND json_extract(event_json, '$.item.type') = 'message'
+        `).all(req.params.id) as { sequence: number; message_id: string }[]
+        const sequenceByMessageId = new Map(sequencedMessageRows.map((row) => [row.message_id, row.sequence]))
+        const attachmentsByMessage = new Map<string, { id: string; name: string; originalPath: string }[]>()
         for (const row of attachmentRows) {
             if (!row.original_path) continue
             const existing = attachmentsByMessage.get(row.message_id) || []
-            existing.push({ name: row.name, originalPath: row.original_path })
+            existing.push({ id: row.id, name: row.name, originalPath: row.original_path })
             attachmentsByMessage.set(row.message_id, existing)
         }
 
@@ -602,6 +612,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         return {
             conversationAgentId: convRow?.agent_id ?? null,
+            latestEventSequence: (db.prepare(`
+                SELECT MAX(sequence) AS sequence FROM chat_events
+                WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
+                  AND json_extract(event_json, '$.item.type') = 'message'
+            `)
+                .get(req.params.id) as { sequence: number | null }).sequence ?? 0,
             lastContextTokens: convRow?.last_context_tokens ?? null,
             executionConfig,
             messages: rows.map((row) => {
@@ -640,12 +656,20 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 try {
                     contextEvidence = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
                 } catch { /* malformed JSON - ignore */ }
-                const fileAttachments = attachmentsByMessage.get(row.id)?.map((file) => ({
+                const attachmentArtifacts = attachmentsByMessage.get(row.id)?.map((file) => ({
+                    id: file.id,
                     name: file.name,
                     href: toFileUrl(file.originalPath, file.name),
                 }))
-                return {
+                const fileAttachments = attachmentArtifacts?.map(({ name, href }) => ({ name, href }))
+                let storedBlocks: ContentBlock[] | undefined
+                try {
+                    const parsed = row.content_blocks_json ? JSON.parse(row.content_blocks_json) as unknown : undefined
+                    if (Array.isArray(parsed)) storedBlocks = parsed as ContentBlock[]
+                } catch { /* malformed canonical JSON — use legacy columns */ }
+                const message = {
                     id: row.id,
+                    sequence: sequenceByMessageId.get(row.id),
                     conversationId: row.conversation_id,
                     role: row.role,
                     content: row.content,
@@ -672,6 +696,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     latencyMs: row.latency_ms,
                     createdAt: row.created_at
                 }
+                const blocks = storedBlocks ?? messageContentBlocks({ ...message, fileAttachments: undefined })
+                const fileBlocks = messageContentBlocks({ ...message, fileAttachments: attachmentArtifacts,
+                    content: '', thinking: undefined,
+                    imageDataUrls: undefined, videoDataUrls: undefined, audioDataUrls: undefined,
+                    structuredContent: undefined }).filter((block) => block.type === 'file')
+                return { ...message, contentBlocks: [...blocks, ...fileBlocks] }
             }),
         }
     })
@@ -740,6 +770,27 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     // GET /api/chat/conversations/:id/steps — get execution steps
     app.get<{ Params: { id: string } }>('/conversations/:id/steps', async (req) => {
         const db = getDb()
+        const orderedEvents = db.prepare(`
+            SELECT sequence, event_json FROM chat_events
+            WHERE conversation_id = ? AND json_extract(event_json, '$.type') IN ('execution-step', 'tool-calls')
+        `).all(req.params.id) as { sequence: number; event_json: string }[]
+        const sequenceByStep = new Map<string, number>()
+        const sequenceByStatus = new Map<string, number>()
+        for (const event of orderedEvents) {
+            const payload = JSON.parse(event.event_json) as {
+                type: string; taskId?: string; iteration?: number; invocationId?: string; status?: string
+                items?: Array<{ taskId?: string; iteration?: number; parentInvocationId?: string }>
+            }
+            if (payload.type === 'execution-step' && payload.taskId !== undefined && payload.iteration !== undefined) {
+                const key = JSON.stringify([payload.taskId, payload.iteration, payload.invocationId || null, payload.status])
+                if (!sequenceByStatus.has(key)) sequenceByStatus.set(key, event.sequence)
+            }
+            const item = payload.items?.[0]
+            if (payload.type === 'tool-calls' && item?.taskId !== undefined && item.iteration !== undefined) {
+                const key = JSON.stringify([item.taskId, item.iteration, item.parentInvocationId || null])
+                if (!sequenceByStep.has(key)) sequenceByStep.set(key, event.sequence)
+            }
+        }
         const rows = db
             .prepare('SELECT * FROM execution_steps WHERE conversation_id = ? ORDER BY created_at ASC')
             .all(req.params.id) as {
@@ -762,6 +813,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         return rows.map((row) => ({
             id: row.id,
+            sequence: sequenceByStatus.get(JSON.stringify([row.task_id, row.iteration, row.ma_invocation_id, row.status]))
+                ?? sequenceByStep.get(JSON.stringify([row.task_id, row.iteration, row.ma_invocation_id])),
             conversationId: row.conversation_id,
             taskId: row.task_id,
             iteration: row.iteration,
@@ -942,6 +995,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 .run(conversationId, row.created_at)
             await collectOrphanedAttachmentAssets()
             db.prepare('DELETE FROM execution_steps WHERE conversation_id = ? AND created_at >= ?')
+                .run(conversationId, row.created_at)
+            db.prepare('DELETE FROM chat_events WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
             db.prepare('DELETE FROM tasks WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)

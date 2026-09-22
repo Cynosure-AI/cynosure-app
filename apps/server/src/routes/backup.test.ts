@@ -97,4 +97,40 @@ describe('usage backup', () => {
             await app.close()
         }
     })
+
+    test('round-trips canonical content and ordered chat events', async () => {
+        const db = getDb()
+        db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)')
+            .run('m1', 'c1', 'user', 'Hello', 1)
+        db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
+            .run('c1', 'e1', JSON.stringify({ type: 'transcript-item', item: { type: 'message', id: 'm1' } }), 2)
+        const app = Fastify()
+        await app.register(async registeredApp => registerBackupRoutes(registeredApp), { prefix: '/api/backup' })
+        try {
+            const exported = await app.inject({ method: 'GET', url: '/api/backup/export?modules=conversations' })
+            expect(exported.statusCode).toBe(200)
+            const zip = new AdmZip(exported.rawPayload)
+            expect(JSON.parse(zip.readAsText('conversations/chat_events.json'))).toHaveLength(1)
+            expect(JSON.parse(zip.readAsText('conversations/messages.json'))[0].content_blocks_json).toBe('[{"type":"text","text":"Hello"}]')
+            db.prepare('DELETE FROM chat_events').run()
+            db.prepare('DELETE FROM messages').run()
+            db.prepare('DELETE FROM conversations').run()
+            const boundary = '----cynosure-chat-backup-test'
+            const payload = Buffer.concat([
+                Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="backup.zip"\r\nContent-Type: application/zip\r\n\r\n`),
+                exported.rawPayload,
+                Buffer.from(`\r\n--${boundary}--\r\n`),
+            ])
+            const imported = await app.inject({ method: 'POST', url: '/api/backup/import',
+                headers: { 'content-type': `multipart/form-data; boundary=${boundary}`, 'content-length': String(payload.length) },
+                payload })
+            expect(imported.statusCode, imported.body).toBe(200)
+            expect((db.prepare('SELECT content_blocks_json FROM messages WHERE id = ?').get('m1') as { content_blocks_json: string }).content_blocks_json)
+                .toBe('[{"type":"text","text":"Hello"}]')
+            expect(db.prepare('SELECT execution_id FROM chat_events WHERE conversation_id = ?').all('c1')).toEqual([{ execution_id: 'e1' }])
+        } finally {
+            await app.close()
+        }
+    })
 })
