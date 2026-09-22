@@ -27,6 +27,7 @@ export function appendChatEvent(db: Database.Database, event: PendingChatEvent):
     if (insert.changes === 0) return null
     return { ...event, sequence } as ChatEvent
   })()
+}
 
 /** Append only after a message has been committed. Missing/deleted messages emit nothing. */
 export function appendMessageEvents(
