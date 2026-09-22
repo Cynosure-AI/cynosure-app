@@ -14,7 +14,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
+import type { ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, ChatEvent, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
 
 function memoryFolderPathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -102,6 +102,10 @@ export const api = {
       }>('/api/chat/artifacts/resolve', { artifacts }),
     getMessages: (conversationId: string) =>
       get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
+    getChatEvents: (conversationId: string, after: number) =>
+      get<{ events: ChatEvent[] }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/events?after=${after}`),
+    onChatEvent: (cb: (data: ChatEvent) => void) =>
+      onWsEvent('chat:event', cb as WsHandler),
     getDebugContext: (conversationId: string) =>
       get<DebugContextSnapshot>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/debug-context`),
     getExecutionSteps: (conversationId: string) =>
