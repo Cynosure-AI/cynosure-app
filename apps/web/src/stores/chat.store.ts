@@ -127,9 +127,16 @@ export const useChatStore = defineStore('chat', () => {
     if (structured?.type === 'structured') msg.structuredContent = structured.value
     if (item.type === 'message') {
       msg.agentId = item.agentId
+      msg.agentName = item.agentName ?? msg.agentName
+      msg.agentIconUrl = item.agentIconUrl ?? msg.agentIconUrl
       msg.maInvocationId = item.invocationId
       msg.provider = item.provider ?? undefined
       msg.model = item.model ?? undefined
+      msg.contextEvidence = item.contextEvidence
+      msg.promptTokens = item.usage?.promptTokens ?? undefined
+      msg.completionTokens = item.usage?.completionTokens ?? undefined
+      msg.contextTokens = item.usage?.contextTokens ?? undefined
+      msg.latencyMs = item.usage?.latencyMs ?? undefined
     }
   }
 
