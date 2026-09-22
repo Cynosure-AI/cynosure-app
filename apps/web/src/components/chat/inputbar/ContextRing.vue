@@ -8,7 +8,9 @@ const chatStore = useChatStore()
 const agentDefs = useAgentDefinitionsStore()
 
 const contextUsage = computed(() => {
-  const usage = chatStore.lastUsage
+  // A new chat has no conversation-scoped usage yet. Treat it as empty even
+  // if an asynchronous transition has not finished clearing store state.
+  const usage = chatStore.activeConversationId ? chatStore.lastUsage : null
   const rawMax = chatStore.contextWindow
   if (!rawMax) return null
 

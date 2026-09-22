@@ -91,6 +91,14 @@ export const useChatStore = defineStore('chat', () => {
   // ── Composables ──
 
   const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
+
+  // Usage belongs to one conversation. Clear it synchronously whenever the
+  // active identity changes so an empty/new chat can never render the previous
+  // conversation's context fill while its own state is being established.
+  watch(activeConversationId, () => {
+    streaming.lastUsage.value = null
+  }, { flush: 'sync' })
+
   const liveConversationSubscriptions = computed(() => {
     void postActionsTrigger.value // track active post-action map changes
     const ids = new Set<string>()
@@ -173,6 +181,7 @@ export const useChatStore = defineStore('chat', () => {
   async function setActiveAgent(id: string | null): Promise<void> {
     if (!memoryFolders.value.length) await loadMemoryFolders()
     await agentConfig.setActiveAgent(id)
+    resetStreaming()
   }
 
   const agentConfig = useChatAgentConfig(activeConversationId, messages, conversations, loadConversations)
@@ -519,6 +528,7 @@ export const useChatStore = defineStore('chat', () => {
     agentConfig.syncAgentBaseline()
 
     if (!activeConversationId.value && messages.value.length === 0) {
+      resetStreaming()
       return
     }
 
