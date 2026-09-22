@@ -20,6 +20,7 @@ import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { ConversationExecutionConfig, StoredMessageDto } from '@shared/types'
 import { readContentBlocks, toTranscriptItems } from '../core/chat/transcript.js'
+import { lastChatEventSequence, listChatEvents } from '../core/chat/chat-events.js'
 import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
@@ -680,8 +681,24 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             executionConfig,
             messages,
             transcript: messages.flatMap(toTranscriptItems),
+            lastEventSequence: lastChatEventSequence(db, req.params.id),
         }
     })
+
+    // Replay only events after a snapshot cursor. The event stream is scoped to
+    // the requested conversation and ordered by its durable sequence number.
+    app.get<{ Params: { id: string }; Querystring: { after?: string } }>(
+        '/conversations/:id/events',
+        async (req) => {
+            const after = Number(req.query.after ?? 0)
+            return {
+                events: listChatEvents(
+                    getDb(), req.params.id,
+                    Number.isSafeInteger(after) && after >= 0 ? after : 0,
+                ),
+            }
+        },
+    )
 
     // Resolve persisted attachments before retrying/editing a message. Stored
     // /api/files URLs are only browser-facing references and cannot be sent to
