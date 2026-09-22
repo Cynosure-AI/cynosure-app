@@ -166,7 +166,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       :key="folder.id"
       role="button"
       tabindex="0"
-      class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+      class="group cursor-pointer relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
       :class="[
         highlightedFolderId === folder.id || selectedFolders.has(folder.id) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
         dropTargetFolderId === folder.id ? 'border-accent-500/60 bg-accent-500/10 ring-1 ring-accent-500/50' : '',
@@ -201,7 +201,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       :draggable="true"
       role="button"
       tabindex="0"
-      class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+      class="group cursor-pointer relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
       :class="[selectedFiles.has(file.fileName) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '', !file.supported ? 'opacity-50' : '']"
       @click="emit('openDocument', file.fileName)"
       @dblclick="emit('openDocument', file.fileName)"
