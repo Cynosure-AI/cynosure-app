@@ -2,35 +2,29 @@
 import { ref, computed, onMounted, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
-import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob } from "../../api/types";
+import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
-import DataTable, { type Column } from "../shared/DataTable.vue";
+import type { Column } from "../shared/DataTable.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
-import ModalDialog from "../shared/ModalDialog.vue";
 import MemoryExplorerHeader from "./MemoryExplorerHeader.vue";
+import MemoryExplorerContextMenu from "./MemoryExplorerContextMenu.vue";
+import MemoryExplorerBrowser from "./MemoryExplorerBrowser.vue";
+import MemoryExplorerSearchStatus from "./MemoryExplorerSearchStatus.vue";
+import MemoryExplorerToolbar from "./MemoryExplorerToolbar.vue";
+import MemoryLargeIndexWarning from "./MemoryLargeIndexWarning.vue";
+import type {
+  DocumentDragPayload,
+  DocumentRow,
+  ExplorerContextMenu,
+  ExplorerRow,
+  FolderRow,
+  GlobalDocumentRow,
+  UploadResult,
+} from "./memory-file-explorer-types";
 
 const DOCUMENT_DRAG_MIME = "application/x-cynosure-memory-documents";
-
-interface DocumentDragPayload {
-  sourceFolderId: string;
-  sourceFiles: string[];
-}
-
-type DocumentRow = MemoryFileStatus & { id: string; kind: "file"; name: string };
-type FolderRow = {
-  id: string;
-  kind: "folder";
-  name: string;
-  folder: MemoryFolder;
-  modifiedAt: number;
-  chunkCount?: number;
-  deepResearched: false;
-  status: "folder";
-};
-type ExplorerRow = DocumentRow | FolderRow;
-type GlobalDocumentRow = MemoryFileSearchResult & { id: string };
 
 const props = defineProps<{
   folderId: string;
@@ -52,7 +46,6 @@ const emit = defineEmits<{
 }>();
 
 // --- Constants ---
-const FILES_PAGE_SIZE = 30;
 const LARGE_CHUNK_WARNING_THRESHOLD = 100;
 const EXPLORER_VIEW_KEY = "cy-memory-explorer-view";
 
@@ -88,13 +81,7 @@ const explorerView = ref<"list" | "grid">(
 const highlightedFolderId = ref<string | null>(null);
 const dropTargetFolderId = ref<string | null>(null);
 const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
-const contextMenu = ref<{
-  kind: "folder" | "document";
-  folder?: MemoryFolder;
-  file?: MemoryFileStatus;
-  x: number;
-  y: number;
-} | null>(null);
+const contextMenu = ref<ExplorerContextMenu | null>(null);
 const unsubscribeGraphReset = api.memory.onGraphReset(() => {
   files.value = files.value.map((file) => ({
     ...file,
@@ -119,7 +106,7 @@ function hasRecentDreamUpdate(file: MemoryFileStatus): boolean {
 const fileInput = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
 const uploadProgress = ref({ current: 0, total: 0 });
-const uploadResults = ref<{ fileName: string; chunks: number; error?: string }[]>([]);
+const uploadResults = ref<UploadResult[]>([]);
 const showLargeChunkWarning = ref(false);
 const largeChunkWarningFiles = ref<MemoryFileStatus[]>([]);
 let pendingIndexAction: (() => Promise<void>) | null = null;
@@ -516,12 +503,6 @@ async function reindexAll(): Promise<void> {
     file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"),
   );
   await indexWithWarning(candidates, reindexAllNow);
-}
-
-function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
-  if (kind === "deep-research") return "Deep Research";
-  if (kind === "tool-embeddings") return "Tool indexing";
-  return "Search indexing";
 }
 
 async function deepResearchSelected(targetFile?: MemoryFileStatus): Promise<void> {
@@ -1026,810 +1007,123 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       </template>
     </MemoryExplorerHeader>
 
-    <!-- Omit unset descriptions to keep the explorer vertically dense. -->
-    <p
-      v-if="currentSpace?.description"
-      class="mb-3 text-sm text-theme-500"
-    >
-      {{ currentSpace.description }}
-    </p>
-    <div
-      id="memory-document-search"
-      class="mb-3 rounded-lg border border-theme-800 bg-theme-950/30 p-2"
-    >
-      <div class="flex min-w-0 items-center gap-2">
-        <div class="relative min-w-0 flex-1">
-          <Icon
-            icon="lucide:search"
-            class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
-          />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search this folder and subfolders…"
-            class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder-theme-500 transition-colors focus:border-theme-600 focus:outline-none"
-            @input="page = 0"
-          >
-          <Icon
-            v-if="globalSearchLoading"
-            icon="lucide:loader-2"
-            class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
-          />
-          <button
-            v-if="searchQuery"
-            type="button"
-            class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-            title="Clear search"
-            aria-label="Clear document search"
-            @click="searchQuery = ''"
-          >
-            <Icon
-              icon="lucide:x"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-        </div>
-        <button
-          type="button"
-          :aria-pressed="semanticSearch"
-          aria-label="Toggle semantic search"
-          class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors"
-          :class="semanticSearch
-            ? 'border-accent-500/50 bg-accent-500/15 text-accent-300'
-            : 'border-theme-800 bg-theme-900/60 text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
-          :title="semanticSearch ? 'Semantic search is on' : 'Search document vectors by meaning'"
-          @click="semanticSearch = !semanticSearch"
-        >
-          <Icon
-            icon="lucide:sparkles"
-            class="h-3.5 w-3.5"
-          />
-          <span class="hidden sm:inline">Semantic</span>
-        </button>
-      </div>
-    </div>
+    <MemoryExplorerSearchStatus
+      v-model:query="searchQuery"
+      v-model:semantic="semanticSearch"
+      :description="currentSpace?.description"
+      :search-loading="globalSearchLoading"
+      :uploading="uploading"
+      :upload-progress="uploadProgress"
+      :upload-results="uploadResults"
+      :failed-jobs="failedJobs"
+      @search-input="page = 0"
+      @clear-uploads="uploadResults = []"
+      @dismiss-failure="dismissFailure"
+      @dismiss-all-failures="dismissAllFailures"
+    />
 
-    <!-- Upload progress -->
-    <div
-      v-if="uploading"
-      class="mb-4 px-3 py-2 bg-accent-500/10 border border-accent-500/20 rounded-lg text-xs text-accent-300"
-    >
-      Uploading {{ uploadProgress.current }}/{{ uploadProgress.total }}…
-    </div>
+    <MemoryExplorerToolbar
+      :view="explorerView"
+      :searching="Boolean(searchQuery.trim())"
+      :result-count="globalSearchResults.length"
+      :folder-name="currentSpace?.name"
+      :folder-count="childFolders.length"
+      :file-count="files.length"
+      :running-job-count="runningJobs.length"
+      :selected-count="selectedItemCount"
+      :row-count="documentRows.length"
+      :filtered-file-count="filteredFiles.length"
+      :all-selected="allFilteredSelected"
+      :space-count="spaces.length"
+      :selected-folder-count="selectedFolders.size"
+      :can-index="selectedSearchIndexFiles.length > 0"
+      :index-idle-count="selectedSearchIndexIdleCount"
+      :can-research="selectedDeepResearchFiles.length > 0"
+      :research-idle-count="selectedDeepResearchIdleCount"
+      :can-forget="selectedRememberedFiles.length > 0"
+      :moving="moving"
+      :forgetting="forgettingMemories"
+      :deleting="deleting"
+      :files-loading="filesLoading"
+      @update:view="setExplorerView"
+      @select-page="selectAllOnPage"
+      @select-all="selectAll"
+      @move="showMoveDialog = true"
+      @index="makeSearchableSelected()"
+      @research="deepResearchSelected()"
+      @forget="forgetSelectedMemories()"
+      @remove="deleteSelectedFiles()"
+      @clear-selection="clearSelection"
+      @refresh="loadFiles"
+    />
 
-    <!-- Upload results -->
-    <div
-      v-if="uploadResults.length > 0"
-      class="mb-4 space-y-1"
-    >
-      <div
-        v-for="(r, i) in uploadResults"
-        :key="i"
-        class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
-        :class="r.error ? 'bg-red-500/10 text-red-300' : 'bg-green-500/10 text-green-300'"
-      >
-        <Icon
-          :icon="r.error ? 'lucide:x-circle' : 'lucide:check-circle'"
-          class="w-3.5 h-3.5"
-        />
-        <span class="truncate">{{ r.fileName }}</span>
-        <span
-          v-if="!r.error"
-          class="text-theme-500"
-        >Uploaded — indexing is manual</span>
-        <span
-          v-else
-          class="text-red-400"
-        >{{ r.error }}</span>
-      </div>
-      <button
-        class="text-xs text-theme-500 hover:text-theme-300 px-1"
-        @click="uploadResults = []"
-      >
-        Clear
-      </button>
-    </div>
-
-    <!-- Background job failures. Jobs run server-side, so a failure would
-         otherwise be invisible once the job stops being "active". -->
-    <div
-      v-if="failedJobs.length > 0"
-      class="mb-4 space-y-1"
-    >
-      <div
-        v-for="job in failedJobs"
-        :key="job.id"
-        class="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300"
-      >
-        <Icon
-          icon="lucide:circle-alert"
-          class="mt-0.5 h-3.5 w-3.5 shrink-0"
-        />
-        <div class="min-w-0 flex-1">
-          <div class="font-medium">
-            {{ jobKindLabel(job.kind) }} failed for {{ job.fileName }}
-          </div>
-          <div class="mt-0.5 break-words text-red-400/80">
-            {{ job.error || "Unknown error" }}
-          </div>
-        </div>
-        <button
-          type="button"
-          class="shrink-0 rounded px-1.5 py-0.5 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-200"
-          title="Dismiss"
-          aria-label="Dismiss failure"
-          @click="dismissFailure(job.id)"
-        >
-          <Icon
-            icon="lucide:x"
-            class="h-3.5 w-3.5"
-          />
-        </button>
-      </div>
-      <button
-        v-if="failedJobs.length > 1"
-        type="button"
-        class="px-1 text-xs text-theme-500 transition-colors hover:text-theme-300"
-        @click="dismissAllFailures"
-      >
-        Clear all
-      </button>
-    </div>
-
-    <!-- Toolbar -->
-    <div class="flex items-center justify-between mb-2">
-      <div class="text-xs text-theme-500">
-        <template v-if="searchQuery.trim()">
-          {{ globalSearchResults.length }} result{{ globalSearchResults.length !== 1 ? "s" : "" }}
-          in {{ currentSpace?.name || "this folder" }} and subfolders
-        </template>
-        <template v-else>
-          {{ childFolders.length }} folder{{ childFolders.length !== 1 ? "s" : "" }} ·
-          {{ files.length }} file{{ files.length !== 1 ? "s" : "" }}
-        </template>
-        <template v-if="runningJobs.length > 0">
-          · {{ runningJobs.length }} job{{ runningJobs.length !== 1 ? "s" : "" }} active
-        </template>
-      </div>
-      <div class="flex items-center gap-2">
-        <template v-if="!searchQuery.trim() && selectedItemCount === 0 && documentRows.length > 0">
-          <button
-            class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
-            @click="selectAllOnPage"
-          >
-            Select page
-          </button>
-          <button
-            class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
-            @click="selectAll"
-          >
-            Select all {{ filteredFiles.length }}
-          </button>
-        </template>
-        <div
-          v-if="!searchQuery.trim()"
-          class="flex items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5"
-          aria-label="Explorer view"
-        >
-          <button
-            type="button"
-            class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-            :class="explorerView === 'list' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
-            title="List view"
-            aria-label="List view"
-            :aria-pressed="explorerView === 'list'"
-            @click="setExplorerView('list')"
-          >
-            <Icon
-              icon="lucide:list"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-          <button
-            type="button"
-            class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-            :class="explorerView === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
-            title="Grid view"
-            aria-label="Grid view"
-            :aria-pressed="explorerView === 'grid'"
-            @click="setExplorerView('grid')"
-          >
-            <Icon
-              icon="lucide:grid-2x2"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-        </div>
-        <button
-          type="button"
-          :disabled="filesLoading"
-          class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200"
-          aria-label="Refresh documents"
-          @click="loadFiles"
-        >
-          <Icon
-            :icon="filesLoading ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-            class="w-3.5 h-3.5"
-            :class="{ 'animate-spin': filesLoading }"
-          />
-        </button>
-      </div>
-    </div>
-
-    <!-- Floating bulk actions: pinned inside the document area while scrolling. -->
-    <div
-      v-if="!searchQuery.trim() && selectedItemCount > 0"
-      class="pointer-events-none sticky top-[calc(100vh_-_8rem)] z-30 h-0 sm:top-[calc(100vh_-_5.5rem)]"
-    >
-      <div class="pointer-events-auto mx-auto flex w-fit max-w-full items-center overflow-x-auto rounded-xl border border-theme-700/80 bg-theme-950/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
-        <span class="shrink-0 border-r border-theme-800 px-3 text-xs font-medium text-theme-300">
-          {{ selectedItemCount }} selected
-        </span>
-        <button
-          v-if="!allFilteredSelected"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-theme-400 transition-colors hover:bg-theme-800 hover:text-theme-200"
-          @click="selectAll"
-        >
-          Select all {{ documentRows.length }}
-        </button>
-        <button
-          v-if="spaces.length > 1"
-          :disabled="moving"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-accent-400 transition-colors hover:bg-accent-500/10 disabled:opacity-50"
-          @click="showMoveDialog = true"
-        >
-          <Icon
-            :icon="moving ? 'lucide:loader-2' : 'lucide:folder-input'"
-            class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': moving }"
-          />
-          Move
-        </button>
-        <button
-          v-if="selectedSearchIndexFiles.length > 0 || selectedFolders.size > 0"
-          :disabled="selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
-          title="Build or refresh semantic search vectors for the selected documents"
-          @click="makeSearchableSelected()"
-        >
-          <Icon
-            :icon="selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0 ? 'lucide:loader-2' : 'lucide:search-check'"
-            class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': selectedFolders.size === 0 && selectedSearchIndexIdleCount === 0 }"
-          />
-          Index files
-        </button>
-        <button
-          v-if="selectedDeepResearchFiles.length > 0 || selectedFolders.size > 0"
-          :disabled="selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
-          title="Extract and classify facts from the selected searchable documents"
-          @click="deepResearchSelected()"
-        >
-          <Icon
-            :icon="selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
-            class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': selectedFolders.size === 0 && selectedDeepResearchIdleCount === 0 }"
-          />
-          Deep Research
-        </button>
-        <button
-          v-if="selectedRememberedFiles.length > 0 || selectedFolders.size > 0"
-          :disabled="forgettingMemories"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
-          title="Remove semantic search vectors and extracted facts while keeping the source files"
-          @click="forgetSelectedMemories()"
-        >
-          <Icon
-            :icon="forgettingMemories ? 'lucide:loader-2' : 'lucide:brain-circuit'"
-            class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': forgettingMemories }"
-          />
-          Drop Index
-        </button>
-        <button
-          :disabled="deleting"
-          class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
-          title="Remove the selected source files and their indexes"
-          @click="deleteSelectedFiles()"
-        >
-          <Icon
-            :icon="deleting ? 'lucide:loader-2' : 'lucide:trash-2'"
-            class="h-3.5 w-3.5"
-            :class="{ 'animate-spin': deleting }"
-          />
-          Remove
-        </button>
-        <button
-          class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-l border-theme-800 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
-          title="Clear selection"
-          aria-label="Clear selection"
-          @click="clearSelection"
-        >
-          <Icon
-            icon="lucide:x"
-            class="h-4 w-4"
-          />
-        </button>
-      </div>
-    </div>
-
-    <!-- Scoped or global search results -->
-    <DataTable
-      v-if="searchQuery.trim()"
+    <MemoryExplorerBrowser
       v-model:page="page"
-      :items="globalDocumentRows"
-      :columns="searchColumns"
-      :selectable="false"
-      :row-clickable="true"
-      :row-class="(file) => !file.textDirect ? 'opacity-60' : 'cursor-pointer'"
-      :pagination="true"
-      :page-size="FILES_PAGE_SIZE"
-      pagination-position="both"
-      :empty-message="globalSearchLoading ? 'Searching…' : `No files matching '${searchQuery.trim()}'`"
-      @row-click="openGlobalResult"
-    >
-      <template #col-fileName="{ item: file }">
-        <div class="flex min-w-0 items-center gap-3">
-          <Icon
-            :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-            class="h-4 w-4 shrink-0 text-theme-400"
-          />
-          <div class="min-w-0">
-            <div class="truncate text-sm text-theme-200">
-              {{ file.fileName }}
-            </div>
-            <div class="mt-0.5 flex flex-wrap gap-1">
-              <span
-                v-for="field in file.matchedFields"
-                :key="field"
-                class="rounded border border-theme-700/80 bg-theme-900/70 px-1.5 py-0.5 text-[10px] text-theme-500"
-              >{{ field }}</span>
-            </div>
-          </div>
-        </div>
-      </template>
-      <template #col-folderName="{ item: file }">
-        <div class="min-w-0 text-xs text-theme-400">
-          <div class="truncate">
-            {{ file.folderName }}
-          </div>
-          <div
-            v-if="file.folderPath && file.folderPath !== file.folderName"
-            class="truncate text-[10px] text-theme-600"
-          >
-            {{ file.folderPath }}
-          </div>
-        </div>
-      </template>
-      <template #col-modifiedAt="{ item: file }">
-        <span class="text-xs text-theme-500">{{ new Date(file.modifiedAt).toLocaleDateString() }}</span>
-      </template>
-      <template #col-similarity="{ item: file }">
-        <span
-          class="inline-flex rounded-full border border-accent-500/25 bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-300"
-          :title="`Best chunk cosine similarity: ${((file.similarity || 0) * 100).toFixed(1)}%`"
-        >
-          {{ Math.round((file.similarity || 0) * 100) }}%
-        </span>
-      </template>
-      <template #col-status="{ item: file }">
-        <span
-          class="inline-flex items-center gap-1.5 text-xs"
-          :class="file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
-        >
-          <Icon
-            :icon="statusIcon(file.status)"
-            class="h-3.5 w-3.5"
-          />
-          {{ statusLabel(file.status) }}
-        </span>
-      </template>
-    </DataTable>
-
-    <!-- Empty states -->
-    <div
-      v-else-if="files.length === 0 && childFolders.length === 0 && !filesLoading"
-      class="rounded-xl border border-theme-800 bg-theme-950/45 text-center py-10 text-theme-500 text-sm"
-    >
-      No files in this folder yet. Upload files to get started.
-    </div>
-    <!-- Grid explorer -->
-    <div
-      v-else-if="explorerView === 'grid'"
-      class="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3"
-      data-testid="memory-explorer-grid"
-    >
-      <div
-        v-for="folder in childFolders"
-        :key="folder.id"
-        role="button"
-        tabindex="0"
-        class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
-        :class="[
-          highlightedFolderId === folder.id || selectedFolders.has(folder.id) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
-          dropTargetFolderId === folder.id ? 'border-accent-500/60 bg-accent-500/10 ring-1 ring-accent-500/50' : '',
-        ]"
-        @click="openFolder(folder)"
-        @keydown.enter="openFolder(folder)"
-        @dblclick="openFolder(folder)"
-        @contextmenu="openContextMenu('folder', $event, folder)"
-        @dragover="onFolderDocumentDragOver(folder, $event)"
-        @dragleave="onFolderDocumentDragLeave(folder, $event)"
-        @drop="onFolderDocumentDrop(folder, $event)"
-      >
-        <input
-          type="checkbox"
-          class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-          :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFolders.has(folder.id) }"
-          :checked="selectedFolders.has(folder.id)"
-          :aria-label="`${selectedFolders.has(folder.id) ? 'Deselect' : 'Select'} ${folder.name}`"
-          @click.stop="toggleGridSelection(rowForFolder(folder), $event)"
-        >
-        <Icon
-          :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
-          class="mb-3 h-11 w-11"
-          :class="folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'"
-        />
-        <span class="w-full truncate text-sm font-medium text-theme-200">{{ folder.name }}</span>
-        <span class="mt-1 text-[11px] text-theme-600">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
-      </div>
-      <div
-        v-for="file in filteredFiles"
-        :key="file.fileName"
-        :draggable="true"
-        role="button"
-        tabindex="0"
-        class="group relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
-        :class="[
-          selectedFiles.has(file.fileName) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
-          !file.supported ? 'opacity-50' : '',
-        ]"
-        @click="openEditorModal(file.fileName)"
-        @dblclick="openEditorModal(file.fileName)"
-        @keydown.enter="openEditorModal(file.fileName)"
-        @contextmenu="openContextMenu('document', $event, file)"
-        @dragstart.stop="startDocumentDrag($event, file.fileName)"
-        @dragend="endDocumentDrag"
-      >
-        <input
-          v-if="file.supported"
-          type="checkbox"
-          class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-          :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFiles.has(file.fileName) }"
-          :checked="selectedFiles.has(file.fileName)"
-          :aria-label="`${selectedFiles.has(file.fileName) ? 'Deselect' : 'Select'} ${file.fileName}`"
-          @click.stop="toggleGridSelection(rowForFile(file), $event)"
-        >
-        <Icon
-          :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-          class="mb-3 h-10 w-10"
-          :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
-        />
-        <span
-          class="flex w-full items-center justify-center gap-1 truncate text-sm font-medium"
-          :class="hasRecentDreamUpdate(file) ? 'text-[#f4c072]' : 'text-theme-200'"
-        >
-          <Icon
-            v-if="hasRecentDreamUpdate(file)"
-            icon="lucide:moon"
-            class="h-3.5 w-3.5 shrink-0"
-            aria-label="Updated by a dream within the last 24 hours"
-          />
-          <span class="truncate">{{ file.fileName }}</span>
-        </span>
-        <span class="mt-1 text-[11px] text-theme-600">{{ formatFileSize(file.size) }}</span>
-        <span
-          class="mt-2 inline-flex items-center gap-1 text-[10px]"
-          :class="isJobActive('reindex', file.fileName) ? 'text-orange-400' : file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
-        >
-          <Icon
-            :icon="isJobActive('reindex', file.fileName) ? 'lucide:loader-2' : statusIcon(file.status)"
-            class="h-3 w-3"
-            :class="{ 'animate-spin': isJobActive('reindex', file.fileName) }"
-          />
-          {{ isJobActive('reindex', file.fileName) ? searchIndexProgress(file.fileName) : statusLabel(file.status) }}
-        </span>
-        <span
-          v-if="isJobActive('deep-research', file.fileName)"
-          class="mt-1 inline-flex items-center gap-1 text-[10px] text-emerald-400"
-        >
-          <Icon
-            icon="lucide:loader-2"
-            class="h-3 w-3 animate-spin"
-          />
-          {{ deepResearchProgress(file.fileName) }}
-        </span>
-      </div>
-    </div>
-    <!-- Unified sortable folder/file list -->
-    <DataTable
-      v-else
       v-model:selected-ids="selectedExplorerIds"
-      v-model:page="page"
-      :items="documentRows"
+      :search-query="searchQuery"
+      :search-loading="globalSearchLoading"
+      :search-rows="globalDocumentRows"
+      :search-columns="searchColumns"
+      :explorer-view="explorerView"
+      :files="files"
+      :files-loading="filesLoading"
+      :child-folders="childFolders"
+      :filtered-files="filteredFiles"
+      :document-rows="documentRows"
       :columns="columns"
-      :sort-group-value="explorerSortGroup"
-      :selectable="true"
-      :row-selectable="isExplorerRowSelectable"
-      :row-clickable="true"
-      :row-draggable="(item) => item.kind === 'file'"
-      :row-class="(item) => item.kind === 'folder' ? (dropTargetFolderId === item.folder.id ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/60' : 'cursor-pointer') : !item.supported ? 'opacity-50' : 'cursor-pointer'"
-      :pagination="true"
-      :page-size="FILES_PAGE_SIZE"
-      pagination-position="both"
-      initial-sort-key="modifiedAt"
-      initial-sort-direction="desc"
-      empty-message="No folders or files here yet."
+      :selected-files="selectedFiles"
+      :selected-folders="selectedFolders"
+      :selected-item-count="selectedItemCount"
+      :highlighted-folder-id="highlightedFolderId"
+      :drop-target-folder-id="dropTargetFolderId"
+      :is-row-selectable="isExplorerRowSelectable"
+      :sort-group="explorerSortGroup"
+      :row-for-folder="rowForFolder"
+      :row-for-file="rowForFile"
+      :has-recent-dream-update="hasRecentDreamUpdate"
+      :status-icon="statusIcon"
+      :status-label="statusLabel"
+      :folder-index-summary="folderIndexSummary"
+      :format-file-size="formatFileSize"
+      :is-job-active="isJobActive"
+      :search-index-progress="searchIndexProgress"
+      :deep-research-progress="deepResearchProgress"
+      @open-global-result="openGlobalResult"
+      @open-folder="openFolder"
+      @open-document="openEditorModal"
+      @open-context-menu="openContextMenu"
+      @toggle-grid-selection="toggleGridSelection"
+      @folder-drag-over="onFolderDocumentDragOver"
+      @folder-drag-leave="onFolderDocumentDragLeave"
+      @folder-drop="onFolderDocumentDrop"
+      @document-drag-start="startDocumentDrag"
+      @document-drag-end="endDocumentDrag"
       @row-click="openExplorerRow"
-      @row-contextmenu="openExplorerContextMenu"
-      @row-dragstart="startExplorerDrag"
-      @row-dragover="dragOverExplorerRow"
-      @row-dragleave="dragLeaveExplorerRow"
+      @row-context-menu="openExplorerContextMenu"
+      @row-drag-start="startExplorerDrag"
+      @row-drag-over="dragOverExplorerRow"
+      @row-drag-leave="dragLeaveExplorerRow"
       @row-drop="dropOnExplorerRow"
-      @row-dragend="endDocumentDrag"
       @visible-items-change="visibleDocumentRows = $event"
-    >
-      <template #col-name="{ item }">
-        <div class="flex min-w-0 items-center gap-3">
-          <Icon
-            :icon="item.kind === 'folder'
-              ? item.folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'
-              : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-            class="h-5 w-5 shrink-0"
-            :class="item.kind === 'folder'
-              ? item.folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'
-              : item.supported ? 'text-theme-400' : 'text-theme-600'"
-          />
-          <div class="min-w-0">
-            <div
-              class="flex items-center gap-1 truncate text-sm font-medium"
-              :class="item.kind === 'file' && hasRecentDreamUpdate(item) ? 'text-[#f4c072]' : 'text-theme-200'"
-            >
-              <Icon
-                v-if="item.kind === 'file' && hasRecentDreamUpdate(item)"
-                icon="lucide:moon"
-                class="h-3.5 w-3.5 shrink-0"
-                aria-label="Updated by a dream within the last 24 hours"
-              />
-              {{ item.name }}
-            </div>
-            <div class="mt-0.5 truncate text-[11px] text-theme-600">
-              <template v-if="item.kind === 'folder'">
-                {{ item.folder.fileCount }} direct · {{ item.folder.descendantFileCount || 0 }} nested
-              </template>
-              <template v-else>
-                {{ formatFileSize(item.size) }}<template v-if="item.tags.length">
-                  · {{ item.tags.slice(0, 4).join(', ') }}
-                </template>
-              </template>
-            </div>
-          </div>
-        </div>
-      </template>
-      <template #col-modifiedAt="{ item }">
-        <span class="text-xs text-theme-500">
-          {{ new Date(item.modifiedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }}
-        </span>
-      </template>
-      <template #col-chunkCount="{ item }">
-        <span class="text-xs text-theme-400">
-          <template v-if="item.kind === 'folder'">{{ item.chunkCount || 0 }} items</template>
-          <template v-else-if="item.status === 'indexed'">{{ item.chunkCount || 0 }}</template>
-          <template v-else-if="item.estimatedChunkCount !== undefined">~{{ item.estimatedChunkCount }}</template>
-          <template v-else>—</template>
-        </span>
-      </template>
-      <template #col-deepResearched="{ item }">
-        <span
-          v-if="item.kind !== 'file'"
-          class="text-xs text-theme-600"
-        >Recursive</span>
-        <span
-          v-else-if="isJobActive('deep-research', item.fileName)"
-          class="inline-flex items-center gap-1.5 text-xs text-emerald-400"
-        >
-          <Icon
-            icon="lucide:loader-2"
-            class="h-3.5 w-3.5 animate-spin"
-          />
-          {{ deepResearchProgress(item.fileName) }}
-        </span>
-        <span
-          v-else
-          class="inline-flex items-center gap-1.5 text-xs"
-          :class="item.deepResearched ? 'text-green-400' : 'text-theme-500'"
-        >
-          <Icon
-            :icon="item.deepResearched ? 'lucide:check-circle' : 'lucide:circle-dashed'"
-            class="h-3.5 w-3.5"
-          />
-          {{ item.deepResearched ? 'Researched' : 'Not researched' }}
-        </span>
-      </template>
-      <template #col-status="{ item }">
-        <span
-          v-if="item.kind !== 'file'"
-          class="inline-flex items-center gap-1.5 text-xs"
-          :class="folderIndexSummary(item.folder).colorClass"
-        >
-          <Icon
-            :icon="folderIndexSummary(item.folder).icon"
-            class="h-3.5 w-3.5"
-          /> {{ folderIndexSummary(item.folder).label }}
-        </span>
-        <span
-          v-else-if="isJobActive('reindex', item.fileName)"
-          class="inline-flex items-center gap-1.5 text-xs text-orange-400"
-        >
-          <Icon
-            icon="lucide:loader-2"
-            class="h-3.5 w-3.5 animate-spin"
-          />
-          {{ searchIndexProgress(item.fileName) }}
-        </span>
-        <span
-          v-else
-          class="inline-flex items-center gap-1.5 text-xs"
-          :class="item.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
-        >
-          <Icon
-            :icon="statusIcon(item.status)"
-            class="h-3.5 w-3.5"
-          />
-          {{ statusLabel(item.status) }}
-        </span>
-      </template>
-    </DataTable>
+    />
 
-
-    <Teleport to="body">
-      <div
-        v-if="contextMenu"
-        data-memory-context-menu
-        data-testid="memory-explorer-context-menu"
-        class="fixed z-[80] w-60 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-2xl shadow-black/50"
-        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
-        role="menu"
-        @contextmenu.prevent
-      >
-        <template v-if="contextMenu.kind === 'folder' && contextMenu.folder">
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-            role="menuitem"
-            @click="openFolder(contextMenu.folder)"
-          >
-            <Icon
-              icon="lucide:folder-open"
-              class="h-3.5 w-3.5 text-amber-400"
-            /> Open
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-            role="menuitem"
-            @click="emit('createFolder', contextMenu.folder); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:folder-plus"
-              class="h-3.5 w-3.5 text-accent-400"
-            /> Add subfolder
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-            role="menuitem"
-            @click="emit('editFolder', contextMenu.folder); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:settings-2"
-              class="h-3.5 w-3.5"
-            /> Folder settings
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-            role="menuitem"
-            @click="emit('toggleAutoMemoryExclusion', contextMenu.folder); closeContextMenu()"
-          >
-            <Icon
-              :icon="contextMenu.folder.autoMemoryExcluded ? 'lucide:folder-check' : 'lucide:folder-x'"
-              class="h-3.5 w-3.5"
-              :class="contextMenu.folder.autoMemoryExcluded ? 'text-emerald-400' : 'text-orange-400'"
-            />
-            {{ contextMenu.folder.autoMemoryExcluded ? 'Include in Auto Memory Router' : 'Exclude from Auto Memory Router' }}
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
-            role="menuitem"
-            @click="emit('deleteFolder', contextMenu.folder); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:trash-2"
-              class="h-3.5 w-3.5"
-            /> Delete folder
-          </button>
-        </template>
-        <template v-else-if="contextMenu.kind === 'document' && contextMenu.file">
-          <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-theme-500">
-            {{ contextMenu.file.fileName }}
-          </div>
-          <button
-            v-if="contextMenu.file.textDirect"
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-            role="menuitem"
-            @click="openEditorModal(contextMenu.file.fileName); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:file-pen-line"
-              class="h-3.5 w-3.5"
-            /> Open
-          </button>
-          <button
-            v-if="spaces.length > 1"
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
-            role="menuitem"
-            @click="openContextMove(contextMenu.file)"
-          >
-            <Icon
-              icon="lucide:folder-input"
-              class="h-3.5 w-3.5 text-accent-400"
-            /> Move
-          </button>
-          <button
-            v-if="contextMenu.file.supported && (contextMenu.file.status === 'needs_reindex' || contextMenu.file.status === 'not_indexed')"
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
-            role="menuitem"
-            @click="makeSearchableSelected(contextMenu.file); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:search-check"
-              class="h-3.5 w-3.5"
-            /> Index files
-          </button>
-          <button
-            v-if="contextMenu.file.supported && supportsAnalysis(contextMenu.file)"
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-emerald-300 hover:bg-emerald-500/10"
-            role="menuitem"
-            @click="deepResearchSelected(contextMenu.file); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:network"
-              class="h-3.5 w-3.5"
-            /> Deep Research
-          </button>
-          <button
-            v-if="contextMenu.file.supported && (contextMenu.file.status !== 'not_indexed' || contextMenu.file.deepResearched)"
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
-            role="menuitem"
-            @click="forgetSelectedMemories(contextMenu.file); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:brain-circuit"
-              class="h-3.5 w-3.5"
-            /> Drop Index
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-left text-xs text-red-300 hover:bg-red-500/10"
-            role="menuitem"
-            @click="deleteSelectedFiles(contextMenu.file); closeContextMenu()"
-          >
-            <Icon
-              icon="lucide:trash-2"
-              class="h-3.5 w-3.5"
-            /> Remove
-          </button>
-        </template>
-      </div>
-    </Teleport>
+    <MemoryExplorerContextMenu
+      :menu="contextMenu"
+      :space-count="spaces.length"
+      :supports-analysis="supportsAnalysis"
+      @close="closeContextMenu"
+      @open-folder="openFolder"
+      @create-folder="emit('createFolder', $event)"
+      @edit-folder="emit('editFolder', $event)"
+      @toggle-auto-memory-exclusion="emit('toggleAutoMemoryExclusion', $event)"
+      @delete-folder="emit('deleteFolder', $event)"
+      @open-document="openEditorModal($event.fileName)"
+      @move-document="openContextMove"
+      @index-document="makeSearchableSelected"
+      @research-document="deepResearchSelected"
+      @forget-document="forgetSelectedMemories"
+      @remove-document="deleteSelectedFiles"
+    />
 
     <MemoryDocumentEditorModal
       :show="showEditorModal"
@@ -1839,43 +1133,13 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @saved="handleEditorSaved"
     />
 
-    <ModalDialog
+    <MemoryLargeIndexWarning
       :show="showLargeChunkWarning"
-      title="Index a large document?"
-      icon="lucide:triangle-alert"
-      icon-color="amber"
-      @close="cancelLargeIndex"
-    >
-      <div class="space-y-3 text-sm leading-relaxed text-theme-400">
-        <p>
-          {{ largeChunkWarningFiles.length === 1
-            ? `${largeChunkWarningFiles[0]?.fileName} is estimated to produce ${estimatedChunks(largeChunkWarningFiles[0]!)} chunks.`
-            : `${largeChunkWarningFiles.length} selected files are each estimated to produce more than ${LARGE_CHUNK_WARNING_THRESHOLD} chunks.` }}
-        </p>
-        <p>
-          Very large documents can dominate search results simply because they contribute so many chunks. They also take longer to embed and may increase embedding costs and storage use.
-        </p>
-        <p class="text-theme-300">
-          You can continue anyway if this is intentional.
-        </p>
-      </div>
-      <template #actions>
-        <button
-          type="button"
-          class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-500"
-          @click="confirmLargeIndex"
-        >
-          Index anyway
-        </button>
-        <button
-          type="button"
-          class="px-4 py-2 text-sm text-theme-400 transition-colors hover:text-theme-200"
-          @click="cancelLargeIndex"
-        >
-          Cancel
-        </button>
-      </template>
-    </ModalDialog>
+      :files="largeChunkWarningFiles"
+      :threshold="LARGE_CHUNK_WARNING_THRESHOLD"
+      @confirm="confirmLargeIndex"
+      @cancel="cancelLargeIndex"
+    />
 
     <!-- Hidden file input -->
     <input
