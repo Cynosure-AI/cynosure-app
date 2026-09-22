@@ -268,9 +268,9 @@ export interface ExecutionMarkerItem {
 export type TranscriptItem = MessageItem | ToolCallItem | ToolResultItem | ExecutionMarkerItem
 
 export type ChatEvent =
-  | { version: 1; type: 'item.appended'; conversationId: string; executionId: string; sequence: number; item: TranscriptItem }
-  | { version: 1; type: 'content.delta'; conversationId: string; executionId: string; sequence: number; itemId: string; block: Extract<ContentBlock, { type: 'text' | 'reasoning' }> }
-  | { version: 1; type: 'execution.marker'; conversationId: string; executionId: string; sequence: number; item: ExecutionMarkerItem }
+  | { version: 1; type: 'item.appended'; conversationId: string; executionId: string; sequence: number; payload: { item: TranscriptItem } }
+  | { version: 1; type: 'content.delta'; conversationId: string; executionId: string; sequence: number; payload: { itemId: string; block: Extract<ContentBlock, { type: 'text' | 'reasoning' }> } }
+  | { version: 1; type: 'execution.marker'; conversationId: string; executionId: string; sequence: number; payload: { item: ExecutionMarkerItem } }
 
 export interface StoredMessageDto {
   /** Canonical blocks; legacy columns remain during the staged migration. */
