@@ -56,12 +56,14 @@ export function appendMessageEvents(
   message.blocks = readContentBlocks(row.content_blocks_json, message)
 
   const insert = db.prepare(`
-    INSERT INTO chat_events (conversation_id, execution_id, event_type, payload_json, created_at)
-    VALUES (?, ?, 'item.appended', ?, ?)
+    INSERT OR IGNORE INTO chat_events (conversation_id, execution_id, event_type, item_id, payload_json, created_at)
+    VALUES (?, ?, 'item.appended', ?, ?, ?)
   `)
-  return db.transaction(() => toTranscriptItems(message).map((item): ChatEvent => {
-    const sequence = Number(insert.run(conversationId, executionId, JSON.stringify({ item }), Date.now()).lastInsertRowid)
-    return { version: 1, type: 'item.appended', conversationId, executionId, sequence, payload: { item } }
+  return db.transaction(() => toTranscriptItems(message).flatMap((item): ChatEvent[] => {
+    const result = insert.run(conversationId, executionId, item.id, JSON.stringify({ item }), Date.now())
+    if (result.changes === 0) return []
+    const sequence = Number(result.lastInsertRowid)
+    return [{ version: 1, type: 'item.appended', conversationId, executionId, sequence, payload: { item } }]
   }))()
 }
 
