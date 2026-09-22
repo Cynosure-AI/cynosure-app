@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
-import type { ChatQueueDelivery, ContentBlock, ContextEvidence, QueuedChatMessageDto, StoredMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueDelivery, ContentBlock, ContextEvidence, QueuedChatMessageDto, StoredMessageDto, TranscriptItem } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -65,6 +65,8 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
   const messages = ref<DisplayMessage[]>([])
+  const transcript = ref<TranscriptItem[]>([])
+  const eventCursors = new Map<string, number>()
   const loadingMessages = ref(false)
   const contextWindow = ref<number | null>(null)
   const modelCost = ref<{ input: number; output: number } | null>(null)
@@ -89,6 +91,66 @@ export const useChatStore = defineStore('chat', () => {
     if (!activeConversationId.value) return []
     return quickResponsesMap.get(activeConversationId.value)?.suggestions || []
   })
+
+  /** Apply replayed and live canonical events by stable item ID. */
+  function handleChatEvent(event: ChatEvent): void {
+    if (event.version !== 1 || event.type !== 'item.appended') return
+    if (event.conversationId !== activeConversationId.value) return
+    const item = event.payload.item
+    const index = transcript.value.findIndex(existing => existing.id === item.id)
+    if (index >= 0) transcript.value[index] = item
+    else transcript.value.push(item)
+
+    if (item.type !== 'message' && item.type !== 'tool-result') return
+    const blocks = item.blocks
+    const text = blocks.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+    const reasoning = blocks.flatMap(block => block.type === 'reasoning' ? [block.text] : []).join('')
+    const media = (type: 'image' | 'video' | 'audio') =>
+      blocks.flatMap(block => block.type === type ? [block.url] : [])
+    let msg = messages.value.find(existing => existing.id === item.id)
+    if (!msg) {
+      msg = {
+        id: item.id, role: item.type === 'tool-result' ? 'tool' : item.role,
+        content: text, createdAt: item.createdAt,
+      }
+      messages.value.push(msg)
+    }
+    msg.blocks = blocks
+    msg.content = text
+    msg.thinking = reasoning || undefined
+    msg.imageDataUrls = media('image')
+    msg.videoDataUrls = media('video')
+    msg.audioDataUrls = media('audio')
+    msg.fileAttachments = blocks.flatMap(block =>
+      block.type === 'file' ? [{ name: block.name, href: block.url }] : [])
+    const structured = blocks.find(block => block.type === 'structured')
+    if (structured?.type === 'structured') msg.structuredContent = structured.value
+    if (item.type === 'message') {
+      msg.agentId = item.agentId
+      msg.maInvocationId = item.invocationId
+      msg.provider = item.provider ?? undefined
+      msg.model = item.model ?? undefined
+    }
+  }
+
+  async function replayChatEvents(conversationId: string, after?: number): Promise<void> {
+    let cursor = after ?? eventCursors.get(conversationId)
+    if (cursor === undefined) return
+    try {
+      while (activeConversationId.value === conversationId) {
+        const { events } = await api.chat.getChatEvents(conversationId, cursor)
+        if (activeConversationId.value !== conversationId) return
+        for (const event of events) {
+          handleChatEvent(event)
+          cursor = Math.max(cursor, event.sequence)
+        }
+        eventCursors.set(conversationId, cursor)
+        if (events.length < 500) break
+      }
+    } catch {
+      // The existing stream and message endpoints remain usable during migration.
+    }
+  }
 
   // ── Composables ──
 
@@ -290,6 +352,8 @@ export const useChatStore = defineStore('chat', () => {
       const cfg = response.executionConfig
       agentConfig.restoreConversationConfig(cfg)
 
+      transcript.value = response.transcript ?? []
+      eventCursors.set(id, response.lastEventSequence ?? 0)
       const rows = response.messages
       const lastContextTokens = response.lastContextTokens
       const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
@@ -334,6 +398,8 @@ export const useChatStore = defineStore('chat', () => {
         }
         return base
       })
+
+      void replayChatEvents(id, response.lastEventSequence ?? 0)
 
       // Hydrate server-side post-action state
       try {
@@ -682,6 +748,9 @@ export const useChatStore = defineStore('chat', () => {
     sortedConversations,
     activeConversationId,
     messages,
+    transcript,
+    handleChatEvent,
+    replayChatEvents,
     loadingMessages,
     memoryFolders,
     queuedMessages,
