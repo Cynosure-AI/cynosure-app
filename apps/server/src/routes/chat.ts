@@ -41,6 +41,7 @@ import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverr
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import type { ChatSendRequest, ConversationExecutionConfig, StoredMessageDto } from '@shared/types'
 import { blocksFromStoredMessage } from '../core/chat/transcript.js'
+import { appendMessageEvents } from '../core/chat/chat-events.js'
 import type { ChatQueueRequest } from '@shared/types'
 import {
   configureChatQueue,
@@ -247,7 +248,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const terminalEvent = event.endsWith('-end') || event.endsWith('-error')
       if (abortController.signal.aborted && !terminalEvent) return
       broadcast(event, payload)
-
+      if (event === 'chat:new-message' && payload && typeof payload === 'object') {
+        const message = (payload as { message?: { id?: string } }).message
+        if (message?.id) {
+          try {
+            for (const chatEvent of appendMessageEvents(getDb(), conversationId, executionId, message.id)) {
+              broadcast('chat:event', chatEvent)
+            }
+          } catch (err) {
+            // The legacy stream remains available while canonical event persistence is migrating.
+            console.warn('[chat] Could not record canonical message event:', err)
+          }
+        }
+      }
     }
 
     // Registration happens before the conversation lock and before any async
