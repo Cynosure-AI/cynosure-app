@@ -66,9 +66,18 @@ export function toTranscriptItems(message: StoredMessageDto): TranscriptItem[] {
     blocks,
     createdAt: message.createdAt,
     agentId: message.agentId,
+    agentName: message.agentName,
+    agentIconUrl: message.agentIconUrl,
     invocationId: message.maInvocationId,
     provider: message.provider,
     model: message.model,
+    contextEvidence: message.contextEvidence,
+    usage: {
+      promptTokens: message.promptTokens,
+      completionTokens: message.completionTokens,
+      contextTokens: message.contextTokens,
+      latencyMs: message.latencyMs,
+    },
   }]
   if (message.role === 'assistant' && Array.isArray(message.toolCalls)) {
     for (const [index, value] of message.toolCalls.entries()) {
