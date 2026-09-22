@@ -21,10 +21,21 @@ export function readContentBlocks(json: string | null, message: StoredMessageDto
   if (json) {
     try {
       const blocks: unknown = JSON.parse(json)
-      if (Array.isArray(blocks) && blocks.every((block) =>
-        block !== null && typeof block === 'object' && typeof block.type === 'string' &&
-        ['text', 'reasoning', 'image', 'video', 'audio', 'file', 'structured'].includes(block.type)
-      )) return blocks as ContentBlock[]
+      if (Array.isArray(blocks) && blocks.every((block: unknown) => {
+        if (!block || typeof block !== 'object' || !('type' in block)) return false
+        const value = block as Record<string, unknown>
+        switch (value.type) {
+          case 'text':
+          case 'reasoning': return typeof value.text === 'string'
+          case 'image':
+          case 'video':
+          case 'audio': return typeof value.url === 'string'
+          case 'file': return typeof value.name === 'string' &&
+            (value.url === undefined || typeof value.url === 'string')
+          case 'structured': return 'value' in value
+          default: return false
+        }
+      })) return blocks as ContentBlock[]
     } catch { /* Old or damaged rows fall back to legacy columns. */ }
   }
   return blocksFromStoredMessage(message)
