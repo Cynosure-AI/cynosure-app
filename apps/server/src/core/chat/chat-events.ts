@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { ChatEvent, StoredMessageDto, TranscriptItem } from '@shared/types'
 import { readContentBlocks, toTranscriptItems } from './transcript.js'
+import { getAgent } from '../agents/agent-store.js'
 
 function parseArray(value: string | null): string[] | undefined {
   if (!value) return undefined
@@ -21,7 +22,8 @@ export function appendMessageEvents(
     SELECT id, conversation_id, role, content, thinking, content_blocks_json,
            image_urls_json, video_urls_json, audio_urls_json, structured_content_json,
            tool_calls_json, tool_call_id, agent_id, ma_invocation_id,
-           provider, model, created_at
+           provider, model, memory_sources_json,
+           prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at
     FROM messages WHERE id = ? AND conversation_id = ?
   `).get(messageId, conversationId) as {
     id: string; conversation_id: string; role: string; content: string
@@ -30,7 +32,9 @@ export function appendMessageEvents(
     audio_urls_json: string | null; structured_content_json: string | null
     tool_calls_json: string | null; tool_call_id: string | null
     agent_id: string | null; ma_invocation_id: string | null
-    provider: string | null; model: string | null; created_at: number
+    provider: string | null; model: string | null; memory_sources_json: string | null
+    prompt_tokens: number | null; completion_tokens: number | null
+    context_tokens: number | null; latency_ms: number | null; created_at: number
   } | undefined
   if (!row) return []
 
@@ -42,6 +46,12 @@ export function appendMessageEvents(
     const parsed = row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined
     toolCalls = Array.isArray(parsed) ? parsed : undefined
   } catch { /* Preserve the message. */ }
+  let contextEvidence: StoredMessageDto['contextEvidence']
+  try {
+    const parsed: unknown = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
+    if (Array.isArray(parsed)) contextEvidence = parsed
+  } catch { /* Keep remaining metadata. */ }
+  const agent = row.agent_id ? getAgent(row.agent_id) : null
   const message: StoredMessageDto = {
     id: row.id, conversationId, role: row.role, content: row.content,
     thinking: row.thinking ?? undefined,
@@ -50,6 +60,13 @@ export function appendMessageEvents(
     audioDataUrls: parseArray(row.audio_urls_json),
     structuredContent, toolCalls, toolCallId: row.tool_call_id ?? undefined,
     agentId: row.agent_id ?? undefined,
+    agentName: agent?.name,
+    agentIconUrl: agent?.iconUrl ?? undefined,
+    contextEvidence,
+    promptTokens: row.prompt_tokens,
+    completionTokens: row.completion_tokens,
+    contextTokens: row.context_tokens,
+    latencyMs: row.latency_ms,
     maInvocationId: row.ma_invocation_id ?? undefined,
     provider: row.provider, model: row.model, createdAt: row.created_at,
   }
