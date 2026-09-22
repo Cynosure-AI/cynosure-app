@@ -1,6 +1,4 @@
 import type { WebSocket } from 'ws'
-import { getDb } from './db/database.js'
-import { appendMessageEvents } from './core/chat/chat-events.js'
 
 /** Per-client subscription state */
 interface ClientState {
@@ -93,22 +91,6 @@ export function broadcast(event: string, data: unknown): void {
     if (!canReceiveEvent(state, event, data)) continue
     if (ws.readyState === ws.OPEN) {
       ws.send(msg)
-    }
-  }
-  // Every persisted message writer (chat, subagents, channels, cron, tools)
-  // reaches this boundary. Append once by message ID and publish the same item
-  // shape returned by the conversation snapshot.
-  if (event === 'chat:new-message' && data && typeof data === 'object') {
-    const payload = data as { conversationId?: string; executionId?: string; streamId?: string; message?: { id?: string } }
-    if (payload.conversationId && payload.message?.id) {
-      try {
-        const executionId = payload.executionId || payload.streamId || payload.message.id
-        for (const chatEvent of appendMessageEvents(getDb(), payload.conversationId, executionId, payload.message.id)) {
-          broadcast('chat:event', chatEvent)
-        }
-      } catch (err) {
-        console.warn('[chat] Could not record canonical message event:', err)
-      }
     }
   }
 }
