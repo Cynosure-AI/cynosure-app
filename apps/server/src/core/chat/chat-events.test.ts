@@ -25,7 +25,8 @@ describe('canonical chat event replay', () => {
     `).run()
 
     const first = appendMessageEvents(db, 'a', 'execution-1', 'm1')
-    appendMessageEvents(db, 'b', 'execution-2', 'm2')
+    const other = appendMessageEvents(db, 'b', 'execution-2', 'm2')
+    expect(other[0].sequence).toBe(1)
     const last = appendMessageEvents(db, 'a', 'execution-1', 'm3')
     expect(appendMessageEvents(db, 'a', 'execution-1', 'm1')).toEqual([])
     expect(first[0]).toMatchObject({
