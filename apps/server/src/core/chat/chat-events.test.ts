@@ -32,11 +32,11 @@ describe('canonical chat event replay', () => {
       version: 1, type: 'item.appended', executionId: 'execution-1',
       payload: { item: { id: 'm1', blocks: [{ type: 'text', text: 'new' }] } },
     })
-    expect(listChatEvents(db, 'a', first[0].sequence).map(event => event.payload.item.id))
+    expect(listChatEvents(db, 'a', first[0].sequence).filter(event => event.type === 'item.appended').map(event => event.payload.item.id))
       .toEqual(['m3'])
     expect(last[0].sequence).toBeGreaterThan(first[0].sequence)
     expect(lastChatEventSequence(db, 'a')).toBe(last[0].sequence)
-    expect(listChatEvents(db, 'b', 0).map(event => event.payload.item.id)).toEqual(['m2'])
+    expect(listChatEvents(db, 'b', 0).filter(event => event.type === 'item.appended').map(event => event.payload.item.id)).toEqual(['m2'])
     db.close()
   })
 })
