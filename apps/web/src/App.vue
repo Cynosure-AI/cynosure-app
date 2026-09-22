@@ -58,7 +58,10 @@ async function loadAllStores() {
 
 // Reload stores when server connection is (re)established
 watch(wsConnected, (connected) => {
-  if (connected) loadAllStores()
+  if (connected) {
+    loadAllStores()
+    if (chatStore.activeConversationId) void chatStore.replayChatEvents(chatStore.activeConversationId)
+  }
 })
 
 function handleMcpAuth(data: { serverId: string; serverName: string; authUrl: string }) {
@@ -138,6 +141,7 @@ onMounted(async () => {
     api.chat.onSubAgentStreamEnd((data) => chatStore.handleSubAgentStreamEnd(data)),
     api.chat.onTitleUpdated((data) => chatStore.handleTitleUpdated(data)),
     api.chat.onNewMessage((data) => chatStore.handleNewMessage(data)),
+    api.chat.onChatEvent((event) => chatStore.handleChatEvent(event)),
     api.chat.onChannelConversationState((data) => {
       void chatStore.handleChannelConversationState(data)
     }),
