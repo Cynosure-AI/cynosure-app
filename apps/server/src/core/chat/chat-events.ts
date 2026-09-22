@@ -51,7 +51,9 @@ export function appendMessageEvents(
     const parsed: unknown = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
     if (Array.isArray(parsed)) contextEvidence = parsed
   } catch { /* Keep remaining metadata. */ }
-  const agent = row.agent_id ? getAgent(row.agent_id) : null
+  let agent: ReturnType<typeof getAgent> = null
+  try { agent = row.agent_id ? getAgent(row.agent_id) : null }
+  catch { /* An agent may have been deleted since this message was written. */ }
   const message: StoredMessageDto = {
     id: row.id, conversationId, role: row.role, content: row.content,
     thinking: row.thinking ?? undefined,
