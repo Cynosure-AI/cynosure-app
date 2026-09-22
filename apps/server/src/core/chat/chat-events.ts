@@ -17,14 +17,16 @@ type PendingChatEvent = ChatEvent extends infer Event
 
 /** The caller owns the surrounding transaction and broadcasts only after commit. */
 export function appendChatEvent(db: Database.Database, event: PendingChatEvent): ChatEvent | null {
-  const itemId = event.type === 'item.appended' ? event.payload.item.id : null
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO chat_events (conversation_id, execution_id, event_type, item_id, payload_json, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(event.conversationId, event.executionId, event.type, itemId, JSON.stringify(event.payload), Date.now())
-  if (insert.changes === 0) return null
-  return { ...event, sequence: Number(insert.lastInsertRowid) } as ChatEvent
-}
+  return db.transaction(() => {
+    const itemId = event.type === 'item.appended' ? event.payload.item.id : null
+    const sequence = lastChatEventSequence(db, event.conversationId) + 1
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO chat_events (conversation_id, sequence, execution_id, event_type, item_id, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(event.conversationId, sequence, event.executionId, event.type, itemId, JSON.stringify(event.payload), Date.now())
+    if (insert.changes === 0) return null
+    return { ...event, sequence } as ChatEvent
+  })()
 
 /** Append only after a message has been committed. Missing/deleted messages emit nothing. */
 export function appendMessageEvents(
