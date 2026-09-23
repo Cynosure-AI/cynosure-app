@@ -11,6 +11,13 @@ const ids = (timeline: ReturnType<typeof buildChatTimeline>) => timeline.map(ent
   entry.type === 'message' ? entry.msg.id : entry.type === 'sub-agent-group' ? entry.entries.map(inner => inner.key) : entry.ts)
 
 describe('chat timeline chronology', () => {
+  it('uses canonical sequence when persisted timestamps disagree', () => {
+    const timeline = buildChatTimeline([
+      message('later', 1, { sequence: 20 }),
+      message('earlier', 2, { sequence: 10 }),
+    ], [])
+    expect(ids(timeline)).toEqual(['earlier', 'later'])
+  })
   it('keeps a completed invocation below its own call and before a later retry', () => {
     const messages = [message('user', 0, { role: 'user' }),
       message('first-run', 2, { maInvocationId: 'first', maCodename: 'worker' }),
@@ -86,6 +93,26 @@ describe('chat timeline chronology', () => {
     )
     const group = timeline.find(entry => entry.type === 'sub-agent-group')
     expect(group?.openingMessage).toBe('## Context\nBackground\n\n## Task\nDo the task')
+  })
+
+  it('matches parallel delegations through tool result invocation IDs', () => {
+    const timeline = buildChatTimeline([
+      message('second', 3, { maInvocationId: 'inv-b', maCodename: 'worker' }),
+      message('first', 4, { maInvocationId: 'inv-a', maCodename: 'worker' }),
+    ], [
+      step(1, { taskId: 'parent', toolCalls: [
+        { id: 'call-a', name: 'spawn_subagent', arguments: '{"internalName":"worker","instructions":"First task"}' },
+        { id: 'call-b', name: 'spawn_subagent', arguments: '{"internalName":"worker","instructions":"Second task"}' },
+      ] }),
+      step(2, { taskId: 'parent', results: [
+        { toolCallId: 'call-a', name: 'spawn_subagent', success: true, output: '', invocationId: 'inv-a' },
+        { toolCallId: 'call-b', name: 'spawn_subagent', success: true, output: '', invocationId: 'inv-b' },
+      ] }),
+    ])
+    const groups = timeline.filter((entry) => entry.type === 'sub-agent-group')
+    expect(groups.map((entry) => [entry.entries[0].key, entry.openingMessage])).toEqual([
+      ['m-second', 'Second task'], ['m-first', 'First task'],
+    ])
   })
 
   it('keeps fallback tools inside their invocation and separates user turns', () => {

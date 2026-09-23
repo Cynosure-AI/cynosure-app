@@ -152,6 +152,23 @@ describe('chat streaming completion', () => {
       isError: true,
     })
   })
+
+  test('uses a persisted error message without leaving a duplicate stream placeholder', () => {
+    const { messages, streaming } = setup()
+    streaming.handleStreamStart({ streamId: 'stream', conversationId: 'conversation' })
+    streaming.handleStreamChunk({ streamId: 'stream', conversationId: 'conversation', content: 'Generating image...' })
+    streaming.handleNewMessage({ streamId: 'stream', conversationId: 'conversation', message: {
+      id: 'saved-error', conversationId: 'conversation', role: 'assistant',
+      content: 'Generated image rejected by content moderation.', isError: true, createdAt: 2,
+    } })
+    streaming.handleStreamError({
+      streamId: 'stream', conversationId: 'conversation',
+      error: 'Generated image rejected by content moderation.',
+    })
+    expect(messages.value).toMatchObject([{
+      id: 'saved-error', content: 'Generated image rejected by content moderation.', isError: true,
+    }])
+  })
 })
 
 

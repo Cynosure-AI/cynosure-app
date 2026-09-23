@@ -1,5 +1,120 @@
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool'
 
+/** Provider-neutral, persisted content. URLs point to Cynosure artifacts. */
+export type ContentBlock =
+  | { type: 'text' | 'reasoning'; text: string }
+  | { type: 'image' | 'video' | 'audio'; artifactId: string; url: string }
+  | { type: 'file'; artifactId: string; name: string; url?: string }
+  | { type: 'structured'; value: unknown }
+
+export interface MessageItem {
+  type: 'message'
+  id: string
+  role: ChatRole
+  isError?: boolean
+  content: ContentBlock[]
+  createdAt: number
+  executionId?: string
+  agentId?: string
+  invocationId?: string
+  agentName?: string
+  agentIconUrl?: string | null
+  maCodename?: string
+  maAgentName?: string
+  /** Sequence of the event that first published this persisted message. */
+  sequence?: number
+  contextEvidence?: ContextEvidence[]
+  provider?: string | null
+  model?: string | null
+  promptTokens?: number | null
+  completionTokens?: number | null
+  contextTokens?: number | null
+  latencyMs?: number | null
+}
+
+export interface ToolCallItem {
+  type: 'tool-call'
+  id: string
+  executionId: string
+  taskId?: string
+  iteration?: number
+  callId: string
+  name: string
+  arguments: string
+  parentInvocationId?: string
+  invocationId?: string
+  createdAt: number
+}
+
+export interface ToolResultItem {
+  type: 'tool-result'
+  id: string
+  executionId: string
+  taskId?: string
+  iteration?: number
+  callId: string
+  name: string
+  invocationId?: string
+  content: ContentBlock[]
+  success: boolean
+  createdAt: number
+}
+
+export interface ExecutionMarkerItem {
+  type: 'execution-marker'
+  id: string
+  executionId: string
+  taskId?: string
+  status: 'started' | 'completed' | 'cancelled' | 'failed' | 'compacted'
+  createdAt: number
+  parentInvocationId?: string
+  maCodename?: string
+  detail?: string
+}
+
+export type TranscriptItem = MessageItem | ToolCallItem | ToolResultItem | ExecutionMarkerItem
+
+export interface ChatEventBase {
+  version: 1
+  conversationId: string
+  executionId: string
+  sequence: number
+  createdAt: number
+}
+
+export type ChatEvent = ChatEventBase & (
+  | { type: 'transcript-item'; item: TranscriptItem }
+  | { type: 'tool-calls'; items: ToolCallItem[] }
+  | { type: 'tool-results'; items: ToolResultItem[] }
+  | { type: 'routing-decision'; taskId: string; phase: 'task-context' | 'toolsets' | 'tools' | 'memory-candidates' | 'memory-context'; entries: Array<{ name: string; details: Record<string, unknown> }>; maCodename?: string; maAgentName?: string; parentInvocationId?: string }
+  | { type: 'execution-step'; taskId: string; iteration: number; status: string; message?: string; maCodename?: string; maAgentName?: string; invocationId?: string }
+  | { type: 'stream-start'; streamId: string; scope: 'main' | 'subagent'; agentId?: string; agentName?: string; agentIconUrl?: string | null; invocationId?: string; maCodename?: string; maAgentName?: string; parentInvocationId?: string }
+  | { type: 'content-delta'; streamId: string; scope: 'main' | 'subagent'; block: { type: 'text' | 'reasoning'; text: string } }
+  | { type: 'media-added'; streamId: string; scope: 'main' | 'subagent'; blocks: ContentBlock[] }
+  | { type: 'stream-reset' | 'stream-discard'; streamId: string; scope: 'main' | 'subagent' }
+  | { type: 'stream-end'; streamId: string; scope: 'main' | 'subagent'; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; contextTokens?: number; contextWindow?: number; images?: string[] }
+  | { type: 'stream-error'; streamId: string; scope: 'main' | 'subagent'; error: string }
+  | { type: 'usage'; promptTokens: number; completionTokens: number; totalTokens: number; contextTokens?: number; contextWindow?: number; model?: string }
+  | { type: 'execution-state'; agentId: string | null; state: 'running' | 'stopped' | 'finished' }
+  | { type: 'queue-changed' }
+  | { type: 'title-updated'; title: string }
+  | { type: 'post-action'; action: string; status: 'started' | 'completed' }
+  | { type: 'quick-responses'; messageId: string | null; suggestions: string[] }
+  | { type: 'compact-start' }
+  | { type: 'compact-error'; error: string }
+  | { type: 'compact-event'; messageId: string; summary: string; compactedMessageCount: number; model: string }
+)
+
+export type ChatEventPayload = ChatEvent extends infer Event
+  ? Event extends ChatEvent ? Omit<Event, keyof ChatEventBase> : never
+  : never
+
+export interface ChatEventDraft {
+  conversationId: string
+  executionId: string
+  payload: ChatEventPayload
+}
+
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
@@ -209,39 +324,11 @@ export interface ConversationListItemDto {
   last_user_message: string | null
 }
 
-export interface StoredMessageDto {
-  id: string
-  conversationId: string
-  role: ChatRole | string
-  content: string
-  thinking?: string
-  toolCalls?: unknown[]
-  toolCallId?: string
-  imageDataUrls?: string[]
-  videoDataUrls?: string[]
-  audioDataUrls?: string[]
-  structuredContent?: unknown
-  /** Exact retrieval evidence associated with this assistant turn. */
-  contextEvidence?: ContextEvidence[]
-  fileAttachments?: { name: string; href?: string }[]
-  agentId?: string
-  agentName?: string
-  agentIconUrl?: string | null
-  maCodename?: string
-  maAgentName?: string
-  maInvocationId?: string
-  provider?: string | null
-  model?: string | null
-  promptTokens?: number | null
-  completionTokens?: number | null
-  contextTokens?: number | null
-  latencyMs?: number | null
-  createdAt: number
-}
-
 export interface ConversationMessagesResponse {
   conversationAgentId: string | null
-  messages: StoredMessageDto[]
+  messages: MessageItem[]
+  /** Highest persisted message event included in this snapshot; later stream events must replay. */
+  latestEventSequence: number
   lastContextTokens: number | null
   executionConfig: ConversationExecutionConfig
 }

@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
     setConversationExecutionState: vi.fn(),
     prepareConversationExecution: vi.fn(),
     stopConversationExecution: vi.fn(),
-    reconcileStoppedExecution: vi.fn(),
     isConversationExecuting: vi.fn(() => false),
     truncateConversationExecution: vi.fn(),
     dismissHITLByConversation: vi.fn(),
@@ -151,6 +150,21 @@ describe('chat message actions', () => {
     expect(mocks.agentStore.setConversationExecutionState).toHaveBeenLastCalledWith('created-conversation', false)
   })
 
+  test('Stop can target the execution before the server emits a stream start', async () => {
+    const state = setup()
+    let resolveSend!: () => void
+    mocks.chat.send.mockReturnValueOnce(new Promise<void>((resolve) => { resolveSend = resolve }))
+
+    const send = state.api.sendMessage('Hello')
+    const messageId = state.messages.value[0].id
+    expect(state.streaming.primaryStreamId.value).toBe(messageId)
+
+    await state.api.cancelStream()
+    expect(mocks.chat.cancelStream).toHaveBeenCalledWith(messageId, 'conversation')
+    resolveSend()
+    await send
+  })
+
   test('does not send legacy global router preferences when the agent has no override', async () => {
     const state = setup()
     mocks.agentDefinitions.get.mockReturnValue({ id: 'agent', name: 'Agent', autoRouterProviderId: '', autoRouterModel: '' })
@@ -247,7 +261,7 @@ describe('chat message actions', () => {
     }))
   })
 
-  test('latches local execution off immediately and reconciles server execution ids', async () => {
+  test('keeps Stop available until the server confirms cancellation', async () => {
     const state = setup()
     state.streaming.primaryStreamId.value = 'stream'
     let resolveCancellation!: (result: { success: boolean; executionIds: string[] }) => void
@@ -258,13 +272,24 @@ describe('chat message actions', () => {
     const cancellation = state.api.cancelStream()
 
     expect(mocks.chat.cancelStream).toHaveBeenCalledWith('stream', 'conversation')
-    expect(state.streaming.clearConversationStreamState).toHaveBeenCalledWith('conversation')
-    expect(mocks.agentStore.stopConversationExecution).toHaveBeenCalledWith('conversation', ['stream'])
+    expect(state.streaming.clearConversationStreamState).not.toHaveBeenCalled()
+    expect(mocks.agentStore.stopConversationExecution).not.toHaveBeenCalled()
 
     resolveCancellation({ success: true, executionIds: ['stream', 'linked-stream'] })
     await cancellation
 
-    expect(mocks.agentStore.reconcileStoppedExecution).toHaveBeenCalledWith('conversation', ['stream', 'linked-stream'])
+    expect(mocks.agentStore.stopConversationExecution).toHaveBeenCalledWith('conversation', ['stream', 'linked-stream'])
+    expect(state.streaming.clearConversationStreamState).toHaveBeenCalledWith('conversation')
     expect(mocks.chat.cancelPostActions).toHaveBeenCalledWith('conversation')
+  })
+
+  test('does not hide a running execution when cancellation fails', async () => {
+    const state = setup()
+    state.streaming.primaryStreamId.value = 'stream'
+    mocks.chat.cancelStream.mockRejectedValueOnce(new Error('offline'))
+
+    await expect(state.api.cancelStream()).rejects.toThrow('offline')
+    expect(state.streaming.clearConversationStreamState).not.toHaveBeenCalled()
+    expect(mocks.agentStore.stopConversationExecution).not.toHaveBeenCalled()
   })
 })

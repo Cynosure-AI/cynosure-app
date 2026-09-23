@@ -4,8 +4,9 @@ import { makeSearchAvailableMcpToolsTool } from './expand-available-toolset.js'
 
 const { embed, embedBatch } = vi.hoisted(() => ({ embed: vi.fn(), embedBatch: vi.fn() }))
 vi.mock('../../memory/embedding.js', () => ({
-    getEmbeddingProvider: () => ({
+    getEmbeddingService: () => ({
         embed, embedBatch,
+        profile: { fingerprint: 'test-profile' },
         getConfig: () => ({ providerId: 'test' }),
         getModelName: () => 'test',
         getDimensions: () => 2,

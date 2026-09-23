@@ -193,6 +193,7 @@ export function useChatMessages(
         streaming.streamingContent.value = ''
         streaming.streamingThinking.value = ''
         streaming.isStreaming.value = true
+        streaming.primaryStreamId.value = msgId
 
         const agentDefs = useAgentDefinitionsStore()
         const activeAgent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
@@ -251,8 +252,15 @@ export function useChatMessages(
     async function cancelStream(): Promise<void> {
         const id = streaming.primaryStreamId.value || streaming.currentStreamId.value
         const convId = activeConversationId.value
+        // Ask the server first. Clearing local state before this request succeeds
+        // hides the Stop button while the execution may still be running.
+        const result = id || convId
+            ? await api.chat.cancelStream(id || '', convId || undefined)
+            : { success: true, executionIds: [] as string[] }
         if (convId) {
-            agentStore.stopConversationExecution(convId, id ? [id] : [])
+            agentStore.stopConversationExecution(convId, [...new Set([
+                ...(id ? [id] : []), ...result.executionIds,
+            ])])
             streaming.clearConversationStreamState(convId)
             cancelPostActions(convId)
         } else {
@@ -270,11 +278,6 @@ export function useChatMessages(
             }
             streaming.streamingContent.value = ''
             streaming.streamingThinking.value = ''
-        }
-
-        if (id || convId) {
-            const result = await api.chat.cancelStream(id || '', convId || undefined)
-            if (convId) agentStore.reconcileStoppedExecution(convId, result.executionIds)
         }
 
     }

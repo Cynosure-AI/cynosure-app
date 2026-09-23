@@ -3,6 +3,15 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 import type { RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
 
+function captureRoutingEvents(events: Array<Record<string, unknown>>): void {
+    getEventBus().on('chat:event', (draft) => {
+        const payload = (draft as { payload?: { type?: string; entries?: Array<{ name: string; details: Record<string, unknown> }> } }).payload
+        if (payload?.type === 'routing-decision') events.push({
+            toolCalls: payload.entries?.map((entry) => ({ name: entry.name, arguments: JSON.stringify(entry.details) })),
+        })
+    })
+}
+
 const routerMocks = vi.hoisted(() => ({
     shouldRoute: vi.fn(() => true),
     route: vi.fn(),
@@ -75,7 +84,7 @@ describe('automatic tool routing', () => {
             }),
         } as unknown as LLMGateway
         const selectionEvents: Array<Record<string, unknown>> = []
-        getEventBus().on('step:tools-chosen', (event) => selectionEvents.push(event as Record<string, unknown>))
+        captureRoutingEvents(selectionEvents)
 
         const result = await applyAutoToolRouting({
             enabled: true,
@@ -115,7 +124,7 @@ describe('automatic tool routing', () => {
             }] }),
         } as unknown as LLMGateway
         const events: Array<Record<string, unknown>> = []
-        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+        captureRoutingEvents(events)
 
         await expect(applyAutoToolRouting({
             enabled: true,
@@ -217,7 +226,7 @@ describe('automatic tool routing', () => {
             toolCalls: [{ function: { name: 'select_toolsets', arguments: JSON.stringify({ namespaceIds: ['mcp:browser'] }) } }],
         }) } as unknown as LLMGateway
         const events: Array<Record<string, unknown>> = []
-        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+        captureRoutingEvents(events)
 
         await applyAutoToolRouting({
             enabled: true,

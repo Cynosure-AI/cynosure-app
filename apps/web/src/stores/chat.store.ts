@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
-import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto, StoredMessageDto } from '@shared/types'
+import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -10,6 +10,7 @@ import { useChatStreaming } from '../composables/useChatStreaming'
 import { useChatMessages } from '../composables/useChatMessages'
 import { useChatAgentConfig } from '../composables/useChatAgentConfig'
 import { resolveEffectiveProviderModel } from '../utils/model-selection'
+import { toDisplayMessage } from '../utils/message-view'
 
 export interface Conversation {
   id: string
@@ -24,6 +25,7 @@ export interface Conversation {
 
 export interface DisplayMessage {
   id: string
+  sequence?: number
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   thinking?: string
@@ -64,6 +66,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversationId = ref<string | null>(null)
   const messages = ref<DisplayMessage[]>([])
   const loadingMessages = ref(false)
+  const lastLoadedEventCursor = ref<{ conversationId: string; sequence: number } | null>(null)
   const contextWindow = ref<number | null>(null)
   const modelCost = ref<{ input: number; output: number } | null>(null)
   const modelPricing = ref<ModelPricing | null>(null)
@@ -288,42 +291,9 @@ export const useChatStore = defineStore('chat', () => {
       const cfg = response.executionConfig
       agentConfig.restoreConversationConfig(cfg)
 
-      const rows = response.messages
       const lastContextTokens = response.lastContextTokens
-      const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
-      messages.value = rows.map((r: StoredMessageDto) => {
-        const base: DisplayMessage = {
-          id: r.id,
-          role: r.role as DisplayMessage['role'],
-          content: r.content,
-          thinking: r.thinking || undefined,
-          imageDataUrls: r.imageDataUrls || undefined,
-          videoDataUrls: r.videoDataUrls || undefined,
-          audioDataUrls: r.audioDataUrls || undefined,
-          structuredContent: r.structuredContent,
-          contextEvidence: r.contextEvidence,
-          fileAttachments: r.fileAttachments || undefined,
-          agentId: r.agentId || undefined,
-          agentName: r.agentName || undefined,
-          agentIconUrl: r.agentIconUrl ?? undefined,
-          maCodename: r.maCodename || undefined,
-          maAgentName: r.maAgentName || undefined,
-          maInvocationId: r.maInvocationId || undefined,
-          provider: r.provider || undefined,
-          model: r.model || undefined,
-          promptTokens: r.promptTokens || undefined,
-          completionTokens: r.completionTokens || undefined,
-          contextTokens: r.contextTokens || undefined,
-          latencyMs: r.latencyMs || undefined,
-          createdAt: r.createdAt
-        }
-        if (r.role === 'system' && r.content.startsWith(COMPACT_EVENT_PREFIX)) {
-          try {
-            base.compactEventData = JSON.parse(r.content.slice(COMPACT_EVENT_PREFIX.length))
-          } catch { /* ignore */ }
-        }
-        return base
-      })
+      messages.value = response.messages.map((item) => toDisplayMessage(item))
+      lastLoadedEventCursor.value = { conversationId: id, sequence: response.latestEventSequence }
 
       // Hydrate server-side post-action state
       try {
@@ -673,6 +643,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     messages,
     loadingMessages,
+    lastLoadedEventCursor,
     memoryFolders,
     queuedMessages,
     queuePaused,
@@ -700,7 +671,7 @@ export const useChatStore = defineStore('chat', () => {
     modelModalities,
     modelInfoStatus,
     resolvedModelProvider,
-    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
+    handleStreamStart(data: Parameters<typeof streaming.handleStreamStart>[0]): void {
       if (agentStore.isConversationStopped(data.conversationId, data.streamId)) return
       streaming.handleStreamStart(data)
       agentStore.setConversationExecutionState(data.conversationId, true)
@@ -796,12 +767,12 @@ export const useChatStore = defineStore('chat', () => {
     editMessage: chatMessages.editMessage,
     forkConversationFromMessage,
     async cancelStream(): Promise<void> {
+      await chatMessages.cancelStream()
       const id = activeConversationId.value
       if (id) {
         postActionsMap.delete(id)
         postActionsTrigger.value++
       }
-      await chatMessages.cancelStream()
     },
     cancelPostActions(convId?: string): void {
       const id = convId || activeConversationId.value

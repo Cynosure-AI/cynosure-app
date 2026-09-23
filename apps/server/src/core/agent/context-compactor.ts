@@ -9,6 +9,7 @@ import {
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/providers/base.provider.js'
 import type { ReasoningEffort } from '@shared/types'
+import { messageContentJson, publishChatEvent } from '../chat/transcript.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -258,7 +259,7 @@ export async function applyCompactStrategy({
     }
 
     // Notify the UI so it can show a loading card while summarisation runs
-    broadcast('chat:compact-start', { conversationId })
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'compact-start' } })
 
     let summary: string
     try {
@@ -267,7 +268,7 @@ export async function applyCompactStrategy({
         if (signal?.aborted || (err as Error).name === 'AbortError') throw err
         // Summarisation failed (e.g. provider error). Notify the UI and return the
         // unmodified working messages so the main request can still proceed.
-        broadcast('chat:compact-error', { conversationId, error: String(err) })
+        publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'compact-error', error: String(err) } })
         return { messages: workingMessages, initialContextEstimate: initialEstimate }
     }
 
@@ -287,18 +288,15 @@ export async function applyCompactStrategy({
         compactedThroughCreatedAt: compactedThroughRow?.created_at ?? lastCompactEvent?.compactedThroughCreatedAt,
     }
     db.prepare(
-        'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(compactMsgId, conversationId, 'system', `${COMPACT_EVENT_PREFIX}${JSON.stringify(compactData)}`, createdAt)
+        'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(compactMsgId, conversationId, 'system', `${COMPACT_EVENT_PREFIX}${JSON.stringify(compactData)}`,
+        messageContentJson({ id: compactMsgId, content: `${COMPACT_EVENT_PREFIX}${JSON.stringify(compactData)}` }), createdAt)
 
     // Notify the UI so it can render the completed compact event card
-    broadcast('chat:compact-event', {
-        conversationId,
-        messageId: compactMsgId,
-        summary,
-        compactedMessageCount: toSummarize.length,
-        model: summaryModel,
-        createdAt,
-    })
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: {
+        type: 'compact-event', messageId: compactMsgId, summary,
+        compactedMessageCount: toSummarize.length, model: summaryModel,
+    } })
 
     const summaryNote = `\n\n---\n[Conversation compacted — ${toSummarize.length} messages summarized by ${summaryModel}]\n${summary}`
     const finalSystemMsgs = injectSummaryNote(workingSystemMsgs, summaryNote)

@@ -15,6 +15,7 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
 import { useSidebar } from './composables/useSidebar'
+import { useChatEvents } from './composables/useChatEvents'
 
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
@@ -44,7 +45,6 @@ const mcpAuthOpened = ref<Set<string>>(new Set())
 const mcpAuthReconnecting = ref<string | null>(null)
 
 const cleanups: (() => void)[] = []
-
 async function loadAllStores() {
   await preferencesStore.loadUserSettings()
   await providerStore.loadProviders()
@@ -58,7 +58,9 @@ async function loadAllStores() {
 
 // Reload stores when server connection is (re)established
 watch(wsConnected, (connected) => {
-  if (connected) loadAllStores()
+  if (connected) {
+    void loadAllStores()
+  }
 })
 
 function handleMcpAuth(data: { serverId: string; serverName: string; authUrl: string }) {
@@ -107,6 +109,7 @@ function isExecutionUpdatePayload(data: unknown): data is { event: string; data:
 
 onMounted(async () => {
   loadAllStores()
+  cleanups.push(useChatEvents())
 
   if (electron?.onNewChatRequested) {
     cleanups.push(electron.onNewChatRequested(async () => {
@@ -119,33 +122,9 @@ onMounted(async () => {
 
   // Set up WebSocket event listeners
   cleanups.push(
-    api.chat.onStreamStart((data) => chatStore.handleStreamStart(data)),
-    api.chat.onStreamChunk((data) => chatStore.handleStreamChunk(data)),
-    api.chat.onStreamThinking((data) => chatStore.handleStreamThinking(data)),
-    api.chat.onStreamImages((data) => chatStore.handleStreamImages(data)),
-    api.chat.onStreamVideos((data) => chatStore.handleStreamVideos(data)),
-    api.chat.onStreamReset((data) => chatStore.handleStreamReset(data)),
-    api.chat.onStreamDiscard((data) => chatStore.handleStreamDiscard(data)),
-    api.chat.onStreamUsage((data) => chatStore.handleStreamUsage(data)),
-    api.chat.onStreamEnd((data) => chatStore.handleStreamEnd(data)),
-    api.chat.onStreamError((data) => chatStore.handleStreamError(data)),
-    api.chat.onExecutionState((data) => chatStore.handleChatExecutionState(data)),
-    api.chat.onQueueChanged((data) => chatStore.handleQueueChanged(data)),
-    api.chat.onSubAgentStreamStart((data) => chatStore.handleSubAgentStreamStart(data)),
-    api.chat.onSubAgentStreamChunk((data) => chatStore.handleSubAgentStreamChunk(data)),
-    api.chat.onSubAgentStreamThinking((data) => chatStore.handleSubAgentStreamThinking(data)),
-    api.chat.onSubAgentStreamImages((data) => chatStore.handleSubAgentStreamImages(data)),
-    api.chat.onSubAgentStreamEnd((data) => chatStore.handleSubAgentStreamEnd(data)),
-    api.chat.onTitleUpdated((data) => chatStore.handleTitleUpdated(data)),
-    api.chat.onNewMessage((data) => chatStore.handleNewMessage(data)),
     api.chat.onChannelConversationState((data) => {
       void chatStore.handleChannelConversationState(data)
     }),
-    api.chat.onCompactEvent((data) => chatStore.handleCompactEvent(data)),
-    api.chat.onCompactStart((data) => chatStore.handleCompactStart(data)),
-    api.chat.onCompactError((data) => chatStore.handleCompactError(data)),
-    api.chat.onPostAction((data) => chatStore.handlePostAction(data)),
-    api.chat.onQuickResponses((data) => chatStore.handleQuickResponses(data)),
     // Agent event listeners
     api.agent.onHITLRequest((data) => {
       if (isHITLRequestPayload(data)) agentStore.handleHITLRequest(data)

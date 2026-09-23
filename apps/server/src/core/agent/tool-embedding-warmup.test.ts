@@ -13,7 +13,8 @@ const embedding = vi.hoisted(() => ({
     embed: vi.fn(),
 }))
 vi.mock('../memory/embedding.js', () => ({
-    getEmbeddingProvider: () => ({
+    getEmbeddingService: () => ({
+        profile: { fingerprint: `test:${embedding.model}` },
         getConfig: () => ({ providerId: 'test-provider' }),
         getModelName: () => embedding.model,
         getDimensions: () => 2,

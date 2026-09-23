@@ -31,6 +31,10 @@ describe('conversation message attachment resolution', () => {
         insert.run('user', 'source', 'user', 'Question', null, 1)
         insert.run('answer', 'source', 'assistant', 'Answer', 42, 2)
         insert.run('later', 'source', 'user', 'Later', 99, 2)
+        db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
+            .run('source', 'run-1', JSON.stringify({ type: 'transcript-item', item: {
+                type: 'message', id: 'answer', role: 'assistant', content: [{ type: 'text', text: 'Answer' }], createdAt: 2,
+            } }), 2)
         const app = Fastify()
         await app.register(registerConversationRoutes, { prefix: '/api/chat' })
         try {
@@ -40,6 +44,9 @@ describe('conversation message attachment resolution', () => {
             expect(db.prepare('SELECT content FROM messages WHERE conversation_id = ? ORDER BY created_at').all(id)).toEqual([{ content: 'Question' }, { content: 'Answer' }])
             expect(db.prepare('SELECT title, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(id)).toEqual({ title: 'Original (fork)', last_context_tokens: 42, execution_config_json: '{"model":"selected-model"}' })
             expect(db.prepare('SELECT count(*) AS count FROM messages WHERE conversation_id = ?').get('source')).toEqual({ count: 3 })
+            const clonedEvent = db.prepare('SELECT event_json FROM chat_events WHERE conversation_id = ?').get(id) as { event_json: string }
+            const forkedAnswer = db.prepare("SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant'").get(id) as { id: string }
+            expect(JSON.parse(clonedEvent.event_json).item.id).toBe(forkedAnswer.id)
         } finally {
             await app.close()
         }
@@ -57,15 +64,18 @@ describe('conversation message attachment resolution', () => {
         const audio = await materializeAudioArtifacts(['data:audio/wav;base64,YXVkaW8='], 'conversation-1')
         const files = await materializeFileAttachments([{ name: 'notes.txt', content: 'remember me' }], 'conversation-1')
         db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
         ).run(
             'message-1',
             'conversation-1',
             'user',
             'Use these.',
-            JSON.stringify(images.map((item) => item.url)),
-            JSON.stringify(audio.map((item) => item.url)),
+            JSON.stringify([
+                { type: 'text', text: 'Use these.' },
+                ...images.map((item) => ({ type: 'image', artifactId: item.url, url: item.url })),
+                ...audio.map((item) => ({ type: 'audio', artifactId: item.url, url: item.url })),
+            ]),
             now,
         )
         persistMessageFileAttachments(db, 'message-1', 'conversation-1', files, now)
@@ -113,10 +123,31 @@ describe('conversation message attachment resolution', () => {
         await app.close()
 
         expect(response.statusCode).toBe(200)
-        expect(response.json().messages[0].fileAttachments).toEqual([{
-            name: 'briefing.pdf',
-            href: expect.stringContaining('&name=briefing.pdf'),
-        }])
+        expect(response.json().messages[0].content).toContainEqual(expect.objectContaining({
+            type: 'file', name: 'briefing.pdf', url: expect.stringContaining('&name=briefing.pdf'),
+        }))
+    })
+
+    test('returns a message snapshot cursor and explicit execution step order', async () => {
+        const db = getDb()
+        db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('m1', 'c1', 'user', 'Hello', '[{"type":"text","text":"Hello"}]', 1)
+        const insertEvent = db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
+        const messageEvent = insertEvent.run('c1', 'e1', JSON.stringify({ type: 'transcript-item', item: { type: 'message', id: 'm1' } }), 2)
+        const stepEvent = insertEvent.run('c1', 'e1', JSON.stringify({ type: 'execution-step', taskId: 't1', iteration: 1, status: 'executing' }), 3)
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        try {
+            const messages = await app.inject({ method: 'GET', url: '/api/chat/conversations/c1/messages' })
+            expect(messages.statusCode).toBe(200)
+            expect(messages.json().latestEventSequence).toBe(Number(messageEvent.lastInsertRowid))
+            expect(messages.json().messages[0]).toMatchObject({ sequence: Number(messageEvent.lastInsertRowid), content: [{ type: 'text', text: 'Hello' }] })
+            const events = db.prepare('SELECT sequence FROM chat_events WHERE conversation_id = ? ORDER BY sequence').all('c1') as { sequence: number }[]
+            expect(events.at(-1)?.sequence).toBe(Number(stepEvent.lastInsertRowid))
+        } finally {
+            await app.close()
+        }
     })
 
     test('lists persisted document uploads with their conversation metadata', async () => {

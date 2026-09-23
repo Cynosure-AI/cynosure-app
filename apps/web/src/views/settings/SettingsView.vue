@@ -131,6 +131,12 @@ const sections: SettingsSection[] = [
     terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username', 'avatar', 'profile image', 'user image']
   },
   ...(isElectronBuild ? [{
+    id: 'autostart',
+    categoryId: 'desktop-application' as const,
+    label: 'Autostart',
+    description: 'Start the desktop app when you sign in to your computer.',
+    terms: ['autostart', 'auto start', 'startup', 'launch at login', 'open at login', 'desktop', 'electron']
+  }, {
     id: 'global-hotkey',
     categoryId: 'desktop-application' as const,
     label: 'New Chat Shortcut',

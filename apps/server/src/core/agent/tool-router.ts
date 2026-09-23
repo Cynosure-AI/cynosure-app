@@ -1,6 +1,6 @@
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { createHash } from 'crypto'
-import { getEmbeddingProvider } from '../memory/embedding.js'
+import { getEmbeddingService } from '../memory/embedding.js'
 import { makeSearchAvailableMcpToolsTool } from '../tools/builtin/expand-available-toolset.js'
 import {
     loadCachedRouterEmbeddings,
@@ -11,7 +11,8 @@ import {
     saveCachedToolEmbedding,
     type RouterEmbeddingScope,
 } from './router-embedding-cache.js'
-import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
+import { routerQuery } from './pre-execution/routing-kernel.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 import { compactToolDescription } from '../tools/tool-description.js'
 
@@ -54,20 +55,7 @@ export function buildRouterQuery(
     messages: ChatMessage[] = [],
     windowSize = CONTEXT_WINDOW_TURNS,
 ): string {
-    const recent = messages
-        .filter(({ role }) => role === 'user' || role === 'assistant')
-        .slice(-windowSize)
-
-    if (!recent.length) return currentMessage
-
-    const context = recent
-        .map(({ role, content }) => {
-            const text = messageContentForRouter(content).slice(0, TURN_CHAR_LIMIT)
-            return `${role}: ${text}`
-        })
-        .join('\n')
-
-    return `Recent conversation:\n${context}\n\nCurrent request: ${currentMessage}`
+    return routerQuery({ query: currentMessage, recentMessages: messages }, TURN_CHAR_LIMIT, windowSize)
 }
 
 export function shouldRouteTools(
@@ -83,12 +71,12 @@ export async function embeddingPreFilter(
     mcpGroups: McpToolGroup[],
     topK = MCP_CANDIDATE_COUNT,
     onStatus?: RouteToolsInput['onStatus'],
-): Promise<{ groupIds: string[]; queryVector: number[] }> {
+): Promise<{ groupIds: string[]; queryVector: number[]; profileFingerprint?: string }> {
     try {
-        const embedder = getEmbeddingProvider()
+        const embedder = getEmbeddingService()
         if (mcpGroups.length <= topK) {
             const { vector: queryVector } = await embedder.embed(query)
-            return { groupIds: mcpGroups.map(({ id }) => id), queryVector }
+            return { groupIds: mcpGroups.map(({ id }) => id), queryVector, profileFingerprint: embedder.profile.fingerprint }
         }
         // Describe namespaces consistently, independent of this turn's allowed subset.
         const registered = getToolRegistry().getToolDefinitions()
@@ -128,7 +116,7 @@ export async function embeddingPreFilter(
             .slice(0, topK)
             .map(({ id }) => id)
 
-        return { groupIds, queryVector }
+        return { groupIds, queryVector, profileFingerprint: scope.fingerprint }
     } catch (err) {
         console.warn('[tool-router] Embedding pre-filter failed, using lexical fallback:', err)
         return { groupIds: lexicalPreFilter(query, mcpGroups, topK), queryVector: [] }
@@ -139,7 +127,7 @@ export async function embeddingPreFilter(
 export async function retrieveMcpTools(input: Pick<RouteToolsInput, 'userQuery' | 'allTools' | 'mcpMetadata' | 'topK' | 'maxTools' | 'onStatus'>): Promise<RoutedToolDefinition[]> {
     const groups = buildMcpGroups(input.allTools.filter(isMcpTool), input.mcpMetadata || [])
     if (!groups.length) return []
-    const { groupIds, queryVector } = await embeddingPreFilter(
+    const { groupIds, queryVector, profileFingerprint } = await embeddingPreFilter(
         input.userQuery, groups, input.topK ?? MCP_CANDIDATE_COUNT, input.onStatus,
     )
     const candidateIds = new Set(groupIds)
@@ -152,6 +140,7 @@ export async function retrieveMcpTools(input: Pick<RouteToolsInput, 'userQuery' 
         new Set(),
         new Set(),
         input.onStatus,
+        profileFingerprint,
     )
 }
 
@@ -191,7 +180,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
     ])
 
     // Single unified embedding pass: group pre-filter + tool ranking share the query vector.
-    const { groupIds: candidateGroupIdList, queryVector } = await embeddingPreFilter(query, groups, topK, onStatus)
+    const { groupIds: candidateGroupIdList, queryVector, profileFingerprint } = await embeddingPreFilter(query, groups, topK, onStatus)
     const candidateGroupIds = new Set([...candidateGroupIdList, ...fixedGroupIds])
 
     const candidateMcpTools = groups
@@ -199,7 +188,7 @@ export async function routeTools(input: RouteToolsInput): Promise<RoutedToolDefi
         .flatMap(({ tools }) => tools)
 
     const candidateTools = dedupeTools([...localTools, ...candidateMcpTools])
-    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames, requiredScoredToolNames, onStatus)
+    const selectedTools = await rankCandidateTools(query, queryVector, candidateTools, maxTools, protectedNames, requiredScoredToolNames, onStatus, profileFingerprint)
     const stickyTools = allTools.filter(({ name }) => stickyNames.has(name))
 
     let routedTools: RoutedToolDefinition[] = []
@@ -221,6 +210,7 @@ async function rankCandidateTools(
     protectedNames: Set<string>,
     requiredScoredToolNames: Set<string> = new Set(),
     onStatus?: RouteToolsInput['onStatus'],
+    queryProfileFingerprint?: string,
 ): Promise<RoutedToolDefinition[]> {
     const rankable = tools.filter(({ name }) => !protectedNames.has(name))
 
@@ -230,7 +220,10 @@ async function rankCandidateTools(
     }
 
     try {
-        const embedder = getEmbeddingProvider()
+        const embedder = getEmbeddingService()
+        if (queryProfileFingerprint && embedder.profile.fingerprint !== queryProfileFingerprint) {
+            throw new Error('Embedding profile changed during tool routing')
+        }
         const scope = getRouterEmbeddingScope(embedder)
 
         // Compute content hashes for all rankable tools
@@ -335,18 +328,6 @@ export function routeToolsLexically(input: RouteToolsInput): RoutedToolDefinitio
     return routedTools
 }
 
-function messageContentForRouter(content: string | ContentPart[]): string {
-    if (typeof content === 'string') return content
-
-    const text = content
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('\n')
-        .trim()
-
-    return text || '[multipart content]'
-}
-
 function isMcpTool(tool: RegistryAwareToolDefinition): boolean {
     return Boolean(tool.namespaceId?.startsWith('mcp:'))
 }
@@ -431,7 +412,7 @@ function toolCacheKey(tool: RegistryAwareToolDefinition): string {
 }
 
 function getRouterEmbeddingScope(
-    embedder: ReturnType<typeof getEmbeddingProvider>,
+    embedder: ReturnType<typeof getEmbeddingService>,
 ): RouterEmbeddingScope {
     const config = embedder.getConfig()
 
@@ -439,6 +420,7 @@ function getRouterEmbeddingScope(
         providerId: config.providerId || '',
         model: embedder.getModelName(),
         dimensions: embedder.getDimensions(),
+        fingerprint: embedder.profile.fingerprint,
     }
 }
 
@@ -584,7 +566,7 @@ export function planToolEmbeddingWarmup() {
     const registry = getToolRegistry()
     const tools = registry.getToolDefinitions()
     const groups = buildMcpGroups(tools.filter(isMcpTool), registry.getNamespaceMetadataForTools(tools))
-    const embedder = getEmbeddingProvider()
+    const embedder = getEmbeddingService()
     const scope = getRouterEmbeddingScope(embedder)
     const toolHashes = new Map(tools.map(tool => [toolCacheKey(tool), toolContentHash(tool)]))
     const groupHashes = new Map(groups.map(group => [group.id, groupContentHash(group)]))

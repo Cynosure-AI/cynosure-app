@@ -17,7 +17,7 @@ import { handleCommand } from './slack.commands.js'
 import { postOrUpdate, sendLongSlackMessage, uploadImage, extractAttachments } from './slack.api.js'
 import {
     applyChannelContextLimit, beginChannelExecution, buildChannelHistory, finishChannelExecution,
-    materializeChannelInputAudio, materializeChannelInputImages, persistChannelAssistantMessage, persistChannelExecutionConfig,
+    materializeChannelInputAudio, materializeChannelInputImages, persistChannelAssistantMessage, persistChannelExecutionConfig, persistChannelUserMessage, publishChannelStreamError,
     updateChannelExecution,
     channelImageDataUrl,
 } from '../channel-execution.js'
@@ -140,28 +140,8 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
     const storedAudioUrls = await materializeChannelInputAudio(audioDataUrls, conversationId)
 
     const userMsgId = nanoid()
-    db.prepare(
-        'INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(
-        userMsgId, conversationId, 'user', userText || '(attached media)',
-        storedImageUrls.length ? JSON.stringify(storedImageUrls) : null,
-        storedAudioUrls.length ? JSON.stringify(storedAudioUrls) : null,
-        now
-    )
-    db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
-
-    ctx.broadcast('chat:new-message', {
-        conversationId,
-        message: {
-            id: userMsgId,
-            conversationId,
-            role: 'user',
-            content: userText || '(attached media)',
-            imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
-            audioDataUrls: audioDataUrls.length ? audioDataUrls : undefined,
-            createdAt: now
-        }
-    })
+    persistChannelUserMessage({ broadcast: ctx.broadcast, conversationId, messageId: userMsgId,
+        content: userText || '(attached media)', images: storedImageUrls, audio: storedAudioUrls, createdAt: now })
 
     let messages: ChatMessage[] = buildChannelHistory(conversationId, effectiveAgentId).messages
 
@@ -438,7 +418,7 @@ export async function processMessage(ctx: SlackCtx, msg: SlackMessage, client: W
         const errorMsg = (err as Error).message || 'Unknown error'
         console.error(`[Slack] Agent execution error: ${errorMsg}`)
         getEventBus().emit('task:error', { conversationId, error: execAbort.signal.aborted ? 'Cancelled' : errorMsg })
-        if (!execAbort.signal.aborted) ctx.broadcast('chat:stream-error', { streamId, conversationId, error: errorMsg })
+        if (!execAbort.signal.aborted) publishChannelStreamError(ctx.broadcast, conversationId, streamId, errorMsg)
         await postOrUpdate(client, slackChannelId, thinkingTs, execAbort.signal.aborted ? '⏹ Stopped.' : `⚠️ Error: ${errorMsg.slice(0, 2900)}`, msg.ts)
     } finally {
         finishChannelExecution({ executions: ctx.activeExecutions, executionId: streamId, conversationId, agentId: effectiveAgentId, broadcast: ctx.broadcast })

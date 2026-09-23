@@ -1,5 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
+import { persistAssistantTurn } from '../chat/persist-assistant.js'
 import { interruptPlanningRun } from '../agent/planning-state.js'
 import { cancelPostActions } from '../agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../agent/context-trimmer.js'
@@ -18,6 +20,35 @@ import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 export type ActiveChannelExecutionMap = Map<string, ActiveChannelExecutionEntry>
+
+export function persistChannelUserMessage(input: {
+    broadcast: BroadcastFn
+    conversationId: string
+    messageId: string
+    content: string
+    images: string[]
+    audio: string[]
+    createdAt: number
+}): void {
+    const { broadcast, conversationId, messageId, content, images, audio, createdAt } = input
+    const db = getDb()
+    db.prepare(`INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at)
+        VALUES (?, ?, 'user', ?, ?, ?)`).run(messageId, conversationId, content,
+        messageContentJson({ id: messageId, content, imageDataUrls: images, audioDataUrls: audio }), createdAt)
+    db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(createdAt, conversationId)
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: {
+        type: 'transcript-item', item: messageToTranscriptItem({
+            id: messageId, role: 'user', content, imageDataUrls: images, audioDataUrls: audio, createdAt,
+        }),
+    } })
+}
+
+export function publishChannelStreamError(broadcast: BroadcastFn, conversationId: string, streamId: string, error: string): void {
+    persistAssistantTurn(getDb(), broadcast, { conversationId, streamId, content: error, isError: true })
+    publishChatEvent(broadcast, { conversationId, executionId: streamId, payload: {
+        type: 'stream-error', streamId, scope: 'main', error,
+    } })
+}
 
 export function beginChannelExecution(input: {
     executions: ActiveChannelExecutionMap
@@ -207,15 +238,15 @@ export function persistChannelAssistantMessage(input: {
     const id = nanoid()
     const now = Date.now()
     db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, thinking, image_urls_json, generated_media, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, generated_media, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.conversationId,
         'assistant',
         input.result.content,
-        input.result.thinking || null,
-        input.result.images.length ? JSON.stringify(input.result.images) : null,
+        messageContentJson({ id, content: input.result.content, thinking: input.result.thinking,
+            imageDataUrls: input.result.images }),
         input.result.images.length ? 1 : 0,
         input.agentId,
         input.planned.responseProvider,

@@ -26,6 +26,7 @@ interface StreamBuffer {
     maAgentName?: string
     maInvocationId?: string
     createdAt: number
+    sequence?: number
 }
 
 export interface ChatStreamingState {
@@ -44,7 +45,7 @@ export interface ChatStreamingState {
     restorePrimaryStream(conversationId: string): void
     restoreSubAgentStreams(conversationId: string): void
     finalizeCurrentStreaming(conversationId: string): void
-    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
+    handleStreamStart(data: { streamId: string; conversationId: string; sequence?: number; createdAt?: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
     handleStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
     handleStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
@@ -54,13 +55,13 @@ export interface ChatStreamingState {
     handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
-    handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
+    handleSubAgentStreamStart(data: { streamId: string; conversationId: string; sequence?: number; createdAt?: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
     handleSubAgentStreamChunk(data: { streamId: string; conversationId: string; content: string }): void
     handleSubAgentStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
-    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
+    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; role: string; isError?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
     handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
     handleCompactStart(data: { conversationId: string }): void
     handleCompactError(data: { conversationId: string; error: string }): void
@@ -135,24 +136,8 @@ export function useChatStreaming(
         return undefined
     }
 
-    function sameOptionalIdentity(messageValue?: string | null, bufferValue?: string | null): boolean {
-        return !messageValue || !bufferValue || messageValue === bufferValue
-    }
-
     function findPersistedMatchForBuffer(buf: StreamBuffer): DisplayMessage | undefined {
-        if (!buf.content && !buf.thinking && !buf.images.length && !buf.videos.length) return undefined
-
-        for (let i = messages.value.length - 1; i >= 0; i--) {
-            const msg = messages.value[i]
-            if (msg.role === 'user') break
-            if (msg.role !== 'assistant' || msg.streamId || msg.isStreaming) continue
-            if (msg.content !== buf.content) continue
-            if ((msg.thinking || '') !== (buf.thinking || '')) continue
-            if (!sameOptionalIdentity(msg.agentId, buf.agentId)) continue
-            if (!sameOptionalIdentity(msg.agentName, buf.agentName)) continue
-            return msg
-        }
-        return undefined
+        return messages.value.find((message) => message.role === 'assistant' && message.streamId === buf.streamId)
     }
 
     function hydrateMessageFromBuffer(msg: DisplayMessage, buf: StreamBuffer): void {
@@ -248,7 +233,8 @@ export function useChatStreaming(
             }
 
             const msg: DisplayMessage = {
-                id: `sa_stream_${buf.streamId}_${Date.now()}`,
+                id: `sa_stream_${buf.streamId}`,
+                sequence: buf.sequence,
                 role: 'assistant',
                 content: buf.content,
                 streamId: buf.streamId,
@@ -301,7 +287,8 @@ export function useChatStreaming(
         }
 
         const msg: DisplayMessage = {
-            id: `streaming_${Date.now()}`,
+            id: `streaming_${buf.streamId}`,
+            sequence: buf.sequence,
             role: 'assistant',
             content: buf.content,
             streamId: buf.streamId,
@@ -328,7 +315,7 @@ export function useChatStreaming(
         }
     }
 
-    function handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
+    function handleStreamStart(data: { streamId: string; conversationId: string; sequence?: number; createdAt?: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
         // These refs describe the stream in the visible chat only. Background
         // runs are retained in streamBuffers, but must never replace the active
         // conversation's identity (a cron run used to leak its agent here).
@@ -351,7 +338,8 @@ export function useChatStreaming(
             maCodename: data.maCodename,
             maAgentName: data.maAgentName,
             maInvocationId: data.maInvocationId,
-            createdAt: Date.now()
+            createdAt: data.createdAt ?? Date.now(),
+            sequence: data.sequence,
         })
 
         if (data.conversationId === activeConversationId.value) {
@@ -381,11 +369,13 @@ export function useChatStreaming(
                 reusableMsg.maCodename = data.maCodename
                 reusableMsg.maAgentName = data.maAgentName
                 reusableMsg.maInvocationId = data.maInvocationId
-                reusableMsg.createdAt = Date.now()
+                reusableMsg.createdAt = data.createdAt ?? Date.now()
+                reusableMsg.sequence = data.sequence
                 currentTurnMsgs.push(reusableMsg)
             } else {
                 messages.value.push({
-                    id: `streaming_${Date.now()}`,
+                    id: `streaming_${data.streamId}`,
+                    sequence: data.sequence,
                     role: 'assistant',
                     content: '',
                     streamId: data.streamId,
@@ -395,7 +385,7 @@ export function useChatStreaming(
                     maCodename: data.maCodename,
                     maAgentName: data.maAgentName,
                     maInvocationId: data.maInvocationId,
-                    createdAt: Date.now(),
+                    createdAt: data.createdAt ?? Date.now(),
                     isStreaming: true
                 })
 
@@ -645,6 +635,18 @@ export function useChatStreaming(
             isStreaming.value = false
             currentStreamId.value = null
 
+            // The server has already stored this error and published it as a
+            // transcript message. Finish the temporary stream without adding
+            // another browser-only error bubble.
+            if (messages.value.some(msg => msg.isError && msg.streamId === data.streamId && msg.content === data.error)) {
+                const pending = findStreamingMsg(data.streamId)
+                if (pending) {
+                    pending.isStreaming = false
+                    if (pending.id.startsWith('streaming_')) messages.value.splice(messages.value.indexOf(pending), 1)
+                }
+                return
+            }
+
             const streamMsg = findStreamingMsg(data.streamId)
             if (streamMsg) {
                 streamMsg.isStreaming = false
@@ -666,7 +668,7 @@ export function useChatStreaming(
         }
     }
 
-    function handleSubAgentStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
+    function handleSubAgentStreamStart(data: { streamId: string; conversationId: string; sequence?: number; createdAt?: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
         const key = scopedStreamKey(data.conversationId, data.streamId)
         subAgentStreamBuffers.set(key, {
             streamId: data.streamId,
@@ -682,7 +684,8 @@ export function useChatStreaming(
             maCodename: data.maCodename,
             maAgentName: data.maAgentName,
             maInvocationId: data.maInvocationId,
-            createdAt: Date.now()
+            createdAt: data.createdAt ?? Date.now(),
+            sequence: data.sequence,
         })
 
         if (data.conversationId !== activeConversationId.value) return
@@ -698,7 +701,8 @@ export function useChatStreaming(
         }
 
         const msg: DisplayMessage = {
-            id: `sa_stream_${data.streamId}_${Date.now()}`,
+            id: `sa_stream_${data.streamId}`,
+            sequence: data.sequence,
             role: 'assistant',
             content: '',
             streamId: data.streamId,
@@ -708,7 +712,7 @@ export function useChatStreaming(
             maCodename: data.maCodename,
             maAgentName: data.maAgentName,
             maInvocationId: data.maInvocationId,
-            createdAt: Date.now(),
+            createdAt: data.createdAt ?? Date.now(),
             isStreaming: true
         }
         messages.value.push(msg)
@@ -826,8 +830,11 @@ export function useChatStreaming(
         message: {
             id: string
             conversationId: string
+            sequence?: number
             role: string
+            isError?: boolean
             content: string
+            thinking?: string
             createdAt: number
             imageDataUrls?: string[]
             videoDataUrls?: string[]
@@ -842,6 +849,22 @@ export function useChatStreaming(
             maInvocationId?: string
         }
     }): void {
+        function hydratePersisted(target: DisplayMessage): void {
+            if (data.message.sequence !== undefined) target.sequence = data.message.sequence
+            target.isError = data.message.isError
+            target.content = data.message.content
+            if (data.message.thinking !== undefined) target.thinking = data.message.thinking
+            if (data.message.imageDataUrls) target.imageDataUrls = data.message.imageDataUrls
+            if (data.message.videoDataUrls) target.videoDataUrls = data.message.videoDataUrls
+            if (data.message.audioDataUrls) target.audioDataUrls = data.message.audioDataUrls
+            if (data.message.structuredContent !== undefined) target.structuredContent = data.message.structuredContent
+            if (data.message.fileAttachments?.length) {
+                for (const attachment of target.fileAttachments || []) {
+                    if (attachment.href?.startsWith('blob:')) URL.revokeObjectURL(attachment.href)
+                }
+                target.fileAttachments = data.message.fileAttachments
+            }
+        }
         // Bump updatedAt so the conversation shows as recently updated / unread
         const conv = conversations.value.find(c => c.id === data.conversationId)
         if (conv) {
@@ -855,28 +878,28 @@ export function useChatStreaming(
         if (data.conversationId === activeConversationId.value) {
             const existing = messages.value.find(message => message.id === data.message.id)
             if (existing) {
-                if (data.message.fileAttachments?.length) {
-                    for (const attachment of existing.fileAttachments || []) {
-                        if (attachment.href?.startsWith('blob:')) URL.revokeObjectURL(attachment.href)
-                    }
-                    existing.fileAttachments = data.message.fileAttachments
-                }
+                hydratePersisted(existing)
                 return
             }
             // Replace the temporary round ID with the persisted ID before actions
             // such as forking can address this message on the server.
-            if (data.streamId && data.message.role === 'assistant') {
+            if (data.streamId && data.message.role === 'assistant' && !data.message.isError) {
                 const round = findMsgByStreamId(data.streamId)
                 if (round) {
                     round.id = data.message.id
+                    hydratePersisted(round)
                     return
                 }
             }
             if (!messages.value.some(m => m.id === data.message.id)) {
                 messages.value.push({
                     id: data.message.id,
+                    sequence: data.message.sequence,
                     role: data.message.role as DisplayMessage['role'],
+                    isError: data.message.isError,
+                    streamId: data.message.role === 'assistant' ? data.streamId : undefined,
                     content: data.message.content,
+                    thinking: data.message.thinking,
                     imageDataUrls: data.message.imageDataUrls,
                     videoDataUrls: data.message.videoDataUrls,
                     audioDataUrls: data.message.audioDataUrls,

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 vi.mock('./embedding.js', () => ({
-    getEmbeddingProvider: () => ({
+    getEmbeddingService: () => ({
         embed: async () => { throw new Error('vector projection unavailable in unit test') },
         embedBatch: async () => { throw new Error('vector projection unavailable in unit test') },
     }),

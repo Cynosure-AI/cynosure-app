@@ -2,6 +2,15 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
 
+function captureRoutingEvents(events: Array<Record<string, unknown>>): void {
+    getEventBus().on('chat:event', (draft) => {
+        const payload = (draft as { payload?: { type?: string; entries?: Array<{ name: string; details: Record<string, unknown> }> } }).payload
+        if (payload?.type === 'routing-decision') events.push({
+            toolCalls: payload.entries?.map((entry) => ({ name: entry.name, arguments: JSON.stringify(entry.details) })),
+        })
+    })
+}
+
 const memoryMocks = vi.hoisted(() => ({
     aggregate: vi.fn(),
     format: vi.fn(),
@@ -33,7 +42,7 @@ describe('automatic memory routing visibility', () => {
         memoryMocks.format.mockReturnValue(graphContext)
 
         const events: Array<Record<string, unknown>> = []
-        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+        captureRoutingEvents(events)
 
         const result = await applyAutoMemoryRouting({
             enabled: true,
@@ -98,7 +107,7 @@ describe('automatic memory routing visibility', () => {
             }),
         } as unknown as LLMGateway
         const events: Array<Record<string, unknown>> = []
-        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+        captureRoutingEvents(events)
 
         await applyAutoMemoryRouting({
             enabled: true,
@@ -145,7 +154,7 @@ describe('automatic memory routing visibility', () => {
             memory.permanent.map(({ id }) => id).join(',')
         ))
         const events: Array<Record<string, unknown>> = []
-        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+        captureRoutingEvents(events)
 
         await applyAutoMemoryRouting({
             enabled: true,
@@ -191,7 +200,7 @@ describe('automatic memory routing visibility', () => {
         memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => memory.permanent.map(({ id }) => id).join(','))
         const gateway = { complete: vi.fn() } as unknown as LLMGateway
         const events: Array<Record<string, unknown>> = []
-        getEventBus().on('step:tools-chosen', (event) => events.push(event as Record<string, unknown>))
+        captureRoutingEvents(events)
 
         await expect(applyAutoMemoryRouting({
             enabled: true,

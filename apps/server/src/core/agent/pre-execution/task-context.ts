@@ -1,8 +1,8 @@
 import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
-import { completeWithDebugCapture } from '../../chat/debug-context.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
-import type { ChatMessage, ContentPart, ToolDefinition } from '../../gateway/providers/base.provider.js'
+import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
+import { emitRoutingDecision, recentConversationBlock, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
 
 const TASK_CONTEXT_TOOL_NAME = 'set_task_context'
 const TURN_CHAR_LIMIT = 500
@@ -41,64 +41,68 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
     const taskId = `auto_router_${nanoid()}`
     emitTaskContextStatus(input.conversationId, taskId, input.eventMeta)
 
-    try {
-        const request: Parameters<LLMGateway['complete']>[0] = {
-            messages: [
-                {
-                    role: 'system',
-                    content: [
-                        'You prepare routing queries before the main assistant run.',
-                        'Given the current request and recent conversation, call set_task_context with a structured retrieval plan.',
-                        ...enabledQueryInstructions(input.enabledModes),
-                        'The original request is always searched separately. Generate only complementary expansions.',
-                        'Keep expansions in the request language and preserve exact names, quoted phrases, identifiers, relationship terms, and constraints.',
-                        'Never broaden a specific relationship or operation into generic related topics.',
-                        'toolSearchQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
-                        'Assess external tools and memory independently. It is valid for neither to be required.',
-                        ...enabledRequirementInstructions(input.enabledModes),
-                        'Do not include disabled auto modes.',
-                        'Do not add execution instructions.',
-                        'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
-                    ].join('\n'),
-                },
-                {
-                    role: 'user',
-                    content: [
-                        `Enabled auto modes: ${enabledModeLabels(input.enabledModes).join(', ')}`,
-                        '',
-                        buildRecentConversationBlock(input.recentMessages || []),
-                        '',
-                        `Current request: ${currentRequest}`,
-                    ].filter(Boolean).join('\n'),
-                },
-            ],
-            model: input.model,
-            maxTokens: TASK_CONTEXT_MAX_TOKENS,
-            tools: [buildTaskContextTool(input.enabledModes)],
-            toolChoice: { type: 'function', name: TASK_CONTEXT_TOOL_NAME },
-            thinkingEnabled: false,
-            signal: input.signal,
-        }
-        const result = await completeWithDebugCapture({
-            enabled: input.debugContextEnabled,
-            conversationId: input.conversationId,
-            phase: 'task-context',
-            label: 'Retrieval and tool query planning',
-            gateway: input.gateway,
-            providerId: input.providerId,
-            request,
-        })
-
-        const contextCall = result.toolCalls?.find((call) => call.function.name === TASK_CONTEXT_TOOL_NAME)
-        const parsed = contextCall ? parseTaskContextArguments(contextCall.function.arguments, input.enabledModes, currentRequest) : null
-        emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
-        return parsed
-    } catch (err) {
-        if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
-        console.warn('[auto-router] Task context build failed, using original request in downstream routers:', err)
-        emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed')
-        return null
-    }
+    return runRoutingPhase({
+        signal: input.signal,
+        label: 'auto-router',
+        run: async () => {
+            const request: Parameters<LLMGateway['complete']>[0] = {
+                messages: [
+                    {
+                        role: 'system',
+                        content: [
+                            'You prepare routing queries before the main assistant run.',
+                            'Given the current request and recent conversation, call set_task_context with a structured retrieval plan.',
+                            ...enabledQueryInstructions(input.enabledModes),
+                            'The original request is always searched separately. Generate only complementary expansions.',
+                            'Keep expansions in the request language and preserve exact names, quoted phrases, identifiers, relationship terms, and constraints.',
+                            'Never broaden a specific relationship or operation into generic related topics.',
+                            'toolSearchQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
+                            'Assess external tools and memory independently. It is valid for neither to be required.',
+                            ...enabledRequirementInstructions(input.enabledModes),
+                            'Do not include disabled auto modes.',
+                            'Do not add execution instructions.',
+                            'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
+                        ].join('\n'),
+                    },
+                    {
+                        role: 'user',
+                        content: [
+                            `Enabled auto modes: ${enabledModeLabels(input.enabledModes).join(', ')}`,
+                            '',
+                            recentConversationBlock(input.recentMessages || [], TURN_CHAR_LIMIT),
+                            '',
+                            `Current request: ${currentRequest}`,
+                        ].filter(Boolean).join('\n'),
+                    },
+                ],
+                model: input.model,
+                maxTokens: TASK_CONTEXT_MAX_TOKENS,
+                tools: [buildTaskContextTool(input.enabledModes)],
+                toolChoice: { type: 'function', name: TASK_CONTEXT_TOOL_NAME },
+                thinkingEnabled: false,
+                signal: input.signal,
+            }
+            const parsed = await selectRoutingCandidates({
+                conversationId: input.conversationId,
+                debugContextEnabled: input.debugContextEnabled,
+                phase: 'task-context',
+                label: 'Retrieval and tool query planning',
+                gateway: input.gateway,
+                providerId: input.providerId,
+                model: input.model,
+                signal: input.signal,
+                toolName: TASK_CONTEXT_TOOL_NAME,
+                request,
+                parse: (raw) => parseTaskContextArguments(raw, input.enabledModes, currentRequest),
+            })
+            emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
+            return parsed
+        },
+        fallback: () => {
+            emitTaskContextSelection(input.conversationId, taskId, null, input.eventMeta, 'routing-failed')
+            return null
+        },
+    })
 }
 
 function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes']): ToolDefinition {
@@ -187,30 +191,6 @@ function normalizeMemoryQueries(values: unknown[], originalRequest: string): str
         .slice(0, MAX_MEMORY_EXPANSIONS)
 }
 
-function buildRecentConversationBlock(messages: ChatMessage[]): string {
-    const recent = messages
-        .filter(({ role }) => role === 'user' || role === 'assistant')
-        .slice(-5)
-
-    if (!recent.length) return ''
-
-    const context = recent
-        .map(({ role, content }) => `${role}: ${messageContentForRouter(content).slice(0, TURN_CHAR_LIMIT)}`)
-        .join('\n')
-
-    return `Recent conversation:\n${context}`
-}
-
-function messageContentForRouter(content: string | ContentPart[]): string {
-    if (typeof content === 'string') return content
-    const text = content
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('\n')
-        .trim()
-    return text || '[multipart content]'
-}
-
 function hasEnabledMode(modes: BuildTaskContextInput['enabledModes']): boolean {
     return modes.tools || modes.memories
 }
@@ -262,14 +242,14 @@ function emitTaskContextSelection(
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-generated' | 'routing-failed',
 ): void {
-    getEventBus().emit('step:tools-chosen', {
+    emitRoutingDecision({
         conversationId,
         taskId,
-        iteration: 0,
-        ...eventMeta,
-        toolCalls: [{
+        phase: 'task-context',
+        eventMeta,
+        entries: [{
             name: 'Task context',
-            arguments: JSON.stringify(stripUndefined({
+            details: stripUndefined({
                 type: 'task-context',
                 selectionMethod: 'llm',
                 requiresTools: context?.requiresTools,
@@ -278,8 +258,9 @@ function emitTaskContextSelection(
                 memorySearchQueries: context?.memorySearchQueries,
                 emptyReason,
                 content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,
-            })),
+            }),
         }],
+        empty: { name: 'Task context', details: {} },
     })
 }
 

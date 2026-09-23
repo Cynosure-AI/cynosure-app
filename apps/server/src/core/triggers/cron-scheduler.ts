@@ -302,6 +302,8 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
             },
         })
 
+        abortController.signal.throwIfAborted()
+
         generateTitle({
             conversationId,
             userMessage: titleSource,
@@ -314,6 +316,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
         const notificationAllowed = Boolean(job.outputChannelId) && result.content
             ? await shouldNotifyForCronJob(job, result, conversationId)
             : false
+        abortController.signal.throwIfAborted()
 
         // Send result to configured output channel if set
         if (job.outputChannelId) {
@@ -418,6 +421,17 @@ export function cancelCronRun(jobId: string): boolean {
         return true
     }
     return false
+}
+
+/** Cancel running cron work for the conversation opened by that run. */
+export function cancelCronRunsByConversation(conversationId: string): string[] {
+    const cancelledJobIds: string[] = []
+    for (const run of activeCronRuns.values()) {
+        if (run.conversationId === conversationId && cancelCronRun(run.jobId)) {
+            cancelledJobIds.push(run.jobId)
+        }
+    }
+    return cancelledJobIds
 }
 
 /** Cancel all current cron executions and any coalesced follow-up runs. */

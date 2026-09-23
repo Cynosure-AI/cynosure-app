@@ -459,7 +459,7 @@ function formatDate(timestamp: number): string {
                 class="h-3 w-3"
               /></span>
               <template #content>
-                Auto router is {{ item.autoToolRouting ? 'enabled' : 'disabled' }}
+                Auto memory router is {{ item.autoToolRouting ? 'enabled' : 'disabled' }}
               </template>
             </HoverTooltip>
           </div>

@@ -1,7 +1,8 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
-import type { ChatExecutionState, ExecutionStepRecord, PlanningState } from '../api/types'
+import type { ChatEvent } from '@shared/types'
+import type { ChatExecutionState, PlanningState } from '../api/types'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 
 export interface ToolNamespace {
@@ -32,6 +33,7 @@ export interface ToolInfo {
 }
 
 export interface ToolCallDisplay {
+  id?: string
   name: string
   arguments: string
   annotations?: ToolBehaviorAnnotations
@@ -44,12 +46,13 @@ export interface HITLRequest {
 }
 
 export interface ExecutionStep {
+  sequence?: number
   iteration: number
   status: string
   message?: string
   streamingChoosing?: string
   toolCalls?: ToolCallDisplay[]
-  results?: { name: string; success: boolean; output: string; error?: string; images?: string[] }[]
+  results?: { toolCallId?: string; name: string; success: boolean; output: string; error?: string; images?: string[]; invocationId?: string; structuredContent?: unknown }[]
   timestamp: number
   updatedAt?: number
   /** Task ID — unique per AgentExecutor run, used to match update events to the correct step */
@@ -98,6 +101,7 @@ export const useAgentStore = defineStore('agent', () => {
   /** The conversation the user is currently viewing — used to filter live events. */
   const activeViewConversationId = ref<string | null>(null)
   const stepsPerConversation = new Map<string, ExecutionStep[]>()
+  const toolSequenceByStep = new Map<string, number>()
   const planningPerConversation = new Map<string, PlanningState | null>()
 
   /** Set of conversation IDs currently blocking on a HITL tool-approval request. */
@@ -255,14 +259,36 @@ export const useAgentStore = defineStore('agent', () => {
   /** Build an ExecutionStep from a raw WS event payload. */
   function buildStep(eventData: Record<string, unknown>, taskId?: string): ExecutionStep {
     return {
+      sequence: typeof eventData.sequence === 'number' ? eventData.sequence : toolSequenceByStep.get(JSON.stringify([
+        eventData.conversationId, taskId || null, eventData.iteration, eventData.maInvocationId || null,
+      ])),
       iteration: eventData.iteration as number,
       status: eventData.status as string,
       message: eventData.message as string,
-      timestamp: Date.now(),
+      timestamp: typeof eventData.timestamp === 'number' ? eventData.timestamp : Date.now(),
       taskId: taskId || undefined,
       maCodename: (eventData.maCodename as string) || undefined,
       maAgentName: (eventData.maAgentName as string) || undefined,
       maInvocationId: (eventData.maInvocationId as string) || undefined,
+    }
+  }
+
+  function recordToolSequence(conversationId: string, sequence: number, taskId?: string, iteration?: number, invocationId?: string): void {
+    if (!taskId || iteration === undefined) return
+    const key = JSON.stringify([conversationId, taskId, iteration, invocationId || null])
+    toolSequenceByStep.set(key, sequence)
+    if (toolSequenceByStep.size > 1000) toolSequenceByStep.delete(toolSequenceByStep.keys().next().value!)
+    for (const step of stepsPerConversation.get(conversationId) || []) {
+      if (step.taskId === taskId && step.iteration === iteration && (step.maInvocationId || null) === (invocationId || null)) {
+        step.sequence ??= sequence
+      }
+    }
+    if (activeViewConversationId.value === conversationId) {
+      for (const step of executionSteps.value) {
+        if (step.taskId === taskId && step.iteration === iteration && (step.maInvocationId || null) === (invocationId || null)) {
+          step.sequence ??= sequence
+        }
+      }
     }
   }
 
@@ -326,6 +352,14 @@ export const useAgentStore = defineStore('agent', () => {
     if (step) Object.assign(step, patch, { updatedAt: Date.now() })
   }
 
+  function patchToolStep(convId: string, taskId: string | undefined, iteration: number | undefined,
+    preferredStatus: string, patch: Partial<ExecutionStep>, isForActiveView: boolean): void {
+    const steps = isForActiveView ? executionSteps.value : stepsPerConversation.get(convId) || []
+    const candidates = steps.filter((step) => step.taskId === taskId && step.iteration === iteration)
+    const target = [...candidates].reverse().find((step) => step.status === preferredStatus) ?? candidates.at(-1)
+    if (target) Object.assign(target, patch, { updatedAt: Date.now() })
+  }
+
   function handleExecutionUpdate(data: { event: string; data: Record<string, unknown> }): void {
     const eventData = data.data
     const taskId = eventData.taskId as string | undefined
@@ -365,6 +399,10 @@ export const useAgentStore = defineStore('agent', () => {
 
       case 'step:status': {
         const step = buildStep(eventData, taskId)
+        if (step.sequence !== undefined) {
+          const existingSteps = isForActiveView ? executionSteps.value : stepsPerConversation.get(convId) || []
+          if (existingSteps.some((existing) => existing.sequence === step.sequence)) break
+        }
         const previousStep = isForActiveView
           ? findLastStepByTask(taskId)
           : convId ? findLastStepInArray(stepsPerConversation.get(convId) || [], taskId) : undefined
@@ -393,30 +431,25 @@ export const useAgentStore = defineStore('agent', () => {
 
       case 'step:tools-chosen': {
         const rawCalls = eventData.toolCalls as Array<{
+          id?: string
           function?: { name: string; arguments: string }
           name?: string
           arguments?: string
           annotations?: ToolBehaviorAnnotations
         }>
         const mapped: ToolCallDisplay[] = (rawCalls || []).map((tc) => ({
+          id: tc.id,
           name: tc.function?.name || tc.name || '',
           arguments: tc.function?.arguments || tc.arguments || '',
           annotations: tc.annotations,
         }))
-        if (isForActiveView) {
-          updateLastStepByTask(taskId, { toolCalls: mapped })
-        } else if (convId) {
-          patchBgStep(convId, taskId, { toolCalls: mapped })
-        }
+        patchToolStep(convId, taskId, eventData.iteration as number | undefined, 'choosing-tools', { toolCalls: mapped }, isForActiveView)
         break
       }
 
       case 'step:executed':
-        if (isForActiveView) {
-          updateLastStepByTask(taskId, { results: eventData.results as ExecutionStep['results'] })
-        } else if (convId) {
-          patchBgStep(convId, taskId, { results: eventData.results as ExecutionStep['results'] })
-        }
+        patchToolStep(convId, taskId, eventData.iteration as number | undefined, 'executing',
+          { results: eventData.results as ExecutionStep['results'] }, isForActiveView)
         break
 
       case 'step:hitl-denied':
@@ -426,6 +459,43 @@ export const useAgentStore = defineStore('agent', () => {
           patchBgStep(convId, taskId, { status: 'denied' })
         }
         break
+    }
+  }
+
+  function handleChatToolEvent(event: ChatEvent): void {
+    const base = { conversationId: event.conversationId, executionId: event.executionId }
+    if (event.type === 'execution-step') {
+      handleExecutionUpdate({ event: 'step:status', data: { ...base,
+        taskId: event.taskId, iteration: event.iteration, status: event.status,
+        message: event.message, maCodename: event.maCodename, maAgentName: event.maAgentName,
+        maInvocationId: event.invocationId, timestamp: event.createdAt, sequence: event.sequence,
+      } })
+    } else if (event.type === 'routing-decision') {
+      recordToolSequence(event.conversationId, event.sequence, event.taskId, 0, event.parentInvocationId)
+      handleExecutionUpdate({ event: 'step:tools-chosen', data: { ...base,
+        taskId: event.taskId, iteration: 0, maInvocationId: event.parentInvocationId,
+        maCodename: event.maCodename, maAgentName: event.maAgentName,
+        toolCalls: event.entries.map((entry) => ({ name: entry.name, arguments: JSON.stringify(entry.details) })),
+      } })
+    } else if (event.type === 'tool-calls') {
+      const item = event.items[0]
+      if (!item) return
+      recordToolSequence(event.conversationId, event.sequence, item.taskId, item.iteration, item.parentInvocationId)
+      handleExecutionUpdate({ event: 'step:tools-chosen', data: { ...base,
+        taskId: item.taskId, iteration: item.iteration, maInvocationId: item.parentInvocationId,
+        toolCalls: event.items.map((call) => ({ id: call.callId, name: call.name, arguments: call.arguments })),
+      } })
+    } else if (event.type === 'tool-results') {
+      const item = event.items[0]
+      if (!item) return
+      handleExecutionUpdate({ event: 'step:executed', data: { ...base,
+        taskId: item.taskId, iteration: item.iteration,
+        results: event.items.map((result) => ({
+          toolCallId: result.callId, name: result.name, success: result.success, invocationId: result.invocationId,
+          output: result.content.flatMap((block) => block.type === 'text' ? [block.text] : []).join(''),
+          images: result.content.flatMap((block) => block.type === 'image' ? [block.url] : []),
+        })),
+      } })
     }
   }
 
@@ -625,8 +695,8 @@ export const useAgentStore = defineStore('agent', () => {
     } else {
       // Try loading from DB (survives page reload)
       executionSteps.value = []
-      isExecuting.value = false
-      await loadStepsFromApi(conversationId)
+      isExecuting.value = executingConversationIds.value.has(conversationId)
+      await loadStepsFromEvents(conversationId)
     }
 
     // Always check DB for pending HITL requests — needed after a hard reload
@@ -658,30 +728,18 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function loadStepsFromApi(conversationId: string): Promise<void> {
+  async function loadStepsFromEvents(conversationId: string): Promise<void> {
     try {
-      const rows = await api.chat.getExecutionSteps(conversationId)
-      if (!rows.length) return
-      // Only apply if still viewing same conversation
-      if (activeViewConversationId.value !== conversationId) return
-      if (executionSteps.value.length > 0) return
-      const mapped: ExecutionStep[] = rows.map((r: ExecutionStepRecord) => ({
-        iteration: r.iteration,
-        status: r.status,
-        message: r.message || undefined,
-        toolCalls: r.toolCalls as ToolCallDisplay[] | undefined,
-        results: r.results as ExecutionStep['results'],
-        taskId: r.taskId || undefined,
-        maCodename: r.maCodename || undefined,
-        maAgentName: r.maAgentName || undefined,
-        maInvocationId: r.maInvocationId || undefined,
-        maPhase: r.maPhase || undefined,
-        timestamp: r.createdAt,
-      }))
-      executionSteps.value = mapped
-      stepsPerConversation.set(conversationId, mapped)
+      let after = 0
+      for (;;) {
+        const page = await api.chat.getEvents(conversationId, after)
+        if (activeViewConversationId.value !== conversationId) return
+        for (const event of page.events) handleChatToolEvent(event)
+        if (!page.events.length || page.events.length < 1000 || page.events.at(-1)!.sequence >= page.latestSequence) break
+        after = page.events.at(-1)!.sequence
+      }
     } catch {
-      // API not available or conversation has no steps — ignore
+      // Conversation can still receive live events if history is unavailable.
     }
   }
 
@@ -729,6 +787,8 @@ export const useAgentStore = defineStore('agent', () => {
     respondHITL,
     awaitingHITLConvIds,
     handleExecutionUpdate,
+    handleChatToolEvent,
+    recordToolSequence,
     handlePlanningStateUpdated,
     clearExecution,
     clearConversationExecution,

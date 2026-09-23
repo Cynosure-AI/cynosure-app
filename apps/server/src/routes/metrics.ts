@@ -211,25 +211,17 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             total_completion_tokens: number
         }[]
 
-        // ── Tool usage (from execution_steps tool_calls_json) ───────────────
-
-        const stepsWithTools = db.prepare(`
-            SELECT tool_calls_json
-            FROM execution_steps
-            WHERE tool_calls_json IS NOT NULL AND created_at >= ?
-        `).all(sinceMs) as { tool_calls_json: string }[]
-
+        // Tool calls are counted from the canonical event log.
+        const toolEvents = db.prepare(`
+            SELECT event_json FROM chat_events
+            WHERE created_at >= ? AND json_extract(event_json, '$.type') = 'tool-calls'
+        `).all(sinceMs) as { event_json: string }[]
         const toolCounts = new Map<string, number>()
-        for (const row of stepsWithTools) {
-            try {
-                const calls = JSON.parse(row.tool_calls_json)
-                if (Array.isArray(calls)) {
-                    for (const call of calls) {
-                        const name = call.name || call.function?.name || 'unknown'
-                        toolCounts.set(name, (toolCounts.get(name) || 0) + 1)
-                    }
-                }
-            } catch { /* skip malformed */ }
+        for (const row of toolEvents) {
+            const event = JSON.parse(row.event_json) as { items?: Array<{ name: string }> }
+            for (const call of event.items || []) {
+                toolCounts.set(call.name, (toolCounts.get(call.name) || 0) + 1)
+            }
         }
 
         const toolUsage = [...toolCounts.entries()]

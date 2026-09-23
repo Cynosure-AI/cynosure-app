@@ -1,5 +1,6 @@
 import { interruptPlanningRun } from '../agent/planning-state.js'
 import { getEventBus } from '../telemetry/event-bus.js'
+import type { ChatEventDraft } from '@shared/types'
 
 export interface ActiveChatExecution {
     id: string
@@ -12,6 +13,18 @@ export interface ActiveChatExecution {
 
 const activeChatExecutions = new Map<string, ActiveChatExecution>()
 const activeAbortControllers = new Map<string, AbortController>()
+// Stop can arrive before the send request has registered its execution.
+// Remember that intent briefly, scoped to the conversation and client execution ID.
+const pendingCancellations = new Map<string, { conversationId: string; expiresAt: number }>()
+const PENDING_CANCELLATION_MS = 60_000
+
+function emitExecutionState(execution: ActiveChatExecution, state: 'running' | 'stopped' | 'finished'): void {
+    getEventBus().emit('chat:event', {
+        conversationId: execution.conversationId,
+        executionId: execution.id,
+        payload: { type: 'execution-state', agentId: execution.agentId, state },
+    } satisfies ChatEventDraft)
+}
 
 export function listActiveChatExecutions(): ActiveChatExecution[] {
     return Array.from(activeChatExecutions.values()).filter((execution) =>
@@ -26,14 +39,24 @@ export function getChatExecutionIdsByConversation(conversationId: string): strin
 }
 
 export function registerActiveChatExecution(execution: ActiveChatExecution, controller: AbortController): void {
+    const pending = pendingCancellations.get(execution.id)
+    pendingCancellations.delete(execution.id)
     activeChatExecutions.set(execution.id, execution)
     activeAbortControllers.set(execution.id, controller)
-    getEventBus().emit('chat:execution-state', {
-        executionId: execution.id,
-        conversationId: execution.conversationId,
-        agentId: execution.agentId,
-        state: 'running',
-    })
+    if (pending?.conversationId === execution.conversationId && pending.expiresAt > Date.now()) {
+        controller.abort()
+        emitExecutionState(execution, 'stopped')
+    } else {
+        emitExecutionState(execution, 'running')
+    }
+}
+
+export function cancelPendingChatExecution(executionId: string, conversationId: string): void {
+    const pending = { conversationId, expiresAt: Date.now() + PENDING_CANCELLATION_MS }
+    pendingCancellations.set(executionId, pending)
+    setTimeout(() => {
+        if (pendingCancellations.get(executionId) === pending) pendingCancellations.delete(executionId)
+    }, PENDING_CANCELLATION_MS).unref()
 }
 
 export function unregisterActiveChatExecution(executionId: string): void {
@@ -42,12 +65,7 @@ export function unregisterActiveChatExecution(executionId: string): void {
     activeAbortControllers.delete(executionId)
     activeChatExecutions.delete(executionId)
     if (execution && controller && !controller.signal.aborted) {
-        getEventBus().emit('chat:execution-state', {
-            executionId,
-            conversationId: execution.conversationId,
-            agentId: execution.agentId,
-            state: 'finished',
-        })
+        emitExecutionState(execution, 'finished')
     }
 }
 
@@ -72,12 +90,7 @@ export function cancelChatExecution(executionId: string): boolean {
     // repeated Stop requests remain idempotent and no continuation can lose the
     // authoritative aborted signal while asynchronous work settles.
     if (execution) {
-        getEventBus().emit('chat:execution-state', {
-            executionId,
-            conversationId: execution.conversationId,
-            agentId: execution.agentId,
-            state: 'stopped',
-        })
+        emitExecutionState(execution, 'stopped')
     }
     return true
 }

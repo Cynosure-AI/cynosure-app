@@ -4,16 +4,18 @@ import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifac
 import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-rag.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
 import type { ChatMessage, ContentPart, ToolCall } from '../gateway/providers/base.provider.js'
+import type { ContentBlock } from '@shared/types'
+import { contentBlocksToProviderContent } from './transcript.js'
 
 export interface ChatHistoryRow {
     id: string
     role: string
+    is_error?: number
     content: string
     tool_calls_json: string | null
     tool_call_id: string | null
     agent_id: string | null
-    image_urls_json: string | null
-    audio_urls_json: string | null
+    content_blocks_json: string | null
     created_at: number
 }
 
@@ -29,18 +31,15 @@ export function buildRecentImageArtifactsSystemHint(rows: ChatHistoryRow[], limi
 
     for (let i = rows.length - 1; i >= 0 && artifacts.length < limit; i--) {
         const row = rows[i]
-        if (row.role !== 'assistant' || !row.image_urls_json) continue
-        try {
-            const urls = JSON.parse(row.image_urls_json) as string[]
-            for (let j = urls.length - 1; j >= 0 && artifacts.length < limit; j--) {
-                const url = urls[j]
-                const path = extractFilePathFromFileUrl(url)
-                if (!path || seen.has(path)) continue
-                seen.add(path)
-                artifacts.push({ path, url })
-            }
-        } catch {
-            // Ignore malformed image metadata.
+        if (row.role !== 'assistant') continue
+        const urls = parseContentBlocks(row.content_blocks_json)
+            .flatMap((block) => block.type === 'image' ? [block.url] : [])
+        for (let j = urls.length - 1; j >= 0 && artifacts.length < limit; j--) {
+            const url = urls[j]
+            const path = extractFilePathFromFileUrl(url)
+            if (!path || seen.has(path)) continue
+            seen.add(path)
+            artifacts.push({ path, url })
         }
     }
 
@@ -83,8 +82,8 @@ export function attachPreviousGeneratedImageToActiveUser(
         if (row.role === 'user') break
         if (row.role !== 'assistant') continue
 
-        const urls = parseJsonArray<unknown>(row.image_urls_json)
-            .filter((url): url is string => typeof url === 'string')
+        const urls = parseContentBlocks(row.content_blocks_json)
+            .flatMap((block) => block.type === 'image' ? [block.url] : [])
         if (urls.length) generatedImageUrl = urls.at(-1) || null
         break
     }
@@ -187,13 +186,14 @@ export function buildConversationHistory(input: {
     const { db, conversationId, mainAgentId, inlineAttachmentTextLimit } = input
     const historyRows = db
         .prepare(
-            'SELECT id, role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, audio_urls_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+            'SELECT id, role, is_error, content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as ChatHistoryRow[]
     const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)
 
     const keptToolCallIds = new Set<string>()
     const filteredRows = historyRows.filter((row) => {
+        if (row.is_error) return false
         if (row.role === 'system' && row.content.startsWith(COMPACT_EVENT_PREFIX)) return false
         if (row.role === 'user') return true
         if (row.role === 'assistant') {
@@ -233,22 +233,24 @@ function buildHistoryContent(
     inlineAttachmentTextLimit: number,
     fileAttachments: FileAttachmentArtifact[],
 ): string | ContentPart[] {
-    if (row.role !== 'user') return row.content
+    const canonicalBlocks = parseContentBlocks(row.content_blocks_json)
+    const canonicalText = canonicalBlocks.flatMap((block) => block.type === 'text' ? [block.text] : []).join('')
+    if (row.role !== 'user') return canonicalText
 
-    const imageUrls = parseJsonArray<string>(row.image_urls_json).filter((url) => typeof url === 'string')
-    const audioUrls = parseJsonArray<string>(row.audio_urls_json).filter((url) => typeof url === 'string')
+    const imageUrls = canonicalBlocks.flatMap((block) => block.type === 'image' ? [block.url] : [])
+    const audioUrls = canonicalBlocks.flatMap((block) => block.type === 'audio' ? [block.url] : [])
 
     if (!fileAttachments.length && !imageUrls.length && !audioUrls.length) {
-        return row.content
+        return canonicalText
     }
 
-    const parts: ContentPart[] = [{ type: 'text', text: row.content }]
+    const blocks: ContentBlock[] = [{ type: 'text', text: canonicalText }]
     for (const file of fileAttachments) {
         if (file.textBytes > inlineAttachmentTextLimit) {
             const status = file.chunkCount && file.chunkCount > 0
                 ? `This attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}).`
                 : `This attachment is larger than the inline context limit and will be indexed for retrieval (attachmentId: ${file.id}).`
-            parts.push({
+            blocks.push({
                 type: 'text',
                 text: `[Attached file: ${file.name}]\n${status} Use the current attachment context or attachment_search/attachment_read when details are needed.`
             })
@@ -256,25 +258,25 @@ function buildHistoryContent(
         }
         const fileText = readFileAttachmentText(file)
         if (fileText === null) continue
-        parts.push({
+        blocks.push({
             type: 'text',
             text: `[Attached file: ${file.name}]\n${fileText}`
         })
     }
     for (const url of imageUrls) {
-        parts.push({ type: 'image_url', image_url: { url: artifactFileUrlToDataUrl(url) || url } })
+        blocks.push({ type: 'image', artifactId: url, url })
     }
     for (const url of audioUrls) {
-        parts.push({ type: 'audio_url', audio_url: { url: artifactFileUrlToDataUrl(url) || url } })
+        blocks.push({ type: 'audio', artifactId: url, url })
     }
-    return parts
+    return contentBlocksToProviderContent(blocks, (url) => artifactFileUrlToDataUrl(url) || url)
 }
 
-function parseJsonArray<T>(json: string | null): T[] {
+function parseContentBlocks(json: string | null): ContentBlock[] {
     if (!json) return []
     try {
-        const parsed = JSON.parse(json)
-        return Array.isArray(parsed) ? parsed : []
+        const parsed = JSON.parse(json) as unknown
+        return Array.isArray(parsed) ? parsed as ContentBlock[] : []
     } catch {
         return []
     }

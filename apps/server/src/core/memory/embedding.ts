@@ -1,9 +1,9 @@
+import { createHash } from 'node:crypto'
 import { getEventBus } from '../telemetry/event-bus.js'
-import OpenAI from 'openai'
-import { GoogleGenAI } from '@google/genai'
 import { getGateway } from '../gateway/gateway.js'
 import { getDb } from '../../db/database.js'
 import { estimateTextsTokens, recordAuxiliaryModelUsage } from '../usage-metering.js'
+import { createEmbeddingAdapter, type EmbeddingAdapter, type EmbeddingConnection } from './embedding-adapters.js'
 
 export interface EmbeddingConfig {
   providerId?: string
@@ -13,242 +13,163 @@ export interface EmbeddingConfig {
   dimensions?: number
 }
 
+export interface EmbeddingProfile {
+  readonly providerId: string
+  readonly providerType: string
+  readonly endpoint: string
+  readonly model: string
+  readonly dimensions: number
+  readonly fingerprint: string
+}
+
 export interface EmbeddingResult {
   vector: number[]
   model: string
   dimensions: number
+  profileFingerprint: string
 }
 
-export class EmbeddingProvider {
-  private client: OpenAI | null = null
-  private googleClient: GoogleGenAI | null = null
-  private model: string = 'text-embedding-3-small'
-  private dimensions: number = 1536
-  private configured: boolean = false
-  private providerId: string | null = null
+const DEFAULT_MODEL = 'text-embedding-3-small'
+const DEFAULT_DIMENSIONS = 1536
 
-  /**
-   * Load saved embedding config from the database (called at startup).
-   */
-  loadFromDb(): void {
-    try {
-      const db = getDb()
-      const row = db.prepare("SELECT value_json FROM settings WHERE key = 'embedding'").get() as { value_json: string } | undefined
-      if (row) {
-        const config = JSON.parse(row.value_json) as EmbeddingConfig
-        this.configure(config, false)
-      }
-    } catch {
-      // DB not ready or no config saved — proceed with defaults
-    }
+function resolveConnection(config: EmbeddingConfig): { connection: EmbeddingConnection; providerId: string; providerType: string; endpoint: string } {
+  if (config.providerId && (config.baseUrl || config.apiKey)) {
+    throw new Error('Choose either a registered embedding provider or a direct embedding connection')
   }
-
-  /**
-   * Configure the embedding provider. Optionally persists to DB.
-   */
-  configure(opts?: EmbeddingConfig, persist: boolean = true): void {
-    if (opts?.model) this.model = opts.model
-    if (opts?.dimensions) this.dimensions = opts.dimensions
-    if (opts?.providerId !== undefined) this.providerId = opts.providerId || null
-
-    const baseURL = opts?.baseUrl
-    const apiKey = opts?.apiKey
-
-    this.client = null
-    this.googleClient = null
-    this.configured = false
-
-    if (baseURL || apiKey) {
-      this.client = new OpenAI({
-        baseURL: baseURL || 'https://api.openai.com/v1',
-        apiKey: apiKey || ''
-      })
-      this.configured = true
-    } else if (opts?.providerId) {
-      // Use the registered provider's connection info
-      const gateway = getGateway()
-      const provider = gateway.getProvider(opts.providerId)
-      if (provider) {
-        if (provider.config.type === 'google') {
-          this.googleClient = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
-        } else {
-          const defaultHeaders: Record<string, string> = {}
-          if (provider.config.type === 'openrouter') {
-            defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
-            defaultHeaders['X-OpenRouter-Title'] = 'Cynosure Embedder'
-          } else if (provider.config.type === 'requesty') {
-            defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
-            defaultHeaders['X-Title'] = 'Cynosure Embedder'
-          }
-          this.client = new OpenAI({
-            baseURL: provider.config.baseUrl,
-            apiKey: provider.config.apiKey || 'no-key',
-            defaultHeaders
-          })
-        }
-        this.configured = true
-      }
-    }
-
-    if (persist && opts) {
-      try {
-        const db = getDb()
-        db.prepare(
-          "INSERT OR REPLACE INTO settings (key, value_json) VALUES ('embedding', ?)"
-        ).run(JSON.stringify(opts))
-      } catch {
-        // Best-effort persistence
-      }
-    }
-    getEventBus().emit('embedding:configured')
-  }
-
-  /**
-   * Returns the current configuration (without the API key value).
-   */
-  getConfig(): EmbeddingConfig {
+  if (config.baseUrl || config.apiKey) {
     return {
-      providerId: this.providerId || undefined,
-      model: this.model,
-      dimensions: this.dimensions
+      connection: { kind: 'openai-compatible', baseUrl: config.baseUrl || 'https://api.openai.com/v1', apiKey: config.apiKey || 'no-key' },
+      providerId: 'direct', providerType: 'openai-compatible',
+      endpoint: config.baseUrl || 'https://api.openai.com/v1',
     }
   }
-
-  private getClient(): OpenAI {
-    if (this.client) return this.client
-
-    // Fall back to active provider — works for OpenAI-compatible endpoints only
-    const gateway = getGateway()
-    const provider = gateway.getLastUsedProvider()
-    if (provider.config.type !== 'openai' && provider.config.type !== 'lmstudio') {
-      console.warn(
-        `[Embedding] No embedding provider configured. Active LLM provider "${provider.config.type}" may not support OpenAI-compatible embeddings. ` +
-        `Configure embedding separately via POST /api/memory/embeddings/configure.`
-      )
-    }
-
-    const defaultHeaders: Record<string, string> = {}
-    if (provider.config.type === 'openrouter') {
-      defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
-      defaultHeaders['X-OpenRouter-Title'] = 'Cynosure Embedder'
-    } else if (provider.config.type === 'requesty') {
-      defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
-      defaultHeaders['X-Title'] = 'Cynosure Embedder'
-    }
-
-    return new OpenAI({
-      baseURL: provider.config.baseUrl,
+  if (!config.providerId) throw new Error('Configure an embedding provider before indexing or searching memory')
+  const provider = getGateway().getProvider(config.providerId)
+  if (!provider) throw new Error(`Embedding provider "${config.providerId}" was not found`)
+  const providerType = provider.config.type
+  return {
+    connection: {
+      kind: providerType === 'google' ? 'google' : 'openai-compatible',
+      baseUrl: provider.config.baseUrl,
       apiKey: provider.config.apiKey || 'no-key',
-      defaultHeaders
+      providerType,
+    },
+    providerId: config.providerId,
+    providerType,
+    endpoint: provider.config.baseUrl || (providerType === 'google' ? 'google-generative-language' : 'https://api.openai.com/v1'),
+  }
+}
+
+function fingerprint(parts: readonly unknown[]): string {
+  return createHash('sha256').update(JSON.stringify(parts)).digest('hex')
+}
+
+export class EmbeddingService {
+  readonly profile: EmbeddingProfile
+  private readonly adapter: EmbeddingAdapter
+  private readonly config: Readonly<EmbeddingConfig>
+
+  constructor(config: EmbeddingConfig, adapter?: EmbeddingAdapter) {
+    const model = config.model?.trim() || DEFAULT_MODEL
+    const dimensions = config.dimensions ?? DEFAULT_DIMENSIONS
+    if (!Number.isSafeInteger(dimensions) || dimensions < 1) throw new Error('Embedding dimensions must be a positive integer')
+    const resolved = resolveConnection(config)
+    const credentialIdentity = fingerprint([resolved.connection.apiKey])
+    this.profile = Object.freeze({
+      providerId: resolved.providerId,
+      providerType: resolved.providerType,
+      endpoint: resolved.endpoint,
+      model,
+      dimensions,
+      fingerprint: fingerprint([1, resolved.providerId, resolved.providerType, resolved.endpoint, model, dimensions, credentialIdentity]),
     })
+    this.config = Object.freeze({ ...config, model, dimensions })
+    this.adapter = adapter ?? createEmbeddingAdapter(resolved.connection)
   }
 
-  private getGoogleClient(): GoogleGenAI | null {
-    if (this.googleClient) return this.googleClient
-
-    if (this.providerId) {
-      const provider = getGateway().getProvider(this.providerId)
-      if (provider?.config.type === 'google') {
-        this.googleClient = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
-        return this.googleClient
-      }
-    }
-
-    if (!this.configured) {
-      const provider = getGateway().getLastUsedProvider()
-      if (provider.config.type === 'google') {
-        this.googleClient = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
-        return this.googleClient
-      }
-    }
-
-    return null
+  getConfig(): EmbeddingConfig {
+    return { providerId: this.config.providerId, baseUrl: this.config.baseUrl,
+      model: this.profile.model, dimensions: this.profile.dimensions }
   }
+
+  getModelName(): string { return this.profile.model }
+  getDimensions(): number { return this.profile.dimensions }
 
   async embed(text: string, signal?: AbortSignal): Promise<EmbeddingResult> {
-    const results = await this.embedBatch([text], signal)
-    return results[0]
+    return (await this.embedBatch([text], signal))[0]
   }
 
   async embedBatch(texts: string[], signal?: AbortSignal): Promise<EmbeddingResult[]> {
+    if (!texts.length) return []
     signal?.throwIfAborted()
-    const googleClient = this.getGoogleClient()
-    if (googleClient) {
-      const response = await googleClient.models.embedContent({
-        model: this.model,
-        contents: texts,
-        config: {
-          outputDimensionality: this.dimensions
-        }
-      })
-      signal?.throwIfAborted()
-
-      const embeddings = response.embeddings || []
-      if (embeddings.length !== texts.length) {
-        throw new Error(`Gemini embedding response returned ${embeddings.length} vectors for ${texts.length} inputs`)
-      }
-
-      recordAuxiliaryModelUsage({
-        kind: 'embedding',
-        provider: this.providerId || 'google',
-        model: this.model,
-        inputTokens: estimateTextsTokens(texts),
-      })
-
-      return embeddings.map((item) => {
-        const vector = item.values || []
-        if (vector.length === 0) {
-          throw new Error('Gemini embedding response did not include vector values')
-        }
-        return {
-          vector,
-          model: this.model,
-          dimensions: vector.length
-        }
-      })
+    const response = await this.adapter.embed(texts, this.profile.model, this.profile.dimensions, signal)
+    signal?.throwIfAborted()
+    if (response.vectors.length !== texts.length) {
+      throw new Error(`Embedding response returned ${response.vectors.length} vectors for ${texts.length} inputs`)
     }
-
-    const client = this.getClient()
-
-    const response = await client.embeddings.create(
-      {
-        model: this.model,
-        input: texts,
-        dimensions: this.dimensions
-      },
-      { signal }
-    )
-    signal?.throwIfAborted()
-
-    const usage = (response as { usage?: { prompt_tokens?: number; total_tokens?: number } }).usage
-    recordAuxiliaryModelUsage({
-      kind: 'embedding',
-      provider: this.providerId || 'openai',
-      model: response.model || this.model,
-      inputTokens: usage?.prompt_tokens ?? usage?.total_tokens ?? estimateTextsTokens(texts),
+    if (response.model.toLowerCase() !== this.profile.model.toLowerCase()) {
+      throw new Error(`Embedding provider returned model "${response.model}" for profile model "${this.profile.model}"`)
+    }
+    const results = response.vectors.map((vector) => {
+      if (vector.length !== this.profile.dimensions || vector.some((value) => !Number.isFinite(value))) {
+        throw new Error(`Embedding response is incompatible with profile ${this.profile.fingerprint}: expected ${this.profile.dimensions} finite values`)
+      }
+      return { vector, model: response.model, dimensions: vector.length, profileFingerprint: this.profile.fingerprint }
     })
-
-    return response.data.map((item) => ({
-      vector: item.embedding,
-      model: response.model,
-      dimensions: item.embedding.length
-    }))
-  }
-
-  getModelName(): string {
-    return this.model
-  }
-
-  getDimensions(): number {
-    return this.dimensions
+    recordAuxiliaryModelUsage({ kind: 'embedding', provider: this.profile.providerId,
+      model: response.model, inputTokens: response.inputTokens ?? estimateTextsTokens(texts) })
+    return results
   }
 }
 
-let embeddingInstance: EmbeddingProvider | null = null
+/** Probe through the same provider adapter used for real requests. */
+export async function probeEmbeddingDimensions(config: EmbeddingConfig, signal?: AbortSignal): Promise<number> {
+  const { connection } = resolveConnection(config)
+  const response = await createEmbeddingAdapter(connection).embed(['test'], config.model?.trim() || DEFAULT_MODEL, undefined, signal)
+  const vector = response.vectors[0]
+  if (!vector?.length) throw new Error('Embedding response did not include vector values')
+  return vector.length
+}
 
-export function getEmbeddingProvider(): EmbeddingProvider {
-  if (!embeddingInstance) {
-    embeddingInstance = new EmbeddingProvider()
+let activeService: EmbeddingService | null = null
+let unavailableReason: string | null = null
+
+export function getEmbeddingService(): EmbeddingService {
+  if (!activeService) throw new Error(unavailableReason || 'Configure an embedding provider before indexing or searching memory')
+  return activeService
+}
+
+export function getEmbeddingConfig(): EmbeddingConfig {
+  if (activeService) return activeService.getConfig()
+  const saved = getStoredEmbeddingConfig()
+  return { providerId: saved.providerId, baseUrl: saved.baseUrl,
+    model: saved.model || DEFAULT_MODEL, dimensions: saved.dimensions || DEFAULT_DIMENSIONS }
+}
+
+export function getStoredEmbeddingConfig(): EmbeddingConfig {
+  const row = getDb().prepare("SELECT value_json FROM settings WHERE key = 'embedding'").get() as { value_json: string } | undefined
+  return row ? JSON.parse(row.value_json) as EmbeddingConfig : {}
+}
+
+export function setEmbeddingService(config: EmbeddingConfig, persist = true): EmbeddingService {
+  const next = new EmbeddingService(config)
+  if (persist) getDb().prepare("INSERT INTO settings (key, value_json) VALUES ('embedding', ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json")
+    .run(JSON.stringify(config))
+  activeService = next
+  unavailableReason = null
+  getEventBus().emit('embedding:configured')
+  return next
+}
+
+export function loadEmbeddingServiceFromDb(): void {
+  const config = getStoredEmbeddingConfig()
+  try {
+    activeService = config.providerId || config.baseUrl || config.apiKey ? new EmbeddingService(config) : null
+    unavailableReason = null
+  } catch (error) {
+    activeService = null
+    unavailableReason = error instanceof Error ? error.message : String(error)
+    console.warn('[Embedding] Saved configuration is unavailable:', unavailableReason)
   }
-  return embeddingInstance
+  getEventBus().emit('embedding:configured')
 }

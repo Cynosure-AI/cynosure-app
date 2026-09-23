@@ -4,6 +4,7 @@ export interface RouterEmbeddingScope {
     providerId: string
     model: string
     dimensions: number
+    fingerprint: string
 }
 
 export function loadCachedRouterEmbeddings(
@@ -21,10 +22,11 @@ export function loadCachedRouterEmbeddings(
               AND embedding_provider_id = ?
               AND embedding_model = ?
               AND embedding_dimensions = ?
+              AND profile_fingerprint = ?
         `)
 
         for (const groupId of groupIds) {
-            const row = stmt.get(groupId, scope.providerId, scope.model, scope.dimensions) as {
+            const row = stmt.get(groupId, scope.providerId, scope.model, scope.dimensions, scope.fingerprint) as {
                 content_hash: string
                 vector_json: string
             } | undefined
@@ -54,13 +56,15 @@ export function saveCachedRouterEmbedding(
                 embedding_provider_id,
                 embedding_model,
                 embedding_dimensions,
+                profile_fingerprint,
                 content_hash,
                 vector_json,
                 updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(namespace_id, embedding_provider_id, embedding_model, embedding_dimensions)
             DO UPDATE SET
                 content_hash = excluded.content_hash,
+                profile_fingerprint = excluded.profile_fingerprint,
                 vector_json = excluded.vector_json,
                 updated_at = excluded.updated_at
         `).run(
@@ -68,6 +72,7 @@ export function saveCachedRouterEmbedding(
             scope.providerId,
             scope.model,
             scope.dimensions,
+            scope.fingerprint,
             contentHash,
             JSON.stringify(vector),
             Date.now(),
@@ -90,8 +95,9 @@ export function pruneRouterEmbeddingCache(
             WHERE embedding_provider_id = ?
               AND embedding_model = ?
               AND embedding_dimensions = ?
+              AND profile_fingerprint = ?
               ${activeNamespaceIds.length ? `AND namespace_id NOT IN (${placeholders})` : ''}
-        `).run(scope.providerId, scope.model, scope.dimensions, ...activeNamespaceIds)
+        `).run(scope.providerId, scope.model, scope.dimensions, scope.fingerprint, ...activeNamespaceIds)
     } catch (err) {
         console.warn('[tool-router] Failed to prune router embedding cache:', err)
     }
@@ -114,10 +120,11 @@ export function loadCachedToolEmbeddings(
               AND embedding_provider_id = ?
               AND embedding_model = ?
               AND embedding_dimensions = ?
+              AND profile_fingerprint = ?
         `)
 
         for (const toolName of toolNames) {
-            const row = stmt.get(toolName, scope.providerId, scope.model, scope.dimensions) as {
+            const row = stmt.get(toolName, scope.providerId, scope.model, scope.dimensions, scope.fingerprint) as {
                 content_hash: string
                 vector_json: string
             } | undefined
@@ -147,13 +154,15 @@ export function saveCachedToolEmbedding(
                 embedding_provider_id,
                 embedding_model,
                 embedding_dimensions,
+                profile_fingerprint,
                 content_hash,
                 vector_json,
                 updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(tool_name, embedding_provider_id, embedding_model, embedding_dimensions)
             DO UPDATE SET
                 content_hash = excluded.content_hash,
+                profile_fingerprint = excluded.profile_fingerprint,
                 vector_json = excluded.vector_json,
                 updated_at = excluded.updated_at
         `).run(
@@ -161,6 +170,7 @@ export function saveCachedToolEmbedding(
             scope.providerId,
             scope.model,
             scope.dimensions,
+            scope.fingerprint,
             contentHash,
             JSON.stringify(vector),
             Date.now(),
@@ -183,8 +193,9 @@ export function pruneToolEmbeddingCache(
             WHERE embedding_provider_id = ?
               AND embedding_model = ?
               AND embedding_dimensions = ?
+              AND profile_fingerprint = ?
               ${activeToolNames.length ? `AND tool_name NOT IN (${placeholders})` : ''}
-        `).run(scope.providerId, scope.model, scope.dimensions, ...activeToolNames)
+        `).run(scope.providerId, scope.model, scope.dimensions, scope.fingerprint, ...activeToolNames)
     } catch (err) {
         console.warn('[tool-router] Failed to prune tool embedding cache:', err)
     }

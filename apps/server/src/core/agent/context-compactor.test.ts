@@ -6,7 +6,7 @@ import { applyCompactStrategy, COMPACT_EVENT_PREFIX, type CompactHistoryRow } fr
 
 function database() {
     const db = new Database(':memory:')
-    db.exec('CREATE TABLE messages (id TEXT, conversation_id TEXT, role TEXT, content TEXT, created_at INTEGER)')
+    db.exec('CREATE TABLE messages (id TEXT, conversation_id TEXT, role TEXT, content TEXT, content_blocks_json TEXT, created_at INTEGER)')
     return db
 }
 

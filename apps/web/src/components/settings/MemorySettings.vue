@@ -506,6 +506,7 @@ function cancelDrop() {
             :model-value="rerankModel"
             :providers="openRouterProviders"
             model-type="reranker"
+            :include-provider-default="false"
             placeholder="Select OpenRouter rerank model"
             dropdown-width="min-w-full"
             max-height="max-h-72"

@@ -3,12 +3,58 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import ProviderModelSelect from './ProviderModelSelect.vue'
 import { useProviderStore } from '../../stores/provider.store'
+import { api } from '../../api/client'
 import { SK_PROVIDER_MODEL_FAVORITES } from '../../utils/storage-keys'
 
 describe('ProviderModelSelect favorites', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
+    vi.spyOn(api.modelFavorites, 'get').mockResolvedValue({ favorites: [], initialized: false })
+    vi.spyOn(api.modelFavorites, 'save').mockImplementation(async favorites => ({ favorites }))
+  })
+
+  test('restores favorites from app storage instead of a stale browser copy', async () => {
+    localStorage.setItem(SK_PROVIDER_MODEL_FAVORITES, JSON.stringify([{
+      providerId: 'old-provider', model: 'old-model', modelType: 'llm', label: 'old-model',
+    }]))
+    vi.mocked(api.modelFavorites.get).mockResolvedValue({
+      initialized: true,
+      favorites: [{ providerId: 'openai-1', model: 'gpt-test', modelType: 'llm', label: 'gpt-test' }],
+    })
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue([])
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'openai-1', modelValue: '',
+        providers: [{ id: 'openai-1', name: 'OpenAI', type: 'openai', defaultModel: 'gpt-test' }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    expect(JSON.parse(localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES) || '[]'))
+      .toMatchObject([{ providerId: 'openai-1', model: 'gpt-test' }])
+    await wrapper.get('[role="combobox"]').trigger('click')
+    expect(wrapper.text()).toContain('Favorites')
+  })
+
+  test('imports existing browser favorites when app storage is empty', async () => {
+    localStorage.setItem(SK_PROVIDER_MODEL_FAVORITES, JSON.stringify([{
+      providerId: 'openai-1', model: 'gpt-test', modelType: 'llm', label: 'gpt-test',
+    }]))
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue([])
+    mount(ProviderModelSelect, {
+      props: {
+        providerId: 'openai-1', modelValue: '',
+        providers: [{ id: 'openai-1', name: 'OpenAI', type: 'openai', defaultModel: 'gpt-test' }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    expect(api.modelFavorites.save).toHaveBeenCalledWith([
+      { providerId: 'openai-1', model: 'gpt-test', modelType: 'llm', label: 'gpt-test' },
+    ])
   })
 
   test('reattaches pricing metadata to a favorited model row', async () => {
@@ -119,6 +165,24 @@ describe('ProviderModelSelect favorites', () => {
     const providerDefault = wrapper.findAll('[role="option"]')
       .find((option) => option.text().includes('OpenRouter'))!
     expect(providerDefault.text()).toContain('deepseek/deepseek-v4-flash-0731')
+  })
+
+  test('omits a chat provider default from reranker choices', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue([{ id: 'cohere/rerank-v3.5' }])
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'openrouter-1', modelValue: 'cohere/rerank-v3.5',
+        providers: [{ id: 'openrouter-1', name: 'OpenRouter', type: 'openrouter', defaultModel: 'deepseek/deepseek-v4-flash' }],
+        modelType: 'reranker', includeProviderDefault: false, onlyShowAvailableModels: true,
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+    const options = wrapper.findAll('[role="option"]').map(option => option.text())
+    expect(options).toContain('cohere/rerank-v3.5')
+    expect(options.join(' ')).not.toContain('deepseek')
   })
 
   test('colors image pricing green and transcription pricing blue', async () => {

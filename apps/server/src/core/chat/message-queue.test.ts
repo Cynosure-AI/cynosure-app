@@ -47,7 +47,7 @@ describe('persistent chat queue', () => {
       );
       CREATE TABLE messages (
         id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, role TEXT NOT NULL,
-        content TEXT NOT NULL, image_urls_json TEXT, audio_urls_json TEXT, created_at INTEGER NOT NULL
+        content TEXT NOT NULL, content_blocks_json TEXT, created_at INTEGER NOT NULL
       );
       CREATE TABLE conversations (id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL);
       INSERT INTO conversations VALUES ('conversation', 0);

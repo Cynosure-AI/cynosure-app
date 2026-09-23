@@ -208,7 +208,7 @@ const visibleQuickResponses = computed(() => prefs.quickResponses ? chatStore.ac
 // ─── Unified timeline ───────────────────────────────────────
 
 const unifiedTimeline = computed(() => buildChatTimeline(
-  chatStore.messages, agentStore.executionSteps, conversationAgentId.value,
+  chatStore.messages, agentStore.executionSteps,
 ))
 
 /** Key of the last tool-group entry — only this one can show as "active" */

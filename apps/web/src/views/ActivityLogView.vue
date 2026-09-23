@@ -37,7 +37,6 @@ let unsubNotification: (() => void) | undefined;
 let unsubDreamUpdate: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
 let unsubHITLRequest: (() => void) | undefined;
-let unsubExecutionUpdate: (() => void) | undefined;
 let unsubChatExecutionState: (() => void) | undefined;
 let activityLoadPromise: Promise<void> | undefined;
 let liveWorkRefreshPromise: Promise<void> | undefined;
@@ -566,14 +565,9 @@ onMounted(() => {
   unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadActivity());
   unsubMemoryJobUpdate = api.memoryFolders.onJobUpdated(() => void loadActivity());
   unsubHITLRequest = api.agent.onHITLRequest(() => void loadActivity());
-  unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
-    const payload = data as { event?: string };
-    if (payload.event === "step:status" || payload.event === "task:completed" || payload.event === "step:executed") {
-      void loadActivity();
-    }
-  });
-  unsubChatExecutionState = api.chat.onExecutionState(() => {
-    void loadActivity();
+  unsubChatExecutionState = api.chat.onEvent((event) => {
+    if (event.type === 'execution-state' || event.type === 'execution-step' || event.type === 'tool-results' ||
+      event.type === 'transcript-item' && event.item.type === 'execution-marker' && event.item.status === 'completed') void loadActivity();
   });
 });
 
@@ -586,7 +580,6 @@ onUnmounted(() => {
   unsubDreamUpdate?.();
   unsubMemoryJobUpdate?.();
   unsubHITLRequest?.();
-  unsubExecutionUpdate?.();
   unsubChatExecutionState?.();
 });
 
