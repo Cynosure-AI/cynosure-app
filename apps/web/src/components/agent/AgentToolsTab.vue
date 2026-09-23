@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import type { AgentDefinition } from '../../api/types'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { Icon } from '@iconify/vue'
@@ -13,6 +14,7 @@ const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
 const agentStore = useAgentStore()
+const desktopToolList = useMediaQuery('(min-width: 640px)')
 
 const hasMemoryScope = computed(() => (props.agent.memoryFolders?.length ?? 0) > 0)
 const hasSelectableExecutionTools = computed(() => props.agent.tools.length > 0 || props.agent.autoToolRouting)
@@ -68,9 +70,9 @@ function removeMissing() {
 <template>
   <div class="flex flex-col gap-3">
     <BaseCard class="shrink-0 px-5 py-4">
-      <div class="flex items-center justify-between gap-3">
+      <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="min-w-0">
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <Icon
               icon="lucide:route"
               class="h-4 w-4 text-accent-400"
@@ -90,6 +92,7 @@ function removeMissing() {
           </p>
         </div>
         <ToggleSwitch
+          class="self-end sm:self-auto"
           :model-value="agent.autoToolRouting"
           label="Automatic tool discovery"
           size="md"
@@ -120,7 +123,7 @@ function removeMissing() {
             <span
               v-for="name in missingTools"
               :key="name"
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-[10px] font-mono text-amber-300/80"
+              class="inline-flex max-w-full items-center gap-1 break-all px-2 py-0.5 rounded bg-amber-500/10 text-[10px] font-mono text-amber-300/80"
             >
               <Icon
                 icon="lucide:unplug"
@@ -144,9 +147,10 @@ function removeMissing() {
     </div>
 
     <ToolSelector
-      class="h-[clamp(28rem,65dvh,52rem)] shrink-0"
+      class="min-w-0 shrink-0 sm:h-[clamp(28rem,65dvh,52rem)]"
       :model-value="agent.tools"
       :show-approvals="true"
+      :scrollable="desktopToolList"
       :automatic-tool-states="automaticToolStates"
       @update:model-value="emit('update', 'tools', $event)"
     />

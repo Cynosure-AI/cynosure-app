@@ -20,6 +20,12 @@ function autoResize(e: Event) {
   el.style.height = el.scrollHeight + "px";
 }
 
+function formatTimestamp(timestamp: number): string {
+  return new Date(timestamp).toLocaleString([], {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  })
+}
+
 function insertSystemPromptTag(tag: string): void {
   const el = systemPromptRef.value;
   if (!el) {
@@ -122,6 +128,20 @@ onMounted(() =>
           @update:model-value="emit('update', 'favorite', $event)"
         />
       </div>
+      <dl class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-500">
+        <div class="flex items-center gap-1">
+          <dt>Created</dt>
+          <dd class="text-theme-400">
+            {{ formatTimestamp(agent.createdAt) }}
+          </dd>
+        </div>
+        <div class="flex items-center gap-1">
+          <dt>Last changed</dt>
+          <dd class="text-theme-400">
+            {{ formatTimestamp(agent.updatedAt) }}
+          </dd>
+        </div>
+      </dl>
     </BaseCard>
 
     <!-- ── Model ─────────────────────────────────────────────── -->

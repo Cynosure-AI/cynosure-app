@@ -256,7 +256,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full rounded-xl border border-theme-700 bg-theme-800">
+  <div
+    class="flex min-w-0 flex-col rounded-xl border border-theme-700 bg-theme-800"
+    :class="scrollable ? 'h-full' : ''"
+  >
     <div class="flex items-center justify-between px-4 py-2.5 border-b border-theme-700 shrink-0">
       <span class="text-[10px] text-theme-500">
         {{ modelValue.length }}/{{ selectableToolCount }} enabled
@@ -298,7 +301,10 @@ onMounted(() => {
               @update:model-value="setNamespaceExpanded(group.namespace.id, $event)"
             >
               <template #trigger="{ expanded, toggle }">
-                <div class="flex items-center gap-3 sticky top-0 z-10 bg-theme-900/95 backdrop-blur-sm px-3 py-2 border-b border-theme-800/50">
+                <div
+                  class="flex min-w-0 items-center gap-2 bg-theme-900/95 px-2 py-2 backdrop-blur-sm border-b border-theme-800/50 sm:gap-3 sm:px-3"
+                  :class="scrollable ? 'sticky top-0 z-10' : ''"
+                >
                   <button
                     class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
                     @click="toggle"
@@ -338,7 +344,7 @@ onMounted(() => {
                     </span>
                   </label>
                   <div
-                    class="flex min-w-0 cursor-pointer select-none items-center gap-2 flex-1"
+                    class="flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2"
                     @click="toggle"
                   >
                     <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
@@ -355,17 +361,19 @@ onMounted(() => {
                         class="h-4 w-4 text-theme-400"
                       />
                     </span>
-                    <p
-                      class="min-w-0 flex-1 truncate text-[11px] uppercase tracking-wider"
-                      :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : ''"
-                    >
-                      {{ group.namespace.label }}
-                    </p>
-                    <p class="shrink-0 text-[10px] text-theme-600 mt-0.5">
-                      {{ selectedCount(group) }}/{{ selectableCount(group) }} selected
-                      <span v-if="autoManagedCount(group)"> · {{ autoManagedCount(group) }} automatic</span>
-                      <span v-if="unavailableCount(group)"> · {{ unavailableCount(group) }} require agent</span>
-                    </p>
+                    <div class="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                      <p
+                        class="min-w-0 truncate text-[11px] uppercase tracking-wider"
+                        :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : ''"
+                      >
+                        {{ group.namespace.label }}
+                      </p>
+                      <p class="shrink-0 text-[10px] text-theme-600 sm:ml-auto">
+                        {{ selectedCount(group) }}/{{ selectableCount(group) }} selected
+                        <span v-if="autoManagedCount(group)"> · {{ autoManagedCount(group) }} automatic</span>
+                        <span v-if="unavailableCount(group)"> · {{ unavailableCount(group) }} require agent</span>
+                      </p>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -374,10 +382,10 @@ onMounted(() => {
                 <label
                   v-for="tool in group.tools"
                   :key="toolKey(tool)"
-                  class="flex items-center gap-2 rounded-lg px-2 py-2"
+                  class="flex flex-col items-stretch gap-2 rounded-lg px-2 py-2 sm:flex-row sm:items-center"
                   :class="isToolDisabled(tool) ? 'cursor-not-allowed opacity-55' : 'hover:bg-theme-800/70 cursor-pointer'"
                 >
-                  <div class="flex items-start gap-2 flex-1 min-w-0">
+                  <div class="flex min-w-0 flex-1 items-start gap-2">
                     <input
                       type="checkbox"
                       class="mt-0.5 h-4 w-4 accent-accent-600 shrink-0"
@@ -392,7 +400,7 @@ onMounted(() => {
                       :max-width="260"
                     >
                       <div class="min-w-0 flex-1">
-                        <p class="text-xs text-theme-200 font-medium">
+                        <p class="break-words text-xs font-medium text-theme-200 [overflow-wrap:anywhere]">
                           {{ displayToolName(tool) }}
                           <span
                             v-if="isAutoManagedTool(tool)"
@@ -441,7 +449,7 @@ onMounted(() => {
 
                   <button
                     v-if="showApprovals"
-                    class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] transition-colors"
+                    class="flex shrink-0 items-center gap-1 self-end rounded px-1.5 py-0.5 text-[9px] transition-colors sm:self-auto"
                     :class="
                       agentStore.isToolAutoApproved(approvalName(tool))
                         ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
