@@ -288,8 +288,8 @@ onUnmounted(() => {
     class="h-full overflow-y-auto"
     @scroll="handleScroll"
   >
-    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 px-5 pt-5 backdrop-blur-sm md:px-8 md:pt-6">
-      <div class="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 pt-5 backdrop-blur-sm md:pt-6">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
         <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
             Library
@@ -345,12 +345,12 @@ onUnmounted(() => {
       <TabBar
         :model-value="activePanel"
         :tabs="tabs"
-        class="mx-auto mt-4 max-w-7xl"
+        class="mx-auto mt-4 max-w-7xl px-4 sm:px-6 lg:px-8"
         @update:model-value="selectPanel"
       />
     </header>
 
-    <div class="mx-auto max-w-7xl px-5 py-6 md:px-8">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div class="mb-6 flex items-center justify-between gap-3">
         <div
           v-if="activePanel === 'generated'"

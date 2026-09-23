@@ -508,68 +508,70 @@ onMounted(() => loadFolders());
   <div class="relative h-full min-w-0 overflow-y-auto">
     <div class="min-h-full min-w-0">
       <main class="flex min-h-full min-w-0 flex-col">
-        <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 px-4 pt-4 backdrop-blur-sm sm:px-6 sm:pt-5 lg:px-8">
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div class="min-w-0">
-              <h1 class="text-2xl font-bold text-theme-100">
-                Memory
-              </h1>
-              <p class="mt-1 text-sm leading-relaxed text-theme-500">
-                {{ activeSection.description }}
-              </p>
-            </div>
-            <div class="flex shrink-0 items-center gap-2 self-start">
-              <template v-if="activePanel === 'documents'">
+        <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 pt-4 backdrop-blur-sm sm:pt-5">
+          <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <h1 class="text-2xl font-bold text-theme-100">
+                  Memory
+                </h1>
+                <p class="mt-1 text-sm leading-relaxed text-theme-500">
+                  {{ activeSection.description }}
+                </p>
+              </div>
+              <div class="flex shrink-0 items-center gap-2 self-start">
+                <template v-if="activePanel === 'documents'">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+                    :class="activeDocumentView === 'recent'
+                      ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
+                      : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
+                    @click="selectDocumentView('recent')"
+                  >
+                    <Icon
+                      icon="lucide:history"
+                      class="h-4 w-4"
+                    />
+                    Recent Documents
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+                    :class="activeDocumentView === 'trash'
+                      ? 'border-red-500/35 bg-red-500/10 text-red-300'
+                      : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
+                    @click="selectDocumentView('trash')"
+                  >
+                    <Icon
+                      icon="lucide:trash-2"
+                      class="h-4 w-4"
+                    />
+                    Trash
+                  </button>
+                </template>
                 <button
-                  type="button"
-                  class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
-                  :class="activeDocumentView === 'recent'
-                    ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
-                    : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
-                  @click="selectDocumentView('recent')"
+                  v-if="activePanel === 'visual'"
+                  class="p-2 text-theme-500 transition-colors hover:text-theme-200"
+                  title="Refresh knowledge graph"
+                  @click="loadGraph()"
                 >
                   <Icon
-                    icon="lucide:history"
+                    icon="lucide:refresh-cw"
                     class="h-4 w-4"
+                    :class="{ 'animate-spin': graphLoading }"
                   />
-                  Recent Documents
                 </button>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
-                  :class="activeDocumentView === 'trash'
-                    ? 'border-red-500/35 bg-red-500/10 text-red-300'
-                    : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
-                  @click="selectDocumentView('trash')"
-                >
-                  <Icon
-                    icon="lucide:trash-2"
-                    class="h-4 w-4"
-                  />
-                  Trash
-                </button>
-              </template>
-              <button
-                v-if="activePanel === 'visual'"
-                class="p-2 text-theme-500 transition-colors hover:text-theme-200"
-                title="Refresh knowledge graph"
-                @click="loadGraph()"
-              >
-                <Icon
-                  icon="lucide:refresh-cw"
-                  class="h-4 w-4"
-                  :class="{ 'animate-spin': graphLoading }"
-                />
-              </button>
+              </div>
             </div>
-          </div>
 
-          <TabBar
-            :model-value="activePanel"
-            :tabs="memoryTabs"
-            class="mt-4"
-            @update:model-value="selectPanel"
-          />
+            <TabBar
+              :model-value="activePanel"
+              :tabs="memoryTabs"
+              class="mt-4"
+              @update:model-value="selectPanel"
+            />
+          </div>
         </header>
 
         <div
@@ -604,6 +606,7 @@ onMounted(() => loadFolders());
         <MemoryDocumentSection
           v-else-if="activePanel === 'documents'"
           v-model:selected-folder-id="selectedFolderId"
+          class="mx-auto w-full max-w-7xl"
           :spaces="spaces"
           :spaces-loading="spacesLoading"
           :selected-folder="selectedFolder"
@@ -626,6 +629,7 @@ onMounted(() => loadFolders());
           v-model:edge-path-type="graphEdgePathType"
           v-model:fact-level="graphFactLevel"
           v-model:entity-limit="graphEntityLimit"
+          class="mx-auto w-full max-w-7xl"
           :flow-id="KNOWLEDGE_FLOW_ID"
           :graph-search-query="graphSearchQuery"
           :graph="activeGraph"

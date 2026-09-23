@@ -247,7 +247,10 @@ function priorityClass(priority: string): string {
   height: 100%;
   display: flex;
   flex-direction: column;
+  max-width: 80rem;
+  margin-inline: auto;
   padding: 1.5rem 2rem;
+  width: 100%;
   overflow-y: auto;
 }
 

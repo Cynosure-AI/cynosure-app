@@ -227,44 +227,45 @@ onUnmounted(() => {
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-6xl mx-auto py-8 px-6">
-      <div class="mb-4">
-        <div>
+    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:py-5">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
+        <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
             Scheduled Jobs
           </h1>
-          <p class="text-sm text-theme-500 mt-1">
+          <p class="mt-1 text-sm leading-relaxed text-theme-500">
             Cron jobs running on recurring schedules
           </p>
         </div>
-      </div>
-
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-        <button
-          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
-          @click="openAddCronDialog"
-        >
-          <Icon
-            icon="lucide:plus"
-            class="w-4 h-4"
-          />
-          Add Cron Job
-        </button>
-
-        <div class="relative w-full md:w-80 md:ml-auto">
-          <Icon
-            icon="lucide:search"
-            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-500"
-          />
-          <input
-            v-model="cronFilter"
-            type="text"
-            placeholder="Filter scheduled jobs..."
-            class="w-full h-10 pl-10 pr-3 rounded-lg bg-theme-900 border border-theme-800 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+        <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <label class="relative min-w-0 flex-1 sm:w-80 sm:flex-none">
+            <span class="sr-only">Search scheduled jobs</span>
+            <Icon
+              icon="lucide:search"
+              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+            />
+            <input
+              v-model="cronFilter"
+              type="search"
+              placeholder="Filter scheduled jobs..."
+              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-3 text-sm text-theme-200 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
+            >
+          </label>
+          <button
+            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+            @click="openAddCronDialog"
           >
+            <Icon
+              icon="lucide:plus"
+              class="h-4 w-4"
+            />
+            Add Cron Job
+          </button>
         </div>
       </div>
+    </header>
 
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <!-- Loading -->
       <BaseCard
         v-if="loading"

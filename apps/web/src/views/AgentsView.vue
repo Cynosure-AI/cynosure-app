@@ -197,56 +197,59 @@ function formatDate(timestamp: number): string {
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="mx-auto max-w-[1600px] px-4 py-8 sm:px-6">
-      <div class="mb-6 flex items-start justify-between gap-4">
+    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:py-5">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
         <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
             Agents
           </h1>
-          <p class="mt-1 text-sm text-theme-500">
+          <p class="mt-1 text-sm leading-relaxed text-theme-500">
             Create and manage AI agents with custom configurations and favorites.
           </p>
         </div>
-        <button
-          class="flex shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500"
-          @click="showCreateDialog = true"
-        >
-          <Icon
-            icon="lucide:plus"
-            class="h-4 w-4"
-          /> New Agent
-        </button>
-      </div>
-
-      <div
-        v-if="hasAnyAgents"
-        class="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center"
-      >
-        <div class="relative min-w-0 flex-1">
-          <Icon
-            icon="lucide:search"
-            class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
-          />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search agents, providers, or models..."
-            class="w-full rounded-lg border border-theme-700/60 bg-theme-800/60 py-2 pl-10 pr-9 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500/60"
+        <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <label
+            v-if="hasAnyAgents"
+            class="relative min-w-0 flex-1 sm:w-80 sm:flex-none"
           >
+            <span class="sr-only">Search agents</span>
+            <Icon
+              icon="lucide:search"
+              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+            />
+            <input
+              v-model="searchQuery"
+              type="search"
+              placeholder="Search agents, providers, or models..."
+              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-9 text-sm text-theme-200 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
+            >
+            <button
+              v-if="searchQuery"
+              type="button"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-theme-500 hover:text-theme-200"
+              aria-label="Clear search"
+              @click="searchQuery = ''"
+            >
+              <Icon
+                icon="lucide:x"
+                class="h-3.5 w-3.5"
+              />
+            </button>
+          </label>
           <button
-            v-if="searchQuery"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-theme-500 hover:text-theme-300"
-            aria-label="Clear search"
-            @click="searchQuery = ''"
+            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-white hover:bg-accent-500"
+            @click="showCreateDialog = true"
           >
             <Icon
-              icon="lucide:x"
+              icon="lucide:plus"
               class="h-4 w-4"
-            />
+            /> New Agent
           </button>
         </div>
       </div>
+    </header>
 
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div
         v-if="selectedAgentIds.length"
         class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-500/25 bg-accent-500/8 px-3 py-2"
