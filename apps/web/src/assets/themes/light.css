@@ -52,13 +52,20 @@
 [data-theme="light"] .bg-theme-900\/60,
 [data-theme="light"] .bg-theme-900\/70,
 [data-theme="light"] .bg-theme-900\/80,
-[data-theme="light"] .bg-theme-900\/90 { background-color: rgba(248, 250, 255, 0.94); }
+[data-theme="light"] .bg-theme-900\/90,
+[data-theme="light"] .bg-theme-900\/95 { background-color: #f8faff; }
 
 [data-theme="light"] .bg-theme-800,
 [data-theme="light"] .bg-theme-800\/50,
 [data-theme="light"] .bg-theme-800\/60,
 [data-theme="light"] .bg-theme-800\/70,
-[data-theme="light"] .bg-theme-800\/80 { background-color: rgba(255, 255, 255, 0.97); }
+[data-theme="light"] .bg-theme-800\/80,
+[data-theme="light"] .bg-theme-800\/90,
+[data-theme="light"] .bg-theme-800\/95 { background-color: #ffffff; }
+
+[data-theme="light"] .bg-theme-950\/80,
+[data-theme="light"] .bg-theme-950\/90,
+[data-theme="light"] .bg-theme-950\/95 { background-color: var(--color-theme-950); }
 
 [data-theme="light"] .border-theme-700,
 [data-theme="light"] .border-theme-700\/60,
@@ -91,12 +98,13 @@
 }
 
 [data-theme="light"] .chat-header-bar {
+  position: relative;
+  z-index: 40;
   min-height: 4.25rem;
   padding-inline: 1.125rem;
-  background: rgba(255, 255, 255, 0.8);
+  background: #ffffff;
   border-color: rgba(78, 101, 132, 0.16);
   box-shadow: 0 8px 24px rgba(28, 49, 79, 0.055), 0 1px 0 #ffffff inset;
-  backdrop-filter: blur(16px) saturate(125%);
 }
 
 [data-theme="light"] .chat-input-bar .bg-theme-800.border-theme-700.rounded-xl {

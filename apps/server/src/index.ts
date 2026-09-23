@@ -41,6 +41,7 @@ import { ensureDefaultMemoryFolders, syncMemoryFoldersFromFolders } from './core
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
+import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
 import { executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
@@ -508,6 +509,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })
   app.register(registerFileRoutes, { prefix: '/api/files' })
   app.register(registerUserSettingsRoutes, { prefix: '/api/user-settings' })
+  app.register(registerModelFavoritesRoutes, { prefix: '/api/model-favorites' })
 
   app.get('/api/health', async () => {
     return {

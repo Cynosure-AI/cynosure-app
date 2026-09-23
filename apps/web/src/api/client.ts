@@ -23,6 +23,11 @@ function memoryFolderPathId(id: string): string {
 // ---- API object (same shape as window.api from preload) ----
 
 export const api = {
+  modelFavorites: {
+    get: () => get<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>; initialized: boolean }>('/api/model-favorites'),
+    save: (favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>) =>
+      put<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }> }>('/api/model-favorites', { favorites }),
+  },
   userSettings: {
     get: () => get<{ name: string; avatarUrl: string | null }>('/api/user-settings'),
     update: (profile: { name: string; avatarUrl: string | null }) =>
