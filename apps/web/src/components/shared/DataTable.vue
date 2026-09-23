@@ -484,7 +484,7 @@ defineExpose({ startEditing, closeEditor })
 </script>
 
 <template>
-  <div class="rounded-xl border border-theme-800 overflow-x-auto overscroll-x-contain bg-theme-950/45">
+  <div class="data-table rounded-xl border border-theme-800 overflow-x-auto overscroll-x-contain bg-theme-950/45">
     <div
       class="dt-content"
       :style="{ '--dt-min-width': gridMinWidth }"
