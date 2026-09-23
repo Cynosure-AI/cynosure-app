@@ -13,6 +13,10 @@ export interface ActiveChatExecution {
 
 const activeChatExecutions = new Map<string, ActiveChatExecution>()
 const activeAbortControllers = new Map<string, AbortController>()
+// Stop can arrive before the send request has registered its execution.
+// Remember that intent briefly, scoped to the conversation and client execution ID.
+const pendingCancellations = new Map<string, { conversationId: string; expiresAt: number }>()
+const PENDING_CANCELLATION_MS = 60_000
 
 function emitExecutionState(execution: ActiveChatExecution, state: 'running' | 'stopped' | 'finished'): void {
     getEventBus().emit('chat:event', {
@@ -35,9 +39,24 @@ export function getChatExecutionIdsByConversation(conversationId: string): strin
 }
 
 export function registerActiveChatExecution(execution: ActiveChatExecution, controller: AbortController): void {
+    const pending = pendingCancellations.get(execution.id)
+    pendingCancellations.delete(execution.id)
     activeChatExecutions.set(execution.id, execution)
     activeAbortControllers.set(execution.id, controller)
-    emitExecutionState(execution, 'running')
+    if (pending?.conversationId === execution.conversationId && pending.expiresAt > Date.now()) {
+        controller.abort()
+        emitExecutionState(execution, 'stopped')
+    } else {
+        emitExecutionState(execution, 'running')
+    }
+}
+
+export function cancelPendingChatExecution(executionId: string, conversationId: string): void {
+    const pending = { conversationId, expiresAt: Date.now() + PENDING_CANCELLATION_MS }
+    pendingCancellations.set(executionId, pending)
+    setTimeout(() => {
+        if (pendingCancellations.get(executionId) === pending) pendingCancellations.delete(executionId)
+    }, PENDING_CANCELLATION_MS).unref()
 }
 
 export function unregisterActiveChatExecution(executionId: string): void {

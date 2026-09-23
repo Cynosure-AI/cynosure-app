@@ -52,10 +52,23 @@ describe('EmbeddingService', () => {
     })
     const incompatible = service({ dimensions: 3 })
     await expect(incompatible.embed('query')).rejects.toThrow(/incompatible with profile/)
-    const changedModel = new EmbeddingService({ baseUrl: 'https://embeddings.example/v1', apiKey: 'secret',
-      model: 'embed-v1', dimensions: 2 }, {
-      embed: async () => ({ vectors: [[0.5, 0.5]], model: 'different-model' }),
+  })
+
+  test('accepts a provider canonicalizing the model name while retaining the requested profile', async () => {
+    const active = new EmbeddingService({ baseUrl: 'https://embeddings.example/v1', apiKey: 'secret',
+      model: 'qwen/qwen3-embedding-8b', dimensions: 2 }, {
+      embed: async () => ({ vectors: [[0.5, 0.5]], model: 'Qwen/Qwen3-Embedding-8B' }),
     })
-    await expect(changedModel.embed('query')).rejects.toThrow(/returned model/)
+    expect(await active.embed('query')).toMatchObject({
+      model: 'Qwen/Qwen3-Embedding-8B', profileFingerprint: active.profile.fingerprint,
+    })
+  })
+
+  test('rejects a genuinely different provider model', async () => {
+    const active = new EmbeddingService({ baseUrl: 'https://embeddings.example/v1',
+      model: 'qwen/qwen3-embedding-8b', dimensions: 2 }, {
+      embed: async () => ({ vectors: [[0.5, 0.5]], model: 'other/embedding-model' }),
+    })
+    await expect(active.embed('query')).rejects.toThrow(/Embedding provider returned model/)
   })
 })

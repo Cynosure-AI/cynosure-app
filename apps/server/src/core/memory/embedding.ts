@@ -104,11 +104,11 @@ export class EmbeddingService {
     signal?.throwIfAborted()
     const response = await this.adapter.embed(texts, this.profile.model, this.profile.dimensions, signal)
     signal?.throwIfAborted()
-    if (response.model !== this.profile.model) {
-      throw new Error(`Embedding provider returned model "${response.model}" for profile model "${this.profile.model}"`)
-    }
     if (response.vectors.length !== texts.length) {
       throw new Error(`Embedding response returned ${response.vectors.length} vectors for ${texts.length} inputs`)
+    }
+    if (response.model.toLowerCase() !== this.profile.model.toLowerCase()) {
+      throw new Error(`Embedding provider returned model "${response.model}" for profile model "${this.profile.model}"`)
     }
     const results = response.vectors.map((vector) => {
       if (vector.length !== this.profile.dimensions || vector.some((value) => !Number.isFinite(value))) {

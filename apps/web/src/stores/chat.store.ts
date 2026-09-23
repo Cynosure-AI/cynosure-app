@@ -767,12 +767,12 @@ export const useChatStore = defineStore('chat', () => {
     editMessage: chatMessages.editMessage,
     forkConversationFromMessage,
     async cancelStream(): Promise<void> {
+      await chatMessages.cancelStream()
       const id = activeConversationId.value
       if (id) {
         postActionsMap.delete(id)
         postActionsTrigger.value++
       }
-      await chatMessages.cancelStream()
     },
     cancelPostActions(convId?: string): void {
       const id = convId || activeConversationId.value

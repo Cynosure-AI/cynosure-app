@@ -26,6 +26,7 @@ import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversat
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
+  cancelPendingChatExecution,
   getChatExecutionIdsByConversation,
   registerActiveChatExecution,
   unregisterActiveChatExecution,
@@ -148,7 +149,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     const initialAgentId = initialConversation?.agent_id || null
     const initialAgent = initialAgentId ? getAgent(initialAgentId) : null
     const abortController = new AbortController()
-    const streamId = nanoid()
+    const streamId = request.messageId && /^[A-Za-z0-9_-]{6,36}$/.test(request.messageId)
+      ? request.messageId : nanoid()
     const executionId = streamId
     const executionBroadcast: BroadcastFn = (event, data) => {
       const payload = data && typeof data === 'object'
@@ -161,9 +163,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     }
     const emitChat = (payload: ChatEventPayload) => publishChatEvent(executionBroadcast, { conversationId, executionId, payload })
 
-    // Registration happens before the conversation lock and before any async
-    // preflight work. There is no window in which Stop can miss this request
-    // and allow it to register itself later as a seemingly new execution.
+    // Registration precedes all async preflight work. A Stop that arrives before
+    // this request is handled is applied here through the client execution ID.
     registerActiveChatExecution({
       id: executionId,
       conversationId,
@@ -836,6 +837,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       if (cancelChatExecution(streamId)) {
         executionIds.add(streamId)
       } else {
+        if (conversationId) {
+          cancelPendingChatExecution(streamId, conversationId)
+          executionIds.add(streamId)
+        }
         // Try cancelling a channel execution (Telegram/Discord/Slack)
         getChannelManager().cancelExecution(streamId)
       }
