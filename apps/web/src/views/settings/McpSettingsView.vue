@@ -34,8 +34,8 @@ const tabs = computed<TabDef<McpPanel>[]>(() => sections.map((section) => ({
 
 <template>
   <div class="h-full overflow-y-auto">
-    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 px-5 pt-5 backdrop-blur-sm md:px-8 md:pt-6">
-      <div class="mx-auto max-w-7xl">
+    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 pt-5 backdrop-blur-sm md:pt-6">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <h1 class="text-2xl font-bold text-theme-100">
           {{ activePanel === 'browse' ? 'Browse MCP Servers' : 'MCP Servers' }}
         </h1>
@@ -47,11 +47,11 @@ const tabs = computed<TabDef<McpPanel>[]>(() => sections.map((section) => ({
       <TabBar
         v-model="activePanel"
         :tabs="tabs"
-        class="mx-auto mt-4 max-w-7xl"
+        class="mx-auto mt-4 max-w-7xl px-4 sm:px-6 lg:px-8"
       />
     </header>
 
-    <div class="mx-auto max-w-7xl px-5 py-6 md:px-8">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <McpSettings v-model="activePanel" />
     </div>
   </div>

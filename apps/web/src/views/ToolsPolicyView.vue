@@ -306,35 +306,30 @@ onMounted(loadPolicyTools)
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-6xl mx-auto py-8 px-6">
-      <div class="flex items-center justify-between mb-6">
-        <div>
+    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:py-5">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
+        <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
             Tools
           </h1>
-          <p class="text-sm text-theme-500 mt-1 max-w-3xl">
+          <p class="mt-1 max-w-3xl text-sm leading-relaxed text-theme-500">
             Set the HITL behaviour for every registered MCP and built-in tool. <strong class="text-theme-400">Auto-confirm</strong> lets the agent call the tool without asking you first; <strong class="text-theme-400">Ask</strong> pauses for your approval; <strong class="text-theme-400">Defaults</strong> follows each tool's behavior annotations.
           </p>
         </div>
-
         <RouterLink
           to="/settings/mcp"
+          class="inline-flex h-10 shrink-0 items-center gap-2 self-start rounded-lg bg-accent-600 px-4 text-sm font-medium text-white transition-colors hover:bg-accent-500"
         >
-          <button
-            class="flex min-w-32 items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-medium transition-colors"
-            @click="() => $router.push('/settings/mcp')"
-          >
-            <Icon
-              icon="lucide:plus"
-              class="w-4 h-4"
-            />
-            Add Tools
-          </button>
+          <Icon
+            icon="lucide:plus"
+            class="h-4 w-4"
+          />
+          Add Tools
         </RouterLink>
       </div>
+    </header>
 
-
-
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div class="space-y-3">
         <div class="flex flex-col gap-3 rounded-xl border border-theme-800 bg-theme-900 p-4">
           <div class="flex flex-wrap items-center justify-between gap-3">

@@ -52,7 +52,7 @@ const offColors: Record<string, string> = {
     :aria-checked="modelValue"
     :aria-label="label"
     :class="[
-      'relative w-9 h-5 rounded-full transition-colors shrink-0',
+      'toggle-switch relative w-9 h-5 rounded-full transition-colors shrink-0',
       modelValue ? onColors[color] : offColors[size],
       disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
     ]"
@@ -75,7 +75,7 @@ const offColors: Record<string, string> = {
     :aria-checked="modelValue"
     :aria-label="label"
     :class="[
-      'relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0',
+      'toggle-switch relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0',
       modelValue ? onColors[color] : offColors[size],
       disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
     ]"
@@ -98,7 +98,7 @@ const offColors: Record<string, string> = {
     :aria-checked="modelValue"
     :aria-label="label"
     :class="[
-      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0',
+      'toggle-switch relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0',
       modelValue ? onColors[color] : offColors[size],
       disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
     ]"

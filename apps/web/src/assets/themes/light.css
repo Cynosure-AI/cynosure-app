@@ -3,16 +3,16 @@
    ========================================================================== */
 
 [data-theme="light"] {
-  --color-theme-950: #eef3f9;
-  --color-theme-900: #f8fafd;
+  --color-theme-950: #eaf2ff;
+  --color-theme-900: #f5f9ff;
   --color-theme-800: #ffffff;
-  --color-theme-700: #d2dce9;
-  --color-theme-600: #607289;
-  --color-theme-500: #53657d;
-  --color-theme-400: #40536d;
-  --color-theme-300: #30445e;
-  --color-theme-200: #1e324d;
-  --color-theme-100: #0d1d33;
+  --color-theme-700: #c6d6ec;
+  --color-theme-600: #627797;
+  --color-theme-500: #4d6382;
+  --color-theme-400: #354f72;
+  --color-theme-300: #294360;
+  --color-theme-200: #1a3353;
+  --color-theme-100: #0e2442;
   --color-accent-50: #eff7ff;
   --color-accent-100: #dceeff;
   --color-accent-200: #bfddff;
@@ -25,7 +25,7 @@
   --color-accent-900: #203d6e;
   --color-accent-950: #162747;
   --default-blue: #337ff0;
-  --default-line: rgba(78, 101, 132, 0.22);
+  --default-line: #ccd9ed;
   --theme-glow: 0 10px 30px rgba(34, 101, 220, 0.12);
   --theme-glow-strong: 0 0 0 3px rgba(51, 127, 240, 0.16), 0 12px 32px rgba(34, 101, 220, 0.12);
   --theme-accent-rgb: 51, 127, 240;
@@ -34,16 +34,16 @@
 
 [data-theme="light"] body {
   background:
-    radial-gradient(circle at 78% -10%, rgba(51, 127, 240, 0.1), transparent 32rem),
-    radial-gradient(circle at 4% 100%, rgba(99, 123, 181, 0.07), transparent 36rem),
+    radial-gradient(circle at 78% -10%, rgba(51, 127, 240, 0.16), transparent 32rem),
+    radial-gradient(circle at 4% 100%, rgba(99, 123, 181, 0.1), transparent 36rem),
     var(--color-theme-950);
 }
 
 [data-theme="light"] .bg-theme-950 {
   background:
-    radial-gradient(circle at 82% -8%, rgba(51, 127, 240, 0.065), transparent 30rem),
-    radial-gradient(circle at 8% 105%, rgba(124, 99, 255, 0.035), transparent 34rem),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.52), transparent 38%),
+    radial-gradient(circle at 82% -8%, rgba(51, 127, 240, 0.12), transparent 30rem),
+    radial-gradient(circle at 8% 105%, rgba(124, 99, 255, 0.06), transparent 34rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.7), transparent 38%),
     var(--color-theme-950);
 }
 
@@ -53,7 +53,7 @@
 [data-theme="light"] .bg-theme-900\/70,
 [data-theme="light"] .bg-theme-900\/80,
 [data-theme="light"] .bg-theme-900\/90,
-[data-theme="light"] .bg-theme-900\/95 { background-color: #f8faff; }
+[data-theme="light"] .bg-theme-900\/95 { background-color: var(--color-theme-900); }
 
 [data-theme="light"] .bg-theme-800,
 [data-theme="light"] .bg-theme-800\/50,
@@ -83,17 +83,17 @@
 
 [data-theme="light"] #primary-navigation aside {
   background:
-    radial-gradient(circle at 8% 0%, rgba(51, 127, 240, 0.12), transparent 19rem),
-    linear-gradient(180deg, #edf3fb, #e6edf7 76%, #edf2f8);
-  border-right: 1px solid rgba(78, 101, 132, 0.18);
+    radial-gradient(circle at 8% 0%, rgba(51, 127, 240, 0.13), transparent 19rem),
+    linear-gradient(180deg, #f6f9ff, #eaf2ff 76%, #f2f7ff);
+  border-right: 1px solid #ccdaed;
   box-shadow: 12px 0 40px rgba(28, 49, 79, 0.07);
 }
 
 [data-theme="light"] main.bg-theme-900 {
   background:
-    radial-gradient(circle at 65% -20%, rgba(51, 127, 240, 0.065), transparent 34rem),
-    linear-gradient(180deg, #fdfefe, #f7f9fc);
-  border: 1px solid rgba(78, 101, 132, 0.14);
+    radial-gradient(circle at 65% -20%, rgba(51, 127, 240, 0.09), transparent 34rem),
+    linear-gradient(180deg, #ffffff, #f6faff);
+  border: 1px solid #d7e3f2;
   box-shadow: 0 18px 52px rgba(28, 49, 79, 0.12), 0 1px 0 #ffffff inset;
 }
 
@@ -277,6 +277,78 @@
 [data-theme="light"] .mcp-registry-label.bg-violet-500\/15 {
   background: #eee8ff;
   color: #5b34a5;
+}
+
+/* Shared table surfaces and metadata colors apply in every view. */
+[data-theme="light"] .data-table {
+  background: #f8fbff;
+  border-color: #c8d8ef;
+  box-shadow: 0 12px 34px rgba(37, 75, 128, 0.07);
+}
+
+[data-theme="light"] .data-table .dt-grid.bg-theme-900\/70 {
+  background: #eef5ff;
+  border-color: #c8d8ef;
+  color: #354f72;
+}
+
+[data-theme="light"] .data-table .dt-content .group {
+  background: #fbfdff;
+  border-color: #e1e9f4;
+}
+
+[data-theme="light"] .data-table .dt-content .group:hover {
+  background: #eef5ff;
+}
+
+[data-theme="light"] .data-table .dt-content .group[aria-selected="true"] {
+  background: #e6f0ff;
+}
+
+[data-theme="light"] .data-table .dt-content .group[aria-selected="true"]:hover {
+  background: #dceaff;
+}
+
+/* Dark-theme semantic utilities are too light on paper, including inside cells. */
+[data-theme="light"] .text-sky-400 { color: #075985; }
+[data-theme="light"] .text-emerald-400,
+[data-theme="light"] .text-emerald-400\/80 { color: #047857; }
+[data-theme="light"] .text-amber-400,
+[data-theme="light"] .text-amber-400\/80 { color: #92400e; }
+[data-theme="light"] .text-green-400 { color: #166534; }
+[data-theme="light"] .text-red-400 { color: #b42318; }
+[data-theme="light"] .text-indigo-400 { color: #3730a3; }
+[data-theme="light"] .text-violet-400 { color: #6d28a0; }
+
+[data-theme="light"] .data-table .dt-cell .bg-sky-500\/20 {
+  background: #dcecff;
+  color: #07529d;
+}
+
+[data-theme="light"] .data-table .dt-cell .bg-emerald-500\/20 {
+  background: #dcf6e9;
+  color: #066342;
+}
+
+[data-theme="light"] .data-table .dt-cell .bg-theme-500\/20 {
+  background: #e4eaf3;
+  color: #40536d;
+}
+
+[data-theme="light"] .data-table .dt-cell .bg-amber-500\/10 {
+  background: #fff0d7;
+  color: #925000;
+}
+
+/* The light palette uses cobalt for switch state throughout the application. */
+[data-theme="light"] .toggle-switch[aria-checked="true"] {
+  background: #2265dc;
+  box-shadow: 0 2px 5px rgba(34, 101, 220, 0.18);
+}
+
+[data-theme="light"] .toggle-switch[aria-checked="false"] {
+  background: #d6e0ee;
+  box-shadow: inset 0 0 0 1px #bdcbde;
 }
 
 [data-theme="light"] ::selection { background: rgba(51, 127, 240, 0.2); color: var(--color-theme-100); }
