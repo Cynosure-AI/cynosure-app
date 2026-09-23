@@ -1,6 +1,7 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { CronExpressionParser } from 'cron-parser'
 import type { ConversationExecutionConfig } from '@shared/types'
+import { isDefaultChatAgent } from '../../agent/execution-preset.js'
 
 export interface ScheduleToolOptions {
     agentId: string
@@ -23,7 +24,7 @@ export function isScheduleToolName(name?: string | null): name is ScheduleToolNa
 }
 
 function ownerAgentId(agentId: string): string {
-    return agentId === '__agentless__' ? '' : agentId
+    return isDefaultChatAgent({ id: agentId }) ? '' : agentId
 }
 
 function hasScheduleContext(opts: ScheduleToolOptions): boolean {
