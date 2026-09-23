@@ -7,6 +7,8 @@ import CustomSelect, {
   type SelectSize,
 } from "./CustomSelect.vue";
 import { useProviderStore } from "../../stores/provider.store";
+import { api } from "../../api/client";
+import { wsConnected } from "../../api/http";
 import { useProviderLogos } from "../../composables/useProviderLogos";
 import { SK_PROVIDER_MODEL_FAVORITES } from "../../utils/storage-keys";
 import {
@@ -96,6 +98,8 @@ const providerModelTypes = ref<Record<string, Record<string, ModelListType[]>>>(
 const loadingByProvider = ref<Record<string, boolean>>({});
 const favoriteModels = ref<ProviderModelSelection[]>(loadFavoriteModels());
 const FAVORITES_CHANGED_EVENT = "cy-provider-model-favorites-changed";
+let saveQueue: Promise<unknown> = Promise.resolve();
+let pendingSave = false;
 
 function cacheKey(providerId: string): string {
   return `${activeModelTypes.value.join("+")}:${providerId}`;
@@ -185,11 +189,48 @@ function loadFavoriteModels(): ProviderModelSelection[] {
 }
 
 function persistFavoriteModels(): void {
+  pendingSave = true;
   localStorage.setItem(
     SK_PROVIDER_MODEL_FAVORITES,
     JSON.stringify(favoriteModels.value),
   );
   window.dispatchEvent(new Event(FAVORITES_CHANGED_EVENT));
+  const favorites = favoriteModels.value.map(({ providerId, model, modelType, label }) => ({
+    providerId, model, modelType: modelType || "llm" as ModelListType, label,
+  }));
+  const snapshot = JSON.stringify(favoriteModels.value);
+  saveQueue = saveQueue.catch(() => undefined)
+    .then(() => api.modelFavorites.save(favorites))
+    .then(() => {
+      if (localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES) === snapshot) pendingSave = false;
+    });
+  void saveQueue.catch(() => undefined);
+}
+
+async function restoreFavoriteModels(): Promise<void> {
+  // A newly mounted selector must not read an older server value while a
+  // favorite change from another selector is still being saved.
+  await saveQueue.catch(() => undefined);
+  if (pendingSave) {
+    favoriteModels.value = loadFavoriteModels();
+    persistFavoriteModels();
+    await saveQueue.catch(() => undefined);
+    if (pendingSave) return;
+  }
+  const before = localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES);
+  try {
+    const saved = await api.modelFavorites.get();
+    if (before !== localStorage.getItem(SK_PROVIDER_MODEL_FAVORITES)) return;
+    if (!saved.initialized) {
+      if (favoriteModels.value.length) persistFavoriteModels();
+      return;
+    }
+    favoriteModels.value = saved.favorites;
+    localStorage.setItem(SK_PROVIDER_MODEL_FAVORITES, JSON.stringify(saved.favorites));
+    window.dispatchEvent(new Event(FAVORITES_CHANGED_EVENT));
+  } catch {
+    // Keep locally cached favorites while the app server is unavailable.
+  }
 }
 
 function syncFavoriteModels(event?: Event): void {
@@ -206,6 +247,11 @@ function syncFavoriteModels(event?: Event): void {
 onMounted(() => {
   window.addEventListener("storage", syncFavoriteModels);
   window.addEventListener(FAVORITES_CHANGED_EVENT, syncFavoriteModels);
+  void restoreFavoriteModels();
+});
+
+watch(wsConnected, (connected) => {
+  if (connected) void restoreFavoriteModels();
 });
 
 onBeforeUnmount(() => {

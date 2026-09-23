@@ -4,7 +4,7 @@ import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { getActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { andLanceDbFilters, lanceDbEqFilter } from '../core/memory/lancedb-filter.js'
-import { getEmbeddingProvider } from '../core/memory/embedding.js'
+import { getEmbeddingService } from '../core/memory/embedding.js'
 import { buildMemoryFolderFilter } from '../core/memory/memory-folder-scope.js'
 import {
     ensureFolder,
@@ -254,12 +254,13 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
                 return row.id === requestedRow.id || folderPath.startsWith(`${requestedPath}/`)
             })
         if (req.query.semantic === 'true') {
-            const { vector } = await getEmbeddingProvider().embed(query)
+            const { vector, profileFingerprint } = await getEmbeddingService().embed(query)
             const chunks = await getRAGStore().search(
                 getActivePermanentMemoryTableName(),
                 vector,
                 500,
                 buildMemoryFolderFilter(rows),
+                profileFingerprint,
             )
             const bestSimilarityByFile = new Map<string, number>()
             for (const chunk of chunks) {

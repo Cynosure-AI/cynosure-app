@@ -21,7 +21,7 @@ describe('built-in tool categories', () => {
         ['spawn_subagent', 'builtin:utility', 'Built-In: Utility'],
         ['continue_subagent', 'builtin:utility', 'Built-In: Utility'],
     ])('places %s in its category', (name, id, label) => {
-        expect(getBuiltInNamespace(name)).toEqual({ id, label })
+        expect(getBuiltInNamespace(name)).toMatchObject({ id, label })
         expect(getBuiltInToolKey(name)).toBe(`${id}::${name}`)
     })
 })

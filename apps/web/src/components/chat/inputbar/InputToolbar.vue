@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useChatStore } from "../../../stores/chat.store";
-import { useAgentStore } from "../../../stores/agent-runtime.store";
 import { usePreferencesStore } from "../../../stores/preferences.store";
 import { useAgentDefinitionsStore } from "../../../stores/agent-definitions.store";
 import { useProviderStore } from "../../../stores/provider.store";
@@ -38,7 +37,6 @@ const emit = defineEmits<{
 }>();
 
 const chatStore = useChatStore();
-const agentStore = useAgentStore();
 const prefs = usePreferencesStore();
 const agentDefs = useAgentDefinitionsStore();
 const providerStore = useProviderStore();
@@ -125,12 +123,6 @@ const mobileModelLabel = computed(() => {
   return model ? shortModelLabel(model) : "Default";
 });
 
-const hasPendingHITLForActiveConversation = computed(() => {
-  const convId = chatStore.activeConversationId;
-  if (!convId) return false;
-  return agentStore.awaitingHITLConvIds.has(convId);
-});
-
 const showCancelButton = computed(() => chatStore.activeConversationHasRunningInstance);
 
 function queueMessage(): void {
@@ -142,16 +134,7 @@ function steerCurrentRun(): void {
 }
 
 async function onCancelClick(): Promise<void> {
-  if (
-    chatStore.activeConversationHasRunningInstance ||
-    chatStore.activeConversationIsStreaming ||
-    agentStore.activeConversationIsExecuting ||
-    hasPendingHITLForActiveConversation.value
-  ) {
-    await chatStore.cancelStream();
-    return;
-  }
-  chatStore.cancelPostActions();
+  await chatStore.cancelStream();
 }
 
 function onModelProviderOverride(selection: {

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import type { ContentBlock } from '@shared/types'
 import multipart from '@fastify/multipart'
 import archiver from 'archiver'
 import AdmZip from 'adm-zip'
@@ -11,7 +12,7 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { writeFileSync } from 'fs'
 import { extractFilePathFromFileUrl, getConversationArtifactsDir, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { getRAGStore } from '../core/memory/rag.js'
-import { getEmbeddingProvider } from '../core/memory/embedding.js'
+import { loadEmbeddingServiceFromDb } from '../core/memory/embedding.js'
 import { basename, dirname, join } from 'path'
 import {
     existsSync,
@@ -222,8 +223,8 @@ async function resetConversations(db = getDb()): Promise<void> {
     db.prepare('DELETE FROM pending_hitl').run()
     db.prepare('DELETE FROM session_tool_approvals').run()
     db.prepare('DELETE FROM tasks').run()
-    db.prepare('DELETE FROM execution_steps').run()
     db.prepare('DELETE FROM dream_runs').run()
+    db.prepare('DELETE FROM chat_events').run()
     db.prepare('DELETE FROM messages').run()
     db.prepare('DELETE FROM conversations').run()
     await dropConversationAttachmentIndex()
@@ -235,7 +236,6 @@ async function resetConversations(db = getDb()): Promise<void> {
 }
 
 function resetUsage(db = getDb()): void {
-    db.prepare('DELETE FROM execution_steps').run()
     db.prepare('DELETE FROM execution_logs').run()
     try { db.prepare('DELETE FROM auxiliary_model_usage').run() } catch { /* table may not exist */ }
     db.prepare(`
@@ -364,7 +364,6 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const attachments = count('message_attachments')
         const tasks = count('tasks')
         const executionLogs = count('execution_logs')
-        const executionSteps = count('execution_steps')
         const auxiliaryModelUsage = count('auxiliary_model_usage')
         const knowledgeEntities = count('memory_knowledge_entities')
         const knowledgeRelationships = count('memory_knowledge_assertions')
@@ -397,8 +396,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 details: { conversations, messages, attachments, tasks }
             },
             usage: {
-                count: executionLogs + executionSteps + auxiliaryModelUsage,
-                details: { runs: executionLogs, steps: executionSteps, auxiliaryModelUsage }
+                count: executionLogs + auxiliaryModelUsage,
+                details: { runs: executionLogs, auxiliaryModelUsage }
             }
         }
 
@@ -553,12 +552,14 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const db = getDb()
                 const conversations = db.prepare('SELECT * FROM conversations ORDER BY created_at').all()
                 const messages = db.prepare('SELECT * FROM messages ORDER BY created_at').all()
+                const chatEvents = db.prepare('SELECT * FROM chat_events ORDER BY sequence').all()
                 const subagentSessions = db.prepare('SELECT * FROM subagent_sessions ORDER BY created_at').all()
                 const messageAttachments = db.prepare('SELECT * FROM message_attachments ORDER BY created_at').all()
                 const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
                 archive.append(JSON.stringify(messages, null, 2), { name: 'conversations/messages.json' })
+                archive.append(JSON.stringify(chatEvents, null, 2), { name: 'conversations/chat_events.json' })
                 archive.append(JSON.stringify(subagentSessions, null, 2), { name: 'conversations/subagent_sessions.json' })
                 archive.append(JSON.stringify(messageAttachments, null, 2), { name: 'conversations/message_attachments.json' })
                 archive.append(JSON.stringify(tasks, null, 2), { name: 'conversations/tasks.json' })
@@ -580,13 +581,11 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             if (requested.includes('usage')) {
                 const db = getDb()
                 const executionLogs = db.prepare('SELECT * FROM execution_logs ORDER BY created_at').all()
-                const executionSteps = db.prepare('SELECT * FROM execution_steps ORDER BY created_at').all()
                 const auxiliaryModelUsage = db.prepare('SELECT * FROM auxiliary_model_usage ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(executionLogs, null, 2), { name: 'usage/execution_logs.json' })
-                archive.append(JSON.stringify(executionSteps, null, 2), { name: 'usage/execution_steps.json' })
                 archive.append(JSON.stringify(auxiliaryModelUsage, null, 2), { name: 'usage/auxiliary_model_usage.json' })
-                manifest.modules.usage = { count: executionLogs.length + executionSteps.length + auxiliaryModelUsage.length }
+                manifest.modules.usage = { count: executionLogs.length + auxiliaryModelUsage.length }
             }
 
             // Write manifest
@@ -922,7 +921,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             results.settings = res
 
             // Reload the embedding provider from freshly restored settings.
-            getEmbeddingProvider().loadFromDb()
+            loadEmbeddingServiceFromDb()
             emitRestoreProgress('settings', res.errors.length > 0 ? 'failed' : 'completed')
         }
 
@@ -1183,25 +1182,47 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                 `INSERT OR REPLACE INTO messages (
                                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                                     provider, model, prompt_tokens, completion_tokens, context_tokens,
-                                    latency_ms, image_urls_json, video_urls_json, agent_id, memory_sources_json, thinking,
-                                    audio_urls_json, structured_content_json, created_at
+                                    latency_ms, agent_id, ma_codename,
+                                    ma_agent_name, ma_invocation_id, generated_media, is_error, memory_sources_json,
+                                    content_blocks_json, created_at
                                  )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 m.id, m.conversation_id, m.role, m.content,
                                 m.tool_calls_json || null, m.tool_call_id || null,
                                 m.provider || null, m.model || null,
                                 m.prompt_tokens ?? null, m.completion_tokens ?? null,
                                 m.context_tokens ?? null,
-                                m.latency_ms ?? null, m.image_urls_json || null, m.video_urls_json || null, m.agent_id || null,
-                                m.memory_sources_json || null, m.thinking || null,
-                                m.audio_urls_json || null,
-                                m.structured_content_json || null,
+                                m.latency_ms ?? null, m.agent_id || null,
+                                m.ma_codename || null, m.ma_agent_name || null, m.ma_invocation_id || null,
+                                m.generated_media ?? 0, m.is_error ?? 0, m.memory_sources_json || null,
+                                m.content_blocks_json || null,
                                 m.created_at || Date.now()
                             )
                             importedMessageIds.add(m.id as string)
                         } catch (e) {
                             res.errors.push(`Message: ${(e as Error).message}`)
+                        }
+                    }
+                }
+
+                // Canonical replay history; old archives without this file still restore messages.
+                const chatEventsEntry = zip.getEntry('conversations/chat_events.json')
+                if (chatEventsEntry) {
+                    const events = JSON.parse(chatEventsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
+                    const clearEvents = db.prepare('DELETE FROM chat_events WHERE conversation_id = ?')
+                    for (const conversationId of importedConversationIds) clearEvents.run(conversationId)
+                    const insertEvent = db.prepare(`
+                        INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at)
+                        VALUES (?, ?, ?, ?)
+                    `)
+                    for (const event of events) {
+                        if (!importedConversationIds.has(event.conversation_id as string)) continue
+                        try {
+                            insertEvent.run(event.conversation_id, event.execution_id, event.event_json, event.created_at)
+                            res.restored++
+                        } catch (e) {
+                            res.errors.push(`Chat event: ${(e as Error).message}`)
                         }
                     }
                 }
@@ -1315,25 +1336,26 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     const artifactsBaseDir = join(getAppDataDir(), 'artifacts', 'conversations')
                     const placeholders = Array.from(importedConversationIds).map(() => '?').join(',') || "''"
                     const rows = db.prepare(`
-                        SELECT id, conversation_id, image_urls_json, video_urls_json, audio_urls_json
+                        SELECT id, conversation_id, content_blocks_json
                         FROM messages
                         WHERE conversation_id IN (${placeholders})
                     `).all(...Array.from(importedConversationIds)) as {
                         id: string
                         conversation_id: string
-                        image_urls_json: string | null
-                        video_urls_json: string | null
-                        audio_urls_json: string | null
+                        content_blocks_json: string | null
                     }[]
-                    const rehome = (json: string | null, conversationId: string, directory: string): string | null => {
+                    const rehome = (json: string | null, conversationId: string): string | null => {
                         if (!json) return null
                         try {
-                            const urls = JSON.parse(json) as string[]
-                            return JSON.stringify(urls.map((url) => {
-                                const oldPath = extractFilePathFromFileUrl(url)
-                                if (!oldPath) return url
+                            const blocks = JSON.parse(json) as ContentBlock[]
+                            return JSON.stringify(blocks.map((block) => {
+                                if (block.type !== 'image' && block.type !== 'video' && block.type !== 'audio') return block
+                                const oldPath = extractFilePathFromFileUrl(block.url)
+                                if (!oldPath) return block
+                                const directory = block.type === 'image' ? 'images' : block.type === 'video' ? 'videos' : 'audio'
                                 const targetPath = join(artifactsBaseDir, conversationId, directory, basename(oldPath))
-                                return existsSync(targetPath) ? toFileUrl(targetPath) : url
+                                const url = existsSync(targetPath) ? toFileUrl(targetPath) : block.url
+                                return { ...block, artifactId: url, url }
                             }))
                         } catch {
                             return json
@@ -1341,14 +1363,12 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     }
                     const update = db.prepare(`
                         UPDATE messages
-                        SET image_urls_json = ?, video_urls_json = ?, audio_urls_json = ?
+                        SET content_blocks_json = ?
                         WHERE id = ?
                     `)
                     for (const row of rows) {
                         update.run(
-                            rehome(row.image_urls_json, row.conversation_id, 'images'),
-                            rehome(row.video_urls_json, row.conversation_id, 'videos'),
-                            rehome(row.audio_urls_json, row.conversation_id, 'audio'),
+                            rehome(row.content_blocks_json, row.conversation_id),
                             row.id,
                         )
                     }
@@ -1429,34 +1449,6 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             res.restored++
                         } catch (e) {
                             res.errors.push(`Execution log: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Execution steps
-                const stepsEntry = zip.getEntry('usage/execution_steps.json')
-                if (stepsEntry) {
-                    const steps = JSON.parse(stepsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const s of steps) {
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, results_json, evaluation_json, ma_codename, ma_agent_name, ma_invocation_id, ma_phase, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                s.id, s.conversation_id, s.task_id || null, s.iteration ?? 0,
-                                s.status, s.message || null, s.plan || null,
-                                s.tool_calls_json || null,
-                                s.results_json || s.result_json || null,
-                                s.evaluation_json || null,
-                                s.ma_codename || null,
-                                s.ma_agent_name || null,
-                                s.ma_invocation_id || null,
-                                s.ma_phase || null,
-                                s.created_at || Date.now()
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Execution step: ${(e as Error).message}`)
                         }
                     }
                 }

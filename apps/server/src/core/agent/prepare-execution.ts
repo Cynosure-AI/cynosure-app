@@ -17,7 +17,7 @@ import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-att
 import { buildTaskContext } from './pre-execution/task-context.js'
 import { getAssignedMemoryFolders, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
-import type { ExecutionPreset } from './execution-preset.js'
+import { isDefaultChatAgent, type ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 import { getUserSettings } from '../user-settings.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
@@ -146,10 +146,10 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerOverride,
         modelOverride,
     })
-    const scheduleExecutionConfig: ConversationExecutionConfig | undefined = preset.id === '__agentless__'
+    const scheduleExecutionConfig: ConversationExecutionConfig | undefined = isDefaultChatAgent(preset)
         ? {
             allowedTools: [...(input.scheduleSelectedToolKeys ?? preset.tools)],
-            subAgents: [...(input.subAgentAssignments ?? preset.subAgents)],
+            subAgents: (input.subAgentAssignments ?? preset.subAgents).map(({ agentId }) => ({ agentId })),
             memoryFolderIds: memoryFolderOverrides?.map((space) => space.id) ?? [],
             systemPrompt: systemPromptOverride ?? preset.systemPrompt ?? '',
             model: providerModel.model,
@@ -294,7 +294,7 @@ function resolveSelectedMemoryFolderNames(
         return memoryFolderOverrides.map(({ name, description }) => ({ name, ...(description ? { description } : {}) }))
     }
 
-    if (agentId === '__agentless__') return []
+    if (isDefaultChatAgent({ id: agentId })) return []
 
     return getAssignedMemoryFolders(agentId).map(({ name, description }) => ({ name, ...(description ? { description } : {}) }))
 }

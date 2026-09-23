@@ -6,6 +6,7 @@ import { getAgent } from '../core/agents/agent-store.js'
 import { listActiveInstances } from './instances.js'
 import { stopAllActivity } from '../core/activity/stop-all.js'
 import { getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, type MemoryDiffSegment } from '../core/memory/memory-revisions.js'
+import type { ContentBlock } from '@shared/types'
 
 type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
 
@@ -134,11 +135,13 @@ function parseTypeFilter(value: string | undefined): Set<ActivityKind> | null {
     return kinds.length ? new Set(kinds) : null
 }
 
-function parseJsonStringArray(value: string | null): string[] {
+function mediaArtifactsFromBlocks(value: string | null): ActivityArtifact[] {
     if (!value) return []
     try {
-        const parsed = JSON.parse(value) as unknown
-        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+        const parsed = JSON.parse(value) as ContentBlock[]
+        if (!Array.isArray(parsed)) return []
+        return parsed.flatMap((block) => block.type === 'image' || block.type === 'video' || block.type === 'audio'
+            ? [artifactFromUrl(block.url, block.type)] : [])
     } catch {
         return []
     }
@@ -493,25 +496,21 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         // assistant rows that duplicated tool media are filtered too.
         const nonGeneratedArtifactFirstSeen = new Map<string, number>()
         const contextMediaRows = db.prepare(
-            `SELECT conversation_id, role, content, image_urls_json, video_urls_json, audio_urls_json, created_at
+            `SELECT conversation_id, role, content, content_blocks_json, created_at
              FROM messages
              WHERE (role = 'user' OR (role = 'tool' AND generated_media = 0))
-               AND (image_urls_json IS NOT NULL OR video_urls_json IS NOT NULL OR audio_urls_json IS NOT NULL OR content LIKE '%/api/files?path=%' OR content GLOB '*/*.*')`
+               AND (content_blocks_json LIKE '%"type":"image"%' OR content_blocks_json LIKE '%"type":"video"%' OR content_blocks_json LIKE '%"type":"audio"%' OR content LIKE '%/api/files?path=%' OR content GLOB '*/*.*')`
         ).all() as {
             conversation_id: string
             role: string
             content: string
-            image_urls_json: string | null
-            video_urls_json: string | null
-            audio_urls_json: string | null
+            content_blocks_json: string | null
             created_at: number
         }[]
         for (const row of contextMediaRows) {
             if (row.role === 'tool' && toolOutputIndicatesGeneratedArtifact(row.content)) continue
             const contextArtifacts = dedupeArtifacts([
-                ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
-                ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
-                ...parseJsonStringArray(row.audio_urls_json).map((url) => artifactFromUrl(url, 'audio')),
+                ...mediaArtifactsFromBlocks(row.content_blocks_json),
                 ...fileArtifactsFromText(row.content),
             ])
             for (const artifact of contextArtifacts) {
@@ -528,7 +527,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         // of messages lets ordinary replies push older artifacts out of history
         // and can incorrectly report hasMore=false before they are reached.
         const messageRows = db.prepare(
-            `SELECT m.id, m.conversation_id, m.role, m.content, m.image_urls_json, m.video_urls_json, m.audio_urls_json, m.generated_media, m.created_at, c.title, c.agent_id
+            `SELECT m.id, m.conversation_id, m.role, m.content, m.content_blocks_json, m.generated_media, m.created_at, c.title, c.agent_id
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
              WHERE m.generated_media = 1
@@ -540,9 +539,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             conversation_id: string
             role: string
             content: string
-            image_urls_json: string | null
-            video_urls_json: string | null
-            audio_urls_json: string | null
+            content_blocks_json: string | null
             generated_media: number
             created_at: number
             title: string | null
@@ -554,10 +551,8 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                 continue
             }
             const artifacts = dedupeArtifacts([
-                ...parseJsonStringArray(row.image_urls_json).map((url) => artifactFromUrl(url, 'image')),
-                ...parseJsonStringArray(row.video_urls_json).map((url) => artifactFromUrl(url, 'video')),
-                ...parseJsonStringArray(row.audio_urls_json).map((url) => artifactFromUrl(url, 'audio')),
-                // Generated media is persisted in the typed media columns.
+                ...mediaArtifactsFromBlocks(row.content_blocks_json),
+                // Generated media is persisted in content blocks.
                 // A bare media path in assistant prose may simply describe a
                 // file the model is about to inspect, so only documents from
                 // message text remain eligible here.

@@ -1,5 +1,5 @@
 import { prepareAgentExecution } from '../prepare-execution.js'
-import { presetFromAgent, presetFromAgentless } from '../execution-preset.js'
+import { snapshotChatExecutionPreset } from '../execution-preset.js'
 import { toExecutionPlanInput } from './execution-input.js'
 import { getBuiltInMemoryToolKeys, getBuiltInToolKey, isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
 import {
@@ -89,19 +89,14 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     })
 
     const effectiveSubAgents = requestedSubAgents ?? resolvedAgent?.subAgents ?? []
-    const preset = resolvedAgent
-        ? presetFromAgent(resolvedAgent, {
-            tools: toolPolicy.configuredTools,
-            subAgents: effectiveSubAgents,
-        })
-        : presetFromAgentless({
-            tools: toolPolicy.configuredTools,
-            subAgents: effectiveSubAgents,
-            autoToolRouting: autoToolRouting === true,
-            autoMemory,
-            autoRouterProviderId,
-            autoRouterModel,
-        })
+    const preset = snapshotChatExecutionPreset(resolvedAgent, {
+        tools: toolPolicy.configuredTools,
+        subAgents: effectiveSubAgents,
+        autoToolRouting: autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false,
+        autoMemory,
+        autoRouterProviderId,
+        autoRouterModel,
+    })
 
     const prepared = await prepareAgentExecution({
         preset,

@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
 import { getMemoryAggregator } from '../core/memory/memory-aggregator.js'
 import { getHistoryStore } from '../core/memory/history.js'
-import { EmbeddingProvider, getEmbeddingProvider } from '../core/memory/embedding.js'
+import { EmbeddingService, getEmbeddingConfig, getEmbeddingService, getStoredEmbeddingConfig, probeEmbeddingDimensions, setEmbeddingService, type EmbeddingConfig } from '../core/memory/embedding.js'
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemoryFolderFilter, getAllMemoryFolders } from '../core/memory/memory-folder-scope.js'
@@ -17,8 +17,6 @@ import { activatePermanentMemoryIndex, DEFAULT_PERMANENT_MEMORY_TABLE, getActive
 import { beginMemoryReembedding, finishMemoryReembedding } from '../core/memory/reembedding-operation.js'
 import { getGateway } from '../core/gateway/gateway.js'
 import { GRAPH_LIMITS, MEMORY_LIMITS } from '../core/runtime-limits.js'
-import OpenAI from 'openai'
-import { GoogleGenAI } from '@google/genai'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -30,33 +28,6 @@ function markMemoryIndexesForRebuild(): void {
     SET content_hash = '', chunk_count = 0, last_indexed_at = 0,
         deep_researched_at = 0, tags_json = '[]'
   `).run()
-}
-
-async function detectEmbeddingDimensions(providerId: string | undefined, model: string): Promise<number> {
-  const provider = providerId
-    ? getGateway().getProvider(providerId)
-    : getGateway().getLastUsedProvider()
-  if (!provider) throw new Error('Provider not found')
-
-  if (provider.config.type === 'google') {
-    const client = new GoogleGenAI({ apiKey: provider.config.apiKey || 'not-set' })
-    const res = await client.models.embedContent({
-      model,
-      contents: 'test'
-    })
-    const dimensions = res.embeddings?.[0]?.values?.length || 0
-    if (!dimensions) throw new Error('Embedding response did not include vector values')
-    return dimensions
-  }
-
-  const client = new OpenAI({
-    baseURL: provider.config.baseUrl,
-    apiKey: provider.config.apiKey || 'no-key'
-  })
-  const res = await client.embeddings.create({ model, input: 'test' })
-  const dimensions = res.data[0].embedding.length
-  if (!dimensions) throw new Error('Embedding response did not include vector values')
-  return dimensions
 }
 
 export async function registerMemoryRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
@@ -306,18 +277,33 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   app.post<{
     Body: { providerId?: string; baseUrl?: string; apiKey?: string; model?: string; dimensions?: number; reembed?: boolean }
   }>('/embeddings/configure', async (req, reply) => {
-    const embedder = getEmbeddingProvider()
-    const oldConfig = embedder.getConfig()
+    const oldConfig = getEmbeddingConfig()
     const { reembed, ...configOpts } = req.body
-
-    const newModel = configOpts.model || oldConfig.model
-    const newProviderId = configOpts.providerId ?? oldConfig.providerId
-    const newDimensions = configOpts.dimensions || await detectEmbeddingDimensions(newProviderId, newModel || 'text-embedding-3-small')
-    const resolvedConfig = { ...configOpts, model: newModel, dimensions: newDimensions }
-    const embeddingChanged =
-      oldConfig.providerId !== newProviderId ||
-      oldConfig.model !== newModel ||
-      oldConfig.dimensions !== newDimensions
+    const savedConfig = getStoredEmbeddingConfig()
+    const providerChanged = configOpts.providerId !== undefined && configOpts.providerId !== savedConfig.providerId
+    const directChanged = (configOpts.baseUrl !== undefined || configOpts.apiKey !== undefined) && configOpts.providerId === undefined
+    const nextConfig = {
+      ...savedConfig,
+      ...(providerChanged ? { baseUrl: undefined, apiKey: undefined } : {}),
+      ...(directChanged ? { providerId: undefined } : {}),
+      ...configOpts,
+    }
+    const connectionChanged = providerChanged || configOpts.baseUrl !== undefined || configOpts.apiKey !== undefined
+    let resolvedConfig: EmbeddingConfig
+    let nextService: EmbeddingService
+    try {
+      const dimensions = configOpts.dimensions ||
+        (!connectionChanged && nextConfig.model === oldConfig.model ? oldConfig.dimensions : undefined) ||
+        await probeEmbeddingDimensions(nextConfig)
+      resolvedConfig = { ...nextConfig, dimensions }
+      nextService = new EmbeddingService(resolvedConfig)
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) })
+    }
+    const embeddingChanged = nextService.profile.fingerprint !== (() => {
+      try { return getEmbeddingService().profile.fingerprint } catch { return '' }
+    })()
+    const newDimensions = nextService.profile.dimensions
 
     if (embeddingChanged && reembed) {
       const reembedding = beginMemoryReembedding()
@@ -329,7 +315,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       // The active provider and table remain available throughout staging.
       const rag = getRAGStore()
       const activeTable = getActivePermanentMemoryTableName()
-      const migrationEmbedder = new EmbeddingProvider()
+      const migrationEmbedder = nextService
       const migrationId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
       const stagingTable = `permanent_memory_v_${migrationId}`
       let activated = false
@@ -338,7 +324,6 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       try {
         const existingDocs = await rag.listDocuments(activeTable)
         const chunksToReembed = existingDocs.filter(d => d.id !== '__seed__')
-        migrationEmbedder.configure(resolvedConfig, false)
         // Re-embed in batches
         const BATCH_SIZE = 32
         let totalReembedded = 0
@@ -373,6 +358,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
               sectionPath: doc.sectionPath || '',
               contentHash: doc.contentHash || '',
               embeddingModel: embeddings[j].model,
+              embeddingProfileFingerprint: embeddings[j].profileFingerprint,
               representationType: doc.representationType || 'raw',
               sourceChunkId: doc.sourceChunkId || doc.id,
             }))
@@ -390,6 +376,9 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
         if (stagedDocs.length !== totalChunks) {
           throw new Error(`Staging verification failed: expected ${totalChunks} chunks, found ${stagedDocs.length}`)
         }
+        if (stagedDocs.some((doc) => doc.embeddingProfileFingerprint !== nextService.profile.fingerprint)) {
+          throw new Error('Staging verification failed: embedding profile mismatch')
+        }
         await rag.rebuildFtsIndex(stagingTable)
         signal.throwIfAborted()
 
@@ -397,8 +386,8 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
         // publishing the new provider/index pair.
         await dropConversationAttachmentIndex()
         signal.throwIfAborted()
-        activatePermanentMemoryIndex(stagingTable, resolvedConfig)
-        embedder.configure(resolvedConfig, false)
+        activatePermanentMemoryIndex(stagingTable, resolvedConfig, nextService.profile.fingerprint)
+        setEmbeddingService(resolvedConfig, false)
         activated = true
         if (activeTable !== stagingTable) await rag.deleteTable(activeTable)
         let knowledgeProjection: { runs: number; documents: number } | undefined
@@ -441,10 +430,10 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       getMemoryKnowledgeStore().markSearchProjectionsPending()
       await dropConversationAttachmentIndex()
       markMemoryIndexesForRebuild()
-      activatePermanentMemoryIndex(DEFAULT_PERMANENT_MEMORY_TABLE, resolvedConfig)
-      embedder.configure(resolvedConfig, false)
+      activatePermanentMemoryIndex(DEFAULT_PERMANENT_MEMORY_TABLE, resolvedConfig, nextService.profile.fingerprint)
+      setEmbeddingService(resolvedConfig, false)
     } else {
-      embedder.configure(resolvedConfig)
+      setEmbeddingService(resolvedConfig)
     }
 
     return { success: true, vectorsDropped: embeddingChanged, reembedded: false, reembeddedCount: 0, dimensions: newDimensions }
@@ -452,8 +441,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
 
   // GET /api/memory/embeddings/config — get current embedding config
   app.get('/embeddings/config', async () => {
-    const embedder = getEmbeddingProvider()
-    return embedder.getConfig()
+    return getEmbeddingConfig()
   })
 
   // POST /api/memory/embeddings/drop — drop all vector data
@@ -517,7 +505,7 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   }>('/embeddings/probe', async (req, reply) => {
     const { providerId, model } = req.body
     try {
-      return { dimensions: await detectEmbeddingDimensions(providerId, model) }
+      return { dimensions: await probeEmbeddingDimensions({ providerId, model }) }
     } catch (err) {
       return reply.status(500).send({ error: (err as Error).message })
     }

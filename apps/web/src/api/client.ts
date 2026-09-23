@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscri
 import type {
   DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse,
   AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentAnalysis, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk, RuntimeLimits,
-  AgentInstance, ChatExecutionState, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ExecutionStepRecord, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
+  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
@@ -14,7 +14,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
 
 function memoryFolderPathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -23,6 +23,11 @@ function memoryFolderPathId(id: string): string {
 // ---- API object (same shape as window.api from preload) ----
 
 export const api = {
+  modelFavorites: {
+    get: () => get<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>; initialized: boolean }>('/api/model-favorites'),
+    save: (favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>) =>
+      put<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }> }>('/api/model-favorites', { favorites }),
+  },
   userSettings: {
     get: () => get<{ name: string; avatarUrl: string | null }>('/api/user-settings'),
     update: (profile: { name: string; avatarUrl: string | null }) =>
@@ -102,10 +107,11 @@ export const api = {
       }>('/api/chat/artifacts/resolve', { artifacts }),
     getMessages: (conversationId: string) =>
       get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
+    getEvents: (conversationId: string, after = 0, limit = 1000) =>
+      get<{ events: ChatEvent[]; latestSequence: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/events?after=${after}&limit=${limit}`),
+    onEvent: (cb: (event: ChatEvent) => void) => onWsEvent('chat:event', cb as WsHandler),
     getDebugContext: (conversationId: string) =>
       get<DebugContextSnapshot>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/debug-context`),
-    getExecutionSteps: (conversationId: string) =>
-      get<ExecutionStepRecord[]>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/steps`),
     getPendingHITL: (conversationId: string) =>
       get<{ taskId: string; toolCalls: { name: string; arguments: string }[] }[]>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/hitl`
@@ -175,86 +181,6 @@ export const api = {
     onChannelConversationState: (
       cb: (data: { conversationId: string; agentId: string; running: boolean }) => void
     ) => onWsEvent('channel:conversation-state', cb as WsHandler),
-    onExecutionState: (cb: (data: ChatExecutionState) => void) =>
-      onWsEvent('chat:execution-state', cb as WsHandler),
-    onQueueChanged: (cb: (data: { conversationId: string }) => void) =>
-      onWsEvent('chat:queue-changed', cb as WsHandler),
-
-    // Stream event listeners — via WebSocket
-    onStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }) => void) =>
-      onWsEvent('chat:stream-start', cb as WsHandler),
-    onStreamChunk: (
-      cb: (data: { streamId: string; conversationId: string; content: string }) => void
-    ) => onWsEvent('chat:stream-chunk', cb as WsHandler),
-    onStreamThinking: (
-      cb: (data: { streamId: string; conversationId: string; thinking: string }) => void
-    ) => onWsEvent('chat:stream-thinking', cb as WsHandler),
-    onStreamImages: (
-      cb: (data: { streamId: string; conversationId: string; images: string[] }) => void
-    ) => onWsEvent('chat:stream-images', cb as WsHandler),
-    onStreamVideos: (
-      cb: (data: { streamId: string; conversationId: string; videos: string[] }) => void
-    ) => onWsEvent('chat:stream-videos', cb as WsHandler),
-    onStreamEnd: (
-      cb: (data: {
-        streamId: string
-        conversationId: string
-        cancelled?: boolean
-        usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
-        model?: string
-        contextWindow?: number
-        contextTokens?: number
-      }) => void
-    ) => onWsEvent('chat:stream-end', cb as WsHandler),
-    onStreamReset: (cb: (data: { streamId: string; conversationId: string }) => void) =>
-      onWsEvent('chat:stream-reset', cb as WsHandler),
-    onStreamDiscard: (cb: (data: { streamId: string; conversationId: string }) => void) =>
-      onWsEvent('chat:stream-discard', cb as WsHandler),
-    onStreamUsage: (
-      cb: (data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }) => void
-    ) => onWsEvent('chat:stream-usage', cb as WsHandler),
-    onStreamError: (
-      cb: (data: { streamId: string; conversationId: string; error: string }) => void
-    ) => onWsEvent('chat:stream-error', cb as WsHandler),
-
-    // Sub-agent stream events — dedicated handlers so the UI can manage
-    // sub-agent streaming separately from the primary orchestrator stream.
-    onSubAgentStreamStart: (cb: (data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }) => void) =>
-      onWsEvent('chat:subagent-stream-start', cb as WsHandler),
-    onSubAgentStreamChunk: (
-      cb: (data: { streamId: string; conversationId: string; content: string }) => void
-    ) => onWsEvent('chat:subagent-stream-chunk', cb as WsHandler),
-    onSubAgentStreamThinking: (
-      cb: (data: { streamId: string; conversationId: string; thinking: string }) => void
-    ) => onWsEvent('chat:subagent-stream-thinking', cb as WsHandler),
-    onSubAgentStreamImages: (
-      cb: (data: { streamId: string; conversationId: string; images: string[] }) => void
-    ) => onWsEvent('chat:subagent-stream-images', cb as WsHandler),
-    onSubAgentStreamEnd: (
-      cb: (data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }) => void
-    ) => onWsEvent('chat:subagent-stream-end', cb as WsHandler),
-
-    onTitleUpdated: (
-      cb: (data: { conversationId: string; title: string }) => void
-    ) => onWsEvent('chat:title-updated', cb as WsHandler),
-    onNewMessage: (
-      cb: (data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; role: string; content: string; createdAt: number; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }) => void
-    ) => onWsEvent('chat:new-message', cb as WsHandler),
-    onPostAction: (
-      cb: (data: { conversationId: string; action: string; status: 'started' | 'completed' }) => void
-    ) => onWsEvent('chat:post-action', cb as WsHandler),
-    onQuickResponses: (
-      cb: (data: { conversationId: string; messageId: string | null; suggestions: string[] }) => void
-    ) => onWsEvent('chat:quick-responses', cb as WsHandler),
-    onCompactEvent: (
-      cb: (data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }) => void
-    ) => onWsEvent('chat:compact-event', cb as WsHandler),
-    onCompactStart: (
-      cb: (data: { conversationId: string }) => void
-    ) => onWsEvent('chat:compact-start', cb as WsHandler),
-    onCompactError: (
-      cb: (data: { conversationId: string; error: string }) => void
-    ) => onWsEvent('chat:compact-error', cb as WsHandler),
     getPostActions: (conversationId: string) =>
       get<{ actions: string[]; quickResponses: { messageId: string | null; suggestions: string[] } }>(`/api/chat/post-actions?conversationId=${encodeURIComponent(conversationId)}`),
     cancelPostActions: (conversationId: string) =>

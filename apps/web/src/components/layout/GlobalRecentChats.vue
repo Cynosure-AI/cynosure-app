@@ -300,8 +300,9 @@ onMounted(() => {
   disposed = false
   document.addEventListener('click', closeMenu)
   liveCleanups.push(
-    api.chat.onNewMessage(scheduleRefresh),
-    api.chat.onTitleUpdated(scheduleRefresh),
+    api.chat.onEvent((event) => {
+      if (event.type === 'transcript-item' && event.item.type === 'message' || event.type === 'title-updated') scheduleRefresh()
+    }),
     api.chat.onChannelConversationState(scheduleRefresh),
     api.agent.onHITLRequest(scheduleRefresh),
   )

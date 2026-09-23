@@ -25,6 +25,7 @@ import type {
   QueuedChatMessageDto,
 } from '@shared/types'
 import { getChatExecutionIdsByConversation } from './active-executions.js'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent } from './transcript.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -105,7 +106,7 @@ export function getChatQueueState(conversationId: string): ChatQueueStateDto {
 }
 
 function notify(conversationId: string): void {
-  broadcastQueue('chat:queue-changed', { conversationId })
+  publishChatEvent(broadcastQueue, { conversationId, executionId: 'external', payload: { type: 'queue-changed' } })
 }
 
 function nextPosition(conversationId: string): number {
@@ -364,23 +365,22 @@ export async function takeSteeringMessages(conversationId: string, streamId: str
     const now = Date.now()
     db.transaction(() => {
       db.prepare(`
-        INSERT OR IGNORE INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
-        VALUES (?, ?, 'user', ?, ?, ?, ?)
-      `).run(row.id, conversationId, normalized, images.length ? JSON.stringify(images) : null, audio.length ? JSON.stringify(audio) : null, now)
+        INSERT OR IGNORE INTO messages (id, conversation_id, role, content, content_blocks_json, created_at)
+        VALUES (?, ?, 'user', ?, ?, ?)
+      `).run(row.id, conversationId, normalized, messageContentJson({ id: row.id, content: normalized,
+        imageDataUrls: images, audioDataUrls: audio }), now)
       persistMessageFileAttachments(db, row.id, conversationId, files, now)
       db.prepare('DELETE FROM queued_chat_messages WHERE id = ?').run(row.id)
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
     })()
     promoted.push({ role: 'user', content: parts.length > 1 ? parts : normalized })
-    broadcastQueue('chat:new-message', {
-      conversationId,
-      streamId,
-      message: {
-        id: row.id, conversationId, role: 'user', content: normalized,
+    publishChatEvent(broadcastQueue, { conversationId, executionId: streamId, payload: {
+      type: 'transcript-item', item: messageToTranscriptItem({
+        id: row.id, role: 'user', content: normalized,
         imageDataUrls: images, audioDataUrls: audio,
         fileAttachments: files.map(file => ({ name: file.name, href: toFileUrl(file.originalPath, file.name) })), createdAt: now,
-      },
-    })
+      }, streamId),
+    } })
   }
   if (steeringRows.length) {
     notify(conversationId)

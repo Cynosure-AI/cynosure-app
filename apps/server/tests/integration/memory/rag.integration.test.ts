@@ -59,6 +59,25 @@ test('hybrid search retains LanceDB fusion scores for lexical candidates', async
   }
 })
 
+test('rejects searches and writes from a different embedding profile', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-profile-'))
+  const store = new RAGStore()
+  try {
+    await store.initialize(directory)
+    const document = { id: 'one', text: 'profiled memory', vector: [1, 0], source: 'test',
+      createdAt: 1, embeddingProfileFingerprint: 'profile-a' }
+    await store.addDocuments('memory', [document], 2)
+    expect((await store.listDocuments('memory'))[0]?.embeddingProfileFingerprint).toBe('profile-a')
+    await expect(store.search('memory', [1, 0], 5, undefined, 'profile-b')).rejects.toThrow(/different embedding profile/)
+    await expect(store.addDocuments('memory', [{ ...document, id: 'two', embeddingProfileFingerprint: 'profile-b' }], 2))
+      .rejects.toThrow(/different embedding profile/)
+    expect(await store.search('memory', [1, 0], 5, undefined, 'profile-a')).toHaveLength(1)
+  } finally {
+    await store.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 test('chunk keywords participate in BM25 while untagged chunks retain normal retrieval', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-tags-'))
   const store = new RAGStore()

@@ -104,7 +104,7 @@ class ChannelManager {
     }
 
     /** Cancel channel executions when the UI only knows the conversation ID
-     * (notably during pre-execution, before chat:stream-start publishes a stream ID). */
+     * (notably during pre-execution, before the stream-start event publishes a stream ID). */
     cancelExecutionByConversation(conversationId: string): boolean {
         let cancelled = false
         for (const provider of this.providers.values()) {

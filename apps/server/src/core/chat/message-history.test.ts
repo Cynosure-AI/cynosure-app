@@ -35,11 +35,14 @@ function row(overrides: Partial<ChatHistoryRow>): ChatHistoryRow {
         tool_calls_json: null,
         tool_call_id: null,
         agent_id: null,
-        image_urls_json: null,
-        audio_urls_json: null,
+        content_blocks_json: JSON.stringify([{ type: 'text', text: overrides.content ?? 'content' }]),
         created_at: 1,
         ...overrides,
     }
+}
+
+function imageBlocks(...urls: string[]): string {
+    return JSON.stringify(urls.map((url) => ({ type: 'image', artifactId: url, url })))
 }
 
 function databaseReturning(rows: ChatHistoryRow[]): Database.Database {
@@ -86,8 +89,11 @@ describe('conversation history construction', () => {
         const result = buildConversationHistory({
             db: databaseReturning([row({
                 id: 'user', role: 'user', content: 'Review these',
-                image_urls_json: JSON.stringify(['https://example.com/image.png']),
-                audio_urls_json: JSON.stringify(['data:audio/wav;base64,abc']),
+                content_blocks_json: JSON.stringify([
+                    { type: 'text', text: 'Review these' },
+                    { type: 'image', artifactId: 'image', url: 'https://example.com/image.png' },
+                    { type: 'audio', artifactId: 'audio', url: 'data:audio/wav;base64,abc' },
+                ]),
             })]),
             conversationId: 'conversation',
             mainAgentId: null,
@@ -106,9 +112,9 @@ describe('conversation history construction', () => {
 
     test('describes recent unique generated images newest first', () => {
         const hint = buildRecentImageArtifactsSystemHint([
-            row({ role: 'assistant', image_urls_json: JSON.stringify(['file:///older.png', 'file:///shared.png']) }),
-            row({ role: 'assistant', image_urls_json: '{broken' }),
-            row({ role: 'assistant', image_urls_json: JSON.stringify(['file:///shared.png', 'file:///latest.png']) }),
+            row({ role: 'assistant', content_blocks_json: imageBlocks('file:///older.png', 'file:///shared.png') }),
+            row({ role: 'assistant', content_blocks_json: '{broken' }),
+            row({ role: 'assistant', content_blocks_json: imageBlocks('file:///shared.png', 'file:///latest.png') }),
         ], 2)
 
         expect(hint).toContain('latest generated image: path=/latest.png')
@@ -124,7 +130,7 @@ describe('conversation history construction', () => {
                 id: 'generated',
                 role: 'assistant',
                 content: 'Generated image.',
-                image_urls_json: JSON.stringify(['file:///first.png', 'file:///latest.png']),
+                content_blocks_json: imageBlocks('file:///first.png', 'file:///latest.png'),
             }),
             row({ id: 'correction', role: 'user', content: 'Make the sky darker' }),
         ]
@@ -145,7 +151,7 @@ describe('conversation history construction', () => {
     test('keeps explicit images as references after the generated image base', () => {
         const generated = row({
             role: 'assistant',
-            image_urls_json: JSON.stringify(['file:///generated.png']),
+            content_blocks_json: imageBlocks('file:///generated.png'),
         })
         const explicitMessages = [
             { role: 'assistant' as const, content: 'Generated image.' },
@@ -172,7 +178,7 @@ describe('conversation history construction', () => {
     test('does not duplicate the generated base or reach across another user turn', () => {
         const generated = row({
             role: 'assistant',
-            image_urls_json: JSON.stringify(['file:///generated.png']),
+            content_blocks_json: imageBlocks('file:///generated.png'),
         })
         const duplicateMessages = [
             { role: 'assistant' as const, content: 'Generated image.' },

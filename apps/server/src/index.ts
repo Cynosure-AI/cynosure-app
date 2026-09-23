@@ -15,7 +15,6 @@ import { basename, dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { createServer } from 'net'
 import type { WebSocket } from 'ws'
-import { nanoid } from 'nanoid'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { closeDb, getDb } from './db/database.js'
@@ -42,13 +41,14 @@ import { ensureDefaultMemoryFolders, syncMemoryFoldersFromFolders } from './core
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
+import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
+import { executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
-import { getEmbeddingProvider } from './core/memory/embedding.js'
+import { loadEmbeddingServiceFromDb } from './core/memory/embedding.js'
 import { startToolEmbeddingWarmup } from './core/agent/tool-embedding-warmup.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
-import { getAgentMemory } from './core/memory/agent-memory.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 
 const APP_NAME = 'cynosure-server'
@@ -468,7 +468,15 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   const executionListenerCleanups = executionEvents.map((eventName) => {
     const listener = (data: unknown) => {
-      broadcast('agent:execution-update', { event: eventName, data })
+      const step = data && typeof data === 'object' ? data as Record<string, unknown> : null
+      const payload = step && executionUpdateToChatPayload(eventName, step)
+      if (payload && typeof step?.conversationId === 'string') {
+        publishChatEvent(broadcast, { conversationId: step.conversationId,
+          executionId: typeof step.executionId === 'string' ? step.executionId
+            : typeof step.taskId === 'string' ? step.taskId : 'external', payload })
+      } else {
+        broadcast('agent:execution-update', { event: eventName, data })
+      }
     }
     return eventBus.on(eventName, listener)
   })
@@ -481,12 +489,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const removeKnowledgeResetListener = eventBus.on('memory:knowledge-reset', (data: unknown) => {
     broadcast('memory:knowledge-reset', data)
   })
-  const removeChatExecutionStateListener = eventBus.on('chat:execution-state', (data: unknown) => {
-    broadcast('chat:execution-state', data)
+  const removeChatExecutionStateListener = eventBus.on('chat:event', (data: unknown) => {
+    broadcast('chat:event', data)
   })
-
-  // Persist execution steps to DB for reload survival
-  const stepPersistenceCleanups = setupExecutionStepPersistence(eventBus)
 
   app.register(registerProviderRoutes, { prefix: '/api/providers' })
   app.register(async (instance) => registerChatRoutes(instance, broadcast), { prefix: '/api/chat' })
@@ -504,6 +509,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })
   app.register(registerFileRoutes, { prefix: '/api/files' })
   app.register(registerUserSettingsRoutes, { prefix: '/api/user-settings' })
+  app.register(registerModelFavoritesRoutes, { prefix: '/api/model-favorites' })
 
   app.get('/api/health', async () => {
     return {
@@ -518,7 +524,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   await registerWebUi(app, startedAt)
 
   loadSavedProviders()
-  getEmbeddingProvider().loadFromDb()
+  loadEmbeddingServiceFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
   registerBuiltInTools()
@@ -565,9 +571,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       removeMemoryJobUpdatedListener()
       removeKnowledgeResetListener()
       removeChatExecutionStateListener()
-      for (const cleanup of stepPersistenceCleanups) {
-        cleanup()
-      }
       await stopDreamWorker()
       await stopCronScheduler()
       await getChannelManager().stopAll()
@@ -580,95 +583,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       await getMcpManager().disconnectAll()
     }
   }
-}
-
-type EventBusType = ReturnType<typeof getEventBus>
-
-function setupExecutionStepPersistence(eventBus: EventBusType): Array<() => void> {
-  const db = getDb()
-  const insertStep = db.prepare(
-    `INSERT INTO execution_steps (id, conversation_id, task_id, iteration, status, message, plan, tool_calls_json, results_json, evaluation_json, ma_codename, ma_agent_name, ma_invocation_id, ma_phase, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-
-  // Track last step id per task for updates (keyed by taskId to avoid sub-agent collisions)
-  const lastStepIds = new Map<string, string>()
-
-  function stepKey(convId: string, taskId?: string): string {
-    return taskId ? `${convId}:${taskId}` : convId
-  }
-
-  function saveStep(convId: string, iteration: number, status: string, extra: Record<string, unknown> = {}): string {
-    const id = nanoid()
-    const taskId = (extra.taskId as string) || null
-    insertStep.run(
-      id,
-      convId,
-      taskId,
-      iteration,
-      status,
-      (extra.message as string) || null,
-      (extra.plan as string) || null,
-      extra.toolCalls ? JSON.stringify(extra.toolCalls) : null,
-      extra.results ? JSON.stringify(extra.results) : null,
-      extra.evaluation ? JSON.stringify(extra.evaluation) : null,
-      (extra.maCodename as string) || null,
-      (extra.maAgentName as string) || null,
-      (extra.maInvocationId as string) || null,
-      (extra.maPhase as string) || null,
-      Date.now()
-    )
-    lastStepIds.set(stepKey(convId, taskId || undefined), id)
-    return id
-  }
-
-  const updateStep = db.prepare(
-    `UPDATE execution_steps SET plan = COALESCE(?, plan), tool_calls_json = COALESCE(?, tool_calls_json), results_json = COALESCE(?, results_json), evaluation_json = COALESCE(?, evaluation_json) WHERE id = ?`
-  )
-
-  function patchLastStep(convId: string, taskId: string | undefined, patch: Record<string, unknown>): void {
-    const sid = lastStepIds.get(stepKey(convId, taskId))
-    if (!sid) return
-    updateStep.run(
-      patch.plan as string || null,
-      patch.toolCalls ? JSON.stringify(patch.toolCalls) : null,
-      patch.results ? JSON.stringify(patch.results) : null,
-      patch.evaluation ? JSON.stringify(patch.evaluation) : null,
-      sid
-    )
-  }
-
-  const cleanups: Array<() => void> = []
-
-  // Regular agent events
-  cleanups.push(eventBus.on('step:status', (data: unknown) => {
-    const d = data as Record<string, unknown>
-    const convId = d.conversationId as string
-    if (!convId) return
-    saveStep(convId, d.iteration as number, d.status as string, {
-      message: d.message,
-      taskId: d.taskId,
-      maCodename: d.maCodename,
-      maAgentName: d.maAgentName,
-      maInvocationId: d.maInvocationId,
-    })
-  }))
-
-  cleanups.push(eventBus.on('step:tools-chosen', (data: unknown) => {
-    const d = data as Record<string, unknown>
-    const convId = d.conversationId as string
-    if (!convId) return
-    patchLastStep(convId, d.taskId as string | undefined, { toolCalls: d.toolCalls })
-  }))
-
-  cleanups.push(eventBus.on('step:executed', (data: unknown) => {
-    const d = data as Record<string, unknown>
-    const convId = d.conversationId as string
-    if (!convId) return
-    patchLastStep(convId, d.taskId as string | undefined, { results: d.results })
-  }))
-
-  return cleanups
 }
 
 function isWindowsWatchPermissionError(error: unknown): boolean {

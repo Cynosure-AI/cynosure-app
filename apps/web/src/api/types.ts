@@ -1,4 +1,4 @@
-import type { ConversationExecutionConfig } from '@shared/types'
+import type { ChatEvent, ConversationExecutionConfig } from '@shared/types'
 
 // ── Provider / Chat ─────────────────────────────────────────────────────────
 
@@ -143,31 +143,6 @@ export interface TranscriptionResponse {
         seconds?: number
         total_tokens?: number
     }
-}
-
-export interface StoredMessage {
-    id: string
-    conversationId: string
-    role: string
-    content: string
-    thinking?: string
-    toolCalls?: unknown[]
-    toolCallId?: string
-    imageDataUrls?: string[]
-    videoDataUrls?: string[]
-    audioDataUrls?: string[]
-    structuredContent?: unknown
-    fileAttachments?: { name: string; href?: string }[]
-    agentId?: string
-    agentName?: string
-    agentIconUrl?: string | null
-    provider?: string
-    model?: string
-    promptTokens?: number
-    completionTokens?: number
-    contextTokens?: number
-    latencyMs?: number
-    createdAt: number
 }
 
 // ── MCP ─────────────────────────────────────────────────────────────────────
@@ -602,12 +577,8 @@ export interface AgentInstance {
     status: 'running' | 'awaiting-approval'
 }
 
-export interface ChatExecutionState {
-    executionId: string
-    conversationId: string
-    agentId: string | null
-    state: 'running' | 'stopped' | 'finished'
-}
+export type ChatExecutionState = Pick<Extract<ChatEvent, { type: 'execution-state' }>,
+    'executionId' | 'conversationId' | 'agentId' | 'state'>
 
 export interface CronJob {
     id: string
@@ -627,24 +598,6 @@ export interface CronJob {
     isRunning: boolean
     nextRunAt: number | null
     executionConfig: ConversationExecutionConfig | null
-}
-
-export interface ExecutionStepRecord {
-    id: string
-    conversationId: string
-    taskId?: string
-    iteration: number
-    status: string
-    message?: string
-    plan?: string
-    toolCalls?: unknown[]
-    results?: { name: string; success: boolean; output: string; error?: string; images?: string[] }[]
-    evaluation?: { taskComplete: boolean; success: boolean; reasoning: string }
-    maCodename?: string
-    maAgentName?: string
-    maInvocationId?: string
-    maPhase?: string
-    createdAt: number
 }
 
 export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'

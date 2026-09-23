@@ -18,6 +18,14 @@ export function getActivePermanentMemoryTableName(): string {
   }
 }
 
+export function getActivePermanentMemoryProfileFingerprint(): string | null {
+  const row = getDb().prepare('SELECT value_json FROM settings WHERE key = ?')
+    .get(ACTIVE_INDEX_SETTINGS_KEY) as { value_json: string } | undefined
+  if (!row) return null
+  const parsed = JSON.parse(row.value_json) as { profileFingerprint?: unknown }
+  return typeof parsed.profileFingerprint === 'string' ? parsed.profileFingerprint : null
+}
+
 export function setActivePermanentMemoryTableName(tableName: string): void {
   if (!TABLE_NAME_PATTERN.test(tableName)) throw new Error('Invalid permanent-memory table name')
   getDb().prepare(`
@@ -27,14 +35,14 @@ export function setActivePermanentMemoryTableName(tableName: string): void {
 }
 
 /** Atomically activate an index and the embedding configuration that matches it. */
-export function activatePermanentMemoryIndex(tableName: string, embeddingConfig: unknown): void {
+export function activatePermanentMemoryIndex(tableName: string, embeddingConfig: unknown, profileFingerprint: string): void {
   if (!TABLE_NAME_PATTERN.test(tableName)) throw new Error('Invalid permanent-memory table name')
   const db = getDb()
   db.transaction(() => {
     db.prepare(`
       INSERT INTO settings (key, value_json) VALUES (?, ?)
       ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json
-    `).run(ACTIVE_INDEX_SETTINGS_KEY, JSON.stringify({ tableName, activatedAt: Date.now() }))
+    `).run(ACTIVE_INDEX_SETTINGS_KEY, JSON.stringify({ tableName, profileFingerprint, activatedAt: Date.now() }))
     db.prepare(`
       INSERT INTO settings (key, value_json) VALUES ('embedding', ?)
       ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json

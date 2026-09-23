@@ -53,11 +53,7 @@ const activeDreamRuns = ref<ActivityItem[]>([]);
 let instancePollTimer: ReturnType<typeof setInterval> | undefined;
 let dreamPollTimer: ReturnType<typeof setInterval> | undefined;
 let unsubHITLRequest: (() => void) | undefined;
-let unsubExecutionUpdate: (() => void) | undefined;
-let unsubStreamStart: (() => void) | undefined;
-let unsubStreamEnd: (() => void) | undefined;
-let unsubStreamError: (() => void) | undefined;
-let unsubChatExecutionState: (() => void) | undefined;
+let unsubChatEvent: (() => void) | undefined;
 let unsubDreamUpdate: (() => void) | undefined;
 let instanceLoadRevision = 0;
 const terminalChatConversations = new Map<string, number>();
@@ -126,24 +122,16 @@ onMounted(() => {
   unsubHITLRequest = api.agent.onHITLRequest(() => {
     loadInstances();
   });
-  unsubExecutionUpdate = api.agent.onExecutionUpdate((data: unknown) => {
-    const d = data as { event?: string; data?: { status?: string } };
-    if (d.event === "step:status" && d.data?.status !== "awaiting-approval")
-      loadInstances();
-  });
-  unsubStreamStart = api.chat.onStreamStart((data) => {
-    terminalChatConversations.delete(data.conversationId);
-    void loadInstances();
-  });
-  unsubStreamEnd = api.chat.onStreamEnd(removeFinishedChatInstance);
-  unsubStreamError = api.chat.onStreamError(removeFinishedChatInstance);
-  unsubChatExecutionState = api.chat.onExecutionState((data) => {
-    if (data.state === "running") {
-      terminalChatConversations.delete(data.conversationId);
+  unsubChatEvent = api.chat.onEvent((event) => {
+    if (event.type === 'execution-step' && event.status !== 'awaiting-approval') void loadInstances();
+    if (event.type === 'stream-start' && event.scope === 'main' || event.type === 'execution-state' && event.state === 'running') {
+      terminalChatConversations.delete(event.conversationId);
       void loadInstances();
-      return;
+    } else if (event.type === 'stream-end' && event.scope === 'main' || event.type === 'stream-error') {
+      removeFinishedChatInstance({ streamId: event.streamId, conversationId: event.conversationId });
+    } else if (event.type === 'execution-state') {
+      removeFinishedChatInstance({ streamId: event.executionId, conversationId: event.conversationId });
     }
-    removeFinishedChatInstance({ streamId: data.executionId, conversationId: data.conversationId });
   });
   unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadDreamRuns());
   document.addEventListener("click", closeRecentFilterMenu);
@@ -154,11 +142,7 @@ onUnmounted(() => {
   clearInterval(dreamPollTimer);
   memoryJobsStore.stopPolling();
   unsubHITLRequest?.();
-  unsubExecutionUpdate?.();
-  unsubStreamStart?.();
-  unsubStreamEnd?.();
-  unsubStreamError?.();
-  unsubChatExecutionState?.();
+  unsubChatEvent?.();
   unsubDreamUpdate?.();
   document.removeEventListener("click", closeRecentFilterMenu);
 });

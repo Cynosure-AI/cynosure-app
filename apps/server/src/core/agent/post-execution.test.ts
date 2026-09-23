@@ -53,9 +53,9 @@ describe('title generation', () => {
       maxTokens: 512,
     })
     // Fallback title is broadcast first, then the LLM title replaces it.
-    expect(broadcast).toHaveBeenCalledWith('chat:title-updated', {
-      conversationId: 'conversation-1',
-      title: 'Fix Persistent Chat Drafts',
+    expect(broadcast).toHaveBeenCalledWith('chat:event', {
+      conversationId: 'conversation-1', executionId: 'external',
+      payload: { type: 'title-updated', title: 'Fix Persistent Chat Drafts' },
     })
     expect(run).toHaveBeenCalledWith(
       'Fix Persistent Chat Drafts',
@@ -75,9 +75,9 @@ describe('title generation', () => {
       broadcast,
     })
 
-    expect(broadcast).toHaveBeenCalledWith('chat:title-updated', {
-      conversationId: 'conversation-2',
-      title: 'Explain How Database Indexes Work',
+    expect(broadcast).toHaveBeenCalledWith('chat:event', {
+      conversationId: 'conversation-2', executionId: 'external',
+      payload: { type: 'title-updated', title: 'Explain How Database Indexes Work' },
     })
   })
 
@@ -149,20 +149,18 @@ describe('quick response parsing', () => {
       broadcast,
     })
 
-    expect(broadcast).toHaveBeenCalledWith('chat:post-action', {
-      conversationId: 'conversation-1',
-      action: 'generating-quick-responses',
-      status: 'started',
+    expect(broadcast).toHaveBeenCalledWith('chat:event', {
+      conversationId: 'conversation-1', executionId: 'external',
+      payload: { type: 'post-action', action: 'generating-quick-responses', status: 'started' },
     })
     expect(run).toHaveBeenCalledWith(
       '["Show an example","Explain the tradeoffs"]',
       'assistant-1',
       'conversation-1',
     )
-    expect(broadcast).toHaveBeenCalledWith('chat:quick-responses', {
-      conversationId: 'conversation-1',
-      messageId: 'assistant-1',
-      suggestions: ['Show an example', 'Explain the tradeoffs'],
+    expect(broadcast).toHaveBeenCalledWith('chat:event', {
+      conversationId: 'conversation-1', executionId: 'external',
+      payload: { type: 'quick-responses', messageId: 'assistant-1', suggestions: ['Show an example', 'Explain the tradeoffs'] },
     })
   })
 })

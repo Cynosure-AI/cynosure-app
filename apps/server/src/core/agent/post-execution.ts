@@ -14,6 +14,7 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import type { LLMGateway } from '../gateway/gateway.js'
+import { publishChatEvent } from '../chat/transcript.js'
 
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -42,7 +43,7 @@ export function startAction(conversationId: string, action: string, broadcast: B
         activeActions.set(conversationId, actions)
     }
     actions.set(action, (actions.get(action) || 0) + 1)
-    broadcast('chat:post-action', { conversationId, action, status: 'started' })
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'post-action', action, status: 'started' } })
     return getOrCreateAbortController(conversationId).signal
 }
 
@@ -60,7 +61,7 @@ export function completeAction(conversationId: string, action: string, broadcast
             abortControllers.delete(conversationId)
         }
     }
-    broadcast('chat:post-action', { conversationId, action, status: 'completed' })
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'post-action', action, status: 'completed' } })
 }
 
 /** Cancel all in-flight post-actions for a conversation. */
@@ -126,7 +127,7 @@ export function clearQuickResponses(conversationId: string, broadcast: Broadcast
          SET metadata_json = json_remove(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END, '$.quickResponses', '$.quickResponsesMessageId')
          WHERE id = ?`
     ).run(conversationId)
-    broadcast('chat:quick-responses', { conversationId, messageId: null, suggestions: [] })
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'quick-responses', messageId: null, suggestions: [] } })
 }
 
 export interface GenerateQuickResponsesOpts {
@@ -181,7 +182,7 @@ export async function generateQuickResponses(opts: GenerateQuickResponsesOpts): 
                  '$.quickResponses', json(?), '$.quickResponsesMessageId', ?)
              WHERE id = ?`
         ).run(JSON.stringify(suggestions), messageId, conversationId)
-        broadcast('chat:quick-responses', { conversationId, messageId, suggestions })
+        publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'quick-responses', messageId, suggestions } })
     } catch (err) {
         if ((err as Error).name !== 'AbortError') {
             console.warn('[quick-responses] Generation failed:', err)
@@ -379,18 +380,6 @@ function resolveTitleTarget(
     }
 }
 
-function applyFallbackTitle(
-    db: ReturnType<typeof getDb>,
-    conversationId: string,
-    userMessage: string,
-    broadcast: BroadcastFn
-): void {
-    const fallback = buildFallbackTitle(userMessage)
-    if (fallback) {
-        updateConversationTitle(db, conversationId, fallback, broadcast)
-    }
-}
-
 export function buildFallbackTitle(userMessage: string): string {
     const text = normalizeSourceText(userMessage)
         .replace(/^(please\s+)?(can|could|would)\s+you\s+/i, '')
@@ -430,5 +419,5 @@ function updateConversationTitle(
     broadcast: BroadcastFn
 ): void {
     db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, Date.now(), conversationId)
-    broadcast('chat:title-updated', { conversationId, title })
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'title-updated', title } })
 }
