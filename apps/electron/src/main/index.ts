@@ -10,6 +10,7 @@ import ElectronStore from 'electron-store'
 import appIcon from '../../build/icon.png?asset'
 import trayProgressIcon from '../../build/tray_progress.png?asset'
 import { checkForUpdates, initializeUpdater } from './updater'
+import { isAutostartEnabled, setAutostartEnabled } from './autostart'
 
 // ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -523,6 +524,38 @@ app.whenReady().then(async () => {
         cwd: getAppDataDir(),
     })
     uiPrefsStore = prefsStore
+
+    const desktopSettingsStore = new ElectronStore<{ autostart: boolean }>({
+        name: 'desktop-settings',
+        cwd: getAppDataDir(),
+    })
+
+    // Refresh the launch target after an app update. No login item is created
+    // until the user has explicitly enabled Autostart.
+    if (desktopSettingsStore.get('autostart') === true && app.isPackaged
+        && process.platform === 'linux' && isAutostartEnabled()) {
+        try {
+            setAutostartEnabled(true)
+        } catch (error) {
+            console.error('[electron] Could not restore autostart:', error)
+        }
+    }
+
+    ipcMain.handle('autostart:get', () => ({ enabled: app.isPackaged && isAutostartEnabled() }))
+    ipcMain.handle('autostart:set', (_event, enabled: boolean) => {
+        if (typeof enabled !== 'boolean') return { enabled: false, error: 'Invalid Autostart setting.' }
+        if (!app.isPackaged) return { enabled: false, error: 'Autostart is available in the installed desktop app.' }
+        try {
+            setAutostartEnabled(enabled)
+            const actual = isAutostartEnabled()
+            if (actual !== enabled) return { enabled: actual, error: 'The operating system did not apply the Autostart setting.' }
+            desktopSettingsStore.set('autostart', enabled)
+            return { enabled: actual }
+        } catch (error) {
+            console.error('[electron] Could not change autostart:', error)
+            return { enabled: desktopSettingsStore.get('autostart') === true, error: 'Could not change the Autostart setting.' }
+        }
+    })
 
     ipcMain.on('get-ui-prefs', (event) => {
         event.returnValue = prefsStore.store

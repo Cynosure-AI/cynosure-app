@@ -7,9 +7,12 @@ import { SK_GLOBAL_HOTKEY } from '../../utils/storage-keys'
 import { syncPrefsToElectron } from '../../utils/electron-prefs'
 
 type HotkeyResult = { success: boolean; accelerator: string; error?: string }
+type AutostartResult = { enabled: boolean; error?: string }
 type ElectronHotkeyApi = {
   getGlobalHotkey?: () => Promise<HotkeyResult>
   setGlobalHotkey?: (accelerator: string) => Promise<HotkeyResult>
+  getAutostart?: () => Promise<AutostartResult>
+  setAutostart?: (enabled: boolean) => Promise<AutostartResult>
 }
 
 const props = withDefaults(defineProps<{ visibleSections?: string[] }>(), {
@@ -22,8 +25,13 @@ const accelerator = ref('Control+Space')
 const recording = ref(false)
 const saving = ref(false)
 const error = ref('')
+const autostartEnabled = ref(false)
+const autostartLoading = ref(true)
+const autostartSaving = ref(false)
+const autostartError = ref('')
 
-const visible = computed(() => props.visibleSections.length === 0 || props.visibleSections.includes('global-hotkey'))
+const hotkeyVisible = computed(() => props.visibleSections.length === 0 || props.visibleSections.includes('global-hotkey'))
+const autostartVisible = computed(() => props.visibleSections.length === 0 || props.visibleSections.includes('autostart'))
 const displayAccelerator = computed(() => accelerator.value
   .replace(/CommandOrControl/g, 'Ctrl')
   .replace(/Control/g, 'Ctrl')
@@ -34,10 +42,35 @@ const displayAccelerator = computed(() => accelerator.value
 
 onMounted(async () => {
   if (!isElectron.value) return
-  const current = await electron!.getGlobalHotkey!()
-  accelerator.value = current.accelerator
-  if (!current.success) error.value = current.error || 'The shortcut could not be registered.'
+  try {
+    const hotkey = await electron!.getGlobalHotkey!()
+    accelerator.value = hotkey.accelerator
+    if (!hotkey.success) error.value = hotkey.error || 'The shortcut could not be registered.'
+    if (!electron?.getAutostart) throw new Error('Autostart API unavailable')
+    const autostart = await electron.getAutostart()
+    autostartEnabled.value = autostart.enabled
+    autostartError.value = autostart.error || ''
+  } catch {
+    autostartError.value = 'Could not load the Autostart setting.'
+  } finally {
+    autostartLoading.value = false
+  }
 })
+
+async function toggleAutostart(): Promise<void> {
+  if (!electron?.setAutostart || autostartSaving.value) return
+  autostartSaving.value = true
+  autostartError.value = ''
+  try {
+    const result = await electron.setAutostart(!autostartEnabled.value)
+    autostartEnabled.value = result.enabled
+    autostartError.value = result.error || ''
+  } catch {
+    autostartError.value = 'Could not change the Autostart setting.'
+  } finally {
+    autostartSaving.value = false
+  }
+}
 
 function keyName(event: KeyboardEvent): string | null {
   if (event.code === 'Space') return 'Space'
@@ -96,57 +129,109 @@ function record(event: KeyboardEvent): void {
 
 <template>
   <div
-    v-if="isElectron && visible"
-    class="space-y-4"
+    v-if="isElectron"
+    class="space-y-6"
   >
-    <SettingsSubheading label="Global Shortcut" />
-    <BaseCard class="p-5">
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-start gap-3">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
-            <Icon
-              icon="lucide:keyboard"
-              class="h-5 w-5 text-theme-400"
+    <div
+      v-if="autostartVisible"
+      class="space-y-4"
+    >
+      <SettingsSubheading label="Startup" />
+      <BaseCard class="p-5">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-start gap-3">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
+              <Icon
+                icon="lucide:power"
+                class="h-5 w-5 text-theme-400"
+              />
+            </div>
+            <div>
+              <h3 class="text-sm font-medium text-theme-200">
+                Autostart
+              </h3>
+              <p class="mt-0.5 text-xs text-theme-500">
+                Start Cynosure when you sign in to your computer.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="autostartEnabled"
+            aria-label="Autostart"
+            :disabled="autostartLoading || autostartSaving"
+            class="relative h-6 w-11 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 disabled:opacity-50"
+            :class="autostartEnabled ? 'bg-accent-600' : 'bg-theme-700'"
+            @click="toggleAutostart"
+          >
+            <span
+              class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+              :class="autostartEnabled ? 'translate-x-4.5' : 'translate-x-0.5'"
             />
-          </div>
-          <div>
-            <h3 class="text-sm font-medium text-theme-200">
-              New chat shortcut
-            </h3>
-            <p class="mt-0.5 text-xs text-theme-500">
-              Open a fresh empty chat in a compact window beside the mouse cursor.
-            </p>
-          </div>
+          </button>
         </div>
+        <p
+          v-if="autostartError"
+          class="mt-3 text-xs text-red-400 sm:text-right"
+        >
+          {{ autostartError }}
+        </p>
+      </BaseCard>
+    </div>
+    <div
+      v-if="hotkeyVisible"
+      class="space-y-4"
+    >
+      <SettingsSubheading label="Global Shortcut" />
+      <BaseCard class="p-5">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-start gap-3">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
+              <Icon
+                icon="lucide:keyboard"
+                class="h-5 w-5 text-theme-400"
+              />
+            </div>
+            <div>
+              <h3 class="text-sm font-medium text-theme-200">
+                New chat shortcut
+              </h3>
+              <p class="mt-0.5 text-xs text-theme-500">
+                Open a fresh empty chat in a compact window beside the mouse cursor.
+              </p>
+            </div>
+          </div>
 
-        <div class="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            class="min-w-36 rounded-lg border px-3 py-2 font-mono text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
-            :class="recording ? 'border-accent-500 bg-accent-500/10 text-accent-300' : 'border-theme-700 bg-theme-900 text-theme-200 hover:bg-theme-800'"
-            :disabled="saving"
-            @click="recording = true; error = ''"
-            @keydown="record"
-            @blur="recording = false"
-          >
-            {{ recording ? 'Press shortcut…' : displayAccelerator }}
-          </button>
-          <button
-            type="button"
-            class="rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-xs font-medium text-theme-300 transition hover:bg-theme-700 disabled:opacity-50"
-            :disabled="saving || accelerator === 'Control+Space'"
-            @click="save('Control+Space')"
-          >
-            Reset
-          </button>
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              class="min-w-36 rounded-lg border px-3 py-2 font-mono text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
+              :class="recording ? 'border-accent-500 bg-accent-500/10 text-accent-300' : 'border-theme-700 bg-theme-900 text-theme-200 hover:bg-theme-800'"
+              :disabled="saving"
+              @click="recording = true; error = ''"
+              @keydown="record"
+              @blur="recording = false"
+            >
+              {{ recording ? 'Press shortcut…' : displayAccelerator }}
+            </button>
+            <button
+              type="button"
+              class="rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-xs font-medium text-theme-300 transition hover:bg-theme-700 disabled:opacity-50"
+              :disabled="saving || accelerator === 'Control+Space'"
+              @click="save('Control+Space')"
+            >
+              Reset
+            </button>
+          </div>
         </div>
-      </div>
-      <p
-        v-if="error"
-        class="mt-3 text-xs text-red-400 sm:text-right"
-      >
-        {{ error }}
-      </p>
-    </BaseCard>
+        <p
+          v-if="error"
+          class="mt-3 text-xs text-red-400 sm:text-right"
+        >
+          {{ error }}
+        </p>
+      </BaseCard>
+    </div>
   </div>
 </template>

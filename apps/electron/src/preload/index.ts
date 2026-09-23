@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electron', {
     setUiPrefs: (prefs: Record<string, string>) => ipcRenderer.sendSync('set-ui-prefs', prefs),
     getGlobalHotkey: () => ipcRenderer.invoke('global-hotkey:get'),
     setGlobalHotkey: (accelerator: string) => ipcRenderer.invoke('global-hotkey:set', accelerator),
+    getAutostart: () => ipcRenderer.invoke('autostart:get'),
+    setAutostart: (enabled: boolean) => ipcRenderer.invoke('autostart:set', enabled),
     onNewChatRequested: (listener: () => void) => {
         const handler = () => listener()
         ipcRenderer.on('desktop:new-chat', handler)
