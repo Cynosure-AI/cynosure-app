@@ -11,6 +11,7 @@ import type { ChatMessage } from '../gateway/providers/base.provider.js'
 import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { buildPersistedChatConfig } from '../chat/run-config.js'
 import { resolveMemoryFolderOverrides } from '../chat/run-config.js'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -69,14 +70,16 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     const triggerMsgId = nanoid()
     const triggerCreatedAt = Date.now()
     db.prepare(
-        'INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(triggerMsgId, conversationId, 'user', userContent, triggerCreatedAt)
+        'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(triggerMsgId, conversationId, 'user', userContent,
+        messageContentJson({ id: triggerMsgId, content: userContent }), triggerCreatedAt)
     db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(triggerCreatedAt, conversationId)
 
-    broadcast('chat:new-message', {
-        conversationId,
-        message: { id: triggerMsgId, conversationId, role: 'user', content: userContent, createdAt: triggerCreatedAt }
-    })
+    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: {
+        type: 'transcript-item', item: messageToTranscriptItem({
+            id: triggerMsgId, role: 'user', content: userContent, createdAt: triggerCreatedAt,
+        }),
+    } })
 
     const startMs = Date.now()
     let planningRunId: string | undefined
@@ -156,8 +159,10 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         const assistantMsgId = nanoid()
         const now = Date.now()
         db.prepare(
-            'INSERT INTO messages (id, conversation_id, role, content, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(assistantMsgId, conversationId, 'assistant', result.content, planned.providerId || null, planned.responseModel || null, result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null, result.contextTokens ?? null, now - startMs, now)
+            'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(assistantMsgId, conversationId, 'assistant', result.content,
+            messageContentJson({ id: assistantMsgId, content: result.content, thinking: result.thinking, imageDataUrls: result.images }),
+            planned.providerId || null, planned.responseModel || null, result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null, result.contextTokens ?? null, now - startMs, now)
 
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(Date.now(), conversationId)
 

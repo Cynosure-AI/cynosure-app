@@ -7,6 +7,7 @@ import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { customAlphabet, nanoid } from 'nanoid'
 import type { ChatMessage, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
 
 /** Maximum execution time for delegated work before the sub-agent is aborted. */
 const SUB_AGENT_EXECUTION_TIMEOUT_MS = 300_000 // 5 minutes
@@ -134,7 +135,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             reasoningEffort: agentData.reasoningEffort,
             signal: subAgentSignal,
             streamMode: 'per-round',
-            streamEventPrefix: 'chat:subagent-stream',
+            streamScope: 'subagent',
             saveMessages: true,
             emitEvents: true,
             eventMeta,
@@ -154,13 +155,13 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 const createdAt = Date.now()
                 db.prepare(
                     `INSERT INTO messages (
-                        id, conversation_id, role, content, thinking, image_urls_json, generated_media, agent_id,
+                        id, conversation_id, role, content, content_blocks_json, generated_media, agent_id,
                         ma_codename, ma_agent_name, ma_invocation_id,
                         provider, model, prompt_tokens, completion_tokens, context_tokens, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 ).run(
-                    messageId, conversationId, 'assistant', result.content, result.thinking || null,
-                    result.images.length ? JSON.stringify(result.images) : null,
+                    messageId, conversationId, 'assistant', result.content,
+                    messageContentJson({ id: messageId, content: result.content, thinking: result.thinking, imageDataUrls: result.images }),
                     result.images.length ? 1 : 0,
                     agentData.id, eventMeta.maCodename, eventMeta.maAgentName, invocationId,
                     result.provider || prepared.providerId || null,
@@ -168,16 +169,15 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null,
                     result.contextTokens ?? null, createdAt
                 )
-                broadcast('chat:new-message', {
-                    conversationId, streamId: executor.lastStreamId,
-                    message: {
-                        id: messageId, conversationId, role: 'assistant', content: result.content,
+                publishChatEvent(broadcast, { conversationId, executionId: executor.lastStreamId, payload: {
+                    type: 'transcript-item', item: messageToTranscriptItem({
+                        id: messageId, role: 'assistant', content: result.content,
                         thinking: result.thinking, imageDataUrls: result.images, createdAt,
                         agentId: agentData.id, agentName: agentData.name, agentIconUrl: agentData.iconUrl || null,
                         maCodename: eventMeta.maCodename, maAgentName: eventMeta.maAgentName,
                         maInvocationId: invocationId,
-                    },
-                })
+                    }, executor.lastStreamId),
+                } })
             }
 
             const nextHistory = [...history, { role: 'assistant' as const, content: result.content || '(no output)' }]

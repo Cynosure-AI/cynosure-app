@@ -36,10 +36,10 @@ import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAt
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
-import { listChatEvents } from '../core/chat/transcript.js'
+import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
 import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
 import { executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
-import type { ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
+import type { ChatEventDraft, ChatEventPayload, ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 import type { ChatQueueRequest } from '@shared/types'
 import {
   configureChatQueue,
@@ -154,10 +154,12 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const payload = data && typeof data === 'object'
         ? { ...(data as Record<string, unknown>), executionId }
         : data
-      const terminalEvent = event.endsWith('-end') || event.endsWith('-error')
+      const type = event === 'chat:event' ? (data as ChatEventDraft).payload.type : null
+      const terminalEvent = event.endsWith('-end') || event.endsWith('-error') || type === 'stream-end' || type === 'stream-error'
       if (abortController.signal.aborted && !terminalEvent) return
       broadcast(event, payload)
     }
+    const emitChat = (payload: ChatEventPayload) => publishChatEvent(executionBroadcast, { conversationId, executionId, payload })
 
     // Registration happens before the conversation lock and before any async
     // preflight work. There is no window in which Stop can miss this request
@@ -308,9 +310,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const now = Date.now()
       db.transaction(() => {
         db.prepare(
-          `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        ).run(userMsgId, conversationId, 'user', normalizedContent, storedImageUrls?.length ? JSON.stringify(storedImageUrls) : null, storedAudioUrls?.length ? JSON.stringify(storedAudioUrls) : null, now)
+          `INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(userMsgId, conversationId, 'user', normalizedContent, messageContentJson({
+          id: userMsgId, content: normalizedContent, imageDataUrls: storedImageUrls, audioDataUrls: storedAudioUrls,
+        }), now)
         persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
         releaseStagedChatAttachments(conversationId, stagedIds, false)
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
@@ -319,20 +323,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Broadcast the persisted representation for both immediate and queued sends.
       // The sender merges this into its optimistic message, hydrating durable file
       // links, while other connected clients receive the new user message normally.
-      broadcast('chat:new-message', {
-        conversationId,
-        streamId,
-        message: {
+      emitChat({ type: 'transcript-item', item: messageToTranscriptItem({
           id: userMsgId,
-          conversationId,
           role: 'user',
           content: normalizedContent,
           imageDataUrls: storedImageUrls,
           audioDataUrls: storedAudioUrls,
           fileAttachments: storedFileAttachments.map(file => ({ id: file.id, name: file.name, href: toFileUrl(file.originalPath, file.name) })),
           createdAt: now,
-        },
-      })
+        }, executionId) })
 
       // Start naming the conversation as soon as the first user message is
       // available. Title generation only uses that message, so it should not
@@ -352,7 +351,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           const fallback = buildFallbackTitle(normalizedContent)
           if (fallback) {
             db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(fallback, Date.now(), conversationId)
-            broadcast('chat:title-updated', { conversationId, title: fallback })
+            emitChat({ type: 'title-updated', title: fallback })
           }
         }
       }
@@ -440,7 +439,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         unregisterActiveChatExecution(executionId)
         if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
           getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
-          executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+          emitChat({ type: 'stream-end', streamId, scope: 'main', cancelled: true })
           return { streamId }
         }
         throw err
@@ -463,7 +462,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           interruptPlanningRun(planningRunId, { error: 'Interrupted before completion.' })
         }
         getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
-        executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+        emitChat({ type: 'stream-end', streamId, scope: 'main', cancelled: true })
         return { streamId }
       }
       const tools: RegistryAwareToolDefinition[] = plannedTools
@@ -522,14 +521,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             throw new Error('Transcription models require an attached audio file.')
           }
           attemptedVideoOutput = isVideoOutputModel
-          executionBroadcast('chat:stream-start', {
-            streamId, conversationId, agentId: agentId || undefined,
-            agentName: chatAgentName, agentIconUrl: chatAgentIconUrl,
-          })
-          executionBroadcast('chat:stream-chunk', {
-            streamId, conversationId,
-            content: isVideoOutputModel ? 'Generating video...' : 'Transcribing audio...',
-          })
+          emitChat({ type: 'stream-start', streamId, scope: 'main', agentId: agentId || undefined,
+            agentName: chatAgentName, agentIconUrl: chatAgentIconUrl })
+          emitChat({ type: 'content-delta', streamId, scope: 'main', block: { type: 'text',
+            text: isVideoOutputModel ? 'Generating video...' : 'Transcribing audio...' } })
 
           const mediaInput = {
             gateway, conversationId, model: responseModel, providerId: responseProvider,
@@ -541,11 +536,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             : await executeTranscriptionModel(mediaInput)
           abortController.signal.throwIfAborted()
           if (media.videos?.length) {
-            executionBroadcast('chat:stream-videos', { streamId, conversationId, videos: media.videos })
+            emitChat({ type: 'media-added', streamId, scope: 'main', blocks: media.videos.map((url) => ({ type: 'video', artifactId: url, url })) })
           } else {
-            executionBroadcast('chat:stream-chunk', { streamId, conversationId, content: `\n\n${media.content}` })
+            emitChat({ type: 'content-delta', streamId, scope: 'main', block: { type: 'text', text: `\n\n${media.content}` } })
           }
-          executionBroadcast('chat:stream-end', { streamId, conversationId, model: responseModel })
+          emitChat({ type: 'stream-end', streamId, scope: 'main', model: responseModel })
           abortController.signal.throwIfAborted()
 
           const assistant = persistAssistantTurn(db, executionBroadcast, {
@@ -698,7 +693,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             interruptPlanningRun(planningRunId, { error: 'Interrupted before completion.' })
           }
           getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
-          executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+          emitChat({ type: 'stream-end', streamId, scope: 'main', cancelled: true })
           return { streamId }
         }
         if (planningRunId) {
@@ -717,7 +712,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             provider: responseProvider, model: responseModel, startedAt: now,
           })
         }
-        broadcast('chat:stream-error', { streamId, conversationId, error: errorMessage })
+        emitChat({ type: 'stream-error', streamId, scope: 'main', error: errorMessage })
         return { streamId }
       } finally {
         unregisterActiveChatExecution(executionId)
@@ -727,7 +722,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     }).catch((err: unknown) => {
       if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
         getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
-        executionBroadcast('chat:stream-end', { streamId, conversationId, cancelled: true })
+        emitChat({ type: 'stream-end', streamId, scope: 'main', cancelled: true })
         return { streamId }
       }
       throw err

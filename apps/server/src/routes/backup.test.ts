@@ -37,7 +37,7 @@ describe('usage backup', () => {
             expect(summaryResponse.statusCode).toBe(200)
             expect(summaryResponse.json().modules.usage).toEqual({
                 count: 1,
-                details: { runs: 0, steps: 0, auxiliaryModelUsage: 1 },
+                details: { runs: 0, auxiliaryModelUsage: 1 },
             })
 
             const exportResponse = await app.inject({
@@ -101,8 +101,8 @@ describe('usage backup', () => {
     test('round-trips canonical content and ordered chat events', async () => {
         const db = getDb()
         db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
-        db.prepare('INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)')
-            .run('m1', 'c1', 'user', 'Hello', 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('m1', 'c1', 'user', 'Hello', '[{"type":"text","text":"Hello"}]', 1)
         db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
             .run('c1', 'e1', JSON.stringify({ type: 'transcript-item', item: { type: 'message', id: 'm1' } }), 2)
         const app = Fastify()

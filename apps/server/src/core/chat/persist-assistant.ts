@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { nanoid } from 'nanoid'
-import type { ContextEvidence, StoredMessageDto } from '@shared/types'
+import type { ContextEvidence } from '@shared/types'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent, type MessageFields } from './transcript.js'
 
 export interface AssistantTurnInput {
   conversationId: string
@@ -25,10 +26,10 @@ export function persistAssistantTurn(
   db: Database.Database,
   broadcast: (event: string, data: unknown) => void,
   input: AssistantTurnInput,
-): StoredMessageDto {
+): MessageFields & { conversationId: string; contextEvidence?: ContextEvidence[]; provider?: string; model?: string; promptTokens?: number; completionTokens?: number; contextTokens?: number; latencyMs?: number } {
   const id = nanoid()
   const createdAt = Date.now()
-  const message: StoredMessageDto = {
+  const message = {
     id, conversationId: input.conversationId, role: 'assistant', content: input.content,
     thinking: input.thinking || undefined,
     imageDataUrls: input.images?.length ? input.images : undefined,
@@ -46,14 +47,12 @@ export function persistAssistantTurn(
   db.transaction(() => {
     db.prepare(`
       INSERT INTO messages (
-        id, conversation_id, role, content, thinking, image_urls_json, video_urls_json,
+        id, conversation_id, role, content, content_blocks_json,
         generated_media, memory_sources_json, agent_id, provider, model,
         prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, input.conversationId, 'assistant', input.content, input.thinking || null,
-      message.imageDataUrls ? JSON.stringify(message.imageDataUrls) : null,
-      message.videoDataUrls ? JSON.stringify(message.videoDataUrls) : null,
+      id, input.conversationId, 'assistant', input.content, messageContentJson(message),
       input.generatedMedia ? 1 : 0,
       message.contextEvidence ? JSON.stringify(message.contextEvidence) : null,
       input.agentId || null, input.provider || null, input.model || null,
@@ -62,6 +61,10 @@ export function persistAssistantTurn(
     )
     db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(createdAt, input.conversationId)
   })()
-  broadcast('chat:new-message', { conversationId: input.conversationId, streamId: input.streamId, message })
+  publishChatEvent(broadcast, {
+    conversationId: input.conversationId,
+    executionId: input.streamId || 'external',
+    payload: { type: 'transcript-item', item: messageToTranscriptItem(message, input.streamId) },
+  })
   return message
 }

@@ -1,7 +1,8 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
-import type { ChatExecutionState, ExecutionStepRecord, PlanningState } from '../api/types'
+import type { ChatEvent } from '@shared/types'
+import type { ChatExecutionState, PlanningState } from '../api/types'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 
 export interface ToolNamespace {
@@ -461,6 +462,36 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function handleChatToolEvent(event: ChatEvent): void {
+    const base = { conversationId: event.conversationId, executionId: event.executionId }
+    if (event.type === 'execution-step') {
+      handleExecutionUpdate({ event: 'step:status', data: { ...base,
+        taskId: event.taskId, iteration: event.iteration, status: event.status,
+        message: event.message, maCodename: event.maCodename, maAgentName: event.maAgentName,
+        maInvocationId: event.invocationId, timestamp: event.createdAt, sequence: event.sequence,
+      } })
+    } else if (event.type === 'tool-calls') {
+      const item = event.items[0]
+      if (!item) return
+      recordToolSequence(event.conversationId, event.sequence, item.taskId, item.iteration, item.parentInvocationId)
+      handleExecutionUpdate({ event: 'step:tools-chosen', data: { ...base,
+        taskId: item.taskId, iteration: item.iteration, maInvocationId: item.parentInvocationId,
+        toolCalls: event.items.map((call) => ({ id: call.callId, name: call.name, arguments: call.arguments })),
+      } })
+    } else if (event.type === 'tool-results') {
+      const item = event.items[0]
+      if (!item) return
+      handleExecutionUpdate({ event: 'step:executed', data: { ...base,
+        taskId: item.taskId, iteration: item.iteration,
+        results: event.items.map((result) => ({
+          toolCallId: result.callId, name: result.name, success: result.success, invocationId: result.invocationId,
+          output: result.content.flatMap((block) => block.type === 'text' ? [block.text] : []).join(''),
+          images: result.content.flatMap((block) => block.type === 'image' ? [block.url] : []),
+        })),
+      } })
+    }
+  }
+
   function handlePlanningStateUpdated(data: unknown): void {
     const state = data as PlanningState | null
     if (!state?.conversationId) return
@@ -657,8 +688,8 @@ export const useAgentStore = defineStore('agent', () => {
     } else {
       // Try loading from DB (survives page reload)
       executionSteps.value = []
-      isExecuting.value = false
-      await loadStepsFromApi(conversationId)
+      isExecuting.value = executingConversationIds.value.has(conversationId)
+      await loadStepsFromEvents(conversationId)
     }
 
     // Always check DB for pending HITL requests — needed after a hard reload
@@ -690,34 +721,18 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function loadStepsFromApi(conversationId: string): Promise<void> {
+  async function loadStepsFromEvents(conversationId: string): Promise<void> {
     try {
-      const rows = await api.chat.getExecutionSteps(conversationId)
-      if (!rows.length) return
-      // Only apply if still viewing same conversation
-      if (activeViewConversationId.value !== conversationId) return
-      if (executionSteps.value.length > 0) return
-      const mapped: ExecutionStep[] = rows.map((r: ExecutionStepRecord) => ({
-        sequence: r.sequence,
-        iteration: r.iteration,
-        status: r.status,
-        message: r.message || undefined,
-        toolCalls: r.toolCalls as ToolCallDisplay[] | undefined,
-        results: (r.results || []).map((result) => ({ ...result,
-          invocationId: result.structuredContent && typeof result.structuredContent === 'object'
-            ? (result.structuredContent as { invocationId?: string }).invocationId : undefined,
-        })) as ExecutionStep['results'],
-        taskId: r.taskId || undefined,
-        maCodename: r.maCodename || undefined,
-        maAgentName: r.maAgentName || undefined,
-        maInvocationId: r.maInvocationId || undefined,
-        maPhase: r.maPhase || undefined,
-        timestamp: r.createdAt,
-      }))
-      executionSteps.value = mapped
-      stepsPerConversation.set(conversationId, mapped)
+      let after = 0
+      for (;;) {
+        const page = await api.chat.getEvents(conversationId, after)
+        if (activeViewConversationId.value !== conversationId) return
+        for (const event of page.events) handleChatToolEvent(event)
+        if (!page.events.length || page.events.length < 1000 || page.events.at(-1)!.sequence >= page.latestSequence) break
+        after = page.events.at(-1)!.sequence
+      }
     } catch {
-      // API not available or conversation has no steps — ignore
+      // Conversation can still receive live events if history is unavailable.
     }
   }
 
@@ -765,6 +780,7 @@ export const useAgentStore = defineStore('agent', () => {
     respondHITL,
     awaitingHITLConvIds,
     handleExecutionUpdate,
+    handleChatToolEvent,
     recordToolSequence,
     handlePlanningStateUpdated,
     clearExecution,

@@ -129,7 +129,9 @@ describe('AgentExecutor steering', () => {
 
     await expect(run).resolves.toMatchObject({ content: 'steered answer' })
     expect(streamComplete).toHaveBeenCalledTimes(2)
-    expect(broadcast).toHaveBeenCalledWith('chat:stream-discard', expect.objectContaining({ conversationId: 'steering' }))
+    expect(broadcast).toHaveBeenCalledWith('chat:event', expect.objectContaining({
+      conversationId: 'steering', payload: expect.objectContaining({ type: 'stream-discard', scope: 'main' }),
+    }))
   })
 
   test('finishes the in-flight tool, skips later tools, then applies steering', async () => {

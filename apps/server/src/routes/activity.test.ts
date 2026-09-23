@@ -6,6 +6,15 @@ import { join } from 'node:path'
 import { closeDb, getDb } from '../db/database.js'
 import { registerActivityRoutes } from './activity.js'
 import { registerActiveChatExecution, unregisterActiveChatExecution } from '../core/chat/active-executions.js'
+import { messageContentJson } from '../core/chat/transcript.js'
+import type Database from 'better-sqlite3'
+
+function insertMediaMessage(db: Database.Database, id: string, conversationId: string, role: string,
+    content: string, createdAt: number, images: string[] = [], audio: string[] = [], generatedMedia = 0): void {
+    db.prepare(`INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, generated_media, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, conversationId, role, content,
+        messageContentJson({ id, content, imageDataUrls: images, audioDataUrls: audio }), generatedMedia, createdAt)
+}
 
 describe('activity artifact discovery', () => {
     let directory = ''
@@ -46,39 +55,10 @@ describe('activity artifact discovery', () => {
             `INSERT INTO conversations (id, title, origin, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?)`,
         ).run('conversation-1', 'Organize disk files', 'chat', now, now)
-        db.prepare(
-            `INSERT INTO execution_steps (id, conversation_id, iteration, status, results_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-        ).run(
-            'step-1',
-            'conversation-1',
-            1,
-            'completed',
-            JSON.stringify({ filesRead: ['/photos/existing-image.jpg', '/notes/existing.md'] }),
-            now,
-        )
-        db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-        ).run(
-            'message-1',
-            'conversation-1',
-            'assistant',
-            'Generated an image.',
-            JSON.stringify(['https://example.com/generated.png']),
-            now + 1,
-        )
-        db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, audio_urls_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-        ).run(
-            'tool-message-1',
-            'conversation-1',
-            'tool',
-            'Viewed existing audio.',
-            JSON.stringify(['/api/files?path=%2Ftmp%2Fexisting.mp3']),
-            now + 2,
-        )
+        insertMediaMessage(db, 'message-1', 'conversation-1', 'assistant', 'Generated an image.', now + 1,
+            ['https://example.com/generated.png'])
+        insertMediaMessage(db, 'tool-message-1', 'conversation-1', 'tool', 'Viewed existing audio.', now + 2,
+            [], ['/api/files?path=%2Ftmp%2Fexisting.mp3'])
         db.prepare(
             `INSERT INTO messages (id, conversation_id, role, content, created_at)
              VALUES (?, ?, ?, ?, ?)`,
@@ -89,41 +69,12 @@ describe('activity artifact discovery', () => {
             'I will inspect /tmp/existing-image.jpg now.',
             now + 2,
         )
-        db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-        ).run(
-            'user-message-1',
-            'conversation-1',
-            'user',
-            'Use this upload.',
-            JSON.stringify(['/api/files?path=%2Ftmp%2Fuploaded.png']),
-            now + 3,
-        )
-        db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, image_urls_json, audio_urls_json, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-            'assistant-message-2',
-            'conversation-1',
-            'assistant',
-            'I inspected the supplied media.',
-            JSON.stringify(['/api/files?path=%2Ftmp%2Fuploaded.png']),
-            JSON.stringify(['/api/files?path=%2Ftmp%2Fexisting.mp3']),
-            now + 4,
-        )
-        db.prepare(
-            `INSERT INTO messages (id, conversation_id, role, content, audio_urls_json, generated_media, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-            'generated-tool-message',
-            'conversation-1',
-            'tool',
-            'Synthesized speech.',
-            JSON.stringify(['/api/files?path=%2Ftmp%2Fspeech.wav']),
-            1,
-            now + 5,
-        )
+        insertMediaMessage(db, 'user-message-1', 'conversation-1', 'user', 'Use this upload.', now + 3,
+            ['/api/files?path=%2Ftmp%2Fuploaded.png'])
+        insertMediaMessage(db, 'assistant-message-2', 'conversation-1', 'assistant', 'I inspected the supplied media.', now + 4,
+            ['/api/files?path=%2Ftmp%2Fuploaded.png'], ['/api/files?path=%2Ftmp%2Fexisting.mp3'])
+        insertMediaMessage(db, 'generated-tool-message', 'conversation-1', 'tool', 'Synthesized speech.', now + 5,
+            [], ['/api/files?path=%2Ftmp%2Fspeech.wav'], 1)
         db.prepare(
             `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, created_at)
              VALUES (?, ?, ?, ?, ?, ?)`,
@@ -178,12 +129,13 @@ describe('activity artifact discovery', () => {
         db.prepare(`INSERT INTO conversations (id, title, origin, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?)`).run('history', 'Artifact history', 'chat', now, now)
         const insert = db.prepare(`INSERT INTO messages
-            (id, conversation_id, role, content, image_urls_json, created_at)
+            (id, conversation_id, role, content, content_blocks_json, created_at)
             VALUES (?, 'history', 'assistant', ?, ?, ?)`)
         db.transaction(() => {
             for (let index = 0; index < 65; index++) {
                 insert.run(`artifact-${index}`, 'Generated an image.',
-                    JSON.stringify([`https://example.com/generated-${index}.png`]), now + index)
+                    messageContentJson({ id: `artifact-${index}`, content: 'Generated an image.',
+                        imageDataUrls: [`https://example.com/generated-${index}.png`] }), now + index)
             }
         })()
         const app = Fastify()

@@ -22,33 +22,34 @@ import type { ContentBlock, ConversationExecutionConfig } from '@shared/types'
 import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
-import { messageContentBlocks } from '../core/chat/transcript.js'
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
 }
 
-async function cloneMediaUrlsJson(
-    json: string | null,
-    conversationId: string,
-    kind: MediaArtifactKind,
-): Promise<string | null> {
-    if (!json) return null
+function parseMessageBlocks(json: string | null): ContentBlock[] {
+    if (!json) return []
     try {
-        const urls = JSON.parse(json) as string[]
-        const clonedUrls: string[] = []
-        for (const url of urls) {
+        const blocks = JSON.parse(json) as unknown
+        return Array.isArray(blocks) ? blocks as ContentBlock[] : []
+    } catch { return [] }
+}
+
+async function cloneMediaBlocks(blocks: ContentBlock[], conversationId: string): Promise<ContentBlock[]> {
+    const cloned: ContentBlock[] = []
+    for (const block of blocks) {
+        if (block.type === 'image' || block.type === 'video' || block.type === 'audio') {
             try {
-                const artifacts = await materializeMediaArtifacts([url], conversationId, kind)
-                clonedUrls.push(...artifacts.map((artifact) => artifact.url))
+                const artifacts = await materializeMediaArtifacts([block.url], conversationId, block.type as MediaArtifactKind)
+                cloned.push(...artifacts.map((artifact) => ({ type: block.type, artifactId: artifact.url, url: artifact.url })))
             } catch {
-                // Skip missing, expired, or unreadable historical artifacts.
+                // Skip missing or unreadable artifacts.
             }
+        } else {
+            cloned.push(block)
         }
-        return clonedUrls.length ? JSON.stringify(clonedUrls) : null
-    } catch {
-        return null
     }
+    return cloned
 }
 
 /** Delete artifact files and attachment vectors referenced by conversations. */
@@ -57,20 +58,19 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
     preserveReferencedAttachmentAssets(conversationIds)
     for (const convId of conversationIds) {
         const rows = db.prepare(
-            'SELECT image_urls_json FROM messages WHERE conversation_id = ? AND image_urls_json IS NOT NULL'
-        ).all(convId) as { image_urls_json: string }[]
+            'SELECT content_blocks_json FROM messages WHERE conversation_id = ?'
+        ).all(convId) as { content_blocks_json: string | null }[]
 
         for (const row of rows) {
-            try {
-                const urls: string[] = JSON.parse(row.image_urls_json)
-                for (const url of urls) {
+            for (const block of parseMessageBlocks(row.content_blocks_json)) {
+                if (block.type === 'image') {
                     // Extract file path from /api/files?path=<encoded_path>
-                    const filePath = extractFilePathFromFileUrl(url)
+                    const filePath = extractFilePathFromFileUrl(block.url)
                     if (filePath) {
                         try { unlinkSync(filePath) } catch { /* file may already be gone */ }
                     }
                 }
-            } catch { /* skip malformed JSON */ }
+            }
         }
 
         cleanupConversationArtifacts(convId)
@@ -163,13 +163,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 prompt_tokens: number | null
                 completion_tokens: number | null
                 latency_ms: number | null
-                image_urls_json: string | null
-                video_urls_json: string | null
                 agent_id: string | null
                 memory_sources_json: string | null
-                thinking: string | null
-                audio_urls_json: string | null
-                structured_content_json: string | null
                 content_blocks_json: string | null
                 context_tokens: number | null
                 generated_media: number
@@ -177,21 +172,21 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             }[]
 
             const messageIdMap = new Map<string, string>()
+            const clonedBlocks = new Map<string, ContentBlock[]>()
             const insertMessage = db.prepare(`
                 INSERT INTO messages (
                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                     provider, model, prompt_tokens, completion_tokens, latency_ms,
-                    image_urls_json, video_urls_json, agent_id, memory_sources_json, thinking,
-                    audio_urls_json, structured_content_json, context_tokens, generated_media, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    content_blocks_json, agent_id, memory_sources_json,
+                    context_tokens, generated_media, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `)
 
             for (const row of messageRows) {
                 const nextMessageId = nanoid()
                 messageIdMap.set(row.id, nextMessageId)
-                const imageUrlsJson = await cloneMediaUrlsJson(row.image_urls_json, id, 'image')
-                const videoUrlsJson = await cloneMediaUrlsJson(row.video_urls_json, id, 'video')
-                const audioUrlsJson = await cloneMediaUrlsJson(row.audio_urls_json, id, 'audio')
+                const blocks = await cloneMediaBlocks(parseMessageBlocks(row.content_blocks_json), id)
+                clonedBlocks.set(row.id, blocks)
 
                 insertMessage.run(
                     nextMessageId,
@@ -205,13 +200,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     row.prompt_tokens,
                     row.completion_tokens,
                     row.latency_ms,
-                    imageUrlsJson,
-                    videoUrlsJson,
+                    JSON.stringify(blocks),
                     row.agent_id,
                     row.memory_sources_json,
-                    row.thinking,
-                    audioUrlsJson,
-                    row.structured_content_json,
                     row.context_tokens,
                     row.generated_media,
                     row.created_at,
@@ -269,50 +260,31 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 )
             }
 
-            const stepRows = db.prepare(`
-                SELECT * FROM execution_steps
-                WHERE conversation_id = ? AND created_at <= ?
-                ORDER BY created_at ASC
-            `).all(sourceConversationId, forkPoint.created_at) as {
-                task_id: string | null
-                iteration: number
-                status: string
-                message: string | null
-                plan: string | null
-                tool_calls_json: string | null
-                results_json: string | null
-                evaluation_json: string | null
-                ma_codename: string | null
-                ma_agent_name: string | null
-                ma_invocation_id: string | null
-                ma_phase: string | null
-                created_at: number
-            }[]
-            const insertStep = db.prepare(`
-                INSERT INTO execution_steps (
-                    id, conversation_id, task_id, iteration, status, message, plan,
-                    tool_calls_json, results_json, evaluation_json,
-                    ma_codename, ma_agent_name, ma_invocation_id, ma_phase, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `)
-            for (const row of stepRows) {
-                insertStep.run(
-                    nanoid(),
-                    id,
-                    row.task_id,
-                    row.iteration,
-                    row.status,
-                    row.message,
-                    row.plan,
-                    row.tool_calls_json,
-                    row.results_json,
-                    row.evaluation_json,
-                    row.ma_codename,
-                    row.ma_agent_name,
-                    row.ma_invocation_id,
-                    row.ma_phase,
-                    row.created_at,
-                )
+            // Preserve the event order and message links in the forked transcript.
+            const forkSequence = (db.prepare(`
+                SELECT sequence FROM chat_events WHERE conversation_id = ?
+                  AND json_extract(event_json, '$.type') = 'transcript-item'
+                  AND json_extract(event_json, '$.item.id') = ?
+                ORDER BY sequence DESC LIMIT 1
+            `).get(sourceConversationId, messageId) as { sequence: number } | undefined)?.sequence
+            const events = db.prepare(`
+                SELECT execution_id, event_json, created_at FROM chat_events
+                WHERE conversation_id = ? AND ${forkSequence === undefined ? 'created_at <= ?' : 'sequence <= ?'} ORDER BY sequence
+            `).all(sourceConversationId, forkSequence ?? forkPoint.created_at) as Array<{ execution_id: string; event_json: string; created_at: number }>
+            const insertEvent = db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
+            for (const row of events) {
+                const event = JSON.parse(row.event_json) as Record<string, unknown>
+                const item = event.item as { type?: string; id?: string; content?: ContentBlock[] } | undefined
+                if (item?.type === 'message') {
+                    const sourceId = item.id || ''
+                    const mappedId = messageIdMap.get(sourceId)
+                    if (!mappedId) continue
+                    item.id = mappedId
+                    item.content = clonedBlocks.get(sourceId)
+                }
+                if (typeof event.messageId === 'string') event.messageId = messageIdMap.get(event.messageId) || event.messageId
+                event.conversationId = id
+                insertEvent.run(id, row.execution_id, JSON.stringify(event), row.created_at)
             }
 
             return {
@@ -568,13 +540,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 conversation_id: string
                 role: string
                 content: string
-                thinking: string | null
                 tool_calls_json: string | null
                 tool_call_id: string | null
-                image_urls_json: string | null
-                video_urls_json: string | null
-                audio_urls_json: string | null
-                structured_content_json: string | null
                 content_blocks_json: string | null
                 memory_sources_json: string | null
                 agent_id: string | null
@@ -594,12 +561,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             'SELECT id, message_id, name, original_path FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
         ).all(req.params.id) as { id: string; message_id: string; name: string; original_path: string | null }[]
         const sequencedMessageRows = db.prepare(`
-            SELECT sequence, json_extract(event_json, '$.item.id') AS message_id
+            SELECT sequence, execution_id, json_extract(event_json, '$.item.id') AS message_id
             FROM chat_events
             WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
               AND json_extract(event_json, '$.item.type') = 'message'
-        `).all(req.params.id) as { sequence: number; message_id: string }[]
-        const sequenceByMessageId = new Map(sequencedMessageRows.map((row) => [row.message_id, row.sequence]))
+        `).all(req.params.id) as { sequence: number; execution_id: string; message_id: string }[]
+        const eventByMessageId = new Map(sequencedMessageRows.map((row) => [row.message_id, row]))
         const attachmentsByMessage = new Map<string, { id: string; name: string; originalPath: string }[]>()
         for (const row of attachmentRows) {
             if (!row.original_path) continue
@@ -632,26 +599,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                         }
                     } catch { /* agent not found — ignore */ }
                 }
-                let toolCalls: unknown | undefined
-                try {
-                    toolCalls = row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined
-                } catch { /* malformed JSON — ignore */ }
-                let imageDataUrls: string[] | undefined
-                try {
-                    imageDataUrls = row.image_urls_json ? JSON.parse(row.image_urls_json) : undefined
-                } catch { /* malformed JSON — ignore */ }
-                let audioDataUrls: string[] | undefined
-                try {
-                    audioDataUrls = row.audio_urls_json ? JSON.parse(row.audio_urls_json) : undefined
-                } catch { /* malformed JSON — ignore */ }
-                let videoDataUrls: string[] | undefined
-                try {
-                    videoDataUrls = row.video_urls_json ? JSON.parse(row.video_urls_json) : undefined
-                } catch { /* malformed JSON — ignore */ }
-                let structuredContent: unknown | undefined
-                try {
-                    structuredContent = row.structured_content_json ? JSON.parse(row.structured_content_json) : undefined
-                } catch { /* malformed JSON - ignore */ }
                 let contextEvidence: unknown | undefined
                 try {
                     contextEvidence = row.memory_sources_json ? JSON.parse(row.memory_sources_json) : undefined
@@ -661,33 +608,24 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     name: file.name,
                     href: toFileUrl(file.originalPath, file.name),
                 }))
-                const fileAttachments = attachmentArtifacts?.map(({ name, href }) => ({ name, href }))
-                let storedBlocks: ContentBlock[] | undefined
-                try {
-                    const parsed = row.content_blocks_json ? JSON.parse(row.content_blocks_json) as unknown : undefined
-                    if (Array.isArray(parsed)) storedBlocks = parsed as ContentBlock[]
-                } catch { /* malformed canonical JSON — use legacy columns */ }
-                const message = {
+                const blocks = JSON.parse(row.content_blocks_json || '[]') as ContentBlock[]
+                const fileBlocks: ContentBlock[] = attachmentArtifacts?.map((file) => ({
+                    type: 'file', artifactId: file.id, name: file.name, url: file.href,
+                })) || []
+                return {
+                    type: 'message' as const,
                     id: row.id,
-                    sequence: sequenceByMessageId.get(row.id),
-                    conversationId: row.conversation_id,
+                    sequence: eventByMessageId.get(row.id)?.sequence,
+                    executionId: eventByMessageId.get(row.id)?.execution_id,
                     role: row.role,
-                    content: row.content,
-                    thinking: row.thinking || undefined,
-                    toolCalls,
-                    toolCallId: row.tool_call_id || undefined,
-                    imageDataUrls,
-                    videoDataUrls,
-                    audioDataUrls,
-                    structuredContent,
-                    contextEvidence,
-                    fileAttachments,
+                    content: [...blocks, ...fileBlocks],
+                    contextEvidence: contextEvidence as import('@shared/types').ContextEvidence[] | undefined,
                     agentId: row.agent_id || undefined,
                     agentName,
                     agentIconUrl,
                     maCodename: row.ma_codename || undefined,
                     maAgentName: row.ma_agent_name || undefined,
-                    maInvocationId: row.ma_invocation_id || undefined,
+                    invocationId: row.ma_invocation_id || undefined,
                     provider: row.provider,
                     model: row.model,
                     promptTokens: row.prompt_tokens,
@@ -696,12 +634,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     latencyMs: row.latency_ms,
                     createdAt: row.created_at
                 }
-                const blocks = storedBlocks ?? messageContentBlocks({ ...message, fileAttachments: undefined })
-                const fileBlocks = messageContentBlocks({ ...message, fileAttachments: attachmentArtifacts,
-                    content: '', thinking: undefined,
-                    imageDataUrls: undefined, videoDataUrls: undefined, audioDataUrls: undefined,
-                    structuredContent: undefined }).filter((block) => block.type === 'file')
-                return { ...message, contentBlocks: [...blocks, ...fileBlocks] }
             }),
         }
     })
@@ -714,26 +646,17 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         async (req, reply) => {
             const db = getDb()
             const message = db.prepare(
-                `SELECT image_urls_json, audio_urls_json
+                `SELECT content_blocks_json
                  FROM messages
                  WHERE id = ? AND conversation_id = ? AND role = 'user'`
             ).get(req.params.messageId, req.params.id) as {
-                image_urls_json: string | null
-                audio_urls_json: string | null
+                content_blocks_json: string | null
             } | undefined
             if (!message) return reply.status(404).send({ error: 'Message not found' })
 
-            const resolveMedia = (json: string | null): string[] => {
-                if (!json) return []
-                let urls: unknown
-                try {
-                    urls = JSON.parse(json) as unknown
-                } catch {
-                    return []
-                }
-                if (!Array.isArray(urls)) return []
-                return urls
-                    .filter((url): url is string => typeof url === 'string')
+            const blocks = parseMessageBlocks(message.content_blocks_json)
+            const resolveMedia = (kind: 'image' | 'audio'): string[] => {
+                return blocks.flatMap((block) => block.type === kind ? [block.url] : [])
                     .map((url) => {
                         const resolved = artifactFileUrlToDataUrl(url)
                         if (resolved) return resolved
@@ -757,8 +680,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 const encoded = readFileSync(row.original_path).toString('base64')
                 return { name: row.name, content: `data:application/octet-stream;base64,${encoded}` }
             })
-            const imageDataUrls = resolveMedia(message.image_urls_json)
-            const audioDataUrls = resolveMedia(message.audio_urls_json)
+            const imageDataUrls = resolveMedia('image')
+            const audioDataUrls = resolveMedia('audio')
             return {
                 imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
                 audioDataUrls: audioDataUrls.length ? audioDataUrls : undefined,
@@ -766,71 +689,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             }
         }
     )
-
-    // GET /api/chat/conversations/:id/steps — get execution steps
-    app.get<{ Params: { id: string } }>('/conversations/:id/steps', async (req) => {
-        const db = getDb()
-        const orderedEvents = db.prepare(`
-            SELECT sequence, event_json FROM chat_events
-            WHERE conversation_id = ? AND json_extract(event_json, '$.type') IN ('execution-step', 'tool-calls')
-        `).all(req.params.id) as { sequence: number; event_json: string }[]
-        const sequenceByStep = new Map<string, number>()
-        const sequenceByStatus = new Map<string, number>()
-        for (const event of orderedEvents) {
-            const payload = JSON.parse(event.event_json) as {
-                type: string; taskId?: string; iteration?: number; invocationId?: string; status?: string
-                items?: Array<{ taskId?: string; iteration?: number; parentInvocationId?: string }>
-            }
-            if (payload.type === 'execution-step' && payload.taskId !== undefined && payload.iteration !== undefined) {
-                const key = JSON.stringify([payload.taskId, payload.iteration, payload.invocationId || null, payload.status])
-                if (!sequenceByStatus.has(key)) sequenceByStatus.set(key, event.sequence)
-            }
-            const item = payload.items?.[0]
-            if (payload.type === 'tool-calls' && item?.taskId !== undefined && item.iteration !== undefined) {
-                const key = JSON.stringify([item.taskId, item.iteration, item.parentInvocationId || null])
-                if (!sequenceByStep.has(key)) sequenceByStep.set(key, event.sequence)
-            }
-        }
-        const rows = db
-            .prepare('SELECT * FROM execution_steps WHERE conversation_id = ? ORDER BY created_at ASC')
-            .all(req.params.id) as {
-                id: string
-                conversation_id: string
-                task_id: string | null
-                iteration: number
-                status: string
-                message: string | null
-                plan: string | null
-                tool_calls_json: string | null
-                results_json: string | null
-                evaluation_json: string | null
-                ma_codename: string | null
-                ma_agent_name: string | null
-                ma_invocation_id: string | null
-                ma_phase: string | null
-                created_at: number
-            }[]
-
-        return rows.map((row) => ({
-            id: row.id,
-            sequence: sequenceByStatus.get(JSON.stringify([row.task_id, row.iteration, row.ma_invocation_id, row.status]))
-                ?? sequenceByStep.get(JSON.stringify([row.task_id, row.iteration, row.ma_invocation_id])),
-            conversationId: row.conversation_id,
-            taskId: row.task_id,
-            iteration: row.iteration,
-            status: row.status,
-            message: row.message,
-            plan: row.plan,
-            toolCalls: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : undefined,
-            results: row.results_json ? JSON.parse(row.results_json) : undefined,
-            evaluation: row.evaluation_json ? JSON.parse(row.evaluation_json) : undefined,
-            maCodename: row.ma_codename,
-            maAgentName: row.ma_agent_name,
-            maInvocationId: row.ma_invocation_id,
-            maPhase: row.ma_phase,
-            createdAt: row.created_at,
-        }))
-    })
 
     // GET /api/chat/conversations/:id/hitl — return all pending HITL requests for this conversation
     app.get<{ Params: { id: string } }>('/conversations/:id/hitl', async (req) => {
@@ -889,7 +747,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         await cleanupConversationArtifactsAndIndexes([req.params.id])
         await invalidateDreamConversation(req.params.id)
         clearDebugContextCapture(req.params.id)
-        db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
@@ -909,7 +766,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             for (const { id } of ids) await invalidateDreamConversation(id)
             for (const { id } of ids) clearDebugContextCapture(id)
             for (const { id } of ids) {
-                db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
@@ -922,7 +778,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             for (const { id } of allIds) await invalidateDreamConversation(id)
             for (const { id } of allIds) clearDebugContextCapture(id)
             for (const { id } of allIds) {
-                db.prepare('DELETE FROM execution_steps WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
@@ -966,27 +821,20 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
             // Cleanup locally materialized media for messages being truncated.
             const mediaRows = db.prepare(
-                `SELECT image_urls_json, video_urls_json, audio_urls_json
+                `SELECT content_blocks_json
                  FROM messages WHERE conversation_id = ? AND created_at >= ?`
             ).all(conversationId, row.created_at) as {
-                image_urls_json: string | null
-                video_urls_json: string | null
-                audio_urls_json: string | null
+                content_blocks_json: string | null
             }[]
             const conversationArtifactsDir = resolve(getConversationArtifactsDir(conversationId))
             for (const mediaRow of mediaRows) {
-                for (const json of [mediaRow.image_urls_json, mediaRow.video_urls_json, mediaRow.audio_urls_json]) {
-                    if (!json) continue
-                    try {
-                        const urls: string[] = JSON.parse(json)
-                        for (const url of urls) {
-                            const filePath = extractFilePathFromFileUrl(url)
-                            const resolvedPath = filePath ? resolve(filePath) : null
-                            if (resolvedPath?.startsWith(`${conversationArtifactsDir}/`)) {
-                                try { unlinkSync(resolvedPath) } catch { /* already gone */ }
-                            }
-                        }
-                    } catch { /* skip malformed media metadata */ }
+                for (const block of parseMessageBlocks(mediaRow.content_blocks_json)) {
+                    if (block.type !== 'image' && block.type !== 'video' && block.type !== 'audio') continue
+                    const filePath = extractFilePathFromFileUrl(block.url)
+                    const resolvedPath = filePath ? resolve(filePath) : null
+                    if (resolvedPath?.startsWith(`${conversationArtifactsDir}/`)) {
+                        try { unlinkSync(resolvedPath) } catch { /* already gone */ }
+                    }
                 }
             }
 
@@ -994,8 +842,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 .prepare('DELETE FROM messages WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
             await collectOrphanedAttachmentAssets()
-            db.prepare('DELETE FROM execution_steps WHERE conversation_id = ? AND created_at >= ?')
-                .run(conversationId, row.created_at)
             db.prepare('DELETE FROM chat_events WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
             db.prepare('DELETE FROM tasks WHERE conversation_id = ? AND created_at >= ?')

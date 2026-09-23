@@ -1,4 +1,4 @@
-import type { ConversationExecutionConfig } from '@shared/types'
+import type { ChatEvent, ConversationExecutionConfig } from '@shared/types'
 
 // ── Provider / Chat ─────────────────────────────────────────────────────────
 
@@ -577,12 +577,8 @@ export interface AgentInstance {
     status: 'running' | 'awaiting-approval'
 }
 
-export interface ChatExecutionState {
-    executionId: string
-    conversationId: string
-    agentId: string | null
-    state: 'running' | 'stopped' | 'finished'
-}
+export type ChatExecutionState = Pick<Extract<ChatEvent, { type: 'execution-state' }>,
+    'executionId' | 'conversationId' | 'agentId' | 'state'>
 
 export interface CronJob {
     id: string
@@ -602,25 +598,6 @@ export interface CronJob {
     isRunning: boolean
     nextRunAt: number | null
     executionConfig: ConversationExecutionConfig | null
-}
-
-export interface ExecutionStepRecord {
-    id: string
-    conversationId: string
-    sequence?: number
-    taskId?: string
-    iteration: number
-    status: string
-    message?: string
-    plan?: string
-    toolCalls?: unknown[]
-    results?: { toolCallId?: string; name: string; success: boolean; output: string; error?: string; images?: string[]; structuredContent?: unknown }[]
-    evaluation?: { taskComplete: boolean; success: boolean; reasoning: string }
-    maCodename?: string
-    maAgentName?: string
-    maInvocationId?: string
-    maPhase?: string
-    createdAt: number
 }
 
 export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'

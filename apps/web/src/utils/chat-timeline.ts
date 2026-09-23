@@ -15,31 +15,9 @@ export type TimelineEntry =
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
   | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; openingMessage: string | null; continued: boolean; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
 
-export function buildChatTimeline(messages: DisplayMessage[], executionSteps: ExecutionStep[], mainAgentId?: string | null): TimelineEntry[] {
+export function buildChatTimeline(messages: DisplayMessage[], executionSteps: ExecutionStep[]): TimelineEntry[] {
   const entries: TimelineEntry[] = []
   const hasExecSteps = executionSteps.length > 0
-  // Build a display-name -> codename map up front so free-chat runs (where
-  // there is no main agentId to compare against) can still group sub-agent
-  // stream messages with their execution cards.
-  const agentNameToCodename = new Map<string, string>()
-  for (const step of executionSteps) {
-    if (step.maCodename && step.maAgentName) {
-      agentNameToCodename.set(step.maAgentName, step.maCodename)
-    }
-  }
-  const subAgentStepsByIdentity = new Map<string, ExecutionStep[]>()
-  for (const step of executionSteps) {
-    if (!step.maInvocationId) continue
-    const identities = [step.maAgentName, step.maCodename].filter((value): value is string => Boolean(value))
-    for (const identity of identities) {
-      const current = subAgentStepsByIdentity.get(identity) || []
-      current.push(step)
-      subAgentStepsByIdentity.set(identity, current)
-    }
-  }
-  for (const steps of subAgentStepsByIdentity.values()) {
-    steps.sort((a, b) => a.timestamp - b.timestamp)
-  }
 
   for (const msg of messages) {
     // Compact event markers — rendered as divider cards, not regular messages
@@ -62,16 +40,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       !msg.isError
     ) continue
 
-    // A message is from a sub-agent if explicit multi-agent metadata is present,
-    // if it has a different agentId than the orchestrator, or, in free chat,
-    // if execution metadata identifies its agentName as a delegated sub-agent.
-    const isSubAgent = Boolean(
-      msg.maInvocationId ||
-      msg.maCodename ||
-      msg.maAgentName ||
-      (msg.agentId && mainAgentId && msg.agentId !== mainAgentId) ||
-      (!mainAgentId && msg.agentName && agentNameToCodename.has(msg.agentName))
-    )
+    const isSubAgent = Boolean(msg.maInvocationId)
 
     if (msg.role === 'tool') {
       // No exec steps available — render tool messages as compact fallback cards
@@ -101,7 +70,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     for (const [groupKey, steps] of grouped) {
       // A tool-group is from a sub-agent if any step has maCodename set
       steps.sort((a, b) => a.timestamp - b.timestamp)
-      const isSubAgent = steps.some(s => Boolean(s.maInvocationId || s.maCodename || s.maAgentName))
+      const isSubAgent = steps.some(s => Boolean(s.maInvocationId))
       entries.push({
         type: 'tool-group',
         group: { iteration: steps[0].iteration, steps, ts: steps[0].timestamp },
@@ -112,8 +81,8 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     }
   }
 
-  // New activity carries the server's persisted order. Older rows retain the
-  // timestamp fallback until they have canonical event sequences.
+  // Persisted activity follows event order. Optimistic entries have no sequence
+  // yet and stay after persisted activity until their server event arrives.
   function sequenceOf(entry: TimelineEntry): number | undefined {
     if (entry.type === 'message' || entry.type === 'tool-fallback' || entry.type === 'compact-event') return entry.msg.sequence
     if (entry.type === 'tool-group') return entry.group.steps.find((step) => step.sequence !== undefined)?.sequence
@@ -123,7 +92,10 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
   entries.sort((a, b) => {
     const left = sequenceOf(a)
     const right = sequenceOf(b)
-    return left !== undefined && right !== undefined ? left - right : a.ts - b.ts
+    if (left !== undefined && right !== undefined) return left - right
+    if (left !== undefined) return -1
+    if (right !== undefined) return 1
+    return a.ts - b.ts
   })
 
   // ── Group sub-agent entries by invocation ───────────────────────────────
@@ -132,41 +104,12 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     if (!entry.isSubAgent) return null
     if (entry.type === 'tool-group') {
       const firstStep = entry.group.steps[0]
-      return firstStep?.maInvocationId ?? firstStep?.maCodename ?? null
+      return firstStep?.maInvocationId ?? null
     }
     if (entry.type === 'message' || entry.type === 'tool-fallback') {
-      return entry.msg.maInvocationId
-        ?? inferSubAgentInvocationId(entry.msg)
-        ?? entry.msg.maCodename
-        ?? entry.msg.maAgentName
-        ?? (entry.msg.agentName ? agentNameToCodename.get(entry.msg.agentName) : undefined)
-        ?? entry.msg.agentName
-        ?? entry.msg.agentId
-        ?? null
+      return entry.msg.maInvocationId ?? null
     }
     return null
-  }
-
-  function inferSubAgentInvocationId(msg: DisplayMessage): string | null {
-    const identities = [msg.agentName, msg.maCodename, msg.maAgentName].filter((value): value is string => Boolean(value))
-    let best: { id: string; distance: number; before: boolean } | null = null
-
-    for (const identity of identities) {
-      for (const step of subAgentStepsByIdentity.get(identity) || []) {
-        if (!step.maInvocationId) continue
-        const distance = Math.abs(msg.createdAt - step.timestamp)
-        const before = step.timestamp <= msg.createdAt
-        if (
-          !best ||
-          (before && !best.before) ||
-          (before === best.before && distance < best.distance)
-        ) {
-          best = { id: step.maInvocationId, distance, before }
-        }
-      }
-    }
-
-    return best?.id ?? null
   }
 
   type Delegation = { invocationId: string | null; codename: string | null; content: string; continued: boolean }

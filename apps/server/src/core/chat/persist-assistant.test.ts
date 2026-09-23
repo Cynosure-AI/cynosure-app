@@ -13,14 +13,24 @@ describe('persistAssistantTurn', () => {
       conversationId: 'c1', streamId: 's1', content: 'Generated video.', videos: ['/video/1'],
       generatedMedia: true, provider: 'p1', model: 'm1', startedAt: 1,
     })
-    const row = db.prepare('SELECT content, content_blocks_json, video_urls_json, generated_media, provider, model FROM messages WHERE id = ?')
-      .get(message.id) as { content: string; content_blocks_json: string; video_urls_json: string; generated_media: number; provider: string; model: string }
-    expect(row).toMatchObject({ content: 'Generated video.', video_urls_json: '["/video/1"]', generated_media: 1, provider: 'p1', model: 'm1' })
+    const row = db.prepare('SELECT content, content_blocks_json, generated_media, provider, model FROM messages WHERE id = ?')
+      .get(message.id) as { content: string; content_blocks_json: string; generated_media: number; provider: string; model: string }
+    expect(row).toMatchObject({ content: 'Generated video.', generated_media: 1, provider: 'p1', model: 'm1' })
     expect(JSON.parse(row.content_blocks_json)).toEqual([
       { type: 'text', text: 'Generated video.' },
       { type: 'video', artifactId: '/video/1', url: '/video/1' },
     ])
-    expect(broadcast).toHaveBeenCalledWith('chat:new-message', { conversationId: 'c1', streamId: 's1', message })
+    expect(broadcast).toHaveBeenCalledWith('chat:event', {
+      conversationId: 'c1', executionId: 's1', payload: {
+        type: 'transcript-item', item: expect.objectContaining({
+          type: 'message', id: message.id, role: 'assistant',
+          content: [
+            { type: 'text', text: 'Generated video.' },
+            { type: 'video', artifactId: '/video/1', url: '/video/1' },
+          ],
+        }),
+      },
+    })
     db.close()
   })
 })

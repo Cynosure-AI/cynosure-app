@@ -20,6 +20,15 @@ export interface MessageItem {
   agentIconUrl?: string | null
   maCodename?: string
   maAgentName?: string
+  /** Sequence of the event that first published this persisted message. */
+  sequence?: number
+  contextEvidence?: ContextEvidence[]
+  provider?: string | null
+  model?: string | null
+  promptTokens?: number | null
+  completionTokens?: number | null
+  contextTokens?: number | null
+  latencyMs?: number | null
 }
 
 export interface ToolCallItem {
@@ -93,6 +102,16 @@ export type ChatEvent = ChatEventBase & (
   | { type: 'compact-error'; error: string }
   | { type: 'compact-event'; messageId: string; summary: string; compactedMessageCount: number; model: string }
 )
+
+export type ChatEventPayload = ChatEvent extends infer Event
+  ? Event extends ChatEvent ? Omit<Event, keyof ChatEventBase> : never
+  : never
+
+export interface ChatEventDraft {
+  conversationId: string
+  executionId: string
+  payload: ChatEventPayload
+}
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
@@ -303,42 +322,9 @@ export interface ConversationListItemDto {
   last_user_message: string | null
 }
 
-export interface StoredMessageDto {
-  id: string
-  conversationId: string
-  sequence?: number
-  role: ChatRole | string
-  content: string
-  /** Canonical content; legacy scalar/media fields remain for older clients. */
-  contentBlocks?: ContentBlock[]
-  thinking?: string
-  toolCalls?: unknown[]
-  toolCallId?: string
-  imageDataUrls?: string[]
-  videoDataUrls?: string[]
-  audioDataUrls?: string[]
-  structuredContent?: unknown
-  /** Exact retrieval evidence associated with this assistant turn. */
-  contextEvidence?: ContextEvidence[]
-  fileAttachments?: { id?: string; name: string; href?: string }[]
-  agentId?: string
-  agentName?: string
-  agentIconUrl?: string | null
-  maCodename?: string
-  maAgentName?: string
-  maInvocationId?: string
-  provider?: string | null
-  model?: string | null
-  promptTokens?: number | null
-  completionTokens?: number | null
-  contextTokens?: number | null
-  latencyMs?: number | null
-  createdAt: number
-}
-
 export interface ConversationMessagesResponse {
   conversationAgentId: string | null
-  messages: StoredMessageDto[]
+  messages: MessageItem[]
   /** Highest persisted message event included in this snapshot; later stream events must replay. */
   latestEventSequence: number
   lastContextTokens: number | null

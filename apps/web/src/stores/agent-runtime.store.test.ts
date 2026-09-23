@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import type { ChatEvent } from '@shared/types'
 
 vi.mock('../api/client', () => ({ api: {} }))
 
@@ -75,17 +76,18 @@ describe('agent runtime hard-stop latch', () => {
   test('replayed step events deduplicate and tool updates patch the matching round', () => {
     const store = useAgentStore()
     store.setActiveViewConversation('conversation')
-    const step = (sequence: number, iteration: number) => store.handleExecutionUpdate({
-      event: 'step:status', data: { conversationId: 'conversation', taskId: 'task',
-        sequence, iteration, status: 'choosing-tools', timestamp: sequence },
-    })
+    const base = { version: 1 as const, conversationId: 'conversation', executionId: 'task' }
+    const step = (sequence: number, iteration: number) => store.handleChatToolEvent({
+      ...base, type: 'execution-step', sequence, createdAt: sequence, taskId: 'task',
+      iteration, status: 'choosing-tools',
+    } as ChatEvent)
     step(10, 1)
     step(20, 2)
     step(10, 1)
-    store.handleExecutionUpdate({ event: 'step:tools-chosen', data: {
-      conversationId: 'conversation', taskId: 'task', iteration: 1,
-      toolCalls: [{ name: 'lookup', arguments: '{}' }],
-    } })
+    store.handleChatToolEvent({ ...base, type: 'tool-calls', sequence: 11, createdAt: 11,
+      items: [{ type: 'tool-call', id: 'call-1', executionId: 'task', taskId: 'task', iteration: 1,
+        callId: 'call-1', name: 'lookup', arguments: '{}', createdAt: 11 }],
+    } as ChatEvent)
     expect(store.executionSteps).toHaveLength(2)
     expect(store.executionSteps[0].toolCalls?.[0].name).toBe('lookup')
     expect(store.executionSteps[1].toolCalls).toBeUndefined()

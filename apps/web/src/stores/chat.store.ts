@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
-import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto, StoredMessageDto } from '@shared/types'
+import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -10,6 +10,7 @@ import { useChatStreaming } from '../composables/useChatStreaming'
 import { useChatMessages } from '../composables/useChatMessages'
 import { useChatAgentConfig } from '../composables/useChatAgentConfig'
 import { resolveEffectiveProviderModel } from '../utils/model-selection'
+import { toDisplayMessage } from '../utils/message-view'
 
 export interface Conversation {
   id: string
@@ -290,44 +291,8 @@ export const useChatStore = defineStore('chat', () => {
       const cfg = response.executionConfig
       agentConfig.restoreConversationConfig(cfg)
 
-      const rows = response.messages
       const lastContextTokens = response.lastContextTokens
-      const COMPACT_EVENT_PREFIX = '[CONTEXT_COMPACT_EVENT] '
-      messages.value = rows.map((r: StoredMessageDto) => {
-        const blocks = r.contentBlocks
-        const base: DisplayMessage = {
-          id: r.id,
-          sequence: r.sequence,
-          role: r.role as DisplayMessage['role'],
-          content: blocks ? blocks.flatMap((block) => block.type === 'text' ? [block.text] : []).join('') : r.content,
-          thinking: blocks ? blocks.flatMap((block) => block.type === 'reasoning' ? [block.text] : []).join('') || undefined : r.thinking || undefined,
-          imageDataUrls: blocks ? blocks.flatMap((block) => block.type === 'image' ? [block.url] : []) : r.imageDataUrls || undefined,
-          videoDataUrls: blocks ? blocks.flatMap((block) => block.type === 'video' ? [block.url] : []) : r.videoDataUrls || undefined,
-          audioDataUrls: blocks ? blocks.flatMap((block) => block.type === 'audio' ? [block.url] : []) : r.audioDataUrls || undefined,
-          structuredContent: blocks ? blocks.flatMap((block) => block.type === 'structured' ? [block.value] : [])[0] : r.structuredContent,
-          contextEvidence: r.contextEvidence,
-          fileAttachments: blocks ? blocks.flatMap((block) => block.type === 'file' ? [{ name: block.name, href: block.url }] : []) : r.fileAttachments || undefined,
-          agentId: r.agentId || undefined,
-          agentName: r.agentName || undefined,
-          agentIconUrl: r.agentIconUrl ?? undefined,
-          maCodename: r.maCodename || undefined,
-          maAgentName: r.maAgentName || undefined,
-          maInvocationId: r.maInvocationId || undefined,
-          provider: r.provider || undefined,
-          model: r.model || undefined,
-          promptTokens: r.promptTokens || undefined,
-          completionTokens: r.completionTokens || undefined,
-          contextTokens: r.contextTokens || undefined,
-          latencyMs: r.latencyMs || undefined,
-          createdAt: r.createdAt
-        }
-        if (r.role === 'system' && r.content.startsWith(COMPACT_EVENT_PREFIX)) {
-          try {
-            base.compactEventData = JSON.parse(r.content.slice(COMPACT_EVENT_PREFIX.length))
-          } catch { /* ignore */ }
-        }
-        return base
-      })
+      messages.value = response.messages.map((item) => toDisplayMessage(item))
       lastLoadedEventCursor.value = { conversationId: id, sequence: response.latestEventSequence }
 
       // Hydrate server-side post-action state
@@ -706,7 +671,7 @@ export const useChatStore = defineStore('chat', () => {
     modelModalities,
     modelInfoStatus,
     resolvedModelProvider,
-    handleStreamStart(data: { streamId: string; conversationId: string; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void {
+    handleStreamStart(data: Parameters<typeof streaming.handleStreamStart>[0]): void {
       if (agentStore.isConversationStopped(data.conversationId, data.streamId)) return
       streaming.handleStreamStart(data)
       agentStore.setConversationExecutionState(data.conversationId, true)

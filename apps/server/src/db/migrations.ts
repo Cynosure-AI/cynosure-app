@@ -182,6 +182,23 @@ const MIGRATIONS: SchemaMigration[] = [
             db.exec('UPDATE messages SET content = content WHERE content_blocks_json IS NULL')
         },
     },
+    {
+        version: 9,
+        description: 'Keep message media and reasoning only in canonical content blocks',
+        up: (db) => {
+            db.exec('DROP TRIGGER IF EXISTS message_content_blocks_insert')
+            db.exec('DROP TRIGGER IF EXISTS message_content_blocks_update')
+            const columns = new Set((db.pragma('table_info(messages)') as Array<{ name: string }>).map((column) => column.name))
+            for (const column of ['image_urls_json', 'video_urls_json', 'audio_urls_json', 'thinking', 'structured_content_json']) {
+                if (columns.has(column)) db.exec(`ALTER TABLE messages DROP COLUMN ${column}`)
+            }
+        },
+    },
+    {
+        version: 10,
+        description: 'Use chat events as the sole persisted execution timeline',
+        up: (db) => db.exec('DROP TABLE IF EXISTS execution_steps'),
+    },
 ]
 
 /** The schema version this build produces and expects. */

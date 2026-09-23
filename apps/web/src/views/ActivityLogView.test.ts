@@ -11,8 +11,8 @@ vi.mock('../api/client', () => ({
     activity: { list: mocks.list }, instances: { list: async () => [] },
     memory: { onDreamUpdated: mocks.onDream, cancelDreamRun: mocks.cancel },
     memoryFolders: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
-    agent: { onHITLRequest: () => () => undefined, onExecutionUpdate: () => () => undefined },
-    chat: { onExecutionState: () => () => undefined },
+    agent: { onHITLRequest: () => () => undefined },
+    chat: { onEvent: () => () => undefined },
   }
 }))
 const running = { id: 'dream:run', kind: 'dream', title: 'Dream review', description: 'Reviewing conversation', status: 'running', sourceId: 'run', sourceLabel: 'Dream', conversationId: 'chat', conversationTitle: 'My preferences', createdAt: Date.now(), agentId: null, agentName: null, agentIconUrl: null }

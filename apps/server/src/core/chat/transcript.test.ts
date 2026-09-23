@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
-import { appendChatEvent, contentBlocksToProviderContent, listChatEvents, messageContentBlocks } from './transcript.js'
+import { contentBlocksToProviderContent, executionUpdateToChatPayload, listChatEvents, messageContentBlocks, persistChatEvent } from './transcript.js'
 
 describe('canonical chat transcript', () => {
   test('adapts persisted media fields without losing their order within a modality', () => {
@@ -24,12 +24,12 @@ describe('canonical chat transcript', () => {
     db.pragma('foreign_keys = ON')
     applySchemaMigrations(db)
     db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
-    const start = appendChatEvent(db, 'chat:stream-start', { conversationId: 'c1', streamId: 'e1', executionId: 'e1' })!
-    const delta = appendChatEvent(db, 'chat:stream-chunk', { conversationId: 'c1', streamId: 'e1', executionId: 'e1', content: 'Hi' })!
+    const start = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'stream-start', streamId: 'e1', scope: 'main' } })!
+    const delta = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'content-delta', streamId: 'e1', scope: 'main', block: { type: 'text', text: 'Hi' } } })!
     expect(delta.sequence).toBeGreaterThan(start.sequence)
     expect(listChatEvents(db, 'c1', start.sequence)).toEqual([delta])
-    expect(appendChatEvent(db, 'chat:title-updated', { conversationId: 'c1', title: 'New' })?.type).toBe('title-updated')
-    expect(appendChatEvent(db, 'chat:unknown', { conversationId: 'c1' })).toBeNull()
+    expect(persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'title-updated', title: 'New' } })?.type).toBe('title-updated')
+    expect(persistChatEvent(db, { conversationId: 'missing', executionId: 'e1', payload: { type: 'queue-changed' } })).toBeNull()
     db.close()
   })
 
@@ -50,10 +50,10 @@ describe('canonical chat transcript', () => {
     applySchemaMigrations(db)
     db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
     const common = { conversationId: 'c1', taskId: 'task1', executionId: 'exec1', iteration: 2, maInvocationId: 'parent' }
-    const calls = appendChatEvent(db, 'agent:execution-update', { event: 'step:tools-chosen', data: { ...common,
-      toolCalls: [{ id: 'call1', name: 'spawn_subagent', arguments: '{"invocationId":"child"}' }] } })
-    const results = appendChatEvent(db, 'agent:execution-update', { event: 'step:executed', data: { ...common,
-      results: [{ toolCallId: 'call1', success: true, output: 'done', structuredContent: { invocationId: 'child' } }] } })
+    const calls = executionUpdateToChatPayload('step:tools-chosen', { ...common,
+      toolCalls: [{ id: 'call1', name: 'spawn_subagent', arguments: '{"invocationId":"child"}' }] })
+    const results = executionUpdateToChatPayload('step:executed', { ...common,
+      results: [{ toolCallId: 'call1', success: true, output: 'done', structuredContent: { invocationId: 'child' } }] })
     expect(calls?.type).toBe('tool-calls')
     expect(results?.type).toBe('tool-results')
     if (calls?.type === 'tool-calls' && results?.type === 'tool-results') {
@@ -67,14 +67,14 @@ describe('canonical chat transcript', () => {
     const db = new Database(':memory:')
     applySchemaMigrations(db)
     db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
-    const step = appendChatEvent(db, 'agent:execution-update', { event: 'step:status', data: {
+    const step = executionUpdateToChatPayload('step:status', {
       conversationId: 'c1', executionId: 'exec1', taskId: 'task1', iteration: 2,
       status: 'executing', maInvocationId: 'child',
-    } })
-    expect(step).toMatchObject({ type: 'execution-step', executionId: 'exec1', taskId: 'task1', iteration: 2, invocationId: 'child' })
-    const end = appendChatEvent(db, 'agent:execution-update', { event: 'task:completed', data: {
+    })
+    expect(step).toMatchObject({ type: 'execution-step', taskId: 'task1', iteration: 2, invocationId: 'child' })
+    const end = executionUpdateToChatPayload('task:completed', {
       conversationId: 'c1', executionId: 'exec1', taskId: 'task1',
-    } })
+    })
     expect(end).toMatchObject({ type: 'transcript-item', item: { type: 'execution-marker', taskId: 'task1', status: 'completed' } })
     db.close()
   })

@@ -135,9 +135,7 @@ onMounted(async () => {
       agentStore.dismissHITLByConversation(payload?.conversationId)
     }),
     api.agent.onExecutionUpdate((data) => {
-      if (isExecutionUpdatePayload(data) && ![
-        'task:started', 'task:completed', 'task:error', 'step:status', 'step:tools-chosen', 'step:executed',
-      ].includes(data.event)) agentStore.handleExecutionUpdate(data)
+      if (isExecutionUpdatePayload(data)) agentStore.handleExecutionUpdate(data)
     }),
     api.agent.onPlanningStateUpdated((data) => {
       agentStore.handlePlanningStateUpdated(data)

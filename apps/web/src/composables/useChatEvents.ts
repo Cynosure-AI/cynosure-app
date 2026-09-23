@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { wsConnected } from '../api/http'
 import { useChatStore } from '../stores/chat.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
+import { toDisplayMessage } from '../utils/message-view'
 
 /** Reduce live and replayed canonical events through the same chat state path. */
 export function useChatEvents(): () => void {
@@ -65,7 +66,8 @@ export function useChatEvents(): () => void {
     const base = { streamId: 'streamId' in event ? event.streamId : event.executionId, conversationId: event.conversationId }
     switch (event.type) {
       case 'stream-start': {
-        const data = { ...base, agentId: event.agentId, agentName: event.agentName, agentIconUrl: event.agentIconUrl,
+        const data = { ...base, sequence: event.sequence, createdAt: event.createdAt,
+          agentId: event.agentId, agentName: event.agentName, agentIconUrl: event.agentIconUrl,
           maInvocationId: event.invocationId, maCodename: event.maCodename, maAgentName: event.maAgentName }
         if (event.scope === 'subagent') chatStore.handleSubAgentStreamStart(data)
         else chatStore.handleStreamStart(data)
@@ -143,53 +145,16 @@ export function useChatEvents(): () => void {
         }
         if (event.item.type !== 'message') return
         const item: MessageItem = event.item
-        const content = item.content.flatMap((block) => block.type === 'text' ? [block.text] : []).join('')
-        const thinking = item.content.flatMap((block) => block.type === 'reasoning' ? [block.text] : []).join('') || undefined
         chatStore.handleNewMessage({ conversationId: event.conversationId, streamId: event.executionId, message: {
-          id: item.id, conversationId: event.conversationId, sequence: event.sequence, role: item.role, content, thinking, createdAt: item.createdAt,
-          agentId: item.agentId, agentName: item.agentName, agentIconUrl: item.agentIconUrl,
-          maInvocationId: item.invocationId, maCodename: item.maCodename, maAgentName: item.maAgentName,
-          imageDataUrls: item.content.flatMap((block) => block.type === 'image' ? [block.url] : []),
-          videoDataUrls: item.content.flatMap((block) => block.type === 'video' ? [block.url] : []),
-          audioDataUrls: item.content.flatMap((block) => block.type === 'audio' ? [block.url] : []),
-          structuredContent: item.content.flatMap((block) => block.type === 'structured' ? [block.value] : [])[0],
-          fileAttachments: item.content.flatMap((block) => block.type === 'file' ? [{ name: block.name, href: block.url }] : []),
+          ...toDisplayMessage(item, event.sequence), conversationId: event.conversationId,
         } })
         return
       }
       case 'execution-step':
-        agentStore.handleExecutionUpdate({ event: 'step:status', data: {
-          conversationId: event.conversationId, executionId: event.executionId,
-          taskId: event.taskId, iteration: event.iteration, status: event.status,
-          message: event.message, maCodename: event.maCodename, maAgentName: event.maAgentName,
-          maInvocationId: event.invocationId, timestamp: event.createdAt, sequence: event.sequence,
-        } })
+      case 'tool-calls':
+      case 'tool-results':
+        agentStore.handleChatToolEvent(event)
         return
-      case 'tool-calls': {
-        const item = event.items[0]
-        if (item) {
-          agentStore.recordToolSequence(event.conversationId, event.sequence, item.taskId, item.iteration, item.parentInvocationId)
-          agentStore.handleExecutionUpdate({ event: 'step:tools-chosen', data: {
-            conversationId: event.conversationId, executionId: event.executionId,
-            taskId: item.taskId, iteration: item.iteration, maInvocationId: item.parentInvocationId,
-            toolCalls: event.items.map((call) => ({ id: call.callId, name: call.name, arguments: call.arguments })),
-          } })
-        }
-        return
-      }
-      case 'tool-results': {
-        const item = event.items[0]
-        if (item) agentStore.handleExecutionUpdate({ event: 'step:executed', data: {
-          conversationId: event.conversationId, executionId: event.executionId,
-          taskId: item.taskId, iteration: item.iteration,
-          results: event.items.map((result) => ({
-            toolCallId: result.callId, name: result.name, success: result.success, invocationId: result.invocationId,
-            output: result.content.flatMap((block) => block.type === 'text' ? [block.text] : []).join(''),
-            images: result.content.flatMap((block) => block.type === 'image' ? [block.url] : []),
-          })),
-        } })
-        return
-      }
     }
   }
 

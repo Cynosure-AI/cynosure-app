@@ -14,9 +14,7 @@ export interface ChatHistoryRow {
     tool_calls_json: string | null
     tool_call_id: string | null
     agent_id: string | null
-    image_urls_json: string | null
-    audio_urls_json: string | null
-    content_blocks_json?: string | null
+    content_blocks_json: string | null
     created_at: number
 }
 
@@ -32,18 +30,15 @@ export function buildRecentImageArtifactsSystemHint(rows: ChatHistoryRow[], limi
 
     for (let i = rows.length - 1; i >= 0 && artifacts.length < limit; i--) {
         const row = rows[i]
-        if (row.role !== 'assistant' || !row.image_urls_json) continue
-        try {
-            const urls = JSON.parse(row.image_urls_json) as string[]
-            for (let j = urls.length - 1; j >= 0 && artifacts.length < limit; j--) {
-                const url = urls[j]
-                const path = extractFilePathFromFileUrl(url)
-                if (!path || seen.has(path)) continue
-                seen.add(path)
-                artifacts.push({ path, url })
-            }
-        } catch {
-            // Ignore malformed image metadata.
+        if (row.role !== 'assistant') continue
+        const urls = parseContentBlocks(row.content_blocks_json)
+            .flatMap((block) => block.type === 'image' ? [block.url] : [])
+        for (let j = urls.length - 1; j >= 0 && artifacts.length < limit; j--) {
+            const url = urls[j]
+            const path = extractFilePathFromFileUrl(url)
+            if (!path || seen.has(path)) continue
+            seen.add(path)
+            artifacts.push({ path, url })
         }
     }
 
@@ -86,8 +81,8 @@ export function attachPreviousGeneratedImageToActiveUser(
         if (row.role === 'user') break
         if (row.role !== 'assistant') continue
 
-        const urls = parseJsonArray<unknown>(row.image_urls_json)
-            .filter((url): url is string => typeof url === 'string')
+        const urls = parseContentBlocks(row.content_blocks_json)
+            .flatMap((block) => block.type === 'image' ? [block.url] : [])
         if (urls.length) generatedImageUrl = urls.at(-1) || null
         break
     }
@@ -190,7 +185,7 @@ export function buildConversationHistory(input: {
     const { db, conversationId, mainAgentId, inlineAttachmentTextLimit } = input
     const historyRows = db
         .prepare(
-            'SELECT id, role, content, tool_calls_json, tool_call_id, agent_id, image_urls_json, audio_urls_json, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+            'SELECT id, role, content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as ChatHistoryRow[]
     const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)
@@ -236,22 +231,18 @@ function buildHistoryContent(
     inlineAttachmentTextLimit: number,
     fileAttachments: FileAttachmentArtifact[],
 ): string | ContentPart[] {
-    const canonicalBlocks = parseContentBlocks(row.content_blocks_json || null)
-    const canonicalText = canonicalBlocks?.flatMap((block) => block.type === 'text' ? [block.text] : []).join('')
-    if (row.role !== 'user') return canonicalText ?? row.content
+    const canonicalBlocks = parseContentBlocks(row.content_blocks_json)
+    const canonicalText = canonicalBlocks.flatMap((block) => block.type === 'text' ? [block.text] : []).join('')
+    if (row.role !== 'user') return canonicalText
 
-    const imageUrls = canonicalBlocks
-        ? canonicalBlocks.flatMap((block) => block.type === 'image' ? [block.url] : [])
-        : parseJsonArray<string>(row.image_urls_json).filter((url) => typeof url === 'string')
-    const audioUrls = canonicalBlocks
-        ? canonicalBlocks.flatMap((block) => block.type === 'audio' ? [block.url] : [])
-        : parseJsonArray<string>(row.audio_urls_json).filter((url) => typeof url === 'string')
+    const imageUrls = canonicalBlocks.flatMap((block) => block.type === 'image' ? [block.url] : [])
+    const audioUrls = canonicalBlocks.flatMap((block) => block.type === 'audio' ? [block.url] : [])
 
     if (!fileAttachments.length && !imageUrls.length && !audioUrls.length) {
-        return canonicalText ?? row.content
+        return canonicalText
     }
 
-    const blocks: ContentBlock[] = [{ type: 'text', text: canonicalText ?? row.content }]
+    const blocks: ContentBlock[] = [{ type: 'text', text: canonicalText }]
     for (const file of fileAttachments) {
         if (file.textBytes > inlineAttachmentTextLimit) {
             const status = file.chunkCount && file.chunkCount > 0
@@ -279,19 +270,11 @@ function buildHistoryContent(
     return contentBlocksToProviderContent(blocks, (url) => artifactFileUrlToDataUrl(url) || url)
 }
 
-function parseContentBlocks(json: string | null): ContentBlock[] | null {
-    if (!json) return null
-    try {
-        const parsed = JSON.parse(json) as unknown
-        return Array.isArray(parsed) ? parsed as ContentBlock[] : null
-    } catch { return null }
-}
-
-function parseJsonArray<T>(json: string | null): T[] {
+function parseContentBlocks(json: string | null): ContentBlock[] {
     if (!json) return []
     try {
-        const parsed = JSON.parse(json)
-        return Array.isArray(parsed) ? parsed : []
+        const parsed = JSON.parse(json) as unknown
+        return Array.isArray(parsed) ? parsed as ContentBlock[] : []
     } catch {
         return []
     }

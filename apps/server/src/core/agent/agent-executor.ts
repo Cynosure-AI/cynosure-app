@@ -11,7 +11,8 @@ import {
 } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import { IncompleteModelResponseError, type ChatMessage, type ToolCall, type ToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
-import type { ReasoningEffort } from '@shared/types'
+import type { ChatEventPayload, ReasoningEffort } from '@shared/types'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
 import {
     artifactFileUrlToDataUrl,
     materializeAudioArtifacts,
@@ -91,12 +92,8 @@ export interface AgentExecutorConfig {
     emitEvents?: boolean
     /** Extra metadata to merge into all emitted EventBus events (e.g. { maCodename, maAgentName } for sub-agent attribution) */
     eventMeta?: Record<string, unknown>
-    /**
-     * Prefix for broadcast stream events (default: 'chat:stream').
-     * Sub-agents use 'chat:subagent-stream' so the UI can handle them
-     * with dedicated handlers that don't interfere with primary stream state.
-     */
-    streamEventPrefix?: string
+    /** Explicit stream ownership keeps sub-agent events separate from the main response. */
+    streamScope?: 'main' | 'subagent'
     /** Context window size (max tokens) for the model being used.
      *  Included in stream-end events so the UI can display context usage. */
     contextWindow?: number
@@ -215,7 +212,7 @@ export class AgentExecutor {
     get lastStreamId(): string { return this._lastStreamId || this._streamId }
 
     private _streamId: string
-    private _sp: string
+    private _scope: 'main' | 'subagent'
     private steeringRequested = false
     private modelAbortController: AbortController | null = null
 
@@ -239,7 +236,7 @@ export class AgentExecutor {
             ...config,
         }
         this._streamId = config.streamId ?? nanoid()
-        this._sp = config.streamEventPrefix ?? 'chat:stream'
+        this._scope = config.streamScope ?? 'main'
     }
 
     // -------------------------------------------------------------------------
@@ -537,26 +534,34 @@ export class AgentExecutor {
         getEventBus().emit(event, meta ? { ...payload, ...meta } : payload)
     }
 
+    private emitChat(payload: ChatEventPayload): void {
+        publishChatEvent(this.config.broadcast, {
+            conversationId: this.config.conversationId,
+            executionId: this._streamId,
+            payload,
+        })
+    }
+
     private broadcastStreamStart(streamId: string): void {
         const meta = this.config.eventMeta
-        this.config.broadcast(`${this._sp}-start`, {
-            streamId,
-            conversationId: this.config.conversationId,
+        this.emitChat({ type: 'stream-start', streamId, scope: this._scope,
             agentId: this.config.agentId,
             agentName: this.config.agentName,
             agentIconUrl: this.config.agentIconUrl,
-            maCodename: meta?.maCodename,
-            maAgentName: meta?.maAgentName,
-            maInvocationId: meta?.maInvocationId,
+            maCodename: meta?.maCodename as string | undefined,
+            maAgentName: meta?.maAgentName as string | undefined,
+            invocationId: meta?.maInvocationId as string | undefined,
         })
     }
 
     private broadcastStreamEnd(streamId: string, extra: Record<string, unknown> = {}): void {
-        this.config.broadcast(`${this._sp}-end`, {
-            streamId,
-            conversationId: this.config.conversationId,
+        this.emitChat({ type: 'stream-end', streamId, scope: this._scope,
             contextWindow: this.config.contextWindow,
-            ...extra,
+            cancelled: extra.cancelled === true,
+            model: typeof extra.model === 'string' ? extra.model : undefined,
+            usage: extra.usage as { promptTokens: number; completionTokens: number; totalTokens: number } | undefined,
+            contextTokens: typeof extra.contextTokens === 'number' ? extra.contextTokens : undefined,
+            images: Array.isArray(extra.images) ? extra.images as string[] : undefined,
         })
     }
 
@@ -582,9 +587,9 @@ export class AgentExecutor {
         if (contextTokens == null) return
 
         if (usage) {
-            this.config.broadcast(`${this._sp}-usage`, {
-                conversationId,
-                usage,
+            this.emitChat({ type: 'usage',
+                promptTokens: usage.promptTokens, completionTokens: usage.completionTokens,
+                totalTokens: usage.totalTokens,
                 model: this.config.model,
                 contextWindow: this.config.contextWindow,
                 contextTokens,
@@ -741,7 +746,7 @@ export class AgentExecutor {
         usage: Usage
         error?: Error
     }> {
-        const { broadcast, conversationId } = this.config
+        const { conversationId } = this.config
         let content = ''
         let thinking = ''
         const images: string[] = []
@@ -755,12 +760,12 @@ export class AgentExecutor {
                 signal?.throwIfAborted()
                 if (chunk.content) {
                     content += chunk.content
-                    broadcast(`${this._sp}-chunk`, { streamId, conversationId, content: chunk.content })
+                    this.emitChat({ type: 'content-delta', streamId, scope: this._scope, block: { type: 'text', text: chunk.content } })
                     this.emit('step:content', { conversationId, content: chunk.content })
                 }
                 if (chunk.thinking) {
                     thinking += chunk.thinking
-                    broadcast(`${this._sp}-thinking`, { streamId, conversationId, thinking: chunk.thinking })
+                    this.emitChat({ type: 'content-delta', streamId, scope: this._scope, block: { type: 'reasoning', text: chunk.thinking } })
                     this.emit('step:thinking', { conversationId, thinking: chunk.thinking })
                 }
                 if (chunk.images?.length) {
@@ -773,7 +778,8 @@ export class AgentExecutor {
                         console.warn('[artifacts] Failed to materialize generated image:', err instanceof Error ? err.message : err)
                     }
                     images.push(...artifactUrls)
-                    broadcast(`${this._sp}-images`, { streamId, conversationId, images: artifactUrls })
+                    this.emitChat({ type: 'media-added', streamId, scope: this._scope,
+                        blocks: artifactUrls.map((url) => ({ type: 'image', artifactId: url, url })) })
                 }
                 if (chunk.toolCalls?.length) toolCalls = chunk.toolCalls
                 if (chunk.usage) usage = chunk.usage
@@ -828,14 +834,8 @@ export class AgentExecutor {
         const steering = await this.config.takeSteeringMessages()
         if (!steering.length) return false
         messages.push(...steering)
-        this.config.broadcast(`${this._sp}-discard`, {
-            streamId,
-            conversationId: this.config.conversationId,
-        })
-        this.config.broadcast(`${this._sp}-reset`, {
-            streamId,
-            conversationId: this.config.conversationId,
-        })
+        this.emitChat({ type: 'stream-discard', streamId, scope: this._scope })
+        this.emitChat({ type: 'stream-reset', streamId, scope: this._scope })
         return true
     }
 
@@ -881,8 +881,6 @@ export class AgentExecutor {
         usage: Usage
         streamId: string
     }> {
-        const { conversationId } = this.config
-
         let streamId = currentStreamId
         let lastError: Error | undefined
 
@@ -893,7 +891,7 @@ export class AgentExecutor {
                 streamId = nanoid()
                 this.broadcastStreamStart(streamId)
             } else {
-                this.config.broadcast(`${this._sp}-reset`, { streamId, conversationId })
+                this.emitChat({ type: 'stream-reset', streamId, scope: this._scope })
             }
 
             const signal = this.modelSignal()
@@ -1199,23 +1197,25 @@ export class AgentExecutor {
         const createdAt = Date.now()
         getDb().prepare(
             `INSERT INTO messages (
-                id, conversation_id, role, content, thinking, tool_calls_json, agent_id,
+                id, conversation_id, role, content, content_blocks_json, tool_calls_json, agent_id,
                 ma_codename, ma_agent_name, ma_invocation_id,
                 provider, model, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
-            id, conversationId, 'assistant', assistantContent || '', thinking || null, JSON.stringify(visibleToolCalls), agentId || null,
+            id, conversationId, 'assistant', assistantContent || '',
+            messageContentJson({ id, content: assistantContent || '', thinking }),
+            JSON.stringify(visibleToolCalls), agentId || null,
             (meta?.maCodename as string) || null,
             (meta?.maAgentName as string) || null,
             (meta?.maInvocationId as string) || null,
             providerId || null, model || null, createdAt
         )
-        this.config.broadcast('chat:new-message', {
-            conversationId, streamId,
-            message: { id, conversationId, role: 'assistant', content: assistantContent || '',
-                thinking, createdAt, agentId, maCodename: meta?.maCodename,
-                maAgentName: meta?.maAgentName, maInvocationId: meta?.maInvocationId },
-        })
+        publishChatEvent(this.config.broadcast, { conversationId, executionId: this._streamId, payload: {
+            type: 'transcript-item', item: messageToTranscriptItem({ id, role: 'assistant', content: assistantContent || '',
+                thinking, createdAt, agentId, maCodename: meta?.maCodename as string | undefined,
+                maAgentName: meta?.maAgentName as string | undefined, maInvocationId: meta?.maInvocationId as string | undefined,
+                provider: providerId, model }, streamId),
+        } })
     }
 
     /** Save tool result messages to DB and broadcast them to the UI. */
@@ -1229,17 +1229,16 @@ export class AgentExecutor {
             const now = Date.now()
             db.prepare(
                 `INSERT INTO messages (
-                    id, conversation_id, role, content, tool_call_id, image_urls_json, audio_urls_json, generated_media,
-                    structured_content_json, agent_id,
+                    id, conversation_id, role, content, tool_call_id, content_blocks_json, generated_media,
+                    agent_id,
                     ma_codename, ma_agent_name, ma_invocation_id,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
                 toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId,
-                tr.images?.length ? JSON.stringify(tr.images) : null,
-                (tr.audioArtifacts || tr.audioDataUrls)?.length ? JSON.stringify(tr.audioArtifacts || tr.audioDataUrls) : null,
+                messageContentJson({ id: toolMsgId, content: tr.output, imageDataUrls: tr.images,
+                    audioDataUrls: tr.audioArtifacts || tr.audioDataUrls, structuredContent: tr.structuredContent }),
                 tr.generatedMedia ? 1 : 0,
-                tr.structuredContent === undefined ? null : JSON.stringify(tr.structuredContent),
                 agentId || null,
                 (meta?.maCodename as string) || null,
                 (meta?.maAgentName as string) || null,
@@ -1247,20 +1246,19 @@ export class AgentExecutor {
                 now
             )
 
-            broadcast('chat:new-message', {
-                conversationId,
-                message: {
-                    id: toolMsgId, conversationId, role: 'tool', content: tr.output,
+            publishChatEvent(broadcast, { conversationId, executionId: this._streamId, payload: {
+                type: 'transcript-item', item: messageToTranscriptItem({
+                    id: toolMsgId, role: 'tool', content: tr.output,
                     agentId, agentName, agentIconUrl,
-                    maCodename: meta?.maCodename,
-                    maAgentName: meta?.maAgentName,
-                    maInvocationId: meta?.maInvocationId,
+                    maCodename: meta?.maCodename as string | undefined,
+                    maAgentName: meta?.maAgentName as string | undefined,
+                    maInvocationId: meta?.maInvocationId as string | undefined,
                     imageDataUrls: tr.images,
                     audioDataUrls: tr.audioArtifacts || tr.audioDataUrls,
                     structuredContent: tr.structuredContent,
                     createdAt: now,
-                },
-            })
+                }, this._streamId),
+            } })
         }
     }
 }
