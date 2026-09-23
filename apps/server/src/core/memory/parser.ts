@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
 import { createHash } from 'node:crypto'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
-import { getEmbeddingProvider } from './embedding.js'
+import { getEmbeddingService } from './embedding.js'
 import { getRAGStore, type VectorDocument } from './rag.js'
 import type { SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
@@ -134,7 +134,7 @@ export class MemoryParser {
     if (chunks.length === 0) return 0
     opts?.onProgress?.(0, chunks.length)
 
-    const embedder = getEmbeddingProvider()
+    const embedder = getEmbeddingService()
     const ragStore = getRAGStore()
     const BATCH_SIZE = 32
     let totalStored = 0
@@ -189,6 +189,7 @@ export class MemoryParser {
           sourceStart: item.sourceStart,
           sourceEnd: item.sourceEnd,
           embeddingModel: embeddings[j].model,
+          embeddingProfileFingerprint: embeddings[j].profileFingerprint,
           representationType: 'raw',
         }))
         for (const doc of docs) doc.sourceChunkId = doc.id
@@ -255,19 +256,19 @@ export class MemoryParser {
     filter?: string,
     onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void,
   ): Promise<RetrievedChunk[]> {
-    const embedder = getEmbeddingProvider()
+    const embedder = getEmbeddingService()
     const ragStore = getRAGStore()
     const reranker = getMemoryReranker()
 
     onStatus?.('rag')
-    const { vector } = await embedder.embed(query)
+    const { vector, profileFingerprint } = await embedder.embed(query)
     // Search a wider pool because analyzed chunks may have several independent
     // representations. They are collapsed to authoritative chunks below.
     const candidateCount = reranker.getCandidateCount(topK)
     const representationCandidateCount = candidateCount * 4
     const [denseCandidates, lexicalCandidates] = await Promise.all([
-      ragStore.search(tableName, vector, representationCandidateCount, filter),
-      ragStore.lexicalSearch(tableName, query, representationCandidateCount, filter),
+      ragStore.search(tableName, vector, representationCandidateCount, filter, profileFingerprint),
+      ragStore.lexicalSearch(tableName, query, representationCandidateCount, filter, profileFingerprint),
     ])
     const representationResults = fuseRetrievalChannels([denseCandidates, lexicalCandidates], representationCandidateCount)
       .filter((result) => isRetrievableChunk(result.text))

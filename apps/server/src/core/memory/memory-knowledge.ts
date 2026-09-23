@@ -4,7 +4,7 @@ import { getDb } from '../../db/database.js'
 import type { DeleteKnowledgeAssertionResult, KnowledgeAssertion, KnowledgeEntityMergeResult, KnowledgeEntity, KnowledgeEntityType, KnowledgeGraphProjection, ImportanceLevel, KnowledgeSourceChunk } from './knowledge-types.js'
 import type { PreparedMemoryChunk, RetrievedChunk } from './parser.js'
 import { fuseRetrievalChannels } from './parser.js'
-import { getEmbeddingProvider } from './embedding.js'
+import { getEmbeddingService } from './embedding.js'
 import { lanceDbInFilter } from './lancedb-filter.js'
 import { getRAGStore, type SearchResult } from './rag.js'
 import { getMemoryReranker } from './reranker.js'
@@ -1510,12 +1510,12 @@ export class MemoryKnowledgeStore {
     try {
       const reranker = getMemoryReranker()
       const candidateCount = Math.min(RERANKER_LIMITS.maxCandidateCount, Math.max(24, reranker.getCandidateCount(limit * 4)))
-      const embedding = await getEmbeddingProvider().embed(query)
+      const embedding = await getEmbeddingService().embed(query)
       const rag = getRAGStore()
       const filter = lanceDbInFilter('folderId', scopes)
       const [dense, lexical] = await Promise.all([
-        rag.search(MEMORY_KNOWLEDGE_VECTOR_TABLE, embedding.vector, candidateCount, filter),
-        rag.lexicalSearch(MEMORY_KNOWLEDGE_VECTOR_TABLE, query, candidateCount, filter),
+        rag.search(MEMORY_KNOWLEDGE_VECTOR_TABLE, embedding.vector, candidateCount, filter, embedding.profileFingerprint),
+        rag.lexicalSearch(MEMORY_KNOWLEDGE_VECTOR_TABLE, query, candidateCount, filter, embedding.profileFingerprint),
       ])
       const fused = fuseRetrievalChannels([dense, lexical], candidateCount)
       const reranked = await reranker.rerank(query, fused, Math.min(fused.length, Math.max(16, limit * 3)))

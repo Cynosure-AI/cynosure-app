@@ -199,6 +199,19 @@ const MIGRATIONS: SchemaMigration[] = [
         description: 'Use chat events as the sole persisted execution timeline',
         up: (db) => db.exec('DROP TABLE IF EXISTS execution_steps'),
     },
+    {
+        version: 11,
+        description: 'Tag tool embedding caches with their generating profile',
+        up: (db) => {
+            for (const table of ['tool_router_embeddings', 'tool_router_tool_embeddings']) {
+                const columns = db.pragma(`table_info(${table})`) as Array<{ name: string }>
+                if (!columns.length) continue
+                if (!columns.some((column) => column.name === 'profile_fingerprint')) {
+                    db.exec(`ALTER TABLE ${table} ADD COLUMN profile_fingerprint TEXT NOT NULL DEFAULT ''`)
+                }
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

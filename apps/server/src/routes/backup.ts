@@ -12,7 +12,7 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { writeFileSync } from 'fs'
 import { extractFilePathFromFileUrl, getConversationArtifactsDir, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { getRAGStore } from '../core/memory/rag.js'
-import { getEmbeddingProvider } from '../core/memory/embedding.js'
+import { loadEmbeddingServiceFromDb } from '../core/memory/embedding.js'
 import { basename, dirname, join } from 'path'
 import {
     existsSync,
@@ -921,7 +921,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             results.settings = res
 
             // Reload the embedding provider from freshly restored settings.
-            getEmbeddingProvider().loadFromDb()
+            loadEmbeddingServiceFromDb()
             emitRestoreProgress('settings', res.errors.length > 0 ? 'failed' : 'completed')
         }
 

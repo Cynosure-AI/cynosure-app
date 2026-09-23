@@ -23,6 +23,8 @@ describe('global memory file search', () => {
     const { stopAllMemoryFolderWatchers } = await import('../../../src/core/memory/memory-folder-watcher.js')
     await stopAllMemoryFolderWatchers()
     const { closeDb } = await import('../../../src/db/database.js')
+    const { loadEmbeddingServiceFromDb } = await import('../../../src/core/memory/embedding.js')
+    loadEmbeddingServiceFromDb()
     closeDb()
     delete process.env.CYNOSURE_DATA_DIR
     await rm(dataDirectory, { recursive: true, force: true })
@@ -73,9 +75,11 @@ describe('global memory file search', () => {
     const recursiveMatch = await app.inject({ method: 'GET', url: '/api/memory-folders/file-search?query=nested-plan&folderId=folder-a' })
     expect(recursiveMatch.json()).toEqual([expect.objectContaining({ fileName: 'nested-plan.md', folderId: 'folder-c' })])
 
-    const { getEmbeddingProvider } = await import('../../../src/core/memory/embedding.js')
+    const { getEmbeddingService, setEmbeddingService } = await import('../../../src/core/memory/embedding.js')
+    setEmbeddingService({ baseUrl: 'http://127.0.0.1:1/v1', model: 'test', dimensions: 2 }, false)
     const { getRAGStore } = await import('../../../src/core/memory/rag.js')
-    const embed = vi.spyOn(getEmbeddingProvider(), 'embed').mockResolvedValue({ vector: [1, 0], model: 'test', dimensions: 2 })
+    const fingerprint = getEmbeddingService().profile.fingerprint
+    const embed = vi.spyOn(getEmbeddingService(), 'embed').mockResolvedValue({ vector: [1, 0], model: 'test', dimensions: 2, profileFingerprint: fingerprint })
     const vectorSearch = vi.spyOn(getRAGStore(), 'search').mockResolvedValue([{
       id: 'chunk-alpha', text: 'Plain source wording.', source: 'memory', sourceFile: 'alpha.md',
       folderId: 'folder-a', chunkIndex: 0, score: 0.82, denseScore: 0.82, scoreType: 'dense', createdAt: now,
@@ -89,7 +93,7 @@ describe('global memory file search', () => {
       expect.objectContaining({ fileName: 'alpha.md', folderId: 'folder-a', matchedFields: ['content'], similarity: 0.82 }),
     ])
     expect(embed).toHaveBeenCalledWith('space architecture')
-    expect(vectorSearch).toHaveBeenCalledWith(expect.any(String), [1, 0], 500, expect.stringContaining("'folder-a'"))
+    expect(vectorSearch).toHaveBeenCalledWith(expect.any(String), [1, 0], 500, expect.stringContaining("'folder-a'"), fingerprint)
     embed.mockRestore()
     vectorSearch.mockRestore()
 

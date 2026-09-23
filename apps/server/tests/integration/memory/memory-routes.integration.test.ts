@@ -39,6 +39,17 @@ describe('memory search routes', () => {
     await app.close()
   }, 30_000)
 
+  test('requires an explicit embedding provider when configuring memory', async () => {
+    const app = await createApp()
+    const response = await app.inject({
+      method: 'POST', url: '/api/memory/embeddings/configure',
+      payload: { model: 'embed-v1', dimensions: 2 },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error).toMatch(/Configure an embedding provider/)
+    await app.close()
+  })
+
   test('fails closed when an explicit memory folder does not exist', async () => {
     const app = await createApp()
     const response = await app.inject({

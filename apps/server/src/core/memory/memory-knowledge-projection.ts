@@ -1,5 +1,5 @@
 import { getDb } from '../../db/database.js'
-import { getEmbeddingProvider } from './embedding.js'
+import { getEmbeddingService } from './embedding.js'
 import { formatKnowledgeLiteral } from './memory-knowledge-format.js'
 import { getRAGStore, type VectorDocument } from './rag.js'
 
@@ -71,7 +71,7 @@ export class MemoryKnowledgeProjectionStore {
         return 0
       }
       throwIfAborted(signal)
-      const embeddings = await getEmbeddingProvider().embedBatch(projections.map((projection) => projection.searchText))
+      const embeddings = await getEmbeddingService().embedBatch(projections.map((projection) => projection.searchText))
       throwIfAborted(signal)
       const documents: VectorDocument[] = projections.map((projection, index) => ({
         ...projection,
@@ -83,6 +83,7 @@ export class MemoryKnowledgeProjectionStore {
         sectionPath: projection.source === 'knowledge_assertion' ? 'Knowledge assertions' : 'Entities',
         contentHash: String(run.content_hash),
         embeddingModel: embeddings[index].model,
+        embeddingProfileFingerprint: embeddings[index].profileFingerprint,
         // Knowledge projections are their own authoritative rows rather than a
         // search-only view of an indexed source chunk, so they are marked as
         // raw. These fields must be present: LanceDB rejects an append when a

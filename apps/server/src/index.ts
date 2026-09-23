@@ -44,7 +44,7 @@ import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
 import { executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
-import { getEmbeddingProvider } from './core/memory/embedding.js'
+import { loadEmbeddingServiceFromDb } from './core/memory/embedding.js'
 import { startToolEmbeddingWarmup } from './core/agent/tool-embedding-warmup.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
@@ -522,7 +522,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   await registerWebUi(app, startedAt)
 
   loadSavedProviders()
-  getEmbeddingProvider().loadFromDb()
+  loadEmbeddingServiceFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
   registerBuiltInTools()
