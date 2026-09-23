@@ -458,7 +458,7 @@ function formatDate(timestamp: number): string {
                 class="flex items-center rounded px-1.5 py-0.5"
                 :class="item.autoToolRouting ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-600'"
               ><Icon
-                icon="lucide:route"
+                icon="lucide:brain"
                 class="h-3 w-3"
               /></span>
               <template #content>
