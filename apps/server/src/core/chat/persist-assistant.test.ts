@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { describe, expect, test, vi } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
 import { persistAssistantTurn } from './persist-assistant.js'
+import { buildConversationHistory } from './message-history.js'
 
 describe('persistAssistantTurn', () => {
   test('stores multimodal content and publishes the same message', () => {
@@ -31,6 +32,24 @@ describe('persistAssistantTurn', () => {
         }),
       },
     })
+    db.close()
+  })
+
+  test('persists errors for reload without sending them back to the model', () => {
+    const db = new Database(':memory:')
+    applySchemaMigrations(db)
+    db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+    const broadcast = vi.fn()
+    const message = persistAssistantTurn(db, broadcast, {
+      conversationId: 'c1', streamId: 's1', content: 'Generated image rejected by content moderation.', isError: true,
+    })
+    const row = db.prepare('SELECT content, is_error FROM messages WHERE id = ?').get(message.id)
+    expect(row).toEqual({ content: 'Generated image rejected by content moderation.', is_error: 1 })
+    expect(broadcast).toHaveBeenCalledWith('chat:event', expect.objectContaining({
+      payload: { type: 'transcript-item', item: expect.objectContaining({ isError: true }) },
+    }))
+    const history = buildConversationHistory({ db, conversationId: 'c1', mainAgentId: null, inlineAttachmentTextLimit: 24_000 })
+    expect(history.messages).toEqual([])
     db.close()
   })
 })

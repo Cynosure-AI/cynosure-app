@@ -212,6 +212,11 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 12,
+        description: 'Mark persisted assistant error messages',
+        up: (db) => db.exec('ALTER TABLE messages ADD COLUMN is_error INTEGER NOT NULL DEFAULT 0'),
+    },
 ]
 
 /** The schema version this build produces and expects. */

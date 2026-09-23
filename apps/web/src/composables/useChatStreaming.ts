@@ -61,7 +61,7 @@ export interface ChatStreamingState {
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
-    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; role: string; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
+    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; role: string; isError?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
     handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
     handleCompactStart(data: { conversationId: string }): void
     handleCompactError(data: { conversationId: string; error: string }): void
@@ -635,6 +635,18 @@ export function useChatStreaming(
             isStreaming.value = false
             currentStreamId.value = null
 
+            // The server has already stored this error and published it as a
+            // transcript message. Finish the temporary stream without adding
+            // another browser-only error bubble.
+            if (messages.value.some(msg => msg.isError && msg.streamId === data.streamId && msg.content === data.error)) {
+                const pending = findStreamingMsg(data.streamId)
+                if (pending) {
+                    pending.isStreaming = false
+                    if (pending.id.startsWith('streaming_')) messages.value.splice(messages.value.indexOf(pending), 1)
+                }
+                return
+            }
+
             const streamMsg = findStreamingMsg(data.streamId)
             if (streamMsg) {
                 streamMsg.isStreaming = false
@@ -820,6 +832,7 @@ export function useChatStreaming(
             conversationId: string
             sequence?: number
             role: string
+            isError?: boolean
             content: string
             thinking?: string
             createdAt: number
@@ -838,6 +851,7 @@ export function useChatStreaming(
     }): void {
         function hydratePersisted(target: DisplayMessage): void {
             if (data.message.sequence !== undefined) target.sequence = data.message.sequence
+            target.isError = data.message.isError
             target.content = data.message.content
             if (data.message.thinking !== undefined) target.thinking = data.message.thinking
             if (data.message.imageDataUrls) target.imageDataUrls = data.message.imageDataUrls
@@ -869,7 +883,7 @@ export function useChatStreaming(
             }
             // Replace the temporary round ID with the persisted ID before actions
             // such as forking can address this message on the server.
-            if (data.streamId && data.message.role === 'assistant') {
+            if (data.streamId && data.message.role === 'assistant' && !data.message.isError) {
                 const round = findMsgByStreamId(data.streamId)
                 if (round) {
                     round.id = data.message.id
@@ -882,6 +896,8 @@ export function useChatStreaming(
                     id: data.message.id,
                     sequence: data.message.sequence,
                     role: data.message.role as DisplayMessage['role'],
+                    isError: data.message.isError,
+                    streamId: data.message.role === 'assistant' ? data.streamId : undefined,
                     content: data.message.content,
                     thinking: data.message.thinking,
                     imageDataUrls: data.message.imageDataUrls,

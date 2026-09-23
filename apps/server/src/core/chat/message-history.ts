@@ -10,6 +10,7 @@ import { contentBlocksToProviderContent } from './transcript.js'
 export interface ChatHistoryRow {
     id: string
     role: string
+    is_error?: number
     content: string
     tool_calls_json: string | null
     tool_call_id: string | null
@@ -185,13 +186,14 @@ export function buildConversationHistory(input: {
     const { db, conversationId, mainAgentId, inlineAttachmentTextLimit } = input
     const historyRows = db
         .prepare(
-            'SELECT id, role, content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+            'SELECT id, role, is_error, content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as ChatHistoryRow[]
     const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)
 
     const keptToolCallIds = new Set<string>()
     const filteredRows = historyRows.filter((row) => {
+        if (row.is_error) return false
         if (row.role === 'system' && row.content.startsWith(COMPACT_EVENT_PREFIX)) return false
         if (row.role === 'user') return true
         if (row.role === 'assistant') {

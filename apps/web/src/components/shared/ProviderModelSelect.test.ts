@@ -167,6 +167,24 @@ describe('ProviderModelSelect favorites', () => {
     expect(providerDefault.text()).toContain('deepseek/deepseek-v4-flash-0731')
   })
 
+  test('omits a chat provider default from reranker choices', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue([{ id: 'cohere/rerank-v3.5' }])
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'openrouter-1', modelValue: 'cohere/rerank-v3.5',
+        providers: [{ id: 'openrouter-1', name: 'OpenRouter', type: 'openrouter', defaultModel: 'deepseek/deepseek-v4-flash' }],
+        modelType: 'reranker', includeProviderDefault: false, onlyShowAvailableModels: true,
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+    const options = wrapper.findAll('[role="option"]').map(option => option.text())
+    expect(options).toContain('cohere/rerank-v3.5')
+    expect(options.join(' ')).not.toContain('deepseek')
+  })
+
   test('colors image pricing green and transcription pricing blue', async () => {
     const store = useProviderStore()
     store.listModelItems = vi.fn().mockImplementation(async (_providerId, type) => {

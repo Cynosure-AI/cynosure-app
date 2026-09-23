@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
+import { persistAssistantTurn } from '../chat/persist-assistant.js'
 import { interruptPlanningRun } from '../agent/planning-state.js'
 import { cancelPostActions } from '../agent/post-execution.js'
 import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../agent/context-trimmer.js'
@@ -43,6 +44,7 @@ export function persistChannelUserMessage(input: {
 }
 
 export function publishChannelStreamError(broadcast: BroadcastFn, conversationId: string, streamId: string, error: string): void {
+    persistAssistantTurn(getDb(), broadcast, { conversationId, streamId, content: error, isError: true })
     publishChatEvent(broadcast, { conversationId, executionId: streamId, payload: {
         type: 'stream-error', streamId, scope: 'main', error,
     } })

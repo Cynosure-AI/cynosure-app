@@ -1183,10 +1183,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                                     provider, model, prompt_tokens, completion_tokens, context_tokens,
                                     latency_ms, agent_id, ma_codename,
-                                    ma_agent_name, ma_invocation_id, generated_media, memory_sources_json,
+                                    ma_agent_name, ma_invocation_id, generated_media, is_error, memory_sources_json,
                                     content_blocks_json, created_at
                                  )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                             ).run(
                                 m.id, m.conversation_id, m.role, m.content,
                                 m.tool_calls_json || null, m.tool_call_id || null,
@@ -1195,7 +1195,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                 m.context_tokens ?? null,
                                 m.latency_ms ?? null, m.agent_id || null,
                                 m.ma_codename || null, m.ma_agent_name || null, m.ma_invocation_id || null,
-                                m.generated_media ?? 0, m.memory_sources_json || null,
+                                m.generated_media ?? 0, m.is_error ?? 0, m.memory_sources_json || null,
                                 m.content_blocks_json || null,
                                 m.created_at || Date.now()
                             )

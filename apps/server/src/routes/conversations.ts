@@ -155,6 +155,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             `).all(sourceConversationId, forkPoint.created_at, forkPoint.created_at, forkPoint.row_id) as {
                 id: string
                 role: string
+                is_error: number
                 content: string
                 tool_calls_json: string | null
                 tool_call_id: string | null
@@ -178,8 +179,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                     provider, model, prompt_tokens, completion_tokens, latency_ms,
                     content_blocks_json, agent_id, memory_sources_json,
-                    context_tokens, generated_media, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    context_tokens, generated_media, is_error, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `)
 
             for (const row of messageRows) {
@@ -205,6 +206,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     row.memory_sources_json,
                     row.context_tokens,
                     row.generated_media,
+                    row.is_error,
                     row.created_at,
                 )
             }
@@ -539,6 +541,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 id: string
                 conversation_id: string
                 role: string
+                is_error: number
                 content: string
                 tool_calls_json: string | null
                 tool_call_id: string | null
@@ -618,6 +621,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     sequence: eventByMessageId.get(row.id)?.sequence,
                     executionId: eventByMessageId.get(row.id)?.execution_id,
                     role: row.role,
+                    isError: row.is_error === 1,
                     content: [...blocks, ...fileBlocks],
                     contextEvidence: contextEvidence as import('@shared/types').ContextEvidence[] | undefined,
                     agentId: row.agent_id || undefined,

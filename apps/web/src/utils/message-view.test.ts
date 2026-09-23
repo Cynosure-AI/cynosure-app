@@ -26,3 +26,13 @@ test('projects the same canonical message for loading and live replay', () => {
     completionTokens: undefined, contextTokens: undefined, latencyMs: undefined,
   })
 })
+
+test('restores a saved assistant error as an error bubble', () => {
+  const item: MessageItem = {
+    type: 'message', id: 'error-message', role: 'assistant', isError: true, createdAt: 42,
+    content: [{ type: 'text', text: 'Generated image rejected by content moderation.' }],
+  }
+  expect(toDisplayMessage(item)).toMatchObject({
+    id: 'error-message', isError: true, content: 'Generated image rejected by content moderation.',
+  })
+})

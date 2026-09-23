@@ -708,12 +708,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const errorMessage = attemptedVideoOutput
           ? `Video generation failed: ${(err as Error).message}`
           : (err as Error).message
-        if (attemptedVideoOutput) {
-          persistAssistantTurn(db, executionBroadcast, {
-            conversationId, streamId, content: errorMessage, agentId,
-            provider: responseProvider, model: responseModel, startedAt: now,
-          })
-        }
+        persistAssistantTurn(db, executionBroadcast, {
+          conversationId, streamId, content: errorMessage, isError: true, agentId,
+          provider: responseProvider, model: responseModel, startedAt: now,
+        })
         emitChat({ type: 'stream-error', streamId, scope: 'main', error: errorMessage })
         return { streamId }
       } finally {

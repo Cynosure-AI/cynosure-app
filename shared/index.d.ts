@@ -11,6 +11,7 @@ export interface MessageItem {
   type: 'message'
   id: string
   role: ChatRole
+  isError?: boolean
   content: ContentBlock[]
   createdAt: number
   executionId?: string
