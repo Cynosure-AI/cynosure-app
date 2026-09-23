@@ -100,6 +100,28 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     return 0
   })
 
+  // The executor logs "choosing tools" before it persists the assistant's
+  // tool-calling message. Match their call IDs so the card follows the message
+  // that requested it, including when loading an older saved conversation.
+  const messageByCallId = new Map<string, Extract<TimelineEntry, { type: 'message' }>>()
+  for (const entry of entries) {
+    if (entry.type !== 'message' || entry.msg.role !== 'assistant') continue
+    for (const id of entry.msg.toolCallIds || []) messageByCallId.set(id, entry)
+  }
+  const linkedGroups = entries.flatMap((entry) => {
+    if (entry.type !== 'tool-group') return []
+    const message = entry.group.steps.flatMap((step) => step.toolCalls || [])
+      .map((call) => call.id && messageByCallId.get(call.id))
+      .find((candidate) => candidate !== undefined)
+    return message ? [{ group: entry, message }] : []
+  })
+  for (const { group, message } of linkedGroups.reverse()) {
+    const groupIndex = entries.indexOf(group)
+    if (groupIndex > entries.indexOf(message)) continue
+    entries.splice(groupIndex, 1)
+    entries.splice(entries.indexOf(message) + 1, 0, group)
+  }
+
   // ── Group sub-agent entries by invocation ───────────────────────────────
 
   function subAgentGroupIdOf(entry: TimelineEntry): string | null {

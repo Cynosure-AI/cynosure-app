@@ -27,6 +27,26 @@ describe('chat timeline chronology', () => {
     expect(ids(timeline)).toEqual(['23:45', 46, 47, '23:48'])
   })
 
+  it('places a saved tool card after the assistant message that requested its call', () => {
+    const timeline = buildChatTimeline([
+      message('user', 1, { role: 'user' }),
+      message('I will write it now', 3, { sequence: 30, toolCallIds: ['write-1'] }),
+      message('It is written', 5, { sequence: 50 }),
+    ], [
+      step(2, { taskId: 'write', sequence: 20, toolCalls: [{ id: 'write-1', name: 'memory_patch', arguments: '{}' }] }),
+      step(4, { taskId: 'unrelated', sequence: 40, toolCalls: [{ id: 'other-1', name: 'lookup', arguments: '{}' }] }),
+    ])
+    expect(ids(timeline)).toEqual(['user', 'I will write it now', 2, 4, 'It is written'])
+  })
+
+  it('keeps a linked card in timestamp order when it already follows its message', () => {
+    const timeline = buildChatTimeline([
+      message('request', 1, { toolCallIds: ['call-1'] }),
+      message('intervening', 2),
+    ], [step(3, { toolCalls: [{ id: 'call-1', name: 'lookup', arguments: '{}' }] })])
+    expect(ids(timeline)).toEqual(['request', 'intervening', 3])
+  })
+
   it('uses sequence to break equal timestamp ties and keeps unsequenced entries stable', () => {
     const timeline = buildChatTimeline([
       message('later-event', 1, { sequence: 20 }),

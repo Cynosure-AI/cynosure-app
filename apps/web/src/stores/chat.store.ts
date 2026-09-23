@@ -26,6 +26,7 @@ export interface Conversation {
 export interface DisplayMessage {
   id: string
   sequence?: number
+  toolCallIds?: string[]
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   thinking?: string

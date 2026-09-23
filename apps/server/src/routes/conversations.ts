@@ -35,6 +35,19 @@ function parseMessageBlocks(json: string | null): ContentBlock[] {
     } catch { return [] }
 }
 
+function parseToolCallIds(json: string | null): string[] | undefined {
+    if (!json) return undefined
+    try {
+        const calls = JSON.parse(json) as unknown
+        if (!Array.isArray(calls)) return undefined
+        const ids = calls.flatMap((call) => {
+            if (!call || typeof call !== 'object' || !('id' in call)) return []
+            return typeof call.id === 'string' ? [call.id] : []
+        })
+        return ids.length ? ids : undefined
+    } catch { return undefined }
+}
+
 async function cloneMediaBlocks(blocks: ContentBlock[], conversationId: string): Promise<ContentBlock[]> {
     const cloned: ContentBlock[] = []
     for (const block of blocks) {
@@ -619,6 +632,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     type: 'message' as const,
                     id: row.id,
                     sequence: eventByMessageId.get(row.id)?.sequence,
+                    toolCallIds: parseToolCallIds(row.tool_calls_json),
                     executionId: eventByMessageId.get(row.id)?.execution_id,
                     role: row.role,
                     isError: row.is_error === 1,

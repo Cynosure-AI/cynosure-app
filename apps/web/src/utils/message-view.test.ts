@@ -5,7 +5,7 @@ import { toDisplayMessage } from './message-view'
 test('projects the same canonical message for loading and live replay', () => {
   const item: MessageItem = {
     type: 'message', id: 'message-1', role: 'assistant', createdAt: 42,
-    invocationId: 'worker-1',
+    invocationId: 'worker-1', toolCallIds: ['call-1'],
     content: [
       { type: 'text', text: 'Here is the result' },
       { type: 'reasoning', text: 'Checked the source' },
@@ -15,7 +15,7 @@ test('projects the same canonical message for loading and live replay', () => {
     ],
   }
   expect(toDisplayMessage(item, 9)).toEqual({
-    id: 'message-1', sequence: 9, role: 'assistant', createdAt: 42,
+    id: 'message-1', sequence: 9, toolCallIds: ['call-1'], role: 'assistant', createdAt: 42,
     content: 'Here is the result', thinking: 'Checked the source',
     imageDataUrls: ['/api/files?path=image'], videoDataUrls: [], audioDataUrls: [],
     fileAttachments: [{ name: 'report.pdf', href: '/api/files?path=report' }],

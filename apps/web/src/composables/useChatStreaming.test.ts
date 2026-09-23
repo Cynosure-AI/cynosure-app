@@ -206,13 +206,14 @@ describe('persisted streaming message identities', () => {
     const event = { conversationId: 'conversation', streamId: 'stream' }
     streaming.handleStreamStart(event)
     streaming.handleStreamChunk({ ...event, content: 'Checking tools' })
-    streaming.handleNewMessage({ ...event, message: { id: 'saved-round', conversationId: 'conversation', role: 'assistant', content: 'Checking tools', createdAt: 1 } })
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-round', conversationId: 'conversation', role: 'assistant', content: 'Checking tools', toolCallIds: ['call-1'], createdAt: 1 } })
     streaming.handleStreamReset(event)
     streaming.handleStreamChunk({ ...event, content: 'Answer' })
     streaming.handleStreamEnd(event)
     streaming.handleNewMessage({ ...event, message: { id: 'saved-final', conversationId: 'conversation', role: 'assistant', content: 'Answer', createdAt: 2 } })
     expect(messages.value.map(m => m.id)).toEqual(['saved-round', 'saved-final'])
     expect(messages.value.map(m => m.content)).toEqual(['Checking tools', 'Answer'])
+    expect(messages.value[0].toolCallIds).toEqual(['call-1'])
   })
 
   test('assigns the saved ID to a completed sub-agent reply', () => {

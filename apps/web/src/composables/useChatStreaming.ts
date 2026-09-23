@@ -61,7 +61,7 @@ export interface ChatStreamingState {
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
-    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; role: string; isError?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
+    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; toolCallIds?: string[]; role: string; isError?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
     handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
     handleCompactStart(data: { conversationId: string }): void
     handleCompactError(data: { conversationId: string; error: string }): void
@@ -831,6 +831,7 @@ export function useChatStreaming(
             id: string
             conversationId: string
             sequence?: number
+            toolCallIds?: string[]
             role: string
             isError?: boolean
             content: string
@@ -851,6 +852,7 @@ export function useChatStreaming(
     }): void {
         function hydratePersisted(target: DisplayMessage): void {
             if (data.message.sequence !== undefined) target.sequence = data.message.sequence
+            if (data.message.toolCallIds) target.toolCallIds = data.message.toolCallIds
             target.isError = data.message.isError
             target.content = data.message.content
             if (data.message.thinking !== undefined) target.thinking = data.message.thinking
@@ -895,6 +897,7 @@ export function useChatStreaming(
                 messages.value.push({
                     id: data.message.id,
                     sequence: data.message.sequence,
+                    toolCallIds: data.message.toolCallIds,
                     role: data.message.role as DisplayMessage['role'],
                     isError: data.message.isError,
                     streamId: data.message.role === 'assistant' ? data.streamId : undefined,
