@@ -11,13 +11,49 @@ const ids = (timeline: ReturnType<typeof buildChatTimeline>) => timeline.map(ent
   entry.type === 'message' ? entry.msg.id : entry.type === 'sub-agent-group' ? entry.entries.map(inner => inner.key) : entry.ts)
 
 describe('chat timeline chronology', () => {
-  it('uses canonical sequence when persisted timestamps disagree', () => {
+  it('uses displayed timestamps when persistence sequence disagrees', () => {
     const timeline = buildChatTimeline([
       message('later', 1, { sequence: 20 }),
       message('earlier', 2, { sequence: 10 }),
     ], [])
-    expect(ids(timeline)).toEqual(['earlier', 'later'])
+    expect(ids(timeline)).toEqual(['later', 'earlier'])
   })
+
+  it('orders messages and tool cards by time even when their sequences are reversed', () => {
+    const timeline = buildChatTimeline([
+      message('23:48', 48, { sequence: 10 }),
+      message('23:45', 45, { sequence: 30 }),
+    ], [step(46, { sequence: 40 }), step(47, { sequence: 5 })])
+    expect(ids(timeline)).toEqual(['23:45', 46, 47, '23:48'])
+  })
+
+  it('uses sequence to break equal timestamp ties and keeps unsequenced entries stable', () => {
+    const timeline = buildChatTimeline([
+      message('later-event', 1, { sequence: 20 }),
+      message('first-optimistic', 1),
+      message('earlier-event', 1, { sequence: 10 }),
+      message('second-optimistic', 1),
+    ], [])
+    expect(ids(timeline)).toEqual(['earlier-event', 'later-event', 'first-optimistic', 'second-optimistic'])
+  })
+
+  it('does not pull a later preparation card above an intervening message', () => {
+    const timeline = buildChatTimeline(
+      [message('user', 0, { role: 'user' }), message('between', 2)],
+      [step(1, { iteration: 0, taskId: 'first' }), step(3, { iteration: 0, taskId: 'second' })],
+    )
+    expect(ids(timeline)).toEqual(['user', 1, 'between', 3])
+  })
+
+  it('still merges adjacent preparation cards for the same owner', () => {
+    const timeline = buildChatTimeline([], [
+      step(1, { iteration: 0, taskId: 'first' }),
+      step(2, { iteration: 0, taskId: 'second' }),
+    ])
+    expect(timeline).toHaveLength(1)
+    expect(timeline[0].type === 'tool-group' && timeline[0].group.steps.map(item => item.timestamp)).toEqual([1, 2])
+  })
+
   it('keeps a completed invocation below its own call and before a later retry', () => {
     const messages = [message('user', 0, { role: 'user' }),
       message('first-run', 2, { maInvocationId: 'first', maCodename: 'worker' }),
@@ -42,12 +78,22 @@ describe('chat timeline chronology', () => {
     expect(inner.type === 'tool-group' && inner.group.steps.map(s => s.timestamp)).toEqual([2, 3])
   })
 
-  it('keeps interleaved parallel runs grouped until main-agent activity resumes', () => {
+  it('separates invocations and splits them again after main-agent activity', () => {
     const timeline = buildChatTimeline([
       message('a1', 1, { maInvocationId: 'a' }), message('b1', 2, { maInvocationId: 'b' }),
       message('main', 3), message('b2', 4, { maInvocationId: 'b' }), message('a2', 5, { maInvocationId: 'a' }),
     ], [])
     expect(ids(timeline)).toEqual([['m-a1'], ['m-b1'], 'main', ['m-b2'], ['m-a2']])
+  })
+
+  it('splits interleaved invocations so expanded messages and tool cards stay chronological', () => {
+    const timeline = buildChatTimeline([
+      message('a1', 1, { maInvocationId: 'a' }),
+      message('b1', 2, { maInvocationId: 'b' }),
+      message('a2', 3, { maInvocationId: 'a' }),
+    ], [step(4, { maInvocationId: 'b', taskId: 'b-tool' })])
+    expect(ids(timeline)).toEqual([['m-a1'], ['m-b1'], ['m-a2'], ['tg-["b","b-tool",1]']])
+    expect(new Set(timeline.map(entry => entry.key)).size).toBe(timeline.length)
   })
 
   it('renders a continued invocation in a new chronological card', () => {
@@ -68,7 +114,7 @@ describe('chat timeline chronology', () => {
     expect(groups[1]?.continued).toBe(true)
   })
 
-  it('shows the model response before its delegation call and sub-agent card', () => {
+  it('keeps a delegation call and response in timestamp order', () => {
     const timeline = buildChatTimeline(
       [
         message('model-response', 2),
@@ -80,7 +126,7 @@ describe('chat timeline chronology', () => {
       }] })],
     )
 
-    expect(ids(timeline)).toEqual(['model-response', 1, ['m-sub-answer']])
+    expect(ids(timeline)).toEqual([1, 'model-response', ['m-sub-answer']])
   })
 
   it('reconstructs the sub-agent first message from its regular parameters', () => {
