@@ -81,8 +81,9 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     }
   }
 
-  // Persisted activity follows event order. Optimistic entries have no sequence
-  // yet and stay after persisted activity until their server event arrives.
+  // The timestamps shown in the chat are the timeline's ordering authority.
+  // Event sequence records persistence order, which can differ from when a
+  // message or tool step actually happened. Use it only for equal timestamps.
   function sequenceOf(entry: TimelineEntry): number | undefined {
     if (entry.type === 'message' || entry.type === 'tool-fallback' || entry.type === 'compact-event') return entry.msg.sequence
     if (entry.type === 'tool-group') return entry.group.steps.find((step) => step.sequence !== undefined)?.sequence
@@ -90,12 +91,13 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     return undefined
   }
   entries.sort((a, b) => {
+    if (a.ts !== b.ts) return a.ts - b.ts
     const left = sequenceOf(a)
     const right = sequenceOf(b)
     if (left !== undefined && right !== undefined) return left - right
     if (left !== undefined) return -1
     if (right !== undefined) return 1
-    return a.ts - b.ts
+    return 0
   })
 
   // ── Group sub-agent entries by invocation ───────────────────────────────
@@ -174,31 +176,29 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       continued: delegation?.continued ?? false,
       entries: innerEntries,
       ts: innerEntries[0].ts,
-      key: `sag-${groupId}-${innerEntries[0].ts}`
+      key: `sag-${groupId}-${innerEntries[0].key}`
     }
   }
 
   function groupSubAgentEntriesForTurn(turnEntries: TimelineEntry[]): TimelineEntry[] {
-    const groups = new Map<string, Extract<TimelineEntry, { type: 'sub-agent-group' }>>()
     const result: TimelineEntry[] = []
     const pendingDelegations: Delegation[] = []
+    let currentGroup: Extract<TimelineEntry, { type: 'sub-agent-group' }> | null = null
+    let currentGroupId: string | null = null
     for (const entry of turnEntries) {
       if (!entry.isSubAgent) {
         result.push(entry)
-        // Main-agent activity is a chronological boundary. A later
-        // continuation of the same invocation gets a new card here instead
-        // of being pulled back into the invocation's original card.
-        groups.clear()
+        currentGroup = null
+        currentGroupId = null
         pendingDelegations.push(...delegationsFrom(entry))
         continue
       }
       const groupId = subAgentGroupIdOf(entry) ?? entry.key
-      const existing = groups.get(groupId)
-      if (existing) {
-        existing.entries.push(entry)
+      if (currentGroup && currentGroupId === groupId) {
+        currentGroup.entries.push(entry)
       } else {
-        // Anchor each invocation at its first activity, immediately after its
-        // initiating call, rather than collecting all runs below the last call.
+        // A different invocation is a chronological boundary, even when the
+        // previous invocation has more activity later in the same turn.
         const exactIndex = pendingDelegations.findIndex(candidate =>
           candidate.invocationId === groupId || candidate.codename === groupId
         )
@@ -206,7 +206,8 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
         const matchedIndex = exactIndex >= 0 ? exactIndex : fallbackIndex
         const delegation = matchedIndex >= 0 ? pendingDelegations.splice(matchedIndex, 1)[0] : null
         const group = buildSubAgentGroup(groupId, [entry], delegation)
-        groups.set(groupId, group)
+        currentGroup = group
+        currentGroupId = groupId
         result.push(group)
       }
     }
@@ -245,8 +246,12 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
   }
 
   function mergePreTurnGroupsForTurn(turnEntries: TimelineEntry[]): TimelineEntry[] {
-    const mergedByOwner = new Map<string, Extract<TimelineEntry, { type: 'tool-group' }>>()
     const result: TimelineEntry[] = []
+    const ownerOf = (entry: Extract<TimelineEntry, { type: 'tool-group' }>): string => {
+      if (!entry.isSubAgent) return 'main'
+      const firstStep = entry.group.steps[0]
+      return firstStep?.maInvocationId ?? firstStep?.maCodename ?? firstStep?.maAgentName ?? 'sub-agent'
+    }
 
     for (const entry of turnEntries) {
       if (entry.type !== 'tool-group' || entry.group.iteration !== 0) {
@@ -254,11 +259,10 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
         continue
       }
 
-      const firstStep = entry.group.steps[0]
-      const owner = entry.isSubAgent
-        ? firstStep?.maInvocationId ?? firstStep?.maCodename ?? firstStep?.maAgentName ?? 'sub-agent'
-        : 'main'
-      const existing = mergedByOwner.get(owner)
+      const previous = result.at(-1)
+      // A visible entry between preparation cards is a chronological boundary.
+      const existing = previous?.type === 'tool-group' && previous.group.iteration === 0
+        && ownerOf(previous) === ownerOf(entry) ? previous : null
       if (existing) {
         existing.group.steps.push(...entry.group.steps)
         existing.group.steps.sort((a, b) => a.timestamp - b.timestamp)
@@ -269,7 +273,6 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       }
 
       const merged = { ...entry, group: { ...entry.group, steps: [...entry.group.steps] } }
-      mergedByOwner.set(owner, merged)
       result.push(merged)
     }
 
@@ -293,31 +296,5 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     return result
   }
 
-  function putDelegationResponseBeforeCall(source: TimelineEntry[]): TimelineEntry[] {
-    const result: TimelineEntry[] = []
-    for (let index = 0; index < source.length; index++) {
-      const call = source[index]
-      const response = source[index + 1]
-      const subAgent = source[index + 2]
-      if (
-        call?.type === 'tool-group' &&
-        delegationsFrom(call).length > 0 &&
-        response?.type === 'message' &&
-        response.msg.role === 'assistant' &&
-        !response.isSubAgent &&
-        subAgent?.type === 'sub-agent-group'
-      ) {
-        // The assistant text and tool call are emitted in that order by the
-        // model, but the completed tool step has an earlier persisted
-        // timestamp. Restore the conversational order for delegation rounds.
-        result.push(response, call, subAgent)
-        index += 2
-        continue
-      }
-      result.push(call)
-    }
-    return result
-  }
-
-  return putDelegationResponseBeforeCall(groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(entries)))
+  return groupSubAgentEntriesByTurn(mergePreTurnGroupsByTurn(entries))
 }
