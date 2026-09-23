@@ -284,7 +284,7 @@ onUnmounted(() => {
 
     <div
       v-else
-      :class="props.embedded ? 'max-w-none' : 'max-w-3xl mx-auto py-8 px-6'"
+      :class="props.embedded ? 'max-w-none' : 'mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8'"
     >
       <div
         v-if="!props.embedded"
