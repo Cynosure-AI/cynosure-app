@@ -92,4 +92,23 @@ describe('agent runtime hard-stop latch', () => {
     expect(store.executionSteps[0].toolCalls?.[0].name).toBe('lookup')
     expect(store.executionSteps[1].toolCalls).toBeUndefined()
   })
+
+  test('a routing decision reduces to the same visible timeline step', () => {
+    const store = useAgentStore()
+    store.setActiveViewConversation('conversation')
+    store.handleChatToolEvent({
+      version: 1, conversationId: 'conversation', executionId: 'execution',
+      sequence: 11, createdAt: 11, type: 'execution-step', taskId: 'router-task',
+      iteration: 0, status: 'routing-memory',
+    })
+    store.handleChatToolEvent({
+      version: 1, conversationId: 'conversation', executionId: 'execution',
+      sequence: 12, createdAt: 12, type: 'routing-decision', taskId: 'router-task',
+      phase: 'memory-context', entries: [{ name: 'notes.md', details: { type: 'memory' } }],
+    })
+    expect(store.executionSteps).toEqual([expect.objectContaining({
+      taskId: 'router-task',
+      toolCalls: [expect.objectContaining({ name: 'notes.md', arguments: '{"type":"memory"}' })],
+    })])
+  })
 })

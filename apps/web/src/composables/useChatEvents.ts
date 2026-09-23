@@ -151,6 +151,7 @@ export function useChatEvents(): () => void {
         return
       }
       case 'execution-step':
+      case 'routing-decision':
       case 'tool-calls':
       case 'tool-results':
         agentStore.handleChatToolEvent(event)

@@ -28,6 +28,11 @@ describe('canonical chat transcript', () => {
     const delta = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'content-delta', streamId: 'e1', scope: 'main', block: { type: 'text', text: 'Hi' } } })!
     expect(delta.sequence).toBeGreaterThan(start.sequence)
     expect(listChatEvents(db, 'c1', start.sequence)).toEqual([delta])
+    const routing = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: {
+      type: 'routing-decision', taskId: 'router', phase: 'memory-context',
+      entries: [{ name: 'notes.md', details: { type: 'memory' } }],
+    } })!
+    expect(listChatEvents(db, 'c1', delta.sequence)).toEqual([routing])
     expect(persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'title-updated', title: 'New' } })?.type).toBe('title-updated')
     expect(persistChatEvent(db, { conversationId: 'missing', executionId: 'e1', payload: { type: 'queue-changed' } })).toBeNull()
     db.close()

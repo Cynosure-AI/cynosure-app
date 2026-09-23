@@ -85,6 +85,7 @@ export type ChatEvent = ChatEventBase & (
   | { type: 'transcript-item'; item: TranscriptItem }
   | { type: 'tool-calls'; items: ToolCallItem[] }
   | { type: 'tool-results'; items: ToolResultItem[] }
+  | { type: 'routing-decision'; taskId: string; phase: 'task-context' | 'toolsets' | 'tools' | 'memory-candidates' | 'memory-context'; entries: Array<{ name: string; details: Record<string, unknown> }>; maCodename?: string; maAgentName?: string; parentInvocationId?: string }
   | { type: 'execution-step'; taskId: string; iteration: number; status: string; message?: string; maCodename?: string; maAgentName?: string; invocationId?: string }
   | { type: 'stream-start'; streamId: string; scope: 'main' | 'subagent'; agentId?: string; agentName?: string; agentIconUrl?: string | null; invocationId?: string; maCodename?: string; maAgentName?: string; parentInvocationId?: string }
   | { type: 'content-delta'; streamId: string; scope: 'main' | 'subagent'; block: { type: 'text' | 'reasoning'; text: string } }

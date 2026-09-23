@@ -5,8 +5,7 @@ import { MCP_CANDIDATE_COUNT, routeTools, routeToolsLexically, shouldRouteTools,
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
-import { completeWithDebugCapture } from '../../chat/debug-context.js'
-import { recordAuxiliaryModelUsage } from '../../usage-metering.js'
+import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
 
 const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
 const TOOLSET_DESCRIPTION_CHAR_LIMIT = 1_200
@@ -74,86 +73,88 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
     }
 
     const taskId = `router_${nanoid()}`
-    try {
-        signal?.throwIfAborted()
-        emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting required MCPs and toolsets...', eventMeta)
-        const selectedNamespaceIds = await selectToolsets({
-            conversationId,
-            gateway,
-            providerId,
-            model,
-            userQuery: userQuery || '',
-            recentMessages: recentMessages || [],
-            tools,
-            mcpMetadata,
-            signal,
-            debugContextEnabled,
-        })
-        emitToolsetRoutingSelection(
-            conversationId,
-            taskId,
-            selectedNamespaceIds,
-            tools,
-            mcpMetadata || [],
-            eventMeta,
-        )
-        const namespaceFilteredTools = filterToolsByNamespace(tools, selectedNamespaceIds, protectedNames)
-        const autoIncludedToolNames = collectAutoIncludedToolNames(namespaceFilteredTools, selectedNamespaceIds)
-        emitToolRoutingStatus(
-            conversationId,
-            taskId,
-            'finding-tools',
-            `Filtering tools from ${selectedNamespaceIds.size} selected toolset${selectedNamespaceIds.size === 1 ? '' : 's'}...`,
-            eventMeta,
-        )
-        const routedTools = await routeTools({
-            userQuery: userQuery || '',
-            recentMessages: recentMessages || [],
-            allTools: namespaceFilteredTools,
-            availableTools: tools,
-            mcpMetadata,
-            preferredToolNames,
-            usedToolNames,
-            // Complete small toolsets remain included after ordinary semantic
-            // ranking, so they keep a routerScore without consuming the normal cap.
-            requiredScoredToolNames: autoIncludedToolNames,
-            onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
-        })
-        signal?.throwIfAborted()
-        emitToolRoutingSelection(
-            conversationId,
-            taskId,
-            routedTools,
-            'gathered-context',
-            eventMeta,
-            routedTools.length ? undefined : 'none-found',
-            autoIncludedToolNames.size > 0
-                ? 'automatic'
-                : routedTools.some((tool) => typeof (tool as RoutedToolDefinition).routerScore === 'number') ? 'semantic' : 'lexical',
-        )
-        return routedTools
-    } catch (err) {
-        if ((err as Error).name === 'AbortError' || signal?.aborted) throw err
-        console.warn('[tool-router] Routing failed, using deterministic lexical routing:', err)
-        const fallbackTools = routeToolsLexically({
-            userQuery: userQuery || '',
-            recentMessages: recentMessages || [],
-            allTools: tools,
-            mcpMetadata,
-            preferredToolNames,
-            usedToolNames,
-        })
-        emitToolRoutingSelection(
-            conversationId,
-            taskId,
-            fallbackTools,
-            'gathered-context',
-            eventMeta,
-            fallbackTools.length ? undefined : 'routing-failed',
-            'lexical',
-        )
-        return fallbackTools
-    }
+    return runRoutingPhase({
+        signal,
+        label: 'tool-router',
+        run: async () => {
+            emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting required MCPs and toolsets...', eventMeta)
+            const selectedNamespaceIds = await selectToolsets({
+                conversationId,
+                gateway,
+                providerId,
+                model,
+                userQuery: userQuery || '',
+                recentMessages: recentMessages || [],
+                tools,
+                mcpMetadata,
+                signal,
+                debugContextEnabled,
+            })
+            emitToolsetRoutingSelection(
+                conversationId,
+                taskId,
+                selectedNamespaceIds,
+                tools,
+                mcpMetadata || [],
+                eventMeta,
+            )
+            const namespaceFilteredTools = filterToolsByNamespace(tools, selectedNamespaceIds, protectedNames)
+            const autoIncludedToolNames = collectAutoIncludedToolNames(namespaceFilteredTools, selectedNamespaceIds)
+            emitToolRoutingStatus(
+                conversationId,
+                taskId,
+                'finding-tools',
+                `Filtering tools from ${selectedNamespaceIds.size} selected toolset${selectedNamespaceIds.size === 1 ? '' : 's'}...`,
+                eventMeta,
+            )
+            const routedTools = await routeTools({
+                userQuery: userQuery || '',
+                recentMessages: recentMessages || [],
+                allTools: namespaceFilteredTools,
+                availableTools: tools,
+                mcpMetadata,
+                preferredToolNames,
+                usedToolNames,
+                // Complete small toolsets remain included after ordinary semantic
+                // ranking, so they keep a routerScore without consuming the normal cap.
+                requiredScoredToolNames: autoIncludedToolNames,
+                onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
+            })
+            signal?.throwIfAborted()
+            emitToolRoutingSelection(
+                conversationId,
+                taskId,
+                routedTools,
+                'gathered-context',
+                eventMeta,
+                routedTools.length ? undefined : 'none-found',
+                autoIncludedToolNames.size > 0
+                    ? 'automatic'
+                    : routedTools.some((tool) => typeof (tool as RoutedToolDefinition).routerScore === 'number') ? 'semantic' : 'lexical',
+            )
+            return routedTools
+        },
+        fallback: () => {
+            const fallbackTools = routeToolsLexically({
+                userQuery: userQuery || '',
+                recentMessages: recentMessages || [],
+                allTools: tools,
+                mcpMetadata,
+                preferredToolNames,
+                usedToolNames,
+            })
+            emitToolRoutingSelection(
+                conversationId,
+                taskId,
+                fallbackTools,
+                'gathered-context',
+                eventMeta,
+                fallbackTools.length ? undefined : 'routing-failed',
+                'lexical',
+            )
+            return fallbackTools
+        },
+    })
 }
 
 export function emitAutoToolRoutingSkipped(
@@ -181,64 +182,53 @@ async function selectToolsets(input: {
     if (!candidates.length) return new Set()
 
     const candidateIds = candidates.map(({ id }) => id)
-    try {
-        const request: Parameters<LLMGateway['complete']>[0] = {
-            messages: [
-                {
-                    role: 'system',
-                    content: [
-                        'You select MCP servers and toolsets before tools are filtered for the main assistant run.',
-                        'Given the current request, recent conversation, and available toolsets, call select_toolsets with only the namespace IDs whose capabilities are required for this turn.',
-                        `Select at most ${MCP_CANDIDATE_COUNT} namespace IDs.`,
-                        'Prefer the smallest sufficient set. Select a toolset when the task is likely to need one or more of its capabilities.',
-                        'Return an empty list when the request needs no external or built-in tools.',
-                        'Do not answer the user. Do not include rationale. /no_think',
-                    ].join('\n'),
-                },
-                {
-                    role: 'user',
-                    content: [
-                        buildRecentConversationBlock(input.recentMessages),
-                        `Current request: ${input.userQuery}`,
-                        '',
-                        'Available MCPs and toolsets:',
-                        ...candidates.map(formatToolsetCandidate),
-                    ].filter(Boolean).join('\n'),
-                },
-            ],
-            model: input.model,
-            maxTokens: 1_500,
-            tools: [buildToolsetSelectionTool(candidateIds)],
-            toolChoice: { type: 'function', name: TOOLSET_SELECTION_TOOL_NAME },
-            thinkingEnabled: false,
-            signal: input.signal,
-        }
-        const result = await completeWithDebugCapture({
-            enabled: input.debugContextEnabled,
-            conversationId: input.conversationId,
-            phase: 'toolset-selection',
-            label: 'MCP and toolset selection',
-            gateway: input.gateway,
-            providerId: input.providerId,
-            request,
-        })
-
-        recordAuxiliaryModelUsage({
-            kind: 'tool-router',
-            provider: input.providerId || '',
-            model: result.model || input.model || '',
-            inputTokens: result.usage?.promptTokens,
-            outputTokens: result.usage?.completionTokens,
-        })
-
-        const selectionCall = result.toolCalls?.find((call) => call.function.name === TOOLSET_SELECTION_TOOL_NAME)
-        const selection = selectionCall ? parseToolsetSelection(selectionCall.function.arguments, candidateIds) : null
-        if (!selection) throw new Error('Toolset selector returned no valid selection')
-        return new Set(selection.namespaceIds)
-    } catch (err) {
-        if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
-        throw err
+    const request: Parameters<LLMGateway['complete']>[0] = {
+        messages: [
+            {
+                role: 'system',
+                content: [
+                    'You select MCP servers and toolsets before tools are filtered for the main assistant run.',
+                    'Given the current request, recent conversation, and available toolsets, call select_toolsets with only the namespace IDs whose capabilities are required for this turn.',
+                    `Select at most ${MCP_CANDIDATE_COUNT} namespace IDs.`,
+                    'Prefer the smallest sufficient set. Select a toolset when the task is likely to need one or more of its capabilities.',
+                    'Return an empty list when the request needs no external or built-in tools.',
+                    'Do not answer the user. Do not include rationale. /no_think',
+                ].join('\n'),
+            },
+            {
+                role: 'user',
+                content: [
+                    recentConversationBlock(input.recentMessages, 200),
+                    `Current request: ${input.userQuery}`,
+                    '',
+                    'Available MCPs and toolsets:',
+                    ...candidates.map(formatToolsetCandidate),
+                ].filter(Boolean).join('\n'),
+            },
+        ],
+        model: input.model,
+        maxTokens: 1_500,
+        tools: [buildToolsetSelectionTool(candidateIds)],
+        toolChoice: { type: 'function', name: TOOLSET_SELECTION_TOOL_NAME },
+        thinkingEnabled: false,
+        signal: input.signal,
     }
+    const selection = await selectRoutingCandidates({
+        conversationId: input.conversationId,
+        debugContextEnabled: input.debugContextEnabled,
+        phase: 'toolset-selection',
+        label: 'MCP and toolset selection',
+        gateway: input.gateway,
+        providerId: input.providerId,
+        model: input.model,
+        signal: input.signal,
+        usageKind: 'tool-router',
+        toolName: TOOLSET_SELECTION_TOOL_NAME,
+        request,
+        parse: (raw) => parseToolsetSelection(raw, candidateIds),
+    })
+    if (!selection) throw new Error('Toolset selector returned no valid selection')
+    return new Set(selection.namespaceIds)
 }
 
 function buildToolsetSelectionTool(candidateIds: string[]): ToolDefinition {
@@ -266,16 +256,8 @@ function buildToolsetSelectionTool(candidateIds: string[]): ToolDefinition {
 function parseToolsetSelection(raw: string, candidateIds: string[]): ToolsetSelection | null {
     try {
         const parsed = JSON.parse(raw) as { namespaceIds?: unknown }
-        if (!Array.isArray(parsed.namespaceIds)) return null
-
-        const allowed = new Set(candidateIds)
-        const requestedIds = parsed.namespaceIds.filter((id): id is string => typeof id === 'string')
-        const namespaceIds = requestedIds
-            .filter((id) => allowed.has(id))
-            .filter((id, index, arr) => arr.indexOf(id) === index)
-            .slice(0, MCP_CANDIDATE_COUNT)
-        if (requestedIds.length > 0 && namespaceIds.length === 0) return null
-
+        const namespaceIds = parseCandidateIds(parsed.namespaceIds, candidateIds, MCP_CANDIDATE_COUNT)
+        if (!namespaceIds) return null
         return { namespaceIds }
     } catch {
         return null
@@ -302,30 +284,6 @@ function collectProtectedToolNames(
     }
 
     return names
-}
-
-function buildRecentConversationBlock(messages: ChatMessage[]): string {
-    const recent = messages
-        .filter(({ role }) => role === 'user' || role === 'assistant')
-        .slice(-5)
-
-    if (!recent.length) return ''
-
-    const context = recent
-        .map(({ role, content }) => `${role}: ${messageContentForRouter(content).slice(0, 200)}`)
-        .join('\n')
-
-    return `Recent conversation:\n${context}\n`
-}
-
-function messageContentForRouter(content: ChatMessage['content']): string {
-    if (typeof content === 'string') return content
-    const text = content
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('\n')
-        .trim()
-    return text || '[multipart content]'
 }
 
 function toolNamespaceId(tool: RegistryAwareToolDefinition): string {
@@ -415,22 +373,23 @@ function emitToolsetRoutingSelection(
     const candidatesById = new Map(buildToolsetCandidates(tools, mcpMetadata).map((candidate) => [candidate.id, candidate]))
     const selectedToolsets = [...selectedNamespaceIds].map((namespaceId) => ({
         name: candidatesById.get(namespaceId)?.label || namespaceId,
-        arguments: JSON.stringify({ type: 'toolset-router', namespaceId, selectionMethod: 'llm' }),
+        details: { type: 'toolset-router', namespaceId, selectionMethod: 'llm' },
     }))
-    getEventBus().emit('step:tools-chosen', {
+    emitRoutingDecision({
         conversationId,
         taskId,
-        iteration: 0,
-        ...eventMeta,
-        toolCalls: selectedToolsets.length ? selectedToolsets : [{
+        phase: 'toolsets',
+        eventMeta,
+        entries: selectedToolsets,
+        empty: {
             name: 'No toolsets selected',
-            arguments: JSON.stringify({
+            details: {
                 type: 'toolset-router',
                 selectionMethod: 'llm',
                 emptyReason: 'none-relevant',
                 content: 'AI toolset selection ran, but no MCPs or toolsets were relevant for this turn.',
-            }),
-        }],
+            },
+        },
     })
 }
 
@@ -444,36 +403,29 @@ function emitToolRoutingSelection(
     selectionMethod: 'semantic' | 'lexical' | 'automatic' = 'semantic',
 ): void {
     const visibleTools = tools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
-    getEventBus().emit('step:tools-chosen', {
+    emitRoutingDecision({
         conversationId,
         taskId,
-        iteration: 0,
-        ...eventMeta,
-        toolCalls: visibleTools.length ? visibleTools
-            .map((tool) => ({
-                name: tool.name,
-                arguments: typeof (tool as RoutedToolDefinition).routerScore === 'number'
-                    ? JSON.stringify({
-                        type: 'tool-router', contextPhase, selectionMethod,
-                        routerScore: (tool as RoutedToolDefinition).routerScore,
-                        namespaceId: (tool as RegistryAwareToolDefinition).namespaceId,
-                        namespaceLabel: (tool as RegistryAwareToolDefinition).namespaceLabel,
-                    })
-                    : JSON.stringify({
-                        type: 'tool-router', contextPhase, selectionMethod,
-                        namespaceId: (tool as RegistryAwareToolDefinition).namespaceId,
-                        namespaceLabel: (tool as RegistryAwareToolDefinition).namespaceLabel,
-                    })
-            })) : [{
-                name: toolEmptyLabel(emptyReason),
-                arguments: JSON.stringify({
-                    type: 'tool-router',
-                    contextPhase,
-                    selectionMethod,
-                    emptyReason: emptyReason || 'none-selected',
-                    content: toolEmptyContent(emptyReason),
-                }),
-            }],
+        phase: 'tools',
+        eventMeta,
+        entries: visibleTools.map((tool) => ({
+            name: tool.name,
+            details: {
+                type: 'tool-router', contextPhase, selectionMethod,
+                ...(typeof (tool as RoutedToolDefinition).routerScore === 'number'
+                    ? { routerScore: (tool as RoutedToolDefinition).routerScore } : {}),
+                namespaceId: (tool as RegistryAwareToolDefinition).namespaceId,
+                namespaceLabel: (tool as RegistryAwareToolDefinition).namespaceLabel,
+            },
+        })),
+        empty: {
+            name: toolEmptyLabel(emptyReason),
+            details: {
+                type: 'tool-router', contextPhase, selectionMethod,
+                emptyReason: emptyReason || 'none-selected',
+                content: toolEmptyContent(emptyReason),
+            },
+        },
     })
 }
 

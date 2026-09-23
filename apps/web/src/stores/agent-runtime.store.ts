@@ -470,6 +470,13 @@ export const useAgentStore = defineStore('agent', () => {
         message: event.message, maCodename: event.maCodename, maAgentName: event.maAgentName,
         maInvocationId: event.invocationId, timestamp: event.createdAt, sequence: event.sequence,
       } })
+    } else if (event.type === 'routing-decision') {
+      recordToolSequence(event.conversationId, event.sequence, event.taskId, 0, event.parentInvocationId)
+      handleExecutionUpdate({ event: 'step:tools-chosen', data: { ...base,
+        taskId: event.taskId, iteration: 0, maInvocationId: event.parentInvocationId,
+        maCodename: event.maCodename, maAgentName: event.maAgentName,
+        toolCalls: event.entries.map((entry) => ({ name: entry.name, arguments: JSON.stringify(entry.details) })),
+      } })
     } else if (event.type === 'tool-calls') {
       const item = event.items[0]
       if (!item) return

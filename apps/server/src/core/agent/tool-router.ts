@@ -11,7 +11,8 @@ import {
     saveCachedToolEmbedding,
     type RouterEmbeddingScope,
 } from './router-embedding-cache.js'
-import type { ChatMessage, ContentPart, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
+import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
+import { routerQuery } from './pre-execution/routing-kernel.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 import { compactToolDescription } from '../tools/tool-description.js'
 
@@ -54,20 +55,7 @@ export function buildRouterQuery(
     messages: ChatMessage[] = [],
     windowSize = CONTEXT_WINDOW_TURNS,
 ): string {
-    const recent = messages
-        .filter(({ role }) => role === 'user' || role === 'assistant')
-        .slice(-windowSize)
-
-    if (!recent.length) return currentMessage
-
-    const context = recent
-        .map(({ role, content }) => {
-            const text = messageContentForRouter(content).slice(0, TURN_CHAR_LIMIT)
-            return `${role}: ${text}`
-        })
-        .join('\n')
-
-    return `Recent conversation:\n${context}\n\nCurrent request: ${currentMessage}`
+    return routerQuery({ query: currentMessage, recentMessages: messages }, TURN_CHAR_LIMIT, windowSize)
 }
 
 export function shouldRouteTools(
@@ -338,18 +326,6 @@ export function routeToolsLexically(input: RouteToolsInput): RoutedToolDefinitio
     })
     routedTools = dedupeTools([...fixedTools, ...discovered, ...stickyTools, searchTool])
     return routedTools
-}
-
-function messageContentForRouter(content: string | ContentPart[]): string {
-    if (typeof content === 'string') return content
-
-    const text = content
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('\n')
-        .trim()
-
-    return text || '[multipart content]'
 }
 
 function isMcpTool(tool: RegistryAwareToolDefinition): boolean {
