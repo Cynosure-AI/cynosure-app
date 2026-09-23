@@ -33,42 +33,65 @@ describe('memory mutation tool contracts', () => {
         expect(tool.description).not.toContain('"Shared" —')
     })
 
-    test('exposes one contextual patch contract', () => {
+    test('exposes structured line-edit operations', () => {
         const tool = makeMemoryPatchTool({})
-        expect(tool.parameters.required).toEqual(['fileRef', 'patch'])
+        expect(tool.parameters.required).toEqual(['fileRef', 'edits'])
         expect(tool.parameters.additionalProperties).toBe(false)
+        expect(tool.parameters.properties).not.toHaveProperty('patch')
         expect(tool.parameters.properties).not.toHaveProperty('expectedRevision')
         expect(tool.outputSchema?.properties).not.toHaveProperty('currentRevision')
+        expect(tool.outputSchema?.properties).toHaveProperty('editIndex')
+        expect(tool.outputSchema?.properties).toHaveProperty('matchCount')
+        expect(tool.outputSchema?.properties).toHaveProperty('suggestedAnchor')
     })
 
-    test('applies replacement, deletion, insertion, and multi-edit patches atomically', () => {
+    test('applies line replacement, deletion, insertion, and ordered edits', () => {
         const source = '## Development\n\nUses Vue 2.\nKeeps Project X.\n'
-        expect(applyMemoryPatch(source, '@@\n-Uses Vue 2.\n+Uses Vue 3.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 3.\nKeeps Project X.\n' })
-        expect(applyMemoryPatch(source, '@@\n-Keeps Project X.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 2.\n\n' })
-        expect(applyMemoryPatch(source, '@@\n Uses Vue 2.\n+Uses Electron.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 2.\nUses Electron.\nKeeps Project X.\n' })
-        expect(applyMemoryPatch(source, '@@\n-Uses Vue 2.\n+Uses Vue 3.\n Keeps Project X.\n+Uses Electron.')).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 3.\nKeeps Project X.\nUses Electron.\n' })
+        expect(applyMemoryPatch(source, [{ op: 'replace', anchor: 'Uses Vue 2.', content: 'Uses Vue 3.' }])).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 3.\nKeeps Project X.\n' })
+        expect(applyMemoryPatch(source, [{ op: 'delete', anchor: 'Keeps Project X.' }])).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 2.\n' })
+        expect(applyMemoryPatch(source, [{ op: 'insert_after', anchor: 'Uses Vue 2.', content: '- Uses Electron.' }])).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 2.\n- Uses Electron.\nKeeps Project X.\n' })
+        expect(applyMemoryPatch(source, [
+            { op: 'replace', anchor: 'Uses Vue 2.', content: 'Uses Vue 3.' },
+            { op: 'insert_after', anchor: 'Keeps Project X.', content: '- Uses Electron.' },
+        ])).toMatchObject({ status: 'success', content: '## Development\n\nUses Vue 3.\nKeeps Project X.\n- Uses Electron.\n' })
     })
 
-    test('rejects missing and ambiguous context without returning partial content', () => {
-        expect(applyMemoryPatch('Vue 2\nVue 2', '@@\n-Vue 2\n+Vue 3')).toMatchObject({ status: 'conflict', reason: 'ambiguous_context' })
-        expect(applyMemoryPatch('Vue 2', '@@\n-Vue 1\n+Vue 3')).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found' })
-        expect(applyMemoryPatch('Vue 2', '@@\n-Vue 2\n+Vue 3\n@@\n-Missing\n+Present')).toEqual(expect.objectContaining({ status: 'conflict', reason: 'expected_context_not_found' }))
+    test('treats Markdown bullets as ordinary anchors and supports insertion before a line', () => {
+        const source = '## Observations (Update 17:33)\n- Nur zwei Snapshots heute.\n\n## Observations (Update 07:51)\n'
+        const result = applyMemoryPatch(source, [{
+            op: 'insert_before',
+            anchor: '## Observations (Update 07:51)',
+            content: '## Observations (Update 17:45)\n- 17:33→17:45: direkte Projektarbeit statt Konsum.',
+        }])
+        expect(result).toMatchObject({
+            status: 'success',
+            content: '## Observations (Update 17:33)\n- Nur zwei Snapshots heute.\n\n## Observations (Update 17:45)\n- 17:33→17:45: direkte Projektarbeit statt Konsum.\n## Observations (Update 07:51)\n',
+        })
+        expect(applyMemoryPatch('- Existing bullet', [{ op: 'replace', anchor: '- Existing bullet', content: '- Updated bullet' }]))
+            .toMatchObject({ status: 'success', content: '- Updated bullet' })
     })
 
-    test('explains patch syntax and detects deletion markers used as context', () => {
-        const malformed = applyMemoryPatch('- Existing bullet', '@@\n-- Existing bullet')
-        expect(malformed).toMatchObject({ status: 'conflict', reason: 'invalid_patch' })
-        expect('message' in malformed ? malformed.message : '').toContain('You may have used - as context')
-        expect('message' in malformed ? malformed.message : '').toContain('prefix those lines with one space')
+    test('rejects missing and ambiguous anchors without returning partial content', () => {
+        expect(applyMemoryPatch('Vue 2\nVue 2', [{ op: 'replace', anchor: 'Vue 2', content: 'Vue 3' }]))
+            .toMatchObject({ status: 'conflict', reason: 'ambiguous_context', editIndex: 0, matchCount: 2 })
+        expect(applyMemoryPatch('Vue 2', [{ op: 'replace', anchor: 'Vue 1', content: 'Vue 3' }]))
+            .toMatchObject({ status: 'conflict', reason: 'expected_context_not_found', editIndex: 0, matchCount: 0, suggestedAnchor: 'Vue 2' })
+        expect(applyMemoryPatch('Vue 2', [
+            { op: 'replace', anchor: 'Vue 2', content: 'Vue 3' },
+            { op: 'delete', anchor: 'Missing' },
+        ])).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found', editIndex: 1 })
+    })
 
-        const invalidLine = applyMemoryPatch('Existing text', '@@\nExisting text')
-        expect(invalidLine).toMatchObject({ status: 'conflict', reason: 'invalid_patch' })
-        expect('message' in invalidLine ? invalidLine.message : '').toContain('Lines starting with - are deletions')
+    test('rejects invalid edit shapes and multi-line anchors', () => {
+        expect(applyMemoryPatch('Line one\nLine two', [{ op: 'replace', anchor: 'Line one\nLine two', content: 'Updated' }]))
+            .toMatchObject({ status: 'conflict', reason: 'invalid_patch', editIndex: 0 })
+        expect(applyMemoryPatch('Line one', [{ op: 'delete', anchor: 'Line one', content: 'unused' } as never]))
+            .toMatchObject({ status: 'conflict', reason: 'invalid_patch' })
     })
 
     test('matches safe Unicode variants while preserving canonical context bytes', () => {
         const source = 'Header\nStatus: ☕️ — „bereit“\u00a0e\u0301\nTail'
-        const result = applyMemoryPatch(source, '@@\n Status: ☕ - "bereit" é\n+Added ✅')
+        const result = applyMemoryPatch(source, [{ op: 'insert_after', anchor: 'Status: ☕ - "bereit" é', content: 'Added ✅' }])
         expect(result).toMatchObject({
             status: 'success',
             content: 'Header\nStatus: ☕️ — „bereit“\u00a0e\u0301\nAdded ✅\nTail',
@@ -76,15 +99,15 @@ describe('memory mutation tool contracts', () => {
     })
 
     test('treats multiple Unicode-equivalent contexts as ambiguous', () => {
-        const result = applyMemoryPatch('State — ready\nState - ready', '@@\n-State - ready\n+Done')
-        expect(result).toMatchObject({ status: 'conflict', reason: 'ambiguous_context' })
+        const result = applyMemoryPatch('State — ready\nState - ready', [{ op: 'replace', anchor: 'State - ready', content: 'Done' }])
+        expect(result).toMatchObject({ status: 'conflict', reason: 'ambiguous_context', matchCount: 2 })
     })
 
     test('keeps recovery guidance for genuinely different context', () => {
-        const result = applyMemoryPatch('Price: €20 and value ≈ 2', '@@\n-Price: $20 and value = 2\n+Changed')
+        const result = applyMemoryPatch('Price: €20 and value ≈ 2', [{ op: 'replace', anchor: 'Price: $20 and value = 2', content: 'Changed' }])
         expect(result).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found' })
         expect('message' in result ? result.message : '').toContain('other characters remain exact')
-        expect('message' in result ? result.message : '').toContain('Run memory_search again')
+        expect('message' in result ? result.message : '').toContain('run memory_search again')
     })
 
     test('exposes an explicit entity merge contract', () => {

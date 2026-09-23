@@ -1041,70 +1041,12 @@ export type MemoryPatchConflictReason =
 
 export type MemoryPatchApplication =
     | { status: 'success'; content: string; affectedRanges: Array<{ start: number; oldEnd: number; newEnd: number }> }
-    | { status: 'conflict'; reason: MemoryPatchConflictReason; message: string }
+    | { status: 'conflict'; reason: MemoryPatchConflictReason; message: string; editIndex?: number; matchCount?: number; suggestedAnchor?: string }
 
-type ParsedPatchLine = { type: 'context' | 'deletion' | 'addition'; text: string }
-interface ParsedPatchHunk { before: string; lines: ParsedPatchLine[] }
-
-const PATCH_CONTEXT_GUIDANCE = 'Lines starting with - are deletions. To anchor the patch to unchanged text, prefix those lines with one space.'
-
-function invalidPatch(message: string): { error: string } {
-    return { error: `${message} ${PATCH_CONTEXT_GUIDANCE}` }
-}
-
-function parseContextualPatch(patch: string): ParsedPatchHunk[] | { error: string } {
-    if (typeof patch !== 'string' || !patch.trim()) return invalidPatch('patch must be a non-empty string.')
-    const lines = patch.replace(/\r\n?/g, '\n').split('\n')
-    while (lines.length && !lines[0].startsWith('@@')) lines.shift()
-    while (lines.length && lines[lines.length - 1] === '') lines.pop()
-    if (!lines.length) return invalidPatch('patch must contain at least one @@ hunk.')
-
-    const hunks: ParsedPatchHunk[] = []
-    let before: string[] | undefined
-    let hunkLines: string[] = []
-    let parsedLines: ParsedPatchLine[] = []
-    const finish = () => {
-        if (!before) return
-        if (before.length === 0) throw new Error('Each hunk needs deleted or unchanged context for safe addressing.')
-        if (hunkLines.length > 0 && hunkLines.every(line => line.startsWith('--'))) {
-            throw new Error('This hunk contains only -- lines and no unchanged or added lines. You may have used - as context; use a leading space for unchanged text.')
-        }
-        hunks.push({ before: before.join('\n'), lines: parsedLines })
-    }
-    try {
-        for (const line of lines) {
-            if (line.startsWith('@@')) {
-                finish()
-                before = []
-                hunkLines = []
-                parsedLines = []
-                continue
-            }
-            if (!before) return invalidPatch('Patch content must follow an @@ hunk header.')
-            if (line.startsWith('\\ No newline at end of file')) continue
-            hunkLines.push(line)
-            if (line.startsWith('-')) {
-                before.push(line.slice(1))
-                parsedLines.push({ type: 'deletion', text: line.slice(1) })
-            } else if (line.startsWith('+')) {
-                parsedLines.push({ type: 'addition', text: line.slice(1) })
-            } else if (line.startsWith(' ')) {
-                before.push(line.slice(1))
-                parsedLines.push({ type: 'context', text: line.slice(1) })
-            } else if (line === '') {
-                before.push('')
-                parsedLines.push({ type: 'context', text: '' })
-            } else {
-                return invalidPatch(`Invalid patch line ${JSON.stringify(line)}; lines must start with space, +, or -.`)
-            }
-        }
-        finish()
-    } catch (error) {
-        return invalidPatch((error as Error).message)
-    }
-    if (hunks.length === 0) return invalidPatch('patch must contain at least one non-empty hunk.')
-    return hunks
-}
+export type MemoryPatchEdit =
+    | { op: 'insert_before' | 'insert_after'; anchor: string; content: string }
+    | { op: 'replace'; anchor: string; content: string }
+    | { op: 'delete'; anchor: string }
 
 interface NormalizedPatchText {
     text: string
@@ -1157,72 +1099,116 @@ function normalizePatchText(source: string): NormalizedPatchText {
     return { text, sourceOffsets, validBoundaries }
 }
 
-function findNormalizedPatchMatches(content: string, expected: string): Array<{ start: number; end: number }> {
-    const haystack = normalizePatchText(content)
-    const needle = normalizePatchText(expected).text
-    if (!needle) return []
+interface CanonicalLine { text: string; start: number; end: number; endWithNewline: number }
 
-    const matches: Array<{ start: number; end: number }> = []
-    let normalizedStart = haystack.text.indexOf(needle)
-    while (normalizedStart >= 0) {
-        const normalizedEnd = normalizedStart + needle.length
-        if (haystack.validBoundaries.has(normalizedStart) && haystack.validBoundaries.has(normalizedEnd)) {
-            const match = {
-                start: haystack.sourceOffsets[normalizedStart],
-                end: haystack.sourceOffsets[normalizedEnd],
+function canonicalLines(content: string): CanonicalLine[] {
+    const lines: CanonicalLine[] = []
+    let start = 0
+    while (start < content.length) {
+        const newline = content.indexOf('\n', start)
+        const lineEnd = newline < 0 ? content.length : newline
+        const end = newline >= 0 && content.charCodeAt(newline - 1) === 13 ? newline - 1 : lineEnd
+        const text = content.slice(start, end)
+        lines.push({ text, start, end, endWithNewline: newline < 0 ? end : newline + 1 })
+        start = newline < 0 ? content.length : newline + 1
+    }
+    if (content.length === 0 || content.endsWith('\n')) {
+        const end = content.length
+        lines.push({ text: '', start: end, end, endWithNewline: end })
+    }
+    return lines
+}
+
+function findAnchorLines(content: string, anchor: string): CanonicalLine[] {
+    if (!anchor || /\r|\n/.test(anchor)) return []
+    const expected = normalizePatchText(anchor).text
+    return canonicalLines(content).filter(line => normalizePatchText(line.text).text === expected)
+}
+
+function suggestCanonicalAnchor(content: string, anchor: string): string | undefined {
+    const expected = normalizePatchText(anchor).text
+    if (!expected || expected.length > 500) return undefined
+    const lines = canonicalLines(content).filter(line => line.text.length > 0 && line.text.length <= 500)
+    let best: { text: string; distance: number } | undefined
+    for (const line of lines) {
+        const candidate = normalizePatchText(line.text).text
+        if (Math.abs(candidate.length - expected.length) > Math.max(8, Math.floor(expected.length * 0.2))) continue
+        let previous = Array.from({ length: candidate.length + 1 }, (_, index) => index)
+        for (let row = 1; row <= expected.length; row++) {
+            const current = [row]
+            for (let column = 1; column <= candidate.length; column++) {
+                current[column] = Math.min(current[column - 1] + 1, previous[column] + 1, previous[column - 1] + (expected[row - 1] === candidate[column - 1] ? 0 : 1))
             }
-            if (!matches.some(candidate => candidate.start === match.start && candidate.end === match.end)) matches.push(match)
+            previous = current
         }
-        normalizedStart = haystack.text.indexOf(needle, normalizedStart + 1)
+        const distance = previous[candidate.length]
+        if (!best || distance < best.distance) best = { text: line.text, distance }
     }
-    return matches
+    return best && best.distance <= Math.max(3, Math.floor(expected.length * 0.12)) ? best.text : undefined
 }
 
-function renderPatchReplacement(hunk: ParsedPatchHunk, matchedSource: string): string {
-    // Preserve canonical Unicode and whitespace for unchanged context rather
-    // than replacing it with the model's normalized approximation.
-    const matchedBeforeLines = matchedSource.split('\n')
-    const replacement: string[] = []
-    let beforeIndex = 0
-    for (const line of hunk.lines) {
-        if (line.type === 'addition') {
-            replacement.push(line.text)
-            continue
-        }
-        if (line.type === 'context') replacement.push(matchedBeforeLines[beforeIndex] ?? line.text)
-        beforeIndex++
-    }
-    return replacement.join('\n')
+function normalizeInsertedContent(value: string): string {
+    return value.replace(/\r\n?/g, '\n')
 }
 
-/** Apply all contextual hunks in memory. No content is returned on conflict. */
-export function applyMemoryPatch(content: string, patch: string): MemoryPatchApplication {
-    const parsed = parseContextualPatch(patch)
-    if ('error' in parsed) return { status: 'conflict', reason: 'invalid_patch', message: parsed.error }
+function invalidMemoryEdit(editIndex: number, message: string): MemoryPatchApplication {
+    return { status: 'conflict', reason: 'invalid_patch', editIndex, matchCount: 0, message }
+}
+
+/** Apply structured, line-addressed edits in memory. No content is returned on conflict. */
+export function applyMemoryPatch(content: string, edits: MemoryPatchEdit[]): MemoryPatchApplication {
+    if (!Array.isArray(edits) || edits.length === 0) return invalidMemoryEdit(0, 'edits must contain at least one edit operation.')
     let next = content
     const affectedRanges: Array<{ start: number; oldEnd: number; newEnd: number }> = []
-    for (const hunk of parsed) {
-        const matches = findNormalizedPatchMatches(next, hunk.before)
+    for (const [editIndex, edit] of edits.entries()) {
+        if (!edit || typeof edit !== 'object' || !['insert_before', 'insert_after', 'replace', 'delete'].includes(edit.op) || typeof edit.anchor !== 'string' || !edit.anchor.trim()) {
+            return invalidMemoryEdit(editIndex, 'Each edit needs a supported op and a non-empty, single-line anchor.')
+        }
+        const allowedKeys = edit.op === 'delete' ? ['op', 'anchor'] : ['op', 'anchor', 'content']
+        if (Object.keys(edit).some(key => !allowedKeys.includes(key))) return invalidMemoryEdit(editIndex, `Unexpected fields for ${edit.op} edit.`)
+        if (edit.op !== 'delete' && typeof edit.content !== 'string') return invalidMemoryEdit(editIndex, 'This edit operation requires string content.')
+        if (/\r|\n/.test(edit.anchor)) return invalidMemoryEdit(editIndex, 'Anchors must be one complete line without newline characters.')
+        const matches = findAnchorLines(next, edit.anchor)
         if (matches.length === 0) {
             return {
                 status: 'conflict',
                 reason: 'expected_context_not_found',
-                message: 'Expected patch context was not found in the canonical file. Unicode normalization, emoji presentation selectors, typographic quotes and dashes, and non-breaking spaces are tolerated; other characters remain exact. Run memory_search again, copy the unchanged text, and prefix each unchanged line with one space.',
+                editIndex,
+                matchCount: 0,
+                suggestedAnchor: suggestCanonicalAnchor(next, edit.anchor),
+                message: 'The anchor did not match a complete canonical line. Matching tolerates Unicode normalization, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Copy the suggested canonical line if provided, or run memory_search again.',
             }
         }
         if (matches.length > 1) {
-            return { status: 'conflict', reason: 'ambiguous_context', message: 'Expected patch context occurs more than once; include more unchanged context.' }
+            return { status: 'conflict', reason: 'ambiguous_context', editIndex, matchCount: matches.length, message: 'The anchor matches multiple complete lines. Use a longer, unique line as the anchor.' }
         }
-        const { start, end } = matches[0]
-        const replacement = renderPatchReplacement(hunk, next.slice(start, end))
-        next = next.slice(0, start) + replacement + next.slice(end)
-        affectedRanges.push({ start, oldEnd: end, newEnd: start + replacement.length })
+        const { start, end, endWithNewline } = matches[0]
+        let replaceStart = start
+        let replaceEnd = end
+        let replacement = ''
+        const inserted = edit.op === 'delete' ? '' : normalizeInsertedContent(edit.content)
+        if (edit.op === 'insert_before') {
+            replaceEnd = start
+            replacement = `${inserted}\n`
+        } else if (edit.op === 'insert_after') {
+            replaceStart = endWithNewline
+            replaceEnd = endWithNewline
+            replacement = inserted ? `${endWithNewline === end ? '\n' : ''}${inserted}\n` : ''
+        } else if (edit.op === 'replace') {
+            replacement = inserted
+        } else if (edit.op === 'delete') {
+            if (endWithNewline > end) replaceEnd = endWithNewline
+            else if (start > 0) replaceStart = start - (next.charCodeAt(start - 2) === 13 ? 2 : 1)
+        }
+        const oldEnd = replaceEnd
+        next = next.slice(0, replaceStart) + replacement + next.slice(replaceEnd)
+        affectedRanges.push({ start: replaceStart, oldEnd, newEnd: replaceStart + replacement.length })
     }
     return { status: 'success', content: next, affectedRanges }
 }
 
-function patchConflict(reason: MemoryPatchConflictReason, message: string): ToolResult {
-    const result = { status: 'conflict' as const, reason, message }
+function patchConflict(reason: MemoryPatchConflictReason, message: string, details?: { editIndex?: number; matchCount?: number; suggestedAnchor?: string }): ToolResult {
+    const result = { status: 'conflict' as const, reason, message, ...details }
     return { success: false, output: JSON.stringify(result), structuredContent: result }
 }
 
@@ -1233,15 +1219,29 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
         name: 'memory_patch',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Atomically apply a contextual patch to a canonical memory file. Context must identify exactly one location. Matching tolerates canonically equivalent Unicode, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Concurrent changes and revision tracking are handled internally. Use the fileRef returned by memory_search.',
+        description: 'Atomically apply structured edits to a canonical Markdown memory file. Each edit targets a unique complete line; anchors never use diff syntax, so Markdown bullets are ordinary text. Matching tolerates canonically equivalent Unicode, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Concurrent changes and revision tracking are handled internally. Use the fileRef returned by memory_search.',
         parameters: {
             type: 'object',
             additionalProperties: false,
             properties: {
                 fileRef: { type: 'string', description: 'Stable canonical file reference returned by memory_search (for example user-profile#4k8z2q).' },
-                patch: { type: 'string', description: 'One or more @@ contextual diff hunks. Prefix removed lines with -, added lines with +, and unchanged context with a space. Utilise new lines to fit the schema like "@@\n"' },
+                edits: {
+                    type: 'array',
+                    minItems: 1,
+                    description: 'Ordered edit operations. Each anchor must exactly match one complete line from the canonical file. Example: {"op":"insert_before","anchor":"## Next section","content":"## New section\\n- A Markdown bullet"}. Apply all edits atomically; a conflict applies none.',
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            op: { type: 'string', enum: ['insert_before', 'insert_after', 'replace', 'delete'] },
+                            anchor: { type: 'string', description: 'A unique, complete, single line copied from memory_search results.' },
+                            content: { type: 'string', description: 'Markdown text to insert or replace with; required except for delete.' },
+                        },
+                        required: ['op', 'anchor'],
+                    },
+                },
             },
-            required: ['fileRef', 'patch'],
+            required: ['fileRef', 'edits'],
         },
         outputSchema: {
             type: 'object',
@@ -1252,13 +1252,16 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 previousRevision: { type: 'integer' },
                 revision: { type: 'integer' },
                 reason: { type: 'string' },
+                editIndex: { type: 'integer' },
+                matchCount: { type: 'integer' },
+                suggestedAnchor: { type: 'string' },
                 affectedRanges: { type: 'array' },
                 message: { type: 'string' },
             },
         },
         timeout: 120_000,
         execute: async (params: unknown, signal?: AbortSignal) => {
-            const input = (params || {}) as { fileRef: string; patch: string }
+            const input = (params || {}) as { fileRef: string; edits: MemoryPatchEdit[] }
             const initial = resolveMemoryFileRef(input.fileRef, assignedFolders, getKnownFolders)
             if ('error' in initial) return patchConflict('file_not_found', initial.error)
             return withMemoryDocumentLock(initial.documentId, signal, async () => {
@@ -1269,8 +1272,12 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                     return patchConflict('file_not_found', 'The canonical memory file could not be read.')
                 }
                 opts.beforeDocumentMutation?.(resolved.documentId, current)
-                let applied = applyMemoryPatch(current, input.patch)
-                if (applied.status === 'conflict') return patchConflict(applied.reason, applied.message)
+                let applied = applyMemoryPatch(current, input.edits)
+                if (applied.status === 'conflict') return patchConflict(applied.reason, applied.message, {
+                    editIndex: applied.editIndex,
+                    matchCount: applied.matchCount,
+                    suggestedAnchor: applied.suggestedAnchor,
+                })
                 if (applied.content === current) {
                     const result = { status: 'success' as const, fileRef: resolved.documentRef, previousRevision: resolved.revisionNumber, revision: resolved.revisionNumber, affectedRanges: [] }
                     return { success: true, output: JSON.stringify(result), structuredContent: result }
@@ -1280,8 +1287,12 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 const latest = readTextFile(resolved.directoryPath, resolved.fileName)
                 if (latest !== current) {
                     current = latest
-                    applied = applyMemoryPatch(current, input.patch)
-                    if (applied.status === 'conflict') return patchConflict(applied.reason, applied.message)
+                    applied = applyMemoryPatch(current, input.edits)
+                    if (applied.status === 'conflict') return patchConflict(applied.reason, applied.message, {
+                        editIndex: applied.editIndex,
+                        matchCount: applied.matchCount,
+                        suggestedAnchor: applied.suggestedAnchor,
+                    })
                 }
                 try {
                     const indexed = await commitMemoryMutation(resolved, current, applied.content, signal, opts.revisionContext)
