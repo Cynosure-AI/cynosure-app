@@ -19,6 +19,7 @@ import type {
 } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
+import { cancelCronRunsByConversation } from '../core/triggers/cron-scheduler.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
 import { listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
@@ -851,6 +852,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       for (const executionId of getChatExecutionIdsByConversation(conversationId)) executionIds.add(executionId)
       clearPendingHITLForConversation(conversationId)
       cancelChatExecutionByConversation(conversationId)
+      cancelCronRunsByConversation(conversationId)
       getChannelManager().cancelExecutionByConversation(conversationId)
       cancelPostActions(conversationId)
     }

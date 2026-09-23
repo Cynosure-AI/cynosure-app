@@ -151,6 +151,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             isPrimaryExecutor: true,
         })
         const result = await executor.run(messages)
+        signal.throwIfAborted()
         if (planningRunId) {
             closePlanningRun(planningRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
