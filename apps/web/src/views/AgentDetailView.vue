@@ -95,11 +95,7 @@ const tabs: TabDef<AgentSectionId>[] = sections.map(section => ({
   icon: section.icon,
 }))
 
-function formatTimestamp(timestamp: number): string {
-  return new Date(timestamp).toLocaleString([], {
-    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-  })
-}
+
 </script>
 
 <template>
@@ -107,7 +103,7 @@ function formatTimestamp(timestamp: number): string {
     v-if="agent"
     class="h-full overflow-y-auto"
   >
-    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 pt-4 backdrop-blur-sm sm:pt-5">
+    <header class="relative z-20 border-b border-theme-800/60 bg-theme-950/95 pt-4 backdrop-blur-sm sm:sticky sm:top-0 sm:pt-5">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex items-start justify-between gap-3">
           <button
@@ -165,48 +161,7 @@ function formatTimestamp(timestamp: number): string {
           </div>
         </div>
 
-        <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            class="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium"
-            :class="agent.autoToolRouting
-              ? 'border-accent-500/25 bg-accent-500/10 text-accent-300'
-              : 'border-theme-700 bg-theme-900/70 text-theme-500'"
-            :title="`Automatic tool selection is ${agent.autoToolRouting ? 'enabled' : 'disabled'}`"
-          >
-            <Icon
-              icon="lucide:wrench"
-              class="h-3 w-3"
-            />
-            Auto tools: {{ agent.autoToolRouting ? 'On' : 'Off' }}
-          </span>
-          <span
-            class="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium"
-            :class="agent.autoMemory
-              ? 'border-accent-500/25 bg-accent-500/10 text-accent-300'
-              : 'border-theme-700 bg-theme-900/70 text-theme-500'"
-            :title="`Automatic memory retrieval is ${agent.autoMemory ? 'enabled' : 'disabled'}`"
-          >
-            <Icon
-              icon="lucide:brain"
-              class="h-3 w-3"
-            />
-            Auto memory: {{ agent.autoMemory ? 'On' : 'Off' }}
-          </span>
-          <dl class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-500">
-            <div class="flex items-center gap-1">
-              <dt>Created</dt>
-              <dd class="text-theme-400">
-                {{ formatTimestamp(agent.createdAt) }}
-              </dd>
-            </div>
-            <div class="flex items-center gap-1">
-              <dt>Last changed</dt>
-              <dd class="text-theme-400">
-                {{ formatTimestamp(agent.updatedAt) }}
-              </dd>
-            </div>
-          </dl>
-        </div>
+  
 
         <TabBar
           v-model="activeSectionId"
