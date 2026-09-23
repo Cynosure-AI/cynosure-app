@@ -596,458 +596,462 @@ watch(searchQuery, () => {
 
 <template>
   <div
-    class="h-full overflow-y-auto px-4 py-4 pb-12 sm:px-8 sm:py-6"
+    class="h-full overflow-y-auto"
     @scroll.passive="handleScroll"
   >
-    <header class="mb-4 mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h1 class="text-[1.45rem] font-bold tracking-[0.02em] text-theme-100">
-          Activity Log
-        </h1>
-        <p class="mt-1 max-w-3xl text-sm text-theme-500">
-          Active work and a timeline of completed chats, cron runs, memory indexing, generated files, channels, and notifications.
-        </p>
-      </div>
-      <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-        <div class="flex gap-2">
-          <button
-            type="button"
-            class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-400/35 bg-red-400/10 px-3 py-2 text-[13px] font-semibold text-red-300 transition hover:border-red-300/55 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60 sm:flex-none"
-            :disabled="stoppingAll"
-            @click="openStopAllConfirm"
-          >
-            <Icon
-              :icon="stoppingAll ? 'lucide:loader-2' : 'lucide:square-stop'"
-              class="h-4 w-4"
-              :class="{ 'animate-spin': stoppingAll }"
-            />
-            Stop All
-          </button>
-          <button
-            class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:flex-none"
-            :disabled="loading"
-            @click="loadActivity"
-          >
-            <Icon
-              icon="lucide:refresh-cw"
-              class="w-4 h-4"
-              :class="{ 'animate-spin': loading }"
-            />
-            Refresh
-          </button>
+    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:py-5">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
+        <div>
+          <h1 class="text-2xl font-bold text-theme-100">
+            Activity Log
+          </h1>
+          <p class="mt-1 max-w-3xl text-sm leading-relaxed text-theme-500">
+            Active work and a timeline of completed chats, cron runs, memory indexing, generated files, channels, and notifications.
+          </p>
         </div>
-        <p
-          v-if="stopAllMessage"
-          class="text-xs text-theme-400"
-          role="status"
-        >
-          {{ stopAllMessage }}
-        </p>
+        <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-400/35 bg-red-400/10 px-3 py-2 text-[13px] font-semibold text-red-300 transition hover:border-red-300/55 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60 sm:flex-none"
+              :disabled="stoppingAll"
+              @click="openStopAllConfirm"
+            >
+              <Icon
+                :icon="stoppingAll ? 'lucide:loader-2' : 'lucide:square-stop'"
+                class="h-4 w-4"
+                :class="{ 'animate-spin': stoppingAll }"
+              />
+              Stop All
+            </button>
+            <button
+              class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:flex-none"
+              :disabled="loading"
+              @click="loadActivity"
+            >
+              <Icon
+                icon="lucide:refresh-cw"
+                class="w-4 h-4"
+                :class="{ 'animate-spin': loading }"
+              />
+              Refresh
+            </button>
+          </div>
+          <p
+            v-if="stopAllMessage"
+            class="text-xs text-theme-400"
+            role="status"
+          >
+            {{ stopAllMessage }}
+          </p>
+        </div>
       </div>
     </header>
 
-    <div class="mb-5 mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center">
-      <HoverMenu
-        placement="below"
-        :max-width="292"
-        :close-delay="180"
-      >
-        <template #trigger="{ open, toggle }">
-          <button
-            type="button"
-            class="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-300 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 sm:w-48"
-            :class="{ 'filter-chip-active text-accent-700 dark:text-accent-300': selectedKinds.length > 0 }"
-            aria-haspopup="menu"
-            :aria-expanded="open"
-            @click.stop="toggle"
-          >
-            <span class="inline-flex min-w-0 items-center gap-2">
-              <Icon
-                icon="lucide:list-filter"
-                class="h-4 w-4 shrink-0"
-              />
-              <span class="truncate">{{ selectedKindSummary }}</span>
-            </span>
-            <span class="inline-flex shrink-0 items-center gap-1.5">
-              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">
-                {{ selectedKinds.length }}/{{ filterOptions.length }}
-              </span>
-              <Icon
-                icon="lucide:chevron-down"
-                class="h-3.5 w-3.5 text-theme-500 transition"
-                :class="{ 'rotate-180': open }"
-              />
-            </span>
-          </button>
-        </template>
-
-        <template #content>
-          <div
-            class="w-72"
-            role="menu"
-            @click.stop
-          >
+    <div class="mx-auto max-w-7xl px-4 py-6 pb-12 sm:px-6 lg:px-8">
+      <div class="mb-5 mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center">
+        <HoverMenu
+          placement="below"
+          :max-width="292"
+          :close-delay="180"
+        >
+          <template #trigger="{ open, toggle }">
             <button
               type="button"
-              class="mb-1 flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
-              :class="{ 'filter-menu-active text-accent-700 dark:text-accent-300': allKindsSelected || defaultKindsSelected }"
-              @click="toggleAllKinds"
-            >
-              <span class="inline-flex items-center gap-2">
-                <span class="flex h-4 w-4 items-center justify-center rounded border border-theme-600">
-                  <Icon
-                    v-if="allKindsSelected || defaultKindsSelected"
-                    icon="lucide:check"
-                    class="h-3 w-3"
-                  />
-                </span>
-                <Icon
-                  icon="lucide:list-filter"
-                  class="h-3.5 w-3.5"
-                />
-                All Activity
-              </span>
-              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ allActivityTotal }}</span>
-            </button>
-
-            <div class="my-1 h-px bg-theme-800" />
-
-            <label
-              v-for="option in filterOptions"
-              :key="option.value"
-              class="flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
-              :class="{ 'filter-menu-active text-accent-700 dark:text-accent-300': selectedKinds.includes(option.value) }"
+              class="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-300 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 sm:w-48"
+              :class="{ 'filter-chip-active text-accent-700 dark:text-accent-300': selectedKinds.length > 0 }"
+              aria-haspopup="menu"
+              :aria-expanded="open"
+              @click.stop="toggle"
             >
               <span class="inline-flex min-w-0 items-center gap-2">
-                <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-theme-600">
-                  <Icon
-                    v-if="selectedKinds.includes(option.value)"
-                    icon="lucide:check"
-                    class="h-3 w-3"
-                  />
+                <Icon
+                  icon="lucide:list-filter"
+                  class="h-4 w-4 shrink-0"
+                />
+                <span class="truncate">{{ selectedKindSummary }}</span>
+              </span>
+              <span class="inline-flex shrink-0 items-center gap-1.5">
+                <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-300">
+                  {{ selectedKinds.length }}/{{ filterOptions.length }}
                 </span>
                 <Icon
-                  :icon="option.icon"
-                  class="h-3.5 w-3.5 shrink-0"
+                  icon="lucide:chevron-down"
+                  class="h-3.5 w-3.5 text-theme-500 transition"
+                  :class="{ 'rotate-180': open }"
                 />
-                <span class="truncate">{{ option.label }}</span>
               </span>
-              <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ totalByKind[option.value] }}</span>
-              <input
-                type="checkbox"
-                class="sr-only"
-                :checked="selectedKinds.includes(option.value)"
-                @change="toggleKind(option.value)"
+            </button>
+          </template>
+
+          <template #content>
+            <div
+              class="w-72"
+              role="menu"
+              @click.stop
+            >
+              <button
+                type="button"
+                class="mb-1 flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
+                :class="{ 'filter-menu-active text-accent-700 dark:text-accent-300': allKindsSelected || defaultKindsSelected }"
+                @click="toggleAllKinds"
               >
-            </label>
-          </div>
-        </template>
-      </HoverMenu>
-
-      <div class="relative min-w-0 flex-1">
-        <Icon
-          icon="lucide:search"
-          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-600"
-        />
-        <input
-          v-model="searchQuery"
-          type="search"
-          class="w-full rounded-lg border border-theme-800 bg-theme-900/80 py-2 pl-9 pr-10 text-[13px] text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:bg-theme-900"
-          placeholder="Search activity..."
-        >
-        <button
-          v-if="searchQuery"
-          class="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
-          title="Clear search"
-          @click="clearSearch"
-        >
-          <Icon
-            icon="lucide:x"
-            class="h-3.5 w-3.5"
-          />
-        </button>
-      </div>
-    </div>
-
-    <div
-      v-if="loading && items.length === 0"
-      class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
-    >
-      <Icon
-        icon="lucide:loader-2"
-        class="w-8 h-8 animate-spin text-theme-500"
-      />
-      <p>Loading activity...</p>
-    </div>
-
-    <div
-      v-else-if="filteredItems.length === 0"
-      class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
-    >
-      <Icon
-        icon="lucide:inbox"
-        class="w-9 h-9 text-theme-600"
-      />
-      <p>{{ searchQuery.trim() ? "No activity matches your search." : "No activity for this filter yet." }}</p>
-    </div>
-
-    <div
-      v-else
-      class="mx-auto max-w-6xl"
-    >
-      <section
-        v-for="group in groupedItems"
-        :key="group.label"
-        class="mb-2.5"
-      >
-        <div class="sticky -top-6 z-[5] flex items-center gap-2 bg-theme-900 py-1.5 text-[10px] font-bold uppercase tracking-[0.065em] text-theme-500">
-          <span
-            class="text-[13px]"
-            :class="{
-              'text-emerald-400': group.kind === 'active',
-              'text-amber-400': group.kind === 'attention',
-              'text-theme-400': group.kind === 'queued',
-            }"
-          >{{ group.label }}</span>
-          <span class="font-semibold text-theme-600">{{ group.items.length }}</span>
-        </div>
-
-        <div class="flex flex-col gap-1">
-          <article
-            v-for="item in group.items"
-            :key="item.id"
-            class="activity-row grid grid-cols-[1.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[3.35rem_1.5rem_minmax(0,1fr)]"
-            :class="[kindClass(item), {
-              'cursor-pointer': item.conversationId || item.agentId || item.memoryFileName,
-              'activity-requires-attention': item.status === 'awaiting-approval',
-            }]"
-            @click="openItem(item)"
-          >
-            <div class="hidden pt-2 text-right text-[10px] tabular-nums text-theme-500 sm:block">
-              <span>{{ formatClock(item.createdAt) }}</span>
-              <small class="block text-[8px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
-            </div>
-
-            <div class="relative mt-1.5 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border text-[var(--activity-color)] activity-marker">
-              <img
-                v-if="showAgentIcon(item)"
-                :src="agentIcon(item) || undefined"
-                :alt="agentLabel(item)"
-                loading="lazy"
-                class="h-full w-full object-cover ring-1 ring-inset ring-theme-900/60"
-              >
-              <Icon
-                v-else
-                :icon="kindIcon(item.kind)"
-                class="relative h-3 w-3"
-              />
-            </div>
-
-            <div class="activity-card min-w-0 rounded-md border border-theme-800 bg-theme-950 px-2.5 py-1.5 transition">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <div class="flex shrink-0 items-center gap-1 text-[10px] text-theme-600">
-                    <span class="font-bold uppercase tracking-[0.055em] text-[var(--activity-color)]">
-                      {{ item.kind }}
-                    </span>
-                    <span v-if="item.sourceLabel && item.sourceLabel.toLowerCase() !== item.kind">
-                      {{ item.sourceLabel }}
-                    </span>
-                  </div>
-
-                  <h2 class="min-w-0 text-[13px] font-semibold leading-snug text-theme-100">
-                    {{ item.title }}
-                  </h2>
-                </div>
-
-                <div class="flex shrink-0 items-center gap-1.5 pl-1">
-                  <button
-                    v-if="isActiveInstance(item)"
-                    type="button"
-                    class="inline-flex min-h-6 items-center justify-center gap-1 rounded-md border border-red-400/35 bg-red-400/10 px-2 py-1 text-[10px] font-semibold leading-none text-red-300 transition hover:border-red-300/50 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60"
-                    :disabled="Boolean(item.sourceId && stoppingIds.has(item.sourceId))"
-                    @click="stopInstance(item, $event)"
-                  >
+                <span class="inline-flex items-center gap-2">
+                  <span class="flex h-4 w-4 items-center justify-center rounded border border-theme-600">
                     <Icon
-                      :icon="item.sourceId && stoppingIds.has(item.sourceId) ? 'lucide:loader-2' : 'lucide:square'"
+                      v-if="allKindsSelected || defaultKindsSelected"
+                      icon="lucide:check"
                       class="h-3 w-3"
-                      :class="{ 'animate-spin': item.sourceId && stoppingIds.has(item.sourceId) }"
                     />
-                    Stop
-                  </button>
-                  <button
-                    v-else-if="isActiveMemoryJob(item) || isActiveDream(item)"
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-md border border-purple-400/35 bg-purple-400/10 px-2 py-1 text-[10px] font-semibold text-purple-300 transition hover:border-purple-300/50 hover:bg-purple-400/20 hover:text-purple-200 disabled:cursor-wait disabled:opacity-60"
-                    :disabled="Boolean(item.sourceId && cancellingJobIds.has(item.sourceId))"
-                    @click="cancelMemoryJob(item, $event)"
-                  >
-                    <Icon
-                      :icon="item.sourceId && cancellingJobIds.has(item.sourceId) ? 'lucide:loader-2' : 'lucide:x'"
-                      class="h-3 w-3"
-                      :class="{ 'animate-spin': item.sourceId && cancellingJobIds.has(item.sourceId) }"
-                    />
-                    Cancel
-                  </button>
-                  <span
-                    v-if="item.status"
-                    class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold lowercase"
-                    :class="{ 'attention-pill': item.status === 'awaiting-approval' }"
-                  >
-                    {{ item.status }}
                   </span>
-                </div>
-              </div>
-
-              <p
-                v-if="item.description"
-                class="mt-0.5 line-clamp-1 text-[11px] leading-4 text-theme-400 wrap-break-word"
-              >
-                {{ item.description }}
-              </p>
-
-              <p
-                v-if="item.kind === 'dream'"
-                class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-theme-500"
-              >
-                <time
-                  :datetime="new Date(item.createdAt).toISOString()"
-                  class="shrink-0 tabular-nums"
-                >
-                  {{ formatTimestamp(item.createdAt) }}
-                </time>
-                <span
-                  v-if="item.conversationTitle"
-                  class="truncate"
-                >
-                  · {{ item.conversationTitle }}
-                </span>
-              </p>
-
-              <details
-                v-if="item.dreamChanges?.length"
-                class="mt-2 text-xs text-theme-400"
-                @click.stop
-              >
-                <summary class="cursor-pointer">
-                  Memory changes
-                </summary>
-                <ul class="mt-2 space-y-2">
-                  <li
-                    v-for="(change, index) in item.dreamChanges"
-                    :key="index"
-                    class="overflow-hidden rounded-lg border border-emerald-500/20 bg-emerald-500/5"
-                  >
-                    <div class="flex items-center gap-2 px-3 py-2 text-emerald-300">
-                      <Icon
-                        icon="lucide:circle-check"
-                        class="h-3.5 w-3.5 shrink-0"
-                      />
-                      <button
-                        v-if="change.memoryFolderId && change.memoryFileName"
-                        type="button"
-                        class="min-w-0 truncate text-left font-medium hover:text-emerald-200 hover:underline"
-                        @click="openMemoryLocation(change.memoryFolderId, change.memoryFileName)"
-                      >
-                        {{ change.summary }}
-                      </button>
-                      <span
-                        v-else
-                        class="font-medium"
-                      >{{ change.summary }}</span>
-                    </div>
-                    <MemoryInlineDiff
-                      v-if="change.diffSegments"
-                      :segments="change.diffSegments"
-                      class="m-2 mt-0 max-h-72"
-                    />
-                  </li>
-                </ul>
-              </details>
-
-              <div
-                v-if="item.artifacts?.length"
-                class="mt-2 flex flex-wrap gap-1.5"
-              >
-                <a
-                  v-for="artifact in item.artifacts"
-                  :key="artifact.href"
-                  :href="artifact.href"
-                  target="_blank"
-                  rel="noreferrer"
-                  class="artifact-link inline-flex max-w-72 items-center gap-2 overflow-hidden rounded-md border px-2 py-1.5 text-xs text-theme-200"
-                  :class="{ 'min-h-16 pr-3': isImageArtifact(artifact.kind) }"
-                  @click.stop
-                >
-                  <img
-                    v-if="isImageArtifact(artifact.kind)"
-                    :src="artifact.href"
-                    :alt="artifact.label"
-                    loading="lazy"
-                    class="h-12 w-16 shrink-0 rounded object-cover"
-                  >
                   <Icon
-                    v-else
-                    :icon="artifactIcon(artifact.kind)"
+                    icon="lucide:list-filter"
+                    class="h-3.5 w-3.5"
+                  />
+                  All Activity
+                </span>
+                <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ allActivityTotal }}</span>
+              </button>
+
+              <div class="my-1 h-px bg-theme-800" />
+
+              <label
+                v-for="option in filterOptions"
+                :key="option.value"
+                class="flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
+                :class="{ 'filter-menu-active text-accent-700 dark:text-accent-300': selectedKinds.includes(option.value) }"
+              >
+                <span class="inline-flex min-w-0 items-center gap-2">
+                  <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-theme-600">
+                    <Icon
+                      v-if="selectedKinds.includes(option.value)"
+                      icon="lucide:check"
+                      class="h-3 w-3"
+                    />
+                  </span>
+                  <Icon
+                    :icon="option.icon"
                     class="h-3.5 w-3.5 shrink-0"
                   />
-                  <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifactTypeLabel(artifact.kind) }}</span>
-                  <span class="min-w-0 truncate">{{ artifact.label }}</span>
-                  <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifact.ext }}</span>
-                </a>
-              </div>
-
-              <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-theme-500">
-                <span class="inline-flex items-center gap-1">
-                  <Icon
-                    icon="lucide:user-round"
-                    class="w-3 h-3"
-                  />
-                  {{ agentLabel(item) }}
+                  <span class="truncate">{{ option.label }}</span>
                 </span>
-
-                <span
-                  v-if="item.conversationId || item.agentId"
-                  class="inline-flex items-center gap-1"
+                <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ totalByKind[option.value] }}</span>
+                <input
+                  type="checkbox"
+                  class="sr-only"
+                  :checked="selectedKinds.includes(option.value)"
+                  @change="toggleKind(option.value)"
                 >
-                  <Icon
-                    icon="lucide:external-link"
-                    class="w-3 h-3"
-                  />
-                  Open
-                </span>
-              </div>
+              </label>
             </div>
-          </article>
+          </template>
+        </HoverMenu>
+
+        <div class="relative min-w-0 flex-1">
+          <Icon
+            icon="lucide:search"
+            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-600"
+          />
+          <input
+            v-model="searchQuery"
+            type="search"
+            class="w-full rounded-lg border border-theme-800 bg-theme-900/80 py-2 pl-9 pr-10 text-[13px] text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:bg-theme-900"
+            placeholder="Search activity..."
+          >
+          <button
+            v-if="searchQuery"
+            class="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+            title="Clear search"
+            @click="clearSearch"
+          >
+            <Icon
+              icon="lucide:x"
+              class="h-3.5 w-3.5"
+            />
+          </button>
         </div>
-      </section>
+      </div>
 
       <div
-        v-if="loadingMore"
-        class="flex items-center justify-center gap-2 py-6 text-sm text-theme-500"
+        v-if="loading && items.length === 0"
+        class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
       >
         <Icon
           icon="lucide:loader-2"
-          class="h-4 w-4 animate-spin"
+          class="w-8 h-8 animate-spin text-theme-500"
         />
-        Loading more activity...
+        <p>Loading activity...</p>
       </div>
 
       <div
-        v-else-if="hasMore"
-        class="flex justify-center py-6"
+        v-else-if="filteredItems.length === 0"
+        class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
       >
-        <button
-          type="button"
-          class="inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
-          @click="loadMoreActivity"
+        <Icon
+          icon="lucide:inbox"
+          class="w-9 h-9 text-theme-600"
+        />
+        <p>{{ searchQuery.trim() ? "No activity matches your search." : "No activity for this filter yet." }}</p>
+      </div>
+
+      <div
+        v-else
+        class="mx-auto max-w-7xl"
+      >
+        <section
+          v-for="group in groupedItems"
+          :key="group.label"
+          class="mb-2.5"
+        >
+          <div class="sticky -top-6 z-[5] flex items-center gap-2 bg-theme-900 py-1.5 text-[10px] font-bold uppercase tracking-[0.065em] text-theme-500">
+            <span
+              class="text-[13px]"
+              :class="{
+                'text-emerald-400': group.kind === 'active',
+                'text-amber-400': group.kind === 'attention',
+                'text-theme-400': group.kind === 'queued',
+              }"
+            >{{ group.label }}</span>
+            <span class="font-semibold text-theme-600">{{ group.items.length }}</span>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <article
+              v-for="item in group.items"
+              :key="item.id"
+              class="activity-row grid grid-cols-[1.5rem_minmax(0,1fr)] items-stretch gap-2 sm:grid-cols-[3.35rem_1.5rem_minmax(0,1fr)]"
+              :class="[kindClass(item), {
+                'cursor-pointer': item.conversationId || item.agentId || item.memoryFileName,
+                'activity-requires-attention': item.status === 'awaiting-approval',
+              }]"
+              @click="openItem(item)"
+            >
+              <div class="hidden pt-2 text-right text-[10px] tabular-nums text-theme-500 sm:block">
+                <span>{{ formatClock(item.createdAt) }}</span>
+                <small class="block text-[8px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
+              </div>
+
+              <div class="relative mt-1.5 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border text-[var(--activity-color)] activity-marker">
+                <img
+                  v-if="showAgentIcon(item)"
+                  :src="agentIcon(item) || undefined"
+                  :alt="agentLabel(item)"
+                  loading="lazy"
+                  class="h-full w-full object-cover ring-1 ring-inset ring-theme-900/60"
+                >
+                <Icon
+                  v-else
+                  :icon="kindIcon(item.kind)"
+                  class="relative h-3 w-3"
+                />
+              </div>
+
+              <div class="activity-card min-w-0 rounded-md border border-theme-800 bg-theme-950 px-2.5 py-1.5 transition">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <div class="flex shrink-0 items-center gap-1 text-[10px] text-theme-600">
+                      <span class="font-bold uppercase tracking-[0.055em] text-[var(--activity-color)]">
+                        {{ item.kind }}
+                      </span>
+                      <span v-if="item.sourceLabel && item.sourceLabel.toLowerCase() !== item.kind">
+                        {{ item.sourceLabel }}
+                      </span>
+                    </div>
+
+                    <h2 class="min-w-0 text-[13px] font-semibold leading-snug text-theme-100">
+                      {{ item.title }}
+                    </h2>
+                  </div>
+
+                  <div class="flex shrink-0 items-center gap-1.5 pl-1">
+                    <button
+                      v-if="isActiveInstance(item)"
+                      type="button"
+                      class="inline-flex min-h-6 items-center justify-center gap-1 rounded-md border border-red-400/35 bg-red-400/10 px-2 py-1 text-[10px] font-semibold leading-none text-red-300 transition hover:border-red-300/50 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60"
+                      :disabled="Boolean(item.sourceId && stoppingIds.has(item.sourceId))"
+                      @click="stopInstance(item, $event)"
+                    >
+                      <Icon
+                        :icon="item.sourceId && stoppingIds.has(item.sourceId) ? 'lucide:loader-2' : 'lucide:square'"
+                        class="h-3 w-3"
+                        :class="{ 'animate-spin': item.sourceId && stoppingIds.has(item.sourceId) }"
+                      />
+                      Stop
+                    </button>
+                    <button
+                      v-else-if="isActiveMemoryJob(item) || isActiveDream(item)"
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-md border border-purple-400/35 bg-purple-400/10 px-2 py-1 text-[10px] font-semibold text-purple-300 transition hover:border-purple-300/50 hover:bg-purple-400/20 hover:text-purple-200 disabled:cursor-wait disabled:opacity-60"
+                      :disabled="Boolean(item.sourceId && cancellingJobIds.has(item.sourceId))"
+                      @click="cancelMemoryJob(item, $event)"
+                    >
+                      <Icon
+                        :icon="item.sourceId && cancellingJobIds.has(item.sourceId) ? 'lucide:loader-2' : 'lucide:x'"
+                        class="h-3 w-3"
+                        :class="{ 'animate-spin': item.sourceId && cancellingJobIds.has(item.sourceId) }"
+                      />
+                      Cancel
+                    </button>
+                    <span
+                      v-if="item.status"
+                      class="status-pill shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold lowercase"
+                      :class="{ 'attention-pill': item.status === 'awaiting-approval' }"
+                    >
+                      {{ item.status }}
+                    </span>
+                  </div>
+                </div>
+
+                <p
+                  v-if="item.description"
+                  class="mt-0.5 line-clamp-1 text-[11px] leading-4 text-theme-400 wrap-break-word"
+                >
+                  {{ item.description }}
+                </p>
+
+                <p
+                  v-if="item.kind === 'dream'"
+                  class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-theme-500"
+                >
+                  <time
+                    :datetime="new Date(item.createdAt).toISOString()"
+                    class="shrink-0 tabular-nums"
+                  >
+                    {{ formatTimestamp(item.createdAt) }}
+                  </time>
+                  <span
+                    v-if="item.conversationTitle"
+                    class="truncate"
+                  >
+                    · {{ item.conversationTitle }}
+                  </span>
+                </p>
+
+                <details
+                  v-if="item.dreamChanges?.length"
+                  class="mt-2 text-xs text-theme-400"
+                  @click.stop
+                >
+                  <summary class="cursor-pointer">
+                    Memory changes
+                  </summary>
+                  <ul class="mt-2 space-y-2">
+                    <li
+                      v-for="(change, index) in item.dreamChanges"
+                      :key="index"
+                      class="overflow-hidden rounded-lg border border-emerald-500/20 bg-emerald-500/5"
+                    >
+                      <div class="flex items-center gap-2 px-3 py-2 text-emerald-300">
+                        <Icon
+                          icon="lucide:circle-check"
+                          class="h-3.5 w-3.5 shrink-0"
+                        />
+                        <button
+                          v-if="change.memoryFolderId && change.memoryFileName"
+                          type="button"
+                          class="min-w-0 truncate text-left font-medium hover:text-emerald-200 hover:underline"
+                          @click="openMemoryLocation(change.memoryFolderId, change.memoryFileName)"
+                        >
+                          {{ change.summary }}
+                        </button>
+                        <span
+                          v-else
+                          class="font-medium"
+                        >{{ change.summary }}</span>
+                      </div>
+                      <MemoryInlineDiff
+                        v-if="change.diffSegments"
+                        :segments="change.diffSegments"
+                        class="m-2 mt-0 max-h-72"
+                      />
+                    </li>
+                  </ul>
+                </details>
+
+                <div
+                  v-if="item.artifacts?.length"
+                  class="mt-2 flex flex-wrap gap-1.5"
+                >
+                  <a
+                    v-for="artifact in item.artifacts"
+                    :key="artifact.href"
+                    :href="artifact.href"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="artifact-link inline-flex max-w-72 items-center gap-2 overflow-hidden rounded-md border px-2 py-1.5 text-xs text-theme-200"
+                    :class="{ 'min-h-16 pr-3': isImageArtifact(artifact.kind) }"
+                    @click.stop
+                  >
+                    <img
+                      v-if="isImageArtifact(artifact.kind)"
+                      :src="artifact.href"
+                      :alt="artifact.label"
+                      loading="lazy"
+                      class="h-12 w-16 shrink-0 rounded object-cover"
+                    >
+                    <Icon
+                      v-else
+                      :icon="artifactIcon(artifact.kind)"
+                      class="h-3.5 w-3.5 shrink-0"
+                    />
+                    <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifactTypeLabel(artifact.kind) }}</span>
+                    <span class="min-w-0 truncate">{{ artifact.label }}</span>
+                    <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifact.ext }}</span>
+                  </a>
+                </div>
+
+                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-theme-500">
+                  <span class="inline-flex items-center gap-1">
+                    <Icon
+                      icon="lucide:user-round"
+                      class="w-3 h-3"
+                    />
+                    {{ agentLabel(item) }}
+                  </span>
+
+                  <span
+                    v-if="item.conversationId || item.agentId"
+                    class="inline-flex items-center gap-1"
+                  >
+                    <Icon
+                      icon="lucide:external-link"
+                      class="w-3 h-3"
+                    />
+                    Open
+                  </span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <div
+          v-if="loadingMore"
+          class="flex items-center justify-center gap-2 py-6 text-sm text-theme-500"
         >
           <Icon
-            icon="lucide:chevrons-down"
-            class="h-4 w-4"
+            icon="lucide:loader-2"
+            class="h-4 w-4 animate-spin"
           />
-          Load more
-        </button>
+          Loading more activity...
+        </div>
+
+        <div
+          v-else-if="hasMore"
+          class="flex justify-center py-6"
+        >
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
+            @click="loadMoreActivity"
+          >
+            <Icon
+              icon="lucide:chevrons-down"
+              class="h-4 w-4"
+            />
+            Load more
+          </button>
+        </div>
       </div>
     </div>
   </div>
