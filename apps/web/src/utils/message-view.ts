@@ -7,6 +7,7 @@ export function toDisplayMessage(item: MessageItem, sequence = item.sequence): D
   const message: DisplayMessage = {
     id: item.id,
     sequence,
+    toolCallIds: item.toolCallIds,
     streamId: item.role === 'assistant' ? item.executionId : undefined,
     role: item.role,
     isError: item.isError,

@@ -23,6 +23,25 @@ describe('conversation message attachment resolution', () => {
         await rm(directory, { recursive: true, force: true })
     })
 
+    test('returns saved tool-call IDs for ordering execution cards', async () => {
+        const db = getDb()
+        db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)')
+            .run('c1', 'Chat', 1, 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, tool_calls_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('m1', 'c1', 'assistant', 'I will write it now', JSON.stringify([
+                { id: 'write-1', type: 'function', function: { name: 'memory_patch', arguments: '{}' } },
+            ]), 2)
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        try {
+            const response = await app.inject({ method: 'GET', url: '/api/chat/conversations/c1/messages' })
+            expect(response.statusCode, response.body).toBe(200)
+            expect(response.json().messages[0].toolCallIds).toEqual(['write-1'])
+        } finally {
+            await app.close()
+        }
+    })
+
     test('forks persisted history and configuration through the selected message', async () => {
         const db = getDb()
         db.prepare(`INSERT INTO conversations (id, title, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)

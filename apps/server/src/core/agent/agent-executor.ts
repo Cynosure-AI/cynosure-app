@@ -1212,7 +1212,8 @@ export class AgentExecutor {
         )
         publishChatEvent(this.config.broadcast, { conversationId, executionId: this._streamId, payload: {
             type: 'transcript-item', item: messageToTranscriptItem({ id, role: 'assistant', content: assistantContent || '',
-                thinking, createdAt, agentId, maCodename: meta?.maCodename as string | undefined,
+                thinking, createdAt, agentId, toolCallIds: visibleToolCalls.map((call) => call.id),
+                maCodename: meta?.maCodename as string | undefined,
                 maAgentName: meta?.maAgentName as string | undefined, maInvocationId: meta?.maInvocationId as string | undefined,
                 provider: providerId, model }, streamId),
         } })

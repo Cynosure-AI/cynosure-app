@@ -28,6 +28,7 @@ export interface MessageFields {
   completionTokens?: number | null
   contextTokens?: number | null
   latencyMs?: number | null
+  toolCallIds?: string[]
 }
 
 export function messageContentBlocks(message: MessageFields): ContentBlock[] {
@@ -82,6 +83,7 @@ export function messageToTranscriptItem(message: MessageFields, executionId?: st
     completionTokens: message.completionTokens,
     contextTokens: message.contextTokens,
     latencyMs: message.latencyMs,
+    toolCallIds: message.toolCallIds,
   }
 }
 

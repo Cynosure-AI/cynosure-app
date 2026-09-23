@@ -23,6 +23,8 @@ export interface MessageItem {
   maAgentName?: string
   /** Sequence of the event that first published this persisted message. */
   sequence?: number
+  /** Tool calls requested by this assistant message, for transcript ordering. */
+  toolCallIds?: string[]
   contextEvidence?: ContextEvidence[]
   provider?: string | null
   model?: string | null
