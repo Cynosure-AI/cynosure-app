@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../stores/agent-runtime.store'
+import { useMcpServers } from '../../composables/useMcpServers'
 import { Icon } from '@iconify/vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import HoverTooltip from './HoverTooltip.vue'
@@ -23,8 +24,10 @@ const emit = defineEmits<{
 }>()
 
 const agentStore = useAgentStore()
+const { servers, loadServers } = useMcpServers()
 
 const toolFilterText = ref('')
+const brokenIcons = ref<Set<string>>(new Set())
 const expandedNamespaces = ref<Set<string>>(new Set())
 const debouncedSearchExpansion = ref(false)
 let searchExpansionTimer: number | undefined
@@ -145,6 +148,15 @@ function displayToolName(tool: ToolInfo): string {
   return tool.name
 }
 
+function namespaceIcon(namespaceId: string): string | null {
+  if (!namespaceId.startsWith('mcp:') || brokenIcons.value.has(namespaceId)) return null
+  return servers.value.find((server) => server.id === namespaceId.slice(4))?.icon_url ?? null
+}
+
+function markIconBroken(namespaceId: string): void {
+  brokenIcons.value = new Set([...brokenIcons.value, namespaceId])
+}
+
 function approvalName(tool: ToolInfo): string {
   return tool.executionName
 }
@@ -237,6 +249,10 @@ watch(toolFilterText, (value) => {
 onBeforeUnmount(() => {
   window.clearTimeout(searchExpansionTimer)
 })
+
+onMounted(() => {
+  if (servers.value.length === 0) void loadServers().catch(() => undefined)
+})
 </script>
 
 <template>
@@ -322,16 +338,30 @@ onBeforeUnmount(() => {
                     </span>
                   </label>
                   <div
-                    class="flex cursor-pointer select-none justify-between items-center flex-1 gap-2"
+                    class="flex min-w-0 cursor-pointer select-none items-center gap-2 flex-1"
                     @click="toggle"
                   >
+                    <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
+                      <img
+                        v-if="namespaceIcon(group.namespace.id)"
+                        :src="namespaceIcon(group.namespace.id)!"
+                        alt=""
+                        class="h-5 w-5 object-contain"
+                        @error="markIconBroken(group.namespace.id)"
+                      >
+                      <Icon
+                        v-else
+                        :icon="isBuiltInNamespaceId(group.namespace.id) ? 'lucide:blocks' : 'lucide:plug'"
+                        class="h-4 w-4 text-theme-400"
+                      />
+                    </span>
                     <p
-                      class="text-[11px] uppercase tracking-wider "
+                      class="min-w-0 flex-1 truncate text-[11px] uppercase tracking-wider"
                       :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : ''"
                     >
                       {{ group.namespace.label }}
                     </p>
-                    <p class="text-[10px] text-theme-600 mt-0.5">
+                    <p class="shrink-0 text-[10px] text-theme-600 mt-0.5">
                       {{ selectedCount(group) }}/{{ selectableCount(group) }} selected
                       <span v-if="autoManagedCount(group)"> · {{ autoManagedCount(group) }} automatic</span>
                       <span v-if="unavailableCount(group)"> · {{ unavailableCount(group) }} require agent</span>

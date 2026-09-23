@@ -6,6 +6,7 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
 import { useProviderLogos } from '../composables/useProviderLogos'
+import { useMcpServers } from '../composables/useMcpServers'
 import DataTable from '../components/shared/DataTable.vue'
 import BaseCard from '../components/shared/BaseCard.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
@@ -19,6 +20,7 @@ const agentStore = useAgentStore()
 const providerStore = useProviderStore()
 const router = useRouter()
 const { logoUrl } = useProviderLogos()
+const { servers, loadServers } = useMcpServers()
 const TOOLTIP_MAX_TOOLS = 20
 
 const showCreateDialog = ref(false)
@@ -36,8 +38,12 @@ const editModel = ref('')
 const editSaving = ref(false)
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
+const brokenIcons = ref<Set<string>>(new Set())
 
-onMounted(() => agentDefs.load())
+onMounted(() => {
+  void agentDefs.load()
+  if (servers.value.length === 0) void loadServers().catch(() => undefined)
+})
 
 function getProviderName(agent: AgentDefinition): string {
   return providerStore.providers.find(provider => provider.id === agent.providerId)?.name || 'Unknown'
@@ -93,7 +99,7 @@ function startInlineEdit(item: AgentDefinition, column: Column<AgentDefinition>)
   }
 }
 
-function toolNamespaces(agent: AgentDefinition): { mcps: string[]; categories: string[] } {
+function toolNamespaces(agent: AgentDefinition): { mcps: { id: string; label: string }[]; categories: string[] } {
   const namespaces = new Map<string, { id: string; label: string }>()
   for (const key of agent.tools) {
     const namespace = agentStore.availableTools.find(tool => tool.key === key)?.namespace
@@ -101,11 +107,18 @@ function toolNamespaces(agent: AgentDefinition): { mcps: string[]; categories: s
   }
   const values = [...namespaces.values()]
   return {
-    mcps: values.filter(namespace => namespace.id.startsWith('mcp:')).map(namespace => namespace.label),
+    mcps: values.filter(namespace => namespace.id.startsWith('mcp:')),
     categories: values
       .filter(namespace => !namespace.id.startsWith('mcp:'))
       .map(namespace => namespace.label.replace(/^Built-In:\s*/i, '')),
   }
+}
+function namespaceIcon(namespaceId: string): string | null {
+  if (brokenIcons.value.has(namespaceId)) return null
+  return servers.value.find(server => server.id === namespaceId.slice(4))?.icon_url ?? null
+}
+function markIconBroken(namespaceId: string): void {
+  brokenIcons.value = new Set([...brokenIcons.value, namespaceId])
 }
 async function saveInlineModel(items: AgentDefinition[], finish: () => void): Promise<void> {
   if (!editProviderId.value || editSaving.value) return
@@ -405,11 +418,25 @@ function formatDate(timestamp: number): string {
                     MCPs
                   </div>
                   <div
-                    v-for="name in toolNamespaces(item).mcps"
-                    :key="`mcp:${name}`"
-                    class="truncate py-0.5 text-[10px] text-theme-300"
+                    v-for="namespace in toolNamespaces(item).mcps"
+                    :key="namespace.id"
+                    class="flex items-center gap-1.5 py-0.5 text-[10px] text-theme-300"
                   >
-                    {{ name }}
+                    <span class="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded bg-theme-800">
+                      <img
+                        v-if="namespaceIcon(namespace.id)"
+                        :src="namespaceIcon(namespace.id)!"
+                        alt=""
+                        class="h-3.5 w-3.5 object-contain"
+                        @error="markIconBroken(namespace.id)"
+                      >
+                      <Icon
+                        v-else
+                        icon="lucide:plug"
+                        class="h-3 w-3 text-theme-400"
+                      />
+                    </span>
+                    <span class="truncate">{{ namespace.label }}</span>
                   </div>
                 </div>
                 <div
