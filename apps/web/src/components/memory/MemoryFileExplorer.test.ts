@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listJobs: vi.fn(),
   searchFiles: vi.fn(),
   startReindexFile: vi.fn(),
+  ingestFile: vi.fn(),
   updateFolder: vi.fn(),
 }))
 
@@ -24,6 +25,7 @@ vi.mock('../../api/client', () => ({
       listJobs: mocks.listJobs,
       searchFiles: mocks.searchFiles,
       startReindexFile: mocks.startReindexFile,
+      ingestFile: mocks.ingestFile,
       update: mocks.updateFolder,
     },
   },
@@ -83,6 +85,26 @@ describe('MemoryFileExplorer navigation and search', () => {
       status: 'queued', progressCurrent: 0, progressTotal: 0, createdAt: 1, updatedAt: 1,
     })
     mocks.updateFolder.mockResolvedValue({})
+    mocks.ingestFile.mockResolvedValue({ success: true, chunksStored: 0, fileName: 'Untitled.md' })
+  })
+
+  test('creates a named file in the current folder and opens the created file', async () => {
+    mocks.ingestFile.mockResolvedValueOnce({ success: true, chunksStored: 0, fileName: 'Project (2).md' })
+    const wrapper = mountList()
+    await flushPromises()
+
+    const newFileButton = wrapper.findAll('button').find((button) => button.text().trim() === 'New file')
+    expect(newFileButton).toBeDefined()
+    await newFileButton!.trigger('click')
+    const nameInput = document.body.querySelector<HTMLInputElement>('#new-memory-file-name')!
+    nameInput.value = 'Project'
+    nameInput.dispatchEvent(new Event('input'))
+    document.body.querySelector<HTMLFormElement>('[role="dialog"] form')!.requestSubmit()
+    await flushPromises()
+
+    expect(mocks.ingestFile).toHaveBeenCalledWith('category', 'Project.md', '')
+    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('true:Project (2).md')
+    expect(wrapper.emitted('spacesChanged')).toHaveLength(1)
   })
 
   test('opens a linked document while leaving the always-visible search empty', async () => {
