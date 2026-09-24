@@ -1,5 +1,5 @@
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
-import { useAgentStore } from '../stores/agent-runtime.store'
+import { useAgentStore, type ToolInfo } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
@@ -142,6 +142,7 @@ export function useChatAgentConfig(
     const agentOriginalMemoryFolderIds = ref<string[]>([])
     const freeChatDefaultMemoryFolderIds = ref<string[]>([])
     const freeChatPreset = ref<ChatPreset | null>(null)
+    let freeChatToolsFollowDefaults = true
 
     function filterToolsForChatContext(names: string[], _hasAgent = Boolean(activeAgentId.value)): string[] {
         return [...names]
@@ -155,13 +156,28 @@ export function useChatAgentConfig(
         )
     }
 
-    watch(() => agentStore.availableTools, () => {
+    function defaultFreeChatToolKeys(tools: ToolInfo[]): string[] {
+        const defaultNames = new Set(['manage_mcp', 'schedule_create', 'schedule_list', 'schedule_update', 'schedule_delete'])
+        return tools
+            .filter((tool) => isBuiltInNamespaceId(tool.namespace.id) && defaultNames.has(tool.name))
+            .map((tool) => tool.key)
+    }
+
+    watch(() => agentStore.availableTools, (tools, previousTools) => {
         const availableKeys = selectableToolKeys()
         const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
         if (activeAgentId.value) {
             agentOriginalTools.value = agentOriginalTools.value.filter((name) => availableKeys.has(name))
         }
-        if (!arraysEqual(filtered, selectedToolNames.value)) {
+        const previousDefaults = defaultFreeChatToolKeys(previousTools ?? [])
+        const nextDefaults = defaultFreeChatToolKeys(tools)
+        const followsDefaults = !activeAgentId.value && freeChatToolsFollowDefaults && arraysEqual(filtered, previousDefaults)
+        if (freeChatToolsFollowDefaults && freeChatPreset.value && arraysEqual(freeChatPreset.value.tools, previousDefaults)) {
+            freeChatPreset.value = { ...freeChatPreset.value, tools: nextDefaults }
+        }
+        if (followsDefaults && freeChatMemorySelectionInitialized.value) {
+            selectedToolNames.value = nextDefaults
+        } else if (!arraysEqual(filtered, selectedToolNames.value)) {
             selectedToolNames.value = filtered
             captureFreeChatPreset()
         }
@@ -169,7 +185,7 @@ export function useChatAgentConfig(
 
     function regularFreeChatPreset(): ChatPreset {
         return {
-            tools: [],
+            tools: defaultFreeChatToolKeys(agentStore.availableTools),
             subAgentIds: [],
             memoryFolderIds: [...freeChatDefaultMemoryFolderIds.value],
             systemPrompt: DEFAULT_FREE_CHAT_SYSTEM_PROMPT,
@@ -265,6 +281,7 @@ export function useChatAgentConfig(
     }
 
     function setSelectedToolNames(names: string[]): void {
+        if (!activeAgentId.value) freeChatToolsFollowDefaults = false
         const availableKeys = selectableToolKeys()
         const seen = new Set<string>()
         selectedToolNames.value = names.filter((name) => {
@@ -347,6 +364,7 @@ export function useChatAgentConfig(
         const modelOverride = sessionModelOverride.value
         const providerOverride = sessionProviderOverride.value
         const preset = regularFreeChatPreset()
+        freeChatToolsFollowDefaults = true
         freeChatPreset.value = clonePreset(preset)
         applyPreset(preset)
         sessionModelOverride.value = modelOverride
@@ -466,6 +484,7 @@ export function useChatAgentConfig(
     }
 
     function restoreConversationConfig(config: ConversationExecutionConfig): void {
+        if (!activeAgentId.value) freeChatToolsFollowDefaults = false
         const activeAgent = activeAgentId.value ? useAgentDefinitionsStore().get(activeAgentId.value) : null
         const restoredModel = config.model || null
         const restoredProviderId = config.providerId || null
@@ -528,6 +547,7 @@ export function useChatAgentConfig(
 
     function syncAgentBaseline(): void {
         if (!activeAgentId.value) {
+            freeChatToolsFollowDefaults = true
             const preset = regularFreeChatPreset()
             freeChatPreset.value = clonePreset(preset)
             applyPreset(preset)

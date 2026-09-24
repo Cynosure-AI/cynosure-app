@@ -288,7 +288,7 @@ function formatDate(timestamp: number): string {
         :filter-predicate="matchesSearch"
         selectable
         pagination
-        :page-size="20"
+        :page-size="30"
         pagination-position="both"
         row-clickable
         :row-draggable="() => !activeSortKey"
