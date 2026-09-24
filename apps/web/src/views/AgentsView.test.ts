@@ -28,6 +28,21 @@ const NameColumnTable = {
   template: '<div><div v-for="item in items" :key="item.id"><slot name="col-name" :item="item" /></div></div>',
 }
 
+const InfoColumnTable = {
+  name: 'DataTable',
+  props: { items: { type: Array, default: () => [] } },
+  template: '<div><div v-for="item in items" :key="item.id" :data-agent-id="item.id"><slot name="col-info" :item="item" /></div></div>',
+}
+
+const TooltipStub = {
+  template: '<div><slot /><slot name="content" /></div>',
+}
+
+const IconStub = {
+  props: ['icon'],
+  template: '<span :data-icon="icon" />',
+}
+
 function agent(id: string, assignments: Partial<AgentDefinition> = {}): AgentDefinition {
   return {
     id, name: id, description: '', tools: [], subAgents: [], memoryFolders: [],
@@ -83,5 +98,40 @@ describe('AgentsView assignment warnings', () => {
     expect((table.props('items') as AgentDefinition[]).map(item => item.id)).toEqual(['ready'])
     await wrapper.findAll('button').find(button => button.text().trim() === 'Clear filters')!.trigger('click')
     expect((table.props('items') as AgentDefinition[])).toHaveLength(4)
+  })
+
+  test('shows tool discovery on the wrench and auto memory on the brain', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const definitions = useAgentDefinitionsStore()
+    definitions.agents = [
+      agent('tools-on', { autoToolRouting: true, autoMemory: false }),
+      agent('memory-on', { autoToolRouting: false, autoMemory: true }),
+    ]
+    definitions.load = vi.fn().mockResolvedValue(undefined)
+    useAgentStore().availableTools = []
+
+    const wrapper = mount(AgentsView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          DataTable: InfoColumnTable, Icon: IconStub, BaseCard: true,
+          HoverTooltip: TooltipStub, ModalDialog: true, ProviderModelSelect: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const toolsOn = wrapper.get('[data-agent-id="tools-on"]')
+    const memoryOn = wrapper.get('[data-agent-id="memory-on"]')
+    const toolIcon = (row: typeof toolsOn) => row.get('[data-icon="lucide:wrench"]').element.parentElement!
+    const memoryIcon = (row: typeof toolsOn) => row.get('[data-icon="lucide:brain"]').element.parentElement!
+
+    expect(toolIcon(toolsOn).classList.contains('text-emerald-400')).toBe(true)
+    expect(memoryIcon(toolsOn).classList.contains('text-emerald-400')).toBe(false)
+    expect(toolIcon(memoryOn).classList.contains('text-emerald-400')).toBe(false)
+    expect(memoryIcon(memoryOn).classList.contains('text-emerald-400')).toBe(true)
+    expect(toolIcon(toolsOn).parentElement?.textContent).toContain('Automatic tool discovery is enabled')
+    expect(memoryIcon(memoryOn).parentElement?.textContent).toContain('Auto memory is enabled')
   })
 })

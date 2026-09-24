@@ -434,7 +434,7 @@ function formatDate(timestamp: number): string {
             >
               <span
                 class="flex items-center gap-1 rounded px-1.5 py-0.5"
-                :class="item.autoMemory ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-500'"
+                :class="item.autoToolRouting ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-500'"
               ><Icon
                 icon="lucide:wrench"
                 class="h-3 w-3"
@@ -442,9 +442,9 @@ function formatDate(timestamp: number): string {
               <template #content>
                 <div
                   class="mb-2 font-medium"
-                  :class="item.autoMemory ? 'text-emerald-400' : 'text-theme-400'"
+                  :class="item.autoToolRouting ? 'text-emerald-400' : 'text-theme-400'"
                 >
-                  Auto memory is {{ item.autoMemory ? 'enabled' : 'disabled' }}
+                  Automatic tool discovery is {{ item.autoToolRouting ? 'enabled' : 'disabled' }}
                 </div>
                 <div v-if="toolNamespaces(item).mcps.length">
                   <div class="mb-1 font-medium text-theme-400">
@@ -516,13 +516,18 @@ function formatDate(timestamp: number): string {
             >
               <span
                 class="flex items-center rounded px-1.5 py-0.5"
-                :class="item.autoToolRouting ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-600'"
+                :class="item.autoMemory ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-600'"
               ><Icon
                 icon="lucide:brain"
                 class="h-3 w-3"
               /></span>
               <template #content>
-                Auto memory router is {{ item.autoToolRouting ? 'enabled' : 'disabled' }}
+                <div
+                  class="font-medium"
+                  :class="item.autoMemory ? 'text-emerald-400' : 'text-theme-400'"
+                >
+                  Auto memory is {{ item.autoMemory ? 'enabled' : 'disabled' }}
+                </div>
               </template>
             </HoverTooltip>
           </div>
