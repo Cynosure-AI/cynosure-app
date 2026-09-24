@@ -25,7 +25,7 @@ vi.mock('../composables/useProviderLogos', () => ({
 const NameColumnTable = {
   name: 'DataTable',
   props: { items: { type: Array, default: () => [] }, columns: { type: Array, default: () => [] } },
-  template: '<div><div v-for="item in items" :key="item.id"><slot name="col-name" :item="item" /><slot name="col-state" :item="item" /></div></div>',
+  template: '<div><div v-for="item in items" :key="item.id"><slot name="col-name" :item="item" /></div></div>',
 }
 
 function agent(id: string, assignments: Partial<AgentDefinition> = {}): AgentDefinition {
@@ -72,13 +72,7 @@ describe('AgentsView assignment warnings', () => {
     ]))
 
     const table = wrapper.getComponent({ name: 'DataTable' })
-    const stateColumn = (table.props('columns') as Array<{ key: string; sortable?: boolean; sortValue?: (item: AgentDefinition) => number }>)
-      .find(column => column.key === 'state')
-    expect(stateColumn?.sortable).toBe(true)
-    expect(stateColumn?.sortValue?.(definitions.agents[0])).toBe(0)
-    expect(stateColumn?.sortValue?.(definitions.agents[1])).toBe(1)
-    expect(wrapper.findAll('[role="img"][aria-label="Ready"]')).toHaveLength(1)
-    expect(wrapper.findAll('[role="img"][aria-label^="Needs attention:"]')).toHaveLength(3)
+    expect((table.props('columns') as Array<{ key: string }>).some(column => column.key === 'state')).toBe(false)
 
     const filter = wrapper.get('select[aria-label="Filter agents by state"]')
     await filter.setValue('warning')

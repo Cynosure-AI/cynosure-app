@@ -77,7 +77,6 @@ const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || stateFilt
 const agentColumns: Column<AgentDefinition>[] = [
   { key: 'favorite', label: '', width: '36px', sortable: true, sortValue: agent => agent.favorite },
   { key: 'name', label: 'Name', width: 'minmax(240px, 1.45fr)', sortable: true, sortValue: agent => agent.name },
-  { key: 'state', label: 'State', width: '76px', sortable: true, sortValue: agent => agentIssues.value.get(agent.id)?.length ? 1 : 0 },
   { key: 'model', label: 'Model / Provider', width: 'minmax(200px, 0.85fr)', sortable: true, editable: true, sortValue: agent => `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}` },
   { key: 'info', label: 'Info', width: '130px' },
   { key: 'date', label: 'Date', width: '140px', sortable: true, sortValue: agent => agent.createdAt },
@@ -106,11 +105,6 @@ watch([searchQuery, stateFilter], () => { page.value = 0 })
 function clearFilters(): void {
   searchQuery.value = ''
   stateFilter.value = 'all'
-}
-
-function stateLabel(agent: AgentDefinition): string {
-  const issues = agentIssues.value.get(agent.id) ?? []
-  return issues.length ? `Needs attention: ${issues.join(', ')}` : 'Ready'
 }
 
 function startInlineEdit(item: AgentDefinition, column: Column<AgentDefinition>): void {
@@ -232,7 +226,7 @@ function formatDate(timestamp: number): string {
 
 <template>
   <div class="h-full overflow-y-auto">
-    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:py-5">
+    <header class="z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5">
       <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
         <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
@@ -389,20 +383,6 @@ function formatDate(timestamp: number): string {
               </div>
             </div>
           </div>
-        </template>
-        <template #col-state="{ item }">
-          <span
-            role="img"
-            class="inline-flex items-center justify-center"
-            :title="stateLabel(item)"
-            :aria-label="stateLabel(item)"
-          >
-            <Icon
-              :icon="agentIssues.get(item.id)?.length ? 'lucide:alert-triangle' : 'lucide:check-circle'"
-              class="h-4 w-4"
-              :class="agentIssues.get(item.id)?.length ? 'text-amber-400' : 'text-green-400'"
-            />
-          </span>
         </template>
         <template #col-model="{ item }">
           <div class="flex min-w-0 items-center gap-2 pr-4">

@@ -664,8 +664,8 @@ function scoreSection(section: SettingsSection, query: string): number {
           </template>
 
           <main class="h-full min-w-0 overflow-y-auto">
-            <!-- Sticky search bar -->
-            <div class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:px-6 lg:px-8">
+            <!-- Settings search bar -->
+            <div class="z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:sticky sm:top-0 sm:px-6 lg:px-8">
               <div class="mx-auto flex max-w-5xl items-start gap-2">
                 <div class="min-w-0 flex-1">
                   <div class="relative">
