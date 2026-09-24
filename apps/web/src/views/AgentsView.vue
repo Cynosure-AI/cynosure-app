@@ -31,6 +31,7 @@ const showDeleteConfirm = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 const pendingDeleteName = ref('')
 const searchQuery = ref('')
+const stateFilter = ref<'all' | 'ready' | 'warning'>('all')
 const page = ref(0)
 const selectedAgentIds = ref<string[]>([])
 const activeSortKey = ref<string | null>(null)
@@ -72,10 +73,11 @@ function defaultAgentSort(a: AgentDefinition, b: AgentDefinition): number {
 
 const tableAgents = computed(() => [...agentDefs.agents].sort(defaultAgentSort))
 const hasAnyAgents = computed(() => agentDefs.agents.length > 0)
-const hasFilters = computed(() => Boolean(searchQuery.value.trim()))
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || stateFilter.value !== 'all')
 const agentColumns: Column<AgentDefinition>[] = [
   { key: 'favorite', label: '', width: '36px', sortable: true, sortValue: agent => agent.favorite },
   { key: 'name', label: 'Name', width: 'minmax(240px, 1.45fr)', sortable: true, sortValue: agent => agent.name },
+  { key: 'state', label: 'State', width: '76px', sortable: true, sortValue: agent => agentIssues.value.get(agent.id)?.length ? 1 : 0 },
   { key: 'model', label: 'Model / Provider', width: 'minmax(200px, 0.85fr)', sortable: true, editable: true, sortValue: agent => `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}` },
   { key: 'info', label: 'Info', width: '130px' },
   { key: 'date', label: 'Date', width: '140px', sortable: true, sortValue: agent => agent.createdAt },
@@ -93,11 +95,22 @@ const agentIssues = computed(() => {
       .map(subAgent => `Sub-agent: ${subAgent.agentId}`),
   ]] as const))
 })
+const filteredTableAgents = computed(() => tableAgents.value.filter(agent => {
+  if (stateFilter.value === 'all') return true
+  const hasIssues = Boolean(agentIssues.value.get(agent.id)?.length)
+  return stateFilter.value === 'warning' ? hasIssues : !hasIssues
+}))
 
-watch(searchQuery, () => { page.value = 0 })
+watch([searchQuery, stateFilter], () => { page.value = 0 })
 
 function clearFilters(): void {
   searchQuery.value = ''
+  stateFilter.value = 'all'
+}
+
+function stateLabel(agent: AgentDefinition): string {
+  const issues = agentIssues.value.get(agent.id) ?? []
+  return issues.length ? `Needs attention: ${issues.join(', ')}` : 'Ready'
 }
 
 function startInlineEdit(item: AgentDefinition, column: Column<AgentDefinition>): void {
@@ -229,10 +242,10 @@ function formatDate(timestamp: number): string {
             Create and manage AI agents with custom configurations and favorites.
           </p>
         </div>
-        <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+        <div class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
           <label
             v-if="hasAnyAgents"
-            class="relative min-w-0 flex-1 sm:w-80 sm:flex-none"
+            class="relative min-w-0 flex-1 basis-full sm:w-80 sm:basis-auto sm:flex-none"
           >
             <span class="sr-only">Search agents</span>
             <Icon
@@ -257,6 +270,21 @@ function formatDate(timestamp: number): string {
                 class="h-3.5 w-3.5"
               />
             </button>
+          </label>
+          <label
+            v-if="hasAnyAgents"
+            class="min-w-0 shrink-0"
+          >
+            <span class="sr-only">Filter agents by state</span>
+            <select
+              v-model="stateFilter"
+              aria-label="Filter agents by state"
+              class="h-10 rounded-xl border border-theme-700 bg-theme-950/70 px-3 text-sm text-theme-300 outline-none focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
+            >
+              <option value="all">All states</option>
+              <option value="ready">Ready</option>
+              <option value="warning">Needs attention</option>
+            </select>
           </label>
           <button
             class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-white hover:bg-accent-500"
@@ -291,7 +319,7 @@ function formatDate(timestamp: number): string {
         v-if="hasAnyAgents"
         v-model:selected-ids="selectedAgentIds"
         v-model:page="page"
-        :items="tableAgents"
+        :items="filteredTableAgents"
         :columns="agentColumns"
         :filter-text="searchQuery"
         :filter-predicate="matchesSearch"
@@ -361,6 +389,20 @@ function formatDate(timestamp: number): string {
               </div>
             </div>
           </div>
+        </template>
+        <template #col-state="{ item }">
+          <span
+            role="img"
+            class="inline-flex items-center justify-center"
+            :title="stateLabel(item)"
+            :aria-label="stateLabel(item)"
+          >
+            <Icon
+              :icon="agentIssues.get(item.id)?.length ? 'lucide:alert-triangle' : 'lucide:check-circle'"
+              class="h-4 w-4"
+              :class="agentIssues.get(item.id)?.length ? 'text-amber-400' : 'text-green-400'"
+            />
+          </span>
         </template>
         <template #col-model="{ item }">
           <div class="flex min-w-0 items-center gap-2 pr-4">
