@@ -101,4 +101,16 @@ describe('AgentMemoryTab', () => {
     await deselectAll!.trigger('click')
     expect(wrapper.emitted('update')).toContainEqual(['memoryFolders', []])
   })
+
+  test('names missing assigned folders and removes only those assignments', async () => {
+    const wrapper = mount(AgentMemoryTab, {
+      props: { agent: { ...agent, memoryFolders: ['uncategorized', 'deleted-folder'] } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('1 assigned memory folder unavailable')
+    expect(wrapper.text()).toContain('deleted-folder')
+    await wrapper.findAll('button').find(button => button.text().trim() === 'Remove unavailable folders')!.trigger('click')
+    expect(wrapper.emitted('update')).toContainEqual(['memoryFolders', ['uncategorized']])
+  })
 })

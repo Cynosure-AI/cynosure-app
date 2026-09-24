@@ -15,6 +15,7 @@ const router = useRouter()
 // --- Memory Folders ---
 const allSpaces = ref<MemoryFolder[]>([])
 const spacesLoading = ref(false)
+const spacesLoaded = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
 
 const assignedIds = computed(() => new Set(props.agent.memoryFolders ?? []))
@@ -25,6 +26,11 @@ const assignedFolders = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
 )
 const effectiveAssignedCount = computed(() => allSpaces.value.filter(isSelected).length)
+const missingFolderIds = computed(() => {
+  if (!spacesLoaded.value) return []
+  const availableIds = new Set(allSpaces.value.map(space => space.id))
+  return (props.agent.memoryFolders ?? []).filter(id => !availableIds.has(id))
+})
 
 const visibleSpaces = computed(() =>
   allSpaces.value.filter((space) => {
@@ -46,6 +52,7 @@ async function loadFolders() {
       if (b.isUncategorized) return 1
       return (a.folderPath || '').localeCompare(b.folderPath || '')
     })
+    spacesLoaded.value = true
     collapseFoldersWithChildren(allSpaces.value)
   } catch (err) {
     console.error('[memory] Failed to load spaces:', err)
@@ -112,6 +119,11 @@ function folderDepth(space: MemoryFolder): number {
 
 function deselectAll() {
   emit('update', 'memoryFolders', [])
+}
+
+function removeMissingFolders() {
+  const missingIds = new Set(missingFolderIds.value)
+  emit('update', 'memoryFolders', (props.agent.memoryFolders ?? []).filter(id => !missingIds.has(id)))
 }
 
 function memoryFolderScopeIds(space: MemoryFolder): string[] {
@@ -246,6 +258,49 @@ onMounted(() => loadFolders())
       <p class="text-xs text-theme-500 mb-3">
         Select memory folders to give this agent access to shared knowledge.
       </p>
+
+      <div
+        v-if="missingFolderIds.length"
+        class="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
+      >
+        <div class="flex items-start gap-2">
+          <Icon
+            icon="lucide:alert-triangle"
+            class="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+          />
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-medium text-amber-300">
+              {{ missingFolderIds.length }} assigned memory folder{{ missingFolderIds.length > 1 ? 's' : '' }} unavailable
+            </p>
+            <p class="mt-0.5 text-[11px] text-amber-400/60">
+              These folders are assigned to this agent but no longer found in Memory.
+            </p>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              <span
+                v-for="id in missingFolderIds"
+                :key="id"
+                class="inline-flex max-w-full items-center gap-1 break-all rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-300/80"
+              >
+                <Icon
+                  icon="lucide:folder-x"
+                  class="h-3 w-3"
+                />
+                {{ id }}
+              </span>
+            </div>
+            <button
+              class="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-amber-400 transition-colors hover:text-amber-300"
+              @click="removeMissingFolders"
+            >
+              <Icon
+                icon="lucide:trash-2"
+                class="h-3 w-3"
+              />
+              Remove unavailable folders
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- Count + select all/none -->
       <div
