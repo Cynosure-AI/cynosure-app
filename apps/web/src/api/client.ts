@@ -14,7 +14,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, DebugContextSnapshot, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, QueuedChatMessageDto } from '@shared/types'
 
 function memoryFolderPathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -110,8 +110,6 @@ export const api = {
     getEvents: (conversationId: string, after = 0, limit = 1000) =>
       get<{ events: ChatEvent[]; latestSequence: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/events?after=${after}&limit=${limit}`),
     onEvent: (cb: (event: ChatEvent) => void) => onWsEvent('chat:event', cb as WsHandler),
-    getDebugContext: (conversationId: string) =>
-      get<DebugContextSnapshot>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/debug-context`),
     getPendingHITL: (conversationId: string) =>
       get<{ taskId: string; toolCalls: { name: string; arguments: string }[] }[]>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/hitl`
