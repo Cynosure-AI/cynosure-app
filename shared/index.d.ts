@@ -96,7 +96,7 @@ export type ChatEvent = ChatEventBase & (
   | { type: 'stream-reset' | 'stream-discard'; streamId: string; scope: 'main' | 'subagent' }
   | { type: 'stream-end'; streamId: string; scope: 'main' | 'subagent'; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; contextTokens?: number; contextWindow?: number; images?: string[] }
   | { type: 'stream-error'; streamId: string; scope: 'main' | 'subagent'; error: string }
-  | { type: 'usage'; promptTokens: number; completionTokens: number; totalTokens: number; contextTokens?: number; contextWindow?: number; model?: string }
+  | { type: 'usage'; scope?: 'main' | 'subagent'; promptTokens: number; completionTokens: number; totalTokens: number; contextTokens?: number; contextWindow?: number; model?: string }
   | { type: 'execution-state'; agentId: string | null; state: 'running' | 'stopped' | 'finished' }
   | { type: 'queue-changed' }
   | { type: 'title-updated'; title: string }
