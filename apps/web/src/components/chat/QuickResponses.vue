@@ -25,7 +25,7 @@ const emit = defineEmits<{ select: [suggestion: string] }>()
         :key="suggestion"
         type="button"
         class="max-w-full rounded-full border border-theme-700 bg-theme-800/70 px-3 py-1.5 text-left text-xs text-theme-300 transition-colors hover:border-accent-500/60 hover:bg-accent-500/10 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
-        :title="`Fill chat input with: ${suggestion}`"
+        :title="`Send quick response: ${suggestion}`"
         @click="emit('select', suggestion)"
       >
         {{ suggestion }}

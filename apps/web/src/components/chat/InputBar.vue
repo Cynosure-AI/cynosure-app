@@ -362,17 +362,17 @@ function focus(): void {
   textareaRef.value?.focus()
 }
 
-function fillSuggestion(suggestion: string): void {
-  inputText.value = suggestion
-  persistDraft(draftStorageKey.value, suggestion)
-  nextTick(() => {
-    autoResize()
-    textareaRef.value?.focus()
-    textareaRef.value?.setSelectionRange(suggestion.length, suggestion.length)
-  })
+async function sendSuggestion(suggestion: string): Promise<void> {
+  const content = suggestion.trim()
+  if (!content) return
+  if (chatStore.isConversationLocked || chatStore.queuedMessages?.length) {
+    await chatStore.queueMessage(content, 'next')
+  } else {
+    await chatStore.sendMessage(content)
+  }
 }
 
-defineExpose({ processFiles, focus, fillSuggestion })
+defineExpose({ processFiles, focus, sendSuggestion })
 </script>
 
 <template>
