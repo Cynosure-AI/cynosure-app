@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
-import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult } from "../../api/types";
+import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import type { Column } from "../shared/DataTable.vue";
@@ -66,6 +66,10 @@ const files = ref<MemoryFileStatus[]>([]);
 const filesLoading = ref(false);
 const selectedFiles = ref<Set<string>>(new Set());
 const selectedFolders = ref<Set<string>>(new Set());
+const trackedFolderJobs = ref<MemoryIndexJob[]>([]);
+const trackedFolderBaselines = ref<Record<string, number>>({});
+let folderJobPollTimer: ReturnType<typeof setInterval> | null = null;
+let folderJobPollInFlight = false;
 const gridSelectionAnchor = ref<string | null>(null);
 const deleting = ref(false);
 const forgettingMemories = ref(false);
@@ -529,10 +533,67 @@ async function makeSearchableSelected(targetFile?: MemoryFileStatus): Promise<vo
         candidate.supported && (candidate.status === "needs_reindex" || candidate.status === "not_indexed"),
       )) {
         if (folderId === props.folderId) await reindexFile(file.fileName);
-        else await api.memoryFolders.startReindexFile(folderId, file.fileName);
+        else trackFolderJob(await api.memoryFolders.startReindexFile(folderId, file.fileName));
       }
     }
   });
+}
+
+function folderContainsJob(folder: MemoryFolder, job: MemoryIndexJob): boolean {
+  const jobFolder = props.spaces.find((candidate) => candidate.id === job.folderId);
+  return Boolean(jobFolder && (jobFolder.id === folder.id ||
+    (folder.folderPath && jobFolder.folderPath.startsWith(`${folder.folderPath}/`))));
+}
+
+function stopFolderJobPolling(): void {
+  if (folderJobPollTimer !== null) clearInterval(folderJobPollTimer);
+  folderJobPollTimer = null;
+}
+
+function trackFolderJob(job: MemoryIndexJob): void {
+  for (const folder of childFolders.value.filter((candidate) => folderContainsJob(candidate, job))) {
+    if (trackedFolderBaselines.value[folder.id] === undefined) {
+      trackedFolderBaselines.value = {
+        ...trackedFolderBaselines.value,
+        [folder.id]: (folder.indexedFileCount || 0) + (folder.descendantIndexedFileCount || 0),
+      };
+    }
+  }
+  trackedFolderJobs.value = [...trackedFolderJobs.value.filter((item) => item.id !== job.id), job];
+  if (job.status === "completed") emit("spacesChanged");
+  if (!folderJobPollTimer && trackedFolderJobs.value.some(isActiveFolderJob)) {
+    folderJobPollTimer = setInterval(() => void refreshTrackedFolderJobs(), 2000);
+  }
+}
+
+function isActiveFolderJob(job: MemoryIndexJob): boolean {
+  return job.status === "queued" || job.status === "running" || job.status === "retrying";
+}
+
+async function refreshTrackedFolderJobs(): Promise<void> {
+  if (folderJobPollInFlight) return;
+  const folderIds = [...new Set(trackedFolderJobs.value.filter(isActiveFolderJob).map((job) => job.folderId))];
+  if (!folderIds.length) {
+    stopFolderJobPolling();
+    return;
+  }
+  folderJobPollInFlight = true;
+  try {
+    const jobLists = await Promise.all(folderIds.map((id) => api.memoryFolders.listJobs(id)));
+    const latestJobs = new Map(jobLists.flat().map((job) => [job.id, job]));
+    let completed = false;
+    trackedFolderJobs.value = trackedFolderJobs.value.map((job) => {
+      const latest = latestJobs.get(job.id) || job;
+      if (isActiveFolderJob(job) && latest.status === "completed") completed = true;
+      return latest;
+    });
+    if (completed) emit("spacesChanged");
+    if (!trackedFolderJobs.value.some(isActiveFolderJob)) stopFolderJobPolling();
+  } catch {
+    // Keep polling while jobs remain active; the next response is authoritative.
+  } finally {
+    folderJobPollInFlight = false;
+  }
 }
 
 function selectAllOnPage() {
@@ -817,7 +878,21 @@ function folderIndexSummary(folder: MemoryFolder): {
   ratio: number;
 } {
   const total = folder.fileCount + (folder.descendantFileCount || 0);
-  const indexed = (folder.indexedFileCount || 0) + (folder.descendantIndexedFileCount || 0);
+  const folderJobs = trackedFolderJobs.value.filter((job) => job.kind === "reindex" && folderContainsJob(folder, job));
+  const completedFiles = new Set(folderJobs.filter((job) => job.status === "completed")
+    .map((job) => `${job.folderId}\0${job.fileName}`));
+  const indexed = Math.min(total, Math.max(
+    (folder.indexedFileCount || 0) + (folder.descendantIndexedFileCount || 0),
+    (trackedFolderBaselines.value[folder.id] || 0) + completedFiles.size,
+  ));
+  if (folderJobs.some(isActiveFolderJob)) {
+    return {
+      label: `${indexed}/${total} Partially Indexed · Indexing…`,
+      icon: "lucide:loader-2",
+      colorClass: "text-orange-400",
+      ratio: total ? indexed / total : 0,
+    };
+  }
   if (total > 0 && indexed >= total) {
     return { label: "Indexed", icon: "lucide:check-circle", colorClass: "text-green-400", ratio: 1 };
   }
@@ -842,6 +917,9 @@ function formatFileSize(bytes: number): string {
 watch(
   () => props.folderId,
   async (folderId) => {
+    stopFolderJobPolling();
+    trackedFolderJobs.value = [];
+    trackedFolderBaselines.value = {};
     files.value = [];
     clearSelection();
     resetJobs();
@@ -903,6 +981,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  stopFolderJobPolling();
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   if (pathCopiedTimer !== null) window.clearTimeout(pathCopiedTimer);
   window.clearInterval(dreamIndicatorTimer);

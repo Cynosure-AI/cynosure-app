@@ -194,6 +194,16 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       />
       <span class="w-full truncate text-sm font-medium text-theme-200">{{ folder.name }}</span>
       <span class="mt-1 text-[11px] text-theme-600">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
+      <span
+        class="mt-1 inline-flex items-center gap-1 text-[11px]"
+        :class="folderIndexSummary(folder).colorClass"
+      >
+        <Icon
+          :icon="folderIndexSummary(folder).icon"
+          class="h-3 w-3"
+          :class="{ 'animate-spin': folderIndexSummary(folder).icon === 'lucide:loader-2' }"
+        /> {{ folderIndexSummary(folder).label }}
+      </span>
     </div>
     <div
       v-for="file in filteredFiles"
@@ -359,6 +369,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       ><Icon
         :icon="folderIndexSummary(item.folder).icon"
         class="h-3.5 w-3.5"
+        :class="{ 'animate-spin': folderIndexSummary(item.folder).icon === 'lucide:loader-2' }"
       /> {{ folderIndexSummary(item.folder).label }}</span>
       <span
         v-else-if="isJobActive('reindex', item.fileName)"

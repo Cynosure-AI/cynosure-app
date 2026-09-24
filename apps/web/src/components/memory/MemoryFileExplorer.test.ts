@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import MemoryFileExplorer from './MemoryFileExplorer.vue'
+import type { MemoryIndexJob } from '../../api/types'
 
 const mocks = vi.hoisted(() => ({
   listFiles: vi.fn(),
@@ -492,6 +493,68 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
 
     expect(mocks.startReindexFile).toHaveBeenCalledWith('child', 'nested.md')
+  })
+
+  test('tracks selected folder indexing as nested jobs complete', async () => {
+    const indexedFile = {
+      fileName: 'indexed.md', extension: '.md', size: 12, modifiedAt: 1,
+      supported: true, textDirect: true, status: 'indexed' as const, chunkCount: 1,
+      deepResearched: false, analysisStatus: 'not_analyzed' as const, tags: [],
+    }
+    const pendingFiles = ['first.md', 'second.md'].map((fileName) => ({
+      ...indexedFile, fileName, status: 'not_indexed' as const, chunkCount: 0,
+    }))
+    const jobs = pendingFiles.map((file, index) => ({
+      id: `job-${index}`, kind: 'reindex' as const, folderId: 'child', fileName: file.fileName,
+      status: 'queued' as const, createdAt: 1, updatedAt: 1, attempt: 1, maxAttempts: 1,
+    }))
+    let latestJobs: MemoryIndexJob[] = [...jobs]
+    mocks.listFiles.mockImplementation((folderId: string) => Promise.resolve(folderId === 'child' ? [indexedFile, ...pendingFiles] : []))
+    mocks.listJobs.mockImplementation((folderId: string) => Promise.resolve(folderId === 'child' ? latestJobs : []))
+    mocks.startReindexFile.mockImplementation((_folderId: string, fileName: string) =>
+      Promise.resolve(jobs.find((job) => job.fileName === fileName)))
+    const parent = {
+      id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
+      folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1, fileCount: 0,
+    }
+    const child = {
+      ...parent, id: 'child', name: 'Projects', directoryPath: '/notes/projects',
+      folderPath: 'notes/projects', parentFolderPath: 'notes', fileCount: 3, indexedFileCount: 1,
+    }
+    const wrapper = mount(MemoryFileExplorer, {
+      props: { folderId: 'category', spaces: [parent, child] },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: StatusColumnTableStub, HoverTooltip: true, SplitButton: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[aria-label="Grid view"]').trigger('click')
+    await wrapper.get('input[aria-label="Select Projects"]').trigger('click')
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    await wrapper.findAll('button').find((button) => button.text().trim() === 'Index files')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="memory-explorer-grid"]').text()).toContain('1/3 Partially Indexed · Indexing…')
+    await wrapper.get('[aria-label="List view"]').trigger('click')
+    expect(wrapper.text()).toContain('1/3 Partially Indexed · Indexing…')
+
+    try {
+      latestJobs = [{ ...jobs[0], status: 'completed' }, jobs[1]]
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(wrapper.text()).toContain('2/3 Partially Indexed · Indexing…')
+      expect(wrapper.emitted('spacesChanged')).toHaveLength(1)
+
+      latestJobs = jobs.map((job) => ({ ...job, status: 'completed' as const }))
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(wrapper.text()).toContain('Indexed')
+      expect(wrapper.emitted('spacesChanged')).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+      wrapper.unmount()
+    }
   })
 
   test('moves a selected folder as a folder and preserves its hierarchy', async () => {

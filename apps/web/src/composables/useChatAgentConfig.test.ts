@@ -7,6 +7,7 @@ import { useAgentStore, type ToolInfo } from '../stores/agent-runtime.store'
 import { SK_ACTIVE_AGENT, SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
 import { DEFAULT_FREE_CHAT_SYSTEM_PROMPT } from '../utils/default-system-prompts'
 import type { AgentDefinition } from '../api/types'
+import type { ConversationExecutionConfig } from '@shared/types'
 
 describe('chat agent provider defaults', () => {
   beforeEach(() => {
@@ -53,6 +54,43 @@ describe('chat agent provider defaults', () => {
     config.setSelectedToolNames(['builtin::schedule_create', 'builtin::read_file'])
 
     expect(config.selectedToolNames.value).toEqual(['builtin::schedule_create', 'builtin::read_file'])
+  })
+
+  test('enables MCP management and scheduling by default after tools load', async () => {
+    const runtime = useAgentStore()
+    const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
+    config.ensureFreeChatPreset()
+    const defaultTools = [
+      tool('builtin:utility::manage_mcp', 'manage_mcp'),
+      tool('builtin:scheduling::schedule_create', 'schedule_create'),
+      tool('builtin:scheduling::schedule_list', 'schedule_list'),
+      tool('builtin:scheduling::schedule_update', 'schedule_update'),
+      tool('builtin:scheduling::schedule_delete', 'schedule_delete'),
+    ]
+    runtime.availableTools = [...defaultTools, tool('builtin:utility::read_file', 'read_file')]
+    await Promise.resolve()
+
+    expect(config.selectedToolNames.value).toEqual(defaultTools.map((item) => item.key))
+    expect(config.hasFreeChatOverrides.value).toBe(false)
+
+    config.setSelectedToolNames([])
+    expect(config.selectedToolNames.value).toEqual([])
+    config.resetToDefaults()
+    expect(config.selectedToolNames.value).toEqual(defaultTools.map((item) => item.key))
+  })
+
+  test('preserves an existing Free Chat tool selection when tools load later', async () => {
+    const runtime = useAgentStore()
+    const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
+    config.restoreConversationConfig({
+      allowedTools: [], subAgents: [], memoryFolderIds: [], systemPrompt: DEFAULT_FREE_CHAT_SYSTEM_PROMPT,
+      thinkingEnabled: true, reasoningEffort: 'medium', autoToolRouting: true, autoMemory: true,
+      model: '', providerId: '',
+    } as ConversationExecutionConfig)
+    runtime.availableTools = [tool('builtin:utility::manage_mcp', 'manage_mcp')]
+    await Promise.resolve()
+
+    expect(config.selectedToolNames.value).toEqual([])
   })
 
   test('uses the Cyno system prompt for new Free Chats', () => {
