@@ -288,7 +288,7 @@ onUnmounted(() => {
     class="h-full overflow-y-auto"
     @scroll="handleScroll"
   >
-    <header class="sticky top-0 z-10 border-b border-theme-800/60 bg-theme-950/95 pt-5 backdrop-blur-sm md:pt-6">
+    <header class="z-10 border-b border-theme-800/60 bg-theme-950/95 pt-5 backdrop-blur-sm sm:sticky sm:top-0 md:pt-6">
       <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
         <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
