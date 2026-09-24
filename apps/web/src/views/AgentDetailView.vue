@@ -3,8 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
+import { useAgentStore } from '../stores/agent-runtime.store'
 import { useChatStore } from '../stores/chat.store'
 import { Icon } from '@iconify/vue'
+import { api } from '../api/client'
+import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 import AgentGeneralTab from '../components/agent/AgentGeneralTab.vue'
 import AgentToolsTab from '../components/agent/AgentToolsTab.vue'
 import AgentMemoryTab from '../components/agent/AgentMemoryTab.vue'
@@ -25,15 +28,20 @@ interface AgentSection {
 const route = useRoute()
 const router = useRouter()
 const agentDefs = useAgentDefinitionsStore()
+const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
 const activeSectionId = ref<AgentSectionId>('general')
+const availableMemoryFolderIds = ref<Set<string> | null>(null)
 
 const agentId = computed(() => route.params.id as string)
 const agent = computed(() => agentDefs.get(agentId.value))
 const activeSection = computed(() => sections.find(section => section.id === activeSectionId.value) || sections[0])
 
 onMounted(async () => {
+  void api.memoryFolders.list()
+    .then(folders => { availableMemoryFolderIds.value = new Set(folders.map(folder => folder.id)) })
+    .catch(() => undefined)
   await agentDefs.load()
   if (!agent.value) {
     router.push('/agents')
@@ -89,11 +97,35 @@ const sections: AgentSection[] = [
   }
 ]
 
-const tabs: TabDef<AgentSectionId>[] = sections.map(section => ({
-  value: section.id,
-  label: section.label,
-  icon: section.icon,
-}))
+const missingTools = computed(() => {
+  const availableKeys = new Set(agentStore.availableTools
+    .filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name)))
+    .map(tool => tool.key))
+  return (agent.value?.tools ?? []).filter(key => !availableKeys.has(key))
+})
+const missingMemoryFolders = computed(() => {
+  const availableIds = availableMemoryFolderIds.value
+  if (!availableIds) return []
+  return (agent.value?.memoryFolders ?? []).filter(id => !availableIds.has(id))
+})
+const missingSubAgents = computed(() => {
+  const agentIds = new Set(agentDefs.agents.map(item => item.id))
+  return (agent.value?.subAgents ?? []).filter(item => !agentIds.has(item.agentId)).map(item => item.agentId)
+})
+
+const tabs = computed<TabDef<AgentSectionId>[]>(() => {
+  const warnings: Partial<Record<AgentSectionId, string>> = {
+    tools: missingTools.value.length ? `Unavailable tools: ${missingTools.value.join(', ')}` : '',
+    memory: missingMemoryFolders.value.length ? `Unavailable memory folders: ${missingMemoryFolders.value.join(', ')}` : '',
+    'sub-agents': missingSubAgents.value.length ? `Unavailable sub-agents: ${missingSubAgents.value.join(', ')}` : '',
+  }
+  return sections.map(section => ({
+    value: section.id,
+    label: section.label,
+    icon: section.icon,
+    warning: warnings[section.id],
+  }))
+})
 
 
 </script>

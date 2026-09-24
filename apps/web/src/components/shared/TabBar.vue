@@ -6,6 +6,7 @@ export interface TabDef<V extends string = string> {
   label: string
   icon?: string
   badge?: string | number
+  warning?: string
 }
 
 const props = defineProps<{
@@ -49,6 +50,13 @@ const emit = defineEmits<{
       >
         {{ tab.badge }}
       </span>
+      <Icon
+        v-if="tab.warning"
+        icon="lucide:alert-triangle"
+        class="h-3.5 w-3.5 shrink-0 text-amber-400"
+        :title="tab.warning"
+        :aria-label="tab.warning"
+      />
     </button>
   </div>
 </template>
