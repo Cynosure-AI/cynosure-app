@@ -347,43 +347,5 @@ onMounted(async () => {
         />
       </div>
     </BaseCard>
-
-    <SettingsSubheading
-      v-if="showSection('debug-mode')"
-      label="Developer"
-    />
-
-    <BaseCard
-      v-if="showSection('debug-mode')"
-      class="p-5 space-y-4"
-    >
-      <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
-            <Icon
-              icon="lucide:bug"
-              class="w-5 h-5 text-amber-400"
-            />
-          </div>
-          <div>
-            <h3 class="text-sm font-medium text-theme-200">
-              Debug Mode
-            </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
-              Show the persisted chat protocol inspector in chat
-            </p>
-          </div>
-        </div>
-        <ToggleSwitch
-          v-model="prefs.debugMode"
-          label="Enable debug mode"
-        />
-      </div>
-
-      <p class="pt-3 border-t border-theme-700 text-[11px] leading-relaxed text-theme-500">
-        Protocol events can contain messages, tool arguments and results, attachments, and provider-exposed reasoning.
-        Treat exports as sensitive.
-      </p>
-    </BaseCard>
   </div>
 </template>

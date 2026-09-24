@@ -207,13 +207,6 @@ const sections: SettingsSection[] = [
     terms: ['attachment context', 'attachments', 'attached files', 'documents', 'inline attachment', 'rag', 'retrieval', 'file context', 'screenshots']
   },
   {
-    id: 'debug-mode',
-    categoryId: 'chat',
-    label: 'Debug Mode',
-    description: 'Inspect persisted chat protocol events in chat.',
-    terms: ['debug mode', 'chat protocol', 'events', 'messages', 'tools', 'reasoning', 'developer tools']
-  },
-  {
     id: 'enable-voice',
     categoryId: 'speech-to-text',
     label: 'Enable Voice Input',
