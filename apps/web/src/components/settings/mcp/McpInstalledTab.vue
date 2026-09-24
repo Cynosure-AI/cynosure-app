@@ -137,7 +137,7 @@ const canSubmitNewServer = computed(() => {
 })
 
 async function addServer(): Promise<void> {
-  if (!canSubmitNewServer.value) return
+  if (!canSubmitNewServer.value || isLoading('add')) return
   setLoading('add', true)
   try {
     const isRemote = newServer.mode === 'remote'
@@ -187,6 +187,9 @@ async function addServer(): Promise<void> {
       }
     }
     await refreshAll()
+  } catch (error) {
+    actionError.value['add'] = error instanceof Error ? error.message : 'Failed to connect MCP server'
+    addConnected.value = false
   } finally {
     setLoading('add', false)
   }
@@ -491,10 +494,19 @@ defineExpose({ loadServers })
         <div class="flex justify-end gap-2">
           <button
             v-if="actionError['add']"
+            :disabled="isLoading('add')"
             class="px-4 py-2 text-sm bg-theme-700 hover:bg-theme-600 text-theme-200 rounded-lg transition-colors"
             @click="finishAdding"
           >
             Add Anyway
+          </button>
+          <button
+            v-if="actionError['add']"
+            :disabled="!canSubmitNewServer || isLoading('add')"
+            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+            @click="addServer"
+          >
+            {{ isLoading('add') ? 'Reconnecting...' : 'Re-connect' }}
           </button>
           <button
             v-if="!addConnected && !actionError['add']"
@@ -510,7 +522,7 @@ defineExpose({ loadServers })
             :disabled="isLoading('add')"
             @click="cancelForm"
           >
-            Close
+            {{ actionError['add'] ? 'Cancel' : 'Close' }}
           </button>
         </div>
       </template>
