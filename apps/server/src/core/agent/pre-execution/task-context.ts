@@ -31,7 +31,6 @@ export interface BuildTaskContextInput {
     }
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
-    debugContextEnabled?: boolean
 }
 
 export async function buildTaskContext(input: BuildTaskContextInput): Promise<TaskContext | null> {
@@ -84,9 +83,6 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
             }
             const parsed = await selectRoutingCandidates({
                 conversationId: input.conversationId,
-                debugContextEnabled: input.debugContextEnabled,
-                phase: 'task-context',
-                label: 'Retrieval and tool query planning',
                 gateway: input.gateway,
                 providerId: input.providerId,
                 model: input.model,

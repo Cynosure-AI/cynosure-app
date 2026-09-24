@@ -35,7 +35,6 @@ export interface ResolveExecutionToolsInput {
     eventMeta?: Record<string, unknown>
     /** Bypass the external catalogue when intent routing says no external tool is needed. */
     suppressAutoTools?: boolean
-    debugContextEnabled?: boolean
     /** Snapshot used when an agentless scheduling tool creates a durable job. */
     scheduleExecutionConfig?: ConversationExecutionConfig
 }
@@ -69,7 +68,6 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         hydrationAgentId,
         eventMeta,
         suppressAutoTools = false,
-        debugContextEnabled,
         scheduleExecutionConfig,
     } = input
 
@@ -106,7 +104,6 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             usedToolNames,
             eventMeta,
             signal,
-            debugContextEnabled,
         }) as RegistryAwareToolDefinition[]
     } else {
         emitAutoToolRoutingSkipped(conversationId, 'disabled', eventMeta)

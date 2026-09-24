@@ -68,7 +68,6 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         reasoningEffort,
         eventMeta,
         inlineAttachmentTextLimit,
-        debugContextEnabled,
     } = input
     const selectedToolKeys = stripAutomaticallyManagedMemoryToolKeys(input.selectedToolKeys ?? [])
     const hasRequestToolSelection = input.selectedToolKeys !== undefined
@@ -125,7 +124,6 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         memoryFolderOverrides,
         eventMeta,
         inlineAttachmentTextLimit,
-        debugContextEnabled,
         scheduleSelectedToolKeys: selectedToolKeys,
         thinkingEnabled,
         reasoningEffort,

@@ -28,7 +28,6 @@ export interface ApplyAutoToolRoutingInput {
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
-    debugContextEnabled?: boolean
 }
 
 interface ToolsetCandidate {
@@ -56,7 +55,6 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         usedToolNames,
         eventMeta,
         signal,
-        debugContextEnabled,
     } = input
 
     const protectedNames = collectProtectedToolNames(recentMessages || [], preferredToolNames, usedToolNames)
@@ -88,7 +86,6 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
                 tools,
                 mcpMetadata,
                 signal,
-                debugContextEnabled,
             })
             emitToolsetRoutingSelection(
                 conversationId,
@@ -176,7 +173,6 @@ async function selectToolsets(input: {
     tools: RegistryAwareToolDefinition[]
     mcpMetadata?: ToolNamespaceMetadata[]
     signal?: AbortSignal
-    debugContextEnabled?: boolean
 }): Promise<Set<string>> {
     const candidates = buildToolsetCandidates(input.tools, input.mcpMetadata || [])
     if (!candidates.length) return new Set()
@@ -215,9 +211,6 @@ async function selectToolsets(input: {
     }
     const selection = await selectRoutingCandidates({
         conversationId: input.conversationId,
-        debugContextEnabled: input.debugContextEnabled,
-        phase: 'toolset-selection',
-        label: 'MCP and toolset selection',
         gateway: input.gateway,
         providerId: input.providerId,
         model: input.model,

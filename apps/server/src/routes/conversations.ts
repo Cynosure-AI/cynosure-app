@@ -19,7 +19,6 @@ import { listStagedChatAttachments } from '../core/artifacts/staged-attachments.
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { ContentBlock, ConversationExecutionConfig } from '@shared/types'
-import { clearDebugContextCapture } from '../core/chat/debug-context.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
@@ -764,7 +763,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
         await cleanupConversationArtifactsAndIndexes([req.params.id])
         await invalidateDreamConversation(req.params.id)
-        clearDebugContextCapture(req.params.id)
         db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
@@ -782,7 +780,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             const ids = db.prepare(`SELECT id FROM conversations WHERE ${filter} AND pinned = 0`).all(...(agentId === '' ? [] : [agentId])) as { id: string }[]
             await cleanupConversationArtifactsAndIndexes(ids.map(r => r.id))
             for (const { id } of ids) await invalidateDreamConversation(id)
-            for (const { id } of ids) clearDebugContextCapture(id)
             for (const { id } of ids) {
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
@@ -794,7 +791,6 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             const allIds = db.prepare('SELECT id FROM conversations WHERE pinned = 0').all() as { id: string }[]
             await cleanupConversationArtifactsAndIndexes(allIds.map(r => r.id))
             for (const { id } of allIds) await invalidateDreamConversation(id)
-            for (const { id } of allIds) clearDebugContextCapture(id)
             for (const { id } of allIds) {
                 db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)

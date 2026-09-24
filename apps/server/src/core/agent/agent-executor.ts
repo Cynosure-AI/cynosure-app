@@ -21,7 +21,6 @@ import {
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { getPlanningState } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
-import { recordDebugModelRequest, recordDebugModelResponse } from '../chat/debug-context.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
@@ -109,8 +108,6 @@ export interface AgentExecutorConfig {
     planningRunId?: string
     /** True only for the top-level chat executor that owns conversation-level progress persistence. */
     isPrimaryExecutor?: boolean
-    /** Capture model-visible requests and provider-exposed responses for the debug inspector. */
-    debugContextEnabled?: boolean
     /** Promote durable steering messages into this run at model boundaries. */
     takeSteeringMessages?: () => Promise<ChatMessage[]>
 }
@@ -621,7 +618,6 @@ export class AgentExecutor {
      */
     private createStream(messages: ChatMessage[], modelSignal?: AbortSignal): {
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>
-        debugRoundIndex?: number
     } {
         this.config.signal?.throwIfAborted()
         const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, providerId } = this.config
@@ -637,23 +633,8 @@ export class AgentExecutor {
             reasoningEffort,
             signal,
         }
-        const debugRoundIndex = this.config.debugContextEnabled
-            ? recordDebugModelRequest(this.config.conversationId, {
-                phase: 'main-agent',
-                label: 'Agent round',
-                providerId,
-                messages: request.messages,
-                tools: tools,
-                model,
-                temperature,
-                maxTokens,
-                thinkingEnabled,
-                reasoningEffort,
-            })
-            : undefined
         return {
             stream: gateway.streamComplete(request, providerId),
-            debugRoundIndex,
         }
     }
 
@@ -731,7 +712,6 @@ export class AgentExecutor {
     private async consumeStream(
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>,
         streamId: string,
-        debugRoundIndex?: number,
         signal?: AbortSignal,
     ): Promise<{
         content: string
@@ -745,7 +725,6 @@ export class AgentExecutor {
         let content = ''
         let thinking = ''
         const images: string[] = []
-        const debugImages: string[] = []
         let toolCalls: ToolCall[] | undefined
         let usage: Usage
         let completed = false
@@ -764,7 +743,6 @@ export class AgentExecutor {
                     this.emit('step:thinking', { conversationId, thinking: chunk.thinking })
                 }
                 if (chunk.images?.length) {
-                    debugImages.push(...chunk.images)
                     let artifactUrls = chunk.images
                     try {
                         const artifacts = await materializeImageArtifacts(chunk.images, conversationId)
@@ -784,19 +762,11 @@ export class AgentExecutor {
                 }
             }
         } catch (err) {
-            recordDebugModelResponse(conversationId, debugRoundIndex, {
-                content, thinking, images: debugImages, toolCalls, usage,
-                error: (err as Error).message,
-            })
             return { content, thinking, images, toolCalls, usage, error: err as Error }
         }
 
         if (!completed) {
             const error = new Error('Model stream ended before a terminal completion event.')
-            recordDebugModelResponse(conversationId, debugRoundIndex, {
-                content, thinking, images: debugImages, toolCalls, usage,
-                error: error.message,
-            })
             return {
                 content,
                 thinking,
@@ -807,9 +777,6 @@ export class AgentExecutor {
             }
         }
 
-        recordDebugModelResponse(conversationId, debugRoundIndex, {
-            content, thinking, images: debugImages, toolCalls, usage,
-        })
         return { content, thinking, images, toolCalls, usage }
     }
 
@@ -849,7 +816,7 @@ export class AgentExecutor {
             await this.applyPendingSteering(messages, streamId)
             const signal = this.modelSignal()
             const initialStream = this.createStream(messages, signal)
-            const result = await this.consumeStream(initialStream.stream, streamId, initialStream.debugRoundIndex, signal)
+            const result = await this.consumeStream(initialStream.stream, streamId, signal)
             this.modelAbortController = null
             this.config.signal?.throwIfAborted()
             if (this.steeringRequested) {
@@ -891,7 +858,7 @@ export class AgentExecutor {
 
             const signal = this.modelSignal()
             const nextStream = this.createStream(messages, signal)
-            const result = await this.consumeStream(nextStream.stream, streamId, nextStream.debugRoundIndex, signal)
+            const result = await this.consumeStream(nextStream.stream, streamId, signal)
             this.modelAbortController = null
             this.config.signal?.throwIfAborted()
 

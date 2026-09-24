@@ -1,5 +1,4 @@
 import { getEventBus } from '../../telemetry/event-bus.js'
-import { completeWithDebugCapture } from '../../chat/debug-context.js'
 import { recordAuxiliaryModelUsage } from '../../usage-metering.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
@@ -43,23 +42,12 @@ export async function selectRoutingCandidates<T>(input: {
     providerId?: string
     model?: string
     signal?: AbortSignal
-    debugContextEnabled?: boolean
-    phase: Parameters<typeof completeWithDebugCapture>[0]['phase']
-    label: string
     usageKind?: 'tool-router' | 'memory-router'
     toolName: string
     request: Parameters<LLMGateway['complete']>[0]
     parse: (raw: string) => T | null
 }): Promise<T | null> {
-    const result = await completeWithDebugCapture({
-        enabled: input.debugContextEnabled,
-        conversationId: input.conversationId,
-        phase: input.phase,
-        label: input.label,
-        gateway: input.gateway,
-        providerId: input.providerId,
-        request: input.request,
-    })
+    const result = await input.gateway.complete(input.request, input.providerId)
     input.signal?.throwIfAborted()
     if (input.usageKind) {
         recordAuxiliaryModelUsage({
