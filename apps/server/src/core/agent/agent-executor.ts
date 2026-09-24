@@ -587,7 +587,7 @@ export class AgentExecutor {
         if (contextTokens == null) return
 
         if (usage) {
-            this.emitChat({ type: 'usage',
+            this.emitChat({ type: 'usage', scope: this._scope,
                 promptTokens: usage.promptTokens, completionTokens: usage.completionTokens,
                 totalTokens: usage.totalTokens,
                 model: this.config.model,

@@ -19,6 +19,23 @@ function setup(activeId = 'conversation') {
 }
 
 describe('chat streaming completion', () => {
+  test('keeps sub-agent usage out of the main context ring', () => {
+    const { streaming } = setup()
+    streaming.handleStreamUsage({
+      conversationId: 'conversation', scope: 'main',
+      usage: { promptTokens: 200, completionTokens: 50, totalTokens: 250 },
+      contextTokens: 250, contextWindow: 1000,
+    })
+    streaming.handleStreamUsage({
+      conversationId: 'conversation', scope: 'subagent',
+      usage: { promptTokens: 500, completionTokens: 100, totalTokens: 600 },
+      contextTokens: 600, contextWindow: 2000,
+    })
+
+    expect(streaming.lastUsage.value?.contextTokens).toBe(250)
+    expect(streaming.subAgentUsage.value?.totalTokens).toBe(600)
+  })
+
   test('keeps the visible conversation identity when a cron stream runs concurrently', () => {
     const { messages, streaming } = setup('chat-conversation')
 

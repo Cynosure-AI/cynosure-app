@@ -6,6 +6,7 @@ import HoverTooltip from '../../shared/HoverTooltip.vue'
 
 const chatStore = useChatStore()
 const agentDefs = useAgentDefinitionsStore()
+const subAgentUsage = computed(() => chatStore.activeConversationId ? chatStore.subAgentUsage : null)
 
 const contextUsage = computed(() => {
   // A new chat has no conversation-scoped usage yet. Treat it as empty even
@@ -79,14 +80,21 @@ const contextUsage = computed(() => {
     <template #content>
       <div
         v-if="contextUsage"
-        class="min-w-36"
+        class="min-w-46"
       >
         <div class="font-medium text-theme-300 mb-1.5">
           Context Window
         </div>
         <div class="flex justify-between text-theme-400 mb-0.5">
-          <span>Used</span><span class="text-theme-300">{{ contextUsage.used.toLocaleString() }}</span>
+          <span>Main Context</span><span class="text-theme-300">{{ contextUsage.used.toLocaleString() }}</span>
         </div>
+        <div
+          v-if="subAgentUsage"
+          class="flex justify-between gap-4 text-theme-400 mb-0.5"
+        >
+          <span>Sub Agent Usage</span><span class="text-theme-300">{{ subAgentUsage.totalTokens.toLocaleString() }}</span>
+        </div>
+
         <div class="flex justify-between text-theme-400 mb-0.5">
           <span>Capacity</span>
           <span class="flex items-center gap-1.5">

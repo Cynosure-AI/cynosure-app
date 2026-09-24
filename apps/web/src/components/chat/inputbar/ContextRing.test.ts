@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
       totalTokens: number
       contextTokens: number
     },
+    subAgentUsage: null as null | { totalTokens: number },
   },
 }))
 
@@ -39,6 +40,7 @@ describe('ContextRing', () => {
 
   beforeEach(() => {
     mocks.chatStore.activeConversationId = null
+    mocks.chatStore.subAgentUsage = null
   })
 
   test('does not carry context usage into a new chat', () => {
@@ -53,5 +55,16 @@ describe('ContextRing', () => {
     const wrapper = mountRing()
 
     expect(wrapper.text()).toContain('25%')
+  })
+
+  test('shows sub-agent tokens separately from main context usage', () => {
+    mocks.chatStore.activeConversationId = 'conversation-1'
+    mocks.chatStore.subAgentUsage = { totalTokens: 600 }
+    const wrapper = mountRing()
+
+    expect(wrapper.text()).toContain('25%')
+    expect(wrapper.text()).toContain('Main Agent Context')
+    expect(wrapper.text()).toContain('Sub Agent Usage')
+    expect(wrapper.text()).toContain('600')
   })
 })

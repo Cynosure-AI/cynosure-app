@@ -35,6 +35,7 @@ export interface ChatStreamingState {
     streamingContent: Ref<string>
     streamingThinking: Ref<string>
     lastUsage: Ref<TokenUsage | null>
+    subAgentUsage: Ref<TokenUsage | null>
 
     primaryStreamId: Ref<string | null>
     primaryStreamAgent: Ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>
@@ -52,7 +53,7 @@ export interface ChatStreamingState {
     handleStreamVideos(data: { streamId: string; conversationId: string; videos: string[] }): void
     handleStreamReset(data: { streamId: string; conversationId: string }): void
     handleStreamDiscard(data: { streamId: string; conversationId: string }): void
-    handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void
+    handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; scope?: 'main' | 'subagent'; model?: string; contextWindow?: number; contextTokens?: number }): void
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void
     handleStreamError(data: { streamId: string; conversationId: string; error: string }): void
     handleSubAgentStreamStart(data: { streamId: string; conversationId: string; sequence?: number; createdAt?: number; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string }): void
@@ -78,6 +79,7 @@ export function useChatStreaming(
     const streamingContent = ref('')
     const streamingThinking = ref('')
     const lastUsage = ref<TokenUsage | null>(null)
+    const subAgentUsage = ref<TokenUsage | null>(null)
     const primaryStreamId = ref<string | null>(null)
     const primaryStreamAgent = ref<{ agentId?: string; agentName?: string; agentIconUrl?: string | null }>({})
     // These maps are consumed by computed state outside this composable. Keep
@@ -551,8 +553,12 @@ export function useChatStreaming(
         streamingThinking.value = ''
     }
 
-    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number }): void {
+    function handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; scope?: 'main' | 'subagent'; model?: string; contextWindow?: number; contextTokens?: number }): void {
         if (data.conversationId !== activeConversationId.value) return
+        if (data.scope === 'subagent') {
+            subAgentUsage.value = { ...data.usage, model: data.model, contextTokens: data.contextTokens }
+            return
+        }
         lastUsage.value = { ...data.usage, model: data.model, contextTokens: data.contextTokens }
         if (data.contextWindow) {
             contextWindow.value = data.contextWindow
@@ -789,6 +795,7 @@ export function useChatStreaming(
             if (data.usage) {
                 msg.promptTokens = data.usage.promptTokens
                 msg.completionTokens = data.usage.completionTokens
+                subAgentUsage.value = { ...data.usage, model: data.model }
             }
             if (!msg.content && !msg.thinking && !msg.imageDataUrls?.length && !msg.videoDataUrls?.length) {
                 const idx = messages.value.indexOf(msg)
@@ -807,6 +814,7 @@ export function useChatStreaming(
             if (data.usage) {
                 completedMsg.promptTokens = data.usage.promptTokens
                 completedMsg.completionTokens = data.usage.completionTokens
+                subAgentUsage.value = { ...data.usage, model: data.model }
             }
             lastCompletedSubAgentMsgs.delete(key)
         }
@@ -961,6 +969,7 @@ export function useChatStreaming(
         streamingContent,
         streamingThinking,
         lastUsage,
+        subAgentUsage,
         primaryStreamId,
         primaryStreamAgent,
         streamBuffers,

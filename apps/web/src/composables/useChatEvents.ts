@@ -105,7 +105,7 @@ export function useChatEvents(): () => void {
         chatStore.handleStreamError({ ...base, error: event.error })
         return
       case 'usage':
-        chatStore.handleStreamUsage({ conversationId: event.conversationId, usage: event, contextTokens: event.contextTokens, contextWindow: event.contextWindow, model: event.model })
+        chatStore.handleStreamUsage({ conversationId: event.conversationId, scope: event.scope, usage: event, contextTokens: event.contextTokens, contextWindow: event.contextWindow, model: event.model })
         return
       case 'execution-state':
         chatStore.handleChatExecutionState({ executionId: event.executionId, conversationId: event.conversationId, agentId: event.agentId, state: event.state })

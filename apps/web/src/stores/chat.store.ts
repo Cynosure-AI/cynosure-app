@@ -101,6 +101,7 @@ export const useChatStore = defineStore('chat', () => {
   // conversation's context fill while its own state is being established.
   watch(activeConversationId, () => {
     streaming.lastUsage.value = null
+    streaming.subAgentUsage.value = null
   }, { flush: 'sync' })
 
   const liveConversationSubscriptions = computed(() => {
@@ -294,6 +295,15 @@ export const useChatStore = defineStore('chat', () => {
 
       const lastContextTokens = response.lastContextTokens
       messages.value = response.messages.map((item) => toDisplayMessage(item))
+      const lastSubAgentMessage = [...messages.value].reverse().find(
+        (message) => message.maInvocationId && message.role === 'assistant' && message.promptTokens != null
+      )
+      streaming.subAgentUsage.value = lastSubAgentMessage ? {
+        promptTokens: lastSubAgentMessage.promptTokens || 0,
+        completionTokens: lastSubAgentMessage.completionTokens || 0,
+        totalTokens: (lastSubAgentMessage.promptTokens || 0) + (lastSubAgentMessage.completionTokens || 0),
+        model: lastSubAgentMessage.model,
+      } : null
       lastLoadedEventCursor.value = { conversationId: id, sequence: response.latestEventSequence }
 
       // Hydrate server-side post-action state
@@ -491,6 +501,7 @@ export const useChatStore = defineStore('chat', () => {
     streaming.currentStreamId.value = null
     streaming.primaryStreamId.value = null
     streaming.lastUsage.value = null
+    streaming.subAgentUsage.value = null
   }
 
   async function startNewChat(): Promise<void> {
@@ -666,6 +677,7 @@ export const useChatStore = defineStore('chat', () => {
     streamingContent: streaming.streamingContent,
     streamingThinking: streaming.streamingThinking,
     lastUsage: streaming.lastUsage,
+    subAgentUsage: streaming.subAgentUsage,
     contextWindow,
     modelCost,
     modelPricing,
