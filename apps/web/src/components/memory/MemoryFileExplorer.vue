@@ -14,6 +14,7 @@ import MemoryExplorerBrowser from "./MemoryExplorerBrowser.vue";
 import MemoryExplorerSearchStatus from "./MemoryExplorerSearchStatus.vue";
 import MemoryExplorerToolbar from "./MemoryExplorerToolbar.vue";
 import MemoryLargeIndexWarning from "./MemoryLargeIndexWarning.vue";
+import ModalDialog from "../shared/ModalDialog.vue";
 import type {
   DocumentDragPayload,
   DocumentRow,
@@ -108,6 +109,10 @@ function hasRecentDreamUpdate(file: MemoryFileStatus): boolean {
 
 // Upload
 const fileInput = ref<HTMLInputElement | null>(null);
+const showNewFileDialog = ref(false);
+const newFileName = ref("");
+const newFileError = ref("");
+const creatingFile = ref(false);
 const uploading = ref(false);
 const uploadProgress = ref({ current: 0, total: 0 });
 const uploadResults = ref<UploadResult[]>([]);
@@ -807,6 +812,40 @@ async function ingestFiles(fileList: File[]) {
   emit("spacesChanged");
 }
 
+function openNewFileDialog(): void {
+  newFileName.value = "Untitled.md";
+  newFileError.value = "";
+  showNewFileDialog.value = true;
+}
+
+async function createFile(): Promise<void> {
+  if (creatingFile.value) return;
+  const name = newFileName.value.trim();
+  if (!name || name.includes("/") || name.includes("\\")) {
+    newFileError.value = "Enter a file name without a path.";
+    return;
+  }
+  const fileName = /\.(md|txt)$/i.test(name) ? name : `${name}.md`;
+  creatingFile.value = true;
+  newFileError.value = "";
+  try {
+    const folderId = props.folderId;
+    const result = await api.memoryFolders.ingestFile(folderId, fileName, "");
+    showNewFileDialog.value = false;
+    emit("spacesChanged");
+    if (props.folderId === folderId) {
+      searchQuery.value = "";
+      page.value = 0;
+      await loadFiles();
+      openDocument(result.fileName);
+    }
+  } catch (err) {
+    newFileError.value = (err as Error).message || "Failed to create file";
+  } finally {
+    creatingFile.value = false;
+  }
+}
+
 const showEditorModal = ref(false);
 const editorFileName = ref("");
 
@@ -1051,6 +1090,18 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           v-if="currentSpace"
           type="button"
           class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          @click="openNewFileDialog"
+        >
+          <Icon
+            icon="lucide:file-plus-2"
+            class="h-4 w-4 text-accent-400"
+          />
+          New file
+        </button>
+        <button
+          v-if="currentSpace"
+          type="button"
+          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
           @click="emit('createFolder', currentSpace)"
         >
           <Icon
@@ -1211,6 +1262,54 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @close="showEditorModal = false"
       @saved="handleEditorSaved"
     />
+
+    <ModalDialog
+      :show="showNewFileDialog"
+      title="New file"
+      icon="lucide:file-plus-2"
+      @close="!creatingFile && (showNewFileDialog = false)"
+    >
+      <form @submit.prevent="createFile">
+        <label
+          for="new-memory-file-name"
+          class="mb-2 block text-sm text-theme-300"
+        >File name</label>
+        <input
+          id="new-memory-file-name"
+          v-model="newFileName"
+          type="text"
+          class="w-full rounded-lg border border-theme-700 bg-theme-950 px-3 py-2 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
+          :disabled="creatingFile"
+        >
+        <p class="mt-2 text-xs text-theme-500">
+          Files are created as Markdown unless you use a .txt extension.
+        </p>
+        <p
+          v-if="newFileError"
+          role="alert"
+          class="mt-2 text-sm text-red-400"
+        >
+          {{ newFileError }}
+        </p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-lg px-3 py-2 text-sm text-theme-400 hover:bg-theme-800 hover:text-theme-200"
+            :disabled="creatingFile"
+            @click="showNewFileDialog = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-white hover:bg-accent-400 disabled:opacity-50"
+            :disabled="creatingFile"
+          >
+            {{ creatingFile ? 'Creating…' : 'Create file' }}
+          </button>
+        </div>
+      </form>
+    </ModalDialog>
 
     <MemoryLargeIndexWarning
       :show="showLargeChunkWarning"
