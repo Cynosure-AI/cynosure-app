@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import { api } from '../api/client'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
@@ -39,9 +40,13 @@ const editSaving = ref(false)
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
 const brokenIcons = ref<Set<string>>(new Set())
+const availableMemoryFolderIds = ref<Set<string> | null>(null)
 
 onMounted(() => {
   void agentDefs.load()
+  void api.memoryFolders.list()
+    .then(folders => { availableMemoryFolderIds.value = new Set(folders.map(folder => folder.id)) })
+    .catch(() => undefined)
   if (servers.value.length === 0) void loadServers().catch(() => undefined)
 })
 
@@ -76,13 +81,17 @@ const agentColumns: Column<AgentDefinition>[] = [
   { key: 'date', label: 'Date', width: '140px', sortable: true, sortValue: agent => agent.createdAt },
   { key: 'actions', label: 'Actions', width: '84px', class: 'text-right' },
 ]
-const agentsWithIssues = computed(() => {
+const agentIssues = computed(() => {
   const availableKeys = new Set(agentStore.availableTools.map(tool => tool.key))
   const allAgentIds = new Set(agentDefs.agents.map(agent => agent.id))
-  return new Set(agentDefs.agents.filter(agent =>
-    agent.tools.some(tool => !availableKeys.has(tool))
-    || (agent.subAgents || []).some(subAgent => !allAgentIds.has(subAgent.agentId)),
-  ).map(agent => agent.id))
+  return new Map(agentDefs.agents.map(agent => [agent.id, [
+    ...agent.tools.filter(tool => !availableKeys.has(tool)).map(tool => `Tool: ${tool}`),
+    ...(availableMemoryFolderIds.value
+      ? (agent.memoryFolders || []).filter(id => !availableMemoryFolderIds.value!.has(id)).map(id => `Memory folder: ${id}`)
+      : []),
+    ...(agent.subAgents || []).filter(subAgent => !allAgentIds.has(subAgent.agentId))
+      .map(subAgent => `Sub-agent: ${subAgent.agentId}`),
+  ]] as const))
 })
 
 watch(searchQuery, () => { page.value = 0 })
@@ -337,9 +346,11 @@ function formatDate(timestamp: number): string {
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1 text-sm font-medium text-theme-100">
                 <span class="truncate">{{ item.name }}</span><Icon
-                  v-if="agentsWithIssues.has(item.id)"
+                  v-if="agentIssues.get(item.id)?.length"
                   icon="lucide:alert-triangle"
                   class="h-3.5 w-3.5 shrink-0 text-amber-400"
+                  :title="agentIssues.get(item.id)?.join('\n')"
+                  :aria-label="`Unavailable assignments: ${agentIssues.get(item.id)?.join(', ')}`"
                 />
               </div>
               <div
