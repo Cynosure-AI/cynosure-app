@@ -18,9 +18,8 @@ import {
     materializeAudioArtifacts,
     materializeImageArtifacts,
 } from '../artifacts/image-artifacts.js'
-import { isPlanningToolName } from '../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
-import { getPlanningState, reconcilePlanningAfterToolBatch } from './planning-state.js'
+import { getPlanningState } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
 import { recordDebugModelRequest, recordDebugModelResponse } from '../chat/debug-context.js'
 
@@ -359,7 +358,6 @@ export class AgentExecutor {
                 // premature stop gets a fresh consecutive-recovery budget.
                 openPlanRecoveryAttempts = 0
                 const visibleToolCalls = pendingToolCalls.filter((tc) => isVisibleExecutionTool(tc.function.name))
-                const hasPlanningUpdate = pendingToolCalls.some((tc) => isPlanningToolName(tc.function.name))
 
                 if (visibleToolCalls.length) {
                     this.emit('step:status', { taskId, conversationId, iteration: round + 1, status: 'choosing-tools', message: 'Selecting tools...' })
@@ -423,9 +421,6 @@ export class AgentExecutor {
                             structuredContent: tr.structuredContent,
                         }))
                     })
-                    if (!hasPlanningUpdate) {
-                        this.reconcilePlanningProgress(visibleToolResults)
-                    }
                 }
 
                 if (this.config.saveMessages) {
@@ -1143,17 +1138,6 @@ export class AgentExecutor {
             this.config.tools.push(tool)
             existingNames.add(tool.name)
         }
-    }
-
-    private reconcilePlanningProgress(results: ToolCallResult[]): void {
-        const runId = this.config.planningRunId
-        if (!runId || !this.config.isPrimaryExecutor) return
-        const success = results.every((result) => result.success)
-        const failed = results.find((result) => !result.success)
-        reconcilePlanningAfterToolBatch(runId, {
-            success,
-            note: success ? undefined : failed?.output,
-        })
     }
 
     private hasOpenPlanningItems(): boolean {

@@ -16,7 +16,6 @@ import {
   getLatestPlanningState,
   getPlanningState,
   interruptPlanningRun,
-  reconcilePlanningAfterToolBatch,
   resumeOrCreatePlanningRun,
 } from './planning-state.js'
 
@@ -63,8 +62,7 @@ describe('visible planning state', () => {
 
     expect(applyTodoUpdate(run.runId, { op: 'update', taskId: '1', status: 'completed', note: 'built' }).success).toBe(true)
     expect(getPlanningState(run.runId)?.items.map(({ status }) => status)).toEqual(['completed', 'in_progress'])
-    expect(reconcilePlanningAfterToolBatch(run.runId, { success: true })?.items.map(({ status }) => status))
-      .toEqual(['completed', 'completed'])
+    expect(applyTodoUpdate(run.runId, { op: 'completed', taskId: '02' }).success).toBe(true)
 
     const completed = closePlanningRun(run.runId, 'completed', { summary: 'released' })
     expect(completed).toMatchObject({ status: 'completed', result: { summary: 'released' } })
@@ -97,13 +95,25 @@ describe('visible planning state', () => {
       status: 'in_progress',
       note: 'User stopped the run',
     })
-    const failed = reconcilePlanningAfterToolBatch(run.runId, { success: false, note: 'Logs unavailable' })
-    expect(failed?.items.map(({ status }) => status)).toEqual(['blocked', 'in_progress'])
-    expect(failed?.items[0].note).toBe('Logs unavailable')
+    expect(applyTodoUpdate(run.runId, { tasks: [
+      { title: 'Inspect logs', status: 'blocked', note: 'Logs unavailable' },
+      { title: 'Apply fix', status: 'in_progress' },
+    ] }).success).toBe(true)
+    expect(getPlanningState(run.runId)?.items.map(({ status }) => status)).toEqual(['blocked', 'in_progress'])
+    expect(getPlanningState(run.runId)?.items[0].note).toBe('Logs unavailable')
   })
 
-  test('validates atomic operations and exposes planning context', () => {
+  test('accepts full-list updates, including extra legacy fields, and exposes planning context', () => {
     const run = createPlanningRun('conversation', 'Plan')
+
+    expect(applyTodoUpdate(run.runId, { tasks: [{ title: 'First task' }, { title: 'Second task' }] }).success).toBe(true)
+    expect(getPlanningState(run.runId)?.items.map(({ status }) => status)).toEqual(['in_progress', 'pending'])
+    expect(applyTodoUpdate(run.runId, {
+      op: 'set', taskId: '01', tasks: [{ title: 'First task', status: 'completed' }, { title: 'Second task', status: 'in_progress' }],
+    }).success).toBe(true)
+    expect(getPlanningState(run.runId)?.items.map(({ status }) => status)).toEqual(['completed', 'in_progress'])
+    expect(applyTodoUpdate(run.runId, { tasks: [] }).success).toBe(true)
+    expect(getPlanningState(run.runId)?.items).toEqual([])
 
     expect(applyTodoUpdate(run.runId, { op: 'set', tasks: [{ title: '   ' }] })).toEqual({
       success: false,
@@ -125,15 +135,22 @@ describe('visible planning state', () => {
     // Update by taskId only: title stays unchanged.
     expect(applyTodoUpdate(run.runId, { op: 'update', taskId: '1', status: 'completed' }).success).toBe(true)
     expect(getPlanningState(run.runId)?.items[0]).toMatchObject({ id: '01', title: 'New task', status: 'completed' })
+    expect(applyTodoUpdate(run.runId, { op: 'completed' })).toEqual({
+      success: false,
+      output: '`completed` requires `taskId`.',
+    })
+    applyTodoUpdate(run.runId, { op: 'add', title: 'Another task' })
+    expect(applyTodoUpdate(run.runId, { op: 'completed', taskId: '02' })).toMatchObject({
+      success: true,
+      output: expect.stringContaining('"action":"completed"'),
+    })
+    expect(getPlanningState(run.runId)?.items[1]).toMatchObject({ id: '02', status: 'completed' })
     // Update never falls back to creating a task.
     expect(applyTodoUpdate(run.runId, { op: 'update', taskId: '99', status: 'pending' })).toEqual({
       success: false,
       output: 'No task matches taskId "99".',
     })
-    expect(applyTodoUpdate(run.runId, { op: 'clear', title: 'ambiguous' })).toEqual({
-      success: false,
-      output: 'Field "title" is not valid for operation "clear".',
-    })
+    expect(applyTodoUpdate(run.runId, {})).toEqual({ success: false, output: '`tasks` must be an array.' })
   })
 
   test('adds at a requested position, removes by id, and clears the list', () => {

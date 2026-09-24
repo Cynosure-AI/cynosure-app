@@ -27,6 +27,7 @@ export interface PlanningState {
 }
 
 export type TodoUpdateParams =
+  | { tasks: Array<{ title: string; status?: PlanningTaskStatus; note?: string }>; objective?: string }
   | {
       op: 'set'
       objective?: string
@@ -34,6 +35,7 @@ export type TodoUpdateParams =
     }
   | { op: 'add'; title: string; status?: PlanningTaskStatus; note?: string; afterTaskId?: string }
   | { op: 'update'; taskId: string; title?: string; status?: PlanningTaskStatus; note?: string }
+  | { op: 'completed'; taskId: string }
   | { op: 'remove'; taskId: string }
   | { op: 'clear' }
 
@@ -129,7 +131,7 @@ export function buildPlanningStateContext(state: PlanningState): string | null {
     'Current visible planning todo list for this conversation:',
     `objective=${state.objective}`,
     ...lines,
-    'Continue from this state. Use update/add/remove for task-level changes; use set only when the user changed the objective or replaced the plan.',
+    'To change this list, call todo_update with the complete current tasks array. Keep completed tasks in the array.',
   ].join('\n')
 }
 
@@ -213,13 +215,27 @@ export function interruptPlanningRun(
 }
 
 export function applyTodoUpdate(runId: string, params: unknown): { success: boolean; output: string } {
-  const payload = params as Partial<TodoUpdateParams> & { op?: string }
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    return { success: false, output: '`tasks` must be an array.' }
+  }
+  const payload = params as {
+    op?: string
+    objective?: string
+    tasks?: Array<{ title?: string; status?: string; note?: string }>
+    taskId?: string
+    afterTaskId?: string
+    title?: string
+    status?: string
+    note?: string
+  }
   const current = getPlanningState(runId)
   if (!current) return { success: false, output: 'Planning run not found.' }
 
-  const unexpectedField = findUnexpectedOperationField(payload)
-  if (unexpectedField) {
-    return { success: false, output: `Field ${JSON.stringify(unexpectedField)} is not valid for operation ${JSON.stringify(payload.op)}.` }
+  // Current tool calls send the complete list without an operation. Accept
+  // legacy operation calls from older transcripts as well.
+  if (payload.op === undefined) {
+    if (!Array.isArray(payload.tasks)) return { success: false, output: '`tasks` must be an array.' }
+    return payload.tasks.length === 0 ? clearTodoList(current) : setTodoList(current, payload)
   }
 
   switch (payload.op) {
@@ -229,12 +245,14 @@ export function applyTodoUpdate(runId: string, params: unknown): { success: bool
       return addTodoItem(current, payload)
     case 'update':
       return updateTodoItem(current, payload)
+    case 'completed':
+      return completeTodoItem(current, payload)
     case 'remove':
       return removeTodoItem(current, payload)
     case 'clear':
       return clearTodoList(current)
     default:
-      return { success: false, output: 'Invalid or missing `op`. Use set, add, update, remove, or clear.' }
+      return { success: false, output: 'Invalid or missing `op`. Use set, add, update, completed, remove, or clear.' }
   }
 }
 
@@ -317,6 +335,7 @@ function addTodoItem(
 function updateTodoItem(
   current: PlanningState,
   payload: { taskId?: string; title?: string; status?: string; note?: string },
+  action: 'updated' | 'completed' = 'updated',
 ): { success: boolean; output: string } {
   if (!payload.taskId) return { success: false, output: '`update` requires `taskId`.' }
   const idx = findTaskIndexById(current.items, payload.taskId)
@@ -355,7 +374,15 @@ function updateTodoItem(
   }
   persistState(state)
   emitState(state)
-  return { success: true, output: JSON.stringify({ action: 'updated', task: normalizedItems[idx] }) }
+  return { success: true, output: JSON.stringify({ action, task: normalizedItems[idx] }) }
+}
+
+function completeTodoItem(
+  current: PlanningState,
+  payload: { taskId?: string },
+): { success: boolean; output: string } {
+  if (!payload.taskId) return { success: false, output: '`completed` requires `taskId`.' }
+  return updateTodoItem(current, { taskId: payload.taskId, status: 'completed' }, 'completed')
 }
 
 function removeTodoItem(
@@ -390,36 +417,6 @@ function clearTodoList(current: PlanningState): { success: boolean; output: stri
   persistState(state)
   emitState(state)
   return { success: true, output: JSON.stringify({ action: 'cleared', runId: current.runId }) }
-}
-
-export function reconcilePlanningAfterToolBatch(
-  runId: string,
-  result: { success: boolean; note?: string },
-): PlanningState | null {
-  const current = getPlanningState(runId)
-  if (!current || current.status !== 'running') return current
-
-  const activeIndex = current.items.findIndex((item) => item.status === 'in_progress')
-  if (activeIndex === -1) return current
-
-  const now = Date.now()
-  const activeStatus: PlanningTaskStatus = result.success ? 'completed' : 'blocked'
-  const items = current.items.map((item, index) => (
-    index === activeIndex
-      ? { ...item, status: activeStatus, note: cleanNote(result.note) ?? item.note, updatedAt: now }
-      : item
-  ))
-  const normalizedItems = advanceActiveTask(items, activeIndex, activeStatus, now)
-
-  const state: PlanningState = {
-    ...current,
-    items: normalizedItems,
-    currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
-    updatedAt: now,
-  }
-  persistState(state)
-  emitState(state)
-  return state
 }
 
 export function getPlanningState(runId: string): PlanningState | null {
@@ -610,19 +607,6 @@ function invalidTaskStatus(status: string | undefined): { success: false; output
 
 function taskNotFound(taskId: string): { success: false; output: string } {
   return { success: false, output: `No task matches taskId ${JSON.stringify(taskId)}.` }
-}
-
-function findUnexpectedOperationField(payload: { op?: string }): string | undefined {
-  const allowedFields: Record<string, Set<string>> = {
-    set: new Set(['op', 'objective', 'tasks']),
-    add: new Set(['op', 'title', 'status', 'note', 'afterTaskId']),
-    update: new Set(['op', 'taskId', 'title', 'status', 'note']),
-    remove: new Set(['op', 'taskId']),
-    clear: new Set(['op']),
-  }
-  const allowed = payload.op ? allowedFields[payload.op] : undefined
-  if (!allowed) return undefined
-  return Object.keys(payload).find((field) => !allowed.has(field))
 }
 
 function renumberTaskIds(items: PlanningTaskItem[]): PlanningTaskItem[] {

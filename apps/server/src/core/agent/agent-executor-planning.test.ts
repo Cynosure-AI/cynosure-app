@@ -43,7 +43,7 @@ describe('AgentExecutor planning recovery', () => {
           toolCalls: [{
             id: 'finish-plan',
             type: 'function',
-            function: { name: 'todo_update', arguments: '{"op":"update","taskId":"01","status":"completed"}' },
+            function: { name: 'todo_update', arguments: '{"tasks":[{"title":"Finish it","status":"completed"}]}' },
           }],
           done: true,
         }
@@ -86,11 +86,12 @@ describe('AgentExecutor planning recovery', () => {
         return
       }
       if (call === 6) {
+        expect(getPlanningState(run.runId)?.items.map(({ status }) => status)).toEqual(['in_progress', 'pending'])
         yield {
           toolCalls: [{
             id: 'finish-plan',
             type: 'function',
-            function: { name: 'todo_update', arguments: '{"op":"update","taskId":"02","status":"completed"}' },
+            function: { name: 'todo_update', arguments: '{"tasks":[{"title":"Look up data","status":"completed"},{"title":"Close the plan","status":"completed"}]}' },
           }],
           done: true,
         }
