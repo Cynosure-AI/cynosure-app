@@ -77,7 +77,7 @@ const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || stateFilt
 const agentColumns: Column<AgentDefinition>[] = [
   { key: 'favorite', label: '', width: '36px', sortable: true, sortValue: agent => agent.favorite },
   { key: 'name', label: 'Name', width: 'minmax(240px, 1.45fr)', sortable: true, sortValue: agent => agent.name },
-  { key: 'state', label: 'State', width: '76px', sortable: true, sortValue: agent => agentIssues.value.get(agent.id)?.length ? 1 : 0 },
+  { key: 'state', label: 'State', width: '68px', sortable: true, sortValue: agent => agentIssues.value.get(agent.id)?.length ? 1 : 0 },
   { key: 'model', label: 'Model / Provider', width: 'minmax(200px, 0.85fr)', sortable: true, editable: true, sortValue: agent => `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}` },
   { key: 'info', label: 'Info', width: '130px' },
   { key: 'date', label: 'Date', width: '140px', sortable: true, sortValue: agent => agent.createdAt },
@@ -372,14 +372,8 @@ function formatDate(timestamp: number): string {
               />
             </div>
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-1 text-sm font-medium text-theme-100">
-                <span class="truncate">{{ item.name }}</span><Icon
-                  v-if="agentIssues.get(item.id)?.length"
-                  icon="lucide:alert-triangle"
-                  class="h-3.5 w-3.5 shrink-0 text-amber-400"
-                  :title="agentIssues.get(item.id)?.join('\n')"
-                  :aria-label="`Unavailable assignments: ${agentIssues.get(item.id)?.join(', ')}`"
-                />
+              <div class="truncate text-sm font-medium text-theme-100">
+                {{ item.name }}
               </div>
               <div
                 v-if="item.description"
