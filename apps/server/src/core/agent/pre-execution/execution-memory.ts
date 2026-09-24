@@ -22,7 +22,6 @@ export interface ResolveMemoryContextInput {
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
-    debugContextEnabled?: boolean
     /** Skip retrieval when task-context planning determined stored context cannot help. */
     suppressAutoMemory?: boolean
 }
@@ -67,7 +66,6 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         recentMessages,
         eventMeta,
         signal,
-        debugContextEnabled,
         suppressAutoMemory,
     } = input
 
@@ -97,7 +95,6 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         memoryFolderIds: memoryFolderOverrides?.map((space) => space.id),
         eventMeta,
         signal,
-        debugContextEnabled,
     })
 
     return memoryContext ? {

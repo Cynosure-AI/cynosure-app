@@ -370,7 +370,7 @@ onMounted(async () => {
               Debug Mode
             </h3>
             <p class="text-xs text-theme-500 mt-0.5">
-              Capture complete model requests and expose the context inspector in chat
+              Show the persisted chat protocol inspector in chat
             </p>
           </div>
         </div>
@@ -381,9 +381,8 @@ onMounted(async () => {
       </div>
 
       <p class="pt-3 border-t border-theme-700 text-[11px] leading-relaxed text-theme-500">
-        Debug captures can contain system prompts, retrieved memories, message history, tool schemas and results,
-        attachments, and provider-exposed reasoning. Treat exports as sensitive. Provider-private chain-of-thought
-        and platform instructions that are never returned to Cynosure cannot be displayed.
+        Protocol events can contain messages, tool arguments and results, attachments, and provider-exposed reasoning.
+        Treat exports as sensitive.
       </p>
     </BaseCard>
   </div>

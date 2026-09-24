@@ -111,8 +111,8 @@ async function newChat(): Promise<void> {
       v-if="prefs.debugMode"
       type="button"
       class="shrink-0 rounded-lg p-1.5 text-amber-400 transition-colors hover:bg-amber-400/10 hover:text-amber-300"
-      title="Inspect the complete LLM context"
-      aria-label="Open LLM context inspector"
+      title="Inspect persisted chat protocol"
+      aria-label="Open chat protocol inspector"
       @click="debugContextOpen = true"
     >
       <Icon

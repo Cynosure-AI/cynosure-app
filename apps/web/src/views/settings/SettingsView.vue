@@ -210,8 +210,8 @@ const sections: SettingsSection[] = [
     id: 'debug-mode',
     categoryId: 'chat',
     label: 'Debug Mode',
-    description: 'Capture the complete model-visible context for inspection in chat.',
-    terms: ['debug mode', 'context inspector', 'full context', 'system prompt', 'memories', 'tools', 'thinking', 'llm request', 'developer tools']
+    description: 'Inspect persisted chat protocol events in chat.',
+    terms: ['debug mode', 'chat protocol', 'events', 'messages', 'tools', 'reasoning', 'developer tools']
   },
   {
     id: 'enable-voice',

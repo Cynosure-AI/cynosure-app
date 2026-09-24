@@ -37,7 +37,6 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
-import { beginDebugContextCapture, getDebugContextCapture, updateDebugContextCapture } from '../core/chat/debug-context.js'
 import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
 import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
 import { executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
@@ -135,15 +134,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return { success: true, inlineAttachmentTextLimit }
   })
 
-  // GET /api/chat/conversations/:id/debug-context — latest opt-in gateway capture
-  app.get<{ Params: { id: string } }>('/conversations/:id/debug-context', async (req, reply) => {
-    const capture = getDebugContextCapture(req.params.id)
-    if (!capture) {
-      return reply.status(404).send({ error: 'No debug context has been captured for this conversation' })
-    }
-    return capture
-  })
-
   async function executeSend(conversationId: string, request: QueuedExecutionRequest): Promise<boolean> {
     const initialConversation = getDb().prepare('SELECT agent_id FROM conversations WHERE id = ?')
       .get(conversationId) as { agent_id: string | null } | undefined
@@ -205,7 +195,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         titleProviderId: titleProviderIdPref,
         titleModel: titleModelPref,
         inlineAttachmentTextLimit: reqInlineAttachmentTextLimit,
-        debugMode: reqDebugMode,
       } = run
       cancelPostActions(conversationId)
       clearQuickResponses(conversationId, broadcast)
@@ -396,16 +385,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
       const usedToolNames = new Set<string>()
 
-      if (reqDebugMode === true) {
-        beginDebugContextCapture({
-          conversationId,
-          executionId,
-          providerId: providerOverride || resolvedAgent?.providerId,
-          model: model || resolvedAgent?.model,
-          contextStrategy: reqContextStrategy || 'sliding-window',
-        })
-      }
-
       let planned: Awaited<ReturnType<typeof planExecution>>
       try {
         planned = await planExecution({
@@ -434,7 +413,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
             reasoningEffort: reqReasoningEffort,
             inlineAttachmentTextLimit,
-            debugContextEnabled: reqDebugMode === true,
           },
         })
       } catch (err) {
@@ -483,7 +461,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const attachmentContext = await buildAttachmentContextBundle(conversationId, normalizedContent, db)
         messages = appendHiddenSystemContext(messages, attachmentContext?.content ?? null)
         if (attachmentContext?.evidence.length) turnEvidence.push(...attachmentContext.evidence)
-        if (reqDebugMode === true) updateDebugContextCapture(conversationId, { evidence: turnEvidence })
         abortController.signal.throwIfAborted()
         if (attachmentContext) {
           messages = appendHiddenSystemContext(messages, ATTACHMENT_SYSTEM_CONTEXT)
@@ -617,15 +594,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           })
         }
 
-        if (reqDebugMode === true) {
-          updateDebugContextCapture(conversationId, {
-            providerId: responseProvider,
-            model: responseModel,
-            contextWindow,
-            contextStrategy,
-          })
-        }
-
         const executor = new AgentExecutor({
           gateway,
           tools,
@@ -649,7 +617,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           planningRunId,
           isPrimaryExecutor: true,
           usedToolNames,
-          debugContextEnabled: reqDebugMode === true,
           takeSteeringMessages: () => takeSteeringMessages(conversationId, streamId),
           eventMeta: { executionId },
         })

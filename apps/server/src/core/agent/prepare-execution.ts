@@ -85,8 +85,6 @@ export interface PrepareExecutionInput {
     eventMeta?: Record<string, unknown>
     /** Inline text threshold; larger conversation attachments are indexed before execution. */
     inlineAttachmentTextLimit?: number
-    /** Capture auxiliary pre-turn model calls in the Debug Context inspector. */
-    debugContextEnabled?: boolean
     /** Explicitly selected tools to preserve in agentless schedule snapshots. */
     scheduleSelectedToolKeys?: string[]
     thinkingEnabled?: boolean
@@ -184,7 +182,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         enabledModes: autoModes,
         eventMeta: input.eventMeta,
         signal: input.signal,
-        debugContextEnabled: input.debugContextEnabled,
     })
     const toolRoutingQuery = uniqueQueries([input.userQuery, taskContext?.toolSearchQuery]).join('\n') || input.userQuery
     const memoryRoutingQueries = uniqueQueries([
@@ -223,7 +220,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         includeSubAgents: input.includeSubAgents,
         subAgentAssignments: input.subAgentAssignments,
         signal: input.signal,
-        debugContextEnabled: input.debugContextEnabled,
         memoryFolderOverrides,
         hydrationAgentId: input.hydrationAgentId,
         eventMeta: input.eventMeta,
@@ -241,7 +237,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         recentMessages: routingMessages,
         eventMeta: input.eventMeta,
         signal: input.signal,
-        debugContextEnabled: input.debugContextEnabled,
         suppressAutoMemory: taskContext?.requiresMemory === false,
     }), attachmentPreparation])
 
