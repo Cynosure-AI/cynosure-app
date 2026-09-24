@@ -109,8 +109,8 @@ function onDrop(e: DragEvent) {
   }
 }
 
-function fillQuickResponse(suggestion: string): void {
-  inputBarRef.value?.fillSuggestion(suggestion)
+function sendQuickResponse(suggestion: string): void {
+  void inputBarRef.value?.sendSuggestion(suggestion)
 }
 
 async function openRecentChat(conversation: Conversation): Promise<void> {
@@ -242,7 +242,7 @@ watch(
             <ChatPanel
               :search-open="chatSearchOpen"
               @close-search="chatSearchOpen = false"
-              @select-quick-response="fillQuickResponse"
+              @select-quick-response="sendQuickResponse"
             />
 
             <PlanningTaskList

@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import QuickResponses from './QuickResponses.vue'
 
 describe('QuickResponses', () => {
-  test('renders at most three suggestions and emits a fill selection', async () => {
+  test('renders at most three suggestions and emits a selection', async () => {
     const wrapper = mount(QuickResponses, {
       props: { suggestions: ['One', 'Two', 'Three', 'Four'] },
       global: { stubs: { Icon: true } },
@@ -13,6 +13,7 @@ describe('QuickResponses', () => {
     expect(buttons).toHaveLength(3)
     await buttons[1].trigger('click')
     expect(wrapper.emitted('select')).toEqual([['Two']])
+    expect(buttons[1].attributes('title')).toBe('Send quick response: Two')
   })
 
   test('shows post-turn progress without placeholder buttons', () => {

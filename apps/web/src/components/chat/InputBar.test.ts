@@ -108,19 +108,29 @@ describe('InputBar drafts', () => {
     expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('')
   })
 
-  test('fills and focuses a quick response without sending it', async () => {
+  test('sends a quick response while preserving the current draft', async () => {
     const wrapper = mountInputBar(document.body)
     const textarea = wrapper.get<HTMLTextAreaElement>('textarea')
+    await textarea.setValue('My unfinished draft')
 
-    wrapper.vm.fillSuggestion('Tell me more about that')
+    await wrapper.vm.sendSuggestion('Tell me more about that')
     await flushPromises()
 
-    expect(textarea.element.value).toBe('Tell me more about that')
-    expect(document.activeElement).toBe(textarea.element)
-    expect(chatStore.sendMessage).not.toHaveBeenCalled()
-    expect(localStorage.getItem(`${SK_CHAT_DRAFT_PREFIX}conversation:conversation-1`))
-      .toBe('Tell me more about that')
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('Tell me more about that')
+    expect(textarea.element.value).toBe('My unfinished draft')
     wrapper.unmount()
+    expect(localStorage.getItem(`${SK_CHAT_DRAFT_PREFIX}conversation:conversation-1`))
+      .toBe('My unfinished draft')
+  })
+
+  test('queues a quick response when the conversation is running', async () => {
+    chatStore.isConversationLocked = true
+    const wrapper = mountInputBar()
+
+    await wrapper.vm.sendSuggestion('Tell me more about that')
+
+    expect(chatStore.queueMessage).toHaveBeenCalledWith('Tell me more about that', 'next')
+    expect(chatStore.sendMessage).not.toHaveBeenCalled()
   })
 
   test('queues Enter submissions while a conversation is running', async () => {
