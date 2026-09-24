@@ -33,7 +33,6 @@ export interface ApplyAutoMemoryRoutingInput {
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
-    debugContextEnabled?: boolean
 }
 
 interface MemoryContextSelection {
@@ -87,7 +86,6 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         memoryFolderIds,
         eventMeta,
         signal,
-        debugContextEnabled,
     } = input
 
     if (!shouldRouteMemory(userQuery, { enabled })) {
@@ -172,7 +170,6 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 recentMessages,
                 candidates,
                 signal,
-                debugContextEnabled,
             })
 
             // One bounded corrective pass: do not inject merely related evidence
@@ -218,7 +215,6 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                     recentMessages,
                     candidates,
                     signal,
-                    debugContextEnabled,
                 })
             }
 
@@ -368,7 +364,6 @@ async function selectMemoryContext(input: {
     recentMessages: ChatMessage[]
     candidates: AggregatedMemory
     signal?: AbortSignal
-    debugContextEnabled?: boolean
 }): Promise<MemoryContextSelection | null> {
     if (!input.candidates.permanent.length && !input.candidates.graph?.edges.length) return null
 
@@ -416,9 +411,6 @@ async function selectMemoryContext(input: {
         }
         return await selectRoutingCandidates({
             conversationId: input.conversationId,
-            debugContextEnabled: input.debugContextEnabled,
-            phase: 'memory-curation',
-            label: 'Memory evidence verification',
             gateway: input.gateway,
             providerId: input.providerId,
             model: input.model,

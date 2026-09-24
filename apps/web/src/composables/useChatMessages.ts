@@ -126,7 +126,6 @@ export function useChatMessages(
                 compactProviderId: prefs.compactProviderId || undefined,
                 compactModel: prefs.compactModel || undefined,
                 inlineAttachmentTextLimit: prefs.inlineAttachmentTextLimit,
-                debugMode: prefs.debugMode,
             },
         }
     }

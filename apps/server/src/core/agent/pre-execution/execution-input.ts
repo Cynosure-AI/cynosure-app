@@ -33,7 +33,6 @@ export interface ExecutionRequest {
         thinkingEnabled?: boolean
         reasoningEffort?: ReasoningEffort
         inlineAttachmentTextLimit?: number
-        debugContextEnabled?: boolean
     }
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
@@ -65,7 +64,6 @@ export interface ExecutionPlanInput {
     reasoningEffort?: ReasoningEffort
     eventMeta?: Record<string, unknown>
     inlineAttachmentTextLimit?: number
-    debugContextEnabled?: boolean
 }
 
 export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanInput {
@@ -96,6 +94,5 @@ export function toExecutionPlanInput(request: ExecutionRequest): ExecutionPlanIn
         reasoningEffort: run.reasoningEffort,
         eventMeta: request.eventMeta,
         inlineAttachmentTextLimit: run.inlineAttachmentTextLimit,
-        debugContextEnabled: run.debugContextEnabled,
     }
 }

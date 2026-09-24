@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from 'vitest'
 import { AgentExecutor, MaxToolRoundsExceededError } from './agent-executor.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import { IncompleteModelResponseError, type StreamChunk, type ToolDefinition } from '../gateway/providers/base.provider.js'
-import { beginDebugContextCapture, clearDebugContextCapture, getDebugContextCapture } from '../chat/debug-context.js'
 
 describe('AgentExecutor cancellation', () => {
   test('passes cancellation to an in-flight tool and stops before another model round', async () => {
@@ -430,82 +429,5 @@ describe('AgentExecutor tool-loop safety', () => {
     })
 
     await expect(executor.run([{ role: 'user', content: 'loop' }])).rejects.toBeInstanceOf(MaxToolRoundsExceededError)
-  })
-})
-
-describe('AgentExecutor debug context capture', () => {
-  test('captures the exact gateway input and provider-visible output for every round', async () => {
-    const conversationId = 'debug-context-rounds'
-    beginDebugContextCapture({
-      conversationId,
-      executionId: 'execution-1',
-      providerId: 'provider-1',
-      model: 'test-model',
-      contextWindow: 8_192,
-      contextStrategy: 'sliding-window',
-    })
-
-    const tool: ToolDefinition = {
-      name: 'lookup',
-      title: 'Lookup',
-      description: 'Looks up a value',
-      parameters: { type: 'object', properties: { query: { type: 'string' } } },
-      timeout: 1_000,
-      execute: async () => ({ success: true, output: 'tool result' }),
-    }
-    let call = 0
-    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
-      if (call++ === 0) {
-        yield { thinking: 'I should look this up. ', done: false }
-        yield {
-          toolCalls: [{ id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{"query":"value"}' } }],
-          usage: { promptTokens: 10, completionTokens: 4, totalTokens: 14 },
-          done: true,
-        }
-      } else {
-        yield { content: 'Final answer', thinking: 'The tool answered.', usage: { promptTokens: 20, completionTokens: 5, totalTokens: 25 }, done: true }
-      }
-    })())
-    const executor = new AgentExecutor({
-      gateway: { streamComplete } as unknown as LLMGateway,
-      tools: [tool],
-      conversationId,
-      broadcast: vi.fn(),
-      providerId: 'provider-1',
-      model: 'test-model',
-      thinkingEnabled: true,
-      reasoningEffort: 'high',
-      saveMessages: false,
-      emitEvents: false,
-      debugContextEnabled: true,
-    })
-
-    await executor.run([
-      { role: 'system', content: 'System instructions and memory' },
-      { role: 'user', content: 'Question' },
-    ])
-
-    const capture = getDebugContextCapture(conversationId)
-    expect(capture?.rounds).toHaveLength(2)
-    expect(capture?.rounds[0].request.messages).toEqual([
-      { role: 'system', content: 'System instructions and memory' },
-      { role: 'user', content: 'Question' },
-    ])
-    expect(capture?.rounds[0].request.tools[0]).toEqual({
-      name: 'lookup',
-      title: 'Lookup',
-      description: 'Looks up a value',
-      parameters: { type: 'object', properties: { query: { type: 'string' } } },
-    })
-    expect(capture?.rounds[0].response?.thinking).toBe('I should look this up. ')
-    expect(capture?.rounds[1].request.messages.at(-1)).toMatchObject({
-      role: 'tool',
-      content: 'tool result',
-      toolCallId: 'call-1',
-    })
-    expect(capture?.rounds[1].response?.content).toBe('Final answer')
-    expect(capture?.rounds[1].response?.thinking).toBe('The tool answered.')
-
-    clearDebugContextCapture(conversationId)
   })
 })

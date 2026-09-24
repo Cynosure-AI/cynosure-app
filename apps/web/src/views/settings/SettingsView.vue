@@ -207,13 +207,6 @@ const sections: SettingsSection[] = [
     terms: ['attachment context', 'attachments', 'attached files', 'documents', 'inline attachment', 'rag', 'retrieval', 'file context', 'screenshots']
   },
   {
-    id: 'debug-mode',
-    categoryId: 'chat',
-    label: 'Debug Mode',
-    description: 'Capture the complete model-visible context for inspection in chat.',
-    terms: ['debug mode', 'context inspector', 'full context', 'system prompt', 'memories', 'tools', 'thinking', 'llm request', 'developer tools']
-  },
-  {
     id: 'enable-voice',
     categoryId: 'speech-to-text',
     label: 'Enable Voice Input',
