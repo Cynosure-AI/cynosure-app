@@ -147,7 +147,7 @@ function removeMissing() {
     </div>
 
     <ToolSelector
-      class="min-w-0 shrink-0 sm:h-[clamp(28rem,65dvh,52rem)]"
+      class="min-w-0 shrink-0 "
       :model-value="agent.tools"
       :show-approvals="true"
       :scrollable="desktopToolList"
