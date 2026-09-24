@@ -62,17 +62,20 @@ describe('AgentsView assignment warnings', () => {
     })
     await flushPromises()
 
-    const warnings = wrapper.findAll('[aria-label^="Unavailable assignments:"]')
+    const warnings = wrapper.findAll('[role="img"][aria-label^="Needs attention:"]')
       .map(icon => icon.attributes('aria-label'))
     expect(warnings).toHaveLength(3)
     expect(warnings).toEqual(expect.arrayContaining([
-      'Unavailable assignments: Tool: removed-tool',
-      'Unavailable assignments: Memory folder: removed-folder',
-      'Unavailable assignments: Sub-agent: removed-agent',
+      'Needs attention: Tool: removed-tool',
+      'Needs attention: Memory folder: removed-folder',
+      'Needs attention: Sub-agent: removed-agent',
     ]))
+    expect(wrapper.find('[aria-label^="Unavailable assignments:"]').exists()).toBe(false)
 
     const table = wrapper.getComponent({ name: 'DataTable' })
-    const stateColumn = (table.props('columns') as Array<{ key: string; sortable?: boolean; sortValue?: (item: AgentDefinition) => number }>)
+    const columns = table.props('columns') as Array<{ key: string; sortable?: boolean; sortValue?: (item: AgentDefinition) => number }>
+    expect(columns.at(-1)?.key).toBe('state')
+    const stateColumn = columns
       .find(column => column.key === 'state')
     expect(stateColumn?.sortable).toBe(true)
     expect(stateColumn?.sortValue?.(definitions.agents[0])).toBe(0)
