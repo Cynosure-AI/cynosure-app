@@ -50,7 +50,7 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
   { value: "dream", label: "Dream", icon: "lucide:moon-star" },
-  { value: "memory", label: "Memory", icon: "lucide:brain" },
+  { value: "memory", label: "Memory", icon: "lucide:database" },
 ];
 
 const defaultSelectedKinds: ActivityKind[] = filterOptions.map((option) => option.value);
@@ -394,7 +394,7 @@ function kindIcon(kind: ActivityKind): string {
     case "cron":
       return "lucide:clock-check";
     case "memory":
-      return "lucide:brain";
+      return "lucide:database";
     case "chat":
       return "lucide:message-circle";
     case "channels":

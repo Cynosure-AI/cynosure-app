@@ -125,7 +125,7 @@ describe('AgentsView assignment warnings', () => {
     const toolsOn = wrapper.get('[data-agent-id="tools-on"]')
     const memoryOn = wrapper.get('[data-agent-id="memory-on"]')
     const toolIcon = (row: typeof toolsOn) => row.get('[data-icon="lucide:wrench"]').element.parentElement!
-    const memoryIcon = (row: typeof toolsOn) => row.get('[data-icon="lucide:brain"]').element.parentElement!
+    const memoryIcon = (row: typeof toolsOn) => row.get('[data-icon="lucide:database"]').element.parentElement!
 
     expect(toolIcon(toolsOn).classList.contains('text-emerald-400')).toBe(true)
     expect(memoryIcon(toolsOn).classList.contains('text-emerald-400')).toBe(false)

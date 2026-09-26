@@ -160,7 +160,7 @@ function onMaxCtxSliderInput(event: Event) {
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
             <Icon
-              icon="lucide:brain"
+              icon="lucide:database"
               class="w-4 h-4 text-indigo-400"
             />
             <h3 class="text-sm font-medium text-theme-200">
