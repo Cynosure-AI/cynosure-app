@@ -7,6 +7,7 @@ import { useAgentStore } from '../stores/agent-runtime.store'
 import { useChatStore } from '../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import { api } from '../api/client'
+import type { AgentDefinition } from '../api/types'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 import AgentGeneralTab from '../components/agent/AgentGeneralTab.vue'
 import AgentToolsTab from '../components/agent/AgentToolsTab.vue'
@@ -51,6 +52,12 @@ onMounted(async () => {
 async function updateField(field: string, value: unknown) {
   if (agent.value) {
     await agentDefs.update(agentId.value, { [field]: value })
+  }
+}
+
+async function updateReasoning(enabled: boolean, effort: AgentDefinition['reasoningEffort']) {
+  if (agent.value) {
+    await agentDefs.update(agentId.value, { thinkingEnabled: enabled, reasoningEffort: effort })
   }
 }
 
@@ -227,6 +234,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
             :is="activeSection.component"
             :agent="agent"
             @update="updateField"
+            @update-reasoning="updateReasoning"
           />
         </section>
       </div>

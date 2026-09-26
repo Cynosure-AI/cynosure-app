@@ -7,7 +7,10 @@ import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import { useProviderStore } from "../../stores/provider.store";
 
 const props = defineProps<{ agent: AgentDefinition }>();
-const emit = defineEmits<{ update: [field: string, value: unknown] }>();
+const emit = defineEmits<{
+  update: [field: string, value: unknown];
+  updateReasoning: [enabled: boolean, effort: AgentDefinition['reasoningEffort']];
+}>();
 
 const AGENT_ROUTER_PROVIDER = "__agent_provider__";
 const AGENT_ROUTER_MODEL = "__agent_model__";
@@ -17,7 +20,29 @@ const MIN_CONTEXT_TOKENS = 2048;
 const DEFAULT_CONTEXT_TOKENS = 30720;
 const CONTEXT_TOKEN_STEP = 2048;
 const DEFAULT_MAX_CONTEXT_TOKENS = 262144;
-const REASONING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+const REASONING_LEVELS: Array<{
+  value: AgentDefinition['reasoningEffort'] | 'off';
+  label: string;
+  description: string;
+}> = [
+  { value: 'off', label: 'Off', description: 'Plain model mode. Reasoning and planning tools are disabled.' },
+  { value: 'minimal', label: 'Minimal', description: 'Minimal reasoning for the lowest latency and token use.' },
+  { value: 'low', label: 'Low', description: 'Quick reasoning for straightforward tasks.' },
+  { value: 'medium', label: 'Medium', description: 'Balanced reasoning, speed, and token use.' },
+  { value: 'high', label: 'High', description: 'Deep reasoning for complex tasks.' },
+  { value: 'xhigh', label: 'Extra high', description: 'Extra reasoning for especially difficult tasks.' },
+  { value: 'max', label: 'Maximum', description: "The provider's maximum available reasoning effort." },
+];
+const selectedReasoning = computed(() => props.agent.thinkingEnabled === false ? 'off' : props.agent.reasoningEffort || 'medium');
+const reasoningIndex = computed(() => Math.max(0, REASONING_LEVELS.findIndex(level => level.value === selectedReasoning.value)));
+const selectedReasoningOption = computed(() => REASONING_LEVELS[reasoningIndex.value]);
+const reasoningFill = computed(() => `${reasoningIndex.value / (REASONING_LEVELS.length - 1) * 100}%`);
+
+function onReasoningSliderInput(event: Event): void {
+  const level = REASONING_LEVELS[Number((event.target as HTMLInputElement).value)];
+  if (!level) return;
+  emit('updateReasoning', level.value !== 'off', level.value === 'off' ? props.agent.reasoningEffort || 'medium' : level.value);
+}
 
 const autoRouterLeadingSelections = [
   {
@@ -156,50 +181,58 @@ function onMaxCtxSliderInput(event: Event) {
 
     <!-- Thinking / Reasoning -->
     <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
-      <div class="flex items-start justify-between gap-4">
-        <div class="flex-1">
-          <div class="flex items-center gap-2 mb-1">
-            <Icon
-              icon="lucide:database"
-              class="w-4 h-4 text-indigo-400"
-            />
-            <h3 class="text-sm font-medium text-theme-200">
-              Thinking / Reasoning
-            </h3>
-          </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
-            When enabled, models that support reasoning tokens will output their
-            chain-of-thought before responding. This improves answer quality for
-            complex tasks but uses more tokens. Applies to providers like OpenAI
-            (o-series, GPT-5), OpenRouter (Claude, DeepSeek) and Anthropic.
-          </p>
-        </div>
-        <ToggleSwitch
-          :model-value="agent.thinkingEnabled !== false"
-          label="Enable thinking mode"
-          color="indigo"
-          class="mt-0.5"
-          @update:model-value="emit('update', 'thinkingEnabled', $event)"
+      <div class="flex items-center gap-2 mb-1">
+        <Icon
+          icon="lucide:lightbulb"
+          class="w-4 h-4 text-indigo-400"
         />
+        <h3 class="text-sm font-medium text-theme-200">
+          Thinking / Reasoning
+        </h3>
       </div>
-      <div
-        v-if="agent.thinkingEnabled !== false"
-        class="mt-4 grid grid-cols-3 gap-1 rounded-lg border border-theme-700 bg-theme-900/50 p-1 sm:grid-cols-6"
-        aria-label="Default reasoning level"
-      >
-        <button
-          v-for="level in REASONING_LEVELS"
-          :key="level"
-          type="button"
-          class="flex-1 rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
-          :class="(agent.reasoningEffort || 'medium') === level
-            ? 'bg-indigo-500/20 text-indigo-300'
-            : 'text-theme-500 hover:bg-theme-800 hover:text-theme-300'"
-          :aria-pressed="(agent.reasoningEffort || 'medium') === level"
-          @click="emit('update', 'reasoningEffort', level)"
-        >
-          {{ level }}
-        </button>
+      <p class="text-xs text-theme-500 leading-relaxed">
+        Set the default reasoning effort for this agent. Higher levels can improve complex answers but use more time and tokens.
+      </p>
+      <div class="mt-4 max-w-md">
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="text-xs font-medium text-theme-300">Reasoning</span>
+          <span class="text-xs font-medium text-indigo-300">{{ selectedReasoningOption.label }}</span>
+        </div>
+        <div class="reasoning-slider mt-3">
+          <div
+            class="reasoning-slider__rail"
+            aria-hidden="true"
+          >
+            <div
+              class="reasoning-slider__fill"
+              :style="{ width: reasoningFill }"
+            />
+            <span
+              v-for="(level, index) in REASONING_LEVELS"
+              :key="level.value"
+              class="reasoning-slider__dot"
+              :class="{
+                'reasoning-slider__dot--active': index <= reasoningIndex,
+                'reasoning-slider__dot--endpoint': index === 0 || index === REASONING_LEVELS.length - 1,
+              }"
+              :style="{ left: `${index / (REASONING_LEVELS.length - 1) * 100}%` }"
+            />
+          </div>
+          <input
+            class="reasoning-slider__input"
+            type="range"
+            min="0"
+            :max="REASONING_LEVELS.length - 1"
+            step="1"
+            :value="reasoningIndex"
+            aria-label="Default reasoning level"
+            :aria-valuetext="selectedReasoningOption.label"
+            @input="onReasoningSliderInput"
+          >
+        </div>
+        <p class="mt-3 min-h-4 text-xs text-theme-500">
+          {{ selectedReasoningOption.description }}
+        </p>
       </div>
     </div>
 
@@ -266,3 +299,89 @@ function onMaxCtxSliderInput(event: Event) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.reasoning-slider {
+  position: relative;
+  height: 2rem;
+}
+
+.reasoning-slider__rail {
+  position: absolute;
+  inset: 0.375rem 0.875rem;
+  height: 1.25rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-theme-600) 42%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-theme-700) 38%, transparent);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+.reasoning-slider__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--color-accent-500);
+  transition: width 120ms ease;
+}
+
+.reasoning-slider__dot {
+  position: absolute;
+  top: 50%;
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: var(--color-theme-500);
+  transform: translate(-50%, -50%);
+}
+
+.reasoning-slider__dot--active {
+  background: color-mix(in srgb, white 40%, var(--color-accent-300));
+}
+
+.reasoning-slider__dot--endpoint {
+  opacity: 0;
+}
+
+.reasoning-slider__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 2rem;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+}
+
+.reasoning-slider__input::-webkit-slider-runnable-track {
+  height: 1.25rem;
+  background: transparent;
+}
+
+.reasoning-slider__input::-webkit-slider-thumb {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: -0.25rem;
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--color-theme-500) 35%, transparent);
+  border-radius: 9999px;
+  background: var(--color-theme-50);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.24);
+}
+
+.reasoning-slider__input::-moz-range-track {
+  height: 1.25rem;
+  background: transparent;
+}
+
+.reasoning-slider__input::-moz-range-thumb {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-theme-500) 35%, transparent);
+  border-radius: 9999px;
+  background: var(--color-theme-50);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.24);
+}
+</style>
