@@ -31,7 +31,9 @@ describe('QuickPicker', () => {
     expect(wrapper.get('[aria-label="Switch agent"]').element.parentElement?.classList.contains('absolute')).toBe(true)
     expect(wrapper.get('[aria-label="Switch agent"]').element.parentElement?.classList.contains('-bottom-2')).toBe(true)
     expect(wrapper.get('[aria-label="Switch agent"]').element.parentElement?.classList.contains('-right-2')).toBe(true)
+    vi.spyOn(wrapper.get('[aria-label="Switch agent"]').element.parentElement!, 'getBoundingClientRect').mockReturnValue({ top: 200, bottom: 232, left: 100, right: 132 } as DOMRect)
     await wrapper.get('[aria-label="Switch agent"]').trigger('click')
+    expect((document.body.querySelector('[aria-label="Quick agent picker"]') as HTMLElement).style.top).toBe('240px')
     await vi.waitFor(() => expect(document.body.textContent).toContain('Recently used'))
     const text = document.body.textContent ?? ''
     expect(text.indexOf('Favorites')).toBeLessThan(text.indexOf('Recently used'))

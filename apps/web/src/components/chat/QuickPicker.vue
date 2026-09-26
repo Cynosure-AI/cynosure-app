@@ -66,7 +66,7 @@ function positionMenu(): void {
   const width = Math.min(320, window.innerWidth - margin * 2)
   const availableAbove = rect.top - margin * 2
   const availableBelow = window.innerHeight - rect.bottom - margin * 2
-  const above = availableAbove >= 280 || availableAbove > availableBelow
+  const above = availableBelow < 220 && availableAbove > availableBelow
   menuStyle.value = {
     width: `${width}px`,
     left: `${Math.min(Math.max(rect.right - width, margin), window.innerWidth - width - margin)}px`,
