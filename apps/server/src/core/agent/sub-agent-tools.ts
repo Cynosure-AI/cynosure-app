@@ -1,13 +1,14 @@
-import { getGateway } from '../gateway/gateway.js'
+import { customAlphabet, nanoid } from 'nanoid'
+import { getDb } from '../../db/database.js'
 import { getAgent, type SubAgentAssignment } from '../agents/agent-store.js'
+import { readFileAttachmentText } from '../artifacts/file-artifacts.js'
+import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
+import { getGateway } from '../gateway/gateway.js'
+import type { ChatMessage, ContentPart, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
+import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { AgentExecutor } from './agent-executor.js'
 import { prepareAgentExecution } from './prepare-execution.js'
-import { getDb } from '../../db/database.js'
-import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
-import { extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
-import { customAlphabet, nanoid } from 'nanoid'
-import type { ChatMessage, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
-import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
 
 /** Maximum execution time for delegated work before the sub-agent is aborted. */
 const SUB_AGENT_EXECUTION_TIMEOUT_MS = 300_000 // 5 minutes
@@ -43,17 +44,115 @@ interface SubAgentSessionRow {
     history_json: string
 }
 
+interface ConversationMessageAttachmentRow {
+    id: string
+    content_blocks_json: string | null
+    created_at: number
+}
+
+interface ConversationFileAttachmentRow {
+    id: string
+    message_id: string
+    name: string
+    original_path: string | null
+    text_path: string | null
+    created_at: number
+}
+
+function isContentPart(value: unknown): value is ContentPart {
+    if (!value || typeof value !== 'object') return false
+    const part = value as Partial<ContentPart>
+    if (part.type === 'text') return typeof part.text === 'string'
+    if (part.type === 'image_url') return typeof part.image_url?.url === 'string'
+    if (part.type === 'audio_url') return typeof part.audio_url?.url === 'string'
+    return false
+}
+
+function isMessageContent(value: unknown): value is ChatMessage['content'] {
+    return typeof value === 'string' || (Array.isArray(value) && value.every(isContentPart))
+}
+
 function parseSessionHistory(json: string): ChatMessage[] | null {
     try {
         const history = JSON.parse(json) as unknown
         if (!Array.isArray(history)) return null
         if (!history.every((message) => message && typeof message === 'object'
             && ((message as ChatMessage).role === 'user' || (message as ChatMessage).role === 'assistant')
-            && typeof (message as ChatMessage).content === 'string')) return null
+            && isMessageContent((message as ChatMessage).content))) return null
         return history as ChatMessage[]
     } catch {
         return null
     }
+}
+
+function parseMediaBlocks(json: string | null): Array<{ type: 'image' | 'audio'; url: string }> {
+    if (!json) return []
+    try {
+        const value = JSON.parse(json) as unknown
+        if (!Array.isArray(value)) return []
+        return value.filter((block): block is { type: 'image' | 'audio'; url: string } =>
+            block !== null && typeof block === 'object'
+            && (block.type === 'image' || block.type === 'audio')
+            && typeof block.url === 'string')
+    } catch {
+        return []
+    }
+}
+
+/** Resolve a one-based, newest-first reference across attachments in this conversation. */
+function resolveConversationAttachment(conversationId: string, attachmentIndex: number): ContentPart[] | null {
+    if (!Number.isInteger(attachmentIndex) || attachmentIndex < 1) return null
+
+    const db = getDb()
+    const messages = db.prepare(`
+        SELECT id, content_blocks_json, created_at
+        FROM messages
+        WHERE conversation_id = ? AND role = 'user'
+        ORDER BY created_at DESC, id DESC
+    `).all(conversationId) as ConversationMessageAttachmentRow[]
+    const files = db.prepare(`
+        SELECT id, message_id, name, original_path, text_path, created_at
+        FROM message_attachments
+        WHERE conversation_id = ? AND kind = 'file'
+        ORDER BY created_at DESC, id DESC
+    `).all(conversationId) as ConversationFileAttachmentRow[]
+    const filesByMessage = new Map<string, ConversationFileAttachmentRow[]>()
+    for (const file of files) {
+        const current = filesByMessage.get(file.message_id) || []
+        current.push(file)
+        filesByMessage.set(file.message_id, current)
+    }
+
+    let currentIndex = 0
+    for (const message of messages) {
+        for (const block of parseMediaBlocks(message.content_blocks_json)) {
+            currentIndex += 1
+            if (currentIndex === attachmentIndex) {
+                const url = artifactFileUrlToDataUrl(block.url) || block.url
+                return block.type === 'image'
+                    ? [{ type: 'image_url', image_url: { url } }]
+                    : [{ type: 'audio_url', audio_url: { url } }]
+            }
+        }
+        for (const file of filesByMessage.get(message.id) || []) {
+            currentIndex += 1
+            if (currentIndex !== attachmentIndex) continue
+            const text = readFileAttachmentText({ textPath: file.text_path || undefined })
+            const details = [
+                `[Attached file: ${file.name}; attachmentId: ${file.id}]`,
+                file.original_path ? `Path: ${file.original_path}` : '',
+                text || '',
+            ].filter(Boolean).join('\n')
+            return [{ type: 'text', text: details }]
+        }
+    }
+    return null
+}
+
+function messageText(content: ChatMessage['content']): string {
+    if (typeof content === 'string') return content
+    return content.filter((part): part is Extract<ContentPart, { type: 'text' }> => part.type === 'text')
+        .map((part) => part.text).join('\n')
 }
 
 function createInvocationId(internalName: string): string {
@@ -110,7 +209,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             broadcast,
             systemPromptSuffix: '\nYou are a sub-agent continuing a private delegated session. Complete the latest task and report your results clearly.',
             includeSubAgents: false,
-            userQuery: typeof latestUserMessage === 'string' ? latestUserMessage : '',
+            userQuery: latestUserMessage ? messageText(latestUserMessage) : '',
             autoMemory: agentData.autoMemory === true,
             memoryFolderOverrides: getAssignedMemoryFolders(agentData.id),
             eventMeta,
@@ -169,15 +268,17 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null,
                     result.contextTokens ?? null, createdAt
                 )
-                publishChatEvent(broadcast, { conversationId, executionId: executor.lastStreamId, payload: {
-                    type: 'transcript-item', item: messageToTranscriptItem({
-                        id: messageId, role: 'assistant', content: result.content,
-                        thinking: result.thinking, imageDataUrls: result.images, createdAt,
-                        agentId: agentData.id, agentName: agentData.name, agentIconUrl: agentData.iconUrl || null,
-                        maCodename: eventMeta.maCodename, maAgentName: eventMeta.maAgentName,
-                        maInvocationId: invocationId,
-                    }, executor.lastStreamId),
-                } })
+                publishChatEvent(broadcast, {
+                    conversationId, executionId: executor.lastStreamId, payload: {
+                        type: 'transcript-item', item: messageToTranscriptItem({
+                            id: messageId, role: 'assistant', content: result.content,
+                            thinking: result.thinking, imageDataUrls: result.images, createdAt,
+                            agentId: agentData.id, agentName: agentData.name, agentIconUrl: agentData.iconUrl || null,
+                            maCodename: eventMeta.maCodename, maAgentName: eventMeta.maAgentName,
+                            maInvocationId: invocationId,
+                        }, executor.lastStreamId),
+                    }
+                })
             }
 
             const nextHistory = [...history, { role: 'assistant' as const, content: result.content || '(no output)' }]
@@ -225,7 +326,12 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 context: {
                     type: 'string',
                     description: 'Relevant background the sub-agent needs to complete the task: conversation history, prior tool outputs, URLs, filenames, data, or any other details it would not otherwise have access to.'
-                }
+                },
+                attachmentIndex: {
+                    type: 'integer',
+                    minimum: 1,
+                    description: 'Optional one-based reference to an attachment in the parent conversation. Attachments are ordered newest message first; within a message: images, audio, then files. Use 1 for the most recent attachment.'
+                },
             },
             required: ['internalName', 'instructions']
         },
@@ -233,7 +339,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
         execute: async (params: unknown, executionSignal?: AbortSignal): Promise<ToolResult> => {
             const activeSignal = executionSignal ?? signal
             activeSignal?.throwIfAborted()
-            const { internalName, instructions, context } = params as { internalName: string; instructions: string; context?: string }
+            const { internalName, instructions, context, attachmentIndex } = params as { internalName: string; instructions: string; context?: string; attachmentIndex?: number }
             const selected = availableSubAgents.find(({ agentData }) => agentData.internalName === internalName)
 
             if (!selected) {
@@ -249,7 +355,20 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             const userMessage = context
                 ? `## Context\n${context}\n\n## Task\n${instructions}`
                 : instructions
-            const history: ChatMessage[] = [{ role: 'user', content: userMessage }]
+            const attachmentParts = attachmentIndex === undefined
+                ? undefined
+                : resolveConversationAttachment(conversationId, attachmentIndex)
+            if (attachmentIndex !== undefined && !attachmentParts) {
+                return {
+                    success: false,
+                    output: '',
+                    error: `Attachment index ${attachmentIndex} does not exist in this conversation.`,
+                }
+            }
+            const content: ChatMessage['content'] = attachmentParts
+                ? [{ type: 'text', text: userMessage }, ...attachmentParts]
+                : userMessage
+            const history: ChatMessage[] = [{ role: 'user', content }]
             const now = Date.now()
             getDb().prepare('INSERT INTO subagent_sessions (invocation_id, conversation_id, agent_id, history_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
                 .run(invocationId, conversationId, agentData.id, JSON.stringify(history), now, now)
