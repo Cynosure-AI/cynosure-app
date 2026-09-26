@@ -301,52 +301,52 @@ onBeforeUnmount(() => {
                 :icon="entry.icon"
                 class="h-5 w-5 shrink-0 text-theme-300"
               />
-              <span class="min-w-0 flex-1"><span class="block text-sm text-theme-100">{{ entry.label }}</span><span class="block truncate text-[11px] text-theme-500">{{ entry.detail }}</span></span>
+              <span class="min-w-0 flex-1"><span class="block text-sm text-theme-100">{{ entry.label }}</span></span>
               <Icon
                 icon="lucide:chevron-right"
                 class="h-4 w-4 text-theme-500"
               />
             </button>
-            <button
-              v-if="entry.id === 'tools'"
-              type="button"
-              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left hover:bg-theme-800"
-              role="switch"
-              :aria-checked="chatStore.sessionAutoToolRouting"
-              aria-label="Automatic tools"
-              @click="setAutoTools"
-            >
-              <Icon
-                icon="lucide:sparkles"
-                class="h-5 w-5 text-theme-300"
-              /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Tools</span><span class="block text-[11px] text-theme-500">Use tools when helpful</span></span><span
-                class="relative h-5 w-9 rounded-full transition-colors"
-                :class="chatStore.sessionAutoToolRouting ? 'bg-accent-600' : 'bg-theme-600'"
-              ><span
-                class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
-                :class="chatStore.sessionAutoToolRouting ? 'left-[18px]' : 'left-0.5'"
-              /></span>
-            </button>
-            <button
-              v-if="entry.id === 'memory'"
-              type="button"
-              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left hover:bg-theme-800"
-              role="switch"
-              :aria-checked="chatStore.sessionAutoMemory"
-              aria-label="Automatic memories"
-              @click="setAutoMemory"
-            >
-              <Icon
-                icon="lucide:database-zap"
-                class="h-5 w-5 text-theme-300"
-              /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Memories</span><span class="block text-[11px] text-theme-500">Retrieve relevant memories</span></span><span
-                class="relative h-5 w-9 rounded-full transition-colors"
-                :class="chatStore.sessionAutoMemory ? 'bg-accent-600' : 'bg-theme-600'"
-              ><span
-                class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
-                :class="chatStore.sessionAutoMemory ? 'left-[18px]' : 'left-0.5'"
-              /></span>
-            </button>
+            <template v-if="entry.id === 'files'">
+              <button
+                type="button"
+                class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left hover:bg-theme-800"
+                role="switch"
+                :aria-checked="chatStore.sessionAutoMemory"
+                aria-label="Automatic memories"
+                @click="setAutoMemory"
+              >
+                <Icon
+                  icon="lucide:database-zap"
+                  class="h-5 w-5 text-theme-300"
+                /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Memories</span><span class="block text-[11px] text-theme-500">Retrieve relevant memories</span></span><span
+                  class="relative h-5 w-9 rounded-full transition-colors"
+                  :class="chatStore.sessionAutoMemory ? 'bg-accent-600' : 'bg-theme-600'"
+                ><span
+                  class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+                  :class="chatStore.sessionAutoMemory ? 'left-4.5' : 'left-0.5'"
+                /></span>
+              </button>
+              <button
+                type="button"
+                class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left hover:bg-theme-800"
+                role="switch"
+                :aria-checked="chatStore.sessionAutoToolRouting"
+                aria-label="Automatic tools"
+                @click="setAutoTools"
+              >
+                <Icon
+                  icon="lucide:sparkles"
+                  class="h-5 w-5 text-theme-300"
+                /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Tools</span><span class="block text-[11px] text-theme-500">Use tools when helpful</span></span><span
+                  class="relative h-5 w-9 rounded-full transition-colors"
+                  :class="chatStore.sessionAutoToolRouting ? 'bg-accent-600' : 'bg-theme-600'"
+                ><span
+                  class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+                  :class="chatStore.sessionAutoToolRouting ? 'left-4.5' : 'left-0.5'"
+                /></span>
+              </button>
+            </template>
           </template>
         </template>
         <template v-else-if="panel === 'files'">
