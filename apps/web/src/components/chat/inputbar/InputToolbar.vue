@@ -7,14 +7,9 @@ import { useProviderStore } from "../../../stores/provider.store";
 import { useWhisper } from "../../../composables/useWhisper";
 import { Icon } from "@iconify/vue";
 import HoverTooltip from "../../shared/HoverTooltip.vue";
-import HoverMenu from "../../shared/HoverMenu.vue";
 import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
 import SplitButton from "../../shared/SplitButton.vue";
-import ToolsButton from "./ToolsButton.vue";
-import SubAgentsButton from "./SubAgentsButton.vue";
-import MemoryFoldersButton from "./MemoryFoldersButton.vue";
-import SystemPromptButton from "./SystemPromptButton.vue";
-import ThinkingModeButton from "./ThinkingModeButton.vue";
+import ChatOptionsMenu from "./ChatOptionsMenu.vue";
 import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
 import {
   modelPricingSummary,
@@ -41,7 +36,6 @@ const prefs = usePreferencesStore();
 const agentDefs = useAgentDefinitionsStore();
 const providerStore = useProviderStore();
 
-const showMobileDrawer = ref(false);
 const showModelModal = ref(false);
 
 const selectedAgent = computed(() =>
@@ -186,113 +180,13 @@ async function toggleMic(): Promise<void> {
 </script>
 
 <template>
-  <!-- Mobile settings drawer -->
-  <Transition
-    enter-active-class="transition-all duration-200 ease-out"
-    leave-active-class="transition-all duration-150 ease-in"
-    enter-from-class="opacity-0 translate-y-2"
-    enter-to-class="opacity-100 translate-y-0"
-    leave-from-class="opacity-100 translate-y-0"
-    leave-to-class="opacity-0 translate-y-2"
-  >
-    <div
-      v-if="showMobileDrawer"
-      class="lg:hidden flex items-center gap-1 px-2 py-1.5 border-b border-theme-700/50"
-    >
-      <ToolsButton />
-      <SubAgentsButton />
-      <MemoryFoldersButton />
-      <SystemPromptButton />
-      <ThinkingModeButton />
-    </div>
-  </Transition>
-
   <!-- Bottom toolbar -->
   <div class="flex items-center gap-1 px-2 pb-2 pt-0.5">
     <!-- Left: action buttons -->
-    <HoverMenu
-      placement="above"
-      :max-width="210"
-    >
-      <template #trigger="{ open, toggle }">
-        <button
-          type="button"
-          class="p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
-          :class="open ? 'text-accent-400 bg-theme-700/50' : 'text-theme-500 hover:text-theme-300'"
-          title="Add attachment"
-          aria-label="Add attachment"
-          :aria-expanded="open"
-          aria-haspopup="menu"
-          @click="!open && toggle()"
-        >
-          <Icon
-            icon="streamline-ultimate:attachment"
-            class="h-4 w-4"
-          />
-        </button>
-      </template>
-      <template #content="{ close }">
-        <div
-          class="w-48"
-          role="menu"
-        >
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-theme-200 hover:bg-theme-800 hover:text-theme-100"
-            role="menuitem"
-            @click="close(); emit('attach')"
-          >
-            <Icon
-              icon="lucide:upload"
-              class="h-4 w-4 text-theme-400"
-            />
-            <span>Select File</span>
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-theme-200 hover:bg-theme-800 hover:text-theme-100"
-            role="menuitem"
-            @click="close(); emit('browseLibrary')"
-          >
-            <Icon
-              icon="lucide:library"
-              class="h-4 w-4 text-theme-400"
-            />
-            <span>Select From Library</span>
-          </button>
-        </div>
-      </template>
-    </HoverMenu>
-
-    <!--Vertical separator-->
-    <div class="hidden md:block w-px h-6 bg-theme-700/80" />
-
-    <!-- Mobile: single tune button to open drawer -->
-    <button
-      class="lg:hidden p-1.5 rounded-lg transition-colors shrink-0 focus:outline-none"
-      :class="
-        showMobileDrawer
-          ? 'text-accent-400 bg-theme-700/50'
-          : 'text-theme-500 hover:text-theme-300'
-      "
-      title="Chat settings"
-      aria-label="Chat settings"
-      @click="showMobileDrawer = !showMobileDrawer"
-    >
-      <Icon
-        icon="material-symbols:tune"
-        class="h-4 w-4"
-      />
-    </button>
-
-    <!-- Desktop: inline buttons -->
-    <span class="hidden lg:contents">
-      <ToolsButton />
-      <SubAgentsButton />
-      <MemoryFoldersButton />
-      <SystemPromptButton />
-      <ThinkingModeButton />
-    </span>
+    <ChatOptionsMenu
+      @attach="emit('attach')"
+      @browse-library="emit('browseLibrary')"
+    />
 
     
     <div class="flex-1" />
