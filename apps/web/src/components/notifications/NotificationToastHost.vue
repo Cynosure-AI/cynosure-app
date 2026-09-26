@@ -2,8 +2,20 @@
 import { Icon } from '@iconify/vue'
 import { useNotificationStore } from '../../stores/notification.store'
 import type { AppNotification } from '../../api/types'
+import { useRouter } from 'vue-router'
+import { useChatStore } from '../../stores/chat.store'
 
 const notificationStore = useNotificationStore()
+const chatStore = useChatStore()
+const router = useRouter()
+
+async function openConversation(toast: AppNotification): Promise<void> {
+  if (!toast.conversationId) return
+  await chatStore.selectConversation(toast.conversationId, toast.agentId || null)
+  await router.push({ name: 'conversation', params: { conversationId: toast.conversationId } })
+  notificationStore.dismissToast(toast.id)
+  void notificationStore.markRead(toast.id)
+}
 
 function iconFor(priority: AppNotification['priority']): string {
   if (priority === 'alert') return 'lucide:triangle-alert'
@@ -37,31 +49,54 @@ function iconFor(priority: AppNotification['priority']): string {
         @focusin="notificationStore.pauseToast(toast.id)"
         @focusout="notificationStore.resumeToast(toast.id)"
       >
-        <div class="flex gap-3 p-3.5">
-          <div
-            class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-            :class="toast.priority === 'alert'
-              ? 'bg-red-500/15 text-red-400'
-              : toast.priority === 'action'
-                ? 'bg-amber-500/15 text-amber-400'
-                : 'bg-accent-500/15 text-accent-400'"
+        <div class="flex items-start p-3.5">
+          <button
+            v-if="toast.conversationId"
+            type="button"
+            class="-m-3.5 flex min-w-0 flex-1 items-start gap-3 rounded-lg p-3.5 text-left transition-colors hover:bg-theme-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+            :aria-label="`Open conversation: ${toast.title}`"
+            @click="openConversation(toast)"
           >
-            <Icon
-              :icon="iconFor(toast.priority)"
-              class="h-4 w-4"
-            />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="text-sm font-medium text-theme-100">
-              {{ toast.title }}
+            <span
+              class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+              :class="toast.priority === 'alert' ? 'bg-red-500/15 text-red-400' : toast.priority === 'action' ? 'bg-amber-500/15 text-amber-400' : 'bg-accent-500/15 text-accent-400'"
+            >
+              <Icon
+                :icon="iconFor(toast.priority)"
+                class="h-4 w-4"
+              />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-medium text-theme-100">{{ toast.title }}</span>
+              <span class="mt-0.5 block line-clamp-3 text-xs leading-relaxed text-theme-400">{{ toast.body }}</span>
+            </span>
+          </button>
+          <template v-else>
+            <div
+              class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+              :class="toast.priority === 'alert'
+                ? 'bg-red-500/15 text-red-400'
+                : toast.priority === 'action'
+                  ? 'bg-amber-500/15 text-amber-400'
+                  : 'bg-accent-500/15 text-accent-400'"
+            >
+              <Icon
+                :icon="iconFor(toast.priority)"
+                class="h-4 w-4"
+              />
             </div>
-            <p class="mt-0.5 line-clamp-3 text-xs leading-relaxed text-theme-400">
-              {{ toast.body }}
-            </p>
-          </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-theme-100">
+                {{ toast.title }}
+              </div>
+              <p class="mt-0.5 line-clamp-3 text-xs leading-relaxed text-theme-400">
+                {{ toast.body }}
+              </p>
+            </div>
+          </template>
           <button
             type="button"
-            class="-mr-1 -mt-1 rounded-md p-1.5 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+            class="-mr-1 -mt-1 ml-2 shrink-0 rounded-md p-1.5 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
             :aria-label="`Dismiss ${toast.title}`"
             @click="notificationStore.dismissToast(toast.id)"
           >

@@ -6,6 +6,7 @@ import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
 import ChatSettingsMenu from "./ChatSettingsMenu.vue";
+import ChatSchedulesPopover from "./ChatSchedulesPopover.vue";
 
 defineProps<{
   hasPlanningTasks: boolean;
@@ -102,6 +103,8 @@ async function newChat(): Promise<void> {
     </div>
 
     <div class="flex-1 sm:hidden" />
+
+    <ChatSchedulesPopover />
 
     <!-- Planning task list toggle -->
     <button

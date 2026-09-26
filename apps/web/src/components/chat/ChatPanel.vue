@@ -18,6 +18,7 @@ import RichContent from '../shared/RichContent.vue'
 import { Icon } from '@iconify/vue'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
+import QuickPicker from './QuickPicker.vue'
 
 const props = withDefaults(defineProps<{
   searchOpen?: boolean
@@ -697,24 +698,23 @@ onMounted(() => {
       v-else-if="chatStore.messages.length === 0"
       class="flex flex-col items-center justify-center h-full text-theme-400"
     >
-      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
-        <!--Icon Wrapped into a Routerlink to the agents config-->
-        <RouterLink
+      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl">
+        <div
           v-if="activeAgentIconUrl"
-          :to="`/agents/${chatStore.activeAgentId}`"
-          class="absolute inset-0 w-full h-full"
+          class="absolute inset-0 overflow-hidden rounded-3xl"
         >
           <img
             :src="activeAgentIconUrl"
             class="w-full h-full object-cover"
             alt=""
           >
-        </RouterLink>
+        </div>
         <Icon
           v-else
-          icon="lucide:bot-message-square"
+          :icon="conversationAgentId ? 'lucide:bot-message-square' : 'lucide:message-square'"
           class="w-10 h-10 text-accent-400"
         />
+        <QuickPicker />
       </div>
       <template v-if="!wsConnected">
         <Icon
