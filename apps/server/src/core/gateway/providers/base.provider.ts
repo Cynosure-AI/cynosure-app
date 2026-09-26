@@ -270,12 +270,33 @@ export interface VideoGenerationModelInfo {
   name?: string
   description?: string
   created?: number
+  supported_durations?: number[] | null
   supported_resolutions?: string[] | null
   supported_aspect_ratios?: string[] | null
   supported_sizes?: string[] | null
   supported_frame_images?: string[] | null
   pricing_skus?: Record<string, string> | null
   allowed_passthrough_parameters?: string[] | null
+}
+
+export interface ImageGenerationModelInfo {
+  id: string
+  supported_parameters?: Record<string, { type: string; values?: string[]; min?: number; max?: number }>
+}
+
+export interface ImageGenerationRequest {
+  model: string
+  prompt: string
+  n?: number
+  resolution?: string
+  aspect_ratio?: string
+  input_references?: VideoGenerationReferenceImage[]
+  signal?: AbortSignal
+}
+
+export interface ImageGenerationResponse {
+  data: Array<{ b64_json: string; media_type?: string }>
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
 }
 
 export interface VideoGenerationContent {
@@ -380,6 +401,14 @@ export abstract class BaseLLMProvider {
 
   async listVideoModels(): Promise<VideoGenerationModelInfo[]> {
     return []
+  }
+
+  async listImageGenerationModels(): Promise<ImageGenerationModelInfo[]> {
+    return []
+  }
+
+  async generateImage(_request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
+    throw new Error(`${this.config.name} does not support dedicated image generation`)
   }
 
   async generateVideo(_request: VideoGenerationRequest): Promise<VideoGenerationJob> {

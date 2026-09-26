@@ -1,6 +1,7 @@
 import type { VideoGenerationJob, VideoGenerationModelInfo, VideoGenerationRequest } from '../gateway/providers/base.provider.js'
 import type { getGateway } from '../gateway/gateway.js'
 import { materializeMediaBuffer } from '../artifacts/image-artifacts.js'
+import { imageParameters, planMediaParameters, videoParameters, type MediaParameterPlan } from './media-parameters.js'
 
 type Gateway = ReturnType<typeof getGateway>
 
@@ -12,12 +13,14 @@ export interface MediaExecutionInput {
   prompt: string
   imageDataUrls?: string[]
   audioDataUrls?: string[]
+  planner?: { providerId: string; model: string }
   signal: AbortSignal
 }
 
 export interface MediaExecutionResult {
   content: string
   videos?: string[]
+  images?: string[]
   promptTokens?: number
   completionTokens?: number
   contextTokens?: number
@@ -28,15 +31,50 @@ export async function executeVideoModel(input: MediaExecutionInput): Promise<Med
   const videoModel = await gateway.listVideoModels(providerId)
     .then((models) => models.find((item) => item.id === model || item.canonical_slug === model))
     .catch(() => undefined)
+  const plan = videoParameters(await planMediaParameters({ gateway, kind: 'video', prompt: input.prompt,
+    planner: input.planner, signal }), videoModel)
   const submittedJob = await gateway.generateVideo(buildVideoGenerationRequest({
-    model, prompt: input.prompt, imageDataUrls: input.imageDataUrls, videoModel, signal,
+    model, prompt: input.prompt, imageDataUrls: input.imageDataUrls, videoModel, plan, signal,
   }), providerId)
   const completedJob = await pollVideoGeneration(gateway, providerId, submittedJob, signal)
   signal.throwIfAborted()
   const videoContent = await gateway.getVideoGenerationContent(completedJob.id, 0, providerId)
   signal.throwIfAborted()
   const artifact = materializeMediaBuffer(videoContent.data, videoContent.contentType, input.conversationId, 'video')
-  return { content: 'Generated video.', videos: [artifact.url] }
+  const settings = [plan.duration != null ? `${plan.duration}s` : null, plan.resolution,
+    plan.aspect_ratio, plan.generate_audio === false ? 'no audio' : plan.generate_audio === true ? 'with audio' : null]
+    .filter(Boolean).join(', ')
+  return { content: `Generated video${settings ? ` (${settings})` : ''}.`, videos: [artifact.url] }
+}
+
+export async function executeImageModel(input: MediaExecutionInput): Promise<MediaExecutionResult> {
+  const { gateway, providerId, model, signal } = input
+  const imageModel = await gateway.listImageGenerationModels(providerId)
+    .then((models) => models.find((item) => item.id === model))
+  if (!imageModel) throw new Error(`Image model ${model} is unavailable on the dedicated image API`)
+  const plan = imageParameters(await planMediaParameters({ gateway, kind: 'image', prompt: input.prompt,
+    planner: input.planner, signal }), imageModel)
+  const references = input.imageDataUrls?.filter((url) => typeof url === 'string' && url.trim())
+    .map((url) => ({ type: 'image_url' as const, image_url: { url } }))
+  const response = await gateway.generateImage({
+    model, prompt: input.prompt, signal,
+    ...(plan.resolution ? { resolution: plan.resolution } : {}),
+    ...(plan.aspect_ratio ? { aspect_ratio: plan.aspect_ratio } : {}),
+    ...(plan.n != null ? { n: plan.n } : {}),
+    ...(references?.length ? { input_references: references } : {}),
+  }, providerId)
+  signal.throwIfAborted()
+  if (!response.data?.length) throw new Error('Image generation returned no images')
+  const images = response.data.map((item) => {
+    if (!item.b64_json) throw new Error('Image generation returned an empty image')
+    const artifact = materializeMediaBuffer(Buffer.from(item.b64_json, 'base64'),
+      item.media_type || 'image/png', input.conversationId, 'image')
+    return artifact.url
+  })
+  const settings = [plan.resolution, plan.aspect_ratio].filter(Boolean).join(', ')
+  return { content: `Generated ${images.length} image${images.length === 1 ? '' : 's'}${settings ? ` (${settings})` : ''}.`, images,
+    promptTokens: response.usage?.prompt_tokens, completionTokens: response.usage?.completion_tokens,
+    contextTokens: response.usage?.total_tokens }
 }
 
 export async function executeTranscriptionModel(input: MediaExecutionInput): Promise<MediaExecutionResult> {
@@ -100,17 +138,35 @@ function buildVideoGenerationRequest(input: {
   prompt: string
   imageDataUrls?: string[]
   videoModel?: VideoGenerationModelInfo
+  plan: MediaParameterPlan
   signal?: AbortSignal
 }): VideoGenerationRequest {
   const request: VideoGenerationRequest = { model: input.model, prompt: input.prompt, signal: input.signal }
+  if (input.plan.duration != null) request.duration = input.plan.duration
+  if (input.plan.resolution) request.resolution = input.plan.resolution
+  if (input.plan.aspect_ratio) request.aspect_ratio = input.plan.aspect_ratio
+  if (input.plan.generate_audio != null) request.generate_audio = input.plan.generate_audio
   const images = (input.imageDataUrls || []).filter((url) => typeof url === 'string' && url.trim())
+  if (input.plan.frame_mode && !images.length) throw new Error('Attach an image for the requested video frame or reference')
+  if (input.plan.frame_mode === 'first_last' && images.length < 2) {
+    throw new Error('First and last frame generation requires two attached images')
+  }
   if (!images.length) return request
-  const supportedFrames = new Set(input.videoModel?.supported_frame_images || [])
-  if (supportedFrames.has('first_frame')) {
-    request.frame_images = [{ type: 'image_url', image_url: { url: images[0] }, frame_type: 'first_frame' }]
-    if (images[1] && supportedFrames.has('last_frame')) {
-      request.frame_images.push({ type: 'image_url', image_url: { url: images[1] }, frame_type: 'last_frame' })
+  const frameMode = input.plan.frame_mode
+  const supportedFrames = new Set(input.videoModel?.supported_frame_images ||
+    (frameMode && frameMode !== 'reference' ? ['first_frame', 'last_frame'] : []))
+  if (frameMode !== 'reference' && (supportedFrames.has('first_frame') || supportedFrames.has('last_frame'))) {
+    const frames: NonNullable<VideoGenerationRequest['frame_images']> = []
+    if (frameMode === 'last' && supportedFrames.has('last_frame')) {
+      frames.push({ type: 'image_url', image_url: { url: images[0] }, frame_type: 'last_frame' })
+    } else if (supportedFrames.has('first_frame')) {
+      frames.push({ type: 'image_url', image_url: { url: images[0] }, frame_type: 'first_frame' })
+      if (images[1] && supportedFrames.has('last_frame') && frameMode !== 'first') {
+        frames.push({ type: 'image_url', image_url: { url: images[1] }, frame_type: 'last_frame' })
+      }
     }
+    if (frames.length) request.frame_images = frames
+    else request.input_references = images.map((url) => ({ type: 'image_url', image_url: { url } }))
     return request
   }
   request.input_references = images.map((url) => ({ type: 'image_url', image_url: { url } }))

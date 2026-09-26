@@ -8,6 +8,9 @@ import {
   type ModelListItem,
   type ModelPricing,
   type ModelListType,
+  type ImageGenerationModelInfo,
+  type ImageGenerationRequest,
+  type ImageGenerationResponse,
   type TranscriptionRequest,
   type TranscriptionResponse,
   type VideoGenerationContent,
@@ -172,6 +175,18 @@ export class LLMGateway {
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     return provider.listVideoModels()
+  }
+
+  async listImageGenerationModels(providerId?: string): Promise<ImageGenerationModelInfo[]> {
+    const provider = providerId ? this.providers.get(providerId) : this.getLastUsedProvider()
+    if (!provider) throw new Error('Provider not found')
+    return provider.listImageGenerationModels()
+  }
+
+  async generateImage(request: ImageGenerationRequest, providerId?: string): Promise<ImageGenerationResponse> {
+    const provider = providerId ? this.providers.get(providerId) : this.getLastUsedProvider()
+    if (!provider) throw new Error('Provider not found')
+    return provider.generateImage(request)
   }
 
   async generateVideo(

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
+import { useProviderStore } from '../../stores/provider.store'
+import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
@@ -11,6 +13,8 @@ import { api } from '../../api/client'
 import type { StagedChatAttachment } from '../../api/types'
 
 const chatStore = useChatStore()
+const providerStore = useProviderStore()
+const agentDefs = useAgentDefinitionsStore()
 
 defineProps<{
   floating?: boolean
@@ -68,6 +72,18 @@ function modelHasInputModality(modality: string): boolean | null {
 const imageInputUnsupported = computed(() => modelHasInputModality('image') === false)
 const transcriptionOutputSelected = computed(() =>
   chatStore.modelModalities?.output?.some((item) => item.toLowerCase() === 'transcription') === true
+)
+const openRouterSelected = computed(() => {
+  const agentProviderId = chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId)?.providerId : undefined
+  const providerId = chatStore.sessionProviderOverride || agentProviderId || providerStore.lastUsedProviderId
+  return providerStore.providers.find((provider) => provider.id === providerId)?.type === 'openrouter'
+})
+const videoOutputSelected = computed(() => openRouterSelected.value &&
+  chatStore.modelModalities?.output?.some((item) => item.toLowerCase() === 'video') === true
+)
+const imageOutputSelected = computed(() =>
+  openRouterSelected.value && !videoOutputSelected.value &&
+  chatStore.modelModalities?.output?.some((item) => item.toLowerCase() === 'image') === true
 )
 const audioInputUnsupported = computed(() =>
   !transcriptionOutputSelected.value && modelHasInputModality('audio') === false
@@ -594,6 +610,12 @@ defineExpose({ processFiles, focus, sendSuggestion })
           @input="autoResize"
           @paste="onPaste"
         />
+        <p v-if="videoOutputSelected" class="px-4 pb-1 text-xs text-theme-500">
+          Ask for duration, resolution, aspect ratio, or audio. For supported models, attach images in first/last frame order or ask to use them as references.
+        </p>
+        <p v-else-if="imageOutputSelected" class="px-4 pb-1 text-xs text-theme-500">
+          Ask for resolution, aspect ratio, or multiple images in your prompt.
+        </p>
 
         <InputToolbar
           :can-send="canSend"

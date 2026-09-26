@@ -134,6 +134,23 @@ describe('OpenRouter model metadata', () => {
     })
 })
 
+describe('OpenRouter dedicated media generation', () => {
+    test('submits image parameters to the images endpoint', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            data: [{ b64_json: 'YQ==', media_type: 'image/png' }]
+        }), { status: 200 }))
+        vi.stubGlobal('fetch', fetchMock)
+        const provider = new OpenRouterProvider(config)
+        const response = await provider.generateImage({ model: 'image-model', prompt: 'A cat',
+            n: 3, resolution: '2K', aspect_ratio: '16:9' })
+        expect(String(fetchMock.mock.calls[0][0])).toContain('/images')
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+            model: 'image-model', prompt: 'A cat', n: 3, resolution: '2K', aspect_ratio: '16:9'
+        })
+        expect(response.data).toHaveLength(1)
+    })
+})
+
 describe('OpenRouter completion termination', () => {
     test('accepts a natural stop as a completed stream', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })))

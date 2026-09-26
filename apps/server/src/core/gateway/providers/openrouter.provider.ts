@@ -13,6 +13,9 @@ import {
     type ModelListItem,
     type ModelListType,
     type ModelPricing,
+    type ImageGenerationModelInfo,
+    type ImageGenerationRequest,
+    type ImageGenerationResponse,
     type TranscriptionRequest,
     type TranscriptionResponse,
     type VideoGenerationContent,
@@ -64,7 +67,7 @@ interface OpenRouterModel {
     }
 }
 
-interface OpenRouterImageModel {
+interface OpenRouterImageModel extends ImageGenerationModelInfo {
     id: string
     name?: string
     endpoints?: string
@@ -97,6 +100,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
     protected client: OpenAI
     private modelsCache: { models: OpenRouterModel[]; ts: number } | null = null
     private imageModelsCache: { models: ModelListItem[]; ts: number } | null = null
+    private imageGenerationModelsCache: { models: OpenRouterImageModel[]; ts: number } | null = null
     private imageModelsPromise: Promise<ModelListItem[]> | null = null
     protected get defaultBaseUrl(): string { return 'https://openrouter.ai/api/v1' }
 
@@ -365,6 +369,23 @@ export class OpenRouterProvider extends BaseLLMProvider {
         } finally {
             this.imageModelsPromise = null
         }
+    }
+
+    async listImageGenerationModels(): Promise<ImageGenerationModelInfo[]> {
+        if (this.imageGenerationModelsCache && Date.now() - this.imageGenerationModelsCache.ts < MODEL_CACHE_TTL_MS) {
+            return this.imageGenerationModelsCache.models
+        }
+        const data = await this.requestOpenRouter<{ data?: OpenRouterImageModel[] }>('/images/models')
+        const models = Array.isArray(data.data) ? data.data : []
+        this.imageGenerationModelsCache = { models, ts: Date.now() }
+        return models
+    }
+
+    async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
+        const { signal, ...payload } = request
+        return this.requestOpenRouter<ImageGenerationResponse>('/images', {
+            method: 'POST', body: JSON.stringify(payload), signal
+        })
     }
 
     private toModelListItem(model: OpenRouterModel): ModelListItem {
