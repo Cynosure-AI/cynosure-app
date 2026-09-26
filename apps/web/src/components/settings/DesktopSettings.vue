@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
 import { SK_GLOBAL_HOTKEY } from '../../utils/storage-keys'
 import { syncPrefsToElectron } from '../../utils/electron-prefs'
@@ -46,6 +47,11 @@ onMounted(async () => {
     const hotkey = await electron!.getGlobalHotkey!()
     accelerator.value = hotkey.accelerator
     if (!hotkey.success) error.value = hotkey.error || 'The shortcut could not be registered.'
+  } catch {
+    error.value = 'Could not load the global shortcut.'
+  }
+
+  try {
     if (!electron?.getAutostart) throw new Error('Autostart API unavailable')
     const autostart = await electron.getAutostart()
     autostartEnabled.value = autostart.enabled
@@ -57,12 +63,12 @@ onMounted(async () => {
   }
 })
 
-async function toggleAutostart(): Promise<void> {
+async function toggleAutostart(enabled: boolean): Promise<void> {
   if (!electron?.setAutostart || autostartSaving.value) return
   autostartSaving.value = true
   autostartError.value = ''
   try {
-    const result = await electron.setAutostart(!autostartEnabled.value)
+    const result = await electron.setAutostart(enabled)
     autostartEnabled.value = result.enabled
     autostartError.value = result.error || ''
   } catch {
@@ -155,21 +161,12 @@ function record(event: KeyboardEvent): void {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="autostartEnabled"
-            aria-label="Autostart"
+          <ToggleSwitch
+            :model-value="autostartEnabled"
+            label="Autostart"
             :disabled="autostartLoading || autostartSaving"
-            class="relative h-6 w-11 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70 disabled:opacity-50"
-            :class="autostartEnabled ? 'bg-accent-600' : 'bg-theme-700'"
-            @click="toggleAutostart"
-          >
-            <span
-              class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
-              :class="autostartEnabled ? 'translate-x-4.5' : 'translate-x-0.5'"
-            />
-          </button>
+            @update:model-value="toggleAutostart"
+          />
         </div>
         <p
           v-if="autostartError"
