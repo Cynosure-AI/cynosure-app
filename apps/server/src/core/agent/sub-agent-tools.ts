@@ -46,8 +46,7 @@ interface SubAgentSessionRow {
 
 interface ConversationMessageAttachmentRow {
     id: string
-    image_urls_json: string | null
-    audio_urls_json: string | null
+    content_blocks_json: string | null
     created_at: number
 }
 
@@ -86,11 +85,15 @@ function parseSessionHistory(json: string): ChatMessage[] | null {
     }
 }
 
-function parseUrlArray(json: string | null): string[] {
+function parseMediaBlocks(json: string | null): Array<{ type: 'image' | 'audio'; url: string }> {
     if (!json) return []
     try {
         const value = JSON.parse(json) as unknown
-        return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+        if (!Array.isArray(value)) return []
+        return value.filter((block): block is { type: 'image' | 'audio'; url: string } =>
+            block !== null && typeof block === 'object'
+            && (block.type === 'image' || block.type === 'audio')
+            && typeof block.url === 'string')
     } catch {
         return []
     }
@@ -102,7 +105,7 @@ function resolveConversationAttachment(conversationId: string, attachmentIndex: 
 
     const db = getDb()
     const messages = db.prepare(`
-        SELECT id, image_urls_json, audio_urls_json, created_at
+        SELECT id, content_blocks_json, created_at
         FROM messages
         WHERE conversation_id = ? AND role = 'user'
         ORDER BY created_at DESC, id DESC
@@ -122,16 +125,13 @@ function resolveConversationAttachment(conversationId: string, attachmentIndex: 
 
     let currentIndex = 0
     for (const message of messages) {
-        for (const url of parseUrlArray(message.image_urls_json)) {
+        for (const block of parseMediaBlocks(message.content_blocks_json)) {
             currentIndex += 1
             if (currentIndex === attachmentIndex) {
-                return [{ type: 'image_url', image_url: { url: artifactFileUrlToDataUrl(url) || url } }]
-            }
-        }
-        for (const url of parseUrlArray(message.audio_urls_json)) {
-            currentIndex += 1
-            if (currentIndex === attachmentIndex) {
-                return [{ type: 'audio_url', audio_url: { url: artifactFileUrlToDataUrl(url) || url } }]
+                const url = artifactFileUrlToDataUrl(block.url) || block.url
+                return block.type === 'image'
+                    ? [{ type: 'image_url', image_url: { url } }]
+                    : [{ type: 'audio_url', audio_url: { url } }]
             }
         }
         for (const file of filesByMessage.get(message.id) || []) {

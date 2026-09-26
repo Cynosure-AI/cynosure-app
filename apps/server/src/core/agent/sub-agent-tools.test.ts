@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import Database from 'better-sqlite3'
+import { applySchemaMigrations } from '../../db/migrations.js'
 
 const mocks = vi.hoisted(() => ({
     executorConfig: undefined as Record<string, unknown> | undefined,
@@ -6,8 +8,9 @@ const mocks = vi.hoisted(() => ({
     prepareAgentExecution: vi.fn(),
     dbPrepare: vi.fn(),
     session: undefined as { invocation_id: string; agent_id: string; history_json: string } | undefined,
-    attachmentMessages: [] as Array<{ id: string; image_urls_json: string | null; audio_urls_json: string | null; created_at: number }>,
+    attachmentMessages: [] as Array<{ id: string; content_blocks_json: string | null; created_at: number }>,
     attachmentFiles: [] as Array<{ id: string; message_id: string; name: string; original_path: string | null; text_path: string | null; created_at: number }>,
+    realDb: undefined as Database.Database | undefined,
     executorResult: { content: '', images: [], thinking: '', toolRounds: 0 },
 }))
 
@@ -38,7 +41,7 @@ vi.mock('../memory/memory-folder-scope.js', () => ({
 }))
 vi.mock('../../db/database.js', () => ({
     getDb: () => ({
-        prepare: mocks.dbPrepare,
+        prepare: (sql: string) => mocks.realDb ? mocks.realDb.prepare(sql) : mocks.dbPrepare(sql),
     }),
 }))
 vi.mock('./agent-executor.js', () => ({
@@ -62,6 +65,8 @@ describe('sub-agent execution', () => {
         mocks.session = undefined
         mocks.attachmentMessages = []
         mocks.attachmentFiles = []
+        mocks.realDb?.close()
+        mocks.realDb = undefined
         mocks.executorResult = { content: '', images: [], thinking: '', toolRounds: 0 }
         mocks.dbPrepare.mockReset().mockImplementation((sql: string) => ({
             run: vi.fn(),
@@ -143,8 +148,7 @@ describe('sub-agent execution', () => {
     test('passes a referenced conversation image to the spawned sub-agent', async () => {
         mocks.attachmentMessages = [{
             id: 'message',
-            image_urls_json: JSON.stringify(['data:image/png;base64,aW1hZ2U=']),
-            audio_urls_json: null,
+            content_blocks_json: JSON.stringify([{ type: 'image', artifactId: 'image', url: 'data:image/png;base64,aW1hZ2U=' }]),
             created_at: 1,
         }]
         const [tool] = buildSubAgentTools({
@@ -164,6 +168,37 @@ describe('sub-agent execution', () => {
             ],
         }])
         expect(mocks.prepareAgentExecution).toHaveBeenCalledWith(expect.objectContaining({ userQuery: 'Edit this image' }))
+    })
+
+    test('resolves image and audio attachments from the current database schema', async () => {
+        const db = new Database(':memory:')
+        mocks.realDb = db
+        applySchemaMigrations(db)
+        db.prepare('INSERT INTO conversations (id, created_at, updated_at) VALUES (?, ?, ?)').run('conversation', 1, 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('message', 'conversation', 'user', 'Attachments', JSON.stringify([
+                { type: 'text', text: 'Attachments' },
+                { type: 'image', artifactId: 'image', url: 'data:image/png;base64,aW1hZ2U=' },
+                { type: 'audio', artifactId: 'audio', url: 'data:audio/wav;base64,YXVkaW8=' },
+            ]), 1)
+        const [tool] = buildSubAgentTools({
+            subAgents: [{ agentId: 'worker' }],
+            conversationId: 'conversation',
+            broadcast: vi.fn(),
+        })
+
+        const result = await tool.execute({ internalName: 'worker', instructions: 'Listen to this', attachmentIndex: 2 })
+
+        expect(result.success).toBe(true)
+        expect(mocks.executorMessages).toEqual([{
+            role: 'user',
+            content: [
+                { type: 'text', text: 'Listen to this' },
+                { type: 'audio_url', audio_url: { url: 'data:audio/wav;base64,YXVkaW8=' } },
+            ],
+        }])
+        db.close()
+        mocks.realDb = undefined
     })
 
     test('rejects an attachment reference outside the current conversation', async () => {
