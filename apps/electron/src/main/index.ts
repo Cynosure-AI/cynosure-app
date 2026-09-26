@@ -533,7 +533,7 @@ app.whenReady().then(async () => {
     // Refresh the launch target after an app update. No login item is created
     // until the user has explicitly enabled Autostart.
     if (desktopSettingsStore.get('autostart') === true && app.isPackaged
-        && process.platform === 'linux' && isAutostartEnabled()) {
+        && process.platform === 'linux') {
         try {
             setAutostartEnabled(true)
         } catch (error) {
@@ -553,7 +553,13 @@ app.whenReady().then(async () => {
             return { enabled: actual }
         } catch (error) {
             console.error('[electron] Could not change autostart:', error)
-            return { enabled: desktopSettingsStore.get('autostart') === true, error: 'Could not change the Autostart setting.' }
+            let actual = desktopSettingsStore.get('autostart') === true
+            try {
+                actual = isAutostartEnabled()
+            } catch {
+                // Keep the last persisted value if the operating system state cannot be read.
+            }
+            return { enabled: actual, error: 'Could not change the Autostart setting.' }
         }
     })
 
