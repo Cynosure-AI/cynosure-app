@@ -1,0 +1,477 @@
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { CSSProperties } from 'vue'
+import type { ReasoningEffort } from '@shared/types'
+import type { MemoryFolder } from '../../../api/types'
+import type { ToolInfo } from '../../../stores/agent-runtime.store'
+import { onClickOutside } from '@vueuse/core'
+import { Icon } from '@iconify/vue'
+import { useChatStore } from '../../../stores/chat.store'
+import { useAgentStore } from '../../../stores/agent-runtime.store'
+import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
+import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
+import { isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../../utils/memory-folder-selection'
+import SystemPromptModal from '../modals/SystemPromptModal.vue'
+
+const emit = defineEmits<{ attach: []; browseLibrary: [] }>()
+const chatStore = useChatStore()
+const agentStore = useAgentStore()
+const agentDefs = useAgentDefinitionsStore()
+
+type Panel = 'main' | 'files' | 'tools' | 'memory' | 'agents' | 'reasoning'
+const root = ref<HTMLElement | null>(null)
+const menu = ref<HTMLElement | null>(null)
+const open = ref(false)
+const panel = ref<Panel>('main')
+const search = ref('')
+const folderPath = ref<string | null>(null)
+const toolNamespace = ref<string | null>(null)
+const showSystemPrompt = ref(false)
+const menuStyle = ref<CSSProperties>({})
+
+const entries = [
+  { id: 'files', label: 'Files', detail: 'Upload or select from library', icon: 'lucide:paperclip', keywords: 'attachment upload library' },
+  { id: 'tools', label: 'Tools (MCPs)', detail: 'Enable and configure tools', icon: 'lucide:wrench', keywords: 'mcp tools automatic' },
+  { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:brain', keywords: 'folders knowledge automatic' },
+  { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users', keywords: 'delegate agents' },
+  { id: 'reasoning', label: 'Reasoning', detail: 'Set thinking effort', icon: 'lucide:lightbulb', keywords: 'thinking planning' },
+  { id: 'prompt', label: 'System Prompt', detail: 'View and edit system prompt', icon: 'lucide:scroll-text', keywords: 'instructions' },
+] as const
+const visibleEntries = computed(() => entries.filter(item => `${item.label} ${item.detail} ${item.keywords}`.toLowerCase().includes(search.value.toLowerCase().trim())))
+const selectableTools = computed(() => agentStore.availableTools.filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name))))
+const toolGroups = computed(() => {
+  const groups = new Map<string, { id: string; label: string; tools: ToolInfo[] }>()
+  for (const tool of selectableTools.value) {
+    const existing = groups.get(tool.namespace.id)
+    if (existing) existing.tools.push(tool)
+    else groups.set(tool.namespace.id, { id: tool.namespace.id, label: tool.namespace.label, tools: [tool] })
+  }
+  const query = search.value.toLowerCase().trim()
+  return [...groups.values()].filter(group => !query || group.label.toLowerCase().includes(query) || group.tools.some(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query)))
+    .sort((a, b) => Number(isBuiltInNamespaceId(b.id)) - Number(isBuiltInNamespaceId(a.id)) || a.label.localeCompare(b.label))
+})
+const activeTools = computed(() => {
+  const group = toolGroups.value.find(item => item.id === toolNamespace.value)
+  if (!group) return []
+  const query = search.value.toLowerCase().trim()
+  return !query || group.label.toLowerCase().includes(query)
+    ? group.tools
+    : group.tools.filter(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query))
+})
+const visibleAgents = computed(() => agentDefs.agents.filter(agent => `${agent.name} ${agent.internalName || ''} ${agent.description || ''}`.toLowerCase().includes(search.value.toLowerCase().trim())))
+const folders = computed(() => chatStore.memoryFolders)
+const folderSet = computed(() => new Set(chatStore.freeChatMemoryFolderIds))
+const rootFolder = computed(() => folders.value.find(folder => folder.isUncategorized))
+const rootSelected = computed(() => !!rootFolder.value && folderSet.value.has(rootFolder.value.id))
+const activeFolder = computed(() => folders.value.find(folder => folder.folderPath === folderPath.value))
+const visibleFolders = computed(() => {
+  const query = search.value.toLowerCase().trim()
+  if (query) return folders.value.filter(folder => `${folder.name} ${folder.description} ${folder.folderPath}`.toLowerCase().includes(query))
+  return folders.value.filter(folder => (folder.isUncategorized && folderPath.value === null) || (!folder.isUncategorized && parentPath(folder) === folderPath.value))
+})
+const reasoningLevels: { value: ReasoningEffort | 'off'; label: string; detail: string }[] = [
+  { value: 'off', label: 'Off', detail: 'Use the model without reasoning' },
+  { value: 'minimal', label: 'Minimal', detail: 'Lowest latency and token use' },
+  { value: 'low', label: 'Low', detail: 'Quick reasoning' },
+  { value: 'medium', label: 'Medium', detail: 'Balanced reasoning' },
+  { value: 'high', label: 'High', detail: 'Deep reasoning' },
+  { value: 'xhigh', label: 'Extra high', detail: 'For difficult tasks' },
+  { value: 'max', label: 'Maximum', detail: 'Provider maximum' },
+]
+const selectedReasoning = computed(() => chatStore.sessionThinkingEnabled ? chatStore.sessionReasoningEffort : 'off')
+
+function parentPath(folder: MemoryFolder): string | null {
+  if (folder.isUncategorized) return null
+  if (folder.parentFolderPath !== undefined) return folder.parentFolderPath || null
+  const parts = folder.folderPath.split('/').filter(Boolean)
+  return parts.length > 1 ? parts.slice(0, -1).join('/') : null
+}
+function hasChildren(folder: MemoryFolder): boolean {
+  return folders.value.some(item => !item.isUncategorized && parentPath(item) === folder.folderPath)
+}
+function folderSelected(folder: MemoryFolder): boolean {
+  return isMemoryFolderSelected(folder, folderSet.value, rootSelected.value)
+}
+function toggleFolder(folder: MemoryFolder): void {
+  const selected = new Set(chatStore.freeChatMemoryFolderIds)
+  const scope = folder.isUncategorized ? [folder.id] : folders.value.filter(item => item.id === folder.id || item.folderPath.startsWith(`${folder.folderPath}/`)).map(item => item.id)
+  if (folder.isUncategorized) {
+    selected.clear()
+    if (!rootSelected.value) selected.add(folder.id)
+  } else if (rootSelected.value && isAutoExcludedMemoryFolder(folder)) {
+    const remove = selected.has(folder.id)
+    scope.forEach(id => remove ? selected.delete(id) : selected.add(id))
+  } else if (rootSelected.value) {
+    const remaining = folders.value.filter(item => !item.isUncategorized && folderSelected(item) && !scope.includes(item.id)).map(item => item.id)
+    selected.clear()
+    remaining.forEach(id => selected.add(id))
+  } else if (selected.has(folder.id)) scope.forEach(id => selected.delete(id))
+  else scope.forEach(id => selected.add(id))
+  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length, ...selected)
+  chatStore.freeChatMemorySelectionInitialized = true
+  chatStore.markOverridesModified()
+}
+function toggleTool(tool: ToolInfo): void {
+  const selected = new Set(chatStore.selectedToolNames)
+  if (selected.has(tool.key)) selected.delete(tool.key)
+  else selected.add(tool.key)
+  chatStore.setSelectedToolNames([...selected])
+}
+function toggleAgent(id: string): void {
+  const index = chatStore.freeChatSubAgentIds.indexOf(id)
+  if (index < 0) chatStore.freeChatSubAgentIds.push(id)
+  else chatStore.freeChatSubAgentIds.splice(index, 1)
+  chatStore.markOverridesModified()
+}
+function setAutoTools(): void {
+  chatStore.sessionAutoToolRouting = !chatStore.sessionAutoToolRouting
+  chatStore.markOverridesModified()
+}
+function setAutoMemory(): void {
+  chatStore.sessionAutoMemory = !chatStore.sessionAutoMemory
+  chatStore.markOverridesModified()
+}
+function navigate(next: Panel): void {
+  panel.value = next
+  search.value = ''
+  if (next === 'memory') void chatStore.loadMemoryFolders()
+}
+function selectEntry(id: string): void {
+  if (id === 'prompt') {
+    close()
+    showSystemPrompt.value = true
+  } else navigate(id as Panel)
+}
+function close(): void {
+  open.value = false
+  panel.value = 'main'
+  search.value = ''
+  folderPath.value = null
+  toolNamespace.value = null
+}
+function back(): void {
+  if (panel.value === 'memory' && folderPath.value) folderPath.value = activeFolder.value ? parentPath(activeFolder.value) : null
+  else if (panel.value === 'tools' && toolNamespace.value) toolNamespace.value = null
+  else navigate('main')
+  search.value = ''
+}
+function updatePosition(): void {
+  const rect = root.value?.getBoundingClientRect()
+  if (!rect) return
+  const gap = 8
+  const padding = 8
+  const height = 520
+  const above = Math.max(0, rect.top - gap - padding)
+  const below = Math.max(0, window.innerHeight - rect.bottom - gap - padding)
+  const useAbove = above >= Math.min(300, height) || above >= below
+  const width = Math.min(360, window.innerWidth - padding * 2)
+  menuStyle.value = {
+    width: `${width}px`,
+    left: `${Math.max(padding, Math.min(rect.left, window.innerWidth - width - padding))}px`,
+    maxHeight: `${Math.min(height, useAbove ? above : below)}px`,
+    ...(useAbove ? { bottom: `${window.innerHeight - rect.top + gap}px` } : { top: `${rect.bottom + gap}px` }),
+  }
+}
+async function toggle(): Promise<void> {
+  if (open.value) return close()
+  open.value = true
+  await nextTick()
+  updatePosition()
+}
+function pickFile(kind: 'attach' | 'browseLibrary'): void {
+  close()
+  if (kind === 'attach') emit('attach')
+  else emit('browseLibrary')
+}
+onClickOutside(root, close, { ignore: [menu] })
+onMounted(() => {
+  window.addEventListener('resize', updatePosition)
+  window.addEventListener('scroll', updatePosition, true)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updatePosition)
+  window.removeEventListener('scroll', updatePosition, true)
+})
+</script>
+
+<template>
+  <span
+    ref="root"
+    class="inline-flex shrink-0"
+  >
+    <button
+      type="button"
+      class="flex h-8 w-8 items-center justify-center rounded-full border border-theme-700 text-theme-300 transition-colors hover:border-theme-500 hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+      :class="open ? 'bg-theme-700 text-theme-100' : ''"
+      aria-label="Add and configure chat options"
+      aria-haspopup="dialog"
+      :aria-expanded="open"
+      @click="toggle"
+    >
+      <Icon
+        icon="lucide:plus"
+        class="h-5 w-5"
+      />
+    </button>
+  </span>
+
+  <Teleport to="body">
+    <div
+      v-if="open"
+      ref="menu"
+      class="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-theme-700 bg-theme-900 text-theme-200 shadow-2xl shadow-black/50"
+      :style="menuStyle"
+      role="dialog"
+      aria-label="Chat options"
+      @keydown.esc.stop.prevent="panel === 'main' ? close() : back()"
+    >
+      <div
+        v-if="panel !== 'main'"
+        class="flex items-center gap-2 border-b border-theme-700 px-2 py-2"
+      >
+        <button
+          type="button"
+          class="rounded-lg p-1.5 hover:bg-theme-800"
+          aria-label="Back to chat options"
+          @click="back"
+        >
+          <Icon
+            icon="lucide:chevron-left"
+            class="h-4 w-4"
+          />
+        </button>
+        <span class="text-xs font-semibold">{{ panel === 'tools' && toolNamespace ? toolGroups.find(group => group.id === toolNamespace)?.label : panel === 'memory' && activeFolder ? activeFolder.name : entries.find(item => item.id === panel)?.label }}</span>
+      </div>
+      <div
+        v-if="panel !== 'reasoning' && panel !== 'files'"
+        class="border-b border-theme-800 p-2"
+      >
+        <label class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-2 focus-within:border-accent-500">
+          <Icon
+            icon="lucide:search"
+            class="h-4 w-4 text-theme-500"
+          />
+          <input
+            v-model="search"
+            type="search"
+            class="min-w-0 flex-1 bg-transparent text-xs text-theme-100 outline-none placeholder:text-theme-500"
+            :placeholder="panel === 'main' ? 'Filter options…' : `Search ${panel}…`"
+            :aria-label="panel === 'main' ? 'Filter chat options' : `Search ${panel}`"
+          >
+        </label>
+      </div>
+      <div class="min-h-0 overflow-y-auto p-1.5">
+        <template v-if="panel === 'main'">
+          <template
+            v-for="entry in visibleEntries"
+            :key="entry.id"
+          >
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left hover:bg-theme-800 focus-visible:bg-theme-800 focus-visible:outline-none"
+              @click="selectEntry(entry.id)"
+            >
+              <Icon
+                :icon="entry.icon"
+                class="h-5 w-5 shrink-0 text-theme-300"
+              />
+              <span class="min-w-0 flex-1"><span class="block text-sm text-theme-100">{{ entry.label }}</span><span class="block truncate text-[11px] text-theme-500">{{ entry.detail }}</span></span>
+              <Icon
+                icon="lucide:chevron-right"
+                class="h-4 w-4 text-theme-500"
+              />
+            </button>
+            <button
+              v-if="entry.id === 'tools'"
+              type="button"
+              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left hover:bg-theme-800"
+              role="switch"
+              :aria-checked="chatStore.sessionAutoToolRouting"
+              aria-label="Automatic tools"
+              @click="setAutoTools"
+            >
+              <Icon
+                icon="lucide:sparkles"
+                class="h-5 w-5 text-theme-300"
+              /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Tools</span><span class="block text-[11px] text-theme-500">Use tools when helpful</span></span><span
+                class="relative h-5 w-9 rounded-full transition-colors"
+                :class="chatStore.sessionAutoToolRouting ? 'bg-accent-600' : 'bg-theme-600'"
+              ><span
+                class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+                :class="chatStore.sessionAutoToolRouting ? 'left-[18px]' : 'left-0.5'"
+              /></span>
+            </button>
+            <button
+              v-if="entry.id === 'memory'"
+              type="button"
+              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left hover:bg-theme-800"
+              role="switch"
+              :aria-checked="chatStore.sessionAutoMemory"
+              aria-label="Automatic memories"
+              @click="setAutoMemory"
+            >
+              <Icon
+                icon="lucide:database-zap"
+                class="h-5 w-5 text-theme-300"
+              /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Memories</span><span class="block text-[11px] text-theme-500">Retrieve relevant memories</span></span><span
+                class="relative h-5 w-9 rounded-full transition-colors"
+                :class="chatStore.sessionAutoMemory ? 'bg-accent-600' : 'bg-theme-600'"
+              ><span
+                class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+                :class="chatStore.sessionAutoMemory ? 'left-[18px]' : 'left-0.5'"
+              /></span>
+            </button>
+          </template>
+          <div
+            v-if="!visibleEntries.length"
+            class="px-3 py-5 text-center text-xs text-theme-500"
+          >
+            No options match “{{ search }}”
+          </div>
+        </template>
+        <template v-else-if="panel === 'files'">
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left hover:bg-theme-800"
+            @click="pickFile('attach')"
+          >
+            <Icon
+              icon="lucide:upload"
+              class="h-5 w-5"
+            /><span class="flex-1"><span class="block text-sm">Upload files</span><span class="block text-[11px] text-theme-500">Choose files from your device</span></span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left hover:bg-theme-800"
+            @click="pickFile('browseLibrary')"
+          >
+            <Icon
+              icon="lucide:library"
+              class="h-5 w-5"
+            /><span class="flex-1"><span class="block text-sm">Select from library</span><span class="block text-[11px] text-theme-500">Reuse a previous attachment</span></span>
+          </button>
+        </template>
+        <template v-else-if="panel === 'tools'">
+          <template v-if="!toolNamespace">
+            <button
+              v-for="group in toolGroups"
+              :key="group.id"
+              type="button"
+              class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800"
+              @click="toolNamespace = group.id; search = ''"
+            >
+              <Icon
+                icon="lucide:blocks"
+                class="h-4 w-4"
+              /><span class="min-w-0 flex-1 truncate text-xs">{{ group.label }}</span><span class="text-[10px] text-theme-500">{{ group.tools.filter(tool => chatStore.selectedToolNames.includes(tool.key)).length }}/{{ group.tools.length }}</span><Icon
+                icon="lucide:chevron-right"
+                class="h-4 w-4 text-theme-500"
+              />
+            </button>
+            <div
+              v-if="!toolGroups.length"
+              class="px-3 py-5 text-center text-xs text-theme-500"
+            >
+              No tools found
+            </div>
+          </template>
+          <template v-else>
+            <label
+              v-for="tool in activeTools"
+              :key="tool.key"
+              class="flex cursor-pointer gap-2.5 rounded-lg px-2.5 py-2 hover:bg-theme-800"
+            ><input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 accent-accent-500"
+              :checked="chatStore.selectedToolNames.includes(tool.key)"
+              @change="toggleTool(tool)"
+            ><span class="min-w-0"><span class="block truncate text-xs">{{ tool.name }}</span><span class="block text-[10px] text-theme-500">{{ tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '') }}</span></span></label>
+            <div
+              v-if="!activeTools.length"
+              class="px-3 py-5 text-center text-xs text-theme-500"
+            >
+              No tools found
+            </div>
+          </template>
+        </template>
+        <template v-else-if="panel === 'memory'">
+          <div
+            v-for="folder in visibleFolders"
+            :key="folder.id"
+            class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-theme-800"
+          >
+            <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-2"><input
+              type="checkbox"
+              class="h-4 w-4 accent-accent-500"
+              :checked="folderSelected(folder)"
+              @change="toggleFolder(folder)"
+            ><Icon
+              icon="lucide:folder"
+              class="h-4 w-4 text-theme-400"
+            /><span class="min-w-0"><span class="block truncate text-xs">{{ folder.isUncategorized ? 'All Memory' : folder.name }}</span><span class="block text-[10px] text-theme-500">{{ folder.isUncategorized ? 'Uncategorized and standard folders' : `${folder.fileCount} documents` }}</span></span></label><button
+              v-if="hasChildren(folder)"
+              type="button"
+              class="rounded p-1 hover:bg-theme-700"
+              :aria-label="`Open ${folder.name}`"
+              @click="folderPath = folder.folderPath; search = ''"
+            >
+              <Icon
+                icon="lucide:chevron-right"
+                class="h-4 w-4"
+              />
+            </button>
+          </div>
+          <div
+            v-if="!visibleFolders.length"
+            class="px-3 py-5 text-center text-xs text-theme-500"
+          >
+            No memory folders found
+          </div>
+        </template>
+        <template v-else-if="panel === 'agents'">
+          <label
+            v-for="agent in visibleAgents"
+            :key="agent.id"
+            class="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-theme-800"
+          ><input
+            type="checkbox"
+            class="h-4 w-4 accent-accent-500"
+            :checked="chatStore.freeChatSubAgentIds.includes(agent.id)"
+            @change="toggleAgent(agent.id)"
+          ><Icon
+            icon="lucide:bot"
+            class="h-4 w-4"
+          /><span class="min-w-0"><span class="block truncate text-xs">{{ agent.name }}</span><span class="block truncate text-[10px] text-theme-500">{{ agent.description || agent.internalName }}</span></span></label>
+          <div
+            v-if="!visibleAgents.length"
+            class="px-3 py-5 text-center text-xs text-theme-500"
+          >
+            No subagents found
+          </div>
+        </template>
+        <template v-else-if="panel === 'reasoning'">
+          <button
+            v-for="level in reasoningLevels"
+            :key="level.value"
+            type="button"
+            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800"
+            role="radio"
+            :aria-checked="selectedReasoning === level.value"
+            @click="chatStore.setSessionReasoningEffort(level.value)"
+          >
+            <Icon
+              :icon="selectedReasoning === level.value ? 'lucide:circle-check' : 'lucide:circle'"
+              class="h-4 w-4"
+              :class="selectedReasoning === level.value ? 'text-accent-400' : 'text-theme-500'"
+            /><span><span class="block text-xs">{{ level.label }}</span><span class="block text-[10px] text-theme-500">{{ level.detail }}</span></span>
+          </button>
+        </template>
+      </div>
+    </div>
+  </Teleport>
+  <SystemPromptModal
+    v-model="showSystemPrompt"
+    :system-prompt="chatStore.sessionSystemPrompt"
+    @update:system-prompt="(value: string) => { chatStore.sessionSystemPrompt = value; chatStore.markOverridesModified() }"
+  />
+</template>
