@@ -11,6 +11,7 @@ const chatStore = reactive({
   isConversationLocked: false,
   queuedMessages: [] as Array<{ id: string; content: string; attachments: unknown[] }>,
   modelModalities: null as { input: string[]; output: string[] } | null,
+  resolvedModelProvider: null as { providerId: string; model: string } | null,
   sendMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
   queueMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
   updateQueuedMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
@@ -23,6 +24,9 @@ const chatStore = reactive({
 
 vi.mock('../../stores/chat.store', () => ({
   useChatStore: () => chatStore,
+}))
+vi.mock('../../stores/provider.store', () => ({
+  useProviderStore: () => ({ providers: [{ id: 'p1', type: 'openrouter' }] }),
 }))
 
 function mountInputBar(attachTo?: Element) {
@@ -46,6 +50,8 @@ describe('InputBar drafts', () => {
     chatStore.activeAgentId = 'agent-1'
     chatStore.isConversationLocked = false
     chatStore.queuedMessages = []
+    chatStore.resolvedModelProvider = null
+    chatStore.modelModalities = null
     chatStore.sendMessage.mockReset()
     chatStore.sendMessage.mockResolvedValue()
     chatStore.queueMessage.mockReset()
@@ -103,9 +109,24 @@ describe('InputBar drafts', () => {
     await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
     await flushPromises()
 
-    expect(chatStore.sendMessage).toHaveBeenCalledWith('Send this', undefined, undefined, undefined)
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('Send this', undefined, undefined, undefined, undefined)
     expect(localStorage.getItem(draftKey)).toBeNull()
     expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('')
+  })
+
+  test('sends selected video settings with the message', async () => {
+    chatStore.resolvedModelProvider = { providerId: 'p1', model: 'video-model' }
+    chatStore.modelModalities = { input: ['text', 'image'], output: ['video'] }
+    const wrapper = mountInputBar()
+    wrapper.findComponent({ name: 'InputToolbar' }).vm.$emit('mediaSettings', {
+      kind: 'video', duration: 8, aspect_ratio: '9:16', generate_audio: false,
+    })
+    await wrapper.get('textarea').setValue('A dancer in motion')
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('A dancer in motion', undefined, undefined, undefined,
+      { kind: 'video', duration: 8, aspect_ratio: '9:16', generate_audio: false })
   })
 
   test('sends a quick response while preserving the current draft', async () => {
@@ -116,7 +137,7 @@ describe('InputBar drafts', () => {
     await wrapper.vm.sendSuggestion('Tell me more about that')
     await flushPromises()
 
-    expect(chatStore.sendMessage).toHaveBeenCalledWith('Tell me more about that')
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('Tell me more about that', undefined, undefined, undefined, undefined)
     expect(textarea.element.value).toBe('My unfinished draft')
     wrapper.unmount()
     expect(localStorage.getItem(`${SK_CHAT_DRAFT_PREFIX}conversation:conversation-1`))
@@ -129,7 +150,7 @@ describe('InputBar drafts', () => {
 
     await wrapper.vm.sendSuggestion('Tell me more about that')
 
-    expect(chatStore.queueMessage).toHaveBeenCalledWith('Tell me more about that', 'next')
+    expect(chatStore.queueMessage).toHaveBeenCalledWith('Tell me more about that', 'next', undefined, undefined, undefined, undefined)
     expect(chatStore.sendMessage).not.toHaveBeenCalled()
   })
 
@@ -141,7 +162,7 @@ describe('InputBar drafts', () => {
     await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
     await flushPromises()
 
-    expect(chatStore.queueMessage).toHaveBeenCalledWith('Do this next', 'next', undefined, undefined, undefined)
+    expect(chatStore.queueMessage).toHaveBeenCalledWith('Do this next', 'next', undefined, undefined, undefined, undefined)
     expect(chatStore.sendMessage).not.toHaveBeenCalled()
   })
 
@@ -153,7 +174,7 @@ describe('InputBar drafts', () => {
     wrapper.findComponent({ name: 'InputToolbar' }).vm.$emit('steer')
     await flushPromises()
 
-    expect(chatStore.queueMessage).toHaveBeenCalledWith('Change direction', 'steer', undefined, undefined, undefined)
+    expect(chatStore.queueMessage).toHaveBeenCalledWith('Change direction', 'steer', undefined, undefined, undefined, undefined)
   })
 
   test('adds a reused library file to the next message', async () => {
@@ -178,6 +199,7 @@ describe('InputBar drafts', () => {
       undefined,
       [{ name: 'notes.txt', content: 'saved notes' }],
       undefined,
+      undefined,
     )
   })
 
@@ -198,6 +220,7 @@ describe('InputBar drafts', () => {
       ['data:image/png;base64,image'],
       undefined,
       ['data:audio/wav;base64,audio'],
+      undefined,
     )
   })
 

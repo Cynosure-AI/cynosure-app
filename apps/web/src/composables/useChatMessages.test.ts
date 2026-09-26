@@ -8,6 +8,7 @@ import type { ReasoningEffort } from '@shared/types'
 const mocks = vi.hoisted(() => ({
   chat: {
     send: vi.fn(),
+    enqueue: vi.fn(),
     getMessageAttachments: vi.fn(),
     truncateFrom: vi.fn(),
     cancelStream: vi.fn(),
@@ -100,6 +101,7 @@ describe('chat message actions', () => {
       autoRouterModel: 'agent-router-model',
     })
     mocks.chat.send.mockResolvedValue(undefined)
+    mocks.chat.enqueue.mockResolvedValue(undefined)
     mocks.chat.getMessageAttachments.mockResolvedValue({})
     mocks.chat.truncateFrom.mockResolvedValue(undefined)
     mocks.chat.cancelStream.mockResolvedValue({ success: true, executionIds: [] })
@@ -148,6 +150,29 @@ describe('chat message actions', () => {
       }),
     }))
     expect(mocks.agentStore.setConversationExecutionState).toHaveBeenLastCalledWith('created-conversation', false)
+  })
+
+  test('includes explicit media settings in the send request', async () => {
+    const state = setup()
+    await state.api.sendMessage('A dancer in motion', undefined, undefined, undefined, {
+      kind: 'video', duration: 8, aspect_ratio: '9:16', generate_audio: false,
+    })
+    expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({
+      run: expect.objectContaining({ mediaGeneration: {
+        kind: 'video', duration: 8, aspect_ratio: '9:16', generate_audio: false,
+      } }),
+    }))
+  })
+
+  test('keeps media settings on a queued request', async () => {
+    const state = setup()
+    await state.api.queueMessage('A mountain lake', 'next', undefined, undefined, undefined, {
+      kind: 'image', resolution: '2K', n: 2,
+    })
+    expect(mocks.chat.enqueue).toHaveBeenCalledWith('conversation', expect.objectContaining({
+      delivery: 'next',
+      run: expect.objectContaining({ mediaGeneration: { kind: 'image', resolution: '2K', n: 2 } }),
+    }))
   })
 
   test('Stop can target the execution before the server emits a stream start', async () => {

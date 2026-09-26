@@ -6,12 +6,12 @@ import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
-import type { ChatAttachmentInput, ChatQueueDelivery, ChatQueueRequest, ChatSendRequest, ReasoningEffort } from '@shared/types'
+import type { ChatAttachmentInput, ChatQueueDelivery, ChatQueueRequest, ChatSendRequest, MediaGenerationSettings, ReasoningEffort } from '@shared/types'
 
 export interface ChatMessagesApi {
-    sendMessage(content: string, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void>
-    queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void>
-    updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void>
+    sendMessage(content: string, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[], mediaGeneration?: MediaGenerationSettings): Promise<void>
+    queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[], mediaGeneration?: MediaGenerationSettings): Promise<void>
+    updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: ChatAttachmentInput[], audioDataUrls?: string[], mediaGeneration?: MediaGenerationSettings): Promise<void>
     retryFromMessage(messageId: string): Promise<void>
     editMessage(messageId: string, newContent: string): Promise<void>
     cancelStream(): Promise<void>
@@ -95,6 +95,7 @@ export function useChatMessages(
         imageDataUrls?: string[],
         files?: ChatAttachmentInput[],
         audioDataUrls?: string[],
+        mediaGeneration?: MediaGenerationSettings,
     ): ChatSendRequest {
         const agentDefs = useAgentDefinitionsStore()
         const activeAgent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
@@ -126,6 +127,7 @@ export function useChatMessages(
                 compactProviderId: prefs.compactProviderId || undefined,
                 compactModel: prefs.compactModel || undefined,
                 inlineAttachmentTextLimit: prefs.inlineAttachmentTextLimit,
+                mediaGeneration,
             },
         }
     }
@@ -136,10 +138,11 @@ export function useChatMessages(
         imageDataUrls?: string[],
         files?: ChatAttachmentInput[],
         audioDataUrls?: string[],
+        mediaGeneration?: MediaGenerationSettings,
     ): Promise<void> {
         if (!activeConversationId.value) await createConversation()
         const request: ChatQueueRequest = {
-            ...buildRequest(content, createMessageId(), imageDataUrls, files, audioDataUrls),
+            ...buildRequest(content, createMessageId(), imageDataUrls, files, audioDataUrls, mediaGeneration),
             delivery,
         }
         await api.chat.enqueue(activeConversationId.value!, request)
@@ -151,10 +154,11 @@ export function useChatMessages(
         imageDataUrls?: string[],
         files?: ChatAttachmentInput[],
         audioDataUrls?: string[],
+        mediaGeneration?: MediaGenerationSettings,
     ): Promise<void> {
         if (!activeConversationId.value) return
         const request: ChatQueueRequest = {
-            ...buildRequest(content, id, imageDataUrls, files, audioDataUrls),
+            ...buildRequest(content, id, imageDataUrls, files, audioDataUrls, mediaGeneration),
             delivery: 'next',
         }
         await api.chat.updateQueued(activeConversationId.value, id, request)
@@ -164,7 +168,8 @@ export function useChatMessages(
         content: string,
         imageDataUrls?: string[],
         files?: ChatAttachmentInput[],
-        audioDataUrls?: string[]
+        audioDataUrls?: string[],
+        mediaGeneration?: MediaGenerationSettings,
     ): Promise<void> {
         if (!activeConversationId.value) {
             await createConversation()
@@ -206,7 +211,7 @@ export function useChatMessages(
             isStreaming: true
         })
 
-        const request = buildRequest(content, msgId, imageDataUrls, files, audioDataUrls)
+        const request = buildRequest(content, msgId, imageDataUrls, files, audioDataUrls, mediaGeneration)
 
         try {
             await api.chat.send(conversationId, request)

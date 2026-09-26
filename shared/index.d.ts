@@ -162,6 +162,21 @@ export interface ChatRunConfig {
   compactProviderId?: string
   compactModel?: string
   inlineAttachmentTextLimit?: number
+  /** Settings chosen for this message's image or video generation. */
+  mediaGeneration?: MediaGenerationSettings
+}
+
+export interface MediaGenerationSettings {
+  kind: 'image' | 'video'
+  resolution?: string
+  aspect_ratio?: string
+  /** Images per call (image models only). */
+  n?: number
+  /** Seconds (video models only). */
+  duration?: number
+  generate_audio?: boolean
+  /** How attached images should be used for video generation. */
+  frame_mode?: 'auto' | 'first' | 'last' | 'first_last' | 'reference'
 }
 
 export interface ChatAttachmentInput {

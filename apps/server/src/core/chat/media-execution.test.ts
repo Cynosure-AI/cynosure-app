@@ -37,7 +37,9 @@ describe('media generation requests', () => {
       getVideoGenerationContent: vi.fn().mockResolvedValue({ data: new ArrayBuffer(2), contentType: 'video/mp4' }),
     } as unknown as ReturnType<typeof getGateway>
     const result = await executeVideoModel({ gateway, conversationId: 'c1', providerId: 'p1',
-      model: 'video-model', prompt: 'Make an 8-second portrait video at 1080p with no audio. Use the first and last frames.',
+      model: 'video-model', prompt: 'A dancer in motion',
+      mediaSettings: { kind: 'video', duration: 8, resolution: '1080p', aspect_ratio: '9:16',
+        generate_audio: false, frame_mode: 'first_last' },
       imageDataUrls: ['data:image/png;base64,YQ==', 'data:image/png;base64,Yg=='], signal })
     expect(generateVideo).toHaveBeenCalledWith(expect.objectContaining({
       duration: 8, resolution: '1080p', aspect_ratio: '9:16', generate_audio: false,
@@ -57,7 +59,8 @@ describe('media generation requests', () => {
       getVideoGenerationContent: vi.fn().mockResolvedValue({ data: new ArrayBuffer(1), contentType: 'video/mp4' }),
     } as unknown as ReturnType<typeof getGateway>
     await executeVideoModel({ gateway, conversationId: 'c1', providerId: 'p1', model: 'video-model',
-      prompt: 'Use this as the last frame.', imageDataUrls: ['data:image/png;base64,YQ=='], signal })
+      prompt: 'A sunset', mediaSettings: { kind: 'video', frame_mode: 'last' },
+      imageDataUrls: ['data:image/png;base64,YQ=='], signal })
     expect(generateVideo.mock.calls[0][0].frame_images).toEqual([
       { type: 'image_url', image_url: { url: 'data:image/png;base64,YQ==' }, frame_type: 'last_frame' },
     ])
@@ -72,7 +75,8 @@ describe('media generation requests', () => {
       getVideoGenerationContent: vi.fn().mockResolvedValue({ data: new ArrayBuffer(1), contentType: 'video/mp4' }),
     } as unknown as ReturnType<typeof getGateway>
     await executeVideoModel({ gateway, conversationId: 'c1', providerId: 'p1', model: 'video-model',
-      prompt: 'Use this as a style reference image.', imageDataUrls: ['data:image/png;base64,YQ=='], signal })
+      prompt: 'A city at night', mediaSettings: { kind: 'video', frame_mode: 'reference' },
+      imageDataUrls: ['data:image/png;base64,YQ=='], signal })
     expect(generateVideo.mock.calls[0][0].input_references).toEqual([
       { type: 'image_url', image_url: { url: 'data:image/png;base64,YQ==' } },
     ])
@@ -93,7 +97,8 @@ describe('media generation requests', () => {
       generateImage,
     } as unknown as ReturnType<typeof getGateway>
     const result = await executeImageModel({ gateway, conversationId: 'c1', providerId: 'p1',
-      model: 'image-model', prompt: 'Generate 2 landscape images in 2K', signal })
+      model: 'image-model', prompt: 'A mountain lake',
+      mediaSettings: { kind: 'image', n: 2, resolution: '2K', aspect_ratio: '16:9' }, signal })
     expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({
       n: 2, resolution: '2K', aspect_ratio: '16:9',
     }), 'p1')
@@ -109,7 +114,8 @@ describe('media generation requests', () => {
       } }]), generateImage,
     } as unknown as ReturnType<typeof getGateway>
     await expect(executeImageModel({ gateway, conversationId: 'c1', providerId: 'p1', model: 'image-model',
-      prompt: 'Generate 3 portrait 4K images', signal })).rejects.toThrow('does not support resolution 4K')
+      prompt: 'A mountain lake', mediaSettings: { kind: 'image', n: 3, resolution: '4K', aspect_ratio: '9:16' },
+      signal })).rejects.toThrow('does not support resolution 4K')
     expect(generateImage).not.toHaveBeenCalled()
   })
 })

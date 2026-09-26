@@ -2,7 +2,7 @@
 import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useChatStore } from '../../stores/chat.store'
 import { useProviderStore } from '../../stores/provider.store'
-import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import type { MediaGenerationSettings } from '@shared/types'
 import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
@@ -14,7 +14,6 @@ import type { StagedChatAttachment } from '../../api/types'
 
 const chatStore = useChatStore()
 const providerStore = useProviderStore()
-const agentDefs = useAgentDefinitionsStore()
 
 defineProps<{
   floating?: boolean
@@ -56,6 +55,7 @@ const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([
 type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; progressCurrent?: number; progressTotal?: number; controller?: AbortController; error?: string }
 const attachedFiles = ref<DraftFile[]>([])
 const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([])
+const mediaSettings = ref<MediaGenerationSettings | null>(null)
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
 const liveCleanups: Array<() => void> = []
@@ -74,8 +74,7 @@ const transcriptionOutputSelected = computed(() =>
   chatStore.modelModalities?.output?.some((item) => item.toLowerCase() === 'transcription') === true
 )
 const openRouterSelected = computed(() => {
-  const agentProviderId = chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId)?.providerId : undefined
-  const providerId = chatStore.sessionProviderOverride || agentProviderId || providerStore.lastUsedProviderId
+  const providerId = chatStore.resolvedModelProvider?.providerId
   return providerStore.providers.find((provider) => provider.id === providerId)?.type === 'openrouter'
 })
 const videoOutputSelected = computed(() => openRouterSelected.value &&
@@ -85,6 +84,15 @@ const imageOutputSelected = computed(() =>
   openRouterSelected.value && !videoOutputSelected.value &&
   chatStore.modelModalities?.output?.some((item) => item.toLowerCase() === 'image') === true
 )
+const mediaKind = computed<'image' | 'video' | undefined>(() =>
+  videoOutputSelected.value ? 'video' : imageOutputSelected.value ? 'image' : undefined
+)
+watch(() => `${chatStore.resolvedModelProvider?.providerId || ''}:${chatStore.resolvedModelProvider?.model || ''}:${mediaKind.value}`,
+  () => { mediaSettings.value = null })
+function currentMediaSettings(): MediaGenerationSettings | undefined {
+  const settings = mediaSettings.value
+  return settings && settings.kind === mediaKind.value ? { ...settings } : undefined
+}
 const audioInputUnsupported = computed(() =>
   !transcriptionOutputSelected.value && modelHasInputModality('audio') === false
 )
@@ -102,6 +110,7 @@ async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
     return { name: f.name, content: stagedId ? undefined : f.content, stagedId, existingAttachmentId: f.existingAttachmentId }
   })
   const audio = attachedAudio.value.map((a) => a.url)
+  const selectedMediaSettings = currentMediaSettings()
   inputText.value = ''
   persistDraft(draftStorageKey.value, '')
   attachedImages.value = []
@@ -110,18 +119,20 @@ async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
   resetHeight()
   const normalized = content || (audio.length ? 'Transcribe the attached audio.' : content)
   if (editingQueueId.value) {
-    await chatStore.updateQueuedMessage(editingQueueId.value, normalized, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined)
+    await chatStore.updateQueuedMessage(editingQueueId.value, normalized, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined, selectedMediaSettings)
     editingQueueId.value = null
   } else if (chatStore.isConversationLocked || chatStore.queuedMessages?.length) {
-    await chatStore.queueMessage(normalized, delivery, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined)
+    await chatStore.queueMessage(normalized, delivery, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined, selectedMediaSettings)
   } else {
-    await chatStore.sendMessage(normalized, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined)
+    await chatStore.sendMessage(normalized, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined, selectedMediaSettings)
   }
 }
 
 function editQueued(id: string, content: string): void {
   editingQueueId.value = id
   inputText.value = content
+  const queuedSettings = chatStore.queuedMessages.find((item) => item.id === id)?.run.mediaGeneration
+  mediaSettings.value = queuedSettings && queuedSettings.kind === mediaKind.value ? { ...queuedSettings } : null
   nextTick(() => textareaRef.value?.focus())
 }
 
@@ -382,9 +393,9 @@ async function sendSuggestion(suggestion: string): Promise<void> {
   const content = suggestion.trim()
   if (!content) return
   if (chatStore.isConversationLocked || chatStore.queuedMessages?.length) {
-    await chatStore.queueMessage(content, 'next')
+    await chatStore.queueMessage(content, 'next', undefined, undefined, undefined, currentMediaSettings())
   } else {
-    await chatStore.sendMessage(content)
+    await chatStore.sendMessage(content, undefined, undefined, undefined, currentMediaSettings())
   }
 }
 
@@ -610,23 +621,21 @@ defineExpose({ processFiles, focus, sendSuggestion })
           @input="autoResize"
           @paste="onPaste"
         />
-        <p v-if="videoOutputSelected" class="px-4 pb-1 text-xs text-theme-500">
-          Ask for duration, resolution, aspect ratio, or audio. For supported models, attach images in first/last frame order or ask to use them as references.
-        </p>
-        <p v-else-if="imageOutputSelected" class="px-4 pb-1 text-xs text-theme-500">
-          Ask for resolution, aspect ratio, or multiple images in your prompt.
-        </p>
-
         <InputToolbar
           :can-send="canSend"
           :is-running="chatStore.isConversationLocked"
           :editing-queue="Boolean(editingQueueId)"
+          :media-kind="mediaKind"
+          :media-provider-id="chatStore.resolvedModelProvider?.providerId"
+          :media-model="chatStore.resolvedModelProvider?.model"
+          :media-settings="mediaSettings"
           @attach="openFilePicker"
           @browse-library="showFileLibrary = true"
           @send="send('next')"
           @steer="send('steer')"
           @cancel-edit="cancelQueueEdit"
           @transcription="onTranscription"
+          @media-settings="mediaSettings = $event"
         />
       </div>
 

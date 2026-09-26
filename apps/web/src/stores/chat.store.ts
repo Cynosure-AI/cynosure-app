@@ -2,7 +2,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
-import type { ChatQueueDelivery, ContextEvidence, QueuedChatMessageDto } from '@shared/types'
+import type { ChatQueueDelivery, ContextEvidence, MediaGenerationSettings, QueuedChatMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -746,14 +746,14 @@ export const useChatStore = defineStore('chat', () => {
 
     // Messages (delegated)
     sendMessage,
-    async queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: import('@shared/types').ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void> {
+    async queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: import('@shared/types').ChatAttachmentInput[], audioDataUrls?: string[], mediaGeneration?: MediaGenerationSettings): Promise<void> {
       if (!memoryFolders.value.length) await loadMemoryFolders()
       agentConfig.ensureFreeChatPreset()
-      await chatMessages.queueMessage(content, delivery, imageDataUrls, files, audioDataUrls)
+      await chatMessages.queueMessage(content, delivery, imageDataUrls, files, audioDataUrls, mediaGeneration)
       await loadQueue()
     },
-    async updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: import('@shared/types').ChatAttachmentInput[], audioDataUrls?: string[]): Promise<void> {
-      await chatMessages.updateQueuedMessage(id, content, imageDataUrls, files, audioDataUrls)
+    async updateQueuedMessage(id: string, content: string, imageDataUrls?: string[], files?: import('@shared/types').ChatAttachmentInput[], audioDataUrls?: string[], mediaGeneration?: MediaGenerationSettings): Promise<void> {
+      await chatMessages.updateQueuedMessage(id, content, imageDataUrls, files, audioDataUrls, mediaGeneration)
       await loadQueue()
     },
     async removeQueuedMessage(id: string): Promise<void> {

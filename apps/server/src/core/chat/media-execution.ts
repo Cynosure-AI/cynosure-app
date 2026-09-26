@@ -1,7 +1,8 @@
 import type { VideoGenerationJob, VideoGenerationModelInfo, VideoGenerationRequest } from '../gateway/providers/base.provider.js'
+import type { MediaGenerationSettings } from '@shared/types'
 import type { getGateway } from '../gateway/gateway.js'
 import { materializeMediaBuffer } from '../artifacts/image-artifacts.js'
-import { imageParameters, planMediaParameters, videoParameters, type MediaParameterPlan } from './media-parameters.js'
+import { imageParameters, videoParameters, type MediaParameterPlan } from './media-parameters.js'
 
 type Gateway = ReturnType<typeof getGateway>
 
@@ -13,7 +14,7 @@ export interface MediaExecutionInput {
   prompt: string
   imageDataUrls?: string[]
   audioDataUrls?: string[]
-  planner?: { providerId: string; model: string }
+  mediaSettings?: MediaGenerationSettings
   signal: AbortSignal
 }
 
@@ -31,8 +32,8 @@ export async function executeVideoModel(input: MediaExecutionInput): Promise<Med
   const videoModel = await gateway.listVideoModels(providerId)
     .then((models) => models.find((item) => item.id === model || item.canonical_slug === model))
     .catch(() => undefined)
-  const plan = videoParameters(await planMediaParameters({ gateway, kind: 'video', prompt: input.prompt,
-    planner: input.planner, signal }), videoModel)
+  if (input.mediaSettings && input.mediaSettings.kind !== 'video') throw new Error('Image settings cannot be used with a video model')
+  const plan = videoParameters(input.mediaSettings || {}, videoModel)
   const submittedJob = await gateway.generateVideo(buildVideoGenerationRequest({
     model, prompt: input.prompt, imageDataUrls: input.imageDataUrls, videoModel, plan, signal,
   }), providerId)
@@ -52,8 +53,8 @@ export async function executeImageModel(input: MediaExecutionInput): Promise<Med
   const imageModel = await gateway.listImageGenerationModels(providerId)
     .then((models) => models.find((item) => item.id === model))
   if (!imageModel) throw new Error(`Image model ${model} is unavailable on the dedicated image API`)
-  const plan = imageParameters(await planMediaParameters({ gateway, kind: 'image', prompt: input.prompt,
-    planner: input.planner, signal }), imageModel)
+  if (input.mediaSettings && input.mediaSettings.kind !== 'image') throw new Error('Video settings cannot be used with an image model')
+  const plan = imageParameters(input.mediaSettings || {}, imageModel)
   const references = input.imageDataUrls?.filter((url) => typeof url === 'string' && url.trim())
     .map((url) => ({ type: 'image_url' as const, image_url: { url } }))
   const response = await gateway.generateImage({

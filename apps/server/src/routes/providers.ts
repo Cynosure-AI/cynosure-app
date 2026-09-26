@@ -154,6 +154,15 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
     }
   })
 
+  // GET /api/providers/:id/images/models — list image generation models with capabilities
+  app.get<{ Params: { id: string } }>('/:id/images/models', async (req, reply) => {
+    try {
+      return await gateway.listImageGenerationModels(req.params.id)
+    } catch (err) {
+      return reply.status(500).send({ error: (err as Error).message })
+    }
+  })
+
   // POST /api/providers/:id/videos — submit an async video generation job
   app.post<{ Params: { id: string }; Body: VideoGenerationRequest }>('/:id/videos', async (req, reply) => {
     try {

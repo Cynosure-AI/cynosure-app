@@ -9,6 +9,7 @@ import type {
   ModelListItem, StagedChatAttachment,
   VideoGenerationJob,
   VideoGenerationModelInfo,
+  ImageGenerationModelInfo,
   VideoGenerationRequest,
   TranscriptionRequest,
   TranscriptionResponse,
@@ -51,6 +52,8 @@ export const api = {
     },
     listVideoModels: (id: string) =>
       get<VideoGenerationModelInfo[]>(`/api/providers/${encodeURIComponent(id)}/videos/models`),
+    listImageGenerationModels: (id: string) =>
+      get<ImageGenerationModelInfo[]>(`/api/providers/${encodeURIComponent(id)}/images/models`),
     generateVideo: (id: string, request: VideoGenerationRequest) =>
       post<VideoGenerationJob>(`/api/providers/${encodeURIComponent(id)}/videos`, request),
     getVideoJob: (id: string, jobId: string) =>
