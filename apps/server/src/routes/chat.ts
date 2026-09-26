@@ -39,7 +39,7 @@ import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, bu
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
 import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
-import { executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
+import { executeImageModel, executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
 import type { ChatEventDraft, ChatEventPayload, ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
 import type { ChatQueueRequest } from '@shared/types'
 import {
@@ -493,9 +493,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         abortController.signal.throwIfAborted()
         const isVideoOutputModel = resolvedModelInfo?.outputModalities
           ?.some((modality) => modality.toLowerCase() === 'video') === true
+        const isImageOutputModel = resolvedModelInfo?.outputModalities
+          ?.some((modality) => modality.toLowerCase() === 'image') === true
+        const isDedicatedImageModel = (isImageOutputModel || !resolvedModelInfo?.outputModalities?.length)
+          && gateway.getProvider(responseProvider)?.config.type === 'openrouter'
+          && await gateway.listImageGenerationModels(responseProvider)
+            .then((models) => models.some((item) => item.id === responseModel)).catch(() => false)
         const isTranscriptionOutputModel = resolvedModelInfo?.outputModalities
           ?.some((modality) => modality.toLowerCase() === 'transcription') === true
-        if (isVideoOutputModel || isTranscriptionOutputModel) {
+        if (isVideoOutputModel || isDedicatedImageModel || isTranscriptionOutputModel) {
           if (isTranscriptionOutputModel && !providerAudioDataUrls?.length) {
             throw new Error('Transcription models require an attached audio file.')
           }
@@ -503,19 +509,42 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           emitChat({ type: 'stream-start', streamId, scope: 'main', agentId: agentId || undefined,
             agentName: chatAgentName, agentIconUrl: chatAgentIconUrl })
           emitChat({ type: 'content-delta', streamId, scope: 'main', block: { type: 'text',
-            text: isVideoOutputModel ? 'Generating video...' : 'Transcribing audio...' } })
+            text: isVideoOutputModel ? 'Generating video...' : isDedicatedImageModel ? 'Generating image...' : 'Transcribing audio...' } })
+
+          let plannerProvider = titleProviderIdPref && titleModelPref
+            ? { providerId: titleProviderIdPref, model: titleModelPref }
+            : undefined
+          if (!plannerProvider && (isVideoOutputModel || isDedicatedImageModel)) {
+            for (const provider of gateway.getAllProviders().values()) {
+              const candidate = provider.config.defaultModel
+              if (!candidate || (provider.config.id === responseProvider && candidate === responseModel)) continue
+              const info = await gateway.getModelInfo(candidate, provider.config.id).catch(() => null)
+              const modalities = info?.outputModalities?.map((item) => item.toLowerCase())
+              if (modalities?.includes('text') && !modalities.some((item) => item === 'image' || item === 'video')) {
+                plannerProvider = { providerId: provider.config.id, model: candidate }
+                break
+              }
+            }
+          }
+          const activeUserContent = [...messages].reverse().find((message) => message.role === 'user')?.content
+          const activeUserImages = Array.isArray(activeUserContent)
+            ? activeUserContent.flatMap((part) => part.type === 'image_url' ? [part.image_url.url] : [])
+            : []
+          const mediaImageDataUrls = activeUserImages.length ? activeUserImages : providerImageDataUrls
 
           const mediaInput = {
             gateway, conversationId, model: responseModel, providerId: responseProvider,
-            prompt: normalizedContent, imageDataUrls: providerImageDataUrls,
-            audioDataUrls: providerAudioDataUrls, signal: abortController.signal,
+            prompt: normalizedContent, imageDataUrls: mediaImageDataUrls,
+            audioDataUrls: providerAudioDataUrls, planner: plannerProvider, signal: abortController.signal,
           }
           const media = isVideoOutputModel
             ? await executeVideoModel(mediaInput)
-            : await executeTranscriptionModel(mediaInput)
+            : isDedicatedImageModel ? await executeImageModel(mediaInput) : await executeTranscriptionModel(mediaInput)
           abortController.signal.throwIfAborted()
           if (media.videos?.length) {
             emitChat({ type: 'media-added', streamId, scope: 'main', blocks: media.videos.map((url) => ({ type: 'video', artifactId: url, url })) })
+          } else if (media.images?.length) {
+            emitChat({ type: 'media-added', streamId, scope: 'main', blocks: media.images.map((url) => ({ type: 'image', artifactId: url, url })) })
           } else {
             emitChat({ type: 'content-delta', streamId, scope: 'main', block: { type: 'text', text: `\n\n${media.content}` } })
           }
@@ -523,8 +552,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           abortController.signal.throwIfAborted()
 
           const assistant = persistAssistantTurn(db, executionBroadcast, {
-            conversationId, streamId, content: media.content, videos: media.videos,
-            generatedMedia: Boolean(media.videos?.length), agentId,
+            conversationId, streamId, content: media.content, videos: media.videos, images: media.images,
+            generatedMedia: Boolean(media.videos?.length || media.images?.length), agentId,
             provider: responseProvider, model: responseModel, startedAt: now,
             promptTokens: media.promptTokens || null,
             completionTokens: media.completionTokens || null,
