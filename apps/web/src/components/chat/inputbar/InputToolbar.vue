@@ -11,6 +11,8 @@ import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
 import SplitButton from "../../shared/SplitButton.vue";
 import ChatOptionsMenu from "./ChatOptionsMenu.vue";
 import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
+import MediaSettingsButton from "./MediaSettingsButton.vue";
+import type { MediaGenerationSettings } from '@shared/types';
 import {
   modelPricingSummary,
 } from "../../../utils/model-pricing";
@@ -20,6 +22,10 @@ defineProps<{
   canSend: boolean;
   isRunning: boolean;
   editingQueue: boolean;
+  mediaKind?: 'image' | 'video';
+  mediaProviderId?: string;
+  mediaModel?: string;
+  mediaSettings?: MediaGenerationSettings | null;
 }>();
 
 const emit = defineEmits<{
@@ -29,6 +35,7 @@ const emit = defineEmits<{
   steer: [];
   cancelEdit: [];
   transcription: [text: string];
+  mediaSettings: [value: MediaGenerationSettings | null];
 }>();
 
 const chatStore = useChatStore();
@@ -186,6 +193,15 @@ async function toggleMic(): Promise<void> {
     <ChatOptionsMenu
       @attach="emit('attach')"
       @browse-library="emit('browseLibrary')"
+    />
+
+    <MediaSettingsButton
+      v-if="mediaKind && mediaProviderId && mediaModel"
+      :kind="mediaKind"
+      :provider-id="mediaProviderId"
+      :model="mediaModel"
+      :value="mediaSettings || null"
+      @change="emit('mediaSettings', $event)"
     />
 
     

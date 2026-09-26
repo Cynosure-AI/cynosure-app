@@ -195,6 +195,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         titleProviderId: titleProviderIdPref,
         titleModel: titleModelPref,
         inlineAttachmentTextLimit: reqInlineAttachmentTextLimit,
+        mediaGeneration: reqMediaGeneration,
       } = run
       cancelPostActions(conversationId)
       clearQuickResponses(conversationId, broadcast)
@@ -511,21 +512,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           emitChat({ type: 'content-delta', streamId, scope: 'main', block: { type: 'text',
             text: isVideoOutputModel ? 'Generating video...' : isDedicatedImageModel ? 'Generating image...' : 'Transcribing audio...' } })
 
-          let plannerProvider = titleProviderIdPref && titleModelPref
-            ? { providerId: titleProviderIdPref, model: titleModelPref }
-            : undefined
-          if (!plannerProvider && (isVideoOutputModel || isDedicatedImageModel)) {
-            for (const provider of gateway.getAllProviders().values()) {
-              const candidate = provider.config.defaultModel
-              if (!candidate || (provider.config.id === responseProvider && candidate === responseModel)) continue
-              const info = await gateway.getModelInfo(candidate, provider.config.id).catch(() => null)
-              const modalities = info?.outputModalities?.map((item) => item.toLowerCase())
-              if (modalities?.includes('text') && !modalities.some((item) => item === 'image' || item === 'video')) {
-                plannerProvider = { providerId: provider.config.id, model: candidate }
-                break
-              }
-            }
-          }
           const activeUserContent = [...messages].reverse().find((message) => message.role === 'user')?.content
           const activeUserImages = Array.isArray(activeUserContent)
             ? activeUserContent.flatMap((part) => part.type === 'image_url' ? [part.image_url.url] : [])
@@ -535,7 +521,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           const mediaInput = {
             gateway, conversationId, model: responseModel, providerId: responseProvider,
             prompt: normalizedContent, imageDataUrls: mediaImageDataUrls,
-            audioDataUrls: providerAudioDataUrls, planner: plannerProvider, signal: abortController.signal,
+            audioDataUrls: providerAudioDataUrls, mediaSettings: reqMediaGeneration,
+            signal: abortController.signal,
           }
           const media = isVideoOutputModel
             ? await executeVideoModel(mediaInput)
