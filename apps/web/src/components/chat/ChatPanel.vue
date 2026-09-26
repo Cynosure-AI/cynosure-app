@@ -16,9 +16,9 @@ import HITLDialog from '../agent/HITLDialog.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import RichContent from '../shared/RichContent.vue'
 import { Icon } from '@iconify/vue'
+import { useRoute } from 'vue-router'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
-import QuickPicker from './QuickPicker.vue'
 
 const props = withDefaults(defineProps<{
   searchOpen?: boolean
@@ -29,6 +29,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ closeSearch: []; selectQuickResponse: [suggestion: string] }>()
 
 const chatStore = useChatStore()
+const route = useRoute()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const prefs = usePreferencesStore()
@@ -698,23 +699,30 @@ onMounted(() => {
       v-else-if="chatStore.messages.length === 0"
       class="flex flex-col items-center justify-center h-full text-theme-400"
     >
-      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl">
-        <div
-          v-if="activeAgentIconUrl"
-          class="absolute inset-0 overflow-hidden rounded-3xl"
+      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
+        <RouterLink
+          v-if="conversationAgentId"
+          :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"
+          :aria-label="`Open ${activeAgentName ?? 'agent'} settings`"
+          class="absolute inset-0 flex items-center justify-center"
         >
           <img
+            v-if="activeAgentIconUrl"
             :src="activeAgentIconUrl"
             class="w-full h-full object-cover"
             alt=""
           >
-        </div>
+          <Icon
+            v-else
+            icon="lucide:bot-message-square"
+            class="w-10 h-10 text-accent-400"
+          />
+        </RouterLink>
         <Icon
           v-else
-          :icon="conversationAgentId ? 'lucide:bot-message-square' : 'lucide:message-square'"
+          icon="lucide:message-square"
           class="w-10 h-10 text-accent-400"
         />
-        <QuickPicker />
       </div>
       <template v-if="!wsConnected">
         <Icon
