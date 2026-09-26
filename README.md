@@ -33,6 +33,10 @@ apps/
 mcps/        — Built-in MCP tool servers (media converter, diagrams, weather, etc.)
 ```
 
+## Architecture notes
+
+- [Agent, routing, sub-agent, and media chat flows](ARCHITECTURE.md)
+
 ## Prerequisites
 
 - **Node.js** ≥ 22 (required by `unpdf`)
