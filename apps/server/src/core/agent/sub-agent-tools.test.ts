@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
     prepareAgentExecution: vi.fn(),
     dbPrepare: vi.fn(),
     session: undefined as { invocation_id: string; agent_id: string; history_json: string } | undefined,
+    attachmentMessages: [] as Array<{ id: string; image_urls_json: string | null; audio_urls_json: string | null; created_at: number }>,
+    attachmentFiles: [] as Array<{ id: string; message_id: string; name: string; original_path: string | null; text_path: string | null; created_at: number }>,
     executorResult: { content: '', images: [], thinking: '', toolRounds: 0 },
 }))
 
@@ -58,10 +60,13 @@ describe('sub-agent execution', () => {
         mocks.executorConfig = undefined
         mocks.executorMessages = undefined
         mocks.session = undefined
+        mocks.attachmentMessages = []
+        mocks.attachmentFiles = []
         mocks.executorResult = { content: '', images: [], thinking: '', toolRounds: 0 }
         mocks.dbPrepare.mockReset().mockImplementation((sql: string) => ({
             run: vi.fn(),
             get: vi.fn(() => sql.includes('SELECT invocation_id') ? mocks.session : undefined),
+            all: vi.fn(() => sql.includes('FROM message_attachments') ? mocks.attachmentFiles : mocks.attachmentMessages),
         }))
         mocks.prepareAgentExecution.mockReset().mockResolvedValue({
             providerId: 'provider',
@@ -118,6 +123,61 @@ describe('sub-agent execution', () => {
         })
         expect(continueTool.execution).toEqual({ readOnly: false })
         expect(continueTool.annotations).toEqual(tool.annotations)
+    })
+
+    test('declares an optional one-based attachment reference', () => {
+        const [tool] = buildSubAgentTools({
+            subAgents: [{ agentId: 'worker' }],
+            conversationId: 'conversation',
+            broadcast: vi.fn(),
+        })
+
+        expect(tool.parameters).toEqual(expect.objectContaining({
+            properties: expect.objectContaining({
+                attachmentIndex: expect.objectContaining({ type: 'integer', minimum: 1 }),
+            }),
+            required: ['internalName', 'instructions'],
+        }))
+    })
+
+    test('passes a referenced conversation image to the spawned sub-agent', async () => {
+        mocks.attachmentMessages = [{
+            id: 'message',
+            image_urls_json: JSON.stringify(['data:image/png;base64,aW1hZ2U=']),
+            audio_urls_json: null,
+            created_at: 1,
+        }]
+        const [tool] = buildSubAgentTools({
+            subAgents: [{ agentId: 'worker' }],
+            conversationId: 'conversation',
+            broadcast: vi.fn(),
+        })
+
+        const result = await tool.execute({ internalName: 'worker', instructions: 'Edit this image', attachmentIndex: 1 })
+
+        expect(result.success).toBe(true)
+        expect(mocks.executorMessages).toEqual([{
+            role: 'user',
+            content: [
+                { type: 'text', text: 'Edit this image' },
+                { type: 'image_url', image_url: { url: 'data:image/png;base64,aW1hZ2U=' } },
+            ],
+        }])
+        expect(mocks.prepareAgentExecution).toHaveBeenCalledWith(expect.objectContaining({ userQuery: 'Edit this image' }))
+    })
+
+    test('rejects an attachment reference outside the current conversation', async () => {
+        const [tool] = buildSubAgentTools({
+            subAgents: [{ agentId: 'worker' }],
+            conversationId: 'conversation',
+            broadcast: vi.fn(),
+        })
+
+        const result = await tool.execute({ internalName: 'worker', instructions: 'Edit it', attachmentIndex: 1 })
+
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('Attachment index 1 does not exist in this conversation.')
+        expect(mocks.prepareAgentExecution).not.toHaveBeenCalled()
     })
 
     test('returns a durable invocation ID from spawn', async () => {
