@@ -38,6 +38,18 @@ const availableMemoryFolderIds = ref<Set<string> | null>(null)
 const agentId = computed(() => route.params.id as string)
 const agent = computed(() => agentDefs.get(agentId.value))
 const activeSection = computed(() => sections.find(section => section.id === activeSectionId.value) || sections[0])
+const returnToChat = computed(() => {
+  const target = route.query.returnTo
+  if (typeof target !== 'string' || !target.startsWith('/chat')) return null
+  const destination = router.resolve(target)
+  return destination.name === 'triggers-chat' || destination.name === 'conversation'
+    ? target
+    : null
+})
+
+function goBack(): void {
+  void router.push(returnToChat.value ?? '/agents')
+}
 
 onMounted(async () => {
   void api.memoryFolders.list()
@@ -148,14 +160,14 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-300"
-            aria-label="Back to agents"
-            @click="router.push('/agents')"
+            :aria-label="returnToChat ? 'Back to chat' : 'Back to agents'"
+            @click="goBack"
           >
             <Icon
               icon="lucide:arrow-left"
               class="h-4 w-4"
             />
-            <span>Agents</span>
+            <span>{{ returnToChat ? 'Chat' : 'Agents' }}</span>
           </button>
 
           <button
