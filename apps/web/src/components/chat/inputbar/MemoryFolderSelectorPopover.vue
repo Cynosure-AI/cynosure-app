@@ -250,7 +250,7 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-2 border-b border-theme-700 px-3 py-3">
           <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-500/10 text-accent-400">
             <Icon
-              icon="lucide:brain"
+              icon="lucide:database"
               class="h-4 w-4"
             />
           </span>

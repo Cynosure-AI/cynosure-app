@@ -247,7 +247,7 @@ const imageGridClass = computed(() => {
         <CollapsibleSection
           v-model="thinkingExpanded"
           header-label="Thinking"
-          header-icon="lucide:brain"
+          header-icon="lucide:database"
           header-class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] rounded-xl transition-colors hover:bg-indigo-500/10"
           header-text-class="font-medium text-indigo-400"
           chevron-class="h-3.5 w-3.5 text-indigo-300/70"

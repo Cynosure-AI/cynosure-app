@@ -87,7 +87,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-emerald-500 dark:text-emerald-400' },
   'ma-error': { label: 'Error', icon: 'lucide:alert-circle', color: 'text-red-500 dark:text-red-400' },
   'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-theme-400' },
-  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:brain', color: 'text-accent-500 dark:text-accent-300' },
+  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:database', color: 'text-accent-500 dark:text-accent-300' },
 }
 
 const argCache = new Map<string, Record<string, unknown> | null>()
@@ -363,7 +363,7 @@ function isCuratedContext(section: Pick<ContextSection, 'status' | 'phase'>): bo
 
 function contextSectionIcon(section: ContextSection): string {
   if (section.kind === 'entity') return 'lucide:network'
-  if (isCuratedContext(section)) return section.kind === 'memory' ? 'lucide:brain' : 'lucide:package-check'
+  if (isCuratedContext(section)) return section.kind === 'memory' ? 'lucide:database' : 'lucide:package-check'
   return section.kind === 'memory' ? 'lucide:brain-circuit' : 'lucide:database'
 }
 
@@ -404,7 +404,7 @@ function toolCallIcon(call?: ToolCall | null): string {
   if (isTaskContextCall(call)) return 'lucide:compass'
   if (isSubAgentSpawnCall(call.name)) return 'lucide:bot'
   if (isKnowledgeGraphCall(call)) return 'lucide:network'
-  if (isMemoryCall(call)) return 'lucide:brain'
+  if (isMemoryCall(call)) return 'lucide:database'
   return 'lucide:terminal'
 }
 

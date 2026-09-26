@@ -67,7 +67,7 @@ const categories: SettingsCategory[] = [
     id: 'memory',
     label: 'Memory',
     description: 'Tune embeddings, Deep Research, reranking, and vector storage.',
-    icon: 'lucide:brain',
+    icon: 'lucide:database',
     component: MemorySettings
   },
   {

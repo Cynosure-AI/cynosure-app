@@ -224,7 +224,7 @@ onMounted(() => loadFolders())
       <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-2">
           <Icon
-            icon="lucide:brain"
+            icon="lucide:database"
             class="w-4 h-4 text-accent-400"
           />
           <h3 class="text-sm font-medium text-theme-200">
@@ -345,7 +345,7 @@ onMounted(() => loadFolders())
           class="text-center py-6"
         >
           <Icon
-            icon="lucide:brain"
+            icon="lucide:database"
             class="w-8 h-8 text-theme-700 mx-auto mb-2"
           />
           <p class="text-sm text-theme-500">

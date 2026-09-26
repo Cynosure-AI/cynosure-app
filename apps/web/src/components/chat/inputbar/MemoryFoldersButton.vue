@@ -40,7 +40,7 @@ const autoMemoryEnabled = computed(() => chatStore.sessionAutoMemory === true)
           @click="toggle"
         >
           <Icon
-            icon="lucide:brain"
+            icon="lucide:database"
             class="h-5 w-5"
             :class="{ 'text-emerald-600': chatStore.sessionAutoMemory === true }"
           />

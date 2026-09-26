@@ -270,7 +270,7 @@ const cards = computed<ContextCard[]>(() => {
         key: `${channel}-${stepIndex}-${String(args(channelCalls[0]).contextPhase || args(channelCalls[0]).type)}`,
         label: selectionLabel(channel, channelCalls, final),
         summary: method === 'reranker' ? 'Reranker selection' : method === 'llm' ? 'AI selection' : method === 'automatic' ? 'Included complete small toolset' : method === 'semantic' ? 'Embedding similarity' : method === 'lexical' ? 'Lexical matching' : 'Retrieval results',
-        icon: final ? 'lucide:check' : channel === 'memory' ? 'lucide:brain' : args(channelCalls[0]).type === 'toolset-router' ? 'lucide:boxes' : 'lucide:wrench',
+        icon: final ? 'lucide:check' : channel === 'memory' ? 'lucide:database' : args(channelCalls[0]).type === 'toolset-router' ? 'lucide:boxes' : 'lucide:wrench',
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
         // Keep the effective final tool list on the completion item so users can

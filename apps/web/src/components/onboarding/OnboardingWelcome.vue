@@ -90,7 +90,7 @@ const features = [
   {
     title: 'Add Memory',
     description: 'Give agents durable knowledge and useful long-term context.',
-    icon: 'lucide:brain',
+    icon: 'lucide:database',
   },
 ]
 </script>
