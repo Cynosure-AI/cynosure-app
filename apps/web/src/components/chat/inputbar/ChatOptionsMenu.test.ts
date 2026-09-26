@@ -25,6 +25,12 @@ const agentDefs = reactive({ agents: [] as unknown[] })
 vi.mock('../../../stores/chat.store', () => ({ useChatStore: () => chatStore }))
 vi.mock('../../../stores/agent-runtime.store', () => ({ useAgentStore: () => agentStore }))
 vi.mock('../../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => agentDefs }))
+vi.mock('../../../composables/useMcpServers', () => ({
+  useMcpServers: () => ({
+    servers: { value: [{ id: 'docs', icon_url: '/docs-icon.png' }] },
+    loadServers: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
 
 describe('ChatOptionsMenu', () => {
   beforeEach(() => {
@@ -35,7 +41,7 @@ describe('ChatOptionsMenu', () => {
     chatStore.markOverridesModified.mockClear()
   })
 
-  test('filters options and opens the file submenu', async () => {
+  test('opens the file submenu without a main-menu filter', async () => {
     const wrapper = mount(ChatOptionsMenu, {
       attachTo: document.body,
       global: { stubs: { SystemPromptModal: true } },
@@ -44,13 +50,9 @@ describe('ChatOptionsMenu', () => {
     await flushPromises()
 
     const menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
-    const search = menu.querySelector('[aria-label="Filter chat options"]') as HTMLInputElement
-    search.value = 'files'
-    search.dispatchEvent(new Event('input', { bubbles: true }))
-    await flushPromises()
-
+    expect(menu.querySelector('input[type="search"]')).toBeNull()
     expect(menu.textContent).toContain('Files')
-    expect(menu.textContent).not.toContain('Subagents')
+    expect(menu.textContent).toContain('Subagents')
     const files = [...menu.querySelectorAll('button')].find(button => button.textContent?.includes('Upload or select'))!
     files.click()
     await flushPromises()
@@ -82,11 +84,11 @@ describe('ChatOptionsMenu', () => {
     wrapper.unmount()
   })
 
-  test('filters and selects a tool inside its namespace', async () => {
-    agentStore.availableTools = [{
-      key: 'search-key', name: 'Search', description: 'Find documents',
-      namespace: { id: 'mcp:docs', label: 'Documents' },
-    }]
+  test('selects an entire MCP namespace and opens its searchable tool list', async () => {
+    agentStore.availableTools = [
+      { key: 'search-key', name: 'Search', description: 'Find documents', namespace: { id: 'mcp:docs', label: 'Documents' } },
+      { key: 'write-key', name: 'Write', description: 'Create documents', namespace: { id: 'mcp:docs', label: 'Documents' } },
+    ]
     const wrapper = mount(ChatOptionsMenu, {
       attachTo: document.body,
       global: { stubs: { SystemPromptModal: true } },
@@ -96,7 +98,10 @@ describe('ChatOptionsMenu', () => {
     const menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
     ;([...menu.querySelectorAll('button')].find(button => button.textContent?.includes('Enable and configure tools')) as HTMLButtonElement).click()
     await flushPromises()
-    ;([...menu.querySelectorAll('button')].find(button => button.textContent?.includes('Documents')) as HTMLButtonElement).click()
+    expect(menu.querySelector('img[src="/docs-icon.png"]')).not.toBeNull()
+    ;(menu.querySelector('[aria-label="Select all tools in Documents"]') as HTMLButtonElement).click()
+    expect(chatStore.selectedToolNames).toEqual(['search-key', 'write-key'])
+    ;(menu.querySelector('[aria-label="Open Documents tools"]') as HTMLButtonElement).click()
     await flushPromises()
 
     const filter = menu.querySelector('[aria-label="Search tools"]') as HTMLInputElement
@@ -106,7 +111,7 @@ describe('ChatOptionsMenu', () => {
     expect(menu.textContent).toContain('Search')
     ;(menu.querySelector('input[type="checkbox"]') as HTMLInputElement).click()
     await flushPromises()
-    expect(chatStore.selectedToolNames).toEqual(['search-key'])
+    expect(chatStore.selectedToolNames).toEqual(['write-key'])
     wrapper.unmount()
   })
 })

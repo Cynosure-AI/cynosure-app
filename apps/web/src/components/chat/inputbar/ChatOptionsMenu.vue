@@ -9,6 +9,7 @@ import { Icon } from '@iconify/vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
+import { useMcpServers } from '../../../composables/useMcpServers'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
 import { isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../../utils/memory-folder-selection'
 import SystemPromptModal from '../modals/SystemPromptModal.vue'
@@ -17,6 +18,7 @@ const emit = defineEmits<{ attach: []; browseLibrary: [] }>()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
+const { servers, loadServers } = useMcpServers()
 
 type Panel = 'main' | 'files' | 'tools' | 'memory' | 'agents' | 'reasoning'
 const root = ref<HTMLElement | null>(null)
@@ -28,16 +30,16 @@ const folderPath = ref<string | null>(null)
 const toolNamespace = ref<string | null>(null)
 const showSystemPrompt = ref(false)
 const menuStyle = ref<CSSProperties>({})
+const brokenMcpIcons = ref<Set<string>>(new Set())
 
 const entries = [
-  { id: 'files', label: 'Files', detail: 'Upload or select from library', icon: 'lucide:paperclip', keywords: 'attachment upload library' },
-  { id: 'tools', label: 'Tools (MCPs)', detail: 'Enable and configure tools', icon: 'lucide:wrench', keywords: 'mcp tools automatic' },
-  { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:brain', keywords: 'folders knowledge automatic' },
-  { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users', keywords: 'delegate agents' },
-  { id: 'reasoning', label: 'Reasoning', detail: 'Set thinking effort', icon: 'lucide:lightbulb', keywords: 'thinking planning' },
-  { id: 'prompt', label: 'System Prompt', detail: 'View and edit system prompt', icon: 'lucide:scroll-text', keywords: 'instructions' },
+  { id: 'files', label: 'Files', detail: 'Upload or select from library', icon: 'lucide:paperclip' },
+  { id: 'tools', label: 'Tools (MCPs)', detail: 'Enable and configure tools', icon: 'lucide:wrench' },
+  { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:brain' },
+  { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users' },
+  { id: 'reasoning', label: 'Reasoning', detail: 'Set thinking effort', icon: 'lucide:lightbulb' },
+  { id: 'prompt', label: 'System Prompt', detail: 'View and edit system prompt', icon: 'lucide:scroll-text' },
 ] as const
-const visibleEntries = computed(() => entries.filter(item => `${item.label} ${item.detail} ${item.keywords}`.toLowerCase().includes(search.value.toLowerCase().trim())))
 const selectableTools = computed(() => agentStore.availableTools.filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name))))
 const toolGroups = computed(() => {
   const groups = new Map<string, { id: string; label: string; tools: ToolInfo[] }>()
@@ -117,6 +119,29 @@ function toggleTool(tool: ToolInfo): void {
   else selected.add(tool.key)
   chatStore.setSelectedToolNames([...selected])
 }
+function groupSelected(group: { tools: ToolInfo[] }): boolean {
+  return group.tools.length > 0 && group.tools.every(tool => chatStore.selectedToolNames.includes(tool.key))
+}
+function groupSelectionState(group: { tools: ToolInfo[] }): boolean | 'mixed' {
+  if (groupSelected(group)) return true
+  return group.tools.some(tool => chatStore.selectedToolNames.includes(tool.key)) ? 'mixed' : false
+}
+function toggleGroup(group: { tools: ToolInfo[] }): void {
+  const selected = new Set(chatStore.selectedToolNames)
+  const shouldSelect = !groupSelected(group)
+  for (const tool of group.tools) {
+    if (shouldSelect) selected.add(tool.key)
+    else selected.delete(tool.key)
+  }
+  chatStore.setSelectedToolNames([...selected])
+}
+function namespaceIcon(namespaceId: string): string | null {
+  if (!namespaceId.startsWith('mcp:') || brokenMcpIcons.value.has(namespaceId)) return null
+  return servers.value.find(server => server.id === namespaceId.slice(4))?.icon_url ?? null
+}
+function markIconBroken(namespaceId: string): void {
+  brokenMcpIcons.value = new Set([...brokenMcpIcons.value, namespaceId])
+}
 function toggleAgent(id: string): void {
   const index = chatStore.freeChatSubAgentIds.indexOf(id)
   if (index < 0) chatStore.freeChatSubAgentIds.push(id)
@@ -135,6 +160,7 @@ function navigate(next: Panel): void {
   panel.value = next
   search.value = ''
   if (next === 'memory') void chatStore.loadMemoryFolders()
+  if (next === 'tools' && !servers.value.length) void loadServers().catch(() => undefined)
 }
 function selectEntry(id: string): void {
   if (id === 'prompt') {
@@ -243,7 +269,7 @@ onBeforeUnmount(() => {
         <span class="text-xs font-semibold">{{ panel === 'tools' && toolNamespace ? toolGroups.find(group => group.id === toolNamespace)?.label : panel === 'memory' && activeFolder ? activeFolder.name : entries.find(item => item.id === panel)?.label }}</span>
       </div>
       <div
-        v-if="panel !== 'reasoning' && panel !== 'files'"
+        v-if="panel !== 'main' && panel !== 'reasoning' && panel !== 'files'"
         class="border-b border-theme-800 p-2"
       >
         <label class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-2 focus-within:border-accent-500">
@@ -255,15 +281,15 @@ onBeforeUnmount(() => {
             v-model="search"
             type="search"
             class="min-w-0 flex-1 bg-transparent text-xs text-theme-100 outline-none placeholder:text-theme-500"
-            :placeholder="panel === 'main' ? 'Filter options…' : `Search ${panel}…`"
-            :aria-label="panel === 'main' ? 'Filter chat options' : `Search ${panel}`"
+            :placeholder="`Search ${panel}…`"
+            :aria-label="`Search ${panel}`"
           >
         </label>
       </div>
       <div class="min-h-0 overflow-y-auto p-1.5">
         <template v-if="panel === 'main'">
           <template
-            v-for="entry in visibleEntries"
+            v-for="entry in entries"
             :key="entry.id"
           >
             <button
@@ -322,12 +348,6 @@ onBeforeUnmount(() => {
               /></span>
             </button>
           </template>
-          <div
-            v-if="!visibleEntries.length"
-            class="px-3 py-5 text-center text-xs text-theme-500"
-          >
-            No options match “{{ search }}”
-          </div>
         </template>
         <template v-else-if="panel === 'files'">
           <button
@@ -353,21 +373,58 @@ onBeforeUnmount(() => {
         </template>
         <template v-else-if="panel === 'tools'">
           <template v-if="!toolNamespace">
-            <button
+            <div
               v-for="group in toolGroups"
               :key="group.id"
-              type="button"
-              class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800"
-              @click="toolNamespace = group.id; search = ''"
+              class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800"
+              @click="toggleGroup(group)"
             >
-              <Icon
-                icon="lucide:blocks"
-                class="h-4 w-4"
-              /><span class="min-w-0 flex-1 truncate text-xs">{{ group.label }}</span><span class="text-[10px] text-theme-500">{{ group.tools.filter(tool => chatStore.selectedToolNames.includes(tool.key)).length }}/{{ group.tools.length }}</span><Icon
-                icon="lucide:chevron-right"
-                class="h-4 w-4 text-theme-500"
-              />
-            </button>
+              <button
+                type="button"
+                class="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500"
+                role="checkbox"
+                :aria-checked="groupSelectionState(group)"
+                :aria-label="`Select all tools in ${group.label}`"
+              >
+                <span
+                  class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                  :class="groupSelectionState(group) ? 'border-accent-500 bg-accent-500 text-white' : 'border-theme-600 bg-theme-950'"
+                >
+                  <Icon
+                    v-if="groupSelectionState(group)"
+                    :icon="groupSelected(group) ? 'lucide:check' : 'lucide:minus'"
+                    class="h-3 w-3"
+                  />
+                </span>
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
+                  <img
+                    v-if="namespaceIcon(group.id)"
+                    :src="namespaceIcon(group.id)!"
+                    alt=""
+                    class="h-6 w-6 object-contain"
+                    @error="markIconBroken(group.id)"
+                  >
+                  <Icon
+                    v-else
+                    :icon="isBuiltInNamespaceId(group.id) ? 'lucide:blocks' : 'lucide:plug'"
+                    class="h-4 w-4 text-theme-400"
+                  />
+                </span>
+                <span class="min-w-0 flex-1 truncate text-xs">{{ group.label }}</span>
+              </button>
+              <span class="text-[10px] text-theme-500">{{ group.tools.filter(tool => chatStore.selectedToolNames.includes(tool.key)).length }}/{{ group.tools.length }}</span>
+              <button
+                type="button"
+                class="rounded p-1 text-theme-500 hover:bg-theme-700 hover:text-theme-200"
+                :aria-label="`Open ${group.label} tools`"
+                @click.stop="toolNamespace = group.id; search = ''"
+              >
+                <Icon
+                  icon="lucide:chevron-right"
+                  class="h-4 w-4"
+                />
+              </button>
+            </div>
             <div
               v-if="!toolGroups.length"
               class="px-3 py-5 text-center text-xs text-theme-500"
