@@ -227,6 +227,7 @@ function startServer(): Promise<void> {
             ...process.env,
             PATH: getFullPath(),
             CYNOSURE_DATA_DIR: getDataDir(),
+            FILE_ACCESS_ALLOWED_DIRECTORIES: process.env.FILE_ACCESS_ALLOWED_DIRECTORIES || homedir(),
             NODE_ENV: is.dev ? 'development' : 'production'
         }
 
