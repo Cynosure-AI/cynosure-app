@@ -40,6 +40,7 @@ export interface ChatAgentConfigApi {
     freeChatMemorySelectionInitialized: Ref<boolean>
     hasAgentOverrides: ComputedRef<boolean>
     agentOverrideFields: ComputedRef<string[]>
+    freeChatOverrideFields: ComputedRef<string[]>
     hasFreeChatOverrides: ComputedRef<boolean>
     markOverridesModified(): void
     setSelectedToolNames(names: string[]): void
@@ -317,9 +318,7 @@ export function useChatAgentConfig(
         }
     }
 
-    const agentOverrideFields = computed(() => {
-        if (!activeAgentId.value) return []
-        const { preset, model, providerId } = agentPreset(activeAgentId.value)
+    function presetChangedFields(preset: ChatPreset): string[] {
         const fields: string[] = []
         if (!arraysEqual(selectedToolNames.value, preset.tools)) fields.push('Tools')
         if (!arraysEqual(freeChatSubAgentIds.value, preset.subAgentIds)) fields.push('Sub-agents')
@@ -329,6 +328,17 @@ export function useChatAgentConfig(
         if (sessionReasoningEffort.value !== preset.reasoningEffort) fields.push('Reasoning effort')
         if (sessionAutoToolRouting.value !== preset.autoToolRouting) fields.push('Automatic tool routing')
         if (sessionAutoMemory.value !== preset.autoMemory) fields.push('Automatic memory')
+        return fields
+    }
+
+    const freeChatOverrideFields = computed(() =>
+        activeAgentId.value ? [] : presetChangedFields(regularFreeChatPreset())
+    )
+
+    const agentOverrideFields = computed(() => {
+        if (!activeAgentId.value) return []
+        const { preset, model, providerId } = agentPreset(activeAgentId.value)
+        const fields = presetChangedFields(preset)
 
         const effectiveProvider = sessionProviderOverride.value ?? providerId
         const effectiveModel = sessionProviderOverride.value && !sessionModelOverride.value
@@ -579,6 +589,7 @@ export function useChatAgentConfig(
         agentOriginalMemoryFolderIds,
         hasAgentOverrides,
         agentOverrideFields,
+        freeChatOverrideFields,
         hasFreeChatOverrides,
         markOverridesModified,
         setSelectedToolNames,
