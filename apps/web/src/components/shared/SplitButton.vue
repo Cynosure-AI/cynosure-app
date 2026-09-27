@@ -25,12 +25,14 @@ const menuStyle = computed(() => {
 
 const props = withDefaults(defineProps<{
   disabled?: boolean
+  primaryDisabled?: boolean
   title?: string
   primaryLabel: string
   menuLabel: string
   placement?: 'above' | 'below'
 }>(), {
   disabled: false,
+  primaryDisabled: false,
   title: undefined,
   placement: 'below',
 })
@@ -62,7 +64,7 @@ onBeforeUnmount(() => {
   >
     <button
       type="button"
-      :disabled="disabled"
+      :disabled="disabled || primaryDisabled"
       class="inline-flex items-center gap-1.5 rounded-l-lg bg-accent-600 px-2.5 py-1 text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
       :title="title"
       :aria-label="primaryLabel"
