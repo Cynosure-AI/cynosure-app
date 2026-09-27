@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
 import type { ChatStreamingState } from './useChatStreaming'
 import type { DisplayMessage } from '../stores/chat.store'
-import type { ReasoningEffort } from '@shared/types'
+import type { MediaGenerationSettings, ReasoningEffort } from '@shared/types'
 
 const mocks = vi.hoisted(() => ({
   chat: {
@@ -73,6 +73,7 @@ function setup(initialConversationId: string | null = 'conversation') {
     freeChatMemoryFolderIds: ref(['memory-space']),
     freeChatMemorySelectionInitialized: ref(true),
   }
+  const mediaGenerationSettings = ref<MediaGenerationSettings | null>(null)
   const createConversation = vi.fn(async () => {
     activeConversationId.value = 'created-conversation'
     return 'created-conversation'
@@ -84,8 +85,9 @@ function setup(initialConversationId: string | null = 'conversation') {
     streaming,
     createConversation,
     agentConfig,
+    mediaGenerationSettings,
   )
-  return { api, activeConversationId, messages, streaming, createConversation, agentConfig }
+  return { api, activeConversationId, messages, streaming, createConversation, agentConfig, mediaGenerationSettings }
 }
 
 describe('chat message actions', () => {
@@ -225,6 +227,34 @@ describe('chat message actions', () => {
     expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({
       content: 'Try again',
       imageDataUrls: ['image'],
+    }))
+  })
+
+  test.each([
+    { kind: 'video', resolution: '1080p', duration: 8, aspect_ratio: '9:16' },
+    { kind: 'image', resolution: '2K', aspect_ratio: '1:1', n: 2 },
+  ] as MediaGenerationSettings[])('retries with current $kind settings', async (settings) => {
+    const state = setup()
+    state.mediaGenerationSettings.value = settings
+    state.messages.value = [{ id: 'user', role: 'user', content: 'Generate media', createdAt: 10 }]
+
+    await state.api.retryFromMessage('user')
+
+    expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({
+      run: expect.objectContaining({ mediaGeneration: settings }),
+    }))
+  })
+
+  test('edits an image request with the current image settings', async () => {
+    const state = setup()
+    state.mediaGenerationSettings.value = { kind: 'image', resolution: '2K', n: 2 }
+    state.messages.value = [{ id: 'user', role: 'user', content: 'Old prompt', createdAt: 10 }]
+
+    await state.api.editMessage('user', 'New prompt')
+
+    expect(mocks.chat.send).toHaveBeenCalledWith('conversation', expect.objectContaining({
+      content: 'New prompt',
+      run: expect.objectContaining({ mediaGeneration: { kind: 'image', resolution: '2K', n: 2 } }),
     }))
   })
 

@@ -66,6 +66,7 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
   const messages = ref<DisplayMessage[]>([])
+  const mediaGenerationSettings = ref<MediaGenerationSettings | null>(null)
   const loadingMessages = ref(false)
   const lastLoadedEventCursor = ref<{ conversationId: string; sequence: number } | null>(null)
   const contextWindow = ref<number | null>(null)
@@ -252,6 +253,7 @@ export const useChatStore = defineStore('chat', () => {
     streaming,
     createConversation,
     agentConfig,
+    mediaGenerationSettings,
   )
 
   async function sendMessage(...args: Parameters<typeof chatMessages.sendMessage>): Promise<void> {
@@ -654,6 +656,7 @@ export const useChatStore = defineStore('chat', () => {
     sortedConversations,
     activeConversationId,
     messages,
+    mediaGenerationSettings,
     loadingMessages,
     lastLoadedEventCursor,
     memoryFolders,
