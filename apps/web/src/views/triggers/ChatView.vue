@@ -8,6 +8,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProviderStore } from '../../stores/provider.store'
+import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import { Icon } from '@iconify/vue'
 
@@ -20,6 +21,9 @@ const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
 const isDragOver = ref(false)
 const taskListOpen = ref(false)
 const chatSearchOpen = ref(false)
+const needsAgent = ref(false)
+const needsMemory = ref(false)
+const needsTools = ref(false)
 let dragCounter = 0
 let syncingFromRoute = false
 const canUseChat = computed(() => providerStore.providersLoaded && providerStore.providers.length > 0)
@@ -46,6 +50,30 @@ const latestAgentChats = computed(() => {
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 4)
 })
+
+const onboardingPills = computed(() => [
+  ...(needsAgent.value ? [{ label: 'Create Your First Agent', icon: 'lucide:bot', to: { name: 'agents' } }] : []),
+  ...(needsMemory.value ? [{ label: 'Setup Memory', icon: 'lucide:brain', to: { name: 'settings', query: { category: 'memory' } } }] : []),
+  ...(needsTools.value ? [{ label: 'Install Tools', icon: 'lucide:blocks', to: { name: 'settings-mcp', query: { panel: 'browse' } } }] : []),
+])
+
+async function loadOnboardingPills(): Promise<void> {
+  needsAgent.value = false
+  needsMemory.value = false
+  needsTools.value = false
+  const [agents, embedding, servers] = await Promise.allSettled([
+    api.agents.list(),
+    api.memory.getEmbeddingConfig(),
+    api.mcp.listServers(),
+  ])
+  if (agents.status === 'fulfilled') needsAgent.value = agents.value.length === 0
+  if (embedding.status === 'fulfilled') needsMemory.value = !embedding.value.providerId && !embedding.value.baseUrl
+  if (servers.status === 'fulfilled') needsTools.value = servers.value.length === 0
+}
+
+watch(wsConnected, (connected) => {
+  if (connected) void loadOnboardingPills()
+}, { immediate: true })
 
 const hasPlanningTasks = computed(() => Boolean(agentStore.planningState?.items.length))
 const hasSearchableMessages = computed(() => chatStore.messages.some(message =>
@@ -258,16 +286,29 @@ watch(
           />
 
           <div
-            v-if="showCenteredComposer && latestAgentChats.length"
+            v-if="showCenteredComposer && (onboardingPills.length || latestAgentChats.length)"
             class="recent-agent-chats mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-2 px-4 pb-3"
-            aria-label="Recent chats with this agent"
+            aria-label="Getting started and recent chats"
           >
+            <RouterLink
+              v-for="(pill, index) in onboardingPills"
+              :key="pill.label"
+              :to="pill.to"
+              class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-accent-500/35 bg-accent-500/10 px-3 py-1.5 text-xs text-accent-300 shadow-sm transition-colors hover:border-accent-500/70 hover:bg-accent-500/20 hover:text-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
+              :style="{ animationDelay: `${120 + index * 80}ms` }"
+            >
+              <Icon
+                :icon="pill.icon"
+                class="h-3.5 w-3.5 shrink-0"
+              />
+              <span>{{ pill.label }}</span>
+            </RouterLink>
             <button
               v-for="(conversation, index) in latestAgentChats"
               :key="conversation.id"
               type="button"
               class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-theme-700/80 bg-theme-800/70 px-3 py-1.5 text-xs text-theme-400 shadow-sm transition-colors hover:border-accent-500/50 hover:bg-theme-800 hover:text-theme-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
-              :style="{ animationDelay: `${120 + index * 80}ms` }"
+              :style="{ animationDelay: `${120 + (onboardingPills.length + index) * 80}ms` }"
               :title="conversation.title"
               @click="openRecentChat(conversation)"
             >

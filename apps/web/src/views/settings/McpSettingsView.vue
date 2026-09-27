@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import McpSettings from '../../components/settings/mcp/McpSettings.vue'
 import TabBar, { type TabDef } from '../../components/shared/TabBar.vue'
 import { useMcpServers } from '../../composables/useMcpServers'
+import { useRoute } from 'vue-router'
 
 type McpPanel = 'installed' | 'browse'
 
@@ -22,7 +23,8 @@ const sections = [
 ] as const
 
 const { servers } = useMcpServers()
-const activePanel = ref<McpPanel>('installed')
+const route = useRoute()
+const activePanel = ref<McpPanel>(route.query.panel === 'browse' ? 'browse' : 'installed')
 const activeSection = computed(() => sections.find((section) => section.id === activePanel.value) || sections[0])
 const tabs = computed<TabDef<McpPanel>[]>(() => sections.map((section) => ({
   value: section.id,

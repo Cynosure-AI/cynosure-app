@@ -257,7 +257,7 @@ export const api = {
       reembed?: boolean
     }) => post<{ success: boolean; vectorsDropped: boolean; reembedded: boolean; reembeddedCount: number; dimensions: number }>('/api/memory/embeddings/configure', opts),
     getEmbeddingConfig: () =>
-      get<{ providerId?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
+      get<{ providerId?: string; baseUrl?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
     getDeepResearchConfig: () =>
       get<{ providerId?: string; model?: string }>('/api/memory/deep-research/config'),
     configureDeepResearch: (opts: { providerId?: string; model?: string }) =>
