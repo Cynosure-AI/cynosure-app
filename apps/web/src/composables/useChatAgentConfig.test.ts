@@ -108,10 +108,13 @@ describe('chat agent provider defaults', () => {
     config.sessionSystemPrompt.value = 'Temporary override'
     config.markOverridesModified()
 
+    expect(config.freeChatOverrideFields.value).toContain('System prompt')
+
     config.resetToDefaults()
 
     expect(config.sessionSystemPrompt.value).toBe(DEFAULT_FREE_CHAT_SYSTEM_PROMPT)
     expect(config.hasFreeChatOverrides.value).toBe(false)
+    expect(config.freeChatOverrideFields.value).toEqual([])
   })
 
   test('starts a new Free Chat from its defaults instead of retaining overrides', () => {

@@ -81,6 +81,18 @@ const reasoningLevels: { value: ReasoningEffort | 'off'; label: string; detail: 
   { value: 'max', label: 'Maximum', detail: 'Provider maximum' },
 ]
 const selectedReasoning = computed(() => chatStore.sessionThinkingEnabled ? chatStore.sessionReasoningEffort : 'off')
+const changedFields = computed(() => new Set(chatStore.activeAgentId
+  ? chatStore.agentOverrideFields : chatStore.freeChatOverrideFields))
+function entryChanged(id: string): boolean {
+  switch (id) {
+    case 'tools': return changedFields.value.has('Tools')
+    case 'memory': return changedFields.value.has('Memory folders')
+    case 'agents': return changedFields.value.has('Sub-agents')
+    case 'reasoning': return changedFields.value.has('Thinking mode') || changedFields.value.has('Reasoning effort')
+    case 'prompt': return changedFields.value.has('System prompt')
+    default: return false
+  }
+}
 
 function parentPath(folder: MemoryFolder): string | null {
   if (folder.isUncategorized) return null
@@ -299,9 +311,13 @@ onBeforeUnmount(() => {
             >
               <Icon
                 :icon="entry.icon"
-                class="h-5 w-5 shrink-0 text-theme-300"
+                class="h-5 w-5 shrink-0"
+                :class="entryChanged(entry.id) ? 'text-accent-400' : 'text-theme-300'"
               />
-              <span class="min-w-0 flex-1"><span class="block text-sm text-theme-100">{{ entry.label }}</span></span>
+              <span class="min-w-0 flex-1"><span
+                class="block text-sm"
+                :class="entryChanged(entry.id) ? 'text-accent-400' : 'text-theme-100'"
+              >{{ entry.label }}</span></span>
               <Icon
                 icon="lucide:chevron-right"
                 class="h-4 w-4 text-theme-500"
@@ -318,8 +334,12 @@ onBeforeUnmount(() => {
               >
                 <Icon
                   icon="lucide:database-zap"
-                  class="h-5 w-5 text-theme-300"
-                /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Memories</span><span class="block text-[11px] text-theme-500">Retrieve relevant memories</span></span><span
+                  class="h-5 w-5"
+                  :class="changedFields.has('Automatic memory') ? 'text-accent-400' : 'text-theme-300'"
+                /><span class="min-w-0 flex-1"><span
+                  class="block text-sm"
+                  :class="changedFields.has('Automatic memory') ? 'text-accent-400' : ''"
+                >Automatic Memories</span><span class="block text-[11px] text-theme-500">Retrieve relevant memories</span></span><span
                   class="relative h-5 w-9 rounded-full transition-colors"
                   :class="chatStore.sessionAutoMemory ? 'bg-accent-600' : 'bg-theme-600'"
                 ><span
@@ -337,8 +357,12 @@ onBeforeUnmount(() => {
               >
                 <Icon
                   icon="lucide:sparkles"
-                  class="h-5 w-5 text-theme-300"
-                /><span class="min-w-0 flex-1"><span class="block text-sm">Automatic Tools</span><span class="block text-[11px] text-theme-500">Use tools when helpful</span></span><span
+                  class="h-5 w-5"
+                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-400' : 'text-theme-300'"
+                /><span class="min-w-0 flex-1"><span
+                  class="block text-sm"
+                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-400' : ''"
+                >Automatic Tools</span><span class="block text-[11px] text-theme-500">Use tools when helpful</span></span><span
                   class="relative h-5 w-9 rounded-full transition-colors"
                   :class="chatStore.sessionAutoToolRouting ? 'bg-accent-600' : 'bg-theme-600'"
                 ><span

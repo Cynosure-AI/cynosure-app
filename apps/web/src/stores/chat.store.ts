@@ -818,6 +818,7 @@ export const useChatStore = defineStore('chat', () => {
     agentOriginalMemoryFolderIds: agentConfig.agentOriginalMemoryFolderIds,
     hasAgentOverrides: agentConfig.hasAgentOverrides,
     agentOverrideFields: agentConfig.agentOverrideFields,
+    freeChatOverrideFields: agentConfig.freeChatOverrideFields,
     hasFreeChatOverrides: agentConfig.hasFreeChatOverrides,
     markOverridesModified: agentConfig.markOverridesModified,
     setSelectedToolNames: agentConfig.setSelectedToolNames,
