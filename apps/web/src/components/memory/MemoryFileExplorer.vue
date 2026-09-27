@@ -15,6 +15,7 @@ import MemoryExplorerSearchStatus from "./MemoryExplorerSearchStatus.vue";
 import MemoryExplorerToolbar from "./MemoryExplorerToolbar.vue";
 import MemoryLargeIndexWarning from "./MemoryLargeIndexWarning.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
+import SplitButton from "../shared/SplitButton.vue";
 import type {
   DocumentDragPayload,
   DocumentRow,
@@ -422,6 +423,17 @@ const supportedFiles = computed(() => files.value.filter((f) => f.supported));
 const needsAttentionCount = computed(
   () => supportedFiles.value.filter((f) => f.status === "needs_reindex" || f.status === "not_indexed").length,
 );
+const descendantNeedsAttentionCount = computed(() => {
+  const current = currentSpace.value;
+  if (!current) return 0;
+  return Math.max(0, (current.descendantFileCount || 0) - (current.descendantIndexedFileCount || 0));
+});
+const recursiveNeedsAttentionCount = computed(() => needsAttentionCount.value + descendantNeedsAttentionCount.value);
+const currentIndexLabel = computed(() => needsAttentionCount.value
+  ? `Index all ${needsAttentionCount.value} ${needsAttentionCount.value === 1 ? "file" : "files"}`
+  : "No files to index");
+const recursiveIndexLabel = computed(() =>
+  `Index all ${recursiveNeedsAttentionCount.value} ${recursiveNeedsAttentionCount.value === 1 ? "file" : "files"} including subfolders`);
 const selectedDeepResearchFiles = computed(() =>
   files.value.filter((f) => f.supported && supportsAnalysis(f) && selectedFiles.value.has(f.fileName)),
 );
@@ -512,6 +524,28 @@ async function reindexAll(): Promise<void> {
     file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"),
   );
   await indexWithWarning(candidates, reindexAllNow);
+}
+
+async function reindexAllIncludingSubfolders(): Promise<void> {
+  const currentPath = currentSpace.value?.folderPath;
+  if (currentPath === undefined) return;
+  const descendants = props.spaces.filter((folder) => folder.id !== props.folderId &&
+    (currentPath ? folder.folderPath.startsWith(`${currentPath}/`) : Boolean(folder.folderPath)));
+  const groups = await Promise.all(descendants.map(async (folder) => ({
+    folderId: folder.id,
+    files: await api.memoryFolders.listFiles(folder.id),
+  })));
+  const candidates = [files.value, ...groups.map((group) => group.files)]
+    .flat().filter((file) => file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"));
+  await indexWithWarning(candidates, async () => {
+    await reindexAllNow();
+    for (const group of groups) {
+      for (const file of group.files.filter((item) =>
+        item.supported && (item.status === "needs_reindex" || item.status === "not_indexed"))) {
+        trackFolderJob(await api.memoryFolders.startReindexFile(group.folderId, file.fileName));
+      }
+    }
+  });
 }
 
 async function deepResearchSelected(targetFile?: MemoryFileStatus): Promise<void> {
@@ -1110,18 +1144,35 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           />
           New folder
         </button>
-        <button
-          v-if="needsAttentionCount > 0"
+        <SplitButton
+          v-if="recursiveNeedsAttentionCount > 0"
           title="Indexing files makes them available for semantic searching."
-          class="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm transition-colors flex items-center gap-2"
-          @click="reindexAll"
+          :primary-disabled="needsAttentionCount === 0"
+          :primary-label="`${currentIndexLabel} in this folder`"
+          menu-label="Indexing scope options"
+          class="h-8 text-sm"
+          @primary="reindexAll"
         >
           <Icon
             icon="lucide:refresh-cw"
             class="w-4 h-4"
           />
-          Index all {{ needsAttentionCount }} files
-        </button>
+          {{ currentIndexLabel }}
+          <template #menu="{ close }">
+            <button
+              type="button"
+              role="menuitem"
+              class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-theme-200 hover:bg-theme-800 focus:outline-none focus-visible:bg-theme-800"
+              @click="close(); reindexAllIncludingSubfolders()"
+            >
+              <Icon
+                icon="lucide:folders"
+                class="h-4 w-4 shrink-0 text-accent-400"
+              />
+              {{ recursiveIndexLabel }}
+            </button>
+          </template>
+        </SplitButton>
         <button
           :disabled="uploading"
           class="px-3 py-1.5 bg-theme-900/60 hover:bg-theme-800/60 border border-theme-800 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"

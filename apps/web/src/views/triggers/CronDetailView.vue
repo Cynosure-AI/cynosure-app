@@ -200,74 +200,42 @@ watch(cronPrompt, resizePrompt, { immediate: true });
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="max-w-3xl mx-auto py-8 px-6">
-      <!-- Loading -->
-      <div
-        v-if="loading"
-        class="text-center py-12 text-theme-400"
-      >
-        Loading…
-      </div>
-
-      <template v-else-if="job">
-        <!-- Back + Title -->
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center gap-3">
-            <button
-              class="p-1.5 text-theme-500 hover:text-theme-300 transition-colors"
-              @click="router.push('/cron')"
-            >
-              <Icon
-                icon="lucide:arrow-left"
-                class="w-5 h-5"
+    <header
+      v-if="job"
+      class="z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5"
+    >
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-300"
+            aria-label="Back to scheduled jobs"
+            @click="router.push('/cron')"
+          >
+            <Icon
+              icon="lucide:arrow-left"
+              class="h-4 w-4"
+            />
+            <span>Scheduled Jobs</span>
+          </button>
+          <div class="flex flex-wrap items-center justify-end gap-3">
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-theme-300">Enabled</span>
+              <ToggleSwitch
+                v-model="cronEnabled"
+                label="Enable scheduled job"
+                size="md"
+                color="emerald"
               />
-            </button>
-            <button
-              type="button"
-              class="w-9 h-9 rounded-xl bg-linear-to-br from-sky-500/20 to-indigo-500/20 flex items-center justify-center shrink-0 overflow-hidden hover:ring-2 hover:ring-accent-500/60 transition-shadow"
-              :title="`Open ${job.agentName} agent details`"
-              :aria-label="`Open ${job.agentName} agent details`"
-              @click="router.push(`/agents/${job.agentId}`)"
-            >
-              <img
-                v-if="job.agentIconUrl"
-                :src="job.agentIconUrl"
-                class="w-full h-full object-cover"
-              >
-              <Icon
-                v-else
-                icon="lucide:clock"
-                class="w-5 h-5 text-sky-400"
-              />
-            </button>
-            <div>
-              <h1 class="text-2xl font-bold text-theme-100">
-                {{ job.name || "Unnamed cron job" }}
-              </h1>
-              <dl class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-theme-500">
-                <div class="flex items-center gap-1">
-                  <dt>Created</dt>
-                  <dd class="text-theme-400">
-                    {{ formatTimestamp(job.createdAt) }}
-                  </dd>
-                </div>
-                <div class="flex items-center gap-1">
-                  <dt>Last changed</dt>
-                  <dd class="text-theme-400">
-                    {{ formatTimestamp(job.updatedAt) }}
-                  </dd>
-                </div>
-              </dl>
             </div>
-          </div>
-
-          <div class="flex items-center gap-3">
             <span
               v-if="saveMessage"
               class="text-sm text-green-400"
+              role="status"
             >{{ saveMessage }}</span>
             <button
-              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              type="button"
+              class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
               :disabled="saving || !dlgGeneratedExpr.trim()"
               @click="save"
             >
@@ -276,8 +244,71 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           </div>
         </div>
 
-        <!-- Form -->
-        <div class="space-y-4">
+        <div class="mt-3 flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-sky-500/20 to-indigo-500/20 transition-shadow hover:ring-2 hover:ring-accent-500/60"
+            :title="`Open ${job.agentName} agent details`"
+            :aria-label="`Open ${job.agentName} agent details`"
+            @click="router.push(`/agents/${job.agentId}`)"
+          >
+            <img
+              v-if="job.agentIconUrl"
+              :src="job.agentIconUrl"
+              alt=""
+              class="h-full w-full object-cover"
+            >
+            <Icon
+              v-else
+              icon="lucide:clock"
+              class="h-6 w-6 text-sky-400"
+            />
+          </button>
+          <div class="min-w-0">
+            <h1 class="break-words text-2xl font-bold leading-tight text-theme-100">
+              {{ cronName || "Unnamed cron job" }}
+            </h1>
+            <dl class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-500">
+              <div class="flex items-center gap-1">
+                <dt>Created</dt><dd class="text-theme-400">
+                  {{ formatTimestamp(job.createdAt) }}
+                </dd>
+              </div>
+              <div class="flex items-center gap-1">
+                <dt>Last changed</dt><dd class="text-theme-400">
+                  {{ formatTimestamp(job.updatedAt) }}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+        <div
+          class="mt-3 flex items-center gap-2 text-xs"
+          :class="stateMeta.color"
+        >
+          <Icon
+            :icon="stateMeta.icon"
+            class="h-4 w-4"
+            :class="{ 'animate-spin': stateMeta.spin }"
+          />
+          <span>{{ stateMeta.label }}</span>
+          <span class="text-theme-500">{{ stateMeta.description }}</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div
+        v-if="loading"
+        class="py-12 text-center text-theme-400"
+      >
+        Loading…
+      </div>
+      <div
+        v-else-if="job"
+        class="grid gap-4 lg:grid-cols-2 lg:items-start"
+      >
+        <div class="min-w-0 space-y-4">
           <!-- Identity: Name + Agent -->
           <BaseCard class="p-5 space-y-4">
             <div class="flex items-center gap-2">
@@ -315,56 +346,6 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                   class="h-4 w-4 text-accent-400"
                 />
                 Free Chat configuration
-              </div>
-            </div>
-          </BaseCard>
-
-          <!-- State -->
-          <BaseCard class="p-5">
-            <div class="space-y-3">
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0">
-                  <div class="flex items-center gap-2 mb-1">
-                    <Icon
-                      icon="lucide:power"
-                      class="w-4 h-4 text-theme-400"
-                    />
-                    <h3 class="text-sm font-medium text-theme-200">
-                      Enabled / State
-                    </h3>
-                  </div>
-                  <p class="text-xs text-theme-500 leading-relaxed">
-                    Control whether this cron job runs automatically.
-                  </p>
-                </div>
-                <ToggleSwitch
-                  v-model="cronEnabled"
-                  label="Enable scheduled job"
-                  size="md"
-                  color="emerald"
-                  class="mt-0.5 shrink-0"
-                />
-              </div>
-              <div
-                class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
-                :class="[stateMeta.border, stateMeta.bg]"
-              >
-                <Icon
-                  :icon="stateMeta.icon"
-                  class="w-4 h-4 shrink-0"
-                  :class="[stateMeta.color, { 'animate-spin': stateMeta.spin }]"
-                />
-                <div class="min-w-0">
-                  <p
-                    class="text-sm font-medium leading-tight"
-                    :class="stateMeta.color"
-                  >
-                    {{ stateMeta.label }}
-                  </p>
-                  <p class="truncate text-[11px] text-theme-500 leading-tight">
-                    {{ stateMeta.description }}
-                  </p>
-                </div>
               </div>
             </div>
           </BaseCard>
@@ -724,7 +705,8 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               </div>
             </div>
           </BaseCard>
-
+        </div>
+        <div class="min-w-0">
           <!-- Cron Prompt -->
           <BaseCard class="p-5">
             <div class="flex items-center gap-2 mb-1">
@@ -749,7 +731,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             />
           </BaseCard>
         </div>
-      </template>
-    </div>
+      </div>
+    </main>
   </div>
 </template>

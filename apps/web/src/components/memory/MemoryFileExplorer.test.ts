@@ -62,7 +62,6 @@ function mountList(focusFile?: string) {
         Icon: true,
         DataTable: true,
         HoverTooltip: true,
-        SplitButton: true,
         MemoryDocumentMoveDialog: true,
         MemoryDocumentEditorModal: EditorStub,
       },
@@ -205,7 +204,7 @@ describe('MemoryFileExplorer navigation and search', () => {
       global: {
         plugins: [createPinia()],
         stubs: {
-          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          Icon: true, DataTable: true, HoverTooltip: true,
           MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
         },
       },
@@ -344,7 +343,7 @@ describe('MemoryFileExplorer navigation and search', () => {
       global: {
         plugins: [createPinia()],
         stubs: {
-          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          Icon: true, DataTable: true, HoverTooltip: true,
           MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
         },
       },
@@ -375,7 +374,7 @@ describe('MemoryFileExplorer navigation and search', () => {
       global: {
         plugins: [createPinia()],
         stubs: {
-          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          Icon: true, DataTable: true, HoverTooltip: true,
           MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
         },
       },
@@ -424,7 +423,7 @@ describe('MemoryFileExplorer navigation and search', () => {
       global: {
         plugins: [createPinia()],
         stubs: {
-          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          Icon: true, DataTable: true, HoverTooltip: true,
           MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
         },
       },
@@ -502,7 +501,7 @@ describe('MemoryFileExplorer navigation and search', () => {
       global: {
         plugins: [createPinia()],
         stubs: {
-          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          Icon: true, DataTable: true, HoverTooltip: true,
           MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
         },
       },
@@ -515,6 +514,51 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
 
     expect(mocks.startReindexFile).toHaveBeenCalledWith('child', 'nested.md')
+  })
+
+  test('indexes descendant files from the split button when the current folder is indexed', async () => {
+    const indexedFile = {
+      fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
+      supported: true, textDirect: true, status: 'indexed' as const, chunkCount: 1,
+      deepResearched: false, analysisStatus: 'not_analyzed' as const, analysisChunkLimit: 100, tags: [],
+    }
+    const nestedFile = {
+      ...indexedFile, fileName: 'nested.md', status: 'not_indexed' as const,
+    }
+    mocks.listFiles.mockImplementation((folderId: string) => Promise.resolve(folderId === 'child' ? [nestedFile] : [indexedFile]))
+    const wrapper = mount(MemoryFileExplorer, {
+      props: {
+        folderId: 'category',
+        spaces: [
+          {
+            id: 'category', name: 'Notes', description: '', directoryPath: '/notes',
+            folderPath: 'notes', sortOrder: 0, isUncategorized: false, createdAt: 1,
+            fileCount: 1, descendantFileCount: 1, descendantIndexedFileCount: 0,
+          },
+          {
+            id: 'child', name: 'Projects', description: '', directoryPath: '/notes/projects',
+            folderPath: 'notes/projects', parentFolderPath: 'notes', sortOrder: 0,
+            isUncategorized: false, createdAt: 2, fileCount: 1,
+          },
+        ],
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: { Icon: true, DataTable: true, HoverTooltip: true, MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('button[aria-label="No files to index in this folder"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('button[aria-label="Indexing scope options"]').trigger('click')
+    const recursiveAction = [...document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find((button) => button.textContent?.includes('including subfolders'))
+    expect(recursiveAction?.textContent).toContain('1 file')
+    recursiveAction!.click()
+    await flushPromises()
+
+    expect(mocks.startReindexFile).toHaveBeenCalledWith('child', 'nested.md')
+    expect(mocks.startReindexFile).not.toHaveBeenCalledWith('category', 'notes.md')
   })
 
   test('tracks selected folder indexing as nested jobs complete', async () => {
@@ -597,7 +641,7 @@ describe('MemoryFileExplorer navigation and search', () => {
       global: {
         plugins: [createPinia()],
         stubs: {
-          Icon: true, DataTable: true, HoverTooltip: true, SplitButton: true,
+          Icon: true, DataTable: true, HoverTooltip: true,
           MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
         },
       },
