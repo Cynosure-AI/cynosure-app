@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, protocol, net, ipcMain, Tray, Menu, nativeImage, globalShortcut, screen } from 'electron'
+import { app, BrowserWindow, shell, protocol, net, ipcMain, Tray, Menu, nativeImage, globalShortcut, screen, dialog } from 'electron'
 import { spawn, execSync, type ChildProcess } from 'child_process'
 import { createServer } from 'net'
 import { join } from 'path'
@@ -227,7 +227,6 @@ function startServer(): Promise<void> {
             ...process.env,
             PATH: getFullPath(),
             CYNOSURE_DATA_DIR: getDataDir(),
-            FILE_ACCESS_ALLOWED_DIRECTORIES: process.env.FILE_ACCESS_ALLOWED_DIRECTORIES || homedir(),
             NODE_ENV: is.dev ? 'development' : 'production'
         }
 
@@ -514,6 +513,10 @@ app.whenReady().then(async () => {
     // Expose the port to the renderer via synchronous IPC
     ipcMain.on('get-server-port', (event) => {
         event.returnValue = serverPort
+    })
+    ipcMain.handle('file-access:choose-directory', async () => {
+        const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+        return result.canceled ? null : result.filePaths[0] || null
     })
 
     // ── UI preferences persistence (electron-store) ──────────────────────────────────────

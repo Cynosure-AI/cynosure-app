@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
 import { z } from 'zod';
+import { listFileAccessRoots, resolveFileAccessPath } from './file-access-policy.js';
 import type { ToolDefinition, ToolResult, ToolResultContent } from '../../gateway/providers/base.provider.js';
 
 type SortBy = 'name' | 'size' | 'modified';
@@ -78,63 +79,19 @@ const MEDIA_MIME_BY_EXT: Record<string, string> = {
     '.mkv': 'video/x-matroska',
 };
 
-function configuredAllowedDirectories(): string[] {
-    const configured = process.env.FILE_ACCESS_ALLOWED_DIRECTORIES;
-    const dirs = configured
-        ? configured.split(path.delimiter).map(p => p.trim()).filter(Boolean)
-        : [process.cwd()];
-    return dirs.map(dir => path.resolve(dir));
-}
-
 function isWithin(parent: string, child: string): boolean {
     const rel = path.relative(parent, child);
     return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
 async function assertNotAllowedRoot(candidate: string): Promise<void> {
-    for (const root of configuredAllowedDirectories()) {
+    for (const root of listFileAccessRoots()) {
         const realRoot = await fs.realpath(root).catch(() => root);
         if (candidate === realRoot) throw new Error('Cannot move or delete an allowed directory root.');
     }
 }
 
-async function resolveAllowedPath(inputPath: string): Promise<string> {
-    if (!inputPath || inputPath.trim() === '') throw new Error('Path is required.');
-    const absolute = path.resolve(inputPath);
-    let resolvedTarget = absolute;
-
-    try {
-        resolvedTarget = await fs.realpath(absolute);
-    } catch {
-        const missingParts: string[] = [];
-        let cursor = absolute;
-
-        while (true) {
-            try {
-                const realExistingParent = await fs.realpath(cursor);
-                resolvedTarget = path.join(realExistingParent, ...missingParts.reverse());
-                break;
-            } catch {
-                const parent = path.dirname(cursor);
-                if (parent === cursor) throw new Error(`No existing parent directory found for path: ${inputPath}`);
-                missingParts.push(path.basename(cursor));
-                cursor = parent;
-            }
-        }
-    }
-
-    for (const allowed of configuredAllowedDirectories()) {
-        let realAllowed = allowed;
-        try {
-            realAllowed = await fs.realpath(allowed);
-        } catch {
-            // Keep the resolved configured path if the allowed root is created later.
-        }
-        if (isWithin(realAllowed, resolvedTarget)) return resolvedTarget;
-    }
-
-    throw new Error(`Access denied. Path is outside allowed directories: ${inputPath}`);
-}
+const resolveAllowedPath = resolveFileAccessPath;
 
 function globToRegExp(pattern: string): RegExp {
     const escaped = pattern
@@ -668,10 +625,14 @@ function tool<S extends z.ZodObject<z.ZodRawShape>>(
     destructive: boolean,
     handler: (args: z.infer<S>) => Promise<ToolResult>,
 ): ToolDefinition {
+    // Cynosure's AJV validator uses draft 7; these schemas only use keywords
+    // supported there, so omit Zod's draft 2020-12 declaration.
+    const parameters = z.toJSONSchema(schema) as Record<string, unknown>;
+    delete parameters.$schema;
     return {
         name,
         description,
-        parameters: z.toJSONSchema(schema) as Record<string, unknown>,
+        parameters,
         timeout: 120_000,
         execution: { readOnly },
         annotations: { readOnlyHint: readOnly, destructiveHint: destructive, idempotentHint: readOnly, openWorldHint: false },
@@ -687,14 +648,22 @@ function tool<S extends z.ZodObject<z.ZodRawShape>>(
 }
 
 export function makeFileTools(): ToolDefinition[] {
+    const define = <S extends z.ZodObject<z.ZodRawShape>>(
+        name: string,
+        description: string,
+        schema: S,
+        readOnly: boolean,
+        destructive: boolean,
+        handler: (args: z.infer<S>) => Promise<ToolResult>,
+    ) => tool(name, description, schema, readOnly, destructive, handler);
     return [
-        tool('file_info', 'Get file or directory metadata. Omit path to list the directory roots available to native file tools.',
+        define('file_info', 'Get file or directory metadata. Omit path to list the directory roots available to native file tools.',
             z.object({ path: pathField.optional() }), true, false,
             async ({ path: inputPath }) => {
-                if (inputPath === undefined) return jsonResult({ allowedDirectories: configuredAllowedDirectories() });
+                if (inputPath === undefined) return jsonResult({ allowedDirectories: listFileAccessRoots() });
                 return jsonResult(await toFileEntry(await resolveAllowedPath(inputPath)));
             }),
-        tool('file_list_directory', 'List a directory or return a tree. Common dependency, build, and cache folders are excluded.',
+        define('file_list_directory', 'List a directory or return a tree. Common dependency, build, and cache folders are excluded.',
             z.object({
                 path: pathField,
                 tree: z.boolean().optional(),
@@ -709,14 +678,14 @@ export function makeFileTools(): ToolDefinition[] {
                 const entries = await readDirectoryEntries(absPath, includeSizes ?? false, sortBy);
                 return jsonResult(includeSizes ? entries.map(entry => ({ ...entry, sizeHuman: formatBytes(entry.size) })) : entries);
             }),
-        tool('file_search', 'Search file and directory names or paths with a case-insensitive pattern. Supports * and ?.',
+        define('file_search', 'Search file and directory names or paths with a case-insensitive pattern. Supports * and ?.',
             z.object({ path: pathField, pattern: z.string().min(1), excludePatterns: excludeField }), true, false,
             async ({ path: inputPath, pattern, excludePatterns }) => {
                 const results: string[] = [];
                 await searchFilesRecursive(await resolveAllowedPath(inputPath), searchPatternToRegExp(pattern), excludePatterns ?? [], results);
                 return jsonResult(results);
             }),
-        tool('file_read', 'Read one or more text or media files. Text is the default; media, thumbnails, and collage return image content when applicable.',
+        define('file_read', 'Read one or more text or media files. Text is the default; media, thumbnails, and collage return image content when applicable.',
             z.object({
                 path: pathField.optional(),
                 paths: z.array(pathField).min(1).max(100).optional(),
@@ -777,7 +746,7 @@ export function makeFileTools(): ToolDefinition[] {
                 }
                 return textResult(files.length === 1 ? files[0].content : JSON.stringify(files, null, 2));
             }),
-        tool('file_write', 'Write a UTF-8 text file. Existing files require overwrite: true.',
+        define('file_write', 'Write a UTF-8 text file. Existing files require overwrite: true.',
             z.object({ path: pathField, content: z.string(), overwrite: z.boolean().optional() }), false, true,
             async ({ path: inputPath, content, overwrite }) => {
                 const absPath = await resolveAllowedPath(inputPath);
@@ -785,7 +754,7 @@ export function makeFileTools(): ToolDefinition[] {
                 await fs.writeFile(absPath, content, { encoding: 'utf8', flag: overwrite ? 'w' : 'wx' });
                 return textResult(`Wrote file: ${absPath}`);
             }),
-        tool('file_edit', 'Apply ordered, exact text replacements to a UTF-8 file. Preview only by default; set dryRun: false to save.',
+        define('file_edit', 'Apply ordered, exact text replacements to a UTF-8 file. Preview only by default; set dryRun: false to save.',
             z.object({
                 path: pathField,
                 edits: z.array(z.object({ oldText: z.string().min(1), newText: z.string(), replaceAll: z.boolean().optional() })).min(1),
@@ -803,14 +772,14 @@ export function makeFileTools(): ToolDefinition[] {
                 if (!previewOnly) await fs.writeFile(absPath, updated, 'utf8');
                 return textResult(`${previewOnly ? 'Dry run only.' : `Edited file: ${absPath}`}\n\n${unifiedDiff(original, updated)}`);
             }),
-        tool('file_create_directory', 'Create a directory and any missing parent directories.',
+        define('file_create_directory', 'Create a directory and any missing parent directories.',
             z.object({ path: pathField }), false, true,
             async ({ path: inputPath }) => {
                 const absPath = await resolveAllowedPath(inputPath);
                 await fs.mkdir(absPath, { recursive: true });
                 return textResult(`Created directory: ${absPath}`);
             }),
-        tool('file_move', 'Move or rename a file or directory. A directory destination must be an exact new path; existing directories require file_merge.',
+        define('file_move', 'Move or rename a file or directory. A directory destination must be an exact new path; existing directories require file_merge.',
             z.object({ source: pathField, destination: pathField, overwrite: z.boolean().optional() }), false, true,
             async ({ source, destination, overwrite }) => {
                 const absSource = await resolveAllowedPath(source);
@@ -828,7 +797,7 @@ export function makeFileTools(): ToolDefinition[] {
                 }
                 throw new Error('Source is neither a regular file nor a directory.');
             }),
-        tool('file_merge', 'Merge the contents of a source directory into an existing destination directory and remove the empty source. Conflicts require overwrite: true.',
+        define('file_merge', 'Merge the contents of a source directory into an existing destination directory and remove the empty source. Conflicts require overwrite: true.',
             z.object({ source: pathField, destination: pathField, overwrite: z.boolean().optional() }), false, true,
             async ({ source, destination, overwrite }) => {
                 const absSource = await resolveAllowedPath(source);
@@ -838,7 +807,7 @@ export function makeFileTools(): ToolDefinition[] {
                 await mergeDirectoryPath(absSource, absDestination, overwrite ?? false);
                 return textResult(`Merged contents of ${absSource} into ${absDestination} and removed the source directory.`);
             }),
-        tool('file_archive', 'Create or extract a ZIP archive. Extraction rejects path traversal and does not overwrite by default.',
+        define('file_archive', 'Create or extract a ZIP archive. Extraction rejects path traversal and does not overwrite by default.',
             z.object({
                 action: z.enum(['create', 'extract']),
                 filePaths: z.array(pathField).min(1).optional(),
@@ -857,7 +826,7 @@ export function makeFileTools(): ToolDefinition[] {
                 if (filePaths !== undefined) throw new Error('filePaths is only valid when creating.');
                 return textResult(`Extracted ZIP archive to: ${await extractZipArchive(archivePath, destination, overwrite ?? false)}`);
             }),
-        tool('file_delete', 'Delete a file or directory. A non-empty directory requires recursive: true.',
+        define('file_delete', 'Delete a file or directory. A non-empty directory requires recursive: true.',
             z.object({ path: pathField, recursive: z.boolean().optional() }), false, true,
             async ({ path: inputPath, recursive }) => {
                 const absPath = await resolveAllowedPath(inputPath);

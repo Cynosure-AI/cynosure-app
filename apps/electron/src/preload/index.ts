@@ -7,6 +7,7 @@ const serverPort: number = ipcRenderer.sendSync('get-server-port')
 contextBridge.exposeInMainWorld('electron', {
     platform: process.platform,
     serverPort,
+    chooseFileAccessDirectory: (): Promise<string | null> => ipcRenderer.invoke('file-access:choose-directory'),
     // Reliable UI prefs persistence (bypasses Electron's LevelDB localStorage quirks)
     getUiPrefs: (): Record<string, string> => ipcRenderer.sendSync('get-ui-prefs'),
     setUiPrefs: (prefs: Record<string, string>) => ipcRenderer.sendSync('set-ui-prefs', prefs),

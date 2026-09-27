@@ -8,6 +8,7 @@ import ChatSettings from '../../components/settings/ChatSettings.vue'
 import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
 import GeneralSettings from '../../components/settings/AppearanceSettings.vue'
 import DesktopSettings from '../../components/settings/DesktopSettings.vue'
+import FileAccessSettings from '../../components/settings/FileAccessSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
 import ResetDataSettings from '../../components/settings/ResetDataSettings.vue'
 import AboutSettings from '../../components/settings/AboutSettings.vue'
@@ -15,7 +16,7 @@ import ResponsiveSectionLayout from '../../components/shared/ResponsiveSectionLa
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'desktop-application' | 'backup' | 'reset-data' | 'about'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'file-access' | 'desktop-application' | 'backup' | 'reset-data' | 'about'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -93,6 +94,13 @@ const categories: SettingsCategory[] = [
     componentProps: { embedded: true }
   },
   {
+    id: 'file-access',
+    label: 'File Access',
+    description: 'Choose which local folders AI file tools may access.',
+    icon: 'lucide:folder-lock',
+    component: FileAccessSettings
+  },
+  {
     id: 'backup',
     label: 'Backup & Restore',
     description: 'Export your configuration as a zip file or restore from a previous backup.',
@@ -123,6 +131,13 @@ const categories: SettingsCategory[] = [
 ]
 
 const sections: SettingsSection[] = [
+  {
+    id: 'allowed-folders',
+    categoryId: 'file-access',
+    label: 'Allowed Folders',
+    description: 'Add or remove folders that AI file tools can access recursively.',
+    terms: ['files', 'disk', 'folders', 'directories', 'allowlist', 'whitelist', 'permissions', 'browse']
+  },
   {
     id: 'user-profile',
     categoryId: 'general',

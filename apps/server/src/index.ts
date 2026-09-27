@@ -40,6 +40,7 @@ import { stopAllMemoryFolderWatchers } from './core/memory/memory-folder-watcher
 import { ensureDefaultMemoryFolders, syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
 import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
+import { registerFileAccessRoutes } from './routes/file-access.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
@@ -382,6 +383,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
           resolver({ approved, reason })
           pendingHITLResolvers.delete(taskId)
+          getHITLGate().clearExternalRequest(taskId)
           // Remove from persistence now that it is resolved
           getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(taskId)
         } catch {
@@ -403,11 +405,15 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         type: string
         function: { name: string; arguments: string }
         annotations?: ToolBehaviorAnnotations
+        fileAccess?: { path: string; folder: string; toolName: string }
       }>
       resolve: (result: ApprovalResult) => void
     }
 
     pendingHITLResolvers.set(data.taskId, data.resolve)
+    if (data.conversationId && data.toolCalls.some((toolCall) => toolCall.fileAccess)) {
+      getHITLGate().trackExternalRequest(data.taskId, data.conversationId)
+    }
 
     // Persist to DB so the client can restore after a hard reload
     getDb().prepare(
@@ -419,6 +425,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         name: tc.function.name,
         arguments: tc.function.arguments,
         annotations: tc.annotations,
+        fileAccess: tc.fileAccess,
       }))),
       Date.now()
     )
@@ -430,6 +437,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         name: toolCall.function.name,
         arguments: toolCall.function.arguments,
         annotations: toolCall.annotations,
+        fileAccess: toolCall.fileAccess,
       }))
     })
   }
@@ -440,6 +448,14 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const removeHitlResolvedListener = eventBus.on('hitl:resolved', (...args: unknown[]) => {
     const data = args[0] as { taskId: string }
     pendingHITLResolvers.delete(data.taskId)
+    getHITLGate().clearExternalRequest(data.taskId)
+  })
+  const removeHitlCancelRequestListener = eventBus.on('hitl:cancel-request', (...args: unknown[]) => {
+    const data = args[0] as { taskId: string; conversationId: string }
+    pendingHITLResolvers.delete(data.taskId)
+    getHITLGate().clearExternalRequest(data.taskId)
+    getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(data.taskId)
+    broadcast('agent:hitl-resolved', { taskId: data.taskId, conversationId: data.conversationId, cancelled: true })
   })
   const removeHitlClearConversationListener = eventBus.on('hitl:clear-conversation', (...args: unknown[]) => {
     const data = args[0] as { conversationId?: string }
@@ -508,6 +524,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerMemoryFoldersRoutes, { prefix: '/api/memory-folders' })
   app.register(registerMetricsRoutes, { prefix: '/api/metrics' })
   app.register(registerFileRoutes, { prefix: '/api/files' })
+  app.register(registerFileAccessRoutes, { prefix: '/api/file-access' })
   app.register(registerUserSettingsRoutes, { prefix: '/api/user-settings' })
   app.register(registerModelFavoritesRoutes, { prefix: '/api/model-favorites' })
 
@@ -562,6 +579,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       clearInterval(heartbeat)
       removeHitlRequestListener()
       removeHitlResolvedListener()
+      removeHitlCancelRequestListener()
       removeHitlClearConversationListener()
       for (const cleanup of executionListenerCleanups) {
         cleanup()

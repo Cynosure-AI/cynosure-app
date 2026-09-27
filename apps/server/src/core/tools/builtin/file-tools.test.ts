@@ -6,11 +6,18 @@ import sharp from 'sharp';
 import AdmZip from 'adm-zip';
 import { makeFileTools } from './file-tools.js';
 import { getBuiltInToolKey, getBuiltInNamespace, hydrateBuiltInTools } from '../built-in-tools.js';
+import { closeDb } from '../../../db/database.js';
+import { addFileAccessRoot, listFileAccessRoots, preflightFileToolAccess, removeFileAccessRoot } from './file-access-policy.js';
+import { getEventBus } from '../../telemetry/event-bus.js';
+import { AgentExecutor } from '../../agent/agent-executor.js';
+import type { LLMGateway } from '../../gateway/gateway.js';
+import type { ToolCall } from '../../gateway/providers/base.provider.js';
+import { validateToolArguments } from '../tool-argument-validator.js';
 
 let sandbox: string;
 let root: string;
 let outside: string;
-let previousRoots: string | undefined;
+let previousDataDir: string | undefined;
 
 async function call(name: string, params: unknown) {
     const tool = makeFileTools().find(candidate => candidate.name === name);
@@ -19,22 +26,44 @@ async function call(name: string, params: unknown) {
 }
 
 beforeEach(async () => {
-    previousRoots = process.env.FILE_ACCESS_ALLOWED_DIRECTORIES;
+    previousDataDir = process.env.CYNOSURE_DATA_DIR;
     sandbox = await fs.mkdtemp(path.join(tmpdir(), 'cynosure-native-files-'));
+    process.env.CYNOSURE_DATA_DIR = path.join(sandbox, 'data');
     root = path.join(sandbox, 'allowed');
     outside = path.join(sandbox, 'outside');
     await fs.mkdir(root);
     await fs.mkdir(outside);
-    process.env.FILE_ACCESS_ALLOWED_DIRECTORIES = root;
+    for (const allowed of listFileAccessRoots()) removeFileAccessRoot(allowed);
+    await addFileAccessRoot(root);
 });
 
 afterEach(async () => {
-    if (previousRoots === undefined) delete process.env.FILE_ACCESS_ALLOWED_DIRECTORIES;
-    else process.env.FILE_ACCESS_ALLOWED_DIRECTORIES = previousRoots;
+    closeDb();
+    if (previousDataDir === undefined) delete process.env.CYNOSURE_DATA_DIR;
+    else process.env.CYNOSURE_DATA_DIR = previousDataDir;
     await fs.rm(sandbox, { recursive: true, force: true });
 });
 
 describe('native file tools', () => {
+    it('publishes schemas accepted by the agent tool validator', () => {
+        const examples: Record<string, unknown> = {
+            file_info: {},
+            file_list_directory: { path: root },
+            file_search: { path: root, pattern: '*.txt' },
+            file_read: { path: path.join(root, 'one.txt') },
+            file_write: { path: path.join(root, 'one.txt'), content: 'test' },
+            file_edit: { path: path.join(root, 'one.txt'), edits: [{ oldText: 'a', newText: 'b' }] },
+            file_create_directory: { path: path.join(root, 'new') },
+            file_move: { source: root, destination: outside },
+            file_merge: { source: root, destination: outside },
+            file_archive: { action: 'extract', archivePath: path.join(root, 'one.zip') },
+            file_delete: { path: path.join(root, 'one.txt') },
+        };
+        for (const tool of makeFileTools()) {
+            const validation = validateToolArguments(examples[tool.name], tool.parameters);
+            expect(validation.valid, `${tool.name}: ${validation.errors.join('; ')}`).toBe(true);
+        }
+    });
     it('registers in the Files namespace and hydrates an executable tool', async () => {
         expect(getBuiltInNamespace('file_read').id).toBe('builtin:files');
         expect(getBuiltInToolKey('file_read')).toBe('builtin:files::file_read');
@@ -52,7 +81,9 @@ describe('native file tools', () => {
 
     it('writes, reads, previews edits, saves edits, searches, and lists', async () => {
         const file = path.join(root, 'notes', 'one.txt');
-        expect((await call('file_write', { path: file, content: 'hello world\n' })).success).toBe(true);
+        expect(listFileAccessRoots()).toEqual([root]);
+        const writeResult = await call('file_write', { path: file, content: 'hello world\n' });
+        expect(writeResult.success, writeResult.output).toBe(true);
         expect((await call('file_read', { path: file })).output).toBe('hello world\n');
         expect((await call('file_write', { path: file, content: 'oops' })).success).toBe(false);
         const edit = { path: file, edits: [{ oldText: 'world', newText: 'Cynosure' }] };
@@ -67,11 +98,76 @@ describe('native file tools', () => {
         const target = path.join(outside, 'secret.txt');
         await fs.writeFile(target, 'secret');
         await fs.symlink(outside, path.join(root, 'escape'));
+        await fs.symlink(path.join(outside, 'missing.txt'), path.join(root, 'broken'));
         expect((await call('file_read', { path: target })).success).toBe(false);
         expect((await call('file_read', { path: path.join(root, 'escape', 'secret.txt') })).success).toBe(false);
         expect((await call('file_write', { path: path.join(root, 'escape', 'new.txt'), content: 'no' })).success).toBe(false);
+        expect((await call('file_write', { path: path.join(root, 'broken'), content: 'no' })).success).toBe(false);
         expect((await call('file_delete', { path: root, recursive: true })).success).toBe(false);
         expect(await fs.readFile(target, 'utf8')).toBe('secret');
+    });
+
+    it('persists allowlist changes and applies them recursively', async () => {
+        expect(listFileAccessRoots()).toEqual([root]);
+        expect(await addFileAccessRoot(outside)).toContain(outside);
+        const nested = path.join(outside, 'deep');
+        await fs.mkdir(nested);
+        expect((await call('file_write', { path: path.join(nested, 'allowed.txt'), content: 'yes' })).success).toBe(true);
+        expect(removeFileAccessRoot(outside)).toEqual([root]);
+        expect((await call('file_read', { path: path.join(nested, 'allowed.txt') })).success).toBe(false);
+    });
+
+    it('asks before an unlisted folder is accessed and stores approval', async () => {
+        const target = path.join(outside, 'prompt.txt');
+        await fs.writeFile(target, 'approved');
+        const unsubscribe = getEventBus().on('hitl:request', (event) => {
+            const request = event as { toolCalls: Array<{ fileAccess?: { folder: string } }>; resolve: (result: { approved: boolean }) => void };
+            expect(request.toolCalls[0].fileAccess?.folder).toBe(outside);
+            request.resolve({ approved: true });
+        });
+        try {
+            await preflightFileToolAccess({ toolName: 'file_read', arguments: { path: target }, conversationId: 'conversation-test' });
+            const result = await call('file_read', { path: target });
+            expect(result.success, result.output).toBe(true);
+            expect(result.output).toBe('approved');
+            expect(listFileAccessRoots()).toContain(outside);
+        } finally {
+            unsubscribe();
+        }
+    });
+
+    it('leaves an unlisted folder blocked when the user denies the request', async () => {
+        const target = path.join(outside, 'denied.txt');
+        await fs.writeFile(target, 'private');
+        const unsubscribe = getEventBus().on('hitl:request', (event) => {
+            (event as { resolve: (result: { approved: boolean }) => void }).resolve({ approved: false });
+        });
+        try {
+            await expect(preflightFileToolAccess({ toolName: 'file_read', arguments: { path: target }, conversationId: 'conversation-test' })).rejects.toThrow('denied by the user');
+            expect((await call('file_read', { path: target })).success).toBe(false);
+            expect(listFileAccessRoots()).not.toContain(outside);
+        } finally {
+            unsubscribe();
+        }
+    });
+
+    it('waits for folder approval before starting the tool execution timeout', async () => {
+        const target = path.join(outside, 'slow-approval.txt');
+        await fs.writeFile(target, 'read after approval');
+        const tool = { ...makeFileTools().find(candidate => candidate.name === 'file_read')!, timeout: 100,
+            namespaceId: 'builtin:files', originalName: 'file_read' };
+        const executor = new AgentExecutor({ gateway: {} as LLMGateway, tools: [tool], conversationId: 'test', broadcast: () => undefined });
+        const unsubscribe = getEventBus().on('hitl:request', (event) => {
+            setTimeout(() => (event as { resolve: (result: { approved: boolean }) => void }).resolve({ approved: true }), 150);
+        });
+        try {
+            const call: ToolCall = { id: 'read', type: 'function', function: { name: 'file_read', arguments: JSON.stringify({ path: target }) } };
+            const result = await (executor as unknown as { executeSingleToolCall: (call: ToolCall) => Promise<{ success: boolean; output: string }> }).executeSingleToolCall(call);
+            expect(result.success, result.output).toBe(true);
+            expect(result.output).toBe('read after approval');
+        } finally {
+            unsubscribe();
+        }
     });
 
     it('creates and extracts ZIP archives without overwriting existing files', async () => {

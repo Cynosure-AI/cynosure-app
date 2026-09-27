@@ -75,7 +75,7 @@ pnpm dev:electron   # Electron app (starts web + electron)
 
 ### Native file access
 
-Native file tools are listed under **Built-In: Files** in agent and chat tool selection. Set `FILE_ACCESS_ALLOWED_DIRECTORIES` to a platform-delimited list of allowed roots (colon on macOS/Linux, semicolon on Windows). The standalone server defaults to its working directory; the desktop app defaults to the user's home directory. Call `file_info` without a path to see the active roots. Relative paths resolve from the server working directory. Read-only tools follow Cynosure's read-only approval default; changing files uses the normal tool approval flow.
+Native file tools are listed under **Built-In: Files** in agent and chat tool selection. The allowlist starts empty and is managed in **Settings → File Access**. Folders added there are accessible recursively. When a tool targets another folder, Cynosure asks whether to add it to the allowlist; denial stops that tool call. The desktop app offers a folder picker. Call `file_info` without a path to see the active roots. Relative paths resolve from the server working directory. Read-only tools follow Cynosure's read-only approval default; changing files uses the normal tool approval flow.
 
 The tools are `file_info`, `file_list_directory`, `file_search`, `file_read`, `file_write`, `file_edit`, `file_create_directory`, `file_move`, `file_merge`, `file_archive`, and `file_delete`. `file_edit` previews changes unless `dryRun: false` is supplied. `file_read` supports text, media, thumbnails, and image collages.
 

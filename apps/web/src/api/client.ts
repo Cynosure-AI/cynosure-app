@@ -24,6 +24,11 @@ function memoryFolderPathId(id: string): string {
 // ---- API object (same shape as window.api from preload) ----
 
 export const api = {
+  fileAccess: {
+    list: () => get<{ folders: string[] }>('/api/file-access'),
+    add: (path: string) => post<{ folders: string[] }>('/api/file-access', { path }),
+    remove: (path: string) => del<{ folders: string[] }>(`/api/file-access?path=${encodeURIComponent(path)}`),
+  },
   modelFavorites: {
     get: () => get<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>; initialized: boolean }>('/api/model-favorites'),
     save: (favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>) =>
@@ -114,7 +119,7 @@ export const api = {
       get<{ events: ChatEvent[]; latestSequence: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/events?after=${after}&limit=${limit}`),
     onEvent: (cb: (event: ChatEvent) => void) => onWsEvent('chat:event', cb as WsHandler),
     getPendingHITL: (conversationId: string) =>
-      get<{ taskId: string; toolCalls: { name: string; arguments: string }[] }[]>(
+      get<{ taskId: string; toolCalls: { name: string; arguments: string; fileAccess?: { path: string; folder: string; toolName: string } }[] }[]>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/hitl`
       ),
     getPlanningState: (conversationId: string) =>
