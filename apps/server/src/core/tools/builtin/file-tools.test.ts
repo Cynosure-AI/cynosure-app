@@ -7,6 +7,7 @@ import AdmZip from 'adm-zip';
 import { makeFileTools } from './file-tools.js';
 import { getBuiltInToolKey, getBuiltInNamespace, hydrateBuiltInTools } from '../built-in-tools.js';
 import { closeDb } from '../../../db/database.js';
+import { getAppDataDir } from '../../data-dir.js';
 import { addFileAccessRoot, listFileAccessRoots, preflightFileToolAccess, removeFileAccessRoot } from './file-access-policy.js';
 import { getEventBus } from '../../telemetry/event-bus.js';
 import { AgentExecutor } from '../../agent/agent-executor.js';
@@ -26,13 +27,16 @@ async function call(name: string, params: unknown) {
 }
 
 beforeEach(async () => {
+    // Other tests may have opened the process-wide DB before this test changes the data dir.
+    closeDb();
     previousDataDir = process.env.CYNOSURE_DATA_DIR;
     sandbox = await fs.mkdtemp(path.join(tmpdir(), 'cynosure-native-files-'));
-    process.env.CYNOSURE_DATA_DIR = path.join(sandbox, 'data');
+    process.env.CYNOSURE_DATA_DIR = sandbox;
     root = path.join(sandbox, 'allowed');
     outside = path.join(sandbox, 'outside');
     await fs.mkdir(root);
     await fs.mkdir(outside);
+    if (getAppDataDir() !== path.join(sandbox, 'data')) throw new Error('File tool test database is not isolated.');
     for (const allowed of listFileAccessRoots()) removeFileAccessRoot(allowed);
     await addFileAccessRoot(root);
 });

@@ -10,9 +10,10 @@ let sandbox: string
 let previousDataDir: string | undefined
 
 beforeEach(async () => {
+    closeDb()
     sandbox = await fs.mkdtemp(path.join(tmpdir(), 'cynosure-file-routes-'))
     previousDataDir = process.env.CYNOSURE_DATA_DIR
-    process.env.CYNOSURE_DATA_DIR = path.join(sandbox, 'data')
+    process.env.CYNOSURE_DATA_DIR = sandbox
 })
 
 afterEach(async () => {
