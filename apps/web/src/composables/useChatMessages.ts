@@ -37,6 +37,7 @@ export function useChatMessages(
         freeChatMemoryFolderIds: Ref<string[]>
         freeChatMemorySelectionInitialized: Ref<boolean>
     },
+    mediaGenerationSettings: Ref<MediaGenerationSettings | null>,
 ): ChatMessagesApi {
     const agentStore = useAgentStore()
 
@@ -235,7 +236,8 @@ export function useChatMessages(
         messages.value.splice(idx)
         streaming.clearConversationStreamState(conversationId)
         agentStore.truncateConversationExecution(conversationId, msg.createdAt)
-        await sendMessage(msg.content, attachments.imageDataUrls, attachments.files, attachments.audioDataUrls)
+        await sendMessage(msg.content, attachments.imageDataUrls, attachments.files, attachments.audioDataUrls,
+            mediaGenerationSettings.value ? { ...mediaGenerationSettings.value } : undefined)
     }
 
     async function editMessage(messageId: string, newContent: string): Promise<void> {
@@ -250,7 +252,8 @@ export function useChatMessages(
         messages.value.splice(idx)
         streaming.clearConversationStreamState(conversationId)
         agentStore.truncateConversationExecution(conversationId, msg.createdAt)
-        await sendMessage(newContent, attachments.imageDataUrls, attachments.files, attachments.audioDataUrls)
+        await sendMessage(newContent, attachments.imageDataUrls, attachments.files, attachments.audioDataUrls,
+            mediaGenerationSettings.value ? { ...mediaGenerationSettings.value } : undefined)
     }
 
     async function cancelStream(): Promise<void> {

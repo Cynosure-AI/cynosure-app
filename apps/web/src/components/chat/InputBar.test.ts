@@ -11,6 +11,7 @@ const chatStore = reactive({
   isConversationLocked: false,
   queuedMessages: [] as Array<{ id: string; content: string; attachments: unknown[] }>,
   modelModalities: null as { input: string[]; output: string[] } | null,
+  mediaGenerationSettings: null as import('@shared/types').MediaGenerationSettings | null,
   resolvedModelProvider: null as { providerId: string; model: string } | null,
   sendMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
   queueMessage: vi.fn<(...args: unknown[]) => Promise<void>>(),
@@ -52,6 +53,7 @@ describe('InputBar drafts', () => {
     chatStore.queuedMessages = []
     chatStore.resolvedModelProvider = null
     chatStore.modelModalities = null
+    chatStore.mediaGenerationSettings = null
     chatStore.sendMessage.mockReset()
     chatStore.sendMessage.mockResolvedValue()
     chatStore.queueMessage.mockReset()
@@ -119,6 +121,9 @@ describe('InputBar drafts', () => {
     chatStore.modelModalities = { input: ['text', 'image'], output: ['video'] }
     const wrapper = mountInputBar()
     wrapper.findComponent({ name: 'InputToolbar' }).vm.$emit('mediaSettings', {
+      kind: 'video', duration: 8, aspect_ratio: '9:16', generate_audio: false,
+    })
+    expect(chatStore.mediaGenerationSettings).toEqual({
       kind: 'video', duration: 8, aspect_ratio: '9:16', generate_audio: false,
     })
     await wrapper.get('textarea').setValue('A dancer in motion')

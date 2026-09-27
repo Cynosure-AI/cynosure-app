@@ -55,7 +55,10 @@ const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([
 type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; progressCurrent?: number; progressTotal?: number; controller?: AbortController; error?: string }
 const attachedFiles = ref<DraftFile[]>([])
 const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([])
-const mediaSettings = ref<MediaGenerationSettings | null>(null)
+const mediaSettings = computed<MediaGenerationSettings | null>({
+  get: () => chatStore.mediaGenerationSettings,
+  set: (value) => { chatStore.mediaGenerationSettings = value },
+})
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
 const liveCleanups: Array<() => void> = []
