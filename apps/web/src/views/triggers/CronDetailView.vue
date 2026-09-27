@@ -268,32 +268,34 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <h1 class="break-words text-2xl font-bold leading-tight text-theme-100">
               {{ cronName || "Unnamed cron job" }}
             </h1>
-            <dl class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-500">
-              <div class="flex items-center gap-1">
-                <dt>Created</dt><dd class="text-theme-400">
-                  {{ formatTimestamp(job.createdAt) }}
-                </dd>
-              </div>
-              <div class="flex items-center gap-1">
-                <dt>Last changed</dt><dd class="text-theme-400">
-                  {{ formatTimestamp(job.updatedAt) }}
-                </dd>
-              </div>
-            </dl>
+            <div
+              class="flex mt-1 items-center gap-2 text-xs"
+              :class="stateMeta.color"
+            >
+              <Icon
+                :icon="stateMeta.icon"
+                class="h-4 w-4"
+                :class="{ 'animate-spin': stateMeta.spin }"
+              />
+              <span>{{ stateMeta.label }}</span>
+              <span class="text-theme-500">{{ stateMeta.description }}</span>
+            </div>
           </div>
         </div>
-        <div
-          class="mt-3 flex items-center gap-2 text-xs"
-          :class="stateMeta.color"
-        >
-          <Icon
-            :icon="stateMeta.icon"
-            class="h-4 w-4"
-            :class="{ 'animate-spin': stateMeta.spin }"
-          />
-          <span>{{ stateMeta.label }}</span>
-          <span class="text-theme-500">{{ stateMeta.description }}</span>
-        </div>
+
+
+        <dl class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-500">
+          <div class="flex items-center gap-1">
+            <dt>Created</dt><dd class="text-theme-400">
+              {{ formatTimestamp(job.createdAt) }}
+            </dd>
+          </div>
+          <div class="flex items-center gap-1">
+            <dt>Last changed</dt><dd class="text-theme-400">
+              {{ formatTimestamp(job.updatedAt) }}
+            </dd>
+          </div>
+        </dl>
       </div>
     </header>
 
