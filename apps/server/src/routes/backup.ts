@@ -96,6 +96,12 @@ interface MemoryFileIdentityBackup {
 
 type MemoryDocumentBackup = Record<string, string | number | null>
 type MemoryRevisionBackup = Record<string, string | number | null>
+const MEMORY_REVISION_SOURCES = new Set(['ai', 'dream', 'user', 'filesystem', 'import', 'restore'])
+
+function restoreRevisionSource(source: unknown): string {
+    const normalized = typeof source === 'string' ? source.trim().toLowerCase() : ''
+    return MEMORY_REVISION_SOURCES.has(normalized) ? normalized : 'restore'
+}
 
 interface MemoryFolderBackupRow extends Record<string, unknown> {
     id?: unknown
@@ -397,7 +403,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             },
             usage: {
                 count: executionLogs + auxiliaryModelUsage,
-                details: { runs: executionLogs, auxiliaryModelUsage }
+                details: { runs: executionLogs, auxiliaryModelUsage, chatMessages: messages }
             }
         }
 
@@ -646,13 +652,13 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             Boolean(manifest.modules[module]) && (module !== 'knowledge' || Boolean(knowledgeBackup))
         )
         let restoreIndex = 0
-        const emitRestoreProgress = (module: string, status: 'started' | 'completed' | 'failed') => {
+        const emitRestoreProgress = (module: string, status: 'started' | 'completed' | 'failed', errors: string[] = []) => {
             if (!broadcast) return
             const total = restoreModules.length
             const current = status === 'started'
                 ? restoreIndex + 1
                 : Math.min(restoreIndex + 1, total)
-            broadcast('backup:restore-progress', { module, status, current, total })
+            broadcast('backup:restore-progress', { module, status, current, total, errors })
             if (status !== 'started') restoreIndex++
         }
 
@@ -739,7 +745,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.agents = res
-            emitRestoreProgress('agents', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('agents', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore Providers ---
@@ -789,7 +795,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.providers = res
-            emitRestoreProgress('providers', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('providers', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore MCP ---
@@ -837,7 +843,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.mcp = res
-            emitRestoreProgress('mcp', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('mcp', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore Settings ---
@@ -922,7 +928,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
 
             // Reload the embedding provider from freshly restored settings.
             loadEmbeddingServiceFromDb()
-            emitRestoreProgress('settings', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('settings', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore Channels ---
@@ -964,7 +970,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.channels = res
-            emitRestoreProgress('channels', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('channels', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore categorized, revisional memory ---
@@ -988,6 +994,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 await ragStore.initialize()
 
                 db.prepare('DELETE FROM memory_file_index').run()
+                db.prepare('DELETE FROM memory_document_revisions').run()
+                db.prepare('DELETE FROM memory_documents').run()
                 db.prepare('DELETE FROM agent_memory_folders').run()
                 db.prepare('DELETE FROM memory_folders').run()
 
@@ -1060,7 +1068,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             (id, document_id, revision_number, content_hash, content, source, conversation_id, agent_id, message_ids_json, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                             .run(revision.id, revision.document_id, revision.revision_number, revision.content_hash,
-                                revision.content, revision.source, revision.conversation_id || null, revision.agent_id || null,
+                                revision.content, restoreRevisionSource(revision.source), revision.conversation_id || null, revision.agent_id || null,
                                 revision.message_ids_json || '[]', revision.created_at || Date.now())
                     }
                 } else {
@@ -1108,7 +1116,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.memory = res
-            emitRestoreProgress('memory', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('memory', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore governed knowledge, including manual corrections ---
@@ -1125,7 +1133,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.knowledge = res
-            emitRestoreProgress('knowledge', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('knowledge', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore Conversations (only for agents present in DB) ---
@@ -1200,6 +1208,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                 m.created_at || Date.now()
                             )
                             importedMessageIds.add(m.id as string)
+                            // Restored history must not become new Dreaming Mode work.
+                            db.prepare('DELETE FROM dream_message_events WHERE message_id = ?').run(m.id)
                         } catch (e) {
                             res.errors.push(`Message: ${(e as Error).message}`)
                         }
@@ -1428,7 +1438,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.conversations = res
-            emitRestoreProgress('conversations', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('conversations', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         // --- Restore Usage statistics (execution trace data) ---
@@ -1483,7 +1493,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 res.errors.push((e as Error).message)
             }
             results.usage = res
-            emitRestoreProgress('usage', res.errors.length > 0 ? 'failed' : 'completed')
+            emitRestoreProgress('usage', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
 
         return { success: true, results }

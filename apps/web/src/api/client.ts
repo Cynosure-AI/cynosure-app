@@ -549,7 +549,7 @@ export const api = {
     },
     resetApp: (modules?: string[]) =>
       post<{ success: boolean; results?: Record<string, { reset: boolean; errors: string[] }> }>('/api/backup/reset', modules ? { modules } : undefined),
-    onRestoreProgress: (cb: (data: { module: string; status: 'started' | 'completed' | 'failed'; current: number; total: number }) => void) =>
+    onRestoreProgress: (cb: (data: { module: string; status: 'started' | 'completed' | 'failed'; current: number; total: number; errors?: string[] }) => void) =>
       onWsEvent('backup:restore-progress', cb as WsHandler)
   },
 

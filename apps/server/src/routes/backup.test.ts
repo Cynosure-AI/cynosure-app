@@ -37,7 +37,7 @@ describe('usage backup', () => {
             expect(summaryResponse.statusCode).toBe(200)
             expect(summaryResponse.json().modules.usage).toEqual({
                 count: 1,
-                details: { runs: 0, auxiliaryModelUsage: 1 },
+                details: { runs: 0, auxiliaryModelUsage: 1, chatMessages: 0 },
             })
 
             const exportResponse = await app.inject({
@@ -129,6 +129,49 @@ describe('usage backup', () => {
             expect((db.prepare('SELECT content_blocks_json FROM messages WHERE id = ?').get('m1') as { content_blocks_json: string }).content_blocks_json)
                 .toBe('[{"type":"text","text":"Hello"}]')
             expect(db.prepare('SELECT execution_id FROM chat_events WHERE conversation_id = ?').all('c1')).toEqual([{ execution_id: 'e1' }])
+            expect(db.prepare('SELECT message_id FROM dream_message_events WHERE message_id = ?').all('m1')).toEqual([])
+        } finally {
+            await app.close()
+        }
+    })
+
+    test('replaces existing memory documents and revisions during restore', async () => {
+        const db = getDb()
+        db.prepare(`INSERT INTO memory_documents
+            (document_id, document_ref, category_id, file_name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)`)
+            .run('doc-1', 'memory://doc-1', 'uncategorized', 'note.md', 1, 1)
+        db.prepare(`INSERT INTO memory_document_revisions
+            (id, document_id, revision_number, content_hash, content, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`)
+            .run('revision-1', 'doc-1', 1, 'hash', 'Remember this', 'user', 1)
+        const app = Fastify()
+        await app.register(async registeredApp => registerBackupRoutes(registeredApp), { prefix: '/api/backup' })
+        try {
+            const exported = await app.inject({ method: 'GET', url: '/api/backup/export?modules=memory' })
+            expect(exported.statusCode).toBe(200)
+            const exportedZip = new AdmZip(exported.rawPayload)
+            const memoryMetadata = JSON.parse(exportedZip.readAsText('memory/categories.json'))
+            memoryMetadata.revisions[0].source = 'legacy-source'
+            const zip = new AdmZip()
+            for (const entry of exportedZip.getEntries()) {
+                if (entry.isDirectory) continue
+                zip.addFile(entry.entryName, entry.entryName === 'memory/categories.json'
+                    ? Buffer.from(JSON.stringify(memoryMetadata)) : entry.getData())
+            }
+            const boundary = '----cynosure-memory-backup-test'
+            const payload = Buffer.concat([
+                Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="backup.zip"\r\nContent-Type: application/zip\r\n\r\n`),
+                zip.toBuffer(),
+                Buffer.from(`\r\n--${boundary}--\r\n`),
+            ])
+            const imported = await app.inject({ method: 'POST', url: '/api/backup/import',
+                headers: { 'content-type': `multipart/form-data; boundary=${boundary}`, 'content-length': String(payload.length) },
+                payload })
+            expect(imported.statusCode, imported.body).toBe(200)
+            expect(imported.json().results.memory.errors).toEqual([])
+            expect(db.prepare('SELECT content, source FROM memory_document_revisions WHERE id = ?').get('revision-1'))
+                .toEqual({ content: 'Remember this', source: 'restore' })
         } finally {
             await app.close()
         }

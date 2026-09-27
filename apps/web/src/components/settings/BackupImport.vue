@@ -11,8 +11,9 @@ const importResults = ref<Record<string, { restored: number; errors: string[] }>
 const previewData = ref<{ version: number; createdAt: string; modules: Record<string, { count: number }> } | null>(null)
 const importModules = reactive<Record<string, boolean>>({})
 const previewing = ref(false)
-const restoreProgress = ref<{ module: string; status: 'started' | 'completed' | 'failed'; current: number; total: number } | null>(null)
+const restoreProgress = ref<{ module: string; status: 'started' | 'completed' | 'failed'; current: number; total: number; errors?: string[] } | null>(null)
 const restoreStatuses = reactive<Record<string, 'pending' | 'started' | 'completed' | 'failed'>>({})
+const restoreErrors = reactive<Record<string, string[]>>({})
 
 const moduleLabels: Record<string, { label: string; icon: string; description: string }> = {
   agents: { label: 'Agents', icon: 'lucide:bot', description: 'Agent definitions, system prompts, and configuration files' },
@@ -23,7 +24,7 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   memory: { label: 'Memory Folders', icon: 'lucide:book-open', description: 'Memory folder definitions, agent assignments, and document content (re-embedded on import)' },
   knowledge: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
   conversations: { label: 'Conversations', icon: 'lucide:message-square', description: 'Chat history and messages linked to agents (only restores for agents present in the DB)' },
-  usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and step traces used for usage metrics' }
+  usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and auxiliary model usage. Chat usage is restored with Conversations.' }
 }
 
 function onFileChange(event: Event): void {
@@ -66,11 +67,14 @@ async function doImport(): Promise<void> {
   importResults.value = null
   restoreProgress.value = null
   Object.keys(restoreStatuses).forEach(k => delete restoreStatuses[k])
+  Object.keys(restoreErrors).forEach(k => delete restoreErrors[k])
   selected.forEach((key) => { restoreStatuses[key] = 'pending' })
   try {
     const res = await api.backup.importBackup(importFile.value, selected)
     importResults.value = res.results
-    setTimeout(() => window.location.reload(), 1500)
+    if (!Object.values(res.results).some(result => result.errors.length > 0)) {
+      setTimeout(() => window.location.reload(), 1500)
+    }
   } catch (e) {
     importError.value = (e as Error).message
   } finally {
@@ -86,6 +90,7 @@ function clearImport(): void {
   Object.keys(importModules).forEach(k => delete importModules[k])
   restoreProgress.value = null
   Object.keys(restoreStatuses).forEach(k => delete restoreStatuses[k])
+  Object.keys(restoreErrors).forEach(k => delete restoreErrors[k])
 }
 
 // Warn user before navigating away during import
@@ -109,6 +114,7 @@ const unsubscribeRestoreProgress = api.backup.onRestoreProgress((data) => {
   if (!importing.value) return
   restoreProgress.value = data
   restoreStatuses[data.module] = data.status
+  if (data.errors?.length) restoreErrors[data.module] = data.errors
 })
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
@@ -172,12 +178,14 @@ onBeforeUnmount(() => {
               status === 'pending' ? 'text-theme-600' : ''
             ]"
           />
-          <span
-            class="truncate"
-            :class="status === 'pending' ? 'text-theme-500' : 'text-theme-300'"
-          >
-            {{ moduleLabels[key]?.label || key }}
-          </span>
+          <div class="min-w-0">
+            <span :class="status === 'pending' ? 'text-theme-500' : 'text-theme-300'">
+              {{ moduleLabels[key]?.label || key }}
+            </span>
+            <p v-for="(error, index) in restoreErrors[key] || []" :key="index" class="mt-1 text-amber-400 break-words">
+              {{ error }}
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -295,10 +303,13 @@ onBeforeUnmount(() => {
         <div class="space-y-3">
           <div class="flex items-center gap-2">
             <Icon
-              icon="lucide:check-circle"
-              class="w-5 h-5 text-green-400"
+              :icon="Object.values(importResults).some(result => result.errors.length > 0) ? 'lucide:alert-circle' : 'lucide:check-circle'"
+              class="w-5 h-5"
+              :class="Object.values(importResults).some(result => result.errors.length > 0) ? 'text-amber-400' : 'text-green-400'"
             />
-            <span class="text-sm font-medium text-theme-200">Restore Complete</span>
+            <span class="text-sm font-medium text-theme-200">
+              {{ Object.values(importResults).some(result => result.errors.length > 0) ? 'Restore completed with issues' : 'Restore Complete' }}
+            </span>
           </div>
 
           <div

@@ -28,7 +28,7 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   memory: { label: 'Memory Folders', icon: 'lucide:book-open', description: 'Memory folder definitions, agent assignments, and document content (re-embedded on import)' },
   knowledge: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
   conversations: { label: 'Conversations', icon: 'lucide:message-square', description: 'Chat history and messages linked to agents (only restores for agents present in the DB)' },
-  usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and step traces used for usage metrics' }
+  usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and auxiliary model usage. Chat usage is exported with Conversations.' }
 }
 
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
@@ -53,7 +53,7 @@ function moduleCountLabel(key: string): string {
     case 'conversations':
       return `${pluralize(details.conversations || 0, 'Conversation')} · ${pluralize(details.messages || 0, 'Message')}`
     case 'usage':
-      return `${pluralize(details.runs || 0, 'Run')} · ${pluralize(details.steps || 0, 'Step')}`
+      return `${pluralize(details.runs || 0, 'Execution Log')} · ${pluralize(details.auxiliaryModelUsage || 0, 'Auxiliary Usage Entry', 'Auxiliary Usage Entries')} · ${pluralize(details.chatMessages || 0, 'Chat Message')} in Conversations`
     default: return pluralize(module.count, 'Item')
   }
 }
