@@ -95,13 +95,6 @@ interface MemoryFileIdentityBackup {
 }
 
 type MemoryDocumentBackup = Record<string, string | number | null>
-type MemoryRevisionBackup = Record<string, string | number | null>
-const MEMORY_REVISION_SOURCES = new Set(['ai', 'dream', 'user', 'filesystem', 'import', 'restore'])
-
-function restoreRevisionSource(source: unknown): string {
-    const normalized = typeof source === 'string' ? source.trim().toLowerCase() : ''
-    return MEMORY_REVISION_SOURCES.has(normalized) ? normalized : 'restore'
-}
 
 interface MemoryFolderBackupRow extends Record<string, unknown> {
     id?: unknown
@@ -526,8 +519,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     SELECT document_id, document_ref, category_id, file_name, dreamed_at, created_at
                     FROM memory_file_index ORDER BY created_at
                 `).all() as MemoryFileIdentityBackup[]
-                const documents = db.prepare('SELECT * FROM memory_documents ORDER BY created_at').all() as MemoryDocumentBackup[]
-                const revisions = db.prepare('SELECT * FROM memory_document_revisions ORDER BY document_id, revision_number').all() as MemoryRevisionBackup[]
+                const documents = db.prepare("SELECT * FROM memory_documents WHERE status = 'active' ORDER BY created_at").all() as MemoryDocumentBackup[]
                 const files: MemoryFileBackup[] = []
 
                 for (const category of categories) {
@@ -542,7 +534,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     }
                 }
 
-                archive.append(JSON.stringify({ categories, assignments, fileIndex, documents, revisions }, null, 2), { name: 'memory/categories.json' })
+                archive.append(JSON.stringify({ categories, assignments, fileIndex, documents }, null, 2), { name: 'memory/categories.json' })
                 archive.append(JSON.stringify({ files }, null, 2), { name: 'memory/files.json' })
                 manifest.modules.memory = { count: files.length }
             }
@@ -1005,16 +997,16 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 }
                 ensureFolder(memoryRoot)
 
-                // Restore category metadata, document identities, revisions, and assignments.
+                // Restore current category and document state. Historical revisions
+                // in older backups are intentionally ignored.
                 const categoriesEntry = zip.getEntry('memory/categories.json')
                 const folderIdMap = new Map<string, string>()
                 if (categoriesEntry) {
-                    const { categories, assignments, fileIndex, documents, revisions } = JSON.parse(categoriesEntry.getData().toString('utf-8')) as {
+                    const { categories, assignments, fileIndex, documents } = JSON.parse(categoriesEntry.getData().toString('utf-8')) as {
                         categories: MemoryFolderBackupRow[]
                         assignments: Record<string, unknown>[]
                         fileIndex?: MemoryFileIdentityBackup[]
                         documents?: MemoryDocumentBackup[]
-                        revisions?: MemoryRevisionBackup[]
                     }
                     for (const sp of categories) {
                         const importedId = String(sp.id || '')
@@ -1055,6 +1047,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         `).run(file.document_id, file.document_ref, mappedFolderId, file.file_name, file.dreamed_at || 0, file.created_at || Date.now())
                     }
                     for (const document of documents || []) {
+                        if (document.status === 'deleted') continue
                         const folderId = folderIdMap.get(String(document.category_id || '')) || String(document.category_id || '')
                         db.prepare(`INSERT OR REPLACE INTO memory_documents
                             (document_id, document_ref, category_id, file_name, current_hash, status, indexing_status, created_at, updated_at, deleted_at)
@@ -1062,14 +1055,6 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             .run(document.document_id, document.document_ref, folderId, document.file_name,
                                 document.current_hash || '', document.status || 'active', document.indexing_status || 'pending', document.created_at || Date.now(),
                                 document.updated_at || Date.now(), document.deleted_at || null)
-                    }
-                    for (const revision of revisions || []) {
-                        db.prepare(`INSERT OR REPLACE INTO memory_document_revisions
-                            (id, document_id, revision_number, content_hash, content, source, conversation_id, agent_id, message_ids_json, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                            .run(revision.id, revision.document_id, revision.revision_number, revision.content_hash,
-                                revision.content, restoreRevisionSource(revision.source), revision.conversation_id || null, revision.agent_id || null,
-                                revision.message_ids_json || '[]', revision.created_at || Date.now())
                     }
                 } else {
                     throw new Error('Backup does not contain categorized memory metadata.')
