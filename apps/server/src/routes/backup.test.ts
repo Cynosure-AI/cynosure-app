@@ -2,9 +2,11 @@ import Fastify from 'fastify'
 import AdmZip from 'adm-zip'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb, getDb } from '../db/database.js'
+import { getDefaultMemoryFolderDir } from '../core/data-dir.js'
 import { registerBackupRoutes } from './backup.js'
 
 describe('usage backup', () => {
@@ -135,8 +137,10 @@ describe('usage backup', () => {
         }
     })
 
-    test('replaces existing memory documents and revisions during restore', async () => {
+    test('restores current memory without carrying revision history from old backups', async () => {
         const db = getDb()
+        const memoryFile = join(getDefaultMemoryFolderDir(), 'note.md')
+        writeFileSync(memoryFile, 'Current memory')
         db.prepare(`INSERT INTO memory_documents
             (document_id, document_ref, category_id, file_name, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)`)
@@ -152,7 +156,12 @@ describe('usage backup', () => {
             expect(exported.statusCode).toBe(200)
             const exportedZip = new AdmZip(exported.rawPayload)
             const memoryMetadata = JSON.parse(exportedZip.readAsText('memory/categories.json'))
-            memoryMetadata.revisions[0].source = 'legacy-source'
+            expect(memoryMetadata.revisions).toBeUndefined()
+            memoryMetadata.revisions = [{
+                id: 'old-revision', document_id: 'doc-1', revision_number: 2,
+                content_hash: 'old-hash', content: 'Old memory', source: 'legacy-source', created_at: 2,
+            }]
+            writeFileSync(memoryFile, 'Changed after export')
             const zip = new AdmZip()
             for (const entry of exportedZip.getEntries()) {
                 if (entry.isDirectory) continue
@@ -170,8 +179,11 @@ describe('usage backup', () => {
                 payload })
             expect(imported.statusCode, imported.body).toBe(200)
             expect(imported.json().results.memory.errors).toEqual([])
-            expect(db.prepare('SELECT content, source FROM memory_document_revisions WHERE id = ?').get('revision-1'))
-                .toEqual({ content: 'Remember this', source: 'restore' })
+            expect(imported.json().results.memory.restored).toBe(1)
+            expect(readFileSync(memoryFile, 'utf-8')).toBe('Current memory')
+            expect(db.prepare('SELECT document_ref FROM memory_documents WHERE document_id = ?').get('doc-1'))
+                .toEqual({ document_ref: 'memory://doc-1' })
+            expect(db.prepare('SELECT COUNT(*) AS count FROM memory_document_revisions').get()).toEqual({ count: 0 })
         } finally {
             await app.close()
         }
