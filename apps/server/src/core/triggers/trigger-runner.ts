@@ -8,7 +8,7 @@ import { closePlanningRun } from '../agent/planning-state.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
-import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
+import { getAssignedMemoryFolderIds, getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { buildPersistedChatConfig } from '../chat/run-config.js'
 import { resolveMemoryFolderOverrides } from '../chat/run-config.js'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
@@ -119,8 +119,10 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
         const persistedExecutionConfig = buildPersistedChatConfig({
             selectedToolKeys: executionConfig?.allowedTools ?? agent?.tools ?? [],
             requestedSubAgents: executionConfig?.subAgents ?? agent?.subAgents ?? [],
-            requestedMemoryFolderIds: memoryFolders.map((space) => space.id),
-            systemPrompt: planned.messages.find((message) => message.role === 'system')?.content.toString(),
+            requestedMemoryFolderIds: executionConfig?.memoryFolderIds ?? (agent ? getAssignedMemoryFolderIds(agent.id, db) : []),
+            // The planner appends trigger instructions and runtime context to its
+            // prompt. Only the editable base prompt belongs in session settings.
+            systemPrompt: executionConfig?.systemPrompt ?? agent?.systemPrompt ?? '',
             responseModel: planned.responseModel,
             responseProvider: planned.responseProvider,
             thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),

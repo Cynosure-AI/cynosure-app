@@ -65,6 +65,12 @@ export function getAssignedMemoryFolders(agentId: string): MemoryFolderRef[] {
     }
 }
 
+/** The configured selection, before execution expands parent folders. */
+export function getAssignedMemoryFolderIds(agentId: string, db: Database.Database = getDb()): string[] {
+    return (db.prepare('SELECT category_id FROM agent_memory_folders WHERE agent_id = ?').all(agentId) as Array<{ category_id: string }>)
+        .map((row) => row.category_id)
+}
+
 /** Expand folder grants to every currently registered descendant. */
 export function expandMemoryFolderScope(folders: MemoryFolderRef[], db: Database.Database = getDb()): MemoryFolderRef[] {
     if (folders.length === 0) return []
