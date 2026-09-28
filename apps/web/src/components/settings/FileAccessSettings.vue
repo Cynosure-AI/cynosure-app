@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
+import BaseCard from '../shared/BaseCard.vue'
 
 const folders = ref<string[]>([])
 const folderPath = ref('')
@@ -58,10 +59,10 @@ onMounted(refresh)
 </script>
 
 <template>
-  <div class="space-y-6">
+  <BaseCard class="space-y-4 p-5">
     <div>
-      <h2 class="text-lg font-semibold text-theme-100">File Access</h2>
-      <p class="mt-1 text-sm text-ink-muted">
+      <h3 class="text-sm font-medium text-theme-200">File Access</h3>
+      <p class="mt-0.5 text-xs text-ink-muted">
         AI file tools can access these folders and everything inside them. Other folders require your approval when a tool tries to use them.
       </p>
     </div>
@@ -105,5 +106,5 @@ onMounted(refresh)
         >Remove</button>
       </li>
     </ul>
-  </div>
+  </BaseCard>
 </template>
