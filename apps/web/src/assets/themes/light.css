@@ -1,28 +1,28 @@
-/* Paper surfaces and ink. Components use these tokens through Tailwind utilities. */
+/* Cool paper surfaces, clear ink, and a saturated blue accent. */
 [data-theme="light"] {
-  --color-theme-950: #e4ebf3;
-  --color-theme-900: #f5f7fb;
+  --color-theme-950: #eaf2fb;
+  --color-theme-900: #f4f8fd;
   --color-theme-800: #ffffff;
-  --color-theme-700: #b7c5d5;
-  --color-theme-600: #56657a;
-  --color-theme-500: #475569;
-  --color-theme-400: #334155;
-  --color-theme-300: #27364a;
-  --color-theme-200: #1e293b;
-  --color-theme-100: #111827;
+  --color-theme-700: #d5e2f1;
+  --color-theme-600: #627792;
+  --color-theme-500: #526986;
+  --color-theme-400: #3f5878;
+  --color-theme-300: #294365;
+  --color-theme-200: #183354;
+  --color-theme-100: #102746;
 
-  --color-accent-50: #eff7ff;
-  --color-accent-100: #dceeff;
-  --color-accent-200: #bfddff;
-  --color-accent-300: #91c4ff;
-  --color-accent-400: #5ca3ff;
-  --color-accent-500: #2265dc;
-  --color-accent-600: #1f51b2;
-  --color-accent-700: #174184;
-  --color-accent-800: #20468c;
-  --color-accent-900: #203d6e;
-  --color-accent-950: #162747;
-  --color-accent-fg: #174f9e;
+  --color-accent-50: #eef6ff;
+  --color-accent-100: #dcecff;
+  --color-accent-200: #bcd9ff;
+  --color-accent-300: #8bbcff;
+  --color-accent-400: #5599ff;
+  --color-accent-500: #1769f5;
+  --color-accent-600: #075be5;
+  --color-accent-700: #064bc2;
+  --color-accent-800: #12449b;
+  --color-accent-900: #173d7c;
+  --color-accent-950: #122b52;
+  --color-accent-fg: #075be5;
   --color-accent-on: #ffffff;
 
   --color-status-info: #075985;
@@ -33,28 +33,62 @@
   --color-status-indigo: #3730a3;
   --color-status-violet: #6d28a0;
 
-  --color-quote-surface: #e8edf4;
-  --color-code-surface: #f0f4f8;
-  --color-code-text: #243246;
+  --color-ink-secondary: #385574;
+  --color-ink-muted: #597494;
+  --color-ink-faint: #7690ac;
+  --color-page-header: rgba(248, 251, 255, .9);
+  --color-control-surface: rgba(255, 255, 255, .82);
+  --color-table-surface: rgba(255, 255, 255, .72);
+  --color-table-header: rgba(235, 243, 252, .86);
+  --color-table-border: #d5e2f1;
+  --color-table-hover: rgba(224, 238, 255, .74);
+  --color-table-selected: rgba(25, 105, 245, .1);
+  --color-quote-surface: rgba(232, 240, 255, .72);
+  --color-code-surface: #f2f6fc;
+  --color-code-text: #243d60;
+  --color-user-message: #1670f8;
+  --color-user-message-text: #ffffff;
 
-  --theme-glow-strong: 0 0 0 3px rgba(51, 127, 240, 0.16);
+  --theme-glow-strong: 0 0 0 3px rgba(30, 111, 245, .16);
+  --theme-shell-background: linear-gradient(135deg, #e7f0fb 0%, #f7faff 50%, #eaf3fd 100%);
+  --theme-content-background:
+    radial-gradient(circle at 100% 1%, transparent 0 17rem, rgba(151, 197, 251, .12) 17.1rem 17.2rem, transparent 17.3rem 20rem, rgba(151, 197, 251, .1) 20.1rem 20.2rem, transparent 20.3rem),
+    radial-gradient(circle at 100% 100%, transparent 0 14rem, rgba(139, 189, 250, .14) 14.1rem 14.2rem, transparent 14.3rem 17rem, rgba(139, 189, 250, .1) 17.1rem 17.2rem, transparent 17.3rem),
+    radial-gradient(ellipse at 50% 45%, rgba(255, 255, 255, .98) 0%, rgba(246, 250, 255, .88) 48%, rgba(232, 242, 254, .72) 100%);
+  --theme-sidebar-background: linear-gradient(180deg, rgba(246, 250, 255, .98), rgba(234, 243, 253, .96));
+  --theme-sidebar-border: rgba(147, 174, 207, .34);
+  --theme-sidebar-shadow: 8px 0 28px rgba(46, 91, 145, .06);
+  --theme-composer-background: rgba(255, 255, 255, .92);
+  --theme-composer-shadow: 0 12px 36px rgba(53, 101, 158, .12);
+  --theme-nav-active-color: #075be5;
+  --theme-nav-active-background: linear-gradient(90deg, rgba(24, 112, 248, .13), rgba(24, 112, 248, .045));
+  --theme-nav-active-shadow: inset 2px 0 0 #1769f5;
+  --theme-nav-active-border: 0 solid transparent;
+  --theme-selection-background: rgba(23, 105, 245, .22);
+  --theme-selection-color: #102746;
+  --theme-scrollbar-track: rgba(222, 234, 248, .46);
+  --theme-scrollbar-thumb: #c1d4eb;
+  --theme-scrollbar-hover: #9db9da;
+  --theme-action-gradient: linear-gradient(135deg, #1878ff, #075be5 72%, #084fc8);
+  --theme-action-shadow: 0 4px 12px rgba(7, 91, 229, .2);
 
   --syntax-keyword: #b4234c;
   --syntax-string: #185fa5;
   --syntax-muted: #58677d;
   --syntax-number: #174f9e;
   --syntax-class: #65449c;
-
   color-scheme: light;
+}
 
-  --color-ink-secondary: #334155;
-  --color-ink-muted: #475569;
-  --color-ink-faint: #56657a;
-  --color-page-header: #ffffff;
-  --color-control-surface: #ffffff;
-  --color-table-surface: #ffffff;
-  --color-table-header: #ebf0f6;
-  --color-table-border: #cbd5e1;
-  --color-table-hover: #edf4ff;
-  --color-table-selected: #dfeaff;
+[data-theme="light"] .app-content {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 16px 42px rgba(48, 91, 140, .08);
+}
+
+[data-theme="light"] .chat-composer {
+  border-color: rgba(173, 197, 226, .62);
+  backdrop-filter: blur(18px);
+}
+
+[data-theme="light"] .chat-user-message {
+  box-shadow: 0 8px 18px rgba(20, 100, 226, .18);
 }
