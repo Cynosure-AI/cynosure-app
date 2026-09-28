@@ -623,27 +623,27 @@ onMounted(() => {
       <div class="pointer-events-auto flex w-full max-w-xl items-center gap-1.5 rounded-xl border border-theme-700 bg-theme-950/95 p-1.5 shadow-xl shadow-black/20 backdrop-blur">
         <Icon
           icon="lucide:search"
-          class="ml-1.5 h-3.5 w-3.5 shrink-0 text-theme-500"
+          class="ml-1.5 h-3.5 w-3.5 shrink-0 text-ink-muted"
         />
         <input
           ref="searchInput"
           v-model="searchQuery"
           type="search"
-          class="min-w-0 flex-1 bg-transparent px-1 py-1 text-xs text-theme-200 outline-none placeholder:text-theme-600"
+          class="min-w-0 flex-1 bg-transparent px-1 py-1 text-xs text-theme-200 outline-none placeholder:text-ink-faint"
           placeholder="Search this chat…"
           aria-label="Search this chat"
           @keydown.enter.prevent="moveSearchResult($event.shiftKey ? -1 : 1)"
           @keydown.esc.prevent="closeSearch"
         >
         <span
-          class="min-w-16 text-right text-[10px] tabular-nums text-theme-500"
+          class="min-w-16 text-right text-[10px] tabular-nums text-ink-muted"
           aria-live="polite"
         >
           {{ searchResultLabel }}
         </span>
         <button
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-lg text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-default disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-default disabled:opacity-30"
           title="Previous result"
           aria-label="Previous search result"
           :disabled="!searchResults.length"
@@ -656,7 +656,7 @@ onMounted(() => {
         </button>
         <button
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-lg text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-default disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-default disabled:opacity-30"
           title="Next result"
           aria-label="Next search result"
           :disabled="!searchResults.length"
@@ -669,7 +669,7 @@ onMounted(() => {
         </button>
         <button
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-lg text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
           title="Close search"
           aria-label="Close chat search"
           @click="closeSearch"
@@ -689,15 +689,15 @@ onMounted(() => {
     >
       <Icon
         icon="lucide:loader-2"
-        class="w-8 h-8 text-theme-500 animate-spin"
+        class="w-8 h-8 text-ink-muted animate-spin"
       />
-      <span class="text-sm text-theme-500 mt-3">Loading conversation…</span>
+      <span class="text-sm text-ink-muted mt-3">Loading conversation…</span>
     </div>
 
     <!-- Empty state -->
     <div
       v-else-if="chatStore.messages.length === 0"
-      class="flex flex-col items-center justify-center h-full text-theme-400"
+      class="flex flex-col items-center justify-center h-full text-ink-secondary"
     >
       <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
         <RouterLink
@@ -727,12 +727,12 @@ onMounted(() => {
       <template v-if="!wsConnected">
         <Icon
           icon="lucide:loader-2"
-          class="w-8 h-8 text-theme-500 animate-spin mb-4"
+          class="w-8 h-8 text-ink-muted animate-spin mb-4"
         />
         <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
           Initializing…
         </h2>
-        <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
+        <p class="text-sm mt-2 text-ink-muted max-w-sm text-center">
           Connecting to server and loading your data.
         </p>
       </template>
@@ -740,7 +740,7 @@ onMounted(() => {
         <h2 class="text-3xl font-semibold text-theme-200 tracking-tight text-center">
           {{ greeting }}
         </h2>
-        <p class="text-sm mt-2 text-theme-500 max-w-sm text-center">
+        <p class="text-sm mt-2 text-ink-muted max-w-sm text-center">
           Type a message below to begin a new conversation, or choose an agent to assist you.
         </p>
       </template>
@@ -914,14 +914,14 @@ onMounted(() => {
                         >
                           <Icon
                             icon="lucide:wrench"
-                            class="w-3.5 h-3.5 text-theme-500 shrink-0"
+                            class="w-3.5 h-3.5 text-ink-muted shrink-0"
                           />
-                          <span class="text-theme-400 truncate flex-1 text-left">
+                          <span class="text-ink-secondary truncate flex-1 text-left">
                             {{ inner.msg.content.slice(0, 80) }}{{ inner.msg.content.length > 80 ? '…' : '' }}
                           </span>
                           <Icon
                             icon="lucide:chevron-down"
-                            class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
+                            class="w-3 h-3 text-ink-faint shrink-0 transition-transform"
                             :class="{ 'rotate-180': expanded }"
                           />
                         </button>
@@ -1024,14 +1024,14 @@ onMounted(() => {
                 >
                   <Icon
                     icon="lucide:wrench"
-                    class="w-3.5 h-3.5 text-theme-500 shrink-0"
+                    class="w-3.5 h-3.5 text-ink-muted shrink-0"
                   />
-                  <span class="text-theme-400 truncate flex-1 text-left">
+                  <span class="text-ink-secondary truncate flex-1 text-left">
                     {{ entry.msg.content.slice(0, 80) }}{{ entry.msg.content.length > 80 ? '…' : '' }}
                   </span>
                   <Icon
                     icon="lucide:chevron-down"
-                    class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
+                    class="w-3 h-3 text-ink-faint shrink-0 transition-transform"
                     :class="{ 'rotate-180': expanded }"
                   />
                 </button>

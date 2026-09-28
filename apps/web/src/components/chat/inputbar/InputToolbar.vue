@@ -218,7 +218,7 @@ async function toggleMic(): Promise<void> {
 
       <Icon
         icon="lucide:chevron-down"
-        class="h-3.5 w-3.5 text-theme-500 shrink-0"
+        class="h-3.5 w-3.5 text-ink-muted shrink-0"
       />
     </button>
 
@@ -264,9 +264,9 @@ async function toggleMic(): Promise<void> {
                 Capabilities
               </p>
               <div class="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-1 text-xs">
-                <span class="text-theme-500">Input</span>
+                <span class="text-ink-muted">Input</span>
                 <span class="text-theme-200">{{ formattedInputModalities }}</span>
-                <span class="text-theme-500">Output</span>
+                <span class="text-ink-muted">Output</span>
                 <span class="text-theme-200">{{ formattedOutputModalities }}</span>
               </div>
             </div>
@@ -280,7 +280,7 @@ async function toggleMic(): Promise<void> {
                   v-for="cost in formattedTokenCosts"
                   :key="cost.label"
                 >
-                  <span class="text-theme-500">{{ cost.label }}</span>
+                  <span class="text-ink-muted">{{ cost.label }}</span>
                   <span class="text-theme-200 tabular-nums">{{ cost.value }}</span>
                 </template>
               </div>
@@ -295,7 +295,7 @@ async function toggleMic(): Promise<void> {
                   v-for="cost in formattedMediaCosts"
                   :key="cost.label"
                 >
-                  <span class="text-theme-500">{{ cost.label }}</span>
+                  <span class="text-ink-muted">{{ cost.label }}</span>
                   <span class="text-theme-200 tabular-nums">{{ cost.value }}</span>
                 </template>
               </div>
@@ -310,7 +310,7 @@ async function toggleMic(): Promise<void> {
                   v-for="sku in formattedSkuCosts"
                   :key="sku.label"
                 >
-                  <span class="text-theme-500">{{ sku.label }}</span>
+                  <span class="text-ink-muted">{{ sku.label }}</span>
                   <span class="text-theme-200 tabular-nums">{{ sku.value }}</span>
                 </template>
               </div>
@@ -325,7 +325,7 @@ async function toggleMic(): Promise<void> {
                   v-for="cost in formattedExtraCosts"
                   :key="cost.label"
                 >
-                  <span class="text-theme-500">{{ cost.label }}</span>
+                  <span class="text-ink-muted">{{ cost.label }}</span>
                   <span class="text-theme-200 tabular-nums">{{ cost.value }}</span>
                 </template>
               </div>
@@ -341,7 +341,7 @@ async function toggleMic(): Promise<void> {
       placement="above"
     >
       <button
-        class="p-1.5 text-theme-600 rounded-lg shrink-0 cursor-not-allowed focus:outline-none"
+        class="p-1.5 text-ink-faint rounded-lg shrink-0 cursor-not-allowed focus:outline-none"
         title="Voice input"
         disabled
         aria-label="Voice input (requires model download)"
@@ -375,7 +375,7 @@ async function toggleMic(): Promise<void> {
               ? 'bg-amber-500/20 text-status-warning shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
               : whisperStatus === 'loading'
                 ? 'text-status-warning cursor-wait'
-                : 'text-theme-500 hover:text-theme-300'
+                : 'text-ink-muted hover:text-theme-300'
         "
         :title="
           whisperStatus === 'recording'
@@ -435,7 +435,7 @@ async function toggleMic(): Promise<void> {
 
     <button
       v-if="editingQueue"
-      class="p-1.5 text-theme-400 hover:text-theme-100 rounded-lg transition-colors"
+      class="p-1.5 text-ink-secondary hover:text-theme-100 rounded-lg transition-colors"
       title="Cancel edit"
       aria-label="Cancel queued message edit"
       @click="emit('cancelEdit')"
@@ -491,7 +491,7 @@ async function toggleMic(): Promise<void> {
           />
           <span>
             <span class="block text-xs font-medium text-theme-100">Steer current run</span>
-            <span class="mt-0.5 block text-[11px] leading-4 text-theme-400">Interrupt the current response and redirect it with this message.</span>
+            <span class="mt-0.5 block text-[11px] leading-4 text-ink-secondary">Interrupt the current response and redirect it with this message.</span>
           </span>
         </button>
       </template>
@@ -501,7 +501,7 @@ async function toggleMic(): Promise<void> {
       v-if="!isRunning || editingQueue"
       type="button"
       :disabled="!canSend"
-      class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-accent-600 px-2.5 text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
+      class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg accent-action bg-accent-600 px-2.5 text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
       :title="editingQueue ? 'Save queued message' : 'Send message'"
       :aria-label="editingQueue ? 'Save queued message' : 'Send message'"
       @click="queueMessage"

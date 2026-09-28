@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
             <div class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-fg">
               Chunk {{ marker.chunk.chunkIndex + 1 }}<span v-if="marker.chunk.sectionPath"> · {{ marker.chunk.sectionPath }}</span>
             </div>
-            <p :class="{ 'italic text-theme-500': !marker.chunk.summary }">
+            <p :class="{ 'italic text-ink-muted': !marker.chunk.summary }">
               {{ marker.chunk.summary || "Summary unavailable for this chunk." }}
             </p>
             <div
@@ -249,7 +249,7 @@ onBeforeUnmount(() => {
               <span
                 v-for="tag in marker.chunk.tags"
                 :key="tag"
-                class="rounded border border-theme-700 bg-theme-950 px-1.5 py-0.5 text-[11px] text-theme-400"
+                class="rounded border border-theme-700 bg-theme-950 px-1.5 py-0.5 text-[11px] text-ink-secondary"
               >{{ tag }}</span>
             </div>
           </div>

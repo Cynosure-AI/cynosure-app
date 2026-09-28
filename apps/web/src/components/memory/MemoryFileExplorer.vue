@@ -977,7 +977,7 @@ function folderIndexSummary(folder: MemoryFolder): {
       ratio: indexed / total,
     };
   }
-  return { label: "Not Indexed", icon: "lucide:circle-dashed", colorClass: "text-theme-500", ratio: 0 };
+  return { label: "Not Indexed", icon: "lucide:circle-dashed", colorClass: "text-ink-muted", ratio: 0 };
 }
 
 function formatFileSize(bytes: number): string {
@@ -1082,7 +1082,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       <template #path-actions>
         <button
           type="button"
-          class="ml-1 shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="ml-1 shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
           :title="pathCopied ? 'Path copied' : 'Copy folder path'"
           aria-label="Copy current folder path"
           @click="copyCurrentFolderPath"
@@ -1097,7 +1097,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="currentSpace?.isUncategorized"
           :title="currentSpace?.isUncategorized ? 'Cannot edit memory root' : 'Edit folder'"
           :aria-label="currentSpace?.isUncategorized ? 'Memory root cannot be edited' : `Edit ${currentSpace?.name || 'folder'}`"
-          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+          class="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('editSpace')"
         >
           <Icon
@@ -1110,7 +1110,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="currentSpace?.isUncategorized"
           :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
           :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
-          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-30"
+          class="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('deleteSpace')"
         >
           <Icon
@@ -1332,7 +1332,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           class="w-full rounded-lg border border-theme-700 bg-theme-950 px-3 py-2 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
           :disabled="creatingFile"
         >
-        <p class="mt-2 text-xs text-theme-500">
+        <p class="mt-2 text-xs text-ink-muted">
           Files are created as Markdown unless you use a .txt extension.
         </p>
         <p
@@ -1345,7 +1345,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <div class="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            class="rounded-lg px-3 py-2 text-sm text-theme-400 hover:bg-theme-800 hover:text-theme-200"
+            class="rounded-lg px-3 py-2 text-sm text-ink-secondary hover:bg-theme-800 hover:text-theme-200"
             :disabled="creatingFile"
             @click="showNewFileDialog = false"
           >
@@ -1353,7 +1353,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           </button>
           <button
             type="submit"
-            class="rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-accent-on hover:bg-accent-400 disabled:opacity-50"
+            class="rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-medium text-accent-on hover:bg-accent-400 disabled:opacity-50"
             :disabled="creatingFile"
           >
             {{ creatingFile ? 'Creating…' : 'Create file' }}

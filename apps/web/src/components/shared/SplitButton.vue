@@ -65,7 +65,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       :disabled="disabled || primaryDisabled"
-      class="inline-flex items-center gap-1.5 rounded-l-lg bg-accent-600 px-2.5 py-1 text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
+      class="inline-flex items-center gap-1.5 rounded-l-lg accent-action bg-accent-600 px-2.5 py-1 text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-ink-muted focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
       :title="title"
       :aria-label="primaryLabel"
       @click="emit('primary')"
@@ -75,7 +75,7 @@ onBeforeUnmount(() => {
     <button
       type="button"
       :disabled="disabled"
-      class="inline-flex w-7 items-center justify-center rounded-r-lg border-l border-white/20 bg-accent-600 text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:border-theme-600 disabled:bg-theme-700 disabled:text-theme-500 focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
+      class="inline-flex w-7 items-center justify-center rounded-r-lg border-l border-white/20 accent-action bg-accent-600 text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:border-theme-600 disabled:bg-theme-700 disabled:text-ink-muted focus:z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
       title="More options"
       :aria-label="menuLabel"
       aria-haspopup="menu"

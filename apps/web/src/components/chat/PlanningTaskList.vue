@@ -13,17 +13,17 @@ const completedCount = computed(() => state.value?.items.filter((item) => item.s
 const totalCount = computed(() => state.value?.items.length ?? 0)
 
 const statusMeta: Record<PlanningTaskStatus, { icon: string; cls: string }> = {
-  pending: { icon: 'lucide:circle', cls: 'text-theme-500' },
+  pending: { icon: 'lucide:circle', cls: 'text-ink-muted' },
   in_progress: { icon: 'svg-spinners:ring-resize', cls: 'text-accent-fg' },
   completed: { icon: 'lucide:check-circle-2', cls: 'text-status-success' },
   blocked: { icon: 'lucide:octagon-alert', cls: 'text-status-warning' },
-  cancelled: { icon: 'lucide:circle-x', cls: 'text-theme-500' },
+  cancelled: { icon: 'lucide:circle-x', cls: 'text-ink-muted' },
 }
 
 function itemClass(item: PlanningTaskItem): string {
-  if (item.status === 'completed') return 'text-theme-400'
+  if (item.status === 'completed') return 'text-ink-secondary'
   if (item.status === 'blocked') return 'text-amber-200'
-  if (item.status === 'cancelled') return 'text-theme-500'
+  if (item.status === 'cancelled') return 'text-ink-muted'
   return 'text-theme-200'
 }
 </script>
@@ -45,12 +45,12 @@ function itemClass(item: PlanningTaskItem): string {
       <div class="min-w-0 flex-1">
         <div class="truncate text-xs font-medium text-theme-200">
           Tasks {{ completedCount }}/{{ totalCount }}
-          <span class="font-normal text-theme-500"> · {{ state.objective }}</span>
+          <span class="font-normal text-ink-muted"> · {{ state.objective }}</span>
         </div>
       </div>
       <button
         type="button"
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
         title="Close tasks"
         aria-label="Close tasks"
         @click="$emit('close')"
@@ -85,7 +85,7 @@ function itemClass(item: PlanningTaskItem): string {
 
           <div
             v-if="item.note"
-            class="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-[1.4] text-theme-500"
+            class="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-[1.4] text-ink-muted"
           >
             {{ item.note }}
           </div>

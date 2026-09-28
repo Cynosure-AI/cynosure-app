@@ -68,7 +68,7 @@ function iconFor(priority: AppNotification['priority']): string {
             </span>
             <span class="min-w-0 flex-1">
               <span class="block text-sm font-medium text-theme-100">{{ toast.title }}</span>
-              <span class="mt-0.5 block line-clamp-3 text-xs leading-relaxed text-theme-400">{{ toast.body }}</span>
+              <span class="mt-0.5 block line-clamp-3 text-xs leading-relaxed text-ink-secondary">{{ toast.body }}</span>
             </span>
           </button>
           <template v-else>
@@ -89,14 +89,14 @@ function iconFor(priority: AppNotification['priority']): string {
               <div class="text-sm font-medium text-theme-100">
                 {{ toast.title }}
               </div>
-              <p class="mt-0.5 line-clamp-3 text-xs leading-relaxed text-theme-400">
+              <p class="mt-0.5 line-clamp-3 text-xs leading-relaxed text-ink-secondary">
                 {{ toast.body }}
               </p>
             </div>
           </template>
           <button
             type="button"
-            class="-mr-1 -mt-1 ml-2 shrink-0 rounded-md p-1.5 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+            class="-mr-1 -mt-1 ml-2 shrink-0 rounded-md p-1.5 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
             :aria-label="`Dismiss ${toast.title}`"
             @click="notificationStore.dismissToast(toast.id)"
           >

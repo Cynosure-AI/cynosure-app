@@ -152,7 +152,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-fg">
+  <div class="app-shell flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-fg">
     <!-- Mobile sidebar backdrop -->
     <Transition
       v-if="!isOnboardingRoute"
@@ -195,7 +195,7 @@ onUnmounted(() => {
       >
         <button
           type="button"
-          class="p-2 rounded-lg text-theme-400 hover:text-theme-100 hover:bg-theme-800 transition-colors"
+          class="p-2 rounded-lg text-ink-secondary hover:text-theme-100 hover:bg-theme-800 transition-colors"
           aria-label="Open navigation"
           aria-controls="primary-navigation"
           :aria-expanded="sidebarOpen"
@@ -212,7 +212,7 @@ onUnmounted(() => {
         class="flex-1 overflow-hidden relative flex flex-col"
         :class="isOnboardingRoute
           ? 'bg-theme-950'
-          : 'bg-theme-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
+          : 'app-content bg-theme-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
       >
         <RouterView />
       </main>
@@ -229,7 +229,7 @@ onUnmounted(() => {
       layer="nested"
       @close="dismissAuthRequest(mcpAuthRequests[0]?.serverId)"
     >
-      <p class="text-theme-400 leading-relaxed">
+      <p class="text-ink-secondary leading-relaxed">
         The MCP server <strong class="text-theme-200">{{ mcpAuthRequests[0]?.serverName }}</strong> requires external authorization before it can connect. Please click the unblock link below.
       </p>
       <template #actions>
@@ -237,7 +237,7 @@ onUnmounted(() => {
           v-if="!mcpAuthOpened.has(mcpAuthRequests[0]?.serverId)"
           :href="mcpAuthRequests[0]?.authUrl"
           target="_blank"
-          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 text-accent-on rounded-xl text-center font-medium transition-colors shadow-lg shadow-accent-500/20"
+          class="w-full px-4 py-3 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on rounded-xl text-center font-medium transition-colors shadow-lg shadow-accent-500/20"
           @click.prevent="openAuthPage(mcpAuthRequests[0]?.serverId, mcpAuthRequests[0]?.authUrl)"
         >
           Open Authorization Page

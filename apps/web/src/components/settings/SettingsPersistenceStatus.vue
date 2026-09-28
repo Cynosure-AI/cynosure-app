@@ -38,9 +38,9 @@ const icon = computed(() => ({
     v-if="visible"
     class="inline-flex items-center gap-1.5 text-[11px]"
     :class="{
-      'text-theme-500': state === 'idle',
+      'text-ink-muted': state === 'idle',
       'text-status-warning': state === 'dirty',
-      'text-theme-400': state === 'saving',
+      'text-ink-secondary': state === 'saving',
       'text-status-success': state === 'saved',
       'text-status-danger': state === 'error',
     }"

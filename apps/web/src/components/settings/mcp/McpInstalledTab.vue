@@ -353,7 +353,7 @@ defineExpose({ loadServers })
   <div>
     <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
       <button
-        class="h-10 px-4 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm font-medium rounded-lg transition-colors self-start"
+        class="h-10 px-4 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on text-sm font-medium rounded-lg transition-colors self-start"
         @click="showAddForm = true"
       >
         Add Manually
@@ -363,13 +363,13 @@ defineExpose({ loadServers })
         <div class="relative flex-1">
           <Icon
             icon="lucide:search"
-            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-500"
+            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted"
           />
           <input
             v-model="installedFilter"
             type="text"
             placeholder="Filter installed servers..."
-            class="h-10 w-full pl-9 pr-3 bg-theme-900/80 border border-theme-700 text-theme-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            class="h-10 w-full pl-9 pr-3 bg-theme-900/80 border border-theme-700 text-theme-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
           >
         </div>
       </div>
@@ -386,14 +386,14 @@ defineExpose({ loadServers })
         <div class="grid grid-cols-2 gap-1 rounded-lg bg-theme-950/70 border border-theme-800 p-1">
           <button
             class="h-8 rounded-md text-sm transition-colors"
-            :class="newServer.mode === 'local' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+            :class="newServer.mode === 'local' ? 'bg-theme-700 text-theme-100' : 'text-ink-secondary hover:text-theme-200'"
             @click="newServer.mode = 'local'"
           >
             Local
           </button>
           <button
             class="h-8 rounded-md text-sm transition-colors"
-            :class="newServer.mode === 'remote' ? 'bg-theme-700 text-theme-100' : 'text-theme-400 hover:text-theme-200'"
+            :class="newServer.mode === 'remote' ? 'bg-theme-700 text-theme-100' : 'text-ink-secondary hover:text-theme-200'"
             @click="newServer.mode = 'remote'"
           >
             Remote
@@ -402,74 +402,74 @@ defineExpose({ loadServers })
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm text-theme-400 mb-1">Custom name</label>
+            <label class="block text-sm text-ink-secondary mb-1">Custom name</label>
             <input
               v-model="newServer.name"
               type="text"
               placeholder="Use original MCP name"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
           </div>
           <div v-if="newServer.mode === 'remote'">
-            <label class="block text-sm text-theme-400 mb-1">URL</label>
+            <label class="block text-sm text-ink-secondary mb-1">URL</label>
             <input
               v-model="newServer.remoteUrl"
               type="url"
               placeholder="https://mcp.example.com/mcp"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
           </div>
           <div v-else>
-            <label class="block text-sm text-theme-400 mb-1">Command</label>
+            <label class="block text-sm text-ink-secondary mb-1">Command</label>
             <input
               v-model="newServer.command"
               type="text"
               placeholder="npx"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
           </div>
         </div>
         <div>
-          <label class="block text-sm text-theme-400 mb-1">Description</label>
+          <label class="block text-sm text-ink-secondary mb-1">Description</label>
           <textarea
             v-model="newServer.description"
             rows="2"
             placeholder="What this MCP server is useful for"
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
           />
         </div>
         <template v-if="newServer.mode === 'local'">
           <div>
-            <label class="block text-sm text-theme-400 mb-1">Arguments (one per line)</label>
+            <label class="block text-sm text-ink-secondary mb-1">Arguments (one per line)</label>
             <textarea
               v-model="newServer.args"
               rows="3"
               placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             />
           </div>
         </template>
         <template v-else>
           <div>
-            <label class="block text-sm text-theme-400 mb-1">Bearer token</label>
+            <label class="block text-sm text-ink-secondary mb-1">Bearer token</label>
             <input
               v-model="newServer.bearerToken"
               type="password"
               placeholder="Leave blank for OAuth, paste a token, or use $MCP_BEARER_TOKEN"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
-            <p class="mt-1 text-xs text-theme-500">
+            <p class="mt-1 text-xs text-ink-muted">
               Remote MCP servers normally authenticate with OAuth. Use this only for servers that accept an Authorization bearer token.
             </p>
           </div>
         </template>
         <div v-if="newServer.mode === 'local'">
-          <label class="block text-sm text-theme-400 mb-1">Environment Variables (KEY=VALUE, one per line)</label>
+          <label class="block text-sm text-ink-secondary mb-1">Environment Variables (KEY=VALUE, one per line)</label>
           <textarea
             v-model="newServer.env"
             rows="2"
             placeholder="API_KEY=sk-..."
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
           />
         </div>
         <div
@@ -503,7 +503,7 @@ defineExpose({ loadServers })
           <button
             v-if="actionError['add']"
             :disabled="!canSubmitNewServer || isLoading('add')"
-            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
+            class="px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on text-sm rounded-lg transition-colors"
             @click="addServer"
           >
             {{ isLoading('add') ? 'Reconnecting...' : 'Re-connect' }}
@@ -511,7 +511,7 @@ defineExpose({ loadServers })
           <button
             v-if="!addConnected && !actionError['add']"
             :disabled="!canSubmitNewServer || isLoading('add')"
-            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
+            class="px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on text-sm rounded-lg transition-colors"
             @click="addServer"
           >
             {{ isLoading('add') ? 'Connecting...' : 'Save & Connect' }}
@@ -553,7 +553,7 @@ defineExpose({ loadServers })
             <div
               v-else
               class="w-10 h-10 rounded-lg flex items-center justify-center"
-              :class="server.connected ? 'bg-accent-500/15 text-accent-fg' : 'bg-theme-700/50 text-theme-500'"
+              :class="server.connected ? 'bg-accent-500/15 text-accent-fg' : 'bg-theme-700/50 text-ink-muted'"
             >
               <Icon
                 icon="lucide:plug"
@@ -572,11 +572,11 @@ defineExpose({ loadServers })
             </div>
             <div
               v-if="server.description || server.serverInfo?.description"
-              class="text-xs text-theme-400 mt-0.5 line-clamp-2"
+              class="text-xs text-ink-secondary mt-0.5 line-clamp-2"
             >
               {{ server.description || server.serverInfo?.description }}
             </div>
-            <div class="text-xs text-theme-500 mt-1 truncate font-mono">
+            <div class="text-xs text-ink-muted mt-1 truncate font-mono">
               {{ server.command }} {{ server.args.join(' ') }}
             </div>
             <div
@@ -604,7 +604,7 @@ defineExpose({ loadServers })
         >
           <span
             class="mcp-tool-count inline-flex items-center text-[11px] px-2 py-1 rounded-md"
-            :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300 cursor-default' : 'bg-theme-700/60 text-theme-400'"
+            :class="server.toolCount > 0 ? 'bg-emerald-500/15 text-emerald-300 cursor-default' : 'bg-theme-700/60 text-ink-secondary'"
           >
             {{ server.toolCount }} {{ server.toolCount === 1 ? 'tool' : 'tools' }}
           </span>
@@ -621,7 +621,7 @@ defineExpose({ loadServers })
             </div>
             <div
               v-if="server.toolCount > TOOLTIP_MAX_TOOLS"
-              class="text-theme-500 text-[10px] mt-1"
+              class="text-ink-muted text-[10px] mt-1"
             >
               +{{ server.toolCount - TOOLTIP_MAX_TOOLS }} more
             </div>
@@ -633,7 +633,7 @@ defineExpose({ loadServers })
       <template #col-status="{ item: server }">
         <span
           class="mcp-server-status inline-flex items-center gap-1.5 text-xs"
-          :class="server.connected ? 'text-status-success' : server.enabled ? (server.pendingAuthUrl ? 'text-accent-fg' : 'text-status-danger') : 'text-theme-500'"
+          :class="server.connected ? 'text-status-success' : server.enabled ? (server.pendingAuthUrl ? 'text-accent-fg' : 'text-status-danger') : 'text-ink-muted'"
         >
           <span
             class="w-1.5 h-1.5 rounded-full"
@@ -657,7 +657,7 @@ defineExpose({ loadServers })
 
           <button
             v-if="server.enabled && server.pendingAuthUrl && authInProgress !== server.id"
-            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-accent-on rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs accent-action bg-accent-600 hover:bg-accent-500 text-accent-on rounded-md transition-colors"
             @click="startAuth(server)"
           >
             Authorize
@@ -665,7 +665,7 @@ defineExpose({ loadServers })
           <button
             v-else-if="server.enabled && server.pendingAuthUrl && authInProgress === server.id"
             :disabled="isLoading(server.id)"
-            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on rounded-md transition-colors"
             @click="finishAuth(server.id)"
           >
             {{ isLoading(server.id) ? 'Reconnecting...' : 'Reconnect' }}
@@ -681,7 +681,7 @@ defineExpose({ loadServers })
 
           <button
             type="button"
-            class="p-1.5 text-theme-600 hover:text-status-danger rounded-md hover:bg-red-500/10 transition-colors"
+            class="p-1.5 text-ink-faint hover:text-status-danger rounded-md hover:bg-red-500/10 transition-colors"
             :aria-label="`Remove ${server.name}`"
             @click="promptRemoveServer(server.id)"
           >
@@ -710,11 +710,11 @@ defineExpose({ loadServers })
 
     <div
       v-else-if="servers.length === 0 && !showAddForm"
-      class="text-center py-10 text-theme-500"
+      class="text-center py-10 text-ink-muted"
     >
       <Icon
         icon="lucide:plug"
-        class="w-8 h-8 mx-auto mb-2 text-theme-600"
+        class="w-8 h-8 mx-auto mb-2 text-ink-faint"
       />
       <p class="text-lg mb-2">
         No MCP servers installed
@@ -753,7 +753,7 @@ defineExpose({ loadServers })
             <p class="text-sm font-medium text-theme-100">
               {{ originalServerName(editingServer) }}
             </p>
-            <p class="text-xs text-theme-400">
+            <p class="text-xs text-ink-secondary">
               {{ editingServer.connected ? 'Connected' : editingServer.enabled ? (editingServer.pendingAuthUrl ? 'Authorization required' : 'Disconnected') : 'Disabled' }}
               · {{ editingServer.toolCount }} tools
               <span v-if="editingServer.origin"> · {{ editingServer.origin }}</span>
@@ -766,7 +766,7 @@ defineExpose({ loadServers })
         >
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-theme-400 mb-1">Custom name</label>
+              <label class="block text-xs text-ink-secondary mb-1">Custom name</label>
               <input
                 v-model="editServer.name"
                 type="text"
@@ -775,7 +775,7 @@ defineExpose({ loadServers })
               >
             </div>
             <div>
-              <label class="block text-xs text-theme-400 mb-1">Command</label>
+              <label class="block text-xs text-ink-secondary mb-1">Command</label>
               <input
                 v-model="editServer.command"
                 type="text"
@@ -784,16 +784,16 @@ defineExpose({ loadServers })
             </div>
           </div>
           <div>
-            <label class="block text-xs text-theme-400 mb-1">Description</label>
+            <label class="block text-xs text-ink-secondary mb-1">Description</label>
             <textarea
               v-model="editServer.description"
               rows="2"
               :placeholder="editingServer.description || editingServer.serverInfo?.description || 'What this MCP server is useful for'"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             />
           </div>
           <div>
-            <label class="block text-xs text-theme-400 mb-1">Arguments (one per line)</label>
+            <label class="block text-xs text-ink-secondary mb-1">Arguments (one per line)</label>
             <textarea
               v-model="editServer.args"
               rows="3"
@@ -801,14 +801,14 @@ defineExpose({ loadServers })
             />
           </div>
           <div>
-            <label class="block text-xs text-theme-400 mb-1">Environment Variables</label>
+            <label class="block text-xs text-ink-secondary mb-1">Environment Variables</label>
             <template v-if="editingServer.envHints?.length">
               <div class="space-y-2">
                 <div
                   v-for="hint in editingServer.envHints"
                   :key="hint.name"
                 >
-                  <label class="flex items-center gap-1.5 text-xs text-theme-400 mb-1">
+                  <label class="flex items-center gap-1.5 text-xs text-ink-secondary mb-1">
                     <span class="font-mono">{{ hint.name }}</span>
                     <span
                       v-if="hint.required"
@@ -816,24 +816,24 @@ defineExpose({ loadServers })
                     >*</span>
                     <span
                       v-if="hint.description"
-                      class="text-theme-400/70 font-normal"
+                      class="text-ink-secondary/70 font-normal"
                     >- {{ hint.description }}</span>
                   </label>
                   <input
                     v-model="editEnvFields[hint.name]"
                     :type="hint.sensitive ? 'password' : 'text'"
                     :placeholder="hint.name"
-                    class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+                    class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
                   >
                 </div>
               </div>
               <div class="mt-2">
-                <label class="block text-[11px] text-theme-500 mb-1">Additional env vars (KEY=VALUE, one per line)</label>
+                <label class="block text-[11px] text-ink-muted mb-1">Additional env vars (KEY=VALUE, one per line)</label>
                 <textarea
                   v-model="editServer.env"
                   rows="2"
                   placeholder="EXTRA_VAR=value"
-                  class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+                  class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
                 />
               </div>
             </template>
@@ -841,7 +841,7 @@ defineExpose({ loadServers })
               <textarea
                 v-model="editServer.env"
                 rows="3"
-                class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+                class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
                 placeholder="API_KEY=sk-..."
               />
             </template>
@@ -868,7 +868,7 @@ defineExpose({ loadServers })
           <div class="flex flex-wrap items-center gap-2">
             <button
               v-if="editingServer.enabled && editingServer.pendingAuthUrl && authInProgress !== editingServer.id"
-              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-accent-on rounded-md transition-colors"
+              class="px-2.5 py-1.5 text-xs accent-action bg-accent-600 hover:bg-accent-500 text-accent-on rounded-md transition-colors"
               :disabled="isLoading(editingServer.id)"
               @click="startAuth(editingServer)"
             >
@@ -877,7 +877,7 @@ defineExpose({ loadServers })
             <button
               v-else-if="editingServer.enabled && editingServer.pendingAuthUrl && authInProgress === editingServer.id"
               :disabled="isLoading(editingServer.id)"
-              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-md transition-colors"
+              class="px-2.5 py-1.5 text-xs accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on rounded-md transition-colors"
               @click="finishAuth(editingServer.id)"
             >
               {{ isLoading(editingServer.id) ? 'Reconnecting...' : 'Reconnect' }}
@@ -893,7 +893,7 @@ defineExpose({ loadServers })
 
             <button
               type="button"
-              class="p-1.5 text-theme-600 hover:text-status-danger rounded-md hover:bg-red-500/10 transition-colors"
+              class="p-1.5 text-ink-faint hover:text-status-danger rounded-md hover:bg-red-500/10 transition-colors"
               :aria-label="`Remove ${editingServer.name}`"
               :disabled="isLoading(editingServer.id)"
               @click="promptRemoveServer(editingServer.id)"
@@ -907,7 +907,7 @@ defineExpose({ loadServers })
 
             <button
               v-if="editingServer.enabled && !editingServer.pendingAuthUrl && (editingServer.origin === 'smithery.ai' || editingServer.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
-              class="p-1.5 text-theme-600 hover:text-accent-fg rounded-md hover:bg-accent-500/10 transition-colors"
+              class="p-1.5 text-ink-faint hover:text-accent-fg rounded-md hover:bg-accent-500/10 transition-colors"
               :disabled="isLoading(editingServer.id)"
               title="Clear cached OAuth tokens and re-authorize"
               @click="reauthServer(editingServer.id)"
@@ -940,7 +940,7 @@ defineExpose({ loadServers })
             </button>
             <button
               :disabled="!editServer.command.trim() || isLoading(editingServer.id)"
-              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-md transition-colors"
+              class="px-3 py-1.5 text-xs accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on rounded-md transition-colors"
               @click="saveEditing(editingServer.id)"
             >
               {{ isSaving ? 'Saving...' : 'Save' }}

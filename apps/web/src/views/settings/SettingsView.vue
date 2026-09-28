@@ -455,11 +455,11 @@ function categoryButtonClass(id: SettingsCategoryId): string {
   if (!isSearching.value) {
     return activeCategoryId.value === id
       ? 'bg-theme-800 text-theme-100 shadow-[inset_3px_0_0_var(--color-accent-500,#3b82f6)]'
-      : 'text-theme-400 hover:bg-theme-800/70 hover:text-theme-200'
+      : 'text-ink-secondary hover:bg-theme-800/70 hover:text-theme-200'
   }
   return matchCountByCategory.value.get(id)
     ? 'text-theme-300 hover:bg-theme-800/70 hover:text-theme-200'
-    : 'opacity-40 text-theme-600 pointer-events-none'
+    : 'opacity-40 text-ink-faint pointer-events-none'
 }
 
 function onGlobalKeydown(event: KeyboardEvent): void {
@@ -624,13 +624,13 @@ function scoreSection(section: SettingsSection, query: string): number {
                   <h1 class="text-2xl font-bold text-theme-100">
                     Settings
                   </h1>
-                  <p class="mt-1 text-sm leading-relaxed text-theme-500">
+                  <p class="mt-1 text-sm leading-relaxed text-ink-muted">
                     Configure Cynosure, AI behavior, and your workspace.
                   </p>
                 </div>
                 <button
                   type="button"
-                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-900/90 text-theme-400 transition hover:bg-theme-800 hover:text-theme-100 lg:hidden"
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-900/90 text-ink-secondary transition hover:bg-theme-800 hover:text-theme-100 lg:hidden"
                   aria-label="Close settings"
                   @click="closeSettings"
                 >
@@ -670,7 +670,7 @@ function scoreSection(section: SettingsSection, query: string): number {
                     </span>
                     <Icon
                       icon="lucide:chevron-right"
-                      class="h-4 w-4 text-theme-600 lg:hidden"
+                      class="h-4 w-4 text-ink-faint lg:hidden"
                     />
                   </span>
                 </button>
@@ -686,24 +686,24 @@ function scoreSection(section: SettingsSection, query: string): number {
                   <div class="relative">
                     <Icon
                       icon="lucide:search"
-                      class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+                      class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
                     />
                     <input
                       ref="searchInputRef"
                       v-model="searchQuery"
                       type="text"
                       placeholder="Search settings..."
-                      class="w-full rounded-lg border border-theme-700 bg-theme-900/80 px-9 py-2.5 text-sm text-theme-100 placeholder-theme-600 outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+                      class="w-full rounded-lg border border-theme-700 bg-theme-900/80 px-9 py-2.5 text-sm text-theme-100 placeholder:text-ink-faint outline-none transition focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
                     >
                     <kbd
                       v-if="!isSearching"
-                      class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-theme-600 bg-theme-800 border border-theme-700 rounded"
+                      class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-ink-faint bg-theme-800 border border-theme-700 rounded"
                     >
                       /
                     </kbd>
                     <button
                       v-if="isSearching"
-                      class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-muted transition hover:bg-theme-800 hover:text-theme-200"
                       type="button"
                       aria-label="Clear settings search"
                       @click="clearSearch"
@@ -716,14 +716,14 @@ function scoreSection(section: SettingsSection, query: string): number {
                   </div>
                   <p
                     v-if="isSearching"
-                    class="mt-2 text-xs text-theme-500"
+                    class="mt-2 text-xs text-ink-muted"
                   >
                     {{ resultCountLabel }}
                   </p>
                 </div>
                 <button
                   type="button"
-                  class="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-900/90 text-theme-400 shadow-sm transition hover:bg-theme-800 hover:text-theme-100"
+                  class="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-theme-700 bg-theme-900/90 text-ink-secondary shadow-sm transition hover:bg-theme-800 hover:text-theme-100"
                   aria-label="Close settings"
                   @click="closeSettings"
                 >
@@ -742,12 +742,12 @@ function scoreSection(section: SettingsSection, query: string): number {
               >
                 <Icon
                   icon="lucide:search-x"
-                  class="mx-auto h-8 w-8 text-theme-600"
+                  class="mx-auto h-8 w-8 text-ink-faint"
                 />
                 <h2 class="mt-3 text-sm font-semibold text-theme-200">
                   No settings found
                 </h2>
-                <p class="mt-1 text-sm text-theme-500">
+                <p class="mt-1 text-sm text-ink-muted">
                   Try a different term or clear the search.
                 </p>
               </div>
@@ -763,7 +763,7 @@ function scoreSection(section: SettingsSection, query: string): number {
                   class="scroll-mt-4"
                 >
                   <div class="mb-5 flex items-start gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-theme-400 ring-1 ring-theme-800">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-ink-secondary ring-1 ring-theme-800">
                       <Icon
                         :icon="category.icon"
                         class="h-5 w-5"
@@ -773,7 +773,7 @@ function scoreSection(section: SettingsSection, query: string): number {
                       <h2 class="text-xl font-bold text-theme-100">
                         {{ category.label }}
                       </h2>
-                      <p class="mt-1 text-sm leading-relaxed text-theme-500">
+                      <p class="mt-1 text-sm leading-relaxed text-ink-muted">
                         {{ category.description }}
                       </p>
                     </div>
@@ -802,7 +802,7 @@ function scoreSection(section: SettingsSection, query: string): number {
     layer="nested"
     @close="keepEditing"
   >
-    <p class="text-sm leading-relaxed text-theme-400">
+    <p class="text-sm leading-relaxed text-ink-secondary">
       Some grouped settings have not been saved. Discard them and continue?
     </p>
     <template #actions>

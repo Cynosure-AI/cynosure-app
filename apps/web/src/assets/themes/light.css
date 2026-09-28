@@ -32,19 +32,22 @@
   --color-status-green: #166534;
   --color-status-indigo: #3730a3;
   --color-status-violet: #6d28a0;
+
   --color-quote-surface: #e8edf4;
   --color-code-surface: #f0f4f8;
   --color-code-text: #243246;
 
-  --default-blue: #337ff0;
-  --default-line: #c6d1de;
-  --theme-glow: 0 10px 30px rgba(34, 101, 220, 0.12);
   --theme-glow-strong: 0 0 0 3px rgba(51, 127, 240, 0.16);
-  --theme-accent-rgb: 51, 127, 240;
+
   --syntax-keyword: #b4234c;
   --syntax-string: #185fa5;
   --syntax-muted: #58677d;
   --syntax-number: #174f9e;
   --syntax-class: #65449c;
+
   color-scheme: light;
+
+  --color-ink-secondary: #334155;
+  --color-ink-muted: #475569;
+  --color-ink-faint: #56657a;
 }

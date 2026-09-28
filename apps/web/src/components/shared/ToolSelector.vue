@@ -262,7 +262,7 @@ onMounted(() => {
     :class="scrollable ? 'h-full' : ''"
   >
     <div class="flex items-center justify-between px-4 py-2.5 border-b border-theme-700 shrink-0">
-      <span class="text-[10px] text-theme-500">
+      <span class="text-[10px] text-ink-muted">
         {{ modelValue.length }}/{{ selectableToolCount }} enabled
       </span>
       <div class="flex items-center gap-3">
@@ -273,7 +273,7 @@ onMounted(() => {
           Enable all
         </button>
         <button
-          class="text-[11px] text-theme-400 hover:text-theme-200 transition-colors"
+          class="text-[11px] text-ink-secondary hover:text-theme-200 transition-colors"
           @click="clearAllTools"
         >
           Disable all
@@ -286,7 +286,7 @@ onMounted(() => {
         v-model="toolFilterText"
         type="text"
         placeholder="Search tools..."
-        class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-1.5 text-xs text-theme-200 placeholder-theme-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+        class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-1.5 text-xs text-theme-200 placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent-500"
       >
     </div>
 
@@ -307,7 +307,7 @@ onMounted(() => {
                   :class="scrollable ? 'sticky top-0 z-10' : ''"
                 >
                   <button
-                    class="p-1 text-theme-500 hover:text-theme-300 transition-colors"
+                    class="p-1 text-ink-muted hover:text-theme-300 transition-colors"
                     @click="toggle"
                   >
                     <Icon
@@ -359,7 +359,7 @@ onMounted(() => {
                       <Icon
                         v-else
                         :icon="getToolNamespaceIcon(group.namespace.id)"
-                        class="h-4 w-4 text-theme-400"
+                        class="h-4 w-4 text-ink-secondary"
                       />
                     </span>
                     <div class="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
@@ -369,7 +369,7 @@ onMounted(() => {
                       >
                         {{ group.namespace.label }}
                       </p>
-                      <p class="shrink-0 text-[10px] text-theme-600 sm:ml-auto">
+                      <p class="shrink-0 text-[10px] text-ink-faint sm:ml-auto">
                         {{ selectedCount(group) }}/{{ selectableCount(group) }} selected
                         <span v-if="autoManagedCount(group)"> · {{ autoManagedCount(group) }} automatic</span>
                         <span v-if="unavailableCount(group)"> · {{ unavailableCount(group) }} require agent</span>
@@ -405,7 +405,7 @@ onMounted(() => {
                           {{ displayToolName(tool) }}
                           <span
                             v-if="isAutoManagedTool(tool)"
-                            class="ml-1 rounded bg-theme-700 px-1 py-0.5 text-[9px] font-normal uppercase tracking-wide text-theme-400"
+                            class="ml-1 rounded bg-theme-700 px-1 py-0.5 text-[9px] font-normal uppercase tracking-wide text-ink-secondary"
                             :class="automaticToolState(tool).active ? 'bg-emerald-500/10 text-emerald-300' : ''"
                           >
                             {{ automaticToolBadge(tool) }}
@@ -427,7 +427,7 @@ onMounted(() => {
                         <div
                           v-if="isAutoManagedTool(tool)"
                           class="mb-2 rounded border  bg-theme-900/70 px-2 py-1.5 text-[10px] leading-snug pt-1.5 border-t border-theme-800"
-                          :class="automaticToolState(tool).active ? 'text-emerald-300' : 'text-theme-400'"
+                          :class="automaticToolState(tool).active ? 'text-emerald-300' : 'text-ink-secondary'"
                         >
                           {{ automaticToolState(tool).active ? 'Active' : 'Inactive' }} automatically when {{ automaticToolState(tool).criteria }}.
                         </div>
@@ -439,7 +439,7 @@ onMounted(() => {
                           {{ toolRequirement(tool)?.met ? 'Requirement met' : 'Unavailable' }}: {{ toolRequirement(tool)?.criteria }}.
                         </div>
                         <div
-                          class=" text-theme-400 leading-snug"
+                          class=" text-ink-secondary leading-snug"
                           :class="toolParams(tool).length || isAutoManagedTool(tool) ? '' : ''"
                         >
                           {{ displayToolDescription(tool) }}
@@ -477,7 +477,7 @@ onMounted(() => {
 
         <div
           v-if="filteredTools.length === 0"
-          class="px-4 py-6 text-center text-xs text-theme-500"
+          class="px-4 py-6 text-center text-xs text-ink-muted"
         >
           <template v-if="toolFilterText">
             No tools match "{{ toolFilterText }}"

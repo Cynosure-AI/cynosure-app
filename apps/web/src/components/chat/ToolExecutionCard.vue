@@ -86,7 +86,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   'ma-subagent-failed': { label: 'Sub-agent failed', icon: 'lucide:x', color: 'text-status-danger' },
   'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-status-success' },
   'ma-error': { label: 'Error', icon: 'lucide:alert-circle', color: 'text-status-danger' },
-  'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-theme-400' },
+  'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-ink-secondary' },
   'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:database', color: 'text-accent-fg' },
 }
 
@@ -114,7 +114,7 @@ function argType(call?: Pick<ToolCall, 'arguments'> | null): string {
 }
 
 function meta(status?: string): StatusMeta {
-  return status ? STATUS_META[status] ?? { label: status, icon: 'lucide:circle', color: 'text-theme-400' } : FALLBACK_META
+  return status ? STATUS_META[status] ?? { label: status, icon: 'lucide:circle', color: 'text-ink-secondary' } : FALLBACK_META
 }
 
 function normalizeScore(score: unknown): string | null {
@@ -409,7 +409,7 @@ function toolCallIcon(call?: ToolCall | null): string {
 }
 
 function toolCallIconClass(call?: ToolCall | null): string {
-  if (!call) return 'text-theme-500'
+  if (!call) return 'text-ink-muted'
   if (isAttachmentIndexCall(call)) return 'text-sky-600 dark:text-sky-300'
   if (isTaskContextCall(call)) return 'text-cyan-600 dark:text-cyan-300'
   if (isKnowledgeGraphCall(call)) return 'text-status-violet dark:text-violet-300'
@@ -442,7 +442,7 @@ function executionCardClass(execution: ToolExecution | ContextRow): string {
 }
 
 function executionNameClass(execution: ToolExecution | ContextRow): string {
-  if (isCandidateRow(execution)) return 'text-theme-500 line-through decoration-theme-500/70'
+  if (isCandidateRow(execution)) return 'text-ink-muted line-through decoration-theme-500/70'
   if (execution.result?.success === false) return 'text-red-600 dark:text-red-300'
   if (isInternalExecution(execution)) return 'text-purple-600 dark:text-purple-300'
   return isSubAgentSpawnCall(execution.call?.name)
@@ -452,7 +452,7 @@ function executionNameClass(execution: ToolExecution | ContextRow): string {
 
 function scoreBadgeClass(execution: ToolExecution | ContextRow): string {
   return isCandidateRow(execution)
-    ? 'bg-theme-800/70 text-theme-500 ring-theme-700/60 dark:bg-theme-800/50 dark:text-theme-500 dark:ring-theme-700/50'
+    ? 'bg-theme-800/70 text-ink-muted ring-theme-700/60 dark:bg-theme-800/50 dark:text-ink-muted dark:ring-theme-700/50'
     : 'bg-accent-100/70 text-accent-700 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-fg dark:ring-accent-500/20'
 }
 
@@ -724,7 +724,7 @@ const headerIconClass = computed(() => {
   if (isRoutingWorkPending.value) return 'text-accent-fg'
   if (isTaskContext.value) return 'text-cyan-600 dark:text-cyan-300'
   if (isRoutingStatus.value) return 'text-accent-fg'
-  if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-fg' : 'text-theme-500'
+  if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-fg' : 'text-ink-muted'
   if (resultOutcome.value) return resultOutcome.value.color
   return currentPhase.value.color
 })
@@ -780,14 +780,14 @@ const hasDisplayableActivity = computed(() =>
                 >{{ label }}</span>
                 <span
                   v-if="taskContextQueryLabels.length > 3"
-                  class="text-[10px] text-theme-500"
+                  class="text-[10px] text-ink-muted"
                 >+{{ taskContextQueryLabels.length - 3 }}</span>
               </template>
 
               <template v-else-if="headerToolNames.length">
                 <span
                   v-if="isRoutingStatus"
-                  class="text-theme-400 shrink-0"
+                  class="text-ink-secondary shrink-0"
                   :class="currentPhase.color"
                 >{{ headerLabel }}</span>
                 <span
@@ -805,13 +805,13 @@ const hasDisplayableActivity = computed(() =>
                 </span>
                 <span
                   v-if="headerToolNames.length > 3"
-                  class="text-[10px] text-theme-500"
+                  class="text-[10px] text-ink-muted"
                 >+{{ headerToolNames.length - 3 }}</span>
               </template>
 
               <span
                 v-else
-                class="text-theme-400"
+                class="text-ink-secondary"
                 :class="currentPhase.color"
               >{{ headerLabel }}</span>
             </div>
@@ -847,12 +847,12 @@ const hasDisplayableActivity = computed(() =>
 
             <span
               v-if="elapsedMs > 0"
-              class="text-[10px] text-theme-600 tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              class="text-[10px] text-ink-faint tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
             >{{ formatElapsed(elapsedMs) }}</span>
 
             <Icon
               icon="lucide:chevron-down"
-              class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
+              class="w-3 h-3 text-ink-faint shrink-0 transition-transform"
               :class="{ 'rotate-180': isExpanded }"
             />
           </button>
@@ -862,8 +862,8 @@ const hasDisplayableActivity = computed(() =>
           v-if="streamingText && isActive"
           class="mt-1.5 ml-3 px-3 py-2 rounded-lg bg-theme-800/50 border border-theme-700/30"
         >
-          <span class="text-[10px] text-theme-500 font-medium block mb-0.5">{{ streamingText.label }}</span>
-          <p class="text-[11px] text-theme-400 whitespace-pre-wrap">
+          <span class="text-[10px] text-ink-muted font-medium block mb-0.5">{{ streamingText.label }}</span>
+          <p class="text-[11px] text-ink-secondary whitespace-pre-wrap">
             {{ streamingText.text }}<span class="inline-block w-1.5 h-3 bg-theme-400/60 animate-pulse ml-0.5 align-middle" />
           </p>
         </div>
@@ -878,7 +878,7 @@ const hasDisplayableActivity = computed(() =>
           >
             <div class="mb-1 flex items-center justify-between gap-3">
               <span class="text-[11px] font-semibold text-cyan-700 dark:text-cyan-200">Gathering context</span>
-              <time class="text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(routingStatusSteps[0]?.timestamp) }}</time>
+              <time class="text-[10px] tabular-nums text-ink-faint">{{ formatTimestamp(routingStatusSteps[0]?.timestamp) }}</time>
             </div>
             <div
               v-for="step in routingStatusSteps"
@@ -893,7 +893,7 @@ const hasDisplayableActivity = computed(() =>
               <span class="font-medium text-theme-300">{{ meta(step.status).label }}</span>
               <span
                 v-if="step.message"
-                class="min-w-0 truncate text-theme-500"
+                class="min-w-0 truncate text-ink-muted"
               >{{ step.message }}</span>
             </div>
           </div>
@@ -908,7 +908,7 @@ const hasDisplayableActivity = computed(() =>
                 class="w-3 h-3 text-cyan-600 dark:text-cyan-300"
               />
               <span class="text-[11px] font-medium text-cyan-700 dark:text-cyan-200">Preparing context</span>
-              <time class="ml-auto text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(taskContextTimestamp) }}</time>
+              <time class="ml-auto text-[10px] tabular-nums text-ink-faint">{{ formatTimestamp(taskContextTimestamp) }}</time>
             </div>
 
             <div
@@ -923,7 +923,7 @@ const hasDisplayableActivity = computed(() =>
                 <div class="text-[10px] font-medium uppercase tracking-wide text-cyan-600/70 dark:text-cyan-300/70">
                   {{ query.label }}
                 </div>
-                <p class="mt-0.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap wrap-break-word">
+                <p class="mt-0.5 text-[11px] leading-relaxed text-ink-secondary whitespace-pre-wrap wrap-break-word">
                   {{ query.value }}
                 </p>
               </div>
@@ -931,7 +931,7 @@ const hasDisplayableActivity = computed(() =>
 
             <p
               v-else-if="taskContext.content"
-              class="rounded-md bg-cyan-50/50 px-2 py-1.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap dark:bg-theme-950/35"
+              class="rounded-md bg-cyan-50/50 px-2 py-1.5 text-[11px] leading-relaxed text-ink-secondary whitespace-pre-wrap dark:bg-theme-950/35"
             >
               {{ taskContext.content }}
             </p>
@@ -954,7 +954,7 @@ const hasDisplayableActivity = computed(() =>
                 :class="section.iconClass"
               />
               <span class="text-[11px] font-semibold text-theme-300">{{ section.title }}</span>
-              <time class="ml-auto text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(section.timestamp) }}</time>
+              <time class="ml-auto text-[10px] tabular-nums text-ink-faint">{{ formatTimestamp(section.timestamp) }}</time>
             </div>
 
             <div :class="section.compactContext ? 'space-y-1.5' : 'space-y-1.5'">

@@ -175,7 +175,7 @@ const imageGridClass = computed(() => {
       </div>
       <span
         v-if="agentName"
-        class="text-[10px] text-theme-500 max-w-15 truncate leading-tight"
+        class="text-[10px] text-ink-muted max-w-15 truncate leading-tight"
         :title="agentName"
       >{{ agentName }}</span>
     </div>
@@ -184,7 +184,7 @@ const imageGridClass = computed(() => {
     <div
       class="relative md:max-w-[85%] max-w-[90%] rounded-3xl px-5 py-3 text-[15px] wrap-break-word leading-relaxed shadow-sm transition-all"
       :class="[
-        isUser ? 'chat-user-message bg-accent-600 text-accent-on rounded-tr-sm' : 'bg-theme-800/60 border text-theme-200 rounded-tl-sm',
+        isUser ? 'chat-user-message bg-user-message text-user-message-text rounded-tr-sm' : 'bg-theme-800/60 border text-theme-200 rounded-tl-sm',
         isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-theme-700/50' : '',
         isEditing ? 'w-[85%] md:w-[80%]' : ''
       ]"
@@ -196,7 +196,7 @@ const imageGridClass = computed(() => {
       >
         <button
           v-if="isUser && !isEditing && !readonly"
-          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
+          class="p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
           title="Edit"
           @click="startEditing"
         >
@@ -207,7 +207,7 @@ const imageGridClass = computed(() => {
         </button>
         <button
           v-if="isUser && !readonly"
-          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
+          class="p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
           title="Retry"
           @click="$emit('retry')"
         >
@@ -218,7 +218,7 @@ const imageGridClass = computed(() => {
         </button>
         <button
           v-if="isForkable"
-          class="disabled:opacity-40 disabled:cursor-not-allowed p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
+          class="disabled:opacity-40 disabled:cursor-not-allowed p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
           :disabled="forkDisabled || !messageId || /^(streaming_|sa_stream_|error_)/.test(messageId)"
           :title="forkDisabled ? 'Wait for the response to finish before forking' : 'Fork'"
           @click="$emit('fork')"
@@ -229,7 +229,7 @@ const imageGridClass = computed(() => {
           />
         </button>
         <button
-          class="p-1 rounded-md bg-theme-700/80 text-theme-400 hover:text-theme-100 text-[10px]"
+          class="p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
           :title="copied ? 'Copied!' : 'Copy'"
           @click="copyContent"
         >
@@ -261,7 +261,7 @@ const imageGridClass = computed(() => {
           </template>
 
           <div
-            class="border-t border-indigo-500/20 px-3 py-2.5 text-[13px] leading-relaxed text-theme-400 whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
+            class="border-t border-indigo-500/20 px-3 py-2.5 text-[13px] leading-relaxed text-ink-secondary whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
           >
             {{ thinking }}
           </div>
@@ -502,7 +502,7 @@ const imageGridClass = computed(() => {
       <!-- Message metadata (assistant) -->
       <div
         v-if="!isUser && !isStreaming && (model || promptTokens)"
-        class="mt-2 pt-1.5 border-t border-theme-700/50 flex items-center gap-3 text-xs text-theme-500"
+        class="mt-2 pt-1.5 border-t border-theme-700/50 flex items-center gap-3 text-xs text-ink-muted"
       >
         <span v-if="model">{{ model }}</span>
         <span
@@ -534,7 +534,7 @@ const imageGridClass = computed(() => {
       v-if="formattedCreatedAt"
       data-testid="message-row-time"
       :datetime="createdAtIso"
-      class="mb-1 shrink-0 text-[10px] leading-none tabular-nums text-theme-500 opacity-0 transition-opacity group-hover/msg:opacity-100"
+      class="mb-1 shrink-0 text-[10px] leading-none tabular-nums text-ink-muted opacity-0 transition-opacity group-hover/msg:opacity-100"
     >
       {{ formattedCreatedAt }}
     </time>

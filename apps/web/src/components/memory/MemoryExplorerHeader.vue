@@ -36,7 +36,7 @@ const emit = defineEmits<{
         <button
           type="button"
           :disabled="!canGoBack"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           title="Back"
           aria-label="Go back"
           @click="emit('back')"
@@ -49,7 +49,7 @@ const emit = defineEmits<{
         <button
           type="button"
           :disabled="!canGoForward"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           title="Forward"
           aria-label="Go forward"
           @click="emit('forward')"

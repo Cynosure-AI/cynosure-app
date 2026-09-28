@@ -74,7 +74,7 @@ async function doReset(): Promise<void> {
 
 <template>
   <div class="space-y-4">
-    <p class="text-xs text-theme-400">
+    <p class="text-xs text-ink-secondary">
       Clear selected parts of Cynosure without forcing a full application reset. Choose only the data areas you want to remove.
     </p>
 
@@ -91,7 +91,7 @@ async function doReset(): Promise<void> {
       >
         Clear selection
       </button>
-      <span class="text-xs text-theme-500">
+      <span class="text-xs text-ink-muted">
         {{ selectedCount }} selected
       </span>
     </div>
@@ -110,11 +110,11 @@ async function doReset(): Promise<void> {
         >
         <Icon
           :icon="module.icon"
-          class="w-4 h-4 text-theme-400 shrink-0 mt-0.5"
+          class="w-4 h-4 text-ink-secondary shrink-0 mt-0.5"
         />
         <span class="min-w-0">
           <span class="block text-sm text-theme-200">{{ module.label }}</span>
-          <span class="block text-xs text-theme-500 mt-0.5 leading-relaxed">{{ module.description }}</span>
+          <span class="block text-xs text-ink-muted mt-0.5 leading-relaxed">{{ module.description }}</span>
         </span>
       </label>
     </div>
@@ -143,7 +143,7 @@ async function doReset(): Promise<void> {
       <div
         v-for="module in resetModules.filter((item) => resetResults?.[item.key])"
         :key="module.key"
-        class="flex items-center gap-2 text-theme-400"
+        class="flex items-center gap-2 text-ink-secondary"
       >
         <Icon
           :icon="resetResults[module.key].errors.length === 0 ? 'lucide:check' : 'lucide:alert-circle'"
@@ -156,7 +156,7 @@ async function doReset(): Promise<void> {
 
     <button
       :disabled="selectedCount === 0"
-      class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+      class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-ink-muted text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
       @click="showResetConfirm = true"
     >
       <Icon
@@ -175,7 +175,7 @@ async function doReset(): Promise<void> {
     layer="nested"
     @close="closeConfirm"
   >
-    <p class="text-sm text-theme-400 mb-4">
+    <p class="text-sm text-ink-secondary mb-4">
       This will permanently delete the selected data areas. This cannot be undone.
     </p>
     <div class="mb-4 flex flex-wrap gap-1.5">
@@ -187,19 +187,19 @@ async function doReset(): Promise<void> {
         {{ module.label }}
       </span>
     </div>
-    <p class="text-sm text-theme-400 mb-2">
+    <p class="text-sm text-ink-secondary mb-2">
       Type <strong class="text-status-danger">{{ confirmationWord }}</strong> to confirm:
     </p>
     <input
       v-model="resetConfirmText"
       type="text"
       :placeholder="`Type ${confirmationWord}`"
-      class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder-theme-600 focus:outline-none focus:border-red-500/50"
+      class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:border-red-500/50"
     >
     <template #actions>
       <button
         :disabled="resetConfirmText !== confirmationWord || resetting"
-        class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+        class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-ink-muted text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         @click="doReset"
       >
         <Icon
@@ -215,7 +215,7 @@ async function doReset(): Promise<void> {
         {{ resetting ? 'Resetting...' : 'Confirm Reset' }}
       </button>
       <button
-        class="w-full px-4 py-2 text-theme-400 hover:text-theme-200 text-sm transition-colors"
+        class="w-full px-4 py-2 text-ink-secondary hover:text-theme-200 text-sm transition-colors"
         @click="closeConfirm"
       >
         Cancel

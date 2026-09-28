@@ -1,0 +1,62 @@
+/* Component surfaces consume palette values. Tailwind utilities keep their own meaning. */
+.app-shell {
+  background: var(--theme-shell-background);
+}
+
+.app-content {
+  background: var(--theme-content-background);
+}
+
+.app-sidebar {
+  background: var(--theme-sidebar-background);
+  border-right: 1px solid var(--theme-sidebar-border, var(--color-theme-700));
+  box-shadow: var(--theme-sidebar-shadow, none);
+}
+
+.chat-composer {
+  background: var(--theme-composer-background);
+  box-shadow: var(--theme-composer-shadow);
+}
+
+.accent-action {
+  background-image: var(--theme-action-gradient, none);
+  box-shadow: var(--theme-action-shadow, none);
+  border-right: var(--theme-action-border-right, 0 solid transparent);
+}
+
+.accent-action:disabled {
+  background-image: none;
+  box-shadow: none;
+  opacity: .62;
+}
+
+:where(h1, h2) {
+  text-shadow: var(--theme-heading-shadow);
+  text-transform: var(--theme-heading-transform);
+  letter-spacing: var(--theme-heading-spacing);
+}
+
+:where(button, a):focus-visible {
+  box-shadow: var(--theme-glow-strong, none);
+}
+
+::selection {
+  background: var(--theme-selection-background);
+  color: var(--theme-selection-color);
+}
+
+::-webkit-scrollbar {
+  width: var(--theme-scrollbar-size, 8px);
+  height: var(--theme-scrollbar-size, 8px);
+}
+::-webkit-scrollbar-track {
+  background: var(--theme-scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--theme-scrollbar-thumb);
+  border: var(--theme-scrollbar-border, 0 solid transparent);
+  border-radius: var(--theme-scrollbar-radius, 999px);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-scrollbar-hover);
+}

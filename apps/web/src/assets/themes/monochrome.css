@@ -1,17 +1,17 @@
 /* ==========================================================================
    Monochrome Theme - editorial black, white, and disciplined gray
    ========================================================================== */
-
 [data-theme="monochrome"] {
   --color-accent-fg: #d4d4d4;
   --color-accent-on: #080808;
+
   --color-theme-950: #080808;
   --color-theme-900: #101010;
   --color-theme-800: #181818;
   --color-theme-700: #303030;
   --color-theme-600: #484848;
   --color-theme-500: #707070;
-  --color-theme-400: #999999;
+  --color-theme-400: #a6a6a6;
   --color-theme-300: #bdbdbd;
   --color-theme-200: #d8d8d8;
   --color-theme-100: #ededed;
@@ -21,18 +21,14 @@
   --color-accent-200: #e5e5e5;
   --color-accent-300: #d4d4d4;
   --color-accent-400: #b8b8b8;
-  --color-accent-500: #a3a3a3;
-  --color-accent-600: #737373;
+  --color-accent-500: #ededed;
+  --color-accent-600: #ededed;
   --color-accent-700: #525252;
   --color-accent-800: #404040;
   --color-accent-900: #262626;
   --color-accent-950: #171717;
 
-  --mo-white: #f5f5f5;
-  --mo-line: rgba(255, 255, 255, 0.2);
-  --theme-glow: none;
   --theme-glow-strong: 0 0 0 2px rgba(245, 245, 245, 0.35);
-  --theme-accent-rgb: 163, 163, 163;
 
   --radius-xs: 0px;
   --radius-sm: 0px;
@@ -46,104 +42,20 @@
   font-family: "IBM Plex Mono", "SF Mono", "Consolas", monospace;
   letter-spacing: 0;
   color-scheme: dark;
-}
 
-[data-theme="monochrome"] :is(button, a):focus-visible {
-  box-shadow: var(--theme-glow-strong);
-  outline: 1px solid var(--mo-white);
-}
+  --theme-heading-transform: uppercase;
+  --theme-heading-spacing: .06em;
+  --theme-nav-active-background: #ededed;
+  --theme-nav-active-color: #080808;
+  --theme-nav-active-shadow: inset 4px 0 0 #808080;
+  --theme-selection-background: #ededed;
+  --theme-selection-color: #080808;
+  --theme-scrollbar-size: 7px;
+  --theme-scrollbar-thumb: #bdbdbd;
+  --theme-scrollbar-hover: #ededed;
+  --theme-action-shadow: 3px 3px 0 #525252;
 
-[data-theme="monochrome"] .rounded-xl,
-[data-theme="monochrome"] .rounded-lg {
-  border-color: var(--mo-line);
-}
-
-[data-theme="monochrome"] h1,
-[data-theme="monochrome"] h2 {
-  color: var(--mo-white);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-/* Reuse the existing logo artwork without introducing a stray brand color. */
-[data-theme="monochrome"] img[src*="cynosure-logo"] {
-  filter: grayscale(1) brightness(1.75);
-}
-
-[data-theme="monochrome"] label,
-[data-theme="monochrome"] .text-theme-400 {
-  color: #a6a6a6;
-}
-
-[data-theme="monochrome"] input:focus,
-[data-theme="monochrome"] textarea:focus,
-[data-theme="monochrome"] select:focus {
-  border-color: #d8d8d8 !important;
-  box-shadow: inset 3px 0 0 #f5f5f5;
-  outline: none;
-}
-
-[data-theme="monochrome"] button:hover {
-  text-decoration-color: #ededed;
-}
-
-[data-theme="monochrome"] button.bg-accent-600,
-[data-theme="monochrome"] button.bg-accent-500,
-[data-theme="monochrome"] .bg-accent-600,
-[data-theme="monochrome"] .bg-accent-500,
-[data-theme="monochrome"] .bg-accent-400 {
-  background: #ededed;
-  color: #080808;
-  border: 1px solid #ffffff;
-  box-shadow: 3px 3px 0 #525252;
-}
-
-[data-theme="monochrome"] :is(.bg-accent-600, .bg-accent-500, .bg-accent-400) .text-white,
-[data-theme="monochrome"] :is(.text-white.bg-accent-600, .text-white.bg-accent-500, .text-white.bg-accent-400) {
-  color: #080808;
-}
-
-[data-theme="monochrome"] .nav-item.active,
-[data-theme="monochrome"] nav a.router-link-active,
-[data-theme="monochrome"] nav [data-active="true"] {
-  background: #ededed !important;
-  color: #080808 !important;
-  border-left: 4px solid #808080;
-  box-shadow: none;
-}
-
-[data-theme="monochrome"] .nav-item.active :is(svg, span),
-[data-theme="monochrome"] nav a.router-link-active :is(svg, span),
-[data-theme="monochrome"] nav [data-active="true"] :is(svg, span) {
-  color: #080808 !important;
-}
-
-[data-theme="monochrome"] .msg-markdown a {
-  color: #ffffff;
-  text-decoration-thickness: 2px;
-}
-
-[data-theme="monochrome"] .msg-markdown :not(pre) > code {
-  background: #202020;
-  border: 1px solid #484848;
-  color: #ededed;
-}
-
-[data-theme="monochrome"] ::selection {
-  background: #ededed;
-  color: #080808;
-}
-
-[data-theme="monochrome"] ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
-}
-
-[data-theme="monochrome"] ::-webkit-scrollbar-track {
-  background: #080808;
-}
-
-[data-theme="monochrome"] ::-webkit-scrollbar-thumb {
-  background: #bdbdbd;
-  border: 2px solid #080808;
+  --color-ink-secondary: #d4d4d4;
+  --color-ink-muted: #b8b8b8;
+  --color-ink-faint: #a6a6a6;
 }

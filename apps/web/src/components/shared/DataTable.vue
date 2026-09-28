@@ -496,16 +496,16 @@ defineExpose({ startEditing, closeEditor })
         <button
           type="button"
           :disabled="currentPage === 0"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage - 1)"
         >
           Prev
         </button>
-        <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+        <span class="text-xs text-ink-muted">{{ currentPage + 1 }} / {{ pageCount }}</span>
         <button
           type="button"
           :disabled="currentPage >= pageCount - 1"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage + 1)"
         >
           Next
@@ -515,7 +515,7 @@ defineExpose({ startEditing, closeEditor })
       <!-- Header Row -->
       <div
         v-if="showHeader"
-        class="grid gap-4 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400 bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
+        class="grid gap-4 px-5 py-3 text-[11px] tracking-wider uppercase text-ink-secondary bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
         :style="{ '--dt-cols': gridColsTemplate }"
       >
         <!-- Select All Checkbox -->
@@ -550,7 +550,7 @@ defineExpose({ startEditing, closeEditor })
             <Icon
               :icon="sortIcon(col)"
               class="h-3.5 w-3.5 shrink-0"
-              :class="sortColumnKey === col.key ? 'text-accent-fg' : 'text-theme-600'"
+              :class="sortColumnKey === col.key ? 'text-accent-fg' : 'text-ink-faint'"
             />
           </button>
           <template v-else>
@@ -631,7 +631,7 @@ defineExpose({ startEditing, closeEditor })
                 <Icon
                   v-if="col.editable"
                   icon="lucide:pencil"
-                  class="dt-edit-hint absolute right-0 top-0 h-3 w-3 text-theme-600 opacity-0 transition-opacity"
+                  class="dt-edit-hint absolute right-0 top-0 h-3 w-3 text-ink-faint opacity-0 transition-opacity"
                 />
               </div>
             </template>
@@ -646,7 +646,7 @@ defineExpose({ startEditing, closeEditor })
 
       <div
         v-else-if="loading"
-        class="flex items-center justify-center gap-2 px-5 py-10 text-sm text-theme-500"
+        class="flex items-center justify-center gap-2 px-5 py-10 text-sm text-ink-muted"
       >
         <Icon
           icon="lucide:loader-2"
@@ -657,7 +657,7 @@ defineExpose({ startEditing, closeEditor })
 
       <div
         v-else
-        class="px-5 py-10 text-center text-sm text-theme-500"
+        class="px-5 py-10 text-center text-sm text-ink-muted"
       >
         {{ emptyMessage }}
       </div>
@@ -669,16 +669,16 @@ defineExpose({ startEditing, closeEditor })
         <button
           type="button"
           :disabled="currentPage === 0"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage - 1)"
         >
           Prev
         </button>
-        <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+        <span class="text-xs text-ink-muted">{{ currentPage + 1 }} / {{ pageCount }}</span>
         <button
           type="button"
           :disabled="currentPage >= pageCount - 1"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage + 1)"
         >
           Next
@@ -711,7 +711,7 @@ defineExpose({ startEditing, closeEditor })
         </div>
         <button
           type="button"
-          class="shrink-0 rounded-md p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="shrink-0 rounded-md p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
           aria-label="Close editor"
           @click="closeEditor(false)"
         >

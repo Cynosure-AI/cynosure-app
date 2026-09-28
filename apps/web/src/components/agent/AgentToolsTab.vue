@@ -87,7 +87,7 @@ function removeMissing() {
               Auto for {{ agent.tools.length }} tools
             </span>
           </div>
-          <p class="mt-1 text-xs text-theme-500">
+          <p class="mt-1 text-xs text-ink-muted">
             Discover a compact set of relevant registered tools for each request. Up to {{ DIRECT_TOOL_SELECTION_LIMIT }} selected tools are sent directly and remain pinned. Above that limit, a relevant subset is selected automatically from only those tools, even when this switch is off. Required internal tools are added separately.
           </p>
         </div>

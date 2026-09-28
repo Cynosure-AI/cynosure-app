@@ -232,7 +232,7 @@ function formatDate(timestamp: number): string {
           <h1 class="text-2xl font-bold text-theme-100">
             Agents
           </h1>
-          <p class="mt-1 text-sm leading-relaxed text-theme-500">
+          <p class="mt-1 text-sm leading-relaxed text-ink-muted">
             Create and manage AI agents with custom configurations and favorites.
           </p>
         </div>
@@ -244,18 +244,18 @@ function formatDate(timestamp: number): string {
             <span class="sr-only">Search agents</span>
             <Icon
               icon="lucide:search"
-              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
             />
             <input
               v-model="searchQuery"
               type="search"
               placeholder="Search agents, providers, or models..."
-              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-9 text-sm text-theme-200 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
+              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-9 text-sm text-theme-200 outline-none transition placeholder:text-ink-faint focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
             >
             <button
               v-if="searchQuery"
               type="button"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-theme-500 hover:text-theme-200"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-ink-muted hover:text-theme-200"
               aria-label="Clear search"
               @click="searchQuery = ''"
             >
@@ -281,7 +281,7 @@ function formatDate(timestamp: number): string {
             </select>
           </label>
           <button
-            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-accent-on hover:bg-accent-500"
+            class="flex h-10 shrink-0 items-center gap-2 rounded-lg accent-action bg-accent-600 px-4 text-sm font-medium text-accent-on hover:bg-accent-500"
             @click="showCreateDialog = true"
           >
             <Icon
@@ -298,11 +298,11 @@ function formatDate(timestamp: number): string {
         v-if="selectedAgentIds.length"
         class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-500/25 bg-accent-500/8 px-3 py-2"
       >
-        <p class="text-xs text-theme-400">
+        <p class="text-xs text-ink-secondary">
           <span class="font-medium text-theme-200">{{ selectedAgentIds.length }} selected.</span> Double-click the Model cell to edit all selected agents.
         </p>
         <button
-          class="text-xs text-theme-500 hover:text-theme-200"
+          class="text-xs text-ink-muted hover:text-theme-200"
           @click="selectedAgentIds = []"
         >
           Clear selection
@@ -337,7 +337,7 @@ function formatDate(timestamp: number): string {
         <template #col-favorite="{ item }">
           <button
             class="rounded-md p-1"
-            :class="item.favorite ? 'text-status-warning [&>svg]:fill-current' : 'text-theme-600 hover:text-status-warning'"
+            :class="item.favorite ? 'text-status-warning [&>svg]:fill-current' : 'text-ink-faint hover:text-status-warning'"
             :title="item.favorite ? 'Remove from favorites' : 'Add to favorites'"
             @click.stop="toggleFavorite(item)"
           >
@@ -377,7 +377,7 @@ function formatDate(timestamp: number): string {
               </div>
               <div
                 v-if="item.description"
-                class="mt-0.5 line-clamp-2 text-xs text-theme-500"
+                class="mt-0.5 line-clamp-2 text-xs text-ink-muted"
               >
                 {{ item.description }}
               </div>
@@ -412,13 +412,13 @@ function formatDate(timestamp: number): string {
           />
           <div class="mt-3 flex justify-end gap-2">
             <button
-              class="rounded-md px-3 py-1.5 text-xs text-theme-400 hover:bg-theme-800"
+              class="rounded-md px-3 py-1.5 text-xs text-ink-secondary hover:bg-theme-800"
               @click="cancel"
             >
               Cancel
             </button>
             <button
-              class="rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
+              class="rounded-md accent-action bg-accent-600 px-3 py-1.5 text-xs font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
               :disabled="!editProviderId || editSaving"
               @click="saveInlineModel(items, finish)"
             >
@@ -427,14 +427,14 @@ function formatDate(timestamp: number): string {
           </div>
         </template>
         <template #col-info="{ item }">
-          <div class="flex items-center gap-2 text-xs text-theme-500">
+          <div class="flex items-center gap-2 text-xs text-ink-muted">
             <HoverTooltip
               placement="mouse"
               :max-width="220"
             >
               <span
                 class="flex items-center gap-1 rounded px-1.5 py-0.5"
-                :class="item.autoToolRouting ? 'bg-emerald-500/15 text-status-success' : 'bg-theme-700/50 text-theme-500'"
+                :class="item.autoToolRouting ? 'bg-emerald-500/15 text-status-success' : 'bg-theme-700/50 text-ink-muted'"
               ><Icon
                 icon="lucide:wrench"
                 class="h-3 w-3"
@@ -442,12 +442,12 @@ function formatDate(timestamp: number): string {
               <template #content>
                 <div
                   class="mb-2 font-medium"
-                  :class="item.autoToolRouting ? 'text-status-success' : 'text-theme-400'"
+                  :class="item.autoToolRouting ? 'text-status-success' : 'text-ink-secondary'"
                 >
                   Automatic tool discovery is {{ item.autoToolRouting ? 'enabled' : 'disabled' }}
                 </div>
                 <div v-if="toolNamespaces(item).mcps.length">
-                  <div class="mb-1 font-medium text-theme-400">
+                  <div class="mb-1 font-medium text-ink-secondary">
                     MCPs
                   </div>
                   <div
@@ -466,7 +466,7 @@ function formatDate(timestamp: number): string {
                       <Icon
                         v-else
                         icon="lucide:plug"
-                        class="h-3 w-3 text-theme-400"
+                        class="h-3 w-3 text-ink-secondary"
                       />
                     </span>
                     <span class="truncate">{{ namespace.label }}</span>
@@ -476,7 +476,7 @@ function formatDate(timestamp: number): string {
                   v-if="toolNamespaces(item).categories.length"
                   :class="toolNamespaces(item).mcps.length ? 'mt-2' : ''"
                 >
-                  <div class="mb-1 font-medium text-theme-400">
+                  <div class="mb-1 font-medium text-ink-secondary">
                     Categories
                   </div>
                   <div
@@ -516,7 +516,7 @@ function formatDate(timestamp: number): string {
             >
               <span
                 class="flex items-center rounded px-1.5 py-1"
-                :class="item.autoMemory ? 'bg-emerald-500/15 text-status-success' : 'bg-theme-700/50 text-theme-600'"
+                :class="item.autoMemory ? 'bg-emerald-500/15 text-status-success' : 'bg-theme-700/50 text-ink-faint'"
               ><Icon
                 icon="lucide:database"
                 class="h-3 w-3"
@@ -524,7 +524,7 @@ function formatDate(timestamp: number): string {
               <template #content>
                 <div
                   class="font-medium"
-                  :class="item.autoMemory ? 'text-status-success' : 'text-theme-400'"
+                  :class="item.autoMemory ? 'text-status-success' : 'text-ink-secondary'"
                 >
                   Auto memory is {{ item.autoMemory ? 'enabled' : 'disabled' }}
                 </div>
@@ -533,7 +533,7 @@ function formatDate(timestamp: number): string {
           </div>
         </template>
         <template #col-date="{ item }">
-          <div class="flex items-center gap-1 whitespace-nowrap text-xs text-theme-500">
+          <div class="flex items-center gap-1 whitespace-nowrap text-xs text-ink-muted">
             <Icon
               icon="lucide:calendar"
               class="h-3 w-3"
@@ -543,7 +543,7 @@ function formatDate(timestamp: number): string {
         <template #col-actions="{ item }">
           <div class="flex items-center justify-end gap-1">
             <button
-              class="rounded-md p-1.5 text-theme-500 hover:text-accent-fg"
+              class="rounded-md p-1.5 text-ink-muted hover:text-accent-fg"
               title="Duplicate agent"
               @click.stop="duplicateAgent(item.id)"
             >
@@ -553,7 +553,7 @@ function formatDate(timestamp: number): string {
               />
             </button>
             <button
-              class="rounded-md p-1.5 text-theme-500 hover:text-status-danger"
+              class="rounded-md p-1.5 text-ink-muted hover:text-status-danger"
               title="Delete agent"
               @click.stop="confirmDelete(item)"
             >
@@ -574,7 +574,7 @@ function formatDate(timestamp: number): string {
         <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-theme-800">
           <Icon
             icon="lucide:bot"
-            class="h-8 w-8 text-theme-600"
+            class="h-8 w-8 text-ink-faint"
           />
         </div>
         <h3
@@ -583,11 +583,11 @@ function formatDate(timestamp: number): string {
         >
           No agents yet
         </h3>
-        <p class="mx-auto mb-4 max-w-md text-sm text-theme-500">
+        <p class="mx-auto mb-4 max-w-md text-sm text-ink-muted">
           Create an agent with the model, instructions, and tools for the way you work.
         </p>
         <button
-          class="inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
+          class="inline-flex items-center gap-2 rounded-lg accent-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
           @click="showCreateDialog = true"
         >
           <Icon
@@ -599,10 +599,10 @@ function formatDate(timestamp: number): string {
       </BaseCard>
       <div
         v-if="hasAnyAgents && hasFilters"
-        class="mt-4 flex items-center justify-between text-sm text-theme-500"
+        class="mt-4 flex items-center justify-between text-sm text-ink-muted"
       >
         <span>Filters active</span><button
-          class="text-theme-400 hover:text-theme-200"
+          class="text-ink-secondary hover:text-theme-200"
           @click="clearFilters"
         >
           Clear filters
@@ -620,26 +620,26 @@ function formatDate(timestamp: number): string {
           <div>
             <label
               for="new-agent-name"
-              class="mb-1.5 block text-sm text-theme-400"
+              class="mb-1.5 block text-sm text-ink-secondary"
             >Name</label><input
               id="new-agent-name"
               v-model="newName"
               type="text"
               autocomplete="off"
               placeholder="My Agent"
-              class="w-full rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              class="w-full rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
               @keydown.enter="createAgent"
             >
           </div>
           <div>
             <label
               for="new-agent-description"
-              class="mb-1.5 block text-sm text-theme-400"
-            >Description <span class="text-theme-600">(optional)</span></label><textarea
+              class="mb-1.5 block text-sm text-ink-secondary"
+            >Description <span class="text-ink-faint">(optional)</span></label><textarea
               id="new-agent-description"
               v-model="newDescription"
               placeholder="What does this agent do?"
-              class="h-20 w-full resize-none rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              class="h-20 w-full resize-none rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
             />
           </div>
         </div>
@@ -647,13 +647,13 @@ function formatDate(timestamp: number): string {
           <div class="flex justify-end gap-2">
             <button
               type="button"
-              class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200"
+              class="px-4 py-2 text-sm text-ink-secondary hover:text-theme-200"
               @click="showCreateDialog = false"
             >
               Cancel
             </button><button
               type="button"
-              class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
+              class="rounded-lg accent-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
               :disabled="!newName.trim()"
               @click="createAgent"
             >
@@ -669,7 +669,7 @@ function formatDate(timestamp: number): string {
         icon-color="red"
         @close="showDeleteConfirm = false"
       >
-        <p class="leading-relaxed text-theme-400">
+        <p class="leading-relaxed text-ink-secondary">
           Are you sure you want to delete <strong class="text-theme-200">{{ pendingDeleteName }}</strong>? This action cannot be undone.
         </p>
         <template #actions>

@@ -68,7 +68,7 @@ const stateMeta = computed(() => {
       label: 'Disabled',
       description: 'This channel is disabled and will not listen for messages.',
       icon: 'lucide:pause-circle',
-      color: 'text-theme-500',
+      color: 'text-ink-muted',
       bg: 'bg-theme-800',
       border: 'border-theme-700',
       spin: false,
@@ -241,7 +241,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
   <div class="mx-auto max-w-3xl">
     <div
       v-if="loading"
-      class="text-center py-12 text-theme-400"
+      class="text-center py-12 text-ink-secondary"
     >
       Loading...
     </div>
@@ -253,7 +253,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           <button
             type="button"
             aria-label="Back to channels"
-            class="p-1.5 text-theme-500 hover:text-theme-300 transition-colors"
+            class="p-1.5 text-ink-muted hover:text-theme-300 transition-colors"
             @click="requestClose"
           >
             <Icon
@@ -275,7 +275,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             <h1 class="text-2xl font-bold text-theme-100">
               {{ channel.name || 'Unnamed channel' }}
             </h1>
-            <p class="text-sm text-theme-400 mt-0.5">
+            <p class="text-sm text-ink-secondary mt-0.5">
               Agent: {{ selectedAgent?.name || channel.agentId }}
             </p>
           </div>
@@ -287,7 +287,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             :state="saveStatus === 'error' ? 'error' : saving ? 'saving' : isDirty ? 'dirty' : saveStatus"
           />
           <button
-            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            class="px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             :disabled="saving || !canSave || !isDirty"
             @click="save"
           >
@@ -309,7 +309,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             </h3>
           </div>
           <div>
-            <label class="block text-xs text-theme-400 mb-1.5">Name</label>
+            <label class="block text-xs text-ink-secondary mb-1.5">Name</label>
             <input
               v-model="dlgName"
               type="text"
@@ -318,7 +318,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             >
           </div>
           <div>
-            <label class="block text-xs text-theme-400 mb-1.5">Agent</label>
+            <label class="block text-xs text-ink-secondary mb-1.5">Agent</label>
             <AgentSelect
               v-model="dlgAgentId"
               :agents="allAgents"
@@ -338,7 +338,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               Platform
             </h3>
           </div>
-          <p class="text-xs text-theme-500 leading-relaxed mb-4">
+          <p class="text-xs text-ink-muted leading-relaxed mb-4">
             The messaging platform for this channel. Cannot be changed after creation.
           </p>
           <div class="flex gap-2">
@@ -350,7 +350,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors"
               :class="channel.type === opt.value
                 ? 'border-accent-500 bg-accent-500/10 text-accent-fg'
-                : 'border-theme-700 bg-theme-900 text-theme-500 opacity-40'"
+                : 'border-theme-700 bg-theme-900 text-ink-muted opacity-40'"
             >
               <Icon
                 :icon="opt.icon"
@@ -375,7 +375,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
           <template v-if="channel.type === 'telegram'">
             <div>
-              <label class="block text-xs text-theme-400 mb-1.5">Allowed Telegram User IDs</label>
+              <label class="block text-xs text-ink-secondary mb-1.5">Allowed Telegram User IDs</label>
               <input
                 v-model="dlgAllowedTelegramUserIds"
                 type="text"
@@ -383,27 +383,27 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
                 placeholder="e.g. 123456789"
                 class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
-              <p class="text-[11px] text-theme-600 mt-1.5">
+              <p class="text-[11px] text-ink-faint mt-1.5">
                 Required. Only these numeric Telegram user IDs can use the bot. Separate multiple IDs with commas. Group chats are blocked.
               </p>
             </div>
             <div>
-              <label class="block text-xs text-theme-400 mb-1.5">Bot Token</label>
+              <label class="block text-xs text-ink-secondary mb-1.5">Bot Token</label>
               <input
                 v-model="dlgBotToken"
                 type="password"
                 placeholder="123456:ABC-DEF..."
                 class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
-              <p class="text-[11px] text-theme-600 mt-1.5">
-                Get your bot token from <span class="text-theme-400">@BotFather</span> on Telegram.
+              <p class="text-[11px] text-ink-faint mt-1.5">
+                Get your bot token from <span class="text-ink-secondary">@BotFather</span> on Telegram.
               </p>
             </div>
           </template>
 
           <template v-else-if="channel.type === 'discord'">
             <div>
-              <label class="block text-xs text-theme-400 mb-1.5">Bot Token</label>
+              <label class="block text-xs text-ink-secondary mb-1.5">Bot Token</label>
               <input
                 v-model="dlgBotToken"
                 type="password"
@@ -411,7 +411,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
                 placeholder="MTIz...abc"
                 class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
-              <p class="text-[11px] text-theme-600 mt-1.5">
+              <p class="text-[11px] text-ink-faint mt-1.5">
                 Ensure the Message Content intent is enabled in the Discord Developer Portal.
               </p>
             </div>
@@ -419,7 +419,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
           <template v-else-if="channel.type === 'slack'">
             <div>
-              <label class="block text-xs text-theme-400 mb-1.5">Bot Token</label>
+              <label class="block text-xs text-ink-secondary mb-1.5">Bot Token</label>
               <input
                 v-model="dlgBotToken"
                 type="password"
@@ -428,15 +428,15 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               >
             </div>
             <div>
-              <label class="block text-xs text-theme-400 mb-1.5">App Token</label>
+              <label class="block text-xs text-ink-secondary mb-1.5">App Token</label>
               <input
                 v-model="dlgAppToken"
                 type="password"
                 placeholder="xapp-..."
                 class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
-              <p class="text-[11px] text-theme-600 mt-1.5">
-                Enable Socket Mode and generate an app-level token with <span class="text-theme-400">connections:write</span> scope.
+              <p class="text-[11px] text-ink-faint mt-1.5">
+                Enable Socket Mode and generate an app-level token with <span class="text-ink-secondary">connections:write</span> scope.
               </p>
             </div>
           </template>
@@ -453,7 +453,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               Allowed Agents
             </h3>
           </div>
-          <p class="text-xs text-theme-500 leading-relaxed mb-4">
+          <p class="text-xs text-ink-muted leading-relaxed mb-4">
             Restrict which agents users can switch to via commands. Leave empty to allow all agents.
           </p>
           <MultiSelect
@@ -474,7 +474,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               Status
             </h3>
           </div>
-          <p class="text-xs text-theme-500 leading-relaxed mb-4">
+          <p class="text-xs text-ink-muted leading-relaxed mb-4">
             Enable or disable this channel, and test the connection with the current credentials.
           </p>
 
@@ -484,7 +484,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
                 <p class="text-sm font-medium text-theme-200">
                   Enabled / State
                 </p>
-                <p class="text-xs text-theme-500">
+                <p class="text-xs text-ink-muted">
                   Start listening for messages on this channel.
                 </p>
               </div>
@@ -512,7 +512,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
                 >
                   {{ stateMeta.label }}
                 </p>
-                <p class="truncate text-[11px] text-theme-500 leading-tight">
+                <p class="truncate text-[11px] text-ink-muted leading-tight">
                   {{ stateMeta.description }}
                 </p>
               </div>
@@ -520,7 +520,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           </div>
 
           <div class="mt-4 pt-4 border-t border-theme-700 flex items-center justify-between gap-4">
-            <p class="text-xs text-theme-500">
+            <p class="text-xs text-ink-muted">
               Verify that the bot token(s) are valid and the bot can connect.
             </p>
             <button
@@ -530,7 +530,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
                 ? 'border-emerald-500/30 bg-emerald-500/5 text-status-success'
                 : testResult && !testResult.success
                   ? 'border-red-500/30 bg-red-500/5 text-status-danger'
-                  : 'border-theme-700 bg-theme-900 text-theme-400 hover:text-theme-200 hover:border-theme-600'"
+                  : 'border-theme-700 bg-theme-900 text-ink-secondary hover:text-theme-200 hover:border-theme-600'"
               @click="testConnection"
             >
               <Icon
@@ -571,7 +571,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
       layer="nested"
       @close="showDiscardConfirm = false"
     >
-      <p class="text-sm leading-relaxed text-theme-400">
+      <p class="text-sm leading-relaxed text-ink-secondary">
         This channel has changes that have not been saved.
       </p>
       <template #actions>

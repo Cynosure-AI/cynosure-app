@@ -223,14 +223,14 @@ onMounted(() => {
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:mic"
-              class="w-5 h-5 text-theme-400"
+              class="w-5 h-5 text-ink-secondary"
             />
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
               Enable Voice Input
             </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               Show microphone button in the chat input bar
             </p>
           </div>
@@ -256,14 +256,14 @@ onMounted(() => {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:audio-lines"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Transcription Engine
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Choose whether voice input is transcribed locally or by a remote model
           </p>
         </div>
@@ -279,7 +279,7 @@ onMounted(() => {
         v-if="prefs.voiceTranscriptionMode === 'remote'"
         class="space-y-1.5"
       >
-        <label class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">Remote Model</label>
+        <label class="text-[11px] font-medium text-ink-muted uppercase tracking-wider">Remote Model</label>
         <ProviderModelSelect
           v-model:provider-id="prefs.remoteTranscriptionProviderId"
           v-model:model-value="prefs.remoteTranscriptionModel"
@@ -290,7 +290,7 @@ onMounted(() => {
           dropdown-width="min-w-full"
           only-show-available-models
         />
-        <p class="text-xs text-theme-500">
+        <p class="text-xs text-ink-muted">
           Audio from the microphone is sent to the selected provider for transcription.
         </p>
       </div>
@@ -304,7 +304,7 @@ onMounted(() => {
             icon="lucide:shield-check"
             class="w-3.5 h-3.5 text-status-green shrink-0"
           />
-          <span class="text-theme-400">
+          <span class="text-ink-secondary">
             Local mode keeps microphone audio on this device and uses the cached browser Whisper model.
           </span>
         </div>
@@ -320,14 +320,14 @@ onMounted(() => {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:brain-circuit"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Model &amp; Quantization
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             All models support 99 languages including English and German
           </p>
         </div>
@@ -335,7 +335,7 @@ onMounted(() => {
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div class="space-y-1.5">
-          <label class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">Model</label>
+          <label class="text-[11px] font-medium text-ink-muted uppercase tracking-wider">Model</label>
           <CustomSelect
             v-model="prefs.whisperModel"
             :groups="modelGroups"
@@ -343,7 +343,7 @@ onMounted(() => {
           />
         </div>
         <div class="space-y-1.5">
-          <label class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">Quantization</label>
+          <label class="text-[11px] font-medium text-ink-muted uppercase tracking-wider">Quantization</label>
           <CustomSelect
             v-model="prefs.whisperQuantization"
             :groups="quantizationGroups"
@@ -361,7 +361,7 @@ onMounted(() => {
             icon="lucide:info"
             class="w-3.5 h-3.5 text-accent-fg shrink-0"
           />
-          <span class="text-theme-400">
+          <span class="text-ink-secondary">
             <span class="text-theme-300 font-medium">{{ selectedModelInfo.label }}</span>
             - {{ selectedModelInfo.description }}.
             Download size: <span class="text-theme-300">{{ selectedModelInfo.size }}</span>.
@@ -380,14 +380,14 @@ onMounted(() => {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:languages"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Language
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Language used for speech recognition
           </p>
         </div>
@@ -409,14 +409,14 @@ onMounted(() => {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:mic"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Microphone
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Select which microphone to use for voice input
           </p>
         </div>
@@ -437,7 +437,7 @@ onMounted(() => {
             icon="lucide:info"
             class="w-3.5 h-3.5 text-status-warning shrink-0"
           />
-          <span class="text-theme-400">
+          <span class="text-ink-secondary">
             No microphones detected. Please allow microphone access when prompted.
           </span>
         </div>
@@ -458,14 +458,14 @@ onMounted(() => {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:download"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div class="flex-1">
           <h3 class="text-sm font-medium text-theme-200">
             Download &amp; Cache
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Download the model now, or it will be downloaded automatically on first use
           </p>
         </div>
@@ -481,7 +481,7 @@ onMounted(() => {
             'bg-red-500': status === 'error',
           }"
         />
-        <span class="text-xs text-theme-400">
+        <span class="text-xs text-ink-secondary">
           <template v-if="status === 'idle'">
             Not loaded
           </template>
@@ -510,10 +510,10 @@ onMounted(() => {
           class="space-y-1"
         >
           <div class="flex items-center justify-between text-[11px]">
-            <span class="text-theme-400 truncate max-w-[60%]">
+            <span class="text-ink-secondary truncate max-w-[60%]">
               {{ entry.name }}
             </span>
-            <span class="text-theme-500 tabular-nums">
+            <span class="text-ink-muted tabular-nums">
               <template v-if="entry.done">
                 <Icon
                   icon="lucide:check"
@@ -543,8 +543,8 @@ onMounted(() => {
           :disabled="isLoading"
           class="px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500"
           :class="isLoading
-            ? 'bg-theme-700 text-theme-500 cursor-not-allowed'
-            : 'bg-accent-600 hover:bg-accent-500 text-accent-on'"
+            ? 'bg-theme-700 text-ink-muted cursor-not-allowed'
+            : 'accent-action bg-accent-600 hover:bg-accent-500 text-accent-on'"
           @click="downloadModel"
         >
           <Icon
@@ -554,7 +554,7 @@ onMounted(() => {
           {{ isModelReady ? 'Re-download' : 'Download Now' }}
         </button>
         <button
-          class="px-4 py-2 rounded-lg text-sm font-medium text-theme-400 hover:text-theme-200 bg-theme-800 hover:bg-theme-700 border border-theme-700 transition-colors focus:outline-none focus:ring-1 focus:ring-theme-500"
+          class="px-4 py-2 rounded-lg text-sm font-medium text-ink-secondary hover:text-theme-200 bg-theme-800 hover:bg-theme-700 border border-theme-700 transition-colors focus:outline-none focus:ring-1 focus:ring-theme-500"
           @click="deleteCache"
         >
           <Icon
@@ -569,7 +569,7 @@ onMounted(() => {
         v-if="downloadedModels.length > 0"
         class="border-t border-theme-700 pt-4 space-y-2"
       >
-        <h4 class="text-[11px] font-medium text-theme-500 uppercase tracking-wider">
+        <h4 class="text-[11px] font-medium text-ink-muted uppercase tracking-wider">
           Cached Models
         </h4>
         <div
@@ -584,7 +584,7 @@ onMounted(() => {
           <span class="text-xs text-theme-300 flex-1 truncate">
             {{ modelLabel(dl.model) }}
           </span>
-          <span class="text-[11px] text-theme-500 bg-theme-700/60 px-1.5 py-0.5 rounded font-mono uppercase">
+          <span class="text-[11px] text-ink-muted bg-theme-700/60 px-1.5 py-0.5 rounded font-mono uppercase">
             {{ dl.quantization }}
           </span>
           <span
@@ -606,14 +606,14 @@ onMounted(() => {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:help-circle"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <h3 class="text-sm font-medium text-theme-200">
           How it works
         </h3>
       </div>
-      <div class="space-y-2 text-xs text-theme-500 pl-12">
+      <div class="space-y-2 text-xs text-ink-muted pl-12">
         <p>
           <span class="text-theme-300 font-medium">Local mode</span> - The Whisper model runs
           entirely in your browser using WebAssembly. No audio data leaves your device.

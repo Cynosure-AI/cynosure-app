@@ -326,7 +326,7 @@ onBeforeUnmount(() => {
       <div class="relative">
         <Icon
           icon="lucide:search"
-          class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-600"
+          class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint"
         />
         <input
           v-model="searchQuery"
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
               ? 'Filter Free Chat conversations…'
               : 'Filter this agent’s chats…'"
           aria-label="Filter recent chats"
-          class="w-full rounded-lg border border-theme-800 bg-theme-900/70 py-1.5 pl-8 pr-3 text-xs text-theme-300 outline-none transition placeholder:text-theme-600 focus:border-theme-600"
+          class="w-full rounded-lg border border-theme-800 bg-theme-900/70 py-1.5 pl-8 pr-3 text-xs text-theme-300 outline-none transition placeholder:text-ink-faint focus:border-theme-600"
         >
       </div>
     </div>
@@ -360,7 +360,7 @@ onBeforeUnmount(() => {
         @contextmenu.prevent="openContextMenu(conversation.id, $event)"
         @keydown.enter.self.prevent="selectConversation(conversation)"
       >
-        <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-theme-500">
+        <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-ink-muted">
           <img
             v-if="conversation.agentId && agentDefs.get(conversation.agentId)?.iconUrl"
             :src="agentDefs.get(conversation.agentId)?.iconUrl || ''"
@@ -417,7 +417,7 @@ onBeforeUnmount(() => {
           </span>
           <span
             class="flex max-h-0 items-center gap-1 overflow-hidden truncate
-         text-[10px] text-theme-600 opacity-0
+         text-[10px] text-ink-faint opacity-0
          transition-all duration-200 ease-out
          group-hover:mt-0.5 group-hover:max-h-5 group-hover:opacity-100"
           >
@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
         <span class="relative shrink-0">
           <button
             type="button"
-            class="rounded-md p-1 text-theme-500 opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover:opacity-100 focus-visible:opacity-100"
+            class="rounded-md p-1 text-ink-muted opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover:opacity-100 focus-visible:opacity-100"
             :class="{ 'bg-theme-700 text-theme-200 opacity-100': openMenuId === conversation.id }"
             aria-label="Chat options"
             @click.stop="openMenuId = openMenuId === conversation.id ? null : conversation.id"
@@ -520,7 +520,7 @@ onBeforeUnmount(() => {
         v-else-if="!visibleConversations.length"
         class="mx-2 mt-3 flex flex-col items-center rounded-xl px-4 py-7 text-center"
       >
-        <span class="mb-3 flex h-6 w-6 items-center justify-center rounded-2xl border border-theme-700/70 bg-theme-800/70 text-theme-400 shadow-sm">
+        <span class="mb-3 flex h-6 w-6 items-center justify-center rounded-2xl border border-theme-700/70 bg-theme-800/70 text-ink-secondary shadow-sm">
           <Icon
             :icon="emptyState.icon"
             class="h-6 w-6"
@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
           {{ emptyState.title }}
         </span>
 
-        <span class="mt-1 max-w-44 text-[11px] leading-relaxed text-theme-600">
+        <span class="mt-1 max-w-44 text-[11px] leading-relaxed text-ink-faint">
           {{ emptyState.subtitle }}
         </span>
       </div>

@@ -149,14 +149,14 @@ function record(event: KeyboardEvent): void {
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
               <Icon
                 icon="lucide:power"
-                class="h-5 w-5 text-theme-400"
+                class="h-5 w-5 text-ink-secondary"
               />
             </div>
             <div>
               <h3 class="text-sm font-medium text-theme-200">
                 Autostart
               </h3>
-              <p class="mt-0.5 text-xs text-theme-500">
+              <p class="mt-0.5 text-xs text-ink-muted">
                 Start Cynosure when you sign in to your computer.
               </p>
             </div>
@@ -187,14 +187,14 @@ function record(event: KeyboardEvent): void {
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
               <Icon
                 icon="lucide:keyboard"
-                class="h-5 w-5 text-theme-400"
+                class="h-5 w-5 text-ink-secondary"
               />
             </div>
             <div>
               <h3 class="text-sm font-medium text-theme-200">
                 New chat shortcut
               </h3>
-              <p class="mt-0.5 text-xs text-theme-500">
+              <p class="mt-0.5 text-xs text-ink-muted">
                 Open a fresh empty chat in a compact window beside the mouse cursor.
               </p>
             </div>

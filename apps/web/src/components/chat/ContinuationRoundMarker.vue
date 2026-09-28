@@ -16,7 +16,7 @@ defineProps<{
           class="h-3.5 w-3.5 shrink-0"
         />
         <span class="font-medium">Continuing in a new round</span>
-        <span v-if="message" class="hidden text-theme-500 sm:inline">· {{ message }}</span>
+        <span v-if="message" class="hidden text-ink-muted sm:inline">· {{ message }}</span>
       </div>
       <div class="h-px flex-1 bg-linear-to-l from-transparent to-accent-500/25" />
     </div>

@@ -81,15 +81,15 @@ const subAgentColumns: Column<SubAgentItem>[] = [
   <div class="space-y-4">
     <div class="flex items-center justify-between mb-2">
       <div>
-        <p class="text-sm text-theme-400">
+        <p class="text-sm text-ink-secondary">
           Assign sub-agents for multi-agent orchestration.
         </p>
-        <p class="text-xs text-theme-600 mt-1">
+        <p class="text-xs text-ink-faint mt-1">
           When sub-agents are assigned, the agent acts as orchestrator — planning tasks and delegating to sub-agents by internal name.
         </p>
       </div>
       <button
-        class="flex items-center gap-2 px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg text-xs font-medium transition-colors"
+        class="flex items-center gap-2 px-3 py-1.5 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg text-xs font-medium transition-colors"
         @click="showAddDialog = true"
       >
         <Icon
@@ -188,7 +188,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
 
       <template #col-actions="{ item }">
         <button
-          class="p-1.5 text-theme-500 hover:text-status-danger rounded-md transition-all"
+          class="p-1.5 text-ink-muted hover:text-status-danger rounded-md transition-all"
           @click.stop="removeSubAgent(item.agentId)"
         >
           <Icon
@@ -208,11 +208,11 @@ const subAgentColumns: Column<SubAgentItem>[] = [
         />
         How Sub-Agent Orchestration Works
       </h3>
-      <ol class="text-xs text-theme-500 space-y-1.5 ml-6 list-decimal">
-        <li>When you chat with this agent, it receives the task and creates a <strong class="text-theme-400">plan</strong></li>
-        <li>For each step, it creates <strong class="text-theme-400">instructions</strong> and invokes the assigned sub-agent</li>
+      <ol class="text-xs text-ink-muted space-y-1.5 ml-6 list-decimal">
+        <li>When you chat with this agent, it receives the task and creates a <strong class="text-ink-secondary">plan</strong></li>
+        <li>For each step, it creates <strong class="text-ink-secondary">instructions</strong> and invokes the assigned sub-agent</li>
         <li>Sub-agents execute their specialized tasks and report results</li>
-        <li>If a sub-agent encounters an obstacle, it <strong class="text-theme-400">escalates</strong> back to the orchestrator</li>
+        <li>If a sub-agent encounters an obstacle, it <strong class="text-ink-secondary">escalates</strong> back to the orchestrator</li>
         <li>Once all steps are complete, the orchestrator synthesizes the final result</li>
       </ol>
     </BaseCard>
@@ -230,7 +230,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
           </h2>
           <div class="space-y-4">
             <div>
-              <label class="block text-sm text-theme-400 mb-1.5">Agent</label>
+              <label class="block text-sm text-ink-secondary mb-1.5">Agent</label>
               <AgentSelect
                 :model-value="addAgentId"
                 :agents="availableAgents"
@@ -244,25 +244,25 @@ const subAgentColumns: Column<SubAgentItem>[] = [
               class="rounded-lg bg-theme-800 border border-theme-700 p-3 space-y-1.5"
             >
               <div class="flex items-center gap-2">
-                <span class="text-xs text-theme-500">Internal Name:</span>
+                <span class="text-xs text-ink-muted">Internal Name:</span>
                 <span class="text-xs text-theme-200 font-mono">{{ getAgentInternalName(addAgentId) || '—' }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-xs text-theme-500">Description:</span>
+                <span class="text-xs text-ink-muted">Description:</span>
                 <span class="text-xs text-theme-200">{{ getAgentDescription(addAgentId) || '—' }}</span>
               </div>
             </div>
           </div>
           <div class="flex justify-end gap-2 mt-6">
             <button
-              class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
+              class="px-4 py-2 text-sm text-ink-secondary hover:text-theme-200 transition-colors"
               @click="showAddDialog = false"
             >
               Cancel
             </button>
             <button
               :disabled="!addAgentId"
-              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-lg text-sm font-medium transition-colors"
+              class="px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on rounded-lg text-sm font-medium transition-colors"
               @click="addSubAgent"
             >
               Add

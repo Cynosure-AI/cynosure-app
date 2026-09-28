@@ -364,7 +364,7 @@ onBeforeUnmount(() => {
   >
     <div class="flex h-full min-h-0 flex-col rounded-2xl overflow-hidden">
       <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
-        <label class="text-xs text-theme-500 shrink-0">Name</label>
+        <label class="text-xs text-ink-muted shrink-0">Name</label>
         <input
           v-model="editableTitle"
           aria-label="Document name"
@@ -376,7 +376,7 @@ onBeforeUnmount(() => {
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
         <button
-          class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
+          class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-ink-secondary transition hover:bg-theme-800 hover:text-theme-100"
           :class="{ 'bg-accent-500/15 text-accent-fg': showHistory }"
           :disabled="!documentRef || loading"
           title="Revision history"
@@ -389,7 +389,7 @@ onBeforeUnmount(() => {
           History
         </button>
         <button
-          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40"
+          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-ink-secondary transition hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40"
           :class="{ 'bg-accent-500/15 text-accent-fg': analysisExpanded }"
           :disabled="analysisLoading"
           title="Extracted facts and entities"
@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
           ]"
           :key="button.title"
           :title="button.title"
-          :class="button.active ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          :class="button.active ? 'bg-accent-500/15 text-accent-fg' : 'text-ink-secondary hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
           :disabled="!editor || loading"
           @click="button.action"
@@ -427,7 +427,7 @@ onBeforeUnmount(() => {
           v-for="level in headingLevels"
           :key="level"
           :title="`Heading ${level}`"
-          :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-fg' : 'text-ink-secondary hover:text-theme-100 hover:bg-theme-800/70'"
           class="px-2.5 py-2 rounded-lg transition-colors text-xs font-semibold shrink-0 disabled:opacity-40"
           :disabled="!editor || loading"
           @click="toggleHeading(level)"
@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
           ]"
           :key="button.title"
           :title="button.title"
-          :class="button.active ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          :class="button.active ? 'bg-accent-500/15 text-accent-fg' : 'text-ink-secondary hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
           :disabled="!editor || loading"
           @click="button.action"
@@ -473,7 +473,7 @@ onBeforeUnmount(() => {
         <div class="overflow-y-auto border-r border-theme-800 p-2">
           <div
             v-if="historyLoading"
-            class="p-3 text-xs text-theme-500"
+            class="p-3 text-xs text-ink-muted"
           >
             Loading history…
           </div>
@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
             v-for="revision in revisions"
             :key="revision.id"
             class="mb-1 block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-theme-800"
-            :class="selectedRevisionId === revision.id ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400'"
+            :class="selectedRevisionId === revision.id ? 'bg-accent-500/15 text-accent-fg' : 'text-ink-secondary'"
             @click="selectRevision(revision.id)"
           >
             <span class="block font-medium">Revision {{ revision.revisionNumber }}</span>
@@ -499,7 +499,7 @@ onBeforeUnmount(() => {
       >
         <div
           v-if="loading"
-          class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-theme-950/65 text-theme-500 text-sm"
+          class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-theme-950/65 text-ink-muted text-sm"
         >
           <Icon
             icon="lucide:loader-2"
@@ -514,9 +514,9 @@ onBeforeUnmount(() => {
         >
           <div class="flex min-h-0 flex-1 flex-col">
             <div class="flex shrink-0 items-center justify-between px-3 py-2">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-theme-400">Extracted knowledge</span>
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">Extracted knowledge</span>
               <button
-                class="p-1 text-theme-500 hover:text-theme-200"
+                class="p-1 text-ink-muted hover:text-theme-200"
                 title="Close facts"
                 @click="analysisExpanded = false"
               >
@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
             <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
               <div
                 v-if="analysisLoading"
-                class="flex items-center gap-2 py-4 text-xs text-theme-500"
+                class="flex items-center gap-2 py-4 text-xs text-ink-muted"
               >
                 <Icon
                   icon="lucide:loader-2"
@@ -544,13 +544,13 @@ onBeforeUnmount(() => {
               </div>
               <div
                 v-else-if="analysis?.status === 'not_analyzed'"
-                class="py-3 text-xs leading-5 text-theme-500"
+                class="py-3 text-xs leading-5 text-ink-muted"
               >
                 Run Extract facts to generate durable facts and entities.
               </div>
               <div
                 v-else-if="analysis?.status === 'too_large'"
-                class="py-3 text-xs leading-5 text-theme-500"
+                class="py-3 text-xs leading-5 text-ink-muted"
               >
                 Analysis supports up to {{ analysis.maxChunks }} chunks. This document has {{ analysis.chunkCount }}.
               </div>
@@ -576,24 +576,24 @@ onBeforeUnmount(() => {
                     <div class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-xs leading-4 text-theme-300 hover:bg-theme-900/70">
                       <Icon
                         :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:circle-dot'"
-                        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-theme-500"
+                        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-muted"
                       />
                       <span
                         v-if="item.kind === 'relationship' && item.relation && item.entity"
                         class="min-w-0"
                       >
                         <span class="font-medium text-theme-200">{{ item.subject || 'Unknown subject' }}</span>
-                        <span class="mx-1.5 text-theme-600">·</span>
+                        <span class="mx-1.5 text-ink-faint">·</span>
                         <span class="font-mono text-accent-fg">{{ item.relation }}</span>
-                        <span class="mx-1.5 text-theme-600">→</span>
+                        <span class="mx-1.5 text-ink-faint">→</span>
                         <span>{{ item.entity }}</span>
                       </span>
                       <span
                         v-else-if="item.kind === 'entity' && item.entity"
                         class="min-w-0"
                       >
-                        <span class="text-theme-500">Mentioned entity</span>
-                        <span class="mx-1.5 text-theme-600">·</span>
+                        <span class="text-ink-muted">Mentioned entity</span>
+                        <span class="mx-1.5 text-ink-faint">·</span>
                         <span>{{ item.entity }}</span>
                       </span>
                       <span v-else>{{ item.label }}</span>
@@ -607,7 +607,7 @@ onBeforeUnmount(() => {
                           Why this was extracted
                         </div>
                         <p>{{ item.reasoning }}</p>
-                        <div class="mt-2 text-[10px] text-theme-500">
+                        <div class="mt-2 text-[10px] text-ink-muted">
                           <span v-if="item.subject">Subject: {{ item.subject }} · </span>Chunk {{ item.chunkIndex + 1 }}
                         </div>
                       </div>
@@ -616,7 +616,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div
                   v-else
-                  class="py-3 text-xs text-theme-500"
+                  class="py-3 text-xs text-ink-muted"
                 >
                   No durable facts or entities were extracted.
                 </div>
@@ -652,7 +652,7 @@ onBeforeUnmount(() => {
           Restore revision
         </button>
         <button
-          class="px-3 py-1.5 text-theme-400 hover:text-theme-100 rounded-lg text-sm transition-colors"
+          class="px-3 py-1.5 text-ink-secondary hover:text-theme-100 rounded-lg text-sm transition-colors"
           :disabled="saving"
           @click="close"
         >

@@ -40,7 +40,7 @@ function toolEffectBadgeClass(toolCall: ToolCallDisplay): string {
   if (effect === 'destructive') return 'border-red-500/30 bg-red-500/10 text-status-danger'
   if (effect === 'write') return 'border-amber-500/30 bg-amber-500/10 text-status-warning'
   if (effect === 'read') return 'border-sky-500/30 bg-sky-500/10 text-status-info'
-  return 'border-theme-700/60 bg-theme-900/60 text-theme-500'
+  return 'border-theme-700/60 bg-theme-900/60 text-ink-muted'
 }
 
 const approveAllLabel = computed(() => {
@@ -129,7 +129,7 @@ function toggleExpand(index: number): void {
           <div class="text-sm font-semibold text-status-warning tracking-wide uppercase text-[11px]">
             Action Required
           </div>
-          <p class="hitl-card-description mt-0.5 text-xs text-theme-500">
+          <p class="hitl-card-description mt-0.5 text-xs text-ink-muted">
             {{ fileAccess ? 'Allow this folder for AI file tools?' : 'Review the requested tool actions before allowing them to run.' }}
           </p>
         </div>
@@ -141,7 +141,7 @@ function toggleExpand(index: number): void {
           >
             1 of {{ agentStore.activeHITLQueue.length }}
           </span>
-          <span v-if="!fileAccess" class="text-xs font-medium text-theme-400 bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50">
+          <span v-if="!fileAccess" class="text-xs font-medium text-ink-secondary bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50">
             {{ agentStore.pendingHITL.toolCalls.length }} tool{{ agentStore.pendingHITL.toolCalls.length > 1 ? 's' : '' }} requested
           </span>
         </div>
@@ -149,10 +149,10 @@ function toggleExpand(index: number): void {
 
       <div class="hitl-card-body px-4 py-3 space-y-3">
         <div v-if="fileAccess" class="space-y-2 text-sm text-theme-200">
-          <p><span class="text-theme-500">Folder to allow recursively:</span></p>
+          <p><span class="text-ink-muted">Folder to allow recursively:</span></p>
           <p class="break-all rounded-lg border border-theme-700 bg-theme-950/50 p-2.5 font-mono text-xs">{{ fileAccess.folder }}</p>
-          <p class="break-all text-xs text-theme-500">{{ fileAccess.toolName }} requested {{ fileAccess.path }}</p>
-          <p class="text-xs text-theme-500">Allowing adds this folder to Settings → File Access. You can remove it there later.</p>
+          <p class="break-all text-xs text-ink-muted">{{ fileAccess.toolName }} requested {{ fileAccess.path }}</p>
+          <p class="text-xs text-ink-muted">Allowing adds this folder to Settings → File Access. You can remove it there later.</p>
         </div>
         <div
           v-for="(tc, i) in agentStore.pendingHITL.toolCalls"
@@ -176,7 +176,7 @@ function toggleExpand(index: number): void {
               >{{ toolEffectLabel(tc) }}</span>
               <button
                 v-if="hasLongArgs(tc.arguments)"
-                class="text-[10px] font-medium text-theme-500 hover:text-theme-300 transition-colors uppercase tracking-wider"
+                class="text-[10px] font-medium text-ink-muted hover:text-theme-300 transition-colors uppercase tracking-wider"
                 @click="toggleExpand(i)"
               >
                 {{ expandedArgs.has(i) ? 'Show Less' : 'Show More' }}
@@ -202,7 +202,7 @@ function toggleExpand(index: number): void {
             v-model="denyReason"
             type="text"
             placeholder="Why is this being denied? (optional)"
-            class="w-full rounded-lg border border-theme-600 bg-theme-900 px-3 py-2 text-xs text-theme-100 placeholder-theme-500 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none transition-all shadow-inner"
+            class="w-full rounded-lg border border-theme-600 bg-theme-900 px-3 py-2 text-xs text-theme-100 placeholder:text-ink-muted focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none transition-all shadow-inner"
             autofocus
             @keydown.enter="deny"
             @keydown.escape="cancelDeny"
@@ -218,7 +218,7 @@ function toggleExpand(index: number): void {
         <template v-else>
           <button
             v-if="showReasonInput"
-            class="rounded-lg px-3 py-1.5 text-xs font-medium text-theme-400 hover:text-theme-100 hover:bg-theme-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-theme-500"
+            class="rounded-lg px-3 py-1.5 text-xs font-medium text-ink-secondary hover:text-theme-100 hover:bg-theme-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-theme-500"
             @click="cancelDeny"
           >
             Cancel

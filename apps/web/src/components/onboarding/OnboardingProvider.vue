@@ -4,7 +4,7 @@
       <h2 class="text-xl font-bold text-theme-100">
         Connect an AI Provider
       </h2>
-      <p class="text-sm text-theme-500 mt-1">
+      <p class="text-sm text-ink-muted mt-1">
         You need at least one provider to use Cynosure. You can add more later in Settings. <br> It is recommended to use <b>Deepseek-v4</b> as base model.
       </p>
     </div>
@@ -14,7 +14,7 @@
       v-if="providerStore.providers.length"
       class="mb-5 space-y-2"
     >
-      <div class="text-xs font-medium text-theme-400 uppercase tracking-wider mb-2">
+      <div class="text-xs font-medium text-ink-secondary uppercase tracking-wider mb-2">
         Added Providers
       </div>
       <div
@@ -31,23 +31,23 @@
           >
           <span
             v-else
-            class="text-sm font-bold text-theme-400"
+            class="text-sm font-bold text-ink-secondary"
           >{{ provider.type[0].toUpperCase() }}</span>
         </div>
         <div class="flex-1 min-w-0">
           <div class="text-sm font-medium text-theme-200">
             {{ provider.name }}
           </div>
-          <div class="text-xs text-theme-500 truncate">
+          <div class="text-xs text-ink-muted truncate">
             {{ provider.defaultModel }} · {{ provider.type }}
           </div>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span class="text-xs text-theme-500">Added</span>
+          <span class="text-xs text-ink-muted">Added</span>
         </div>
         <button
-          class="p-1.5 text-theme-600 hover:text-status-danger transition-colors"
+          class="p-1.5 text-ink-faint hover:text-status-danger transition-colors"
           @click="providerStore.removeProvider(provider.id)"
         >
           <Icon
@@ -74,7 +74,7 @@
           <p class="text-sm font-semibold text-emerald-300">
             Provider added successfully!
           </p>
-          <p class="text-xs text-theme-400 mt-0.5">
+          <p class="text-xs text-ink-secondary mt-0.5">
             <span class="text-theme-200 font-medium">{{ lastAddedProvider }}</span> is ready to use.
             You can add more providers or continue to the next step.
           </p>
@@ -113,7 +113,7 @@
 
       <!-- Provider type -->
       <div>
-        <label class="block text-xs font-medium text-theme-400 mb-1.5">Provider Type</label>
+        <label class="block text-xs font-medium text-ink-secondary mb-1.5">Provider Type</label>
         <select
           v-model="form.type"
           class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -132,39 +132,39 @@
       <div class="grid grid-cols-2 gap-3">
         <!-- Name -->
         <div>
-          <label class="block text-xs font-medium text-theme-400 mb-1.5">Display Name</label>
+          <label class="block text-xs font-medium text-ink-secondary mb-1.5">Display Name</label>
           <input
             v-model="form.name"
             type="text"
             placeholder="e.g. My OpenAI"
-            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
           >
         </div>
 
         <!-- Base URL (local providers) -->
         <div v-if="hasEditableBaseUrl">
-          <label class="block text-xs font-medium text-theme-400 mb-1.5">Base URL</label>
+          <label class="block text-xs font-medium text-ink-secondary mb-1.5">Base URL</label>
           <input
             v-model="form.baseUrl"
             type="text"
             :placeholder="defaultBaseUrls[form.type]"
-            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
           >
         </div>
 
         <!-- API Key (cloud providers) -->
         <div v-else>
-          <label class="block text-xs font-medium text-theme-400 mb-1.5">API Key</label>
+          <label class="block text-xs font-medium text-ink-secondary mb-1.5">API Key</label>
           <div class="relative">
             <input
               v-model="form.apiKey"
               :type="showApiKey ? 'text' : 'password'"
               placeholder="sk-..."
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
             <button
               type="button"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-500 hover:text-theme-300 transition-colors"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-theme-300 transition-colors"
               @click="showApiKey = !showApiKey"
             >
               <Icon
@@ -178,7 +178,7 @@
 
       <!-- Model -->
       <div>
-        <label class="block text-xs font-medium text-theme-400 mb-1.5">Default Model</label>
+        <label class="block text-xs font-medium text-ink-secondary mb-1.5">Default Model</label>
         <div class="flex gap-2">
           <div class="relative flex-1">
             <input
@@ -186,7 +186,7 @@
               v-model="form.defaultModel"
               type="text"
               :placeholder="defaultModels[form.type] || 'Enter model name'"
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
             <select
               v-else
@@ -227,7 +227,7 @@
 
       <!-- Add button -->
       <button
-        class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-accent-on text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+        class="w-full px-4 py-2.5 accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-accent-on text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         :disabled="!canAdd || saving"
         @click="addProvider"
       >

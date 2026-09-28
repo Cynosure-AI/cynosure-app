@@ -385,14 +385,14 @@ function cancelDrop() {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
           <Icon
             icon="lucide:layers"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Embedding Model
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Select the provider and model for vector embeddings. Changing the model will offer to re-embed existing memories or drop them.
             For local embeddings, <span class="text-theme-300 font-medium">mxbai-embed-large</span> gives the best retrieval quality.
           </p>
@@ -401,7 +401,7 @@ function cancelDrop() {
 
       <div class="space-y-3">
         <div>
-          <label class="block text-xs text-theme-400 mb-1">Provider</label>
+          <label class="block text-xs text-ink-secondary mb-1">Provider</label>
           <ProviderSelect
             v-model="embProviderId"
             :providers="providerStore.providers"
@@ -413,10 +413,10 @@ function cancelDrop() {
 
         <div>
           <div class="flex items-center justify-between gap-3 mb-1">
-            <label class="block text-xs text-theme-400">Model</label>
+            <label class="block text-xs text-ink-secondary">Model</label>
             <span
               v-if="embDimensions"
-              class="text-[11px] text-theme-500 whitespace-nowrap"
+              class="text-[11px] text-ink-muted whitespace-nowrap"
             >
               {{ embDimensions }} dimensions
             </span>
@@ -437,7 +437,7 @@ function cancelDrop() {
             />
             <button
               :disabled="!embProviderId"
-              class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
+              class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-ink-faint text-theme-300 text-sm rounded-lg transition-colors"
               title="Refresh embedding models"
               aria-label="Refresh embedding models"
               @click="embModelRefreshKey += 1"
@@ -458,7 +458,7 @@ function cancelDrop() {
         />
         <button
           :disabled="embSaving || embProbing || !embModel || !embDirty"
-          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
+          class="ml-auto px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on text-sm rounded-lg transition-colors"
           @click="saveEmbeddings"
         >
           <span v-if="embSaving || embProbing">Saving...</span>
@@ -477,14 +477,14 @@ function cancelDrop() {
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
             <Icon
               icon="lucide:list-filter"
-              class="w-5 h-5 text-theme-400"
+              class="w-5 h-5 text-ink-secondary"
             />
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
               Retrieval Reranker
             </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               Optionally send the best hybrid-search candidates to an OpenRouter rerank model before memory is injected into chat context.
               This can improve relevance at the cost of one extra search request.
             </p>
@@ -500,7 +500,7 @@ function cancelDrop() {
 
       <div class="space-y-3">
         <div>
-          <label class="block text-xs text-theme-400 mb-1">OpenRouter Provider / Model</label>
+          <label class="block text-xs text-ink-secondary mb-1">OpenRouter Provider / Model</label>
           <ProviderModelSelect
             :provider-id="rerankProviderId"
             :model-value="rerankModel"
@@ -522,7 +522,7 @@ function cancelDrop() {
         </div>
 
         <div>
-          <label class="block text-xs text-theme-400 mb-1">Candidate Pool</label>
+          <label class="block text-xs text-ink-secondary mb-1">Candidate Pool</label>
           <input
             v-model.number="rerankCandidateCount"
             type="number"
@@ -531,7 +531,7 @@ function cancelDrop() {
             step="1"
             class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
           >
-          <p class="text-xs text-theme-500 mt-1">
+          <p class="text-xs text-ink-muted mt-1">
             Candidates fetched before reranking. Larger pools can improve relevance but increase reranking cost.
           </p>
         </div>
@@ -544,7 +544,7 @@ function cancelDrop() {
         />
         <button
           :disabled="rerankSaving || !rerankDirty || (rerankEnabled && (!rerankProviderId || !rerankModel))"
-          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
+          class="ml-auto px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on text-sm rounded-lg transition-colors"
           @click="saveReranker"
         >
           <span v-if="rerankSaving">Saving...</span>
@@ -567,14 +567,14 @@ function cancelDrop() {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
           <Icon
             icon="lucide:network"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Deep Research Model
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Provider and model used when documents undergo Deep Research into facts for the local knowledge graph.
           </p>
         </div>
@@ -587,7 +587,7 @@ function cancelDrop() {
         :aria-busy="deepResearchSaving"
       >
         <div class="flex items-center justify-between gap-3 mb-1.5">
-          <label class="block text-xs text-theme-400">Provider / Model</label>
+          <label class="block text-xs text-ink-secondary">Provider / Model</label>
         </div>
         <ProviderModelSelect
           :provider-id="deepResearchProviderId"
@@ -598,7 +598,7 @@ function cancelDrop() {
           placeholder="Use active provider default"
           @change="saveDeepResearchSelection"
         />
-        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+        <p class="mt-2 text-[11px] leading-relaxed text-ink-muted">
           This setting is used for Deep Research. Leaving it on the default uses the server's active provider and that provider's default model.
         </p>
       </div>
@@ -661,7 +661,7 @@ function cancelDrop() {
         />
         <button
           :disabled="!dreamLoaded || dreamSaving || !dreamDirty || (dreamEnabled && !dreamSelectionValid)"
-          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg"
+          class="ml-auto px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on text-sm rounded-lg"
           @click="saveDream"
         >
           {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
@@ -678,7 +678,7 @@ function cancelDrop() {
       layer="nested"
       @close="cancelDrop"
     >
-      <p class="text-theme-400 leading-relaxed">
+      <p class="text-ink-secondary leading-relaxed">
         Changing the embedding provider or model makes existing vectors incompatible.
         You can <strong class="text-theme-200">re-embed</strong> all stored memories with the new model to preserve your data,
         or <strong class="text-theme-200">drop</strong> all vectors and re-upload files manually.
@@ -689,7 +689,7 @@ function cancelDrop() {
         v-if="reembedProgress"
         class="mt-4 space-y-2"
       >
-        <div class="flex items-center justify-between text-xs text-theme-400">
+        <div class="flex items-center justify-between text-xs text-ink-secondary">
           <span>Re-embedding...</span>
           <span>{{ reembedProgress.current }} / {{ reembedProgress.total }} chunks ({{ reembedPercent }}%)</span>
         </div>
@@ -704,7 +704,7 @@ function cancelDrop() {
       <template #actions>
         <button
           :disabled="embSaving"
-          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 text-accent-on rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 text-accent-on rounded-xl text-center font-medium transition-colors"
           @click="confirmReembed"
         >
           {{ embSaving ? 'Re-Embedding...' : 'Re-Embed All Memories' }}

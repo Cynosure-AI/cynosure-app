@@ -232,7 +232,7 @@ const chatRoute = computed(() =>
 
 <template>
   <aside
-    class="bg-theme-950 relative flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
+    class="app-sidebar bg-theme-950 relative flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden"
     :class="sidebarCollapsed ? 'w-72 md:w-16 sidebar-collapsed' : 'w-72'"
   >
     <!-- Brand -->
@@ -307,7 +307,7 @@ const chatRoute = computed(() =>
               class="w-4 h-4"
               :class="notificationStore.unreadCount > 0
                 ? 'text-accent-fg'
-                : 'text-theme-500'
+                : 'text-ink-muted'
               "
             />
             <span
@@ -360,7 +360,7 @@ const chatRoute = computed(() =>
                     </button>
                     <button
                       v-if="notificationStore.notifications.length > 0"
-                      class="text-[10px] text-theme-500 hover:text-theme-300 transition-colors px-1.5 py-0.5"
+                      class="text-[10px] text-ink-muted hover:text-theme-300 transition-colors px-1.5 py-0.5"
                       @click.stop="notificationStore.removeAll()"
                     >
                       Clear all
@@ -372,7 +372,7 @@ const chatRoute = computed(() =>
                 <div class="max-h-72 overflow-y-auto">
                   <div
                     v-if="notificationStore.notifications.length === 0"
-                    class="px-3 py-6 text-center text-xs text-theme-500"
+                    class="px-3 py-6 text-center text-xs text-ink-muted"
                   >
                     No notifications yet
                   </div>
@@ -407,15 +407,15 @@ const chatRoute = computed(() =>
                         />
                         <span class="text-xs font-medium text-theme-200 truncate">{{ notif.title }}</span>
                       </div>
-                      <p class="text-[11px] text-theme-500 mt-0.5 line-clamp-2">
+                      <p class="text-[11px] text-ink-muted mt-0.5 line-clamp-2">
                         {{ notif.body }}
                       </p>
                       <div class="flex items-center gap-2 mt-1">
-                        <span class="text-[10px] text-theme-600">
+                        <span class="text-[10px] text-ink-faint">
                           {{ agentDefs.get(notif.agentId)?.name || "Agent" }}
                         </span>
-                        <span class="text-[10px] text-theme-600">·</span>
-                        <span class="text-[10px] text-theme-600">{{
+                        <span class="text-[10px] text-ink-faint">·</span>
+                        <span class="text-[10px] text-ink-faint">{{
                           formatTimeAgo(notificationTime(notif))
                         }}</span>
                       </div>
@@ -423,7 +423,7 @@ const chatRoute = computed(() =>
                     <!-- Delete button -->
                     <button
                       type="button"
-                      class="mt-1 shrink-0 text-theme-600 hover:text-theme-300 transition-colors"
+                      class="mt-1 shrink-0 text-ink-faint hover:text-theme-300 transition-colors"
                       :aria-label="`Dismiss ${notif.title}`"
                       @click.stop="notificationStore.remove(notif.id)"
                     >
@@ -449,7 +449,7 @@ const chatRoute = computed(() =>
         <!-- Collapse toggle (desktop only) -->
         <button
           type="button"
-          class="collapse-toggle-btn hidden md:flex p-1.5 rounded-lg text-theme-500 hover:text-theme-300 hover:bg-theme-800 transition-colors"
+          class="collapse-toggle-btn hidden md:flex p-1.5 rounded-lg text-ink-muted hover:text-theme-300 hover:bg-theme-800 transition-colors"
           :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
           :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
           :aria-expanded="!sidebarCollapsed"
@@ -555,7 +555,7 @@ const chatRoute = computed(() =>
           </button>
           <button
             type="button"
-            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-theme-500 opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/recent-header:opacity-100 focus-visible:opacity-100"
+            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-ink-muted opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/recent-header:opacity-100 focus-visible:opacity-100"
             :class="{ 'bg-theme-800 text-theme-200 opacity-100': recentFilterMenuOpen }"
             aria-label="Filter recent chats"
             aria-haspopup="menu"
@@ -573,7 +573,7 @@ const chatRoute = computed(() =>
             class="absolute right-2 top-7 z-30 w-44 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
             @click.stop
           >
-            <div class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-theme-500">
+            <div class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
               Filter by
             </div>
 
@@ -588,7 +588,7 @@ const chatRoute = computed(() =>
             >
               <Icon
                 :icon="option.icon"
-                class="h-3.5 w-3.5 text-theme-500"
+                class="h-3.5 w-3.5 text-ink-muted"
               />
               <span class="flex-1">{{ option.label }}</span>
               <Icon
@@ -628,7 +628,7 @@ const chatRoute = computed(() =>
           <Icon
             v-else
             icon="lucide:user-round"
-            class="h-4 w-4 text-theme-500"
+            class="h-4 w-4 text-ink-muted"
           />
           <span
             class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-theme-950"
@@ -656,7 +656,7 @@ const chatRoute = computed(() =>
           >
             {{ preferencesStore.userName.trim() }}
           </span>
-          <span class="truncate text-[11px] leading-4 text-theme-400">
+          <span class="truncate text-[11px] leading-4 text-ink-secondary">
             <template v-if="!wsConnected">Connecting...</template>
             <template v-else-if="hasAwaitingApproval">Needs Attention</template>
             <template v-else-if="instances.length > 0">Agents Running...</template>
@@ -668,7 +668,7 @@ const chatRoute = computed(() =>
         </span>
         <Icon
           icon="lucide:settings"
-          class="h-4 w-4 shrink-0 text-theme-500 transition-colors"
+          class="h-4 w-4 shrink-0 text-ink-muted transition-colors"
           :class="{ 'text-accent-fg': showStatusPopover }"
         />
       </button>
@@ -708,7 +708,7 @@ const chatRoute = computed(() =>
   border-radius: 0.5rem;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--color-theme-400, #a1a1aa);
+  color: var(--color-ink-secondary);
   cursor: pointer;
   margin-bottom: 2px;
   transition: all 150ms ease;
@@ -721,15 +721,17 @@ const chatRoute = computed(() =>
 }
 
 .nav-item.active {
-  color: var(--color-theme-100, #f4f4f5);
-  background-color: color-mix(in srgb, var(--color-accent-500) 10%, var(--color-theme-800));
-  box-shadow: inset 3px 0 0 var(--color-accent-500, #3b82f6);
+  color: var(--theme-nav-active-color, var(--color-theme-100));
+  background: var(--theme-nav-active-background, color-mix(in srgb, var(--color-accent-500) 10%, var(--color-theme-800)));
+  box-shadow: var(--theme-nav-active-shadow, inset 3px 0 0 var(--color-accent-500));
+  border: var(--theme-nav-active-border, 0 solid transparent);
+  clip-path: var(--theme-nav-active-clip, none);
 }
 
 .section-label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--color-theme-500, #71717a);
+  color: var(--color-ink-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 1.25rem 0.75rem 0.5rem;

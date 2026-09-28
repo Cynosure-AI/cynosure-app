@@ -116,7 +116,7 @@ const gridLines = computed(() => {
 
 <template>
   <BaseCard class="p-4 mb-6">
-    <h3 class="text-xs font-medium text-theme-400 mb-3">
+    <h3 class="text-xs font-medium text-ink-secondary mb-3">
       Daily Activity
     </h3>
 
@@ -131,7 +131,7 @@ const gridLines = computed(() => {
         class="absolute left-6 right-0 border-theme-800/60"
         :style="{ bottom: (line / maxMessages * 100) + '%' }"
       >
-        <span class="absolute -left-6 -top-2 text-[9px] text-theme-600 w-5 text-right">
+        <span class="absolute -left-6 -top-2 text-[9px] text-ink-faint w-5 text-right">
           {{ line }}
         </span>
       </div>
@@ -163,7 +163,7 @@ const gridLines = computed(() => {
           <!-- Date label -->
           <span
             v-if="i % labelInterval === 0 || i === filledData.length - 1"
-            class="absolute -bottom-4 text-[9px] text-theme-600 whitespace-nowrap"
+            class="absolute -bottom-4 text-[9px] text-ink-faint whitespace-nowrap"
           >
             {{ shortDate(day.date) }}
           </span>
@@ -185,18 +185,18 @@ const gridLines = computed(() => {
           <div class="font-medium text-theme-300 mb-1.5">
             {{ shortDate(hoveredDay.date) }}
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Messages</span><span class="text-theme-300">{{ hoveredDay.messages }}</span>
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Conversations</span><span class="text-theme-300">{{ hoveredDay.conversations }}</span>
           </div>
-          <div class="flex justify-between text-theme-400">
+          <div class="flex justify-between text-ink-secondary">
             <span>Tokens</span><span class="text-theme-300">{{ formatNumber(hoveredDay.tokens) }}</span>
           </div>
           <div
             v-if="hoveredDay.estimatedCost != null"
-            class="flex justify-between text-theme-400 mt-0.5"
+            class="flex justify-between text-ink-secondary mt-0.5"
           >
             <span>Est. Cost</span>
             <span class="text-status-warning">
@@ -208,7 +208,7 @@ const gridLines = computed(() => {
             <div class="border-t border-theme-800 mt-2 pt-1.5 mb-1">
               <!-- header row -->
               <div
-                class="grid text-[10px] text-theme-500 uppercase tracking-wider mb-1"
+                class="grid text-[10px] text-ink-muted uppercase tracking-wider mb-1"
                 style="grid-template-columns: 1fr 2.5rem 3.5rem;"
               >
                 <span>Model</span>
@@ -219,14 +219,14 @@ const gridLines = computed(() => {
               <div
                 v-for="m in hoveredDay.models.slice(0, 6)"
                 :key="m.model"
-                class="grid items-baseline text-theme-400 mb-0.5"
+                class="grid items-baseline text-ink-secondary mb-0.5"
                 style="grid-template-columns: 1fr 2.5rem 3.5rem;"
               >
                 <span class="truncate text-theme-300 pr-2">{{ m.model }}</span>
                 <span class="text-right tabular-nums">{{ m.messages }}</span>
                 <span
                   class="text-right tabular-nums"
-                  :class="m.estimatedCost != null ? 'text-status-warning' : 'text-theme-600'"
+                  :class="m.estimatedCost != null ? 'text-status-warning' : 'text-ink-faint'"
                 >
                   <template v-if="m.estimatedCost != null">
                     ${{ m.estimatedCost < 0.01 ? m.estimatedCost.toFixed(4) : m.estimatedCost.toFixed(2) }}
@@ -236,7 +236,7 @@ const gridLines = computed(() => {
               </div>
               <div
                 v-if="hoveredDay.models.length > 6"
-                class="text-theme-600 text-[10px] mt-0.5"
+                class="text-ink-faint text-[10px] mt-0.5"
               >
                 +{{ hoveredDay.models.length - 6 }} more
               </div>

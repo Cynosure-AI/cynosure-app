@@ -26,7 +26,7 @@
         >
           Welcome to <span class="text-accent-fg">Cynosure</span>
         </h1>
-        <p class="mt-3 max-w-2xl text-sm leading-6 text-theme-400 sm:text-base">
+        <p class="mt-3 max-w-2xl text-sm leading-6 text-ink-secondary sm:text-base">
           Bring your models, tools, and knowledge together. Build capable agents that remember context and work the way you do.
         </p>
 
@@ -46,14 +46,14 @@
               <h2 class="text-sm font-semibold text-theme-100">
                 {{ feature.title }}
               </h2>
-              <p class="mt-1.5 text-xs leading-5 text-theme-500">
+              <p class="mt-1.5 text-xs leading-5 text-ink-muted">
                 {{ feature.description }}
               </p>
             </div>
           </article>
         </div>
 
-        <div class="welcome-next-hint mt-7 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-theme-500">
+        <div class="welcome-next-hint mt-7 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-ink-muted">
           <Icon
             icon="lucide:sparkles"
             class="h-3.5 w-3.5 text-accent-fg"

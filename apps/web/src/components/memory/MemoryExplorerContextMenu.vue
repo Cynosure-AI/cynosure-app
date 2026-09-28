@@ -97,7 +97,7 @@ const emit = defineEmits<{
         </button>
       </template>
       <template v-else-if="menu.kind === 'document' && menu.file">
-        <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-theme-500">
+        <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-ink-muted">
           {{ menu.file.fileName }}
         </div>
         <button

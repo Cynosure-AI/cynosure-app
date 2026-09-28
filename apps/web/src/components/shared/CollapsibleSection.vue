@@ -28,7 +28,7 @@ const props = withDefaults(
     headerClass:
       'flex w-full items-center gap-2 px-3 py-2 text-left text-sm rounded-lg transition-colors border border-theme-700/40 bg-theme-800/50 hover:bg-theme-800 hover:border-theme-700/60',
     headerTextClass: 'font-medium text-theme-300',
-    chevronClass: 'w-3.5 h-3.5 text-theme-500',
+    chevronClass: 'w-3.5 h-3.5 text-ink-muted',
     chevronIcon: 'lucide:chevron-down',
     keyboardShortcuts: false,
   }
@@ -137,7 +137,7 @@ watch(
       <Icon
         v-if="headerIcon"
         :icon="headerIcon"
-        class="w-3.5 h-3.5 shrink-0 text-theme-400"
+        class="w-3.5 h-3.5 shrink-0 text-ink-secondary"
       />
       <span :class="headerTextClass">{{ headerLabel }}</span>
       <slot

@@ -4,15 +4,15 @@
       <h2 class="text-xl font-bold text-theme-100">
         Add MCP Tools
       </h2>
-      <p class="text-sm text-theme-500 mt-1">
+      <p class="text-sm text-ink-muted mt-1">
         Extend your agents with installable tools. Everything here is optional and can also be added later in
-        <strong class="text-theme-400">Settings → MCPs</strong>.
+        <strong class="text-ink-secondary">Settings → MCPs</strong>.
       </p>
     </div>
 
     <div
       v-if="registryLoading"
-      class="flex items-center gap-2 text-sm text-theme-500 py-8"
+      class="flex items-center gap-2 text-sm text-ink-muted py-8"
     >
       <Icon
         icon="lucide:loader-2"
@@ -60,10 +60,10 @@
                 :class="mcp.badgeClass"
               >{{ mcp.badge }}</span>
             </div>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               {{ mcp.description }}
             </p>
-            <p class="text-[11px] text-theme-600 mt-0.5 font-mono">
+            <p class="text-[11px] text-ink-faint mt-0.5 font-mono">
               {{ mcp.packageId }}
             </p>
           </div>
@@ -101,14 +101,14 @@
           v-if="expandedId === mcp.id && mcp.envVars?.length"
           class="px-4 pb-4 border-t border-theme-700/40 pt-4 space-y-3"
         >
-          <p class="text-xs text-theme-400 font-medium">
+          <p class="text-xs text-ink-secondary font-medium">
             Configuration Required
           </p>
           <div
             v-for="envVar in mcp.envVars"
             :key="envVar.name"
           >
-            <label class="block text-xs text-theme-500 mb-1">
+            <label class="block text-xs text-ink-muted mb-1">
               {{ envVar.label }}
               <span
                 v-if="envVar.required"
@@ -119,12 +119,12 @@
               v-model="envValues[mcp.id + ':' + envVar.name]"
               :type="envVar.secret ? 'password' : 'text'"
               :placeholder="envVar.placeholder"
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
           </div>
           <div class="flex gap-2">
             <button
-              class="flex items-center gap-1.5 px-3 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-xs font-medium rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-xs font-medium rounded-lg transition-colors"
               :disabled="loadingId === mcp.id || !canInstallWithEnv(mcp)"
               @click="installWithEnv(mcp)"
             >
@@ -136,7 +136,7 @@
               {{ loadingId === mcp.id ? 'Installing…' : 'Install' }}
             </button>
             <button
-              class="px-3 py-2 text-theme-500 hover:text-theme-300 text-xs transition-colors"
+              class="px-3 py-2 text-ink-muted hover:text-theme-300 text-xs transition-colors"
               @click="expandedId = null"
             >
               Cancel
@@ -157,7 +157,7 @@
     <!-- Filesystem path note -->
     <div
       v-if="filesystemExpanded"
-      class="mt-3 flex items-start gap-2 text-xs text-theme-500 bg-theme-900/60 border border-theme-800 rounded-lg px-4 py-3"
+      class="mt-3 flex items-start gap-2 text-xs text-ink-muted bg-theme-900/60 border border-theme-800 rounded-lg px-4 py-3"
     >
       <Icon
         icon="lucide:info"

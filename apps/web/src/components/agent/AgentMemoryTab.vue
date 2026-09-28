@@ -178,7 +178,7 @@ onMounted(() => loadFolders())
               Dreaming
             </h3>
           </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
+          <p class="text-xs text-ink-muted leading-relaxed">
             Allow conversations with this agent to be reviewed by Dream Mode after they become inactive. Enabled by default; turn this off to opt out.
           </p>
         </div>
@@ -205,7 +205,7 @@ onMounted(() => loadFolders())
               Automatic memory retrieval
             </h3>
           </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
+          <p class="text-xs text-ink-muted leading-relaxed">
             Retrieve and inject relevant document snippets before this agent responds. Relationship tools use the same selected-folder scope on demand.
           </p>
         </div>
@@ -233,7 +233,7 @@ onMounted(() => loadFolders())
         </div>
         <div class="flex items-center gap-2">
           <button
-            class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 transition-colors flex items-center gap-1"
+            class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 transition-colors flex items-center gap-1"
             @click="goToMemory"
           >
             <Icon
@@ -244,7 +244,7 @@ onMounted(() => loadFolders())
           </button>
           <button
             :disabled="spacesLoading"
-            class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200 transition-colors"
+            class="px-2 py-1.5 text-xs text-ink-secondary hover:text-theme-200 transition-colors"
             @click="loadFolders"
           >
             <Icon
@@ -255,7 +255,7 @@ onMounted(() => loadFolders())
           </button>
         </div>
       </div>
-      <p class="text-xs text-theme-500 mb-3">
+      <p class="text-xs text-ink-muted mb-3">
         Select memory folders to give this agent access to shared knowledge.
       </p>
 
@@ -307,7 +307,7 @@ onMounted(() => loadFolders())
         v-if="allSpaces.length > 0"
         class="mb-2 flex items-center justify-between text-xs"
       >
-        <span class="text-theme-500">
+        <span class="text-ink-muted">
           {{ effectiveAssignedCount === allSpaces.length ? 'All memory selected' : `${effectiveAssignedCount}/${allSpaces.length} selected` }}
         </span>
         <div class="flex items-center gap-3">
@@ -320,7 +320,7 @@ onMounted(() => loadFolders())
           </button>
           <button
             v-if="assignedFolders.length > 0"
-            class="text-theme-400 hover:text-theme-200 transition-colors"
+            class="text-ink-secondary hover:text-theme-200 transition-colors"
             @click="deselectAll"
           >
             Deselect all
@@ -332,7 +332,7 @@ onMounted(() => loadFolders())
       <div class="rounded-lg border border-theme-700 overflow-hidden">
         <div
           v-if="spacesLoading"
-          class="text-sm text-theme-500 text-center py-6"
+          class="text-sm text-ink-muted text-center py-6"
         >
           <Icon
             icon="lucide:loader-2"
@@ -348,7 +348,7 @@ onMounted(() => loadFolders())
             icon="lucide:database"
             class="w-8 h-8 text-theme-700 mx-auto mb-2"
           />
-          <p class="text-sm text-theme-500">
+          <p class="text-sm text-ink-muted">
             No memory folders found
           </p>
         </div>
@@ -377,7 +377,7 @@ onMounted(() => loadFolders())
             />
             <!-- Chevron: always rendered to keep all rows aligned -->
             <button
-              class="p-0.5 shrink-0 text-theme-500 hover:text-theme-200 transition-colors"
+              class="p-0.5 shrink-0 text-ink-muted hover:text-theme-200 transition-colors"
               :class="{ 'invisible pointer-events-none': space.isUncategorized || !hasChildren(space) }"
               @click.stop="toggleCollapsed(space)"
             >
@@ -391,14 +391,14 @@ onMounted(() => loadFolders())
               <Icon
                 :icon="space.isUncategorized ? 'lucide:hard-drive' : 'lucide:folder'"
                 class="w-3.5 h-3.5"
-                :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-fg' : 'text-theme-500'"
+                :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-fg' : 'text-ink-muted'"
               />
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-theme-200 truncate">
                 {{ space.isUncategorized ? 'All Memory' : space.name }}
               </div>
-              <div class="text-[11px] text-theme-500">
+              <div class="text-[11px] text-ink-muted">
                 {{ space.isUncategorized ? 'Includes Uncategorized and standard folders' : `${space.fileCount} doc${space.fileCount !== 1 ? 's' : ''}` }}
               </div>
             </div>

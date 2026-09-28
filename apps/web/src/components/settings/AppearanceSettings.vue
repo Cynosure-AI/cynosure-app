@@ -100,12 +100,12 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
           <Icon
             icon="lucide:user-round"
-            class="h-5 w-5 text-theme-400"
+            class="h-5 w-5 text-ink-secondary"
           />
         </span>
         <span class="min-w-0 flex-1">
           <span class="block text-sm font-medium text-theme-200">Your name</span>
-          <span class="mt-0.5 block text-xs text-theme-500">
+          <span class="mt-0.5 block text-xs text-ink-muted">
             Agents can reference this value with the <code
               v-pre
               class="text-accent-fg"
@@ -120,14 +120,14 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
               :disabled="prefs.userSettingsSaving"
               autocomplete="name"
               placeholder="How should agents address you?"
-              class="w-full max-w-md rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+              class="w-full max-w-md rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 outline-none transition placeholder:text-ink-faint focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
               @change="saveName"
               @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
             >
             <Icon
               v-if="prefs.userSettingsSaving"
               icon="lucide:loader-2"
-              class="h-4 w-4 animate-spin text-theme-500"
+              class="h-4 w-4 animate-spin text-ink-muted"
             />
           </span>
           <span
@@ -174,14 +174,14 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:palette"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Theme
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Choose your visual style
           </p>
         </div>
@@ -266,14 +266,14 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:list-tree"
-              class="w-5 h-5 text-theme-400"
+              class="w-5 h-5 text-ink-secondary"
             />
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
               Auto-expand Thinking
             </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               Automatically expand thinking / reasoning blocks
             </p>
           </div>
@@ -300,14 +300,14 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:graduation-cap"
-              class="w-5 h-5 text-theme-400"
+              class="w-5 h-5 text-ink-secondary"
             />
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
               Setup Guide
             </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               Re-run the onboarding flow to configure providers, memory and MCPs
             </p>
           </div>

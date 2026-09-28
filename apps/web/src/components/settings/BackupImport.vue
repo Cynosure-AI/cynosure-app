@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
             Restoring {{ moduleLabels[restoreProgress.module]?.label || restoreProgress.module }}
           </span>
         </div>
-        <span class="text-xs text-theme-500 whitespace-nowrap">
+        <span class="text-xs text-ink-muted whitespace-nowrap">
           {{ restoreProgress.current }} / {{ restoreProgress.total }}
         </span>
       </div>
@@ -175,11 +175,11 @@ onBeforeUnmount(() => {
               status === 'completed' ? 'text-status-green' : '',
               status === 'failed' ? 'text-status-warning' : '',
               status === 'started' ? 'text-accent-fg animate-spin' : '',
-              status === 'pending' ? 'text-theme-600' : ''
+              status === 'pending' ? 'text-ink-faint' : ''
             ]"
           />
           <div class="min-w-0">
-            <span :class="status === 'pending' ? 'text-theme-500' : 'text-theme-300'">
+            <span :class="status === 'pending' ? 'text-ink-muted' : 'text-theme-300'">
               {{ moduleLabels[key]?.label || key }}
             </span>
             <p v-for="(error, index) in restoreErrors[key] || []" :key="index" class="mt-1 text-status-warning break-words">
@@ -202,10 +202,10 @@ onBeforeUnmount(() => {
         >
           <Icon
             icon="lucide:upload-cloud"
-            class="w-8 h-8 text-theme-500"
+            class="w-8 h-8 text-ink-muted"
           />
-          <span class="text-sm text-theme-400">Click to select a backup file</span>
-          <span class="text-[11px] text-theme-600">.zip files only</span>
+          <span class="text-sm text-ink-secondary">Click to select a backup file</span>
+          <span class="text-[11px] text-ink-faint">.zip files only</span>
           <input
             type="file"
             accept=".zip"
@@ -231,12 +231,12 @@ onBeforeUnmount(() => {
             <p class="text-sm text-theme-200 font-medium">
               {{ importFile?.name }}
             </p>
-            <p class="text-[11px] text-theme-500">
+            <p class="text-[11px] text-ink-muted">
               Created {{ new Date(previewData.createdAt).toLocaleString() }}
             </p>
           </div>
           <button
-            class="text-xs text-theme-500 hover:text-theme-300 transition-colors"
+            class="text-xs text-ink-muted hover:text-theme-300 transition-colors"
             @click="clearImport"
           >
             Change file
@@ -244,7 +244,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="space-y-2">
-          <p class="text-xs text-theme-400">
+          <p class="text-xs text-ink-secondary">
             Select modules to restore:
           </p>
           <label
@@ -260,11 +260,11 @@ onBeforeUnmount(() => {
             >
             <Icon
               :icon="moduleLabels[key]?.icon || 'lucide:package'"
-              class="w-4 h-4 text-theme-400 shrink-0"
+              class="w-4 h-4 text-ink-secondary shrink-0"
             />
             <div class="flex-1">
               <span class="text-sm text-theme-200">{{ moduleLabels[key]?.label || key }}</span>
-              <span class="text-xs text-theme-500 ml-2">{{ info.count }} item{{ info.count !== 1 ? 's' : '' }}</span>
+              <span class="text-xs text-ink-muted ml-2">{{ info.count }} item{{ info.count !== 1 ? 's' : '' }}</span>
             </div>
           </label>
         </div>
@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
 
         <button
           :disabled="importing || !Object.values(importModules).some(Boolean)"
-          class="w-full px-4 py-2.5 bg-green-600 hover:bg-green-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          class="w-full px-4 py-2.5 bg-green-600 hover:bg-green-500 disabled:bg-theme-700 disabled:text-ink-muted text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           @click="doImport"
         >
           <Icon
@@ -319,7 +319,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               :icon="moduleLabels[key]?.icon || 'lucide:package'"
-              class="w-4 h-4 text-theme-400 shrink-0"
+              class="w-4 h-4 text-ink-secondary shrink-0"
             />
             <div class="flex-1">
               <span class="text-sm text-theme-200">{{ moduleLabels[key]?.label || key }}</span>

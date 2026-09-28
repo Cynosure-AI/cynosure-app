@@ -58,7 +58,7 @@ function insertSmartTag(tag: string): void {
     @close="close"
   >
     <div class="flex items-start justify-between gap-3 mb-3">
-      <p class="text-xs text-theme-500">
+      <p class="text-xs text-ink-muted">
         Prepended as a system message alongside the built-in agentic instructions — does not replace them.
       </p>
       <PromptSmartTagPicker @insert="insertSmartTag" />
@@ -68,7 +68,7 @@ function insertSmartTag(tag: string): void {
       v-model="draft"
       placeholder="Optional system instructions..."
       rows="26"
-      class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-2 text-sm text-theme-100 font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+      class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-2 text-sm text-theme-100 font-mono resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
     />
 
     <template #actions>
@@ -80,7 +80,7 @@ function insertSmartTag(tag: string): void {
           Cancel
         </button>
         <button
-          class="px-4 py-2 text-sm rounded-lg bg-accent-600 text-accent-on hover:bg-accent-500 transition-colors"
+          class="px-4 py-2 text-sm rounded-lg accent-action bg-accent-600 text-accent-on hover:bg-accent-500 transition-colors"
           @click="save"
         >
           Save

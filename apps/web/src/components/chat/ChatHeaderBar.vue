@@ -124,7 +124,7 @@ async function newChat(): Promise<void> {
         class="h-4 w-4"
       />
       <span
-        class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[9px] font-semibold leading-none text-accent-on"
+        class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full accent-action bg-accent-600 px-1 text-[9px] font-semibold leading-none text-accent-on"
       >
         {{ planningTaskCount > 9 ? '9+' : planningTaskCount }}
       </span>
@@ -132,7 +132,7 @@ async function newChat(): Promise<void> {
 
     <!-- New Chat button -->
     <button
-      class="flex items-center gap-1.5 px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg text-xs font-medium transition-colors shrink-0"
+      class="flex items-center gap-1.5 px-3 py-1.5 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg text-xs font-medium transition-colors shrink-0"
       @click="newChat"
     >
       <Icon

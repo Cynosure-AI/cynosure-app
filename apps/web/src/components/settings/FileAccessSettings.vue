@@ -61,7 +61,7 @@ onMounted(refresh)
   <div class="space-y-6">
     <div>
       <h2 class="text-lg font-semibold text-theme-100">File Access</h2>
-      <p class="mt-1 text-sm text-theme-500">
+      <p class="mt-1 text-sm text-ink-muted">
         AI file tools can access these folders and everything inside them. Other folders require your approval when a tool tries to use them.
       </p>
     </div>
@@ -72,7 +72,7 @@ onMounted(refresh)
         type="text"
         aria-label="Folder path"
         placeholder="Absolute folder path"
-        class="min-w-0 flex-1 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 placeholder-theme-500 focus:border-accent-500 focus:outline-none"
+        class="min-w-0 flex-1 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 placeholder:text-ink-muted focus:border-accent-500 focus:outline-none"
       >
       <button
         v-if="electron?.chooseFileAccessDirectory"
@@ -83,13 +83,13 @@ onMounted(refresh)
       <button
         type="submit"
         :disabled="busy || !folderPath.trim()"
-        class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on disabled:opacity-50"
+        class="rounded-lg accent-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on disabled:opacity-50"
       >Add folder</button>
     </form>
 
     <p v-if="error" role="alert" class="text-sm text-status-danger">{{ error }}</p>
-    <p v-if="loading" class="text-sm text-theme-500">Loading folders…</p>
-    <p v-else-if="!folders.length" class="rounded-lg border border-theme-800 bg-theme-900/50 p-4 text-sm text-theme-500">
+    <p v-if="loading" class="text-sm text-ink-muted">Loading folders…</p>
+    <p v-else-if="!folders.length" class="rounded-lg border border-theme-800 bg-theme-900/50 p-4 text-sm text-ink-muted">
       No folders allowed yet. Cynosure will ask when an AI file tool first needs access.
     </p>
     <ul v-else class="divide-y divide-theme-800 rounded-lg border border-theme-800">

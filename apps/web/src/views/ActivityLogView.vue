@@ -605,7 +605,7 @@ watch(searchQuery, () => {
           <h1 class="text-2xl font-bold text-theme-100">
             Activity Log
           </h1>
-          <p class="mt-1 max-w-3xl text-sm leading-relaxed text-theme-500">
+          <p class="mt-1 max-w-3xl text-sm leading-relaxed text-ink-muted">
             Active work and a timeline of completed chats, cron runs, memory indexing, generated files, channels, and notifications.
           </p>
         </div>
@@ -625,7 +625,7 @@ watch(searchQuery, () => {
               Stop All
             </button>
             <button
-              class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:flex-none"
+              class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-ink-secondary transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 disabled:cursor-wait disabled:opacity-70 sm:flex-none"
               :disabled="loading"
               @click="loadActivity"
             >
@@ -639,7 +639,7 @@ watch(searchQuery, () => {
           </div>
           <p
             v-if="stopAllMessage"
-            class="text-xs text-theme-400"
+            class="text-xs text-ink-secondary"
             role="status"
           >
             {{ stopAllMessage }}
@@ -677,7 +677,7 @@ watch(searchQuery, () => {
                 </span>
                 <Icon
                   icon="lucide:chevron-down"
-                  class="h-3.5 w-3.5 text-theme-500 transition"
+                  class="h-3.5 w-3.5 text-ink-muted transition"
                   :class="{ 'rotate-180': open }"
                 />
               </span>
@@ -710,7 +710,7 @@ watch(searchQuery, () => {
                   />
                   All Activity
                 </span>
-                <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ allActivityTotal }}</span>
+                <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-ink-secondary">{{ allActivityTotal }}</span>
               </button>
 
               <div class="my-1 h-px bg-theme-800" />
@@ -735,7 +735,7 @@ watch(searchQuery, () => {
                   />
                   <span class="truncate">{{ option.label }}</span>
                 </span>
-                <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-theme-400">{{ totalByKind[option.value] }}</span>
+                <span class="rounded-full bg-theme-700/55 px-1.5 py-0.5 text-[11px] tabular-nums text-ink-secondary">{{ totalByKind[option.value] }}</span>
                 <input
                   type="checkbox"
                   class="sr-only"
@@ -750,17 +750,17 @@ watch(searchQuery, () => {
         <div class="relative min-w-0 flex-1">
           <Icon
             icon="lucide:search"
-            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-600"
+            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
           />
           <input
             v-model="searchQuery"
             type="search"
-            class="w-full rounded-lg border border-theme-800 bg-theme-900/80 py-2 pl-9 pr-10 text-[13px] text-theme-100 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:bg-theme-900"
+            class="w-full rounded-lg border border-theme-800 bg-theme-900/80 py-2 pl-9 pr-10 text-[13px] text-theme-100 outline-none transition placeholder:text-ink-faint focus:border-accent-500/60 focus:bg-theme-900"
             placeholder="Search activity..."
           >
           <button
             v-if="searchQuery"
-            class="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition hover:bg-theme-800 hover:text-theme-200"
+            class="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted transition hover:bg-theme-800 hover:text-theme-200"
             title="Clear search"
             @click="clearSearch"
           >
@@ -774,22 +774,22 @@ watch(searchQuery, () => {
 
       <div
         v-if="loading && items.length === 0"
-        class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
+        class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-ink-muted"
       >
         <Icon
           icon="lucide:loader-2"
-          class="w-8 h-8 animate-spin text-theme-500"
+          class="w-8 h-8 animate-spin text-ink-muted"
         />
         <p>Loading activity...</p>
       </div>
 
       <div
         v-else-if="filteredItems.length === 0"
-        class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-theme-500"
+        class="flex min-h-80 flex-col items-center justify-center gap-3 text-sm text-ink-muted"
       >
         <Icon
           icon="lucide:inbox"
-          class="w-9 h-9 text-theme-600"
+          class="w-9 h-9 text-ink-faint"
         />
         <p>{{ searchQuery.trim() ? "No activity matches your search." : "No activity for this filter yet." }}</p>
       </div>
@@ -803,16 +803,16 @@ watch(searchQuery, () => {
           :key="group.label"
           class="mb-2.5"
         >
-          <div class="sticky -top-6 z-[5] flex items-center gap-2 bg-theme-900 py-1.5 text-[10px] font-bold uppercase tracking-[0.065em] text-theme-500">
+          <div class="sticky -top-6 z-[5] flex items-center gap-2 bg-theme-900 py-1.5 text-[10px] font-bold uppercase tracking-[0.065em] text-ink-muted">
             <span
               class="text-[13px]"
               :class="{
                 'text-status-success': group.kind === 'active',
                 'text-status-warning': group.kind === 'attention',
-                'text-theme-400': group.kind === 'queued',
+                'text-ink-secondary': group.kind === 'queued',
               }"
             >{{ group.label }}</span>
-            <span class="font-semibold text-theme-600">{{ group.items.length }}</span>
+            <span class="font-semibold text-ink-faint">{{ group.items.length }}</span>
           </div>
 
           <div class="flex flex-col gap-1">
@@ -826,7 +826,7 @@ watch(searchQuery, () => {
               }]"
               @click="openItem(item)"
             >
-              <div class="hidden pt-2 text-right text-[10px] tabular-nums text-theme-500 sm:block">
+              <div class="hidden pt-2 text-right text-[10px] tabular-nums text-ink-muted sm:block">
                 <span>{{ formatClock(item.createdAt) }}</span>
                 <small class="block text-[8px] text-theme-700">{{ formatTimeAgo(item.createdAt) }}</small>
               </div>
@@ -849,7 +849,7 @@ watch(searchQuery, () => {
               <div class="activity-card min-w-0 rounded-md border border-theme-800 bg-theme-950 px-2.5 py-1.5 transition">
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <div class="flex shrink-0 items-center gap-1 text-[10px] text-theme-600">
+                    <div class="flex shrink-0 items-center gap-1 text-[10px] text-ink-faint">
                       <span class="font-bold uppercase tracking-[0.055em] text-[var(--activity-color)]">
                         {{ item.kind }}
                       </span>
@@ -904,14 +904,14 @@ watch(searchQuery, () => {
 
                 <p
                   v-if="item.description"
-                  class="mt-0.5 line-clamp-1 text-[11px] leading-4 text-theme-400 wrap-break-word"
+                  class="mt-0.5 line-clamp-1 text-[11px] leading-4 text-ink-secondary wrap-break-word"
                 >
                   {{ item.description }}
                 </p>
 
                 <p
                   v-if="item.kind === 'dream'"
-                  class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-theme-500"
+                  class="mt-0.5 flex items-center gap-1 text-[11px] leading-4 text-ink-muted"
                 >
                   <time
                     :datetime="new Date(item.createdAt).toISOString()"
@@ -929,7 +929,7 @@ watch(searchQuery, () => {
 
                 <details
                   v-if="item.dreamChanges?.length"
-                  class="mt-2 text-xs text-theme-400"
+                  class="mt-2 text-xs text-ink-secondary"
                   @click.stop
                 >
                   <summary class="cursor-pointer">
@@ -994,13 +994,13 @@ watch(searchQuery, () => {
                       :icon="artifactIcon(artifact.kind)"
                       class="h-3.5 w-3.5 shrink-0"
                     />
-                    <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifactTypeLabel(artifact.kind) }}</span>
+                    <span class="shrink-0 text-[10px] uppercase text-ink-muted">{{ artifactTypeLabel(artifact.kind) }}</span>
                     <span class="min-w-0 truncate">{{ artifact.label }}</span>
-                    <span class="shrink-0 text-[10px] uppercase text-theme-500">{{ artifact.ext }}</span>
+                    <span class="shrink-0 text-[10px] uppercase text-ink-muted">{{ artifact.ext }}</span>
                   </a>
                 </div>
 
-                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-theme-500">
+                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-ink-muted">
                   <span class="inline-flex items-center gap-1">
                     <Icon
                       icon="lucide:user-round"
@@ -1027,7 +1027,7 @@ watch(searchQuery, () => {
 
         <div
           v-if="loadingMore"
-          class="flex items-center justify-center gap-2 py-6 text-sm text-theme-500"
+          class="flex items-center justify-center gap-2 py-6 text-sm text-ink-muted"
         >
           <Icon
             icon="lucide:loader-2"
@@ -1042,7 +1042,7 @@ watch(searchQuery, () => {
         >
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-400 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
+            class="inline-flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-ink-secondary transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100"
             @click="loadMoreActivity"
           >
             <Icon
@@ -1067,7 +1067,7 @@ watch(searchQuery, () => {
       This cancels all work currently running on the server, including chats, cron runs, channel agents,
       search indexing and Deep Research, vector re-embedding, and auxiliary chat actions.
     </p>
-    <p class="mt-3 text-xs leading-5 text-theme-500">
+    <p class="mt-3 text-xs leading-5 text-ink-muted">
       {{ knownActiveWorkCount > 0 ? `${knownActiveWorkCount} active operation${knownActiveWorkCount === 1 ? '' : 's'} currently visible.` : 'The server will also check for background work not currently visible in this view.' }}
       Cron schedules and channel connections will remain enabled.
     </p>
@@ -1089,7 +1089,7 @@ watch(searchQuery, () => {
       </button>
       <button
         type="button"
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-wait disabled:bg-theme-700 disabled:text-theme-500"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-wait disabled:bg-theme-700 disabled:text-ink-muted"
         :disabled="stoppingAll"
         @click="stopAllActivity"
       >

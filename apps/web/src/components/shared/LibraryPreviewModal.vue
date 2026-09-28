@@ -121,7 +121,7 @@ const formattedDate = computed(() => props.createdAt
         >
           <Icon
             icon="lucide:triangle-alert"
-            class="h-8 w-8 text-theme-400"
+            class="h-8 w-8 text-ink-secondary"
           />
           <p class="text-sm text-theme-300">
             Could not load the document preview.
@@ -142,7 +142,7 @@ const formattedDate = computed(() => props.createdAt
           v-else
           class="flex max-w-md flex-col items-center px-8 py-16 text-center"
         >
-          <div class="mb-5 flex h-24 w-24 items-center justify-center rounded-3xl bg-theme-800 text-theme-400 ring-1 ring-theme-700">
+          <div class="mb-5 flex h-24 w-24 items-center justify-center rounded-3xl bg-theme-800 text-ink-secondary ring-1 ring-theme-700">
             <Icon
               :icon="icon"
               class="h-11 w-11"
@@ -151,13 +151,13 @@ const formattedDate = computed(() => props.createdAt
           <p class="text-base font-medium text-theme-200">
             Preview isn't available for this file type
           </p>
-          <p class="mt-2 text-sm leading-6 text-theme-500">
+          <p class="mt-2 text-sm leading-6 text-ink-muted">
             Download the file to open it with an app on your device.
           </p>
         </div>
       </div>
 
-      <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-theme-500">
+      <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
         <span class="rounded-md bg-theme-800 px-2 py-1 font-semibold text-theme-300">{{ typeLabel }}</span>
         <span v-if="agentName">Created by {{ agentName }}</span>
         <span v-if="agentName && formattedDate">·</span>
@@ -182,7 +182,7 @@ const formattedDate = computed(() => props.createdAt
           v-if="artifact"
           :href="artifact.href"
           :download="artifact.label"
-          class="inline-flex items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-500"
+          class="inline-flex items-center justify-center gap-2 rounded-xl accent-action bg-accent-600 px-4 py-2.5 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-500"
         >
           <Icon
             icon="lucide:download"

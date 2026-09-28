@@ -51,7 +51,7 @@ function getProviderIcon(type: string): string {
       >
       <span
         v-else
-        class="text-lg font-bold text-theme-400"
+        class="text-lg font-bold text-ink-secondary"
       >{{ getProviderIcon(provider.type) }}</span>
     </div>
 
@@ -63,7 +63,7 @@ function getProviderIcon(type: string): string {
           class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-fg font-medium"
         >Last used</span>
       </div>
-      <div class="text-sm text-theme-500 truncate">
+      <div class="text-sm text-ink-muted truncate">
         {{ provider.defaultModel }} · {{ provider.type }}
       </div>
     </div>
@@ -99,7 +99,7 @@ function getProviderIcon(type: string): string {
       </button>
       <button
         type="button"
-        class="p-1 text-theme-500 hover:text-status-danger transition-colors"
+        class="p-1 text-ink-muted hover:text-status-danger transition-colors"
         :aria-label="`Remove ${provider.name}`"
         @click="emit('remove', provider.id)"
       >

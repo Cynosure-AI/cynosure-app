@@ -54,7 +54,7 @@
               </div>
               <span
                 class="text-[10px] font-medium transition-colors duration-200 hidden sm:block"
-                :class="breadcrumbStepIndex === index ? 'text-theme-200' : breadcrumbStepIndex > index ? 'text-theme-400' : 'text-theme-600'"
+                :class="breadcrumbStepIndex === index ? 'text-theme-200' : breadcrumbStepIndex > index ? 'text-ink-secondary' : 'text-ink-faint'"
               >{{ step.label }}</span>
             </button>
           </template>
@@ -74,7 +74,7 @@
         <!-- Dismiss button -->
         <button
           v-if="currentStep !== STEP_DONE && serverReady"
-          class="text-xs text-theme-600 hover:text-theme-400 transition-colors flex items-center gap-1 ml-auto disabled:cursor-not-allowed disabled:opacity-60"
+          class="text-xs text-ink-faint hover:text-ink-secondary transition-colors flex items-center gap-1 ml-auto disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="advancing"
           @click="dismiss"
         >
@@ -103,7 +103,7 @@
           <h2 class="text-lg font-semibold text-theme-100 mb-1">
             Initializing
           </h2>
-          <p class="text-sm text-theme-500">
+          <p class="text-sm text-ink-muted">
             Waiting for server readiness before starting onboarding.
           </p>
         </div>
@@ -153,10 +153,10 @@
             <h2 class="text-2xl font-bold text-theme-100 mb-3">
               You're all set!
             </h2>
-            <p class="text-theme-400 text-sm leading-relaxed mb-2">
+            <p class="text-ink-secondary text-sm leading-relaxed mb-2">
               Cynosure is configured and ready to use. Start a conversation and see what your agents can do.
             </p>
-            <p class="text-theme-600 text-xs">
+            <p class="text-ink-faint text-xs">
               You can always revisit these settings from the workspace drawer.
             </p>
           </div>
@@ -170,7 +170,7 @@
         <!-- Back -->
         <button
           v-if="currentStep > STEP_WELCOME && currentStep < STEP_DONE"
-          class="flex items-center gap-1.5 px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors rounded-lg hover:bg-theme-800/60 disabled:cursor-not-allowed disabled:opacity-60"
+          class="flex items-center gap-1.5 px-4 py-2 text-sm text-ink-secondary hover:text-theme-200 transition-colors rounded-lg hover:bg-theme-800/60 disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="advancing"
           @click="goBack"
         >
@@ -203,7 +203,7 @@
         <div class="flex items-center gap-2">
           <span
             v-if="!serverReady"
-            class="text-xs text-theme-500"
+            class="text-xs text-ink-muted"
           >
             Connecting to server...
           </span>
@@ -227,8 +227,8 @@
             v-if="serverReady && currentStep < STEP_DONE"
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-lg transition-colors"
             :class="canContinue
-              ? 'bg-accent-600 hover:bg-accent-500 text-accent-on'
-              : 'bg-theme-800 text-theme-500 cursor-not-allowed'"
+              ? 'accent-action bg-accent-600 hover:bg-accent-500 text-accent-on'
+              : 'bg-theme-800 text-ink-muted cursor-not-allowed'"
             :disabled="!canContinue || advancing"
             @click="goNext"
           >
@@ -247,7 +247,7 @@
 
           <button
             v-else-if="serverReady"
-            class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg transition-colors"
+            class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium accent-action bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg transition-colors"
             @click="goToChat"
           >
             Start chatting
@@ -330,12 +330,12 @@ const showBreadcrumb = computed(() =>
 
 function stepCircleClass(bIndex: number): string {
   if (breadcrumbStepIndex.value > bIndex) {
-    return 'border-accent-500 bg-accent-500 text-accent-on'
+    return 'border-accent-500 accent-action bg-accent-500 text-accent-on'
   }
   if (breadcrumbStepIndex.value === bIndex) {
     return 'border-accent-500 bg-transparent text-accent-fg'
   }
-  return 'border-theme-700 bg-transparent text-theme-600'
+  return 'border-theme-700 bg-transparent text-ink-faint'
 }
 
 // ── Validation ────────────────────────────────────────────────────

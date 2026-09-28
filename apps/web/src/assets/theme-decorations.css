@@ -1,0 +1,133 @@
+/* Decorations are theme artwork, separate from palette and utility styles. */
+
+[data-theme="cyberpunk"] h1::after,
+[data-theme="cyberpunk"] h2::after {
+  content: "";
+  display: block;
+  margin-top: 4px;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--cp-yellow) 0%,
+    var(--cp-yellow) 60%,
+    transparent 60%,
+    transparent 61%,
+    var(--cp-green) 61%,
+    var(--cp-green) 80%,
+    transparent 80%
+  );
+}
+
+[data-theme="cyberpunk"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 3px
+  );
+  pointer-events: none;
+  z-index: 10000;
+}
+
+[data-theme="emerald"] body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 20; opacity: .52;
+  background:
+    radial-gradient(circle at 0 0, transparent 0 68px, rgba(216,173,69,.8) 69px 70px, transparent 71px 91px, rgba(216,173,69,.42) 92px 93px, transparent 94px),
+    radial-gradient(circle at 100% 10%, transparent 0 70px, rgba(216,173,69,.72) 71px 72px, transparent 73px),
+    radial-gradient(circle at 100% 57%, transparent 0 116px, rgba(216,173,69,.68) 117px 118px, transparent 119px 140px, rgba(216,173,69,.3) 141px 142px, transparent 143px),
+    radial-gradient(circle at 2% 76%, transparent 0 74px, rgba(216,173,69,.62) 75px 76px, transparent 77px 96px, rgba(216,173,69,.28) 97px 98px, transparent 99px),
+    linear-gradient(90deg, rgba(216,173,69,.62), rgba(216,173,69,.62)) 0 68px / 14rem 1px no-repeat,
+    linear-gradient(90deg, rgba(216,173,69,.44), rgba(216,173,69,.44)) 100% calc(100% - 18px) / 13rem 1px no-repeat,
+    linear-gradient(180deg, rgba(216,173,69,.5), rgba(216,173,69,.5)) calc(100% - 10px) 0 / 1px 9rem no-repeat;
+  clip-path: polygon(18rem 0, 100% 0, 100% 100%, 18rem 100%);
+}
+
+[data-theme="emerald"] body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 20; opacity: .28;
+  background:
+    radial-gradient(circle, rgba(216,173,69,.92) 0 1px, transparent 1.35px) 0 0 / 10px 10px,
+    linear-gradient(116deg, transparent 49.75%, rgba(216,173,69,.72) 49.9% 50.1%, transparent 50.25%),
+    linear-gradient(64deg, transparent 49.78%, rgba(216,173,69,.48) 49.92% 50.08%, transparent 50.22%);
+  -webkit-mask-image:
+    radial-gradient(ellipse 12rem 8rem at 96% 38%, #000, transparent 72%),
+    radial-gradient(ellipse 10rem 7rem at 5% 70%, #000, transparent 72%),
+    radial-gradient(ellipse 8rem 5rem at 91% 96%, #000, transparent 74%);
+  mask-image:
+    radial-gradient(ellipse 12rem 8rem at 96% 38%, #000, transparent 72%),
+    radial-gradient(ellipse 10rem 7rem at 5% 70%, #000, transparent 72%),
+    radial-gradient(ellipse 8rem 5rem at 91% 96%, #000, transparent 74%);
+  clip-path: polygon(18rem 0, 100% 0, 100% 100%, 18rem 100%);
+}
+
+[data-theme="virtualboy"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.04) 3px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 10000;
+}
+
+[data-theme="monochrome"] img[src*="cynosure-logo"] {
+  filter: grayscale(1) brightness(1.75);
+}
+
+/* VirtualBoy's brackets belong to navigation and the content frame. */
+[data-theme="virtualboy"] .nav-item.active,
+[data-theme="virtualboy"] .app-content {
+  position: relative;
+}
+[data-theme="virtualboy"] .nav-item.active::before,
+[data-theme="virtualboy"] .nav-item.active::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--cb-cyan);
+  pointer-events: none;
+}
+[data-theme="virtualboy"] .nav-item.active::before {
+  top: -1px;
+  left: -1px;
+  border-right: 0;
+  border-bottom: 0;
+}
+[data-theme="virtualboy"] .nav-item.active::after {
+  right: -1px;
+  bottom: -1px;
+  border-top: 0;
+  border-left: 0;
+}
+[data-theme="virtualboy"] .app-content::before,
+[data-theme="virtualboy"] .app-content::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--cb-red);
+  pointer-events: none;
+  z-index: 50;
+  opacity: .5;
+}
+[data-theme="virtualboy"] .app-content::before {
+  top: 0;
+  left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+[data-theme="virtualboy"] .app-content::after {
+  right: 0;
+  bottom: 0;
+  border-top: 0;
+  border-left: 0;
+}

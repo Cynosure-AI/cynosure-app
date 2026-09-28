@@ -118,9 +118,9 @@ defineExpose({ createAgent })
         One last thing
       </div>
       <h2 class="text-xl font-bold text-theme-100">
-        Create your First Agent <span class="font-normal text-theme-500">(optional)</span>
+        Create your First Agent <span class="font-normal text-ink-muted">(optional)</span>
       </h2>
-      <p class="mt-1 max-w-2xl text-sm leading-relaxed text-theme-500">
+      <p class="mt-1 max-w-2xl text-sm leading-relaxed text-ink-muted">
         Give your first agent a role and a few instructions. You can fine-tune its tools,
         memory, and behavior later.
       </p>
@@ -140,10 +140,10 @@ defineExpose({ createAgent })
           type="text"
           autocomplete="off"
           placeholder="e.g. Research Assistant"
-          class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
         >
-        <p class="mt-1.5 text-[11px] text-theme-600">
-          Internal name: <span class="font-mono text-theme-500">{{ internalName }}</span>
+        <p class="mt-1.5 text-[11px] text-ink-faint">
+          Internal name: <span class="font-mono text-ink-muted">{{ internalName }}</span>
         </p>
       </div>
 
@@ -169,7 +169,7 @@ defineExpose({ createAgent })
           v-model="description"
           rows="3"
           placeholder="What is this agent best at?"
-          class="w-full resize-none rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full resize-none rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
         />
       </div>
 
@@ -198,9 +198,9 @@ defineExpose({ createAgent })
           v-model="systemPrompt"
           rows="7"
           placeholder="Describe the role, tone, and boundaries for this agent…"
-          class="w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 font-mono text-sm leading-relaxed text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 font-mono text-sm leading-relaxed text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
         />
-        <p class="mt-1.5 text-[11px] text-theme-600">
+        <p class="mt-1.5 text-[11px] text-ink-faint">
           These instructions are added to Cynosure’s built-in agent behavior.
         </p>
       </div>

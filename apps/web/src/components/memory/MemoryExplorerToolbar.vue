@@ -42,7 +42,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="mb-2 flex items-center justify-between">
-    <div class="text-xs text-theme-500">
+    <div class="text-xs text-ink-muted">
       <template v-if="searching">
         {{ resultCount }} result{{ resultCount !== 1 ? "s" : "" }} in {{ folderName || "this folder" }} and subfolders
       </template>
@@ -56,13 +56,13 @@ const emit = defineEmits<{
     <div class="flex items-center gap-2">
       <template v-if="!searching && selectedCount === 0 && rowCount > 0">
         <button
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200"
           @click="emit('selectPage')"
         >
           Select page
         </button>
         <button
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200"
           @click="emit('selectAll')"
         >
           Select all {{ filteredFileCount }}
@@ -76,7 +76,7 @@ const emit = defineEmits<{
         <button
           type="button"
           class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-          :class="view === 'list' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+          :class="view === 'list' ? 'bg-theme-700 text-theme-100' : 'text-ink-muted hover:text-theme-200'"
           title="List view"
           aria-label="List view"
           :aria-pressed="view === 'list'"
@@ -90,7 +90,7 @@ const emit = defineEmits<{
         <button
           type="button"
           class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-          :class="view === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+          :class="view === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-ink-muted hover:text-theme-200'"
           title="Grid view"
           aria-label="Grid view"
           :aria-pressed="view === 'grid'"
@@ -105,7 +105,7 @@ const emit = defineEmits<{
       <button
         type="button"
         :disabled="filesLoading"
-        class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200"
+        class="px-2 py-1.5 text-xs text-ink-secondary hover:text-theme-200"
         aria-label="Refresh documents"
         @click="emit('refresh')"
       >
@@ -126,7 +126,7 @@ const emit = defineEmits<{
       <span class="shrink-0 border-r border-theme-800 px-3 text-xs font-medium text-theme-300">{{ selectedCount }} selected</span>
       <button
         v-if="!allSelected"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-theme-400 transition-colors hover:bg-theme-800 hover:text-theme-200"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-ink-secondary transition-colors hover:bg-theme-800 hover:text-theme-200"
         @click="emit('selectAll')"
       >
         Select all {{ rowCount }}
@@ -195,7 +195,7 @@ const emit = defineEmits<{
         /> Remove
       </button>
       <button
-        class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-l border-theme-800 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+        class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-l border-theme-800 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
         title="Clear selection"
         aria-label="Clear selection"
         @click="emit('clearSelection')"

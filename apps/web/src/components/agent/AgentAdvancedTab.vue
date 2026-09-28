@@ -132,7 +132,7 @@ function onMaxCtxSliderInput(event: Event) {
               Auto-Approve All Tools
             </h3>
           </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
+          <p class="text-xs text-ink-muted leading-relaxed">
             When enabled, this agent will execute all tool calls without
             requiring manual approval. This applies to chat, sub-agent
             delegations, and cron jobs. When disabled, tool calls follow
@@ -160,14 +160,14 @@ function onMaxCtxSliderInput(event: Event) {
           Context Routing Model
         </h3>
       </div>
-      <p class="text-xs text-theme-500 leading-relaxed">
+      <p class="text-xs text-ink-muted leading-relaxed">
         Override the provider and model used to prepare context for automatic tool discovery
         and memory retrieval. Those features are enabled independently in the Tools and Memory tabs.
         By default, uses the current agent / selected chat model.
       </p>
 
       <div class="mt-4">
-        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
+        <label class="block text-xs text-ink-secondary mb-1.5">Provider / Model</label>
         <ProviderModelSelect
           :provider-id="agent.autoRouterProviderId || AGENT_ROUTER_PROVIDER"
           :model-value="agent.autoRouterModel || AGENT_ROUTER_MODEL"
@@ -190,7 +190,7 @@ function onMaxCtxSliderInput(event: Event) {
           Thinking / Reasoning
         </h3>
       </div>
-      <p class="text-xs text-theme-500 leading-relaxed">
+      <p class="text-xs text-ink-muted leading-relaxed">
         Set the default reasoning effort for this agent. Higher levels can improve complex answers but use more time and tokens.
       </p>
       <div class="mt-4 max-w-md">
@@ -230,7 +230,7 @@ function onMaxCtxSliderInput(event: Event) {
             @input="onReasoningSliderInput"
           >
         </div>
-        <p class="mt-3 min-h-4 text-xs text-theme-500">
+        <p class="mt-3 min-h-4 text-xs text-ink-muted">
           {{ selectedReasoningOption.description }}
         </p>
       </div>
@@ -249,7 +249,7 @@ function onMaxCtxSliderInput(event: Event) {
               Max Context Tokens
             </h3>
           </div>
-          <p class="text-xs text-theme-500 leading-relaxed">
+          <p class="text-xs text-ink-muted leading-relaxed">
             Set a hard cap on the number of tokens sent to the model. When set,
             the context trimmer will trigger at this limit instead of the
             model's full context window. Useful to reduce costs and mitigate the
@@ -276,13 +276,13 @@ function onMaxCtxSliderInput(event: Event) {
                   :min="MIN_CONTEXT_TOKENS"
                   :step="CONTEXT_TOKEN_STEP"
                   placeholder="e.g. 16384"
-                  class="w-28 bg-theme-900 border border-theme-600 rounded-lg px-3 py-1.5 text-sm text-theme-200 placeholder-theme-600 focus:outline-none focus:border-amber-500/50"
+                  class="w-28 bg-theme-900 border border-theme-600 rounded-lg px-3 py-1.5 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:border-amber-500/50"
                   @blur="onMaxCtxBlur"
                 >
-                <span class="text-xs text-theme-600">tokens</span>
+                <span class="text-xs text-ink-faint">tokens</span>
               </div>
             </div>
-            <div class="flex items-center justify-between text-[11px] text-theme-600">
+            <div class="flex items-center justify-between text-[11px] text-ink-faint">
               <span>{{ MIN_CONTEXT_TOKENS.toLocaleString() }}</span>
               <span>{{ maxCtxSliderMax.toLocaleString() }}</span>
             </div>

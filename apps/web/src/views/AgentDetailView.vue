@@ -159,7 +159,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
         <div class="flex items-start justify-between gap-3">
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-300"
+            class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-300"
             :aria-label="returnToChat ? 'Back to chat' : 'Back to agents'"
             @click="goBack"
           >
@@ -172,7 +172,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
 
           <button
             type="button"
-            class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-400"
+            class="inline-flex shrink-0 items-center gap-2 rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-400"
             @click="goToChat"
           >
             <Icon
@@ -205,7 +205,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
             </h1>
             <p
               v-if="agent.description"
-              class="mt-1 line-clamp-2 text-sm leading-relaxed text-theme-500"
+              class="mt-1 line-clamp-2 text-sm leading-relaxed text-ink-muted"
             >
               {{ agent.description }}
             </p>
@@ -226,7 +226,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
       <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <section class="scroll-mt-4">
           <div class="mb-5 flex items-start gap-3">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-theme-400 ring-1 ring-theme-800">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-ink-secondary ring-1 ring-theme-800">
               <Icon
                 :icon="activeSection.icon"
                 class="h-5 w-5"
@@ -236,7 +236,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
               <h2 class="text-xl font-bold text-theme-100">
                 {{ activeSection.label }}
               </h2>
-              <p class="mt-1 text-sm leading-relaxed text-theme-500">
+              <p class="mt-1 text-sm leading-relaxed text-ink-muted">
                 {{ activeSection.description }}
               </p>
             </div>

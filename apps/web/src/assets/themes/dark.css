@@ -1,8 +1,10 @@
 /* ==========================================================================
    Dark Theme - graphite depth, cool light, and a crisp electric-blue accent
    ========================================================================== */
+:is([data-theme="dark"], :root:not([data-theme])) {
+  --color-accent-fg: #86c5ff;
+  --color-accent-on: #ffffff;
 
-:where([data-theme="dark"], :root:not([data-theme])) {
   --color-theme-950: #0b0d12;
   --color-theme-900: #11141b;
   --color-theme-800: #1a1e28;
@@ -13,6 +15,7 @@
   --color-theme-300: #aeb8c8;
   --color-theme-200: #d5dbe5;
   --color-theme-100: #f3f6fa;
+
   --color-accent-50: #eff8ff;
   --color-accent-100: #dbeeff;
   --color-accent-200: #b8ddff;
@@ -24,172 +27,26 @@
   --color-accent-800: #194a8e;
   --color-accent-900: #183e70;
   --color-accent-950: #102747;
-  --default-blue: #4fa8ff;
-  --default-line: rgba(174, 184, 200, 0.13);
-  --theme-glow: 0 0 20px rgba(39, 136, 245, 0.12);
-  --theme-glow-strong:
-    0 0 0 1px rgba(79, 168, 255, 0.3), 0 0 28px rgba(39, 136, 245, 0.16);
-  --theme-accent-rgb: 39, 136, 245;
+
+  --theme-glow-strong: 0 0 0 1px rgba(79, 168, 255, 0.3), 0 0 28px rgba(39, 136, 245, 0.16);
+
   color-scheme: dark;
-}
 
-:where([data-theme="dark"], :root:not([data-theme])) body {
-  background:
-    radial-gradient(
-      circle at 78% -8%,
-      rgba(39, 136, 245, 0.11),
-      transparent 30rem
-    ),
-    radial-gradient(
-      circle at 5% 105%,
-      rgba(111, 88, 255, 0.055),
-      transparent 34rem
-    ),
-    var(--color-theme-950);
-}
+  --theme-shell-background: radial-gradient(circle at 78% -8%, rgba(39,136,245,.075), transparent 30rem), radial-gradient(circle at 5% 105%, rgba(111,88,255,.04), transparent 34rem), var(--color-theme-950);
+  --theme-content-background: radial-gradient(circle at 62% -18%, rgba(79,168,255,.045), transparent 34rem), linear-gradient(180deg, #121720, #10141c);
+  --theme-sidebar-background: radial-gradient(circle at 12% 2%, rgba(79,168,255,.07), transparent 17rem), linear-gradient(180deg, #0d1118, #090b10 72%);
+  --theme-sidebar-border: rgba(174,184,200,.08);
+  --theme-sidebar-shadow: 12px 0 40px rgba(0,0,0,.14);
+  --theme-composer-background: linear-gradient(180deg, #1d2330, #191e29);
+  --theme-composer-shadow: 0 12px 36px rgba(0,0,0,.22);
+  --theme-nav-active-background: linear-gradient(90deg, rgba(79,168,255,.14), rgba(39,136,245,.035));
+  --theme-selection-background: rgba(79,168,255,.28);
+  --theme-scrollbar-thumb: #343c4c;
+  --theme-scrollbar-hover: #4b566b;
+  --theme-action-gradient: linear-gradient(135deg, #1d72dc, #176de0 55%, #1757b5);
+  --theme-action-shadow: 0 4px 8px rgba(23,109,224,.22);
 
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-950 {
-  background:
-    radial-gradient(
-      circle at 78% -8%,
-      rgba(39, 136, 245, 0.075),
-      transparent 30rem
-    ),
-    radial-gradient(
-      circle at 5% 105%,
-      rgba(111, 88, 255, 0.04),
-      transparent 34rem
-    ),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.012), transparent 42%),
-    var(--color-theme-950);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/50,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/60,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/70,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/80,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-900\/90 {
-  background-color: color-mix(in srgb, var(--color-theme-900) 96%, #2788f5 4%);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/50,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/60,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/70,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-theme-800\/80 {
-  background-color: color-mix(in srgb, var(--color-theme-800) 97%, #4fa8ff 3%);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .border-theme-700,
-:where([data-theme="dark"], :root:not([data-theme])) .border-theme-700\/60,
-:where([data-theme="dark"], :root:not([data-theme])) .border-theme-800,
-:where([data-theme="dark"], :root:not([data-theme])) .border-theme-800\/60 {
-  border-color: var(--default-line);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .shadow-xl,
-:where([data-theme="dark"], :root:not([data-theme])) .shadow-2xl {
-  box-shadow:
-    0 24px 70px rgba(0, 0, 0, 0.48),
-    0 1px 0 rgba(255, 255, 255, 0.035) inset;
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) #primary-navigation aside {
-  background:
-    radial-gradient(
-      circle at 12% 2%,
-      rgba(79, 168, 255, 0.07),
-      transparent 17rem
-    ),
-    linear-gradient(180deg, #0d1118, #090b10 72%);
-  border-right: 1px solid rgba(174, 184, 200, 0.08);
-  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.14);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) main.bg-theme-900 {
-  background:
-    radial-gradient(
-      circle at 62% -18%,
-      rgba(79, 168, 255, 0.045),
-      transparent 34rem
-    ),
-    linear-gradient(180deg, #121720, #10141c);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) main > .shrink-0.border-b {
-  background: rgba(16, 20, 28, 0.72);
-  backdrop-filter: blur(14px);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .chat-input-bar .bg-theme-800.border-theme-700.rounded-xl {
-  background: linear-gradient(180deg, #1d2330, #191e29);
-  box-shadow:
-    0 12px 36px rgba(0, 0, 0, 0.22),
-    0 1px 0 rgba(255, 255, 255, 0.035) inset;
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) :is(button, a):focus-visible {
-  box-shadow: var(--theme-glow-strong);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) :is(input, textarea, select):focus {
-  border-color: rgba(79, 168, 255, 0.52) !important;
-  box-shadow:
-    0 0 0 3px rgba(39, 136, 245, 0.1),
-    0 0 24px rgba(39, 136, 245, 0.06);
-  outline: none;
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) button.bg-accent-600,
-:where([data-theme="dark"], :root:not([data-theme])) button.bg-accent-500,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-accent-600,
-:where([data-theme="dark"], :root:not([data-theme])) .bg-accent-500 {
-  background-image: linear-gradient(135deg, #1d72dc, #176de0 55%, #1757b5);
-  box-shadow:
-    0 4px 8px rgba(23, 109, 224, 0.22),
-    0 1px 0 rgba(255, 255, 255, 0.18) inset;
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .nav-item.active,
-:where([data-theme="dark"], :root:not([data-theme])) nav a.router-link-active,
-:where([data-theme="dark"], :root:not([data-theme])) nav [data-active="true"] {
-  background: linear-gradient(
-    90deg,
-    rgba(79, 168, 255, 0.14),
-    rgba(39, 136, 245, 0.035)
-  ) !important;
-  border-left: 2px solid var(--default-blue);
-  box-shadow: inset 5px 0 18px rgba(39, 136, 245, 0.07);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .msg-markdown a {
-  color: #86c5ff;
-  text-decoration-color: rgba(134, 197, 255, 0.35);
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) .msg-markdown :not(pre) > code {
-  background: rgba(79, 168, 255, 0.08);
-  border: 1px solid rgba(79, 168, 255, 0.13);
-  color: #b8ddff;
-}
-
-:where([data-theme="dark"], :root:not([data-theme])) ::selection {
-  background: rgba(79, 168, 255, 0.28);
-  color: #fff;
-}
-:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar-track {
-  background: #0b0d12;
-}
-:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar-thumb {
-  background: #343c4c;
-  border: 2px solid #0b0d12;
-  border-radius: 999px;
-}
-:where([data-theme="dark"], :root:not([data-theme])) ::-webkit-scrollbar-thumb:hover {
-  background: #4b566b;
+  --color-ink-secondary: #b0bccd;
+  --color-ink-muted: #9aa7ba;
+  --color-ink-faint: #8794a8;
 }

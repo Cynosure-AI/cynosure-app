@@ -9,6 +9,8 @@
 @import "./themes/emerald.css";
 @import "./themes/industrial.css";
 @import "./themes/monochrome.css";
+@import "./theme-effects.css";
+@import "./theme-decorations.css";
 
 @theme {
   --color-theme-50: #fafafa;
@@ -48,9 +50,31 @@
   --color-quote-surface: color-mix(in srgb, var(--color-theme-800) 70%, var(--color-theme-900));
   --color-code-surface: var(--color-theme-900);
   --color-code-text: var(--color-theme-200);
+  --color-user-message: var(--color-accent-600);
+  --color-user-message-text: var(--color-accent-on);
+  --color-ink-secondary: #b0bccd;
+  --color-ink-muted: #9aa7ba;
+  --color-ink-faint: #8794a8;
 }
 
 :where(:root) {
+  --theme-shell-background: var(--color-theme-950);
+  --theme-content-background: var(--color-theme-900);
+  --theme-sidebar-background: var(--color-theme-950);
+  --theme-composer-background: var(--color-theme-800);
+  --theme-composer-shadow: none;
+  --theme-nav-active-color: var(--color-theme-100);
+  --theme-nav-active-background: color-mix(in srgb, var(--color-accent-500) 10%, var(--color-theme-800));
+  --theme-nav-active-shadow: inset 3px 0 0 var(--color-accent-500);
+  --theme-nav-active-border: 0 solid transparent;
+  --theme-heading-shadow: none;
+  --theme-heading-transform: none;
+  --theme-heading-spacing: normal;
+  --theme-scrollbar-track: var(--color-theme-950);
+  --theme-scrollbar-thumb: var(--color-theme-700);
+  --theme-scrollbar-hover: var(--color-theme-600);
+  --theme-selection-background: color-mix(in srgb, var(--color-accent-500) 28%, transparent);
+  --theme-selection-color: var(--color-theme-100);
   --syntax-keyword: #c678dd;
   --syntax-string: #98c379;
   --syntax-muted: #7f848e;
@@ -87,20 +111,6 @@ body,
   cursor: not-allowed;
 }
 
-/*
- * Theme gradients have greater specificity than disabled background utilities.
- * Keep their contrast-safe foreground and communicate disabled state by muting
- * the whole accent treatment instead of turning only its content low-contrast.
- */
-button:is(.bg-accent-600, .bg-accent-500, .bg-accent-400):disabled {
-  background-color: var(--color-accent-600);
-  color: var(--color-accent-on);
-  cursor: not-allowed;
-  filter: saturate(0.55);
-  opacity: 0.62;
-  box-shadow: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -110,11 +120,6 @@ button:is(.bg-accent-600, .bg-accent-500, .bg-accent-400):disabled {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* ── Main content area: always keep rounded corners regardless of theme ── */
-main.rounded-xl {
-  border-radius: 0.75rem;
 }
 
 button:hover {

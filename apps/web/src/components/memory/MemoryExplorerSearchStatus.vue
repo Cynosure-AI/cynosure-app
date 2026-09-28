@@ -32,7 +32,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
 <template>
   <p
     v-if="description"
-    class="mb-3 text-sm text-theme-500"
+    class="mb-3 text-sm text-ink-muted"
   >
     {{ description }}
   </p>
@@ -44,24 +44,24 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
       <div class="relative min-w-0 flex-1">
         <Icon
           icon="lucide:search"
-          class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
+          class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted"
         />
         <input
           v-model="query"
           type="text"
           placeholder="Search this folder and subfolders…"
-          class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder-theme-500 transition-colors focus:border-theme-600 focus:outline-none"
+          class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder:text-ink-muted transition-colors focus:border-theme-600 focus:outline-none"
           @input="emit('searchInput')"
         >
         <Icon
           v-if="searchLoading"
           icon="lucide:loader-2"
-          class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-theme-500"
+          class="absolute right-9 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-ink-muted"
         />
         <button
           v-if="query"
           type="button"
-          class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
           title="Clear search"
           aria-label="Clear document search"
           @click="query = ''"
@@ -77,7 +77,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
         :aria-pressed="semantic"
         aria-label="Toggle semantic search"
         class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors"
-        :class="semantic ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg' : 'border-theme-800 bg-theme-900/60 text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
+        :class="semantic ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg' : 'border-theme-800 bg-theme-900/60 text-ink-muted hover:bg-theme-800 hover:text-theme-200'"
         :title="semantic ? 'Semantic search is on' : 'Search document vectors by meaning'"
         @click="semantic = !semantic"
       >
@@ -114,7 +114,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
       <span class="truncate">{{ result.fileName }}</span>
       <span
         v-if="!result.error"
-        class="text-theme-500"
+        class="text-ink-muted"
       >Uploaded — indexing is manual</span>
       <span
         v-else
@@ -122,7 +122,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
       >{{ result.error }}</span>
     </div>
     <button
-      class="px-1 text-xs text-theme-500 hover:text-theme-300"
+      class="px-1 text-xs text-ink-muted hover:text-theme-300"
       @click="emit('clearUploads')"
     >
       Clear
@@ -166,7 +166,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
     <button
       v-if="failedJobs.length > 1"
       type="button"
-      class="px-1 text-xs text-theme-500 transition-colors hover:text-theme-300"
+      class="px-1 text-xs text-ink-muted transition-colors hover:text-theme-300"
       @click="emit('dismissAllFailures')"
     >
       Clear all

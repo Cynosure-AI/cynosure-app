@@ -34,7 +34,7 @@ const emit = defineEmits<{
       class="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px"
       :class="modelValue === tab.value
         ? 'text-accent-fg border-accent-400'
-        : 'text-theme-500 border-transparent hover:text-theme-300'"
+        : 'text-ink-muted border-transparent hover:text-theme-300'"
       @click="emit('update:modelValue', tab.value)"
     >
       <Icon

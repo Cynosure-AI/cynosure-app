@@ -329,12 +329,12 @@ onBeforeUnmount(() =>
         <Icon
           v-else-if="selectedOption?.iconName"
           :icon="selectedOption.iconName"
-          class="w-3.5 h-3.5 text-theme-400"
+          class="w-3.5 h-3.5 text-ink-secondary"
         />
         <Icon
           v-else
           :icon="placeholderIcon"
-          class="w-3.5 h-3.5 text-theme-500"
+          class="w-3.5 h-3.5 text-ink-muted"
         />
       </span>
 
@@ -365,7 +365,7 @@ onBeforeUnmount(() =>
       <!-- Chevron -->
       <Icon
         icon="lucide:chevron-down"
-        class="w-3 h-3 text-theme-500 shrink-0 transition-transform duration-150"
+        class="w-3 h-3 text-ink-muted shrink-0 transition-transform duration-150"
         :class="{ 'rotate-180': isOpen }"
       />
     </button>
@@ -397,7 +397,7 @@ onBeforeUnmount(() =>
           type="text"
           placeholder="Search…"
           autocomplete="off"
-          class="w-full bg-theme-700/60 border border-theme-600 rounded-md text-theme-200 placeholder:text-theme-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full bg-theme-700/60 border border-theme-600 rounded-md text-theme-200 placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent-500"
           :class="currentSizeClasses.filterInput"
           @keydown.esc.prevent="isOpen = false"
           @keydown.arrow-down.prevent="handleKeydown"
@@ -412,7 +412,7 @@ onBeforeUnmount(() =>
       >
         <div
           v-if="filterable && filterQuery && !filteredAllOptions.length"
-          class="px-3 py-2 text-theme-500 italic"
+          class="px-3 py-2 text-ink-muted italic"
           :class="currentSizeClasses.empty"
         >
           No results
@@ -424,7 +424,7 @@ onBeforeUnmount(() =>
           <!-- Group header -->
           <div
             v-if="group.label"
-            class="px-2.5 pb-2 text-[10px] font-semibold uppercase tracking-wider text-theme-500"
+            class="px-2.5 pb-2 text-[10px] font-semibold uppercase tracking-wider text-ink-muted"
             :class="[
               gi > 0 ? 'pt-2 border-t border-theme-800' : 'pt-1.5',
               props.stickyGroupHeaders ? 'select-group-header' : ''
@@ -448,7 +448,7 @@ onBeforeUnmount(() =>
             :class="[
               currentSizeClasses.option,
               opt.disabled
-                ? 'text-theme-600 cursor-not-allowed'
+                ? 'text-ink-faint cursor-not-allowed'
                 : opt.value === modelValue
                   ? 'text-theme-100'
                   : 'text-theme-300',
@@ -478,7 +478,7 @@ onBeforeUnmount(() =>
                 v-else-if="opt.iconName"
                 :icon="opt.iconName"
                 class="w-3.5 h-3.5"
-                :class="opt.disabled ? 'text-theme-600' : 'text-theme-400'"
+                :class="opt.disabled ? 'text-ink-faint' : 'text-ink-secondary'"
               />
             </span>
 
@@ -515,7 +515,7 @@ onBeforeUnmount(() =>
               :class="[
                 opt.actionActive
                   ? 'text-status-warning opacity-100 hover:text-amber-300 [&>svg]:fill-current'
-                  : 'text-theme-500 opacity-0 hover:text-status-warning group-hover/select-option:opacity-100 group-focus-visible/select-option:opacity-100',
+                  : 'text-ink-muted opacity-0 hover:text-status-warning group-hover/select-option:opacity-100 group-focus-visible/select-option:opacity-100',
               ]"
               :title="opt.actionLabel"
               :aria-label="opt.actionLabel"

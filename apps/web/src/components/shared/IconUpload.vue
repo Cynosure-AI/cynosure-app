@@ -110,8 +110,8 @@ function removeImage() {
 
 <template>
   <div>
-    <label class="block text-sm text-theme-400 mb-1.5">{{ label || 'Icon' }}</label>
-    <p class="text-xs text-theme-600 mb-2">
+    <label class="block text-sm text-ink-secondary mb-1.5">{{ label || 'Icon' }}</label>
+    <p class="text-xs text-ink-faint mb-2">
       <slot name="description">
         Custom avatar. Images up to 5 MB are cropped and optimized to 512 × 512.
       </slot>
@@ -141,7 +141,7 @@ function removeImage() {
           v-else
           :icon="isProcessing ? 'lucide:loader-2' : fallbackIcon || 'lucide:image'"
           class="w-7 h-7 transition-colors"
-          :class="[isDragging ? 'text-theme-300' : 'text-theme-500', { 'animate-spin': isProcessing }]"
+          :class="[isDragging ? 'text-theme-300' : 'text-ink-muted', { 'animate-spin': isProcessing }]"
         />
       </div>
 
@@ -157,7 +157,7 @@ function removeImage() {
         <button
           v-if="iconUrl"
           type="button"
-          class="px-3 py-1.5 bg-theme-800 hover:bg-theme-700 text-theme-400 text-xs rounded-lg transition-colors"
+          class="px-3 py-1.5 bg-theme-800 hover:bg-theme-700 text-ink-secondary text-xs rounded-lg transition-colors"
           @click="removeImage"
         >
           Remove

@@ -361,7 +361,7 @@ function formatTimestamp(timestamp: number): string {
           <span class="min-w-0 flex-1">
             <span class="block text-[12px] font-semibold text-theme-200">{{ card.title }}</span>
             <span
-              class="block truncate text-[11px] text-theme-400"
+              class="block truncate text-[11px] text-ink-secondary"
               role="status"
               aria-live="polite"
             >{{
@@ -373,7 +373,7 @@ function formatTimestamp(timestamp: number): string {
           >{{ selectedCountLabel(card) }}</span>
           <Icon
             icon="lucide:chevron-down"
-            class="h-3.5 w-3.5 text-theme-500 transition-transform"
+            class="h-3.5 w-3.5 text-ink-muted transition-transform"
             :class="{ 'rotate-180': expandedCards.has(card.channel) }"
           />
         </button>
@@ -419,14 +419,14 @@ function formatTimestamp(timestamp: number): string {
                 <span class="min-w-0 flex-1"><span class="block text-[11px] font-medium text-theme-300">{{ item.label
                 }}</span><span
                   v-if="item.summary"
-                  class="block text-[10px] text-theme-500"
+                  class="block text-[10px] text-ink-muted"
                 >{{ item.summary
                 }}</span></span>
-                <time class="text-[9px] tabular-nums text-theme-600">{{ formatTimestamp(item.timestamp) }}</time>
+                <time class="text-[9px] tabular-nums text-ink-faint">{{ formatTimestamp(item.timestamp) }}</time>
                 <Icon
                   v-if="item.details.length"
                   icon="lucide:chevron-right"
-                  class="mt-0.5 h-3 w-3 text-theme-600 transition-transform"
+                  class="mt-0.5 h-3 w-3 text-ink-faint transition-transform"
                   :class="{ 'rotate-90': expandedSteps.has(item.key) }"
                 />
               </button>
@@ -438,7 +438,7 @@ function formatTimestamp(timestamp: number): string {
                 <div
                   v-for="(detail, index) in item.details"
                   :key="`${detail.name}-${index}`"
-                  class="text-[10px] text-theme-400"
+                  class="text-[10px] text-ink-secondary"
                 >
                   <span class="font-medium">{{ detail.name }}</span><span
                     v-if="detail.score"
@@ -446,11 +446,11 @@ function formatTimestamp(timestamp: number): string {
                   >{{ detail.score }}</span>
                   <span
                     v-if="detail.matchedRepresentations?.length"
-                    class="ml-2 text-theme-500"
+                    class="ml-2 text-ink-muted"
                   >via {{ detail.matchedRepresentations.join(' + ') }}</span>
                   <p
                     v-if="detail.content && item.key.includes('searching-memory')"
-                    class="mt-0.5 line-clamp-2 leading-relaxed text-theme-500"
+                    class="mt-0.5 line-clamp-2 leading-relaxed text-ink-muted"
                   >
                     {{ detail.content }}
                   </p>
@@ -486,13 +486,13 @@ function formatTimestamp(timestamp: number): string {
                 </div>
                 <div
                   v-if="memory.matchedRepresentations?.length"
-                  class="mt-1 text-[9px] text-theme-500"
+                  class="mt-1 text-[9px] text-ink-muted"
                 >
                   Matched via {{ memory.matchedRepresentations.join(' + ') }}
                 </div>
                 <p
                   v-if="memory.content"
-                  class="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-theme-400"
+                  class="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-ink-secondary"
                 >
                   {{ memory.content }}
                 </p>
@@ -542,7 +542,7 @@ function formatTimestamp(timestamp: number): string {
               </div>
               <p
                 v-else
-                class="mt-1 text-[10px] text-theme-500"
+                class="mt-1 text-[10px] text-ink-muted"
               >
                 No individual tools selected.
               </p>

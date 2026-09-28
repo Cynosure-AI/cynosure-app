@@ -89,7 +89,7 @@ const badges = computed<BehaviorBadge[]>(() => {
           key: 'closed-world',
           label: 'local scope',
           icon: 'lucide:box',
-          classes: 'bg-theme-800 text-theme-400',
+          classes: 'bg-theme-800 text-ink-secondary',
           title: 'Server-declared hint: this tool operates within a closed domain.',
         })
   }

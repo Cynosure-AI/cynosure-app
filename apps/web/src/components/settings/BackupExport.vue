@@ -97,7 +97,7 @@ async function doExport(): Promise<void> {
 
 <template>
   <div class="space-y-4">
-    <p class="text-xs text-theme-500">
+    <p class="text-xs text-ink-muted">
       Select which modules to include in the backup file.
     </p>
 
@@ -117,7 +117,7 @@ async function doExport(): Promise<void> {
           <div class="flex items-center gap-1.5">
             <Icon
               :icon="meta.icon"
-              class="w-3.5 h-3.5 text-theme-400"
+              class="w-3.5 h-3.5 text-ink-secondary"
             />
             <span class="text-sm font-medium text-theme-200">{{ meta.label }}</span>
           </div>
@@ -128,7 +128,7 @@ async function doExport(): Promise<void> {
             <span v-if="summaryLoading">Counting…</span>
             <span v-else>{{ moduleCountLabel(key) }}</span>
           </div>
-          <p class="text-[11px] text-theme-500 mt-0.5">{{ meta.description }}</p>
+          <p class="text-[11px] text-ink-muted mt-0.5">{{ meta.description }}</p>
         </div>
       </label>
     </div>
@@ -142,7 +142,7 @@ async function doExport(): Promise<void> {
 
     <button
       :disabled="exporting || !Object.values(exportModules).some(Boolean)"
-      class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+      class="w-full px-4 py-2.5 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
       @click="doExport"
     >
       <Icon

@@ -37,7 +37,7 @@ function showSection(id: string): boolean {
           <h3 class="text-sm font-medium text-theme-200">
             Reset Data
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Clear selected data areas or return to a clean state
           </p>
         </div>

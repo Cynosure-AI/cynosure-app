@@ -4,7 +4,7 @@
       <h2 class="text-xl font-bold text-theme-100">
         Set Up Memory
       </h2>
-      <p class="text-sm text-theme-500 mt-1">
+      <p class="text-sm text-ink-muted mt-1">
         Choose which provider Cynosure should use to turn documents and conversations into
         searchable memory. Cynosure recommends a strong default while leaving the final choice to you.
       </p>
@@ -15,7 +15,7 @@
         <label class="block text-sm font-medium text-theme-300 mb-1.5">
           Memory embedding provider
         </label>
-        <p class="text-xs text-theme-500 mb-3">
+        <p class="text-xs text-ink-muted mb-3">
           OpenAI, Google, and OpenRouter have recommended defaults. Other providers are supported
           when they expose embedding models.
         </p>
@@ -44,7 +44,7 @@
           >Embedding model</label>
           <span
             v-if="embDimensions"
-            class="whitespace-nowrap text-[11px] text-theme-500"
+            class="whitespace-nowrap text-[11px] text-ink-muted"
           >{{ embDimensions }} dimensions</span>
         </div>
 
@@ -53,7 +53,7 @@
             id="onboarding-embedding-model"
             v-model="embModel"
             :disabled="resolvingModel || !availableModels.length"
-            class="w-full rounded-lg border border-theme-600 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:cursor-wait disabled:text-theme-500"
+            class="w-full rounded-lg border border-theme-600 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:cursor-wait disabled:text-ink-muted"
             @change="onEmbeddingModelChange"
           >
             <option
@@ -79,30 +79,30 @@
           <Icon
             v-if="resolvingModel"
             icon="lucide:loader-2"
-            class="pointer-events-none absolute right-8 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-theme-500"
+            class="pointer-events-none absolute right-8 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-ink-muted"
           />
         </div>
 
         <p
           v-if="recommendedModel"
-          class="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-theme-500"
+          class="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-muted"
         >
           <Icon
             icon="lucide:sparkles"
             class="mt-0.5 h-3 w-3 shrink-0 text-accent-fg"
           />
-          We recommend <span class="font-mono text-theme-400">{{ recommendedModel }}</span> for this provider.
+          We recommend <span class="font-mono text-ink-secondary">{{ recommendedModel }}</span> for this provider.
         </p>
         <p
           v-else-if="!resolvingModel && !availableModels.length"
-          class="mt-2 text-[11px] text-theme-500"
+          class="mt-2 text-[11px] text-ink-muted"
         >
           This provider did not return an embedding model. You can configure one later in Settings → Memory.
         </p>
       </div>
 
       <button
-        class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-sm font-medium rounded-lg transition-colors"
+        class="flex items-center gap-2 px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-sm font-medium rounded-lg transition-colors"
         :disabled="!embProviderId || !embModel || savingEmb || resolvingModel"
         @click="saveEmbeddings"
       >
@@ -128,7 +128,7 @@
           <p class="text-sm font-medium text-accent-fg">
             Memory embeddings are ready
           </p>
-          <p class="text-xs text-theme-400 mt-0.5">
+          <p class="text-xs text-ink-secondary mt-0.5">
             Cynosure can now index memory folders and retrieve relevant knowledge for your agents.
           </p>
         </div>

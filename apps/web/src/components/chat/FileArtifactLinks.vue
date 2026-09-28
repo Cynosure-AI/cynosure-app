@@ -46,11 +46,11 @@ function handleClick(event: MouseEvent): void {
         class="h-3.5 w-3.5 shrink-0 text-accent-fg"
       />
       <span class="truncate">{{ artifact.label }}</span>
-      <span class="shrink-0 rounded bg-theme-700 px-1 py-0.5 text-[9px] text-theme-400">{{ artifact.ext }}</span>
+      <span class="shrink-0 rounded bg-theme-700 px-1 py-0.5 text-[9px] text-ink-secondary">{{ artifact.ext }}</span>
     </a>
     <span
       v-if="limit !== undefined && links.length > limit"
-      class="self-center text-[10px] text-theme-500"
+      class="self-center text-[10px] text-ink-muted"
     >+{{ links.length - limit }}</span>
   </div>
 </template>

@@ -238,13 +238,13 @@ onUnmounted(() => {
       <div class="relative min-w-0 flex-1">
         <Icon
           icon="lucide:search"
-          class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-theme-500"
+          class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted"
         />
         <input
           v-model="query"
           type="text"
           :placeholder="`Search ${title.toLocaleLowerCase()}…`"
-          class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-3 text-sm text-theme-200 placeholder-theme-500 focus:border-theme-600 focus:outline-none"
+          class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-3 text-sm text-theme-200 placeholder:text-ink-muted focus:border-theme-600 focus:outline-none"
         >
       </div>
       <div
@@ -254,7 +254,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="flex h-7 w-7 items-center justify-center rounded-md"
-          :class="explorerView === 'list' ? 'bg-theme-700 text-theme-100' : 'text-theme-500'"
+          :class="explorerView === 'list' ? 'bg-theme-700 text-theme-100' : 'text-ink-muted'"
           aria-label="List view"
           @click="setExplorerView('list')"
         >
@@ -266,7 +266,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="flex h-7 w-7 items-center justify-center rounded-md"
-          :class="explorerView === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-theme-500'"
+          :class="explorerView === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-ink-muted'"
           aria-label="Grid view"
           @click="setExplorerView('grid')"
         >
@@ -278,7 +278,7 @@ onUnmounted(() => {
       </div>
       <button
         type="button"
-        class="flex h-8 w-8 items-center justify-center text-theme-400 hover:text-theme-200"
+        class="flex h-8 w-8 items-center justify-center text-ink-secondary hover:text-theme-200"
         title="Refresh"
         @click="load"
       >
@@ -298,7 +298,7 @@ onUnmounted(() => {
     </p>
     <div
       v-if="!loading && rows.length === 0"
-      class="rounded-xl border border-theme-800 bg-theme-950/45 py-10 text-center text-sm text-theme-500"
+      class="rounded-xl border border-theme-800 bg-theme-950/45 py-10 text-center text-sm text-ink-muted"
     >
       {{ mode === 'recent' ? 'No documents yet.' : 'Trash is empty.' }}
     </div>
@@ -317,14 +317,14 @@ onUnmounted(() => {
         <Icon
           :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : row.fileName.endsWith('.md') ? 'lucide:file-text' : 'lucide:file'"
           class="mb-3 h-10 w-10"
-          :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
+          :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-ink-secondary'"
         />
         <span
           class="w-full truncate text-sm font-medium"
           :class="hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-200'"
         >{{ row.fileName }}</span>
-        <span class="mt-1 w-full truncate text-[11px] text-theme-600">{{ row.folderName }}</span>
-        <span class="mt-1 text-[11px] text-theme-500">{{ new Date('deletedAt' in row ? row.deletedAt : row.modifiedAt).toLocaleString() }}</span>
+        <span class="mt-1 w-full truncate text-[11px] text-ink-faint">{{ row.folderName }}</span>
+        <span class="mt-1 text-[11px] text-ink-muted">{{ new Date('deletedAt' in row ? row.deletedAt : row.modifiedAt).toLocaleString() }}</span>
         <div class="mt-3 flex gap-2">
           <template v-if="mode === 'trash' && 'deletedAt' in row">
             <button
@@ -334,7 +334,7 @@ onUnmounted(() => {
               Open
             </button>
             <button
-              class="rounded-lg bg-accent-600 px-2.5 py-1.5 text-xs font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
+              class="rounded-lg accent-action bg-accent-600 px-2.5 py-1.5 text-xs font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
               :disabled="restoringRef === row.documentRef"
               @click.stop="restore(row)"
             >
@@ -376,7 +376,7 @@ onUnmounted(() => {
           <Icon
             :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : 'lucide:file-text'"
             class="h-5 w-5 shrink-0"
-            :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
+            :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-ink-secondary'"
           /><span
             class="truncate text-sm font-medium"
             :class="hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-200'"
@@ -384,10 +384,10 @@ onUnmounted(() => {
         </div>
       </template>
       <template #col-folderName="{ item: row }">
-        <span class="text-xs text-theme-400">{{ row.folderPath || row.folderName }}</span>
+        <span class="text-xs text-ink-secondary">{{ row.folderPath || row.folderName }}</span>
       </template>
       <template #col-date="{ item: row }">
-        <span class="text-xs text-theme-500">{{ new Date('deletedAt' in row ? row.deletedAt : row.modifiedAt).toLocaleString() }}</span>
+        <span class="text-xs text-ink-muted">{{ new Date('deletedAt' in row ? row.deletedAt : row.modifiedAt).toLocaleString() }}</span>
       </template>
       <template #col-actions="{ item: row }">
         <div
@@ -443,7 +443,7 @@ onUnmounted(() => {
       <div class="flex h-[60vh] min-h-0 flex-col">
         <div
           v-if="diffRevision"
-          class="mb-3 flex shrink-0 flex-wrap items-center gap-2 text-xs text-theme-500"
+          class="mb-3 flex shrink-0 flex-wrap items-center gap-2 text-xs text-ink-muted"
         >
           <span>{{ previewDocument?.folderName || folderFor(previewDocument?.folderId || '')?.name || 'Removed folder' }}</span>
           <span aria-hidden="true">·</span>
@@ -453,7 +453,7 @@ onUnmounted(() => {
         </div>
         <div
           v-if="diffLoading"
-          class="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-theme-500"
+          class="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-ink-muted"
         >
           <Icon
             icon="lucide:loader-2"
@@ -485,7 +485,7 @@ onUnmounted(() => {
       icon-color="red"
       @close="pendingDelete = null"
     >
-      <p class="leading-relaxed text-theme-400">
+      <p class="leading-relaxed text-ink-secondary">
         Permanently delete <strong class="text-theme-200">{{ pendingDelete?.fileName }}</strong> and all revision history? This cannot be undone.
       </p>
       <template #actions>
@@ -510,7 +510,7 @@ onUnmounted(() => {
       icon-color="red"
       @close="showEmptyConfirmation = false"
     >
-      <p class="leading-relaxed text-theme-400">
+      <p class="leading-relaxed text-ink-secondary">
         Permanently delete all {{ trash.length }} trashed documents and their revision history? This cannot be undone.
       </p>
       <template #actions>

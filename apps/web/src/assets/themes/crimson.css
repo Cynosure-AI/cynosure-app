@@ -1,10 +1,10 @@
 /* ==========================================================================
    Crimson Theme - black graphite surfaces with restrained scarlet accents
    ========================================================================== */
-
 [data-theme="crimson"] {
   --color-accent-fg: #ff8181;
   --color-accent-on: #fff7f8;
+
   --color-theme-950: #070708;
   --color-theme-900: #0d0d0f;
   --color-theme-800: #151517;
@@ -15,6 +15,7 @@
   --color-theme-300: #c0bdc1;
   --color-theme-200: #dfdcdf;
   --color-theme-100: #f4f2f4;
+
   --color-accent-50: #fff1f1;
   --color-accent-100: #ffdddd;
   --color-accent-200: #ffb8b8;
@@ -26,98 +27,26 @@
   --color-accent-800: #60070b;
   --color-accent-900: #4f090c;
   --color-accent-950: #2d0204;
-  --crimson-line: rgba(255, 255, 255, 0.075);
-  --theme-glow: 0 0 20px rgba(184, 15, 31, 0.09);
+
   --theme-glow-strong: 0 0 0 1px rgba(232, 59, 59, 0.28), 0 0 28px rgba(184, 15, 31, 0.16);
-  --theme-accent-rgb: 184, 15, 31;
+
   color-scheme: dark;
+
+  --theme-shell-background: radial-gradient(circle at 78% -8%, rgba(184,15,31,.045), transparent 30rem), radial-gradient(circle at 5% 105%, rgba(126,22,39,.025), transparent 34rem), var(--color-theme-950);
+  --theme-content-background: radial-gradient(circle at 62% -18%, rgba(184,15,31,.025), transparent 34rem), linear-gradient(180deg, #101012, #0b0b0d);
+  --theme-sidebar-background: radial-gradient(circle at 12% 2%, rgba(184,15,31,.035), transparent 17rem), linear-gradient(180deg, #0e0e10, #080809 72%);
+  --theme-sidebar-border: rgba(255,255,255,.065);
+  --theme-sidebar-shadow: 12px 0 40px rgba(8,1,3,.2);
+  --theme-composer-background: linear-gradient(180deg, #19191b, #121214);
+  --theme-composer-shadow: 0 12px 36px rgba(8,1,3,.28);
+  --theme-nav-active-background: linear-gradient(90deg, rgba(184,15,31,.13), rgba(184,15,31,.025));
+  --theme-selection-background: rgba(184,15,31,.42);
+  --theme-scrollbar-thumb: #3d3b3f;
+  --theme-scrollbar-hover: #625f64;
+  --theme-action-gradient: linear-gradient(135deg, #c71928, #a50a18 55%, #71050c);
+  --theme-action-shadow: 0 4px 10px rgba(112,3,12,.38);
+
+  --color-ink-secondary: #c2b8bd;
+  --color-ink-muted: #aaa0a5;
+  --color-ink-faint: #968c91;
 }
-
-[data-theme="crimson"] body,
-[data-theme="crimson"] .bg-theme-950 {
-  background:
-    radial-gradient(circle at 78% -8%, rgba(184, 15, 31, 0.045), transparent 30rem),
-    radial-gradient(circle at 5% 105%, rgba(126, 22, 39, 0.025), transparent 34rem),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.012), transparent 42%),
-    var(--color-theme-950);
-}
-
-[data-theme="crimson"] .bg-theme-900,
-[data-theme="crimson"] .bg-theme-900\/50,
-[data-theme="crimson"] .bg-theme-900\/60,
-[data-theme="crimson"] .bg-theme-900\/70,
-[data-theme="crimson"] .bg-theme-900\/80,
-[data-theme="crimson"] .bg-theme-900\/90 {
-  background-color: var(--color-theme-900);
-}
-
-[data-theme="crimson"] .bg-theme-800,
-[data-theme="crimson"] .bg-theme-800\/50,
-[data-theme="crimson"] .bg-theme-800\/60,
-[data-theme="crimson"] .bg-theme-800\/70,
-[data-theme="crimson"] .bg-theme-800\/80 {
-  background-color: var(--color-theme-800);
-}
-
-[data-theme="crimson"] .border-theme-700,
-[data-theme="crimson"] .border-theme-700\/60,
-[data-theme="crimson"] .border-theme-800,
-[data-theme="crimson"] .border-theme-800\/60 {
-  border-color: var(--crimson-line);
-}
-
-[data-theme="crimson"] :is(.shadow-xl, .shadow-2xl) {
-  box-shadow: 0 24px 70px rgba(8, 1, 3, 0.54), 0 1px 0 rgba(255, 220, 225, 0.025) inset;
-}
-
-[data-theme="crimson"] #primary-navigation aside {
-  background: radial-gradient(circle at 12% 2%, rgba(184, 15, 31, 0.035), transparent 17rem), linear-gradient(180deg, #0e0e10, #080809 72%);
-  border-right: 1px solid rgba(255, 255, 255, 0.065);
-  box-shadow: 12px 0 40px rgba(8, 1, 3, 0.2);
-}
-
-[data-theme="crimson"] main.bg-theme-900 {
-  background: radial-gradient(circle at 62% -18%, rgba(184, 15, 31, 0.025), transparent 34rem), linear-gradient(180deg, #101012, #0b0b0d);
-}
-
-[data-theme="crimson"] main > .shrink-0.border-b {
-  background: rgba(11, 11, 13, 0.86);
-  backdrop-filter: blur(14px);
-}
-
-[data-theme="crimson"] .chat-input-bar .bg-theme-800.border-theme-700.rounded-xl {
-  background: linear-gradient(180deg, #19191b, #121214);
-  box-shadow: 0 12px 36px rgba(8, 1, 3, 0.28), 0 1px 0 rgba(255, 220, 225, 0.03) inset;
-}
-
-[data-theme="crimson"] :is(button, a):focus-visible { box-shadow: var(--theme-glow-strong); }
-
-[data-theme="crimson"] :is(input, textarea, select):focus {
-  border-color: rgba(232, 59, 59, 0.55) !important;
-  box-shadow: 0 0 0 3px rgba(184, 15, 31, 0.14), 0 0 24px rgba(184, 15, 31, 0.08);
-  outline: none;
-}
-
-[data-theme="crimson"] button.bg-accent-600,
-[data-theme="crimson"] button.bg-accent-500,
-[data-theme="crimson"] .bg-accent-600,
-[data-theme="crimson"] .bg-accent-500 {
-  background-image: linear-gradient(135deg, #c71928, #a50a18 55%, #71050c);
-  box-shadow: 0 4px 10px rgba(112, 3, 12, 0.38), 0 1px 0 rgba(255, 184, 184, 0.16) inset;
-}
-
-[data-theme="crimson"] .nav-item.active,
-[data-theme="crimson"] nav a.router-link-active,
-[data-theme="crimson"] nav [data-active="true"] {
-  background: linear-gradient(90deg, rgba(184, 15, 31, 0.14), rgba(121, 7, 14, 0.02) 58%, transparent) !important;
-  border-left: 2px solid var(--color-accent-400);
-  box-shadow: inset 5px 0 18px rgba(184, 15, 31, 0.11);
-}
-
-[data-theme="crimson"] .msg-markdown a { color: #ff8181; text-decoration-color: rgba(255, 129, 129, 0.38); }
-[data-theme="crimson"] .msg-markdown :not(pre) > code { background: rgba(184, 15, 31, 0.1); border: 1px solid rgba(232, 59, 59, 0.15); color: #ffb8b8; }
-[data-theme="crimson"] ::selection { background: rgba(184, 15, 31, 0.42); color: #fff; }
-[data-theme="crimson"] ::-webkit-scrollbar { width: 8px; height: 8px; }
-[data-theme="crimson"] ::-webkit-scrollbar-track { background: #070708; }
-[data-theme="crimson"] ::-webkit-scrollbar-thumb { background: #3d3b3f; border: 2px solid #070708; border-radius: 999px; }
-[data-theme="crimson"] ::-webkit-scrollbar-thumb:hover { background: #625f64; }
