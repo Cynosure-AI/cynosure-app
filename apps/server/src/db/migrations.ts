@@ -217,6 +217,56 @@ const MIGRATIONS: SchemaMigration[] = [
         description: 'Mark persisted assistant error messages',
         up: (db) => db.exec('ALTER TABLE messages ADD COLUMN is_error INTEGER NOT NULL DEFAULT 0'),
     },
+    {
+        version: 13,
+        description: 'Name directory tools for their directory operations',
+        up: (db) => {
+            const renamed = new Map([
+                ['file_list_directory', 'directory_list'],
+                ['file_create_directory', 'directory_create'],
+                ['file_merge', 'directory_merge'],
+            ])
+            const renameValue = (value: unknown): unknown => {
+                if (typeof value === 'string') {
+                    for (const [oldName, newName] of renamed) {
+                        if (value === oldName) return newName
+                        if (value === `builtin:files::${oldName}`) return `builtin:files::${newName}`
+                    }
+                    return value
+                }
+                if (Array.isArray(value)) return value.map(renameValue)
+                if (value && typeof value === 'object') {
+                    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, renameValue(entry)]))
+                }
+                return value
+            }
+            for (const { table, column } of [
+                { table: 'agents', column: 'tools_json' },
+                { table: 'conversations', column: 'execution_config_json' },
+                { table: 'cron_jobs', column: 'execution_config_json' },
+            ]) {
+                const rows = db.prepare(`SELECT rowid, ${column} AS value FROM ${table}`).all() as Array<{ rowid: number; value: string }>
+                const update = db.prepare(`UPDATE ${table} SET ${column} = ? WHERE rowid = ?`)
+                for (const row of rows) {
+                    if (![...renamed.keys()].some(name => row.value.includes(name))) continue
+                    const original: unknown = JSON.parse(row.value)
+                    const next = JSON.stringify(renameValue(original))
+                    if (next !== row.value) update.run(next, row.rowid)
+                }
+            }
+            for (const [oldName, newName] of renamed) {
+                for (const prefix of ['', 'built_in_files__']) {
+                    const oldApprovalName = `${prefix}${oldName}`
+                    const newApprovalName = `${prefix}${newName}`
+                    db.prepare('INSERT OR IGNORE INTO tool_approvals (tool_name, auto_approve) SELECT ?, auto_approve FROM tool_approvals WHERE tool_name = ?').run(newApprovalName, oldApprovalName)
+                    db.prepare('DELETE FROM tool_approvals WHERE tool_name = ?').run(oldApprovalName)
+                    db.prepare('INSERT OR IGNORE INTO session_tool_approvals (conversation_id, tool_name, created_at) SELECT conversation_id, ?, created_at FROM session_tool_approvals WHERE tool_name = ?').run(newApprovalName, oldApprovalName)
+                    db.prepare('DELETE FROM session_tool_approvals WHERE tool_name = ?').run(oldApprovalName)
+                }
+                db.prepare('DELETE FROM tool_router_tool_embeddings WHERE tool_name = ?').run(oldName)
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */
