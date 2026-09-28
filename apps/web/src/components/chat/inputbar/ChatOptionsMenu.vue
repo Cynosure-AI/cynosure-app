@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
     <div
       v-if="open"
       ref="menu"
-      class="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-theme-700 bg-theme-900 text-theme-200 shadow-2xl shadow-black/50"
+      class="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-theme-700 bg-theme-900 text-theme-200 shadow-2xl"
       :style="menuStyle"
       role="dialog"
       aria-label="Chat options"
