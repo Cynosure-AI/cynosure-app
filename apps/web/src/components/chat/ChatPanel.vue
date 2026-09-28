@@ -891,6 +891,7 @@ onMounted(() => {
                   :iteration="inner.group.iteration"
                   :steps="inner.group.steps"
                   :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
+                  :delegation-handoff="inner.group.delegationHandoff"
                 />
                 <div
                   v-else-if="inner.type === 'tool-fallback'"
@@ -985,7 +986,29 @@ onMounted(() => {
           :iteration="entry.group.iteration"
           :steps="entry.group.steps"
           :is-active="agentStore.isExecuting && entry.key === lastToolGroupKey"
+          :delegation-handoff="entry.group.delegationHandoff"
         />
+
+        <div
+          v-else-if="entry.type === 'delegation-result'"
+          class="px-4 py-1.5"
+        >
+          <div class="max-w-[80%] ml-3 md:ml-12 flex items-center gap-2 rounded-xl border border-indigo-500/20 bg-indigo-950/10 px-3 py-2 text-xs text-ink-secondary">
+            <Icon
+              :icon="entry.results.every(result => result.success) ? 'lucide:check-circle-2' : 'lucide:circle-alert'"
+              class="w-3.5 h-3.5 shrink-0"
+              :class="entry.results.every(result => result.success) ? 'text-status-success' : 'text-status-danger'"
+            />
+            <span>{{ entry.results.every(result => result.success) ? 'Sub-agent returned' : 'Delegation failed' }}</span>
+            <span class="ml-auto text-[10px] text-ink-muted">{{ entry.results.filter(result => result.success).length }}/{{ entry.results.length }} ok</span>
+          </div>
+          <div
+            v-if="entry.results.some(result => !result.success)"
+            class="max-w-[80%] ml-3 md:ml-12 mt-1 max-h-40 overflow-y-auto break-words text-xs text-status-danger whitespace-pre-wrap"
+          >
+            {{ entry.results.filter(result => !result.success).map(result => result.error || result.output).join('\n') }}
+          </div>
+        </div>
 
         <ContinuationRoundMarker
           v-else-if="entry.type === 'continuation'"

@@ -54,6 +54,8 @@ export interface ExecutionStep {
   streamingChoosing?: string
   toolCalls?: ToolCallDisplay[]
   results?: { toolCallId?: string; name: string; success: boolean; output: string; error?: string; images?: string[]; invocationId?: string; structuredContent?: unknown }[]
+  resultsAt?: number
+  resultsSequence?: number
   timestamp: number
   updatedAt?: number
   /** Task ID — unique per AgentExecutor run, used to match update events to the correct step */
@@ -450,7 +452,11 @@ export const useAgentStore = defineStore('agent', () => {
 
       case 'step:executed':
         patchToolStep(convId, taskId, eventData.iteration as number | undefined, 'executing',
-          { results: eventData.results as ExecutionStep['results'] }, isForActiveView)
+          {
+            results: eventData.results as ExecutionStep['results'],
+            resultsAt: typeof eventData.timestamp === 'number' ? eventData.timestamp : Date.now(),
+            resultsSequence: typeof eventData.sequence === 'number' ? eventData.sequence : undefined,
+          }, isForActiveView)
         break
 
       case 'step:hitl-denied':
@@ -490,7 +496,7 @@ export const useAgentStore = defineStore('agent', () => {
       const item = event.items[0]
       if (!item) return
       handleExecutionUpdate({ event: 'step:executed', data: { ...base,
-        taskId: item.taskId, iteration: item.iteration,
+        taskId: item.taskId, iteration: item.iteration, timestamp: event.createdAt, sequence: event.sequence,
         results: event.items.map((result) => ({
           toolCallId: result.callId, name: result.name, success: result.success, invocationId: result.invocationId,
           output: result.content.flatMap((block) => block.type === 'text' ? [block.text] : []).join(''),
