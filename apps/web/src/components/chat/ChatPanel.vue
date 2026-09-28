@@ -169,6 +169,19 @@ const emptyStateSubAgents = computed(() => {
     .map((id) => agentDefs.get(id))
     .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
 })
+const visibleEmptyStateSubAgents = computed(() =>
+  emptyStateSubAgents.value.length > 10
+    ? emptyStateSubAgents.value.slice(0, 9)
+    : emptyStateSubAgents.value,
+)
+const overflowEmptyStateSubAgents = computed(() =>
+  emptyStateSubAgents.value.length > 10
+    ? emptyStateSubAgents.value.slice(9)
+    : [],
+)
+const overflowEmptyStateSubAgentsTitle = computed(() =>
+  overflowEmptyStateSubAgents.value.map((agent) => agent.name).join('\n'),
+)
 
 /** Resolve agent identity: prefer message's own data, then look up from agent
  *  definitions store by agentId, and only fall back to the conversation agent. */
@@ -776,7 +789,7 @@ onMounted(() => {
           aria-label="Assigned sub-agents"
         >
           <span
-            v-for="(subAgent, index) in emptyStateSubAgents"
+            v-for="(subAgent, index) in visibleEmptyStateSubAgents"
             :key="subAgent.id"
             :title="subAgent.name"
             :style="{ transitionDelay: `${index * 50}ms` }"
@@ -793,6 +806,16 @@ onMounted(() => {
               icon="lucide:bot"
               class="h-5 w-5 text-ink-secondary"
             />
+          </span>
+          <span
+            v-if="overflowEmptyStateSubAgents.length"
+            :key="'overflow-' + overflowEmptyStateSubAgents.length"
+            :title="overflowEmptyStateSubAgentsTitle"
+            class="flex h-10 w-10 items-center justify-center rounded-full border border-theme-700 bg-theme-800 text-xs font-medium text-ink-secondary shadow-sm"
+            :style="{ transitionDelay: `${visibleEmptyStateSubAgents.length * 50}ms` }"
+            aria-label="Additional assigned sub-agents"
+          >
+            +{{ overflowEmptyStateSubAgents.length }}
           </span>
         </TransitionGroup>
       </template>
