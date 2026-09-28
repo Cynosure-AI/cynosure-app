@@ -128,6 +128,31 @@ describe('ProviderModelSelect favorites', () => {
     ])
   })
 
+  test('uses an amber pricing tag for video output models', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockImplementation(async (_providerId, type) =>
+      type === 'video'
+        ? [{ id: 'video/model', inputModalities: ['text', 'image'], outputModalities: ['video'], pricing: { prompt: 0.001 } }]
+        : []
+    )
+
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'openrouter-video',
+        modelValue: 'video/model',
+        providers: [{ id: 'openrouter-video', name: 'OpenRouter', type: 'openrouter', defaultModel: '' }],
+        modelTypes: ['llm', 'image', 'video', 'transcription'],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+
+    const row = wrapper.findAll('[role="option"]')
+      .find((option) => (option.attributes('data-value') || '').includes('video/model'))!
+    expect(row.find('.text-amber-400').exists()).toBe(true)
+  })
+
   test('shortens agent and provider defaults only in the collapsed trigger', async () => {
     const store = useProviderStore()
     store.listModelItems = vi.fn().mockResolvedValue([])

@@ -149,6 +149,7 @@ function pricingTooltip(model: ModelListItem): string | undefined {
 function pricingTagVariant(model: ModelListItem): SelectOption['tagVariant'] {
   const output = (model.outputModalities || []).map((item) => item.toLowerCase());
   if (output.includes('transcription')) return 'blue';
+  if (output.includes('video')) return 'amber';
   if (output.includes('image')) return 'green';
   return 'default';
 }

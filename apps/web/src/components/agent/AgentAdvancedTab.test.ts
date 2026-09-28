@@ -14,20 +14,20 @@ function mountTab(thinkingEnabled: boolean, reasoningEffort: AgentDefinition['re
   })
 }
 
-describe('AgentAdvancedTab reasoning slider', () => {
+describe('AgentAdvancedTab reasoning dropdown', () => {
   test('turns reasoning off while retaining the saved effort', async () => {
     const wrapper = mountTab(true, 'high')
-    const slider = wrapper.get<HTMLInputElement>('[aria-label="Default reasoning level"]')
-    expect(slider.element.value).toBe('4')
-    await slider.setValue('0')
+    const select = wrapper.get<HTMLSelectElement>('#agent-reasoning-level')
+    expect(select.element.value).toBe('high')
+    await select.setValue('off')
     expect(wrapper.emitted('updateReasoning')).toEqual([[false, 'high']])
   })
 
   test('selecting a level from Off enables reasoning', async () => {
     const wrapper = mountTab(false, 'low')
-    const slider = wrapper.get<HTMLInputElement>('[aria-label="Default reasoning level"]')
-    expect(slider.element.value).toBe('0')
-    await slider.setValue('5')
+    const select = wrapper.get<HTMLSelectElement>('#agent-reasoning-level')
+    expect(select.element.value).toBe('off')
+    await select.setValue('xhigh')
     expect(wrapper.emitted('updateReasoning')).toEqual([[true, 'xhigh']])
   })
 })
