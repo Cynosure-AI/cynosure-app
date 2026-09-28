@@ -89,7 +89,7 @@ describe('McpBrowseTab registry pagination', () => {
 
     expect(wrapper.get('[aria-label="MCP server marketplace"]').element.tagName).toBe('SECTION')
     expect(wrapper.findAll('[role="tab"]')).toHaveLength(3)
-    expect(wrapper.text()).toContain('Supercharge your workflow')
+    expect(wrapper.text()).not.toContain('Supercharge your workflow')
     expect(wrapper.text()).toContain('Browse by category')
     expect(wrapper.text()).toContain('Recommended description')
     expect(apiMocks.searchRegistry).toHaveBeenCalledWith(expect.objectContaining({ registry: 'recommended' }))
