@@ -14,7 +14,7 @@ function segmentClass(type: MemoryDiffSegment["type"]): string {
 
 <template>
   <div class="flex min-h-0 flex-col overflow-hidden rounded-xl border border-theme-800/80 bg-theme-950/70">
-    <div class="flex items-center gap-4 border-b border-theme-800/70 px-4 py-2 text-[11px] text-theme-500">
+    <div class="flex items-center gap-4 border-b border-theme-800/70 px-4 py-2 text-[11px] text-ink-muted">
       <span class="flex items-center gap-1.5">
         <span class="h-2.5 w-2.5 rounded-sm bg-emerald-500/30" /> Added
       </span>
@@ -27,6 +27,6 @@ function segmentClass(type: MemoryDiffSegment["type"]): string {
       :key="index"
       :class="segmentClass(segment.type)"
     >{{ segment.text }}</span></pre>
-    <div v-else class="p-6 text-center text-sm text-theme-500">No changes.</div>
+    <div v-else class="p-6 text-center text-sm text-ink-muted">No changes.</div>
   </div>
 </template>

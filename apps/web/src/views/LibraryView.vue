@@ -294,7 +294,7 @@ onUnmounted(() => {
           <h1 class="text-2xl font-bold text-theme-100">
             Library
           </h1>
-          <p class="mt-1 text-sm leading-relaxed text-theme-500">
+          <p class="mt-1 text-sm leading-relaxed text-ink-muted">
             {{ activeSection.description }}
           </p>
         </div>
@@ -304,19 +304,19 @@ onUnmounted(() => {
             <span class="sr-only">Search {{ activePanel === 'uploads' ? 'uploads' : 'generated files' }}</span>
             <Icon
               icon="lucide:search"
-              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
             />
             <input
               v-model="searchQuery"
               type="search"
               :placeholder="activePanel === 'uploads' ? 'Search uploads or conversations' : 'Search files, agents, or conversations'"
-              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-9 text-sm text-theme-200 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
+              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-9 text-sm text-theme-200 outline-none transition placeholder:text-ink-faint focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
             >
             <button
               v-if="searchQuery"
               type="button"
               aria-label="Clear search"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-theme-500 hover:text-theme-200"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-ink-muted hover:text-theme-200"
               @click="clearSearch"
             >
               <Icon
@@ -329,7 +329,7 @@ onUnmounted(() => {
             type="button"
             :title="`Refresh ${activePanel}`"
             :aria-label="`Refresh ${activePanel}`"
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-theme-700 bg-theme-950/70 text-theme-400 transition hover:border-theme-600 hover:text-theme-100"
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-theme-700 bg-theme-950/70 text-ink-secondary transition hover:border-theme-600 hover:text-theme-100"
             :disabled="loading"
             @click="loadEntries(true)"
           >
@@ -363,8 +363,8 @@ onUnmounted(() => {
             class="library-filter-button inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
             :aria-pressed="selectedFilter === option.value"
             :class="selectedFilter === option.value
-              ? 'border-accent-500/50 bg-accent-500/15 text-accent-200'
-              : 'border-theme-700 bg-theme-950/50 text-theme-400 hover:border-theme-600 hover:text-theme-200'"
+              ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg'
+              : 'border-theme-700 bg-theme-950/50 text-ink-secondary hover:border-theme-600 hover:text-theme-200'"
             @click="selectedFilter = option.value"
           >
             <Icon
@@ -377,11 +377,11 @@ onUnmounted(() => {
         </div>
         <div
           v-else
-          class="flex min-w-0 items-center gap-2 text-xs text-theme-500"
+          class="flex min-w-0 items-center gap-2 text-xs text-ink-muted"
         >
           <Icon
             icon="lucide:shield-check"
-            class="h-4 w-4 shrink-0 text-accent-400"
+            class="h-4 w-4 shrink-0 text-accent-fg"
           />
           <span>Stored copies used when messages are edited or retried</span>
         </div>
@@ -404,7 +404,7 @@ onUnmounted(() => {
             class="flex h-7 w-8 items-center justify-center rounded-md transition"
             :class="viewMode === mode.value
               ? 'bg-theme-700 text-theme-100 shadow-sm'
-              : 'text-theme-500 hover:bg-theme-800/70 hover:text-theme-200'"
+              : 'text-ink-muted hover:bg-theme-800/70 hover:text-theme-200'"
             @click="viewMode = mode.value"
           >
             <Icon
@@ -444,12 +444,12 @@ onUnmounted(() => {
       >
         <Icon
           icon="lucide:triangle-alert"
-          class="mb-3 h-8 w-8 text-red-400"
+          class="mb-3 h-8 w-8 text-status-danger"
         />
         <p class="font-medium text-theme-200">
           Couldn't load {{ activePanel === 'uploads' ? 'uploads' : 'generated files' }}
         </p>
-        <p class="mt-1 max-w-md text-sm text-theme-500">
+        <p class="mt-1 max-w-md text-sm text-ink-muted">
           {{ error }}
         </p>
         <button
@@ -465,7 +465,7 @@ onUnmounted(() => {
         v-else-if="!visibleEntries.length"
         class="flex min-h-96 flex-col items-center justify-center rounded-2xl border border-dashed border-theme-700 bg-theme-950/25 px-6 text-center"
       >
-        <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-theme-800/70 text-theme-500">
+        <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-theme-800/70 text-ink-muted">
           <Icon
             :icon="searchQuery ? 'lucide:search-x' : activePanel === 'uploads' ? 'lucide:paperclip' : 'lucide:shapes'"
             class="h-7 w-7"
@@ -474,7 +474,7 @@ onUnmounted(() => {
         <p class="font-semibold text-theme-200">
           {{ emptyTitle }}
         </p>
-        <p class="mt-1 max-w-sm text-sm leading-6 text-theme-500">
+        <p class="mt-1 max-w-sm text-sm leading-6 text-ink-muted">
           {{ emptyDescription }}
         </p>
       </div>
@@ -516,11 +516,11 @@ onUnmounted(() => {
             />
             <div
               v-else
-              class="flex flex-col items-center text-theme-500"
+              class="flex flex-col items-center text-ink-muted"
               :class="viewMode === 'grid' ? 'gap-3' : 'gap-1.5'"
             >
               <div
-                class="flex items-center justify-center bg-theme-800/80 ring-1 ring-theme-700/70 transition group-hover:text-accent-300"
+                class="flex items-center justify-center bg-theme-800/80 ring-1 ring-theme-700/70 transition group-hover:text-accent-fg"
                 :class="viewMode === 'grid' ? 'h-16 w-16 rounded-2xl' : 'h-10 w-10 rounded-xl'"
               >
                 <Icon
@@ -530,7 +530,7 @@ onUnmounted(() => {
               </div>
               <span
                 v-if="viewMode === 'grid'"
-                class="text-[11px] font-bold uppercase tracking-wider text-theme-600"
+                class="text-[11px] font-bold uppercase tracking-wider text-ink-faint"
               >{{ artifactTypeLabel(entry.artifact) }}</span>
             </div>
             <span
@@ -542,7 +542,7 @@ onUnmounted(() => {
             <span
               v-if="entry.status && entry.status !== 'ready'"
               class="absolute right-3 top-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold backdrop-blur-sm"
-              :class="entry.status === 'failed' ? 'border-red-500/30 bg-red-950/80 text-red-300' : 'border-accent-500/30 bg-theme-950/85 text-accent-300'"
+              :class="entry.status === 'failed' ? 'border-red-500/30 bg-red-950/80 text-red-300' : 'border-accent-500/30 bg-theme-950/85 text-accent-fg'"
               :title="entry.error"
             >
               <Icon
@@ -575,11 +575,11 @@ onUnmounted(() => {
             </p>
             <p
               v-if="viewMode === 'list'"
-              class="mt-1 truncate text-xs text-theme-500"
+              class="mt-1 truncate text-xs text-ink-muted"
             >
               {{ entry.conversationTitle }}
             </p>
-            <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-theme-500">
+            <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-ink-muted">
               <span class="min-w-0 truncate">
                 {{ entry.agentName || (activePanel === 'uploads' ? 'Free Chat' : 'AI assistant') }}
                 <template v-if="entry.sizeBytes != null"> · {{ formatBytes(entry.sizeBytes) }}</template>
@@ -601,7 +601,7 @@ onUnmounted(() => {
 
       <div
         v-if="loadingMore"
-        class="flex items-center justify-center gap-2 py-8 text-sm text-theme-500"
+        class="flex items-center justify-center gap-2 py-8 text-sm text-ink-muted"
       >
         <Icon
           icon="lucide:loader-2"

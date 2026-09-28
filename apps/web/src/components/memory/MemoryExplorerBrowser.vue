@@ -98,7 +98,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <div class="flex min-w-0 items-center gap-3">
         <Icon
           :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-          class="h-4 w-4 shrink-0 text-theme-400"
+          class="h-4 w-4 shrink-0 text-ink-secondary"
         />
         <div class="min-w-0">
           <div class="truncate text-sm text-theme-200">
@@ -108,38 +108,38 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
             <span
               v-for="field in file.matchedFields"
               :key="field"
-              class="rounded border border-theme-700/80 bg-theme-900/70 px-1.5 py-0.5 text-[10px] text-theme-500"
+              class="rounded border border-theme-700/80 bg-theme-900/70 px-1.5 py-0.5 text-[10px] text-ink-muted"
             >{{ field }}</span>
           </div>
         </div>
       </div>
     </template>
     <template #col-folderName="{ item: file }">
-      <div class="min-w-0 text-xs text-theme-400">
+      <div class="min-w-0 text-xs text-ink-secondary">
         <div class="truncate">
           {{ file.folderName }}
         </div>
         <div
           v-if="file.folderPath && file.folderPath !== file.folderName"
-          class="truncate text-[10px] text-theme-600"
+          class="truncate text-[10px] text-ink-faint"
         >
           {{ file.folderPath }}
         </div>
       </div>
     </template>
     <template #col-modifiedAt="{ item: file }">
-      <span class="text-xs text-theme-500">{{ new Date(file.modifiedAt).toLocaleDateString() }}</span>
+      <span class="text-xs text-ink-muted">{{ new Date(file.modifiedAt).toLocaleDateString() }}</span>
     </template>
     <template #col-similarity="{ item: file }">
       <span
-        class="inline-flex rounded-full border border-accent-500/25 bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-300"
+        class="inline-flex rounded-full border border-accent-500/25 bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-fg"
         :title="`Best chunk cosine similarity: ${((file.similarity || 0) * 100).toFixed(1)}%`"
       >{{ Math.round((file.similarity || 0) * 100) }}%</span>
     </template>
     <template #col-status="{ item: file }">
       <span
         class="inline-flex items-center gap-1.5 text-xs"
-        :class="file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        :class="file.status === 'indexed' ? 'text-status-green' : 'text-ink-muted'"
       >
         <Icon
           :icon="statusIcon(file.status)"
@@ -151,14 +151,14 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
 
   <div
     v-else-if="files.length === 0 && childFolders.length === 0 && !filesLoading"
-    class="rounded-xl border border-theme-800 bg-theme-950/45 py-10 text-center text-sm text-theme-500"
+    class="rounded-xl border border-table-border bg-table-surface py-10 text-center text-sm text-ink-muted"
   >
     No files in this folder yet. Upload files to get started.
   </div>
 
   <div
     v-else-if="explorerView === 'grid'"
-    class="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3"
+    class="grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl border border-table-border bg-table-surface p-3 sm:grid-cols-4 sm:p-4 lg:grid-cols-5 xl:grid-cols-6"
     data-testid="memory-explorer-grid"
   >
     <div
@@ -166,10 +166,10 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       :key="folder.id"
       role="button"
       tabindex="0"
-      class="group cursor-pointer relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
+      class="group relative flex min-w-0 min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg px-2 py-3 text-center transition-colors hover:bg-table-hover"
       :class="[
-        highlightedFolderId === folder.id || selectedFolders.has(folder.id) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '',
-        dropTargetFolderId === folder.id ? 'border-accent-500/60 bg-accent-500/10 ring-1 ring-accent-500/50' : '',
+        highlightedFolderId === folder.id || selectedFolders.has(folder.id) ? 'bg-table-selected' : '',
+        dropTargetFolderId === folder.id ? 'bg-table-selected ring-1 ring-inset ring-accent-500/60' : '',
       ]"
       @click="emit('openFolder', folder)"
       @keydown.enter="emit('openFolder', folder)"
@@ -181,7 +181,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     >
       <input
         type="checkbox"
-        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFolders.has(folder.id) }"
         :checked="selectedFolders.has(folder.id)"
         :aria-label="`${selectedFolders.has(folder.id) ? 'Deselect' : 'Select'} ${folder.name}`"
@@ -189,13 +189,16 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       >
       <Icon
         :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
-        class="mb-3 h-11 w-11"
-        :class="folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'"
+        class="mb-3 h-12 w-12"
+        :class="folder.autoMemoryExcluded ? 'text-status-danger' : 'text-status-warning'"
       />
-      <span class="w-full truncate text-sm font-medium text-theme-200">{{ folder.name }}</span>
-      <span class="mt-1 text-[11px] text-theme-600">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
       <span
-        class="mt-1 inline-flex items-center gap-1 text-[11px]"
+        class="w-full truncate text-sm font-medium text-theme-200"
+        :title="folder.name"
+      >{{ folder.name }}</span>
+      <span class="mt-1 text-xs text-ink-faint sm:text-sm">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
+      <span
+        class="mt-2 inline-flex items-center gap-1 text-xs sm:text-sm"
         :class="folderIndexSummary(folder).colorClass"
       >
         <Icon
@@ -211,8 +214,8 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       :draggable="true"
       role="button"
       tabindex="0"
-      class="group cursor-pointer relative flex min-h-36 flex-col items-center justify-center rounded-xl border border-theme-800 bg-theme-950/45 p-4 text-center transition hover:border-theme-700 hover:bg-theme-800/30"
-      :class="[selectedFiles.has(file.fileName) ? 'border-accent-500/50 bg-accent-500/[0.08]' : '', !file.supported ? 'opacity-50' : '']"
+      class="group relative flex min-w-0 min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg px-2 py-3 text-center transition-colors hover:bg-table-hover"
+      :class="[selectedFiles.has(file.fileName) ? 'bg-table-selected' : '', !file.supported ? 'opacity-50' : '']"
       @click="emit('openDocument', file.fileName)"
       @dblclick="emit('openDocument', file.fileName)"
       @keydown.enter="emit('openDocument', file.fileName)"
@@ -223,7 +226,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <input
         v-if="file.supported"
         type="checkbox"
-        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFiles.has(file.fileName) }"
         :checked="selectedFiles.has(file.fileName)"
         :aria-label="`${selectedFiles.has(file.fileName) ? 'Deselect' : 'Select'} ${file.fileName}`"
@@ -231,12 +234,13 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       >
       <Icon
         :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-        class="mb-3 h-10 w-10"
-        :class="file.supported ? 'text-theme-400' : 'text-theme-600'"
+        class="mb-3 h-12 w-12"
+        :class="file.supported ? 'text-ink-secondary' : 'text-ink-faint'"
       />
       <span
-        class="flex w-full items-center justify-center gap-1 truncate text-sm font-medium"
-        :class="hasRecentDreamUpdate(file) ? 'text-[#f4c072]' : 'text-theme-200'"
+        class="flex w-full min-w-0 items-center justify-center gap-1 truncate text-sm font-medium"
+        :class="hasRecentDreamUpdate(file) ? 'text-status-warning' : 'text-theme-200'"
+        :title="file.fileName"
       >
         <Icon
           v-if="hasRecentDreamUpdate(file)"
@@ -246,10 +250,10 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         />
         <span class="truncate">{{ file.fileName }}</span>
       </span>
-      <span class="mt-1 text-[11px] text-theme-600">{{ formatFileSize(file.size) }}</span>
+      <span class="mt-1 text-xs text-ink-faint sm:text-sm">{{ formatFileSize(file.size) }}</span>
       <span
-        class="mt-2 inline-flex items-center gap-1 text-[10px]"
-        :class="isJobActive('reindex', file.fileName) ? 'text-orange-400' : file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        class="mt-2 inline-flex items-center gap-1 text-xs sm:text-sm"
+        :class="isJobActive('reindex', file.fileName) ? 'text-status-warning' : file.status === 'indexed' ? 'text-status-green' : 'text-ink-muted'"
       >
         <Icon
           :icon="isJobActive('reindex', file.fileName) ? 'lucide:loader-2' : statusIcon(file.status)"
@@ -260,7 +264,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       </span>
       <span
         v-if="isJobActive('deep-research', file.fileName)"
-        class="mt-1 inline-flex items-center gap-1 text-[10px] text-emerald-400"
+        class="mt-1 inline-flex items-center gap-1 text-xs text-status-success sm:text-sm"
       >
         <Icon
           icon="lucide:loader-2"
@@ -302,12 +306,12 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         <Icon
           :icon="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder' : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
           class="h-5 w-5 shrink-0"
-          :class="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400' : item.supported ? 'text-theme-400' : 'text-theme-600'"
+          :class="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'text-status-danger' : 'text-status-warning' : item.supported ? 'text-ink-secondary' : 'text-ink-faint'"
         />
         <div class="min-w-0">
           <div
             class="flex items-center gap-1 truncate text-sm font-medium"
-            :class="item.kind === 'file' && hasRecentDreamUpdate(item) ? 'text-[#f4c072]' : 'text-theme-200'"
+            :class="item.kind === 'file' && hasRecentDreamUpdate(item) ? 'text-status-warning' : 'text-theme-200'"
           >
             <Icon
               v-if="item.kind === 'file' && hasRecentDreamUpdate(item)"
@@ -316,7 +320,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
               aria-label="Updated by a dream within the last 24 hours"
             /> {{ item.name }}
           </div>
-          <div class="mt-0.5 truncate text-[11px] text-theme-600">
+          <div class="mt-0.5 truncate text-[11px] text-ink-faint">
             <template v-if="item.kind === 'folder'">
               {{ item.folder.fileCount }} direct · {{ item.folder.descendantFileCount || 0 }} nested
             </template>
@@ -330,10 +334,10 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       </div>
     </template>
     <template #col-modifiedAt="{ item }">
-      <span class="text-xs text-theme-500">{{ new Date(item.modifiedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }}</span>
+      <span class="text-xs text-ink-muted">{{ new Date(item.modifiedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }}</span>
     </template>
     <template #col-chunkCount="{ item }">
-      <span class="text-xs text-theme-400">
+      <span class="text-xs text-ink-secondary">
         <template v-if="item.kind === 'folder'">{{ item.chunkCount || 0 }} items</template>
         <template v-else-if="item.status === 'indexed'">{{ item.chunkCount || 0 }}</template>
         <template v-else-if="item.estimatedChunkCount !== undefined">~{{ item.estimatedChunkCount }}</template>
@@ -343,11 +347,11 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     <template #col-deepResearched="{ item }">
       <span
         v-if="item.kind !== 'file'"
-        class="text-xs text-theme-600"
+        class="text-xs text-ink-faint"
       >Recursive</span>
       <span
         v-else-if="isJobActive('deep-research', item.fileName)"
-        class="inline-flex items-center gap-1.5 text-xs text-emerald-400"
+        class="inline-flex items-center gap-1.5 text-xs text-status-success"
       ><Icon
         icon="lucide:loader-2"
         class="h-3.5 w-3.5 animate-spin"
@@ -355,7 +359,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <span
         v-else
         class="inline-flex items-center gap-1.5 text-xs"
-        :class="item.deepResearched ? 'text-green-400' : 'text-theme-500'"
+        :class="item.deepResearched ? 'text-status-green' : 'text-ink-muted'"
       ><Icon
         :icon="item.deepResearched ? 'lucide:check-circle' : 'lucide:circle-dashed'"
         class="h-3.5 w-3.5"
@@ -373,7 +377,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       /> {{ folderIndexSummary(item.folder).label }}</span>
       <span
         v-else-if="isJobActive('reindex', item.fileName)"
-        class="inline-flex items-center gap-1.5 text-xs text-orange-400"
+        class="inline-flex items-center gap-1.5 text-xs text-status-warning"
       ><Icon
         icon="lucide:loader-2"
         class="h-3.5 w-3.5 animate-spin"
@@ -381,7 +385,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <span
         v-else
         class="inline-flex items-center gap-1.5 text-xs"
-        :class="item.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        :class="item.status === 'indexed' ? 'text-status-green' : 'text-ink-muted'"
       ><Icon
         :icon="statusIcon(item.status)"
         class="h-3.5 w-3.5"

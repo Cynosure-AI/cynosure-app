@@ -127,7 +127,7 @@ function priorityClass(priority: string): string {
         </button>
         <button
           v-if="notificationStore.notifications.length > 0"
-          class="btn btn-ghost btn-sm text-theme-500 hover:text-red-400"
+          class="btn btn-ghost btn-sm text-ink-muted hover:text-status-danger"
           @click="notificationStore.removeAll()"
         >
           <Icon

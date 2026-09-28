@@ -42,7 +42,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="mb-2 flex items-center justify-between">
-    <div class="text-xs text-theme-500">
+    <div class="text-xs text-ink-muted">
       <template v-if="searching">
         {{ resultCount }} result{{ resultCount !== 1 ? "s" : "" }} in {{ folderName || "this folder" }} and subfolders
       </template>
@@ -56,13 +56,13 @@ const emit = defineEmits<{
     <div class="flex items-center gap-2">
       <template v-if="!searching && selectedCount === 0 && rowCount > 0">
         <button
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200"
           @click="emit('selectPage')"
         >
           Select page
         </button>
         <button
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200"
           @click="emit('selectAll')"
         >
           Select all {{ filteredFileCount }}
@@ -70,13 +70,13 @@ const emit = defineEmits<{
       </template>
       <div
         v-if="!searching"
-        class="flex items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5"
+        class="flex items-center rounded-lg border border-theme-700/70 bg-control-surface p-0.5"
         aria-label="Explorer view"
       >
         <button
           type="button"
           class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-          :class="view === 'list' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+          :class="view === 'list' ? 'bg-theme-700 text-theme-100' : 'text-ink-muted hover:text-theme-200'"
           title="List view"
           aria-label="List view"
           :aria-pressed="view === 'list'"
@@ -90,7 +90,7 @@ const emit = defineEmits<{
         <button
           type="button"
           class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-          :class="view === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-theme-500 hover:text-theme-200'"
+          :class="view === 'grid' ? 'bg-theme-700 text-theme-100' : 'text-ink-muted hover:text-theme-200'"
           title="Grid view"
           aria-label="Grid view"
           :aria-pressed="view === 'grid'"
@@ -105,7 +105,7 @@ const emit = defineEmits<{
       <button
         type="button"
         :disabled="filesLoading"
-        class="px-2 py-1.5 text-xs text-theme-400 hover:text-theme-200"
+        class="px-2 py-1.5 text-xs text-ink-secondary hover:text-theme-200"
         aria-label="Refresh documents"
         @click="emit('refresh')"
       >
@@ -126,7 +126,7 @@ const emit = defineEmits<{
       <span class="shrink-0 border-r border-theme-800 px-3 text-xs font-medium text-theme-300">{{ selectedCount }} selected</span>
       <button
         v-if="!allSelected"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-theme-400 transition-colors hover:bg-theme-800 hover:text-theme-200"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-ink-secondary transition-colors hover:bg-theme-800 hover:text-theme-200"
         @click="emit('selectAll')"
       >
         Select all {{ rowCount }}
@@ -134,7 +134,7 @@ const emit = defineEmits<{
       <button
         v-if="spaceCount > 1"
         :disabled="moving"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-accent-400 transition-colors hover:bg-accent-500/10 disabled:opacity-50"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-accent-fg transition-colors hover:bg-accent-500/10 disabled:opacity-50"
         @click="emit('move')"
       >
         <Icon
@@ -159,7 +159,7 @@ const emit = defineEmits<{
       <button
         v-if="canResearch || selectedFolderCount > 0"
         :disabled="selectedFolderCount === 0 && researchIdleCount === 0"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-status-success transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
         title="Extract and classify facts from the selected searchable documents"
         @click="emit('research')"
       >
@@ -184,7 +184,7 @@ const emit = defineEmits<{
       </button>
       <button
         :disabled="deleting"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-status-danger transition-colors hover:bg-red-500/10 disabled:opacity-50"
         title="Remove the selected source files and their indexes"
         @click="emit('remove')"
       >
@@ -195,7 +195,7 @@ const emit = defineEmits<{
         /> Remove
       </button>
       <button
-        class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-l border-theme-800 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+        class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-l border-theme-800 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
         title="Clear selection"
         aria-label="Clear selection"
         @click="emit('clearSelection')"

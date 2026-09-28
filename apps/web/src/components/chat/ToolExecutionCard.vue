@@ -67,27 +67,27 @@ const props = defineProps<{
 const expanded = ref(false)
 const lightboxSrc = ref<string | null>(null)
 
-const FALLBACK_META: StatusMeta = { label: 'Executing', icon: 'lucide:play', color: 'text-emerald-500 dark:text-emerald-400' }
+const FALLBACK_META: StatusMeta = { label: 'Executing', icon: 'lucide:play', color: 'text-status-success' }
 const STATUS_META: Record<string, StatusMeta> = {
   'building-task-context': { label: 'Preparing Context', icon: 'lucide:compass', color: 'text-cyan-600 dark:text-cyan-300' },
   'indexing-attachments': { label: 'Indexing Attachments', icon: 'lucide:paperclip', color: 'text-sky-600 dark:text-sky-300' },
-  'indexing-tools': { label: 'Indexing Tools', icon: 'lucide:database-zap', color: 'text-accent-500 dark:text-accent-300' },
-  'routing-tools': { label: 'Gathering Tools Context', icon: 'lucide:route', color: 'text-accent-500 dark:text-accent-300' },
-  'finding-tools': { label: 'Finding Required Tools', icon: 'lucide:search-check', color: 'text-accent-500 dark:text-accent-300' },
-  'routing-memory': { label: 'Gathering Memory Context', icon: 'lucide:brain-circuit', color: 'text-accent-500 dark:text-accent-300' },
-  'curating-tools': { label: 'Refining Tool Context', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
-  'curating-memory': { label: 'Refining Memory Context', icon: 'lucide:list-filter', color: 'text-accent-500 dark:text-accent-300' },
-  'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-amber-500 dark:text-amber-400' },
-  denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-red-500 dark:text-red-400' },
+  'indexing-tools': { label: 'Indexing Tools', icon: 'lucide:database-zap', color: 'text-accent-fg' },
+  'routing-tools': { label: 'Gathering Tools Context', icon: 'lucide:route', color: 'text-accent-fg' },
+  'finding-tools': { label: 'Finding Required Tools', icon: 'lucide:search-check', color: 'text-accent-fg' },
+  'routing-memory': { label: 'Gathering Memory Context', icon: 'lucide:brain-circuit', color: 'text-accent-fg' },
+  'curating-tools': { label: 'Refining Tool Context', icon: 'lucide:list-filter', color: 'text-accent-fg' },
+  'curating-memory': { label: 'Refining Memory Context', icon: 'lucide:list-filter', color: 'text-accent-fg' },
+  'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-status-warning' },
+  denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-status-danger' },
   executing: FALLBACK_META,
-  'ma-status': { label: 'Orchestrator', icon: 'lucide:network', color: 'text-violet-500 dark:text-violet-400' },
-  'ma-subagent-running': { label: 'Sub-agent running', icon: 'lucide:bot', color: 'text-indigo-500 dark:text-indigo-400' },
-  'ma-subagent-done': { label: 'Sub-agent done', icon: 'lucide:check', color: 'text-emerald-500 dark:text-emerald-400' },
-  'ma-subagent-failed': { label: 'Sub-agent failed', icon: 'lucide:x', color: 'text-red-500 dark:text-red-400' },
-  'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-emerald-500 dark:text-emerald-400' },
-  'ma-error': { label: 'Error', icon: 'lucide:alert-circle', color: 'text-red-500 dark:text-red-400' },
-  'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-theme-400' },
-  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:database', color: 'text-accent-500 dark:text-accent-300' },
+  'ma-status': { label: 'Orchestrator', icon: 'lucide:network', color: 'text-status-violet' },
+  'ma-subagent-running': { label: 'Sub-agent running', icon: 'lucide:bot', color: 'text-status-indigo' },
+  'ma-subagent-done': { label: 'Sub-agent done', icon: 'lucide:check', color: 'text-status-success' },
+  'ma-subagent-failed': { label: 'Sub-agent failed', icon: 'lucide:x', color: 'text-status-danger' },
+  'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-status-success' },
+  'ma-error': { label: 'Error', icon: 'lucide:alert-circle', color: 'text-status-danger' },
+  'ma-file': { label: 'File', icon: 'lucide:file-text', color: 'text-ink-secondary' },
+  'memory-retrieved': { label: 'Memory retrieved', icon: 'lucide:database', color: 'text-accent-fg' },
 }
 
 const argCache = new Map<string, Record<string, unknown> | null>()
@@ -114,7 +114,7 @@ function argType(call?: Pick<ToolCall, 'arguments'> | null): string {
 }
 
 function meta(status?: string): StatusMeta {
-  return status ? STATUS_META[status] ?? { label: status, icon: 'lucide:circle', color: 'text-theme-400' } : FALLBACK_META
+  return status ? STATUS_META[status] ?? { label: status, icon: 'lucide:circle', color: 'text-ink-secondary' } : FALLBACK_META
 }
 
 function normalizeScore(score: unknown): string | null {
@@ -379,7 +379,7 @@ function contextSectionClass(section: ContextSection): string {
 }
 
 function contextSectionIconClass(section: ContextSection): string {
-  if (section.kind === 'entity') return 'text-violet-500 dark:text-violet-300'
+  if (section.kind === 'entity') return 'text-status-violet dark:text-violet-300'
   return isCuratedContext(section) ? 'text-cyan-600 dark:text-cyan-300' : 'text-cyan-500 dark:text-cyan-400'
 }
 
@@ -395,7 +395,7 @@ function toolChipClass(name: string): string {
   if (name === 'Task context') return 'bg-cyan-200/40 text-cyan-700 ring-1 ring-cyan-400/25 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/15'
   return isSubAgentSpawnCall(name)
     ? 'bg-indigo-200/40 text-indigo-700 ring-1 ring-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/20'
-    : 'bg-accent-200/40 text-accent-700 dark:bg-accent-500/10 dark:text-accent-300'
+    : 'bg-accent-200/40 text-accent-700 dark:bg-accent-500/10 dark:text-accent-fg'
 }
 
 function toolCallIcon(call?: ToolCall | null): string {
@@ -409,12 +409,12 @@ function toolCallIcon(call?: ToolCall | null): string {
 }
 
 function toolCallIconClass(call?: ToolCall | null): string {
-  if (!call) return 'text-theme-500'
+  if (!call) return 'text-ink-muted'
   if (isAttachmentIndexCall(call)) return 'text-sky-600 dark:text-sky-300'
   if (isTaskContextCall(call)) return 'text-cyan-600 dark:text-cyan-300'
-  if (isKnowledgeGraphCall(call)) return 'text-violet-500 dark:text-violet-300'
+  if (isKnowledgeGraphCall(call)) return 'text-status-violet dark:text-violet-300'
   if (isInternalToolName(call.name)) return 'text-purple-500 dark:text-purple-300'
-  return isSubAgentSpawnCall(call.name) ? 'text-indigo-500 dark:text-indigo-400' : 'text-accent-500 dark:text-accent-400'
+  return isSubAgentSpawnCall(call.name) ? 'text-status-indigo' : 'text-accent-fg'
 }
 
 function executionIcon(execution: ToolExecution): string {
@@ -424,7 +424,7 @@ function executionIcon(execution: ToolExecution): string {
 
 function executionIconClass(execution: ToolExecution): string {
   if (!execution.result) return toolCallIconClass(execution.call)
-  return execution.result.success ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
+  return execution.result.success ? 'text-status-success' : 'text-status-danger'
 }
 
 function executionCardClass(execution: ToolExecution | ContextRow): string {
@@ -442,18 +442,18 @@ function executionCardClass(execution: ToolExecution | ContextRow): string {
 }
 
 function executionNameClass(execution: ToolExecution | ContextRow): string {
-  if (isCandidateRow(execution)) return 'text-theme-500 line-through decoration-theme-500/70'
+  if (isCandidateRow(execution)) return 'text-ink-muted line-through decoration-theme-500/70'
   if (execution.result?.success === false) return 'text-red-600 dark:text-red-300'
   if (isInternalExecution(execution)) return 'text-purple-600 dark:text-purple-300'
   return isSubAgentSpawnCall(execution.call?.name)
     ? 'text-indigo-600 dark:text-indigo-300'
-    : 'text-accent-500 dark:text-accent-300'
+    : 'text-accent-fg'
 }
 
 function scoreBadgeClass(execution: ToolExecution | ContextRow): string {
   return isCandidateRow(execution)
-    ? 'bg-theme-800/70 text-theme-500 ring-theme-700/60 dark:bg-theme-800/50 dark:text-theme-500 dark:ring-theme-700/50'
-    : 'bg-accent-100/70 text-accent-700 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-200 dark:ring-accent-500/20'
+    ? 'bg-theme-800/70 text-ink-muted ring-theme-700/60 dark:bg-theme-800/50 dark:text-ink-muted dark:ring-theme-700/50'
+    : 'bg-accent-100/70 text-accent-700 ring-accent-300/50 dark:bg-accent-500/10 dark:text-accent-fg dark:ring-accent-500/20'
 }
 
 function headerButtonClass(isExpanded: boolean): string {
@@ -537,20 +537,20 @@ const resultOutcome = computed<ResultOutcomeMeta | null>(() => {
     return {
       label: 'Success',
       icon: 'lucide:check-circle',
-      color: 'text-emerald-500/70 dark:text-emerald-400/70',
+      color: 'text-status-success/70 dark:text-status-success/70',
     }
   }
   if (successfulResultCount.value > 0) {
     return {
       label: 'Partial success',
       icon: 'lucide:triangle-alert',
-      color: 'text-amber-600/80 dark:text-amber-400/80',
+      color: 'text-amber-600/80 dark:text-status-warning/80',
     }
   }
   return {
     label: 'Failed',
     icon: 'lucide:alert-circle',
-    color: 'text-red-500/70 dark:text-red-400/70',
+    color: 'text-status-danger/70 dark:text-status-danger/70',
   }
 })
 
@@ -720,11 +720,11 @@ const headerIcon = computed(() => {
 })
 
 const headerIconClass = computed(() => {
-  if (currentPhase.value.label === 'Denied') return 'text-red-500 dark:text-red-400'
-  if (isRoutingWorkPending.value) return 'text-accent-500 dark:text-accent-300'
+  if (currentPhase.value.label === 'Denied') return 'text-status-danger'
+  if (isRoutingWorkPending.value) return 'text-accent-fg'
   if (isTaskContext.value) return 'text-cyan-600 dark:text-cyan-300'
-  if (isRoutingStatus.value) return 'text-accent-500 dark:text-accent-300'
-  if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-500 dark:text-accent-400' : 'text-theme-500'
+  if (isRoutingStatus.value) return 'text-accent-fg'
+  if (headerToolNames.value.length && !results.value.length) return props.isActive ? 'text-accent-fg' : 'text-ink-muted'
   if (resultOutcome.value) return resultOutcome.value.color
   return currentPhase.value.color
 })
@@ -762,12 +762,12 @@ const hasDisplayableActivity = computed(() =>
 
             <span
               v-if="maContext?.codename"
-              class="text-[10px] text-indigo-500/80 dark:text-indigo-400/80 truncate max-w-16"
+              class="text-[10px] text-status-indigo/80 dark:text-status-indigo/80 truncate max-w-16"
               :title="maContext.agentName || maContext.codename"
             >{{ maContext.codename }}</span>
             <span
               v-else-if="maContext?.phase"
-              class="text-[10px] text-violet-400/80"
+              class="text-[10px] text-status-violet/80"
             >{{ maContext.phase }}</span>
 
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
@@ -780,14 +780,14 @@ const hasDisplayableActivity = computed(() =>
                 >{{ label }}</span>
                 <span
                   v-if="taskContextQueryLabels.length > 3"
-                  class="text-[10px] text-theme-500"
+                  class="text-[10px] text-ink-muted"
                 >+{{ taskContextQueryLabels.length - 3 }}</span>
               </template>
 
               <template v-else-if="headerToolNames.length">
                 <span
                   v-if="isRoutingStatus"
-                  class="text-theme-400 shrink-0"
+                  class="text-ink-secondary shrink-0"
                   :class="currentPhase.color"
                 >{{ headerLabel }}</span>
                 <span
@@ -805,13 +805,13 @@ const hasDisplayableActivity = computed(() =>
                 </span>
                 <span
                   v-if="headerToolNames.length > 3"
-                  class="text-[10px] text-theme-500"
+                  class="text-[10px] text-ink-muted"
                 >+{{ headerToolNames.length - 3 }}</span>
               </template>
 
               <span
                 v-else
-                class="text-theme-400"
+                class="text-ink-secondary"
                 :class="currentPhase.color"
               >{{ headerLabel }}</span>
             </div>
@@ -847,12 +847,12 @@ const hasDisplayableActivity = computed(() =>
 
             <span
               v-if="elapsedMs > 0"
-              class="text-[10px] text-theme-600 tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              class="text-[10px] text-ink-faint tabular-nums shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
             >{{ formatElapsed(elapsedMs) }}</span>
 
             <Icon
               icon="lucide:chevron-down"
-              class="w-3 h-3 text-theme-600 shrink-0 transition-transform"
+              class="w-3 h-3 text-ink-faint shrink-0 transition-transform"
               :class="{ 'rotate-180': isExpanded }"
             />
           </button>
@@ -862,8 +862,8 @@ const hasDisplayableActivity = computed(() =>
           v-if="streamingText && isActive"
           class="mt-1.5 ml-3 px-3 py-2 rounded-lg bg-theme-800/50 border border-theme-700/30"
         >
-          <span class="text-[10px] text-theme-500 font-medium block mb-0.5">{{ streamingText.label }}</span>
-          <p class="text-[11px] text-theme-400 whitespace-pre-wrap">
+          <span class="text-[10px] text-ink-muted font-medium block mb-0.5">{{ streamingText.label }}</span>
+          <p class="text-[11px] text-ink-secondary whitespace-pre-wrap">
             {{ streamingText.text }}<span class="inline-block w-1.5 h-3 bg-theme-400/60 animate-pulse ml-0.5 align-middle" />
           </p>
         </div>
@@ -878,7 +878,7 @@ const hasDisplayableActivity = computed(() =>
           >
             <div class="mb-1 flex items-center justify-between gap-3">
               <span class="text-[11px] font-semibold text-cyan-700 dark:text-cyan-200">Gathering context</span>
-              <time class="text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(routingStatusSteps[0]?.timestamp) }}</time>
+              <time class="text-[10px] tabular-nums text-ink-faint">{{ formatTimestamp(routingStatusSteps[0]?.timestamp) }}</time>
             </div>
             <div
               v-for="step in routingStatusSteps"
@@ -893,7 +893,7 @@ const hasDisplayableActivity = computed(() =>
               <span class="font-medium text-theme-300">{{ meta(step.status).label }}</span>
               <span
                 v-if="step.message"
-                class="min-w-0 truncate text-theme-500"
+                class="min-w-0 truncate text-ink-muted"
               >{{ step.message }}</span>
             </div>
           </div>
@@ -908,7 +908,7 @@ const hasDisplayableActivity = computed(() =>
                 class="w-3 h-3 text-cyan-600 dark:text-cyan-300"
               />
               <span class="text-[11px] font-medium text-cyan-700 dark:text-cyan-200">Preparing context</span>
-              <time class="ml-auto text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(taskContextTimestamp) }}</time>
+              <time class="ml-auto text-[10px] tabular-nums text-ink-faint">{{ formatTimestamp(taskContextTimestamp) }}</time>
             </div>
 
             <div
@@ -923,7 +923,7 @@ const hasDisplayableActivity = computed(() =>
                 <div class="text-[10px] font-medium uppercase tracking-wide text-cyan-600/70 dark:text-cyan-300/70">
                   {{ query.label }}
                 </div>
-                <p class="mt-0.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap wrap-break-word">
+                <p class="mt-0.5 text-[11px] leading-relaxed text-ink-secondary whitespace-pre-wrap wrap-break-word">
                   {{ query.value }}
                 </p>
               </div>
@@ -931,7 +931,7 @@ const hasDisplayableActivity = computed(() =>
 
             <p
               v-else-if="taskContext.content"
-              class="rounded-md bg-cyan-50/50 px-2 py-1.5 text-[11px] leading-relaxed text-theme-400 whitespace-pre-wrap dark:bg-theme-950/35"
+              class="rounded-md bg-cyan-50/50 px-2 py-1.5 text-[11px] leading-relaxed text-ink-secondary whitespace-pre-wrap dark:bg-theme-950/35"
             >
               {{ taskContext.content }}
             </p>
@@ -954,7 +954,7 @@ const hasDisplayableActivity = computed(() =>
                 :class="section.iconClass"
               />
               <span class="text-[11px] font-semibold text-theme-300">{{ section.title }}</span>
-              <time class="ml-auto text-[10px] tabular-nums text-theme-600">{{ formatTimestamp(section.timestamp) }}</time>
+              <time class="ml-auto text-[10px] tabular-nums text-ink-faint">{{ formatTimestamp(section.timestamp) }}</time>
             </div>
 
             <div :class="section.compactContext ? 'space-y-1.5' : 'space-y-1.5'">
@@ -1043,7 +1043,7 @@ const hasDisplayableActivity = computed(() =>
 
                   <p
                     v-if="execution.result?.error"
-                    class="mt-1 text-[10px] text-red-600 dark:text-red-400"
+                    class="mt-1 text-[10px] text-red-600 dark:text-status-danger"
                   >
                     {{ execution.result.error }}
                   </p>

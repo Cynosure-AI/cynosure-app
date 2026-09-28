@@ -4,15 +4,15 @@
       <h2 class="text-xl font-bold text-theme-100">
         Add MCP Tools
       </h2>
-      <p class="text-sm text-theme-500 mt-1">
+      <p class="text-sm text-ink-muted mt-1">
         Extend your agents with installable tools. Everything here is optional and can also be added later in
-        <strong class="text-theme-400">Settings → MCPs</strong>.
+        <strong class="text-ink-secondary">Settings → MCPs</strong>.
       </p>
     </div>
 
     <div
       v-if="registryLoading"
-      class="flex items-center gap-2 text-sm text-theme-500 py-8"
+      class="flex items-center gap-2 text-sm text-ink-muted py-8"
     >
       <Icon
         icon="lucide:loader-2"
@@ -60,10 +60,10 @@
                 :class="mcp.badgeClass"
               >{{ mcp.badge }}</span>
             </div>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               {{ mcp.description }}
             </p>
-            <p class="text-[11px] text-theme-600 mt-0.5 font-mono">
+            <p class="text-[11px] text-ink-faint mt-0.5 font-mono">
               {{ mcp.packageId }}
             </p>
           </div>
@@ -72,7 +72,7 @@
           <div class="shrink-0">
             <div
               v-if="installedIds.has(mcp.id)"
-              class="flex items-center gap-1.5 text-emerald-400"
+              class="flex items-center gap-1.5 text-status-success"
             >
               <Icon
                 icon="lucide:check-circle-2"
@@ -101,30 +101,30 @@
           v-if="expandedId === mcp.id && mcp.envVars?.length"
           class="px-4 pb-4 border-t border-theme-700/40 pt-4 space-y-3"
         >
-          <p class="text-xs text-theme-400 font-medium">
+          <p class="text-xs text-ink-secondary font-medium">
             Configuration Required
           </p>
           <div
             v-for="envVar in mcp.envVars"
             :key="envVar.name"
           >
-            <label class="block text-xs text-theme-500 mb-1">
+            <label class="block text-xs text-ink-muted mb-1">
               {{ envVar.label }}
               <span
                 v-if="envVar.required"
-                class="text-red-400"
+                class="text-status-danger"
               > *</span>
             </label>
             <input
               v-model="envValues[mcp.id + ':' + envVar.name]"
               :type="envVar.secret ? 'password' : 'text'"
               :placeholder="envVar.placeholder"
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder-theme-600"
+              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
           </div>
           <div class="flex gap-2">
             <button
-              class="flex items-center gap-1.5 px-3 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-xs font-medium rounded-lg transition-colors"
               :disabled="loadingId === mcp.id || !canInstallWithEnv(mcp)"
               @click="installWithEnv(mcp)"
             >
@@ -136,7 +136,7 @@
               {{ loadingId === mcp.id ? 'Installing…' : 'Install' }}
             </button>
             <button
-              class="px-3 py-2 text-theme-500 hover:text-theme-300 text-xs transition-colors"
+              class="px-3 py-2 text-ink-muted hover:text-theme-300 text-xs transition-colors"
               @click="expandedId = null"
             >
               Cancel
@@ -147,7 +147,7 @@
         <!-- Error -->
         <div
           v-if="errors[mcp.id]"
-          class="px-4 pb-3 text-xs text-red-400"
+          class="px-4 pb-3 text-xs text-status-danger"
         >
           {{ errors[mcp.id] }}
         </div>
@@ -157,7 +157,7 @@
     <!-- Filesystem path note -->
     <div
       v-if="filesystemExpanded"
-      class="mt-3 flex items-start gap-2 text-xs text-theme-500 bg-theme-900/60 border border-theme-800 rounded-lg px-4 py-3"
+      class="mt-3 flex items-start gap-2 text-xs text-ink-muted bg-theme-900/60 border border-theme-800 rounded-lg px-4 py-3"
     >
       <Icon
         icon="lucide:info"
@@ -216,16 +216,16 @@ const mcpOptions = ref<McpOption[]>([])
 
 const iconByName: Record<string, Pick<McpOption, 'icon' | 'iconBg' | 'iconColor'>> = {
   time: { icon: 'lucide:clock', iconBg: 'bg-cyan-500/10', iconColor: 'text-cyan-400' },
-  tavily: { icon: 'lucide:search', iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-400' },
-  weather: { icon: 'lucide:cloud-sun', iconBg: 'bg-sky-500/10', iconColor: 'text-sky-400' },
-  chrome: { icon: 'lucide:globe', iconBg: 'bg-amber-500/10', iconColor: 'text-amber-400' },
-  computer: { icon: 'lucide:monitor', iconBg: 'bg-violet-500/10', iconColor: 'text-violet-400' },
+  tavily: { icon: 'lucide:search', iconBg: 'bg-emerald-500/10', iconColor: 'text-status-success' },
+  weather: { icon: 'lucide:cloud-sun', iconBg: 'bg-sky-500/10', iconColor: 'text-status-info' },
+  chrome: { icon: 'lucide:globe', iconBg: 'bg-amber-500/10', iconColor: 'text-status-warning' },
+  computer: { icon: 'lucide:monitor', iconBg: 'bg-violet-500/10', iconColor: 'text-status-violet' },
   filesystem: { icon: 'lucide:folder-open', iconBg: 'bg-theme-600/40', iconColor: 'text-theme-300' },
-  gmail: { icon: 'lucide:mail', iconBg: 'bg-red-500/10', iconColor: 'text-red-400' },
+  gmail: { icon: 'lucide:mail', iconBg: 'bg-red-500/10', iconColor: 'text-status-danger' },
   github: { icon: 'lucide:github', iconBg: 'bg-theme-600/40', iconColor: 'text-theme-100' },
-  youtube: { icon: 'lucide:youtube', iconBg: 'bg-red-500/10', iconColor: 'text-red-400' },
-  cynosure: { icon: 'lucide:sparkles', iconBg: 'bg-accent-500/10', iconColor: 'text-accent-400' },
-  media: { icon: 'lucide:file-cog', iconBg: 'bg-indigo-500/10', iconColor: 'text-indigo-400' },
+  youtube: { icon: 'lucide:youtube', iconBg: 'bg-red-500/10', iconColor: 'text-status-danger' },
+  cynosure: { icon: 'lucide:sparkles', iconBg: 'bg-accent-500/10', iconColor: 'text-accent-fg' },
+  media: { icon: 'lucide:file-cog', iconBg: 'bg-indigo-500/10', iconColor: 'text-status-indigo' },
 }
 
 function slugify(value: string): string {
@@ -243,7 +243,7 @@ function getIcon(srv: McpRegistryServer['server']): Pick<McpOption, 'icon' | 'ic
 }
 
 function getBadge(pkgType: string): Pick<McpOption, 'badge' | 'badgeClass'> {
-  if (pkgType === 'smithery') return { badge: 'Smithery', badgeClass: 'bg-accent-500/20 text-accent-400' }
+  if (pkgType === 'smithery') return { badge: 'Smithery', badgeClass: 'bg-accent-500/20 text-accent-fg' }
   if (pkgType === 'pypi') return { badge: 'PyPI', badgeClass: 'bg-indigo-500/20 text-indigo-300' }
   return { badge: 'npm', badgeClass: 'bg-theme-600/60 text-theme-300' }
 }

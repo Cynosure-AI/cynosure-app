@@ -34,7 +34,7 @@ test('the visible Stop button always requests chat cancellation', async () => {
     props: { canSend: false, isRunning: true, editingQueue: false },
     global: { stubs: {
       Icon: true, HoverMenu: true, HoverTooltip: true, ProviderModelSelect: true,
-      SplitButton: true, ModelSelectorModal: true,
+      SplitButton: true, ModelSelectorModal: true, ChatOptionsMenu: true,
     } },
   })
   await wrapper.get('[aria-label="Stop current response"]').trigger('click')

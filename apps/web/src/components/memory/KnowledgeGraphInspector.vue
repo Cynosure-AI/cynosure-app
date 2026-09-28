@@ -180,7 +180,7 @@ function clearSelection(): void { emit("close"); }
             <span>{{ selectedGraphEdge.fromName }}</span>
             <Icon
               icon="lucide:arrow-right"
-              class="h-3 w-3 shrink-0 text-theme-600"
+              class="h-3 w-3 shrink-0 text-ink-faint"
             />
             <span>{{ selectedGraphEdge.toName }}</span>
           </div>
@@ -209,7 +209,7 @@ function clearSelection(): void { emit("close"); }
           <div class="entity-node-sidebar-relation-path">
             <Icon
               :icon="selectedGraphEdge.sourceKind === 'memory' ? 'lucide:file-text' : 'lucide:message-circle'"
-              class="h-3 w-3 shrink-0 text-theme-600"
+              class="h-3 w-3 shrink-0 text-ink-faint"
             />
             <span>{{ selectedGraphEdge.sourceChunk?.fileName || selectedGraphEdge.sourceId }}</span>
           </div>
@@ -222,10 +222,10 @@ function clearSelection(): void { emit("close"); }
             class="mt-1 rounded-md border border-theme-800 bg-theme-950/70 p-2"
             @toggle="hydrateSourceChunk(selectedGraphEdge.sourceChunk, $event)"
           >
-            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-400 hover:text-accent-300">
+            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-fg hover:text-accent-fg">
               {{ sourceChunkLabel(selectedGraphEdge.sourceChunk) }}
             </summary>
-            <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-theme-500">
+            <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-ink-muted">
               {{ sourceChunkLoading(selectedGraphEdge.sourceChunk) ? "Loading source chunk…" : sourceChunkText(selectedGraphEdge.sourceChunk) }}
             </div>
           </details>
@@ -318,7 +318,7 @@ function clearSelection(): void { emit("close"); }
           <div class="entity-node-sidebar-relation-path">
             <Icon
               :icon="origin.sourceKind === 'memory' ? 'lucide:file-text' : 'lucide:message-circle'"
-              class="h-3 w-3 shrink-0 text-theme-600"
+              class="h-3 w-3 shrink-0 text-ink-faint"
             />
             <span>{{ origin.label }}</span>
           </div>
@@ -342,10 +342,10 @@ function clearSelection(): void { emit("close"); }
               class="group/source mt-1"
               @toggle="hydrateSourceChunk(chunk, $event)"
             >
-              <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-400 hover:text-accent-300">
+              <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-fg hover:text-accent-fg">
                 {{ sourceChunkLabel(chunk) }}
               </summary>
-              <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-theme-500">
+              <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-ink-muted">
                 {{ sourceChunkLoading(chunk) ? "Loading source chunk…" : sourceChunkText(chunk) }}
               </div>
             </details>
@@ -380,7 +380,7 @@ function clearSelection(): void { emit("close"); }
             <span>{{ edge.fromName }}</span>
             <Icon
               icon="lucide:arrow-right"
-              class="h-3 w-3 shrink-0 text-theme-600"
+              class="h-3 w-3 shrink-0 text-ink-faint"
             />
             <span>{{ edge.toName }}</span>
           </div>
@@ -403,10 +403,10 @@ function clearSelection(): void { emit("close"); }
             class="mt-2 rounded-md border border-theme-800 bg-theme-950/70 p-2"
             @toggle="hydrateSourceChunk(edge.sourceChunk, $event)"
           >
-            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-400 hover:text-accent-300">
+            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-fg hover:text-accent-fg">
               {{ sourceChunkLabel(edge.sourceChunk) }}
             </summary>
-            <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-theme-500">
+            <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-ink-muted">
               {{ sourceChunkLoading(edge.sourceChunk) ? "Loading source chunk…" : sourceChunkText(edge.sourceChunk) }}
             </div>
           </details>

@@ -26,7 +26,7 @@ function estimatedChunks(file: MemoryFileStatus): number {
     icon-color="amber"
     @close="$emit('cancel')"
   >
-    <div class="space-y-3 text-sm leading-relaxed text-theme-400">
+    <div class="space-y-3 text-sm leading-relaxed text-ink-secondary">
       <p>
         {{ files.length === 1
           ? `${files[0]?.fileName} is estimated to produce ${estimatedChunks(files[0]!)} chunks.`
@@ -47,7 +47,7 @@ function estimatedChunks(file: MemoryFileStatus): number {
       </button>
       <button
         type="button"
-        class="px-4 py-2 text-sm text-theme-400 transition-colors hover:text-theme-200"
+        class="px-4 py-2 text-sm text-ink-secondary transition-colors hover:text-theme-200"
         @click="$emit('cancel')"
       >
         Cancel

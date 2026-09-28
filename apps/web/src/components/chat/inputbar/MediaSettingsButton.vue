@@ -88,7 +88,7 @@ onClickOutside(root, () => { open.value = false })
   >
     <button
       type="button"
-      class="relative flex h-8 w-8 items-center justify-center rounded-full border border-theme-700 text-accent-300 transition-colors hover:border-theme-500 hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+      class="relative flex h-8 w-8 items-center justify-center rounded-full border border-theme-700 text-accent-fg transition-colors hover:border-theme-500 hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
       :aria-label="`${kind === 'video' ? 'Video' : 'Image'} generation settings`"
       :aria-expanded="open"
       :title="`${kind === 'video' ? 'Video' : 'Image'} generation settings`"
@@ -116,7 +116,7 @@ onClickOutside(root, () => { open.value = false })
         </h3>
         <button
           type="button"
-          class="text-xs text-theme-400 hover:text-theme-100"
+          class="text-xs text-ink-secondary hover:text-theme-100"
           @click="reset"
         >
           Reset
@@ -124,7 +124,7 @@ onClickOutside(root, () => { open.value = false })
       </div>
       <p
         v-if="loading"
-        class="mb-2 text-xs text-theme-500"
+        class="mb-2 text-xs text-ink-muted"
       >
         Loading model options…
       </p>
@@ -235,7 +235,7 @@ onClickOutside(root, () => { open.value = false })
               >{{ option.label }}</option>
             </select>
           </label>
-          <p class="text-theme-500">
+          <p class="text-ink-muted">
             For first and last frames, attach two images in that order.
           </p>
         </template>

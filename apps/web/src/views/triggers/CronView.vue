@@ -233,7 +233,7 @@ onUnmounted(() => {
           <h1 class="text-2xl font-bold text-theme-100">
             Scheduled Jobs
           </h1>
-          <p class="mt-1 text-sm leading-relaxed text-theme-500">
+          <p class="mt-1 text-sm leading-relaxed text-ink-muted">
             Cron jobs running on recurring schedules
           </p>
         </div>
@@ -242,17 +242,17 @@ onUnmounted(() => {
             <span class="sr-only">Search scheduled jobs</span>
             <Icon
               icon="lucide:search"
-              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
             />
             <input
               v-model="cronFilter"
               type="search"
               placeholder="Filter scheduled jobs..."
-              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-3 text-sm text-theme-200 outline-none transition placeholder:text-theme-600 focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
+              class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-3 text-sm text-theme-200 outline-none transition placeholder:text-ink-faint focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
             >
           </label>
           <button
-            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+            class="flex h-10 shrink-0 items-center gap-2 rounded-lg accent-action bg-accent-600 px-4 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
             @click="openAddCronDialog"
           >
             <Icon
@@ -273,9 +273,9 @@ onUnmounted(() => {
       >
         <Icon
           icon="lucide:loader-2"
-          class="w-8 h-8 text-theme-500 animate-spin mx-auto mb-3"
+          class="w-8 h-8 text-ink-muted animate-spin mx-auto mb-3"
         />
-        <p class="text-sm text-theme-500">
+        <p class="text-sm text-ink-muted">
           Loading schedules…
         </p>
       </BaseCard>
@@ -288,17 +288,17 @@ onUnmounted(() => {
           <div class="w-16 h-16 rounded-2xl bg-theme-800 flex items-center justify-center mx-auto mb-4">
             <Icon
               icon="lucide:clock"
-              class="w-8 h-8 text-theme-600"
+              class="w-8 h-8 text-ink-faint"
             />
           </div>
           <h3 class="text-lg font-medium text-theme-200 mb-2">
             No cron jobs
           </h3>
-          <p class="text-sm text-theme-500 max-w-md mx-auto mb-4">
+          <p class="text-sm text-ink-muted max-w-md mx-auto mb-4">
             Create a cron job to run an agent on a recurring schedule.
           </p>
           <button
-            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg accent-action bg-accent-600 hover:bg-accent-500 text-sm font-medium text-accent-on transition-colors"
             @click="openAddCronDialog"
           >
             <Icon
@@ -325,7 +325,7 @@ onUnmounted(() => {
           <template #col-agent="{ item: job }">
             <button
               type="button"
-              class="flex min-w-0 items-center gap-2 text-left hover:text-accent-300"
+              class="flex min-w-0 items-center gap-2 text-left hover:text-accent-fg"
               :title="`Open ${job.agentName} agent details`"
               :aria-label="`Open ${job.agentName} agent details`"
               @click.stop="openAgentDetails(job.agentId)"
@@ -340,7 +340,7 @@ onUnmounted(() => {
                 <Icon
                   v-else
                   icon="lucide:bot"
-                  class="w-4 h-4 text-theme-400"
+                  class="w-4 h-4 text-ink-secondary"
                 />
               </span>
               <!--<span class="truncate text-xs text-theme-300">{{ job.agentName }}</span>-->
@@ -354,7 +354,7 @@ onUnmounted(() => {
               </div>
               <div
                 v-if="job.prompt"
-                class="mt-0.5 text-xs text-theme-500 flex items-center gap-1.5"
+                class="mt-0.5 text-xs text-ink-muted flex items-center gap-1.5"
               >
                 <span class="truncate">{{ job.prompt }}</span>
               </div>
@@ -367,13 +367,13 @@ onUnmounted(() => {
                 <Icon
                   icon="lucide:clock"
                   class="w-3 h-3"
-                  :class="job.enabled ? 'text-sky-400' : 'text-theme-500'"
+                  :class="job.enabled ? 'text-status-info' : 'text-ink-muted'"
                 />
                 <span>{{ cronToHuman(job.schedule) }}</span>
               </div>
               <div
                 v-if="job.enabled && job.nextRunAt && !job.isRunning"
-                class="mt-1 text-emerald-400/80 tabular-nums"
+                class="mt-1 text-status-success/80 tabular-nums"
               >
                 <Icon
                   icon="lucide:timer"
@@ -387,19 +387,19 @@ onUnmounted(() => {
             <div class="flex flex-wrap items-center gap-1.5">
               <span
                 v-if="job.isRunning"
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-400"
+                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-status-success"
               >EXECUTING</span>
               <span
                 v-else-if="job.enabled"
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-sky-500/20 text-sky-400"
+                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-sky-500/20 text-status-info"
               >SCHEDULED</span>
               <span
                 v-else
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-theme-500/20 text-theme-500"
+                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-theme-500/20 text-ink-muted"
               >PAUSED</span>
               <span
                 v-if="job.oneOff"
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/10 text-amber-400"
+                class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/10 text-status-warning"
               >One-off</span>
             </div>
           </template>
@@ -407,7 +407,7 @@ onUnmounted(() => {
           <template #col-actions="{ item: job }">
             <div class="flex items-center gap-1">
               <button
-                class="p-1.5 rounded-lg text-theme-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
+                class="p-1.5 rounded-lg text-ink-secondary hover:text-status-success hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
                 title="Execute now"
                 :disabled="runningNow.has(job.id) || job.isRunning"
                 @click.stop="runJobNow(job.id)"
@@ -419,7 +419,7 @@ onUnmounted(() => {
                 />
               </button>
               <button
-                class="p-1.5 rounded-lg text-theme-400 hover:text-theme-200 hover:bg-theme-700 transition-colors"
+                class="p-1.5 rounded-lg text-ink-secondary hover:text-theme-200 hover:bg-theme-700 transition-colors"
                 title="Edit"
                 @click.stop="openCronJob(job)"
               >
@@ -429,7 +429,7 @@ onUnmounted(() => {
                 />
               </button>
               <button
-                class="p-1.5 rounded-lg text-theme-400 hover:text-sky-400 hover:bg-sky-500/10 transition-colors disabled:opacity-40"
+                class="p-1.5 rounded-lg text-ink-secondary hover:text-status-info hover:bg-sky-500/10 transition-colors disabled:opacity-40"
                 title="Duplicate Cron Job"
                 :disabled="duplicatingNow.has(job.id)"
                 @click.stop="duplicateCronJob(job)"
@@ -441,7 +441,7 @@ onUnmounted(() => {
                 />
               </button>
               <button
-                class="p-1.5 rounded-lg text-theme-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                class="p-1.5 rounded-lg text-ink-secondary hover:text-status-danger hover:bg-red-500/10 transition-colors"
                 title="Delete"
                 @click.stop="confirmDeleteCron(job)"
               >
@@ -485,18 +485,18 @@ onUnmounted(() => {
           <div class="space-y-4">
             <!-- Job name -->
             <div>
-              <label class="block text-sm text-theme-400 mb-1">Name</label>
+              <label class="block text-sm text-ink-secondary mb-1">Name</label>
               <input
                 v-model="cronName"
                 type="text"
                 placeholder="e.g. Daily health check"
-                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="w-full px-3 py-2 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
               >
             </div>
 
             <!-- Agent picker -->
             <div>
-              <label class="block text-sm text-theme-400 mb-1">Agent</label>
+              <label class="block text-sm text-ink-secondary mb-1">Agent</label>
               <AgentSelect
                 v-model="cronAgentId"
                 :agents="allAgents"
@@ -508,7 +508,7 @@ onUnmounted(() => {
 
             <!-- Schedule builder -->
             <div>
-              <label class="block text-sm text-theme-400 mb-2">Schedule</label>
+              <label class="block text-sm text-ink-secondary mb-2">Schedule</label>
               <CustomSelect
                 v-model="dlgFrequencyValue"
                 :groups="frequencyGroups"
@@ -523,7 +523,7 @@ onUnmounted(() => {
                 v-if="dlgFrequency === 'minutes'"
                 class="flex items-center gap-2 mb-3"
               >
-                <span class="text-sm text-theme-400">Every</span>
+                <span class="text-sm text-ink-secondary">Every</span>
                 <select
                   v-model.number="dlgEveryMinutes"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -536,7 +536,7 @@ onUnmounted(() => {
                     {{ m }}
                   </option>
                 </select>
-                <span class="text-sm text-theme-400">minutes</span>
+                <span class="text-sm text-ink-secondary">minutes</span>
               </div>
 
               <!-- Hourly -->
@@ -544,7 +544,7 @@ onUnmounted(() => {
                 v-else-if="dlgFrequency === 'hourly'"
                 class="flex items-center gap-2 mb-3"
               >
-                <span class="text-sm text-theme-400">Every hour at minute</span>
+                <span class="text-sm text-ink-secondary">Every hour at minute</span>
                 <select
                   v-model.number="dlgAtMinute"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -564,7 +564,7 @@ onUnmounted(() => {
                 v-else-if="dlgFrequency === 'daily'"
                 class="flex items-center gap-2 mb-3"
               >
-                <span class="text-sm text-theme-400">Every day at</span>
+                <span class="text-sm text-ink-secondary">Every day at</span>
                 <select
                   v-model.number="dlgAtHour"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -577,7 +577,7 @@ onUnmounted(() => {
                     {{ String(h).padStart(2, '0') }}
                   </option>
                 </select>
-                <span class="text-sm text-theme-400">:</span>
+                <span class="text-sm text-ink-secondary">:</span>
                 <select
                   v-model.number="dlgAtMinute"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -597,7 +597,7 @@ onUnmounted(() => {
                 v-else-if="dlgFrequency === 'weekly'"
                 class="flex items-center gap-2 flex-wrap mb-3"
               >
-                <span class="text-sm text-theme-400">Every</span>
+                <span class="text-sm text-ink-secondary">Every</span>
                 <select
                   v-model.number="dlgWeekday"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -610,7 +610,7 @@ onUnmounted(() => {
                     {{ label }}
                   </option>
                 </select>
-                <span class="text-sm text-theme-400">at</span>
+                <span class="text-sm text-ink-secondary">at</span>
                 <select
                   v-model.number="dlgAtHour"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -623,7 +623,7 @@ onUnmounted(() => {
                     {{ String(h).padStart(2, '0') }}
                   </option>
                 </select>
-                <span class="text-sm text-theme-400">:</span>
+                <span class="text-sm text-ink-secondary">:</span>
                 <select
                   v-model.number="dlgAtMinute"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -643,7 +643,7 @@ onUnmounted(() => {
                 v-else-if="dlgFrequency === 'monthly'"
                 class="flex items-center gap-2 flex-wrap mb-3"
               >
-                <span class="text-sm text-theme-400">On day</span>
+                <span class="text-sm text-ink-secondary">On day</span>
                 <select
                   v-model.number="dlgMonthDay"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -656,7 +656,7 @@ onUnmounted(() => {
                     {{ d }}
                   </option>
                 </select>
-                <span class="text-sm text-theme-400">at</span>
+                <span class="text-sm text-ink-secondary">at</span>
                 <select
                   v-model.number="dlgAtHour"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -669,7 +669,7 @@ onUnmounted(() => {
                     {{ String(h).padStart(2, '0') }}
                   </option>
                 </select>
-                <span class="text-sm text-theme-400">:</span>
+                <span class="text-sm text-ink-secondary">:</span>
                 <select
                   v-model.number="dlgAtMinute"
                   class="px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -693,9 +693,9 @@ onUnmounted(() => {
                   v-model="dlgCustomExpr"
                   type="text"
                   placeholder="*/30 * * * *"
-                  class="w-full px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
+                  class="w-full px-3 py-1.5 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
                 >
-                <p class="text-[11px] text-theme-600 mt-1">
+                <p class="text-[11px] text-ink-faint mt-1">
                   Standard cron: minute hour day-of-month month day-of-week
                 </p>
               </div>
@@ -704,16 +704,16 @@ onUnmounted(() => {
               <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-theme-800/50 border border-theme-800">
                 <Icon
                   icon="lucide:calendar-clock"
-                  class="w-3.5 h-3.5 text-sky-400 shrink-0"
+                  class="w-3.5 h-3.5 text-status-info shrink-0"
                 />
                 <span class="text-xs text-theme-300">{{ dlgHumanReadable }}</span>
-                <code class="ml-auto text-[11px] text-theme-600 font-mono">{{ dlgGeneratedExpr }}</code>
+                <code class="ml-auto text-[11px] text-ink-faint font-mono">{{ dlgGeneratedExpr }}</code>
               </div>
             </div>
 
             <!-- Prompt -->
             <div>
-              <label class="block text-sm text-theme-400 mb-1">Prompt (optional)</label>
+              <label class="block text-sm text-ink-secondary mb-1">Prompt (optional)</label>
               <textarea
                 v-model="cronPrompt"
                 rows="3"
@@ -726,14 +726,14 @@ onUnmounted(() => {
           <!-- Actions -->
           <div class="flex justify-end gap-3 mt-6">
             <button
-              class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
+              class="px-4 py-2 text-sm text-ink-secondary hover:text-theme-200 transition-colors"
               @click="showAddCron = false"
             >
               Cancel
             </button>
             <button
               :disabled="!cronAgentId || !dlgGeneratedExpr.trim() || cronSaving"
-              class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+              class="px-4 py-2 rounded-lg accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-accent-on transition-colors"
               @click="saveCronJob"
             >
               {{ cronSaving ? 'Creating…' : 'Create' }}
@@ -751,7 +751,7 @@ onUnmounted(() => {
       icon-color="red"
       @close="showDeleteConfirm = false"
     >
-      <p class="text-theme-400 leading-relaxed">
+      <p class="text-ink-secondary leading-relaxed">
         Are you sure you want to delete the cron job for
         <strong class="text-theme-200">{{ pendingDeleteName }}</strong>?
         This will clear the schedule and disable the job.
@@ -764,7 +764,7 @@ onUnmounted(() => {
           Delete
         </button>
         <button
-          class="px-4 py-2 text-sm text-theme-400 hover:text-theme-200 transition-colors"
+          class="px-4 py-2 text-sm text-ink-secondary hover:text-theme-200 transition-colors"
           @click="showDeleteConfirm = false"
         >
           Cancel

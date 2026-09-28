@@ -484,28 +484,28 @@ defineExpose({ startEditing, closeEditor })
 </script>
 
 <template>
-  <div class="data-table rounded-xl border border-theme-800 overflow-x-auto overscroll-x-contain bg-theme-950/45">
+  <div class="data-table overflow-x-auto overscroll-x-contain rounded-xl border border-table-border bg-table-surface">
     <div
       class="dt-content"
       :style="{ '--dt-min-width': gridMinWidth }"
     >
       <div
         v-if="showTopPagination"
-        class="flex items-center justify-center gap-2 px-4 py-2 border-b border-theme-800/70 bg-theme-900/40"
+        class="flex items-center justify-center gap-2 border-b border-table-border bg-table-header px-4 py-2"
       >
         <button
           type="button"
           :disabled="currentPage === 0"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage - 1)"
         >
           Prev
         </button>
-        <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+        <span class="text-xs text-ink-muted">{{ currentPage + 1 }} / {{ pageCount }}</span>
         <button
           type="button"
           :disabled="currentPage >= pageCount - 1"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage + 1)"
         >
           Next
@@ -515,7 +515,7 @@ defineExpose({ startEditing, closeEditor })
       <!-- Header Row -->
       <div
         v-if="showHeader"
-        class="grid gap-4 px-5 py-3 text-[11px] tracking-wider uppercase text-theme-400 bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
+        class="dt-grid grid items-start gap-4 border-b border-table-border bg-table-header px-5 py-3 text-[11px] uppercase tracking-wider text-ink-secondary"
         :style="{ '--dt-cols': gridColsTemplate }"
       >
         <!-- Select All Checkbox -->
@@ -525,7 +525,7 @@ defineExpose({ startEditing, closeEditor })
         >
           <input
             type="checkbox"
-            class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950"
+            class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950"
             :checked="allSelected"
             :indeterminate="someSelected"
             :aria-label="allSelected ? 'Deselect all visible rows' : 'Select all visible rows'"
@@ -550,7 +550,7 @@ defineExpose({ startEditing, closeEditor })
             <Icon
               :icon="sortIcon(col)"
               class="h-3.5 w-3.5 shrink-0"
-              :class="sortColumnKey === col.key ? 'text-accent-400' : 'text-theme-600'"
+              :class="sortColumnKey === col.key ? 'text-accent-fg' : 'text-ink-faint'"
             />
           </button>
           <template v-else>
@@ -564,8 +564,8 @@ defineExpose({ startEditing, closeEditor })
         <div
           v-for="item in visibleItems"
           :key="item.id"
-          class="group border-b border-theme-800/70 last:border-b-0 hover:bg-theme-800/30 transition-colors"
-          :class="[rowClass?.(item), { 'cursor-pointer': rowClickable, 'bg-accent-500/[0.06]': isSelected(item.id) }]"
+          class="group border-b border-table-border/70 transition-colors last:border-b-0 hover:bg-table-hover"
+          :class="[rowClass?.(item), { 'cursor-pointer': rowClickable, 'bg-table-selected': isSelected(item.id) }]"
           :draggable="isDraggable(item)"
           :tabindex="rowClickable ? 0 : undefined"
           :aria-selected="showSelectableColumn ? isSelected(item.id) : undefined"
@@ -592,7 +592,7 @@ defineExpose({ startEditing, closeEditor })
               <input
                 v-if="isSelectable(item)"
                 type="checkbox"
-                class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950 sm:opacity-0 sm:group-hover:opacity-100"
+                class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg opacity-100 transition-opacity focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950 sm:opacity-0 sm:group-hover:opacity-100"
                 :class="{ 'sm:!opacity-100': anySelected || isSelected(item.id) }"
                 :checked="isSelected(item.id)"
                 :aria-label="`${isSelected(item.id) ? 'Deselect' : 'Select'} row`"
@@ -631,7 +631,7 @@ defineExpose({ startEditing, closeEditor })
                 <Icon
                   v-if="col.editable"
                   icon="lucide:pencil"
-                  class="dt-edit-hint absolute right-0 top-0 h-3 w-3 text-theme-600 opacity-0 transition-opacity"
+                  class="dt-edit-hint absolute right-0 top-0 h-3 w-3 text-ink-faint opacity-0 transition-opacity"
                 />
               </div>
             </template>
@@ -646,7 +646,7 @@ defineExpose({ startEditing, closeEditor })
 
       <div
         v-else-if="loading"
-        class="flex items-center justify-center gap-2 px-5 py-10 text-sm text-theme-500"
+        class="flex items-center justify-center gap-2 px-5 py-10 text-sm text-ink-muted"
       >
         <Icon
           icon="lucide:loader-2"
@@ -657,28 +657,28 @@ defineExpose({ startEditing, closeEditor })
 
       <div
         v-else
-        class="px-5 py-10 text-center text-sm text-theme-500"
+        class="px-5 py-10 text-center text-sm text-ink-muted"
       >
         {{ emptyMessage }}
       </div>
 
       <div
         v-if="showBottomPagination"
-        class="flex items-center justify-center gap-2 px-4 py-2 border-t border-theme-800/70 bg-theme-900/40"
+        class="flex items-center justify-center gap-2 border-t border-table-border bg-table-header px-4 py-2"
       >
         <button
           type="button"
           :disabled="currentPage === 0"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage - 1)"
         >
           Prev
         </button>
-        <span class="text-xs text-theme-500">{{ currentPage + 1 }} / {{ pageCount }}</span>
+        <span class="text-xs text-ink-muted">{{ currentPage + 1 }} / {{ pageCount }}</span>
         <button
           type="button"
           :disabled="currentPage >= pageCount - 1"
-          class="px-2 py-1 text-xs text-theme-400 hover:text-theme-200 disabled:opacity-30"
+          class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200 disabled:opacity-30"
           @click="setPage(currentPage + 1)"
         >
           Next
@@ -704,14 +704,14 @@ defineExpose({ startEditing, closeEditor })
           </p>
           <p
             v-if="editingItems.length > 1"
-            class="mt-0.5 text-[10px] text-accent-400"
+            class="mt-0.5 text-[10px] text-accent-fg"
           >
             Applies to {{ editingItems.length }} selected rows
           </p>
         </div>
         <button
           type="button"
-          class="shrink-0 rounded-md p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="shrink-0 rounded-md p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
           aria-label="Close editor"
           @click="closeEditor(false)"
         >

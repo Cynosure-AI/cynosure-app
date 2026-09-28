@@ -74,7 +74,7 @@ onMounted(() =>
       </IconUpload>
 
       <div>
-        <label class="block text-sm text-theme-400 mb-1.5">Name</label>
+        <label class="block text-sm text-ink-secondary mb-1.5">Name</label>
         <input
           :value="agent.name"
           type="text"
@@ -86,15 +86,15 @@ onMounted(() =>
       </div>
 
       <div>
-        <label class="block text-sm text-theme-400 mb-1.5">Internal Name</label>
-        <p class="text-xs text-theme-600 mb-2">
-          Machine identifier used by the orchestrator to invoke this agent as a sub-agent (e.g. <code class="text-theme-400">web_researcher</code>). Auto-generated from the name if left empty.
+        <label class="block text-sm text-ink-secondary mb-1.5">Internal Name</label>
+        <p class="text-xs text-ink-faint mb-2">
+          Machine identifier used by the orchestrator to invoke this agent as a sub-agent (e.g. <code class="text-ink-secondary">web_researcher</code>). Auto-generated from the name if left empty.
         </p>
         <input
           :value="agent.internalName"
           type="text"
           placeholder="auto-generated from name"
-          class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 font-mono placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 font-mono placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
           @change="
             emit('update', 'internalName', ($event.target as HTMLInputElement).value)
           "
@@ -102,7 +102,7 @@ onMounted(() =>
       </div>
 
       <div>
-        <label class="block text-sm text-theme-400 mb-1.5">Description</label>
+        <label class="block text-sm text-ink-secondary mb-1.5">Description</label>
         <textarea
           :value="agent.description"
           class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none h-20"
@@ -128,16 +128,16 @@ onMounted(() =>
           @update:model-value="emit('update', 'favorite', $event)"
         />
       </div>
-      <dl class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-theme-500">
+      <dl class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
         <div class="flex items-center gap-1">
           <dt>Created</dt>
-          <dd class="text-theme-400">
+          <dd class="text-ink-secondary">
             {{ formatTimestamp(agent.createdAt) }}
           </dd>
         </div>
         <div class="flex items-center gap-1">
           <dt>Last changed</dt>
-          <dd class="text-theme-400">
+          <dd class="text-ink-secondary">
             {{ formatTimestamp(agent.updatedAt) }}
           </dd>
         </div>
@@ -147,8 +147,8 @@ onMounted(() =>
     <!-- ── Model ─────────────────────────────────────────────── -->
     <BaseCard class="p-5 space-y-4">
       <div>
-        <label class="block text-sm text-theme-400 mb-1.5">Provider / Model</label>
-        <p class="text-xs text-theme-600 mb-2">
+        <label class="block text-sm text-ink-secondary mb-1.5">Provider / Model</label>
+        <p class="text-xs text-ink-faint mb-2">
           Overrides the provider's default model for this agent. Leave empty to
           use the provider default.
         </p>
@@ -175,10 +175,10 @@ onMounted(() =>
     <!-- ── System Prompt ──────────────────────────────────────── -->
     <BaseCard class="p-5">
       <div class="flex items-center justify-between gap-3 mb-1.5">
-        <label class="block text-sm text-theme-400">System Prompt</label>
+        <label class="block text-sm text-ink-secondary">System Prompt</label>
         <PromptSmartTagPicker @insert="insertSystemPromptTag" />
       </div>
-      <p class="text-xs text-theme-600 mb-2">
+      <p class="text-xs text-ink-faint mb-2">
         Prepended as a system message alongside the built-in agentic
         instructions — does not replace them.
       </p>
@@ -186,7 +186,7 @@ onMounted(() =>
         ref="systemPromptRef"
         :value="agent.systemPrompt"
         placeholder="Optional system instructions..."
-        class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-theme-600 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none font-mono min-h-64"
+        class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none font-mono min-h-64"
         style="field-sizing: content"
         @change="
           emit(

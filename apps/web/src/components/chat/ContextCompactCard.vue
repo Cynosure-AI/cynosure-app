@@ -32,14 +32,14 @@ const formattedDate = computed(() => {
         <button
           class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all group
                  bg-amber-500/8 hover:bg-amber-500/15 border border-amber-500/20 hover:border-amber-500/35
-                 text-amber-400/80 hover:text-amber-300 disabled:cursor-default disabled:hover:bg-amber-500/8 disabled:hover:text-amber-400/80"
+                 text-status-warning/80 hover:text-amber-300 disabled:cursor-default disabled:hover:bg-amber-500/8 disabled:hover:text-status-warning/80"
           :disabled="isPending"
           @click="!isPending && (expanded = !expanded)"
         >
           <Icon
             v-if="isPending"
             icon="svg-spinners:ring-resize"
-            class="w-3.5 h-3.5 shrink-0 text-amber-400"
+            class="w-3.5 h-3.5 shrink-0 text-status-warning"
           />
           <Icon
             v-else
@@ -49,7 +49,7 @@ const formattedDate = computed(() => {
           <span v-if="isPending">Compacting conversation…</span>
           <template v-else>
             <span>Context compacted — {{ compactedMessageCount }} messages summarized</span>
-            <span class="text-amber-500/50 font-normal ml-1">{{ formattedDate }}</span>
+            <span class="text-status-warning/50 font-normal ml-1">{{ formattedDate }}</span>
             <Icon
               icon="lucide:chevron-down"
               class="w-3 h-3 shrink-0 transition-transform"
@@ -74,7 +74,7 @@ const formattedDate = computed(() => {
           class="mx-auto mt-1 rounded-xl border border-amber-500/15 bg-amber-500/5 overflow-hidden"
         >
           <div class="flex items-center justify-between px-4 py-2 border-b border-amber-500/10">
-            <div class="flex items-center gap-2 text-xs text-amber-400/70">
+            <div class="flex items-center gap-2 text-xs text-status-warning/70">
               <Icon
                 icon="lucide:sparkles"
                 class="w-3.5 h-3.5"

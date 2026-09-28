@@ -70,12 +70,12 @@ function handleKeydown(event: KeyboardEvent) {
   <div class="relative">
     <Icon
       icon="lucide:search"
-      class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-600"
+      class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint"
     />
     <input
       :value="modelValue"
       type="text"
-      class="w-72 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder-theme-600 focus:outline-none focus:border-theme-600"
+      class="w-72 max-w-full pl-8 pr-3 py-2 text-sm bg-theme-950 border border-theme-800 rounded-lg text-theme-200 placeholder:text-ink-faint focus:outline-none focus:border-theme-600"
       :placeholder="placeholder || 'Search knowledge entities'"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       @keydown="handleKeydown"
@@ -94,7 +94,7 @@ function handleKeydown(event: KeyboardEvent) {
         @mousedown.prevent.stop="selectNode(node)"
       >
         <span class="truncate">{{ node.name }}</span>
-        <span class="shrink-0 rounded-md border border-theme-700 bg-theme-900 px-1.5 py-0.5 text-[10px] text-theme-500">
+        <span class="shrink-0 rounded-md border border-theme-700 bg-theme-900 px-1.5 py-0.5 text-[10px] text-ink-muted">
           {{ node.type }}
         </span>
       </button>

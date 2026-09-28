@@ -9,7 +9,7 @@ import UsageMetrics from '../components/shared/UsageMetrics.vue'
         <h1 class="text-2xl font-bold text-theme-100">
           Usage
         </h1>
-        <p class="mt-1 text-sm leading-relaxed text-theme-500">
+        <p class="mt-1 text-sm leading-relaxed text-ink-muted">
           Model, tool, and agent usage metrics
         </p>
       </div>

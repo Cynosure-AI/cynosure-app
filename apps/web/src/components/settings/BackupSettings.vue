@@ -36,14 +36,14 @@ function showAnySection(ids: string[]): boolean {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:download"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Export Backup
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Download your configuration as a zip file
           </p>
         </div>
@@ -62,14 +62,14 @@ function showAnySection(ids: string[]): boolean {
         <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
           <Icon
             icon="lucide:upload"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Import & Restore
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Restore from a previous backup file
           </p>
         </div>

@@ -111,7 +111,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       <span class="truncate">{{ summary }}</span>
       <Icon
         icon="lucide:chevron-down"
-        class="w-4 h-4 text-theme-400 shrink-0 ml-2 transition-transform"
+        class="w-4 h-4 text-ink-secondary shrink-0 ml-2 transition-transform"
         :class="isOpen ? 'rotate-180' : ''"
       />
     </button>
@@ -127,14 +127,14 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       >
         <button
           type="button"
-          class="text-xs text-accent-400 hover:text-accent-300"
+          class="text-xs text-accent-fg hover:text-accent-fg"
           @click="selectAll"
         >
           Select All
         </button>
         <button
           type="button"
-          class="text-xs text-theme-400 hover:text-theme-200"
+          class="text-xs text-ink-secondary hover:text-theme-200"
           @click="unselectAll"
         >
           Unselect All
@@ -173,12 +173,12 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
           <span>{{ opt.label }}</span>
           <span
             v-if="opt.hint"
-            class="text-theme-500 text-xs ml-auto"
+            class="text-ink-muted text-xs ml-auto"
           >{{ opt.hint }}</span>
         </label>
         <div
           v-if="filteredOptions.length === 0"
-          class="px-3 py-2 text-xs text-theme-500"
+          class="px-3 py-2 text-xs text-ink-muted"
         >
           No matches
         </div>

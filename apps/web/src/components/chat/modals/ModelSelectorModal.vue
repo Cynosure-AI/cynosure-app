@@ -79,7 +79,7 @@ function onSelectionChange(selection: {
   >
     <div class="space-y-3">
       <div
-        class="rounded-lg border border-theme-700 bg-theme-900/50 px-3 py-2 text-xs text-theme-500"
+        class="rounded-lg border border-theme-700 bg-theme-900/50 px-3 py-2 text-xs text-ink-muted"
       >
         Current default:
         <span class="text-theme-300">{{ defaultModelLabel }}</span>

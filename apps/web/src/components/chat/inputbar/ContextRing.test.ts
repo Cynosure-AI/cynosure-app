@@ -63,7 +63,7 @@ describe('ContextRing', () => {
     const wrapper = mountRing()
 
     expect(wrapper.text()).toContain('25%')
-    expect(wrapper.text()).toContain('Main Agent Context')
+    expect(wrapper.text()).toContain('Main Context')
     expect(wrapper.text()).toContain('Sub Agent Usage')
     expect(wrapper.text()).toContain('600')
   })

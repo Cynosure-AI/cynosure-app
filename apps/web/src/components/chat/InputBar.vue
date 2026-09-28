@@ -426,12 +426,12 @@ defineExpose({ processFiles, focus, sendSuggestion })
         class="mb-2 space-y-1.5 rounded-xl border border-theme-700 bg-theme-900/90 p-2"
         aria-label="Queued messages"
       >
-        <div class="flex items-center justify-between px-1 text-[11px] text-theme-500">
+        <div class="flex items-center justify-between px-1 text-[11px] text-ink-muted">
           <span>{{ chatStore.queuedMessages?.length }} queued</span>
           <button
             v-if="!chatStore.isConversationLocked"
             type="button"
-            class="text-accent-400 hover:text-accent-300"
+            class="text-accent-fg hover:text-accent-fg"
             @click="chatStore.runNextQueuedMessage()"
           >
             Run next
@@ -442,9 +442,9 @@ defineExpose({ processFiles, focus, sendSuggestion })
           :key="item.id"
           class="flex items-center gap-2 rounded-lg bg-theme-800 px-2.5 py-2 text-xs"
         >
-          <Icon icon="lucide:list-end" class="h-3.5 w-3.5 shrink-0 text-theme-500" />
+          <Icon icon="lucide:list-end" class="h-3.5 w-3.5 shrink-0 text-ink-muted" />
           <span class="min-w-0 flex-1 truncate text-theme-200">{{ item.content }}</span>
-          <span v-if="item.attachments.length" class="flex shrink-0 items-center gap-1 text-theme-500">
+          <span v-if="item.attachments.length" class="flex shrink-0 items-center gap-1 text-ink-muted">
             <span
               v-for="attachment in item.attachments"
               :key="attachment.id"
@@ -453,19 +453,19 @@ defineExpose({ processFiles, focus, sendSuggestion })
               <span class="truncate">{{ attachment.name }}</span>
               <button
                 type="button"
-                class="hover:text-red-400"
+                class="hover:text-status-danger"
                 :aria-label="`Remove ${attachment.name}`"
                 @click.stop="chatStore.removeQueuedAttachment(item.id, attachment.id)"
               >×</button>
             </span>
           </span>
-          <button type="button" class="text-theme-500 hover:text-theme-200" title="Edit queued message" @click="editQueued(item.id, item.content)">
+          <button type="button" class="text-ink-muted hover:text-theme-200" title="Edit queued message" @click="editQueued(item.id, item.content)">
             <Icon icon="lucide:pencil" class="h-3.5 w-3.5" />
           </button>
-          <button type="button" class="text-accent-500 hover:text-accent-300" :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'" @click="chatStore.steerQueuedMessage(item.id)">
+          <button type="button" class="text-accent-fg hover:text-accent-fg" :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'" @click="chatStore.steerQueuedMessage(item.id)">
             <Icon icon="lucide:corner-up-left" class="h-3.5 w-3.5" />
           </button>
-          <button type="button" class="text-theme-500 hover:text-red-400" title="Remove queued message" @click="chatStore.removeQueuedMessage(item.id)">
+          <button type="button" class="text-ink-muted hover:text-status-danger" title="Remove queued message" @click="chatStore.removeQueuedMessage(item.id)">
             <Icon icon="lucide:x" class="h-3.5 w-3.5" />
           </button>
         </div>
@@ -526,12 +526,12 @@ defineExpose({ processFiles, focus, sendSuggestion })
           <Icon
             :icon="file.status === 'processing' ? 'lucide:loader-2' : file.status === 'error' ? 'lucide:circle-alert' : 'mdi:file-document-outline'"
             class="h-4 w-4 shrink-0"
-            :class="file.status === 'processing' ? 'animate-spin text-accent-400' : file.status === 'error' ? 'text-red-400' : 'text-theme-400'"
+            :class="file.status === 'processing' ? 'animate-spin text-accent-fg' : file.status === 'error' ? 'text-status-danger' : 'text-ink-secondary'"
           />
           <span class="text-xs text-theme-300 max-w-32 truncate">{{ file.name }}</span>
           <span
             v-if="file.status === 'processing'"
-            class="text-[10px] text-theme-500 group-hover:hidden"
+            class="text-[10px] text-ink-muted group-hover:hidden"
           >{{ file.progressCurrent || 0 }} / {{ file.progressTotal || '?' }} chunks</span>
           <span
             v-if="file.status === 'processing'"
@@ -539,7 +539,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           >Cancel</span>
           <span
             v-else-if="file.status === 'error'"
-            class="text-[10px] text-red-400"
+            class="text-[10px] text-status-danger"
             :title="file.error"
           >Failed</span>
           <button
@@ -567,7 +567,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
         >
           <Icon
             icon="mdi:music-note"
-            class="h-4 w-4 text-theme-400 shrink-0"
+            class="h-4 w-4 text-ink-secondary shrink-0"
           />
           <span class="text-xs text-theme-300 max-w-32 truncate">{{ audio.name }}</span>
           <HoverTooltip
@@ -600,8 +600,8 @@ defineExpose({ processFiles, focus, sendSuggestion })
 
       <!-- Input area: textarea + bottom bar inside a unified container -->
       <div
-        class="rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 transition-shadow duration-300"
-        :class="{ 'shadow-2xl shadow-black/40': floating }"
+        class="chat-composer rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 transition-shadow duration-300"
+        :class="{ 'shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40': floating }"
       >
         <input
           ref="fileInputRef"
@@ -618,7 +618,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           v-model="inputText"
           :placeholder="editingQueueId ? 'Edit queued message…' : chatStore.isConversationLocked ? 'Queue a message…' : 'Type a message...'"
           rows="1"
-          class="w-full bg-transparent text-theme-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder-theme-500"
+          class="w-full bg-transparent text-theme-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder:text-ink-muted"
           aria-label="Type a message"
           @keydown="onKeydown"
           @input="autoResize"
