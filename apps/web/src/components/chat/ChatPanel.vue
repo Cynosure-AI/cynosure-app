@@ -160,6 +160,16 @@ const activeAgentName = computed(() => {
   return agentDefs.get(conversationAgentId.value)?.name ?? null
 })
 
+const emptyStateSubAgents = computed(() => {
+  const assignedIds = conversationAgentId.value
+    ? agentDefs.get(conversationAgentId.value)?.subAgents?.map(({ agentId }) => agentId) ?? []
+    : chatStore.freeChatSubAgentIds
+
+  return assignedIds
+    .map((id) => agentDefs.get(id))
+    .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
+})
+
 /** Resolve agent identity: prefer message's own data, then look up from agent
  *  definitions store by agentId, and only fall back to the conversation agent. */
 function resolveAgentId(msg: DisplayMessage): string | undefined {
@@ -751,6 +761,40 @@ onMounted(() => {
         <p class="text-sm mt-2 text-ink-muted max-w-sm text-center">
           Type a message below to begin a new conversation, or choose an agent to assist you.
         </p>
+        <TransitionGroup
+          tag="div"
+          appear
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="scale-75 opacity-0"
+          enter-to-class="scale-100 opacity-100"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="scale-100 opacity-100"
+          leave-to-class="scale-75 opacity-0"
+          move-class="transition-transform duration-200"
+          class="flex items-center justify-center gap-2"
+          :class="{ 'mt-4': emptyStateSubAgents.length }"
+          aria-label="Assigned sub-agents"
+        >
+          <span
+            v-for="(subAgent, index) in emptyStateSubAgents"
+            :key="subAgent.id"
+            :title="subAgent.name"
+            :style="{ transitionDelay: `${index * 50}ms` }"
+            class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-theme-700 bg-theme-800 shadow-sm"
+          >
+            <img
+              v-if="subAgent.iconUrl"
+              :src="subAgent.iconUrl"
+              :alt="subAgent.name"
+              class="h-full w-full object-cover"
+            >
+            <Icon
+              v-else
+              icon="lucide:bot"
+              class="h-5 w-5 text-ink-secondary"
+            />
+          </span>
+        </TransitionGroup>
       </template>
     </div>
 
