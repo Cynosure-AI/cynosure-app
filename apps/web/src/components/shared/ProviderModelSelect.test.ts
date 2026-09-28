@@ -277,4 +277,52 @@ describe('ProviderModelSelect favorites', () => {
     first.unmount()
     second.unmount()
   })
+
+  test('renders a small window of a large model list and still finds distant models', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue(
+      Array.from({ length: 1000 }, (_, index) => ({ id: `model-${String(index).padStart(4, '0')}` })),
+    )
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'large-provider', modelValue: '',
+        providers: [{ id: 'large-provider', name: 'Large Provider', type: 'openai', defaultModel: '' }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+    expect(wrapper.findAll('[role="option"]').length).toBeLessThan(50)
+
+    const scroller = wrapper.get('.custom-select-options')
+    ;(scroller.element as HTMLElement).scrollTop = 900 * 32
+    await scroller.trigger('scroll')
+    expect(wrapper.text()).toContain('model-0900')
+    expect(wrapper.findAll('[role="option"]').length).toBeLessThan(50)
+
+    await wrapper.get('input[placeholder="Search…"]').setValue('model-0999')
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
+    await wrapper.get('[role="option"]').trigger('click')
+    expect(wrapper.emitted('change')?.[0]).toEqual([{ providerId: 'large-provider', model: 'model-0999' }])
+    wrapper.unmount()
+  })
+
+  test('keeps a minimum-width dropdown stable as virtual rows change', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockResolvedValue([{ id: 'short' }, { id: 'a-much-longer-model-name' }])
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'width-provider', modelValue: '', dropdownWidth: 'min-w-full',
+        providers: [{ id: 'width-provider', name: 'Provider', type: 'openai', defaultModel: '' }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+    const dropdown = wrapper.get('[role="listbox"]')
+    expect(dropdown.classes()).toContain('min-w-full')
+    expect(dropdown.classes()).toContain('w-96')
+    expect(dropdown.classes()).toContain('max-w-[calc(100vw-2rem)]')
+    wrapper.unmount()
+  })
 })
