@@ -7,6 +7,7 @@ Open-source AI agent platform with tool use, memory, multi-provider LLM support,
 - **Multi-provider LLM support** — OpenAI, Anthropic, Google Gemini, Groq, Grok, Ollama, LM Studio, OpenRouter, Requesty, Mistral
 - **Streaming chat** — Real-time token streaming with image/file attachments and voice input (local Whisper STT)
 - **Tool system** — Built-in tools + [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers, discoverable via a built-in registry browser
+- **Native file tools** — Browse, search, read, edit, move, archive, and delete local files in configured directories
 - **Agents** — Reusable AI presets with custom system prompts, model selection, tool access, and sub-agent orchestration
 - **Memory folders** — Hybrid RAG retrieval plus a source-grounded knowledge graph with manual corrections and portable backups
 - **Messaging channels** — Telegram, Discord, and Slack integrations so agents can respond remotely
@@ -71,6 +72,12 @@ pnpm dev:electron   # Electron app (starts web + electron)
 > pnpm build:server
 > pnpm dev:electron
 > ```
+
+### Native file access
+
+Native file tools are listed under **Built-In: Files** in agent and chat tool selection. The allowlist starts empty and is managed in **Settings → File Access**. Folders added there are accessible recursively. When a tool targets another folder, Cynosure asks whether to add it to the allowlist; denial stops that tool call. The desktop app offers a folder picker. Call `file_info` without a path to see the active roots. Relative paths resolve from the server working directory. Read-only tools follow Cynosure's read-only approval default; changing files uses the normal tool approval flow.
+
+The tools are `file_info`, `file_list_directory`, `file_search`, `file_read`, `file_write`, `file_edit`, `file_create_directory`, `file_move`, `file_merge`, `file_archive`, and `file_delete`. `file_edit` previews changes unless `dryRun: false` is supplied. `file_read` supports text, media, thumbnails, and image collages.
 
 ## Building
 

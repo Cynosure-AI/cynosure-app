@@ -720,6 +720,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 name: string
                 arguments: string
                 annotations?: ToolBehaviorAnnotations
+                fileAccess?: { path: string; folder: string; toolName: string }
             }>
         }))
     })

@@ -12,6 +12,7 @@ const denyReason = ref('')
 const showReasonInput = ref(false)
 const expandedArgs = ref<Set<number>>(new Set())
 const showApproveDropdown = ref(false)
+const fileAccess = computed(() => agentStore.pendingHITL?.toolCalls.find(tc => tc.fileAccess)?.fileAccess)
 type ToolEffect = 'destructive' | 'write' | 'read' | 'unknown'
 
 function toolEffect(toolCall: ToolCallDisplay): ToolEffect {
@@ -49,6 +50,11 @@ const approveAllLabel = computed(() => {
 
 function approve(): void {
   agentStore.respondHITL(true, undefined, 'once')
+  resetState()
+}
+
+function denyFileAccess(): void {
+  agentStore.respondHITL(false)
   resetState()
 }
 
@@ -124,7 +130,7 @@ function toggleExpand(index: number): void {
             Action Required
           </div>
           <p class="hitl-card-description mt-0.5 text-xs text-theme-500">
-            Review the requested tool actions before allowing them to run.
+            {{ fileAccess ? 'Allow this folder for AI file tools?' : 'Review the requested tool actions before allowing them to run.' }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -135,15 +141,22 @@ function toggleExpand(index: number): void {
           >
             1 of {{ agentStore.activeHITLQueue.length }}
           </span>
-          <span class="text-xs font-medium text-theme-400 bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50">
+          <span v-if="!fileAccess" class="text-xs font-medium text-theme-400 bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50">
             {{ agentStore.pendingHITL.toolCalls.length }} tool{{ agentStore.pendingHITL.toolCalls.length > 1 ? 's' : '' }} requested
           </span>
         </div>
       </div>
 
       <div class="hitl-card-body px-4 py-3 space-y-3">
+        <div v-if="fileAccess" class="space-y-2 text-sm text-theme-200">
+          <p><span class="text-theme-500">Folder to allow recursively:</span></p>
+          <p class="break-all rounded-lg border border-theme-700 bg-theme-950/50 p-2.5 font-mono text-xs">{{ fileAccess.folder }}</p>
+          <p class="break-all text-xs text-theme-500">{{ fileAccess.toolName }} requested {{ fileAccess.path }}</p>
+          <p class="text-xs text-theme-500">Allowing adds this folder to Settings → File Access. You can remove it there later.</p>
+        </div>
         <div
           v-for="(tc, i) in agentStore.pendingHITL.toolCalls"
+          v-show="!fileAccess"
           :key="i"
           class="hitl-tool-card flex flex-col gap-1.5 rounded-lg border p-2.5 border-theme-700/50 bg-theme-900/25"
           :class="toolCardClass(tc)"
@@ -170,7 +183,7 @@ function toggleExpand(index: number): void {
               </button>
             </div>
           </div>
-          
+
           <RichContent
             v-if="tc.arguments"
             :content="tc.arguments"
@@ -182,7 +195,7 @@ function toggleExpand(index: number): void {
 
       <Transition name="slide-down">
         <div
-          v-if="showReasonInput"
+          v-if="showReasonInput && !fileAccess"
           class="px-4 pb-3"
         >
           <input
@@ -198,80 +211,86 @@ function toggleExpand(index: number): void {
       </Transition>
 
       <div class="hitl-card-footer flex items-center justify-end gap-2 px-4 py-2.5 border-t border-theme-700/50 bg-theme-800/80">
-        <button
-          v-if="showReasonInput"
-          class="rounded-lg px-3 py-1.5 text-xs font-medium text-theme-400 hover:text-theme-100 hover:bg-theme-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-theme-500"
-          @click="cancelDeny"
-        >
-          Cancel
-        </button>
-        <button
-          class="rounded-lg px-4 py-1.5 text-xs font-semibold transition-all focus:outline-none focus:ring-2"
-          :class="showReasonInput 
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 focus:ring-red-500' 
-            : 'bg-theme-700/50 text-theme-300 border border-theme-600/50 hover:bg-theme-700 hover:text-white focus:ring-theme-500'"
-          @click="deny"
-        >
-          {{ showReasonInput ? 'Confirm Deny' : 'Deny Request' }}
-        </button>
-        <!-- Split Allow button with dropdown -->
-        <div
-          v-if="!showReasonInput"
-          class="relative"
-        >
-          <div class="flex items-center rounded-lg bg-emerald-600 border border-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 overflow-hidden">
-            <button
-              class="px-4 py-1.5 text-xs font-semibold text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
-              @click="approve"
-            >
-              Allow
-            </button>
-            <span class="w-px h-4 bg-white/30 dark:bg-emerald-500/20 self-center shrink-0" />
-            <button
-              class="px-1.5 py-1.5 text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
-              @click.stop="showApproveDropdown = !showApproveDropdown"
-            >
-              <Icon
-                icon="mdi:chevron-down"
-                class="w-3.5 h-3.5 transition-transform"
-                :class="showApproveDropdown ? 'rotate-180' : ''"
-              />
-            </button>
-          </div>
-          <!-- Dropdown menu -->
-          <div
-            v-if="showApproveDropdown"
-            class="absolute right-0 bottom-full mb-1 w-52 rounded-lg border border-theme-700 bg-theme-800 shadow-lg shadow-black/40 overflow-hidden z-50"
+        <template v-if="fileAccess">
+          <button class="rounded-lg border border-theme-600 px-4 py-1.5 text-xs font-semibold text-theme-300 hover:bg-theme-700" @click="denyFileAccess">Deny</button>
+          <button class="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700" @click="approve">Allow folder</button>
+        </template>
+        <template v-else>
+          <button
+            v-if="showReasonInput"
+            class="rounded-lg px-3 py-1.5 text-xs font-medium text-theme-400 hover:text-theme-100 hover:bg-theme-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-theme-500"
+            @click="cancelDeny"
           >
-            <button
-              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-              @click="approveSession"
-            >
-              Allow in this Session
-            </button>
-            <button
-              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-theme-700/50"
-              @click="approveAll"
-            >
-              {{ approveAllLabel }}
-            </button>
-
-            <!--Separator-->
-            <span class="block h-px bg-theme-600 my-1" />
-            <button
-              class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-theme-700/50"
-              @click="approveAllToolsSession"
-            >
-              Allow All Tools in this Session
-            </button>
-          </div>
-          <!-- Backdrop to close dropdown -->
+            Cancel
+          </button>
+          <button
+            class="rounded-lg px-4 py-1.5 text-xs font-semibold transition-all focus:outline-none focus:ring-2"
+            :class="showReasonInput
+              ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 focus:ring-red-500'
+              : 'bg-theme-700/50 text-theme-300 border border-theme-600/50 hover:bg-theme-700 hover:text-white focus:ring-theme-500'"
+            @click="deny"
+          >
+            {{ showReasonInput ? 'Confirm Deny' : 'Deny Request' }}
+          </button>
+          <!-- Split Allow button with dropdown -->
           <div
-            v-if="showApproveDropdown"
-            class="fixed inset-0 z-40"
-            @click="showApproveDropdown = false"
-          />
-        </div>
+            v-if="!showReasonInput"
+            class="relative"
+          >
+            <div class="flex items-center rounded-lg bg-emerald-600 border border-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 overflow-hidden">
+              <button
+                class="px-4 py-1.5 text-xs font-semibold text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
+                @click="approve"
+              >
+                Allow
+              </button>
+              <span class="w-px h-4 bg-white/30 dark:bg-emerald-500/20 self-center shrink-0" />
+              <button
+                class="px-1.5 py-1.5 text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
+                @click.stop="showApproveDropdown = !showApproveDropdown"
+              >
+                <Icon
+                  icon="mdi:chevron-down"
+                  class="w-3.5 h-3.5 transition-transform"
+                  :class="showApproveDropdown ? 'rotate-180' : ''"
+                />
+              </button>
+            </div>
+            <!-- Dropdown menu -->
+            <div
+              v-if="showApproveDropdown"
+              class="absolute right-0 bottom-full mb-1 w-52 rounded-lg border border-theme-700 bg-theme-800 shadow-lg shadow-black/40 overflow-hidden z-50"
+            >
+              <button
+                class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+                @click="approveSession"
+              >
+                Allow in this Session
+              </button>
+              <button
+                class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-theme-700/50"
+                @click="approveAll"
+              >
+                {{ approveAllLabel }}
+              </button>
+
+              <!--Separator-->
+              <span class="block h-px bg-theme-600 my-1" />
+              <button
+                class="w-full text-left px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors border-t border-theme-700/50"
+                @click="approveAllToolsSession"
+              >
+                Allow All Tools in this Session
+              </button>
+            </div>
+            <!-- Backdrop to close dropdown -->
+            <div
+              v-if="showApproveDropdown"
+              class="fixed inset-0 z-40"
+              @click="showApproveDropdown = false"
+            />
+          </div>
+        </template>
       </div>
     </div>
   </div>

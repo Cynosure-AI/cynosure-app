@@ -168,18 +168,6 @@ export const recommendedServers: RegistryServerEntry[] = [
         'mcp-document-parser',
     ),
     cynosureMcp(
-        '@cynosure-mcp/file-access',
-        'File Access',
-        'Safe file access, editing, directory browsing, and image thumbnails.',
-        'mcp-file-access',
-        [{
-            name: 'FILE_ACCESS_ALLOWED_DIRECTORIES',
-            description: 'Platform-delimited list of directory roots the MCP may access. Defaults to the current working directory.',
-            isRequired: true,
-            format: 'string',
-        }],
-    ),
-    cynosureMcp(
         '@cynosure-mcp/imap-email',
         'IMAP Email',
         'Read, search, draft, and send email through IMAP and SMTP.',
