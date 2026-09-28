@@ -359,6 +359,11 @@ onBeforeUnmount(() => {
                 /></span>
               </button>
             </template>
+            <div
+              v-if="entry.id === 'files'"
+              class="mx-2 my-1 border-t border-theme-700/75"
+              role="separator"
+            />
           </template>
         </template>
         <template v-else-if="panel === 'files'">
