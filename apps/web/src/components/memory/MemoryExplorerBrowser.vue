@@ -151,15 +151,14 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
 
   <div
     v-else-if="files.length === 0 && childFolders.length === 0 && !filesLoading"
-    class="py-10 text-center text-sm text-ink-muted"
-    :class="explorerView === 'list' ? 'rounded-xl border border-table-border bg-table-surface' : ''"
+    class="rounded-xl border border-table-border bg-table-surface py-10 text-center text-sm text-ink-muted"
   >
     No files in this folder yet. Upload files to get started.
   </div>
 
   <div
     v-else-if="explorerView === 'grid'"
-    class="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+    class="grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl border border-table-border bg-table-surface p-3 sm:grid-cols-4 sm:p-4 lg:grid-cols-5 xl:grid-cols-6"
     data-testid="memory-explorer-grid"
   >
     <div
@@ -194,7 +193,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         :class="folder.autoMemoryExcluded ? 'text-status-danger' : 'text-status-warning'"
       />
       <span
-        class="w-full truncate text-sm font-medium text-theme-200 sm:text-base"
+        class="w-full truncate text-sm font-medium text-theme-200"
         :title="folder.name"
       >{{ folder.name }}</span>
       <span class="mt-1 text-xs text-ink-faint sm:text-sm">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
@@ -239,7 +238,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         :class="file.supported ? 'text-ink-secondary' : 'text-ink-faint'"
       />
       <span
-        class="flex w-full min-w-0 items-center justify-center gap-1 truncate text-sm font-medium sm:text-base"
+        class="flex w-full min-w-0 items-center justify-center gap-1 truncate text-sm font-medium"
         :class="hasRecentDreamUpdate(file) ? 'text-status-warning' : 'text-theme-200'"
         :title="file.fileName"
       >
