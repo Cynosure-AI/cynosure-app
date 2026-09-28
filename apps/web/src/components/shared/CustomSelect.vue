@@ -62,6 +62,8 @@ const props = withDefaults(
     selectedLabel?: string;
     /** Render the trigger like clickable text instead of a boxed form control. */
     bareTrigger?: boolean;
+    /** Render only nearby rows in long dropdowns. */
+    virtualized?: boolean;
     /**
      * Trigger button size:
      * - 'xs' — extra compact (text-xs, py-1, px-2)
@@ -82,6 +84,7 @@ const props = withDefaults(
     showSelectedTag: true,
     selectedLabel: undefined,
     bareTrigger: false,
+    virtualized: false,
     size: "sm",
   },
 );
@@ -102,6 +105,20 @@ const focusedValue = ref<string>("");
 /** True when the last focus change came from keyboard navigation (not mouse hover) */
 const keyboardNav = ref(false);
 const filterQuery = ref("");
+const scrollTop = ref(0);
+
+const rowHeights: Record<SelectSize, number> = { xs: 24, sm: 32, md: 40, lg: 48 };
+const groupHeight = 30;
+const overscan = 240;
+const rowHeight = computed(() => rowHeights[props.size]);
+const viewportHeight = ref(320);
+
+function updateScroll(): void {
+  const scroller = listRef.value?.querySelector('.custom-select-options') as HTMLElement | null;
+  if (!scroller) return;
+  scrollTop.value = scroller.scrollTop;
+  viewportHeight.value = scroller.clientHeight || 320;
+}
 
 const allOptions = computed(() => props.groups.flatMap((g) => g.options));
 const selectedOption = computed(
@@ -135,6 +152,34 @@ const filteredGroups = computed(() => {
 const filteredAllOptions = computed(() =>
   filteredGroups.value.flatMap((g) => g.options),
 );
+
+const visibleGroups = computed(() => {
+  if (!props.virtualized) return { groups: filteredGroups.value.map(group => ({ ...group, top: 0, bottom: 0 })), before: 0, after: 0 };
+  const start = Math.max(0, scrollTop.value - overscan);
+  const end = scrollTop.value + viewportHeight.value + overscan;
+  const groups: (SelectOptionGroup & { top: number; bottom: number })[] = [];
+  let offset = 0;
+  let before = 0;
+  for (const group of filteredGroups.value) {
+    const header = group.label ? groupHeight : 0;
+    const height = header + group.options.length * rowHeight.value;
+    if (offset + height < start) {
+      before += height;
+    } else if (offset <= end) {
+      const first = Math.max(0, Math.floor((start - offset - header) / rowHeight.value));
+      const last = Math.min(group.options.length, Math.ceil((end - offset - header) / rowHeight.value));
+      groups.push({
+        ...group,
+        options: group.options.slice(first, Math.max(first, last)),
+        top: first * rowHeight.value,
+        bottom: (group.options.length - Math.max(first, last)) * rowHeight.value,
+      });
+    }
+    offset += height;
+  }
+  const shownHeight = groups.reduce((sum, group) => sum + (group.label ? groupHeight : 0) + group.top + group.options.length * rowHeight.value + group.bottom, 0);
+  return { groups, before, after: Math.max(0, offset - before - shownHeight) };
+});
 
 /** True when at least one visible option carries an icon — avoids wasting column space */
 const hasOptionIcons = computed(() =>
@@ -187,12 +232,15 @@ function tagVariantClasses(variant: SelectOption['tagVariant']): string {
 
 function open(): void {
   filterQuery.value = "";
+  scrollTop.value = 0;
+  keyboardNav.value = false;
   isOpen.value = true;
   emit("open");
   focusedValue.value = props.modelValue;
   if (props.filterable) {
     nextTick(() => filterInputRef.value?.focus());
   }
+  nextTick(updateScroll);
 }
 
 function toggle(): void {
@@ -274,6 +322,9 @@ function handleClickOutside(e: MouseEvent): void {
 
 /** When filter changes, move focus to first visible option if current one is hidden */
 watch(filterQuery, () => {
+  const scroller = listRef.value?.querySelector('.custom-select-options') as HTMLElement | null;
+  if (scroller) scroller.scrollTop = 0;
+  scrollTop.value = 0;
   const opts = filteredAllOptions.value;
   if (opts.length && !opts.find((o) => o.value === focusedValue.value)) {
     focusedValue.value = opts[0].value;
@@ -284,10 +335,31 @@ watch(filterQuery, () => {
 watch(focusedValue, (val) => {
   if (!keyboardNav.value) return;
   nextTick(() => {
-    const el = listRef.value?.querySelector(
-      `[data-value="${CSS.escape(val)}"]`,
-    ) as HTMLElement | null;
-    el?.scrollIntoView({ block: "nearest" });
+    if (props.virtualized) {
+      const index = filteredAllOptions.value.findIndex(option => option.value === val);
+      if (index >= 0) {
+        let offset = 0;
+        let remaining = index;
+        for (const group of filteredGroups.value) {
+          offset += group.label ? groupHeight : 0;
+          if (remaining < group.options.length) { offset += remaining * rowHeight.value; break; }
+          offset += group.options.length * rowHeight.value;
+          remaining -= group.options.length;
+        }
+        const scroller = listRef.value?.querySelector('.custom-select-options') as HTMLElement | null;
+        if (scroller) {
+          if (offset < scroller.scrollTop) scroller.scrollTop = offset;
+          else if (offset + rowHeight.value > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = offset + rowHeight.value - scroller.clientHeight;
+          updateScroll();
+        }
+      }
+    }
+    if (!props.virtualized) {
+      const el = listRef.value?.querySelector(
+        `[data-value="${CSS.escape(val)}"]`,
+      ) as HTMLElement | null;
+      el?.scrollIntoView({ block: "nearest" });
+    }
   });
 });
 
@@ -407,8 +479,9 @@ onBeforeUnmount(() =>
       </div>
 
       <div
-        class="py-1 overflow-y-auto"
+        class="custom-select-options py-1 overflow-y-auto"
         :class="maxHeight"
+        @scroll="updateScroll"
       >
         <div
           v-if="filterable && filterQuery && !filteredAllOptions.length"
@@ -417,8 +490,12 @@ onBeforeUnmount(() =>
         >
           No results
         </div>
+        <div
+          v-if="virtualized && visibleGroups.before"
+          :style="{ height: `${visibleGroups.before}px` }"
+        />
         <template
-          v-for="(group, gi) in filteredGroups"
+          v-for="(group, gi) in visibleGroups.groups"
           :key="gi"
         >
           <!-- Group header -->
@@ -429,9 +506,15 @@ onBeforeUnmount(() =>
               gi > 0 ? 'pt-2 border-t border-theme-800' : 'pt-1.5',
               props.stickyGroupHeaders ? 'select-group-header' : ''
             ]"
+            :style="virtualized ? { height: `${groupHeight}px`, boxSizing: 'border-box' } : undefined"
           >
             {{ group.label }}
           </div>
+
+          <div
+            v-if="virtualized && group.top"
+            :style="{ height: `${group.top}px` }"
+          />
 
           <!-- Options -->
           <button
@@ -444,6 +527,7 @@ onBeforeUnmount(() =>
             :disabled="opt.disabled"
             :title="opt.tooltip"
             :data-value="opt.value"
+            :style="virtualized ? { height: `${rowHeight}px` } : undefined"
             class="group/select-option w-full flex items-center gap-2 cursor-pointer transition-colors"
             :class="[
               currentSizeClasses.option,
@@ -534,7 +618,15 @@ onBeforeUnmount(() =>
               class="w-3 h-3 text-accent-fg shrink-0"
             />
           </button>
+          <div
+            v-if="virtualized && group.bottom"
+            :style="{ height: `${group.bottom}px` }"
+          />
         </template>
+        <div
+          v-if="virtualized && visibleGroups.after"
+          :style="{ height: `${visibleGroups.after}px` }"
+        />
       </div>
     </div>
   </div>
