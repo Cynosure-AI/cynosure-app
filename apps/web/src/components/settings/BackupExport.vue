@@ -27,7 +27,7 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   channels: { label: 'Channels', icon: 'lucide:radio', description: 'Channel configurations (Telegram, etc.)' },
   memory: { label: 'Memory Folders', icon: 'lucide:book-open', description: 'Memory folder definitions, agent assignments, and document content (re-embedded on import)' },
   knowledge: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
-  conversations: { label: 'Conversations', icon: 'lucide:message-square', description: 'Chat history and messages linked to agents (only restores for agents present in the DB)' },
+  conversations: { label: 'Conversations & Artifacts', icon: 'lucide:message-square', description: 'Chat history, generated media, and uploaded files (only restores for agents present in the DB)' },
   usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and auxiliary model usage. Chat usage is exported with Conversations.' }
 }
 

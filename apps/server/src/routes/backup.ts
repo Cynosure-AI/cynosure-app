@@ -553,6 +553,11 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 const chatEvents = db.prepare('SELECT * FROM chat_events ORDER BY sequence').all()
                 const subagentSessions = db.prepare('SELECT * FROM subagent_sessions ORDER BY created_at').all()
                 const messageAttachments = db.prepare('SELECT * FROM message_attachments ORDER BY created_at').all()
+                const attachmentAssets = db.prepare(`
+                    SELECT DISTINCT a.* FROM attachment_assets a
+                    JOIN message_attachments ma ON ma.asset_id = a.id
+                    ORDER BY a.created_at
+                `).all() as Array<{ id: string; original_path: string; text_path: string }>
                 const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at').all()
 
                 archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
@@ -560,7 +565,16 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 archive.append(JSON.stringify(chatEvents, null, 2), { name: 'conversations/chat_events.json' })
                 archive.append(JSON.stringify(subagentSessions, null, 2), { name: 'conversations/subagent_sessions.json' })
                 archive.append(JSON.stringify(messageAttachments, null, 2), { name: 'conversations/message_attachments.json' })
+                archive.append(JSON.stringify(attachmentAssets, null, 2), { name: 'conversations/attachment_assets.json' })
                 archive.append(JSON.stringify(tasks, null, 2), { name: 'conversations/tasks.json' })
+
+                for (const asset of attachmentAssets) {
+                    if (!existsSync(asset.original_path) || !existsSync(asset.text_path)) {
+                        throw new Error(`Attachment asset ${asset.id} is missing a file; backup cannot preserve it`)
+                    }
+                    archive.file(asset.original_path, { name: `conversations/attachment-assets/${asset.id}/original` })
+                    archive.file(asset.text_path, { name: `conversations/attachment-assets/${asset.id}/text` })
+                }
 
                 // Export artifact files for each conversation
                 const conversationIds = (conversations as Record<string, unknown>[]).map(c => c.id as string)
@@ -1260,7 +1274,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                                 a.id, a.message_id, a.conversation_id, a.kind || 'file', a.name || '',
                                 a.original_path || null, a.text_path || null,
                                 a.size_bytes ?? null, a.text_bytes ?? null, a.chunk_count ?? null,
-                                a.metadata_json || null, a.created_at || Date.now(), a.id
+                                a.metadata_json || null, a.created_at || Date.now(), a.asset_id || a.id
                             )
                         } catch (e) {
                             res.errors.push(`Message attachment: ${(e as Error).message}`)
@@ -1339,17 +1353,23 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         conversation_id: string
                         content_blocks_json: string | null
                     }[]
+                    const rehomeMediaUrl = (url: string, conversationId: string, kind?: string): string => {
+                        const oldPath = extractFilePathFromFileUrl(url)
+                        if (!oldPath) return url
+                        const directory = kind === 'image' ? 'images' : kind === 'video' ? 'videos' : kind === 'audio' ? 'audio'
+                            : /[\\/]images[\\/]/.test(oldPath) ? 'images' : /[\\/]videos[\\/]/.test(oldPath) ? 'videos'
+                                : /[\\/]audio[\\/]/.test(oldPath) ? 'audio' : null
+                        if (!directory) return url
+                        const targetPath = join(artifactsBaseDir, conversationId, directory, basename(oldPath))
+                        return existsSync(targetPath) ? toFileUrl(targetPath) : url
+                    }
                     const rehome = (json: string | null, conversationId: string): string | null => {
                         if (!json) return null
                         try {
                             const blocks = JSON.parse(json) as ContentBlock[]
                             return JSON.stringify(blocks.map((block) => {
                                 if (block.type !== 'image' && block.type !== 'video' && block.type !== 'audio') return block
-                                const oldPath = extractFilePathFromFileUrl(block.url)
-                                if (!oldPath) return block
-                                const directory = block.type === 'image' ? 'images' : block.type === 'video' ? 'videos' : 'audio'
-                                const targetPath = join(artifactsBaseDir, conversationId, directory, basename(oldPath))
-                                const url = existsSync(targetPath) ? toFileUrl(targetPath) : block.url
+                                const url = rehomeMediaUrl(block.url, conversationId, block.type)
                                 return { ...block, artifactId: url, url }
                             }))
                         } catch {
@@ -1367,6 +1387,27 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             row.id,
                         )
                     }
+                    const eventRows = db.prepare(`SELECT sequence, conversation_id, event_json FROM chat_events WHERE conversation_id IN (${placeholders})`)
+                        .all(...Array.from(importedConversationIds)) as Array<{ sequence: number; conversation_id: string; event_json: string }>
+                    const rehomeEventValue = (value: unknown, conversationId: string): unknown => {
+                        if (Array.isArray(value)) return value.map(item => rehomeEventValue(item, conversationId))
+                        if (value && typeof value === 'object') {
+                            const object = value as Record<string, unknown>
+                            const mapped: Record<string, unknown> = {}
+                            for (const [key, item] of Object.entries(object)) {
+                                mapped[key] = key === 'url' && typeof item === 'string'
+                                    ? rehomeMediaUrl(item, conversationId)
+                                    : rehomeEventValue(item, conversationId)
+                            }
+                            if (typeof mapped.url === 'string' && typeof mapped.artifactId === 'string') mapped.artifactId = mapped.url
+                            return mapped
+                        }
+                        return value
+                    }
+                    const updateEvent = db.prepare('UPDATE chat_events SET event_json = ? WHERE sequence = ?')
+                    for (const row of eventRows) {
+                        updateEvent.run(JSON.stringify(rehomeEventValue(JSON.parse(row.event_json), row.conversation_id)), row.sequence)
+                    }
                 } catch (e) {
                     res.errors.push(`Artifact path migration: ${(e as Error).message}`)
                 }
@@ -1375,13 +1416,46 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 try {
                     const appDataDir = getAppDataDir()
                     const artifactsBaseDir = join(appDataDir, 'artifacts', 'conversations')
+                    const assetEntry = zip.getEntry('conversations/attachment_assets.json')
+                    const archivedAssets = assetEntry
+                        ? JSON.parse(assetEntry.getData().toString('utf-8')) as Array<Record<string, unknown>>
+                        : []
+                    const importedAssetIds = new Set(
+                        (db.prepare(`SELECT DISTINCT asset_id FROM message_attachments WHERE conversation_id IN (${Array.from(importedConversationIds).map(() => '?').join(',') || "''"})`)
+                            .all(...Array.from(importedConversationIds)) as Array<{ asset_id: string | null }>)
+                            .map(row => row.asset_id).filter((id): id is string => Boolean(id))
+                    )
+                    for (const asset of archivedAssets) {
+                        const id = asset.id
+                        if (typeof id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(id) || !importedAssetIds.has(id)) continue
+                        const original = zip.getEntry(`conversations/attachment-assets/${id}/original`)
+                        const text = zip.getEntry(`conversations/attachment-assets/${id}/text`)
+                        if (!original || !text) {
+                            res.errors.push(`Attachment asset ${id}: missing file in backup`)
+                            continue
+                        }
+                        const assetDir = join(appDataDir, 'artifacts', 'attachment-assets')
+                        mkdirSync(assetDir, { recursive: true })
+                        const originalPath = join(assetDir, basename(String(asset.original_path || id)))
+                        const textPath = join(assetDir, basename(String(asset.text_path || `${id}.parsed.md`)))
+                        writeFileSync(originalPath, original.getData())
+                        writeFileSync(textPath, text.getData())
+                        db.prepare(`INSERT OR REPLACE INTO attachment_assets
+                            (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                        ).run(id, asset.name || '', originalPath, textPath, asset.size_bytes ?? 0,
+                            asset.text_bytes ?? 0, asset.chunk_count ?? null, asset.metadata_json || null, asset.created_at || Date.now())
+                        db.prepare(`UPDATE message_attachments SET original_path = ?, text_path = ? WHERE asset_id = ? AND conversation_id IN (${Array.from(importedConversationIds).map(() => '?').join(',') || "''"})`)
+                            .run(originalPath, textPath, id, ...Array.from(importedConversationIds))
+                    }
                     const rows = db.prepare(`
-                        SELECT id, conversation_id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
+                        SELECT id, asset_id, conversation_id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
                         FROM message_attachments
                         WHERE conversation_id IN (${Array.from(importedConversationIds).map(() => '?').join(',') || "''"})
                           AND kind = 'file'
                     `).all(...Array.from(importedConversationIds)) as {
                         id: string
+                        asset_id: string | null
                         conversation_id: string
                         name: string
                         original_path: string | null
@@ -1393,10 +1467,16 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
 
                     for (const row of rows) {
                         if (!row.original_path || !row.text_path) continue
-                        const originalPath = join(artifactsBaseDir, row.conversation_id, 'files', basename(row.original_path))
-                        const textPath = join(artifactsBaseDir, row.conversation_id, 'files', basename(row.text_path))
+                        const restoredAsset = archivedAssets.some(asset => asset.id === row.asset_id)
+                        const originalPath = restoredAsset ? row.original_path : join(artifactsBaseDir, row.conversation_id, 'files', basename(row.original_path))
+                        const textPath = restoredAsset ? row.text_path : join(artifactsBaseDir, row.conversation_id, 'files', basename(row.text_path))
+                        if (!existsSync(originalPath) || !existsSync(textPath)) {
+                            res.errors.push(`Attachment ${row.id}: missing file in backup`)
+                            continue
+                        }
                         const attachment: FileAttachmentArtifact = {
                             id: row.id,
+                            assetId: row.asset_id || row.id,
                             name: row.name,
                             originalPath,
                             textPath,
@@ -1408,7 +1488,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                         db.prepare(`INSERT OR REPLACE INTO attachment_assets
                             (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                        ).run(row.id, row.name, originalPath, textPath, row.size_bytes ?? 0, row.text_bytes ?? 0,
+                        ).run(row.asset_id || row.id, row.name, originalPath, textPath, row.size_bytes ?? 0, row.text_bytes ?? 0,
                             chunkCount, JSON.stringify({ ...attachment, chunkCount }), Date.now())
                         db.prepare(`
                             UPDATE message_attachments

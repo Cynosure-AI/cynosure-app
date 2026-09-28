@@ -2,11 +2,11 @@ import Fastify from 'fastify'
 import AdmZip from 'adm-zip'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb, getDb } from '../db/database.js'
-import { getDefaultMemoryFolderDir } from '../core/data-dir.js'
+import { getAppDataDir, getDefaultMemoryFolderDir } from '../core/data-dir.js'
 import { registerBackupRoutes } from './backup.js'
 
 describe('usage backup', () => {
@@ -102,9 +102,25 @@ describe('usage backup', () => {
 
     test('round-trips canonical content and ordered chat events', async () => {
         const db = getDb()
+        const mediaDir = join(getAppDataDir(), 'artifacts', 'conversations', 'c1', 'images')
+        const assetDir = join(getAppDataDir(), 'artifacts', 'attachment-assets')
+        mkdirSync(mediaDir, { recursive: true })
+        mkdirSync(assetDir, { recursive: true })
+        const imagePath = join(mediaDir, 'picture.png')
+        const originalPath = join(assetDir, 'document.txt')
+        const textPath = join(assetDir, 'document.txt.parsed.md')
+        writeFileSync(imagePath, 'image bytes')
+        writeFileSync(originalPath, 'original document')
+        writeFileSync(textPath, '')
         db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
         db.prepare('INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-            .run('m1', 'c1', 'user', 'Hello', '[{"type":"text","text":"Hello"}]', 1)
+            .run('m1', 'c1', 'user', 'Hello', JSON.stringify([{ type: 'image', artifactId: 'image', url: `/api/files?path=${encodeURIComponent(imagePath)}` }]), 1)
+        db.prepare(`INSERT INTO attachment_assets (id, name, original_path, text_path, size_bytes, text_bytes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`).run('asset1', 'document.txt', originalPath, textPath, 17, 0, 1)
+        db.prepare(`INSERT INTO message_attachments
+            (id, message_id, conversation_id, kind, name, original_path, text_path, size_bytes, text_bytes, asset_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run('attachment1', 'm1', 'c1', 'file', 'document.txt', originalPath, textPath, 17, 0, 'asset1', 1)
         db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
             .run('c1', 'e1', JSON.stringify({ type: 'transcript-item', item: { type: 'message', id: 'm1' } }), 2)
         const app = Fastify()
@@ -114,10 +130,15 @@ describe('usage backup', () => {
             expect(exported.statusCode).toBe(200)
             const zip = new AdmZip(exported.rawPayload)
             expect(JSON.parse(zip.readAsText('conversations/chat_events.json'))).toHaveLength(1)
-            expect(JSON.parse(zip.readAsText('conversations/messages.json'))[0].content_blocks_json).toBe('[{"type":"text","text":"Hello"}]')
+            expect(zip.getEntry('conversations/artifacts/c1/images/picture.png')).not.toBeNull()
+            expect(zip.readAsText('conversations/attachment-assets/asset1/original')).toBe('original document')
+            expect(JSON.parse(zip.readAsText('conversations/attachment_assets.json'))).toHaveLength(1)
             db.prepare('DELETE FROM chat_events').run()
+            db.prepare('DELETE FROM message_attachments').run()
+            db.prepare('DELETE FROM attachment_assets').run()
             db.prepare('DELETE FROM messages').run()
             db.prepare('DELETE FROM conversations').run()
+            rmSync(join(getAppDataDir(), 'artifacts'), { recursive: true, force: true })
             const boundary = '----cynosure-chat-backup-test'
             const payload = Buffer.concat([
                 Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="backup.zip"\r\nContent-Type: application/zip\r\n\r\n`),
@@ -128,8 +149,13 @@ describe('usage backup', () => {
                 headers: { 'content-type': `multipart/form-data; boundary=${boundary}`, 'content-length': String(payload.length) },
                 payload })
             expect(imported.statusCode, imported.body).toBe(200)
-            expect((db.prepare('SELECT content_blocks_json FROM messages WHERE id = ?').get('m1') as { content_blocks_json: string }).content_blocks_json)
-                .toBe('[{"type":"text","text":"Hello"}]')
+            const blocks = JSON.parse((db.prepare('SELECT content_blocks_json FROM messages WHERE id = ?').get('m1') as { content_blocks_json: string }).content_blocks_json)
+            expect(blocks[0].url).toBe(`/api/files?path=${encodeURIComponent(imagePath)}`)
+            expect(readFileSync(imagePath, 'utf8')).toBe('image bytes')
+            const restoredAsset = db.prepare('SELECT * FROM attachment_assets WHERE id = ?').get('asset1') as { original_path: string; text_path: string }
+            expect(readFileSync(restoredAsset.original_path, 'utf8')).toBe('original document')
+            expect(existsSync(restoredAsset.text_path)).toBe(true)
+            expect(db.prepare('SELECT asset_id FROM message_attachments WHERE id = ?').get('attachment1')).toEqual({ asset_id: 'asset1' })
             expect(db.prepare('SELECT execution_id FROM chat_events WHERE conversation_id = ?').all('c1')).toEqual([{ execution_id: 'e1' }])
             expect(db.prepare('SELECT message_id FROM dream_message_events WHERE message_id = ?').all('m1')).toEqual([])
         } finally {
