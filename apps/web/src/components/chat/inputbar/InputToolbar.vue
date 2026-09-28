@@ -196,6 +196,8 @@ async function toggleMic(): Promise<void> {
       @browse-library="emit('browseLibrary')"
     />
 
+    <slot />
+
     <MediaSettingsButton
       v-if="mediaKind && mediaProviderId && mediaModel"
       :kind="mediaKind"
