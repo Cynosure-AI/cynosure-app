@@ -8,6 +8,8 @@ import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ToolBehaviorBadges from '../components/shared/ToolBehaviorBadges.vue'
 import { isBuiltInNamespaceId } from '../utils/internal-tools'
 import { toolInjectionCondition } from '../utils/tool-injection-condition'
+import { useMcpServers } from '../composables/useMcpServers'
+import { getToolNamespaceIcon } from '../utils/tool-namespace-icons'
 
 interface NamespaceGroup {
   id: string
@@ -36,7 +38,9 @@ interface ToolParamSchema {
 type ApprovalState = 'all' | 'defaults' | 'none' | 'partial'
 
 const agentStore = useAgentStore()
+const { servers, loadServers } = useMcpServers()
 const tools = ref<ToolInfo[]>([])
+const brokenIcons = ref<Set<string>>(new Set())
 const filterText = ref('')
 const expandedGroupIds = ref<Set<string>>(new Set())
 const loading = ref(true)
@@ -45,6 +49,11 @@ const debouncedSearchExpansion = ref(false)
 let searchExpansionTimer: number | undefined
 
 const columns: Column<NamespaceGroup>[] = [
+  {
+    key: 'icon',
+    label: '',
+    width: '40px',
+  },
   {
     key: 'category',
     label: 'Category / MCP',
@@ -132,6 +141,12 @@ function isAutoApproved(name: string): boolean {
   return agentStore.isToolAutoApproved(name)
 }
 
+function toolApprovalLabel(tool: ToolInfo): string {
+  return defaultApprovalNames.value.has(approvalName(tool))
+    ? 'default'
+    : isAutoApproved(approvalName(tool)) ? 'allow' : 'ask'
+}
+
 function namespaceAutoApprovedCount(group: NamespaceGroup): number {
   return group.tools.filter((tool) => isAutoApproved(approvalName(tool))).length
 }
@@ -154,10 +169,19 @@ function namespaceApprovalSort(group: NamespaceGroup): number {
 
 function namespaceApprovalLabel(group: NamespaceGroup): string {
   const state = namespaceApprovalState(group)
-  if (state === 'all') return 'all auto'
-  if (state === 'defaults') return 'defaults'
+  if (state === 'all') return 'all allow'
+  if (state === 'defaults') return 'default'
   if (state === 'none') return 'all ask'
   return 'mixed'
+}
+
+function namespaceIconUrl(namespaceId: string): string | null {
+  if (!namespaceId.startsWith('mcp:') || brokenIcons.value.has(namespaceId)) return null
+  return servers.value.find((server) => server.id === namespaceId.slice(4))?.icon_url ?? null
+}
+
+function markIconBroken(namespaceId: string): void {
+  brokenIcons.value = new Set([...brokenIcons.value, namespaceId])
 }
 
 function stateIcon(state: ApprovalState): string {
@@ -301,7 +325,10 @@ onBeforeUnmount(() => {
   window.clearTimeout(searchExpansionTimer)
 })
 
-onMounted(loadPolicyTools)
+onMounted(() => {
+  void loadPolicyTools()
+  void loadServers().catch(() => undefined)
+})
 </script>
 
 <template>
@@ -313,7 +340,7 @@ onMounted(loadPolicyTools)
             Tools
           </h1>
           <p class="mt-1 max-w-3xl text-sm leading-relaxed text-ink-muted">
-            Set the HITL behaviour for every registered MCP and built-in tool. <strong class="text-ink-secondary">Auto-confirm</strong> lets the agent call the tool without asking you first; <strong class="text-ink-secondary">Ask</strong> pauses for your approval; <strong class="text-ink-secondary">Defaults</strong> follows each tool's behavior annotations.
+            Set the approval behaviour for every registered MCP and built-in tool. <strong class="text-ink-secondary">Allow</strong> lets the agent call a tool without asking; <strong class="text-ink-secondary">Ask</strong> pauses for your approval; <strong class="text-ink-secondary">Default</strong> follows each tool's behavior annotations.
           </p>
         </div>
         <RouterLink
@@ -334,27 +361,27 @@ onMounted(loadPolicyTools)
         <div class="flex flex-col gap-3 rounded-xl border border-theme-800 bg-theme-900 p-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <span class="text-xs text-ink-muted">
-              {{ autoApprovedCount }}/{{ tools.length }} auto-confirmed
+              {{ autoApprovedCount }}/{{ tools.length }} allowed
             </span>
             <div class="flex items-center gap-3">
               <button
                 class="text-xs text-status-green hover:text-green-300 transition-colors"
                 @click="confirmAll"
               >
-                Auto-confirm all
+                Allow all
               </button>
               <button
                 class="text-xs text-status-info hover:text-sky-300 transition-colors"
-                title="Use annotation defaults: read-only tools auto-confirm; write, destructive, and unannotated tools ask"
+                title="Use annotation defaults: read-only tools are allowed; write, destructive, and unannotated tools ask"
                 @click="defaultsAll"
               >
-                Defaults
+                Default
               </button>
               <button
                 class="text-xs text-ink-secondary hover:text-theme-200 transition-colors"
                 @click="askAll"
               >
-                Ask for all
+                Ask all
               </button>
             </div>
           </div>
@@ -376,6 +403,23 @@ onMounted(loadPolicyTools)
           :row-class="(group) => isExpanded(group.id) ? 'bg-theme-800/30' : undefined"
           @row-click="toggleExpanded"
         >
+          <template #col-icon="{ item: group }">
+            <span class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-theme-800/80">
+              <img
+                v-if="namespaceIconUrl(group.namespace.id)"
+                :src="namespaceIconUrl(group.namespace.id)!"
+                alt=""
+                class="h-5 w-5 object-contain"
+                @error="markIconBroken(group.namespace.id)"
+              >
+              <Icon
+                v-else
+                :icon="getToolNamespaceIcon(group.namespace.id)"
+                class="h-4 w-4 text-ink-secondary"
+              />
+            </span>
+          </template>
+
           <template #col-category="{ item: group }">
             <div class="flex min-w-0 items-start gap-3">
               <Icon
@@ -407,11 +451,11 @@ onMounted(loadPolicyTools)
                 role="checkbox"
                 :aria-checked="namespaceApprovalState(group) === 'partial' || namespaceApprovalState(group) === 'defaults' ? 'mixed' : namespaceApprovalState(group) === 'all'"
                 :title="namespaceApprovalState(group) === 'all'
-                  ? 'All tools auto-confirm. Click to restore annotation defaults.'
+                  ? 'All tools are allowed. Click to restore annotation defaults.'
                   : namespaceApprovalState(group) === 'defaults'
                     ? 'Using annotation defaults. Click to require approval for all.'
                     : namespaceApprovalState(group) === 'none'
-                      ? 'All tools ask. Click to auto-confirm all.'
+                      ? 'All tools ask. Click to allow all.'
                       : 'Custom mix. Click to restore annotation defaults.'"
                 @click.stop="toggleNamespaceApproval(group)"
               >
@@ -488,14 +532,14 @@ onMounted(loadPolicyTools)
                   <button
                     class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
                     :class="isAutoApproved(approvalName(tool)) ? 'bg-green-500/15 text-status-green hover:bg-green-500/25' : 'bg-amber-500/10 text-status-warning hover:bg-amber-500/20'"
-                    :title="isAutoApproved(approvalName(tool)) ? 'Auto-confirmed - click to require approval' : 'Requires approval - click to auto-confirm'"
+                    :title="isAutoApproved(approvalName(tool)) ? 'Allowed - click to require approval' : 'Requires approval - click to allow'"
                     @click.stop="toggleApproval(approvalName(tool))"
                   >
                     <Icon
                       :icon="isAutoApproved(approvalName(tool)) ? 'lucide:shield-check' : 'lucide:shield-alert'"
                       class="h-3.5 w-3.5"
                     />
-                    {{ isAutoApproved(approvalName(tool)) ? 'auto' : 'ask' }}
+                    {{ toolApprovalLabel(tool) }}
                   </button>
                 </div>
               </div>
