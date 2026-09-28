@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CSSProperties } from 'vue'
-import type { ReasoningEffort } from '@shared/types'
 import type { MemoryFolder } from '../../../api/types'
 import type { ToolInfo } from '../../../stores/agent-runtime.store'
 import { onClickOutside } from '@vueuse/core'
@@ -21,7 +20,7 @@ const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const { servers, loadServers } = useMcpServers()
 
-type Panel = 'main' | 'files' | 'tools' | 'memory' | 'agents' | 'reasoning'
+type Panel = 'main' | 'files' | 'tools' | 'memory' | 'agents'
 const root = ref<HTMLElement | null>(null)
 const menu = ref<HTMLElement | null>(null)
 const open = ref(false)
@@ -38,7 +37,6 @@ const entries = [
   { id: 'tools', label: 'Tools (MCPs)', detail: 'Enable and configure tools', icon: 'lucide:wrench' },
   { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:brain' },
   { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users' },
-  { id: 'reasoning', label: 'Reasoning', detail: 'Set thinking effort', icon: 'lucide:lightbulb' },
   { id: 'prompt', label: 'System Prompt', detail: 'View and edit system prompt', icon: 'lucide:scroll-text' },
 ] as const
 const selectableTools = computed(() => agentStore.availableTools.filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name))))
@@ -72,16 +70,6 @@ const visibleFolders = computed(() => {
   if (query) return folders.value.filter(folder => `${folder.name} ${folder.description} ${folder.folderPath}`.toLowerCase().includes(query))
   return folders.value.filter(folder => (folder.isUncategorized && folderPath.value === null) || (!folder.isUncategorized && parentPath(folder) === folderPath.value))
 })
-const reasoningLevels: { value: ReasoningEffort | 'off'; label: string; detail: string }[] = [
-  { value: 'off', label: 'Off', detail: 'Disable reasoning if the model permits it' },
-  { value: 'minimal', label: 'Minimal', detail: 'Lowest latency and token use' },
-  { value: 'low', label: 'Low', detail: 'Quick reasoning' },
-  { value: 'medium', label: 'Medium', detail: 'Balanced reasoning' },
-  { value: 'high', label: 'High', detail: 'Deep reasoning' },
-  { value: 'xhigh', label: 'Extra high', detail: 'For difficult tasks' },
-  { value: 'max', label: 'Maximum', detail: 'Provider maximum' },
-]
-const selectedReasoning = computed(() => chatStore.sessionThinkingEnabled ? chatStore.sessionReasoningEffort : 'off')
 const changedFields = computed(() => new Set(chatStore.activeAgentId
   ? chatStore.agentOverrideFields : chatStore.freeChatOverrideFields))
 function entryChanged(id: string): boolean {
@@ -89,7 +77,6 @@ function entryChanged(id: string): boolean {
     case 'tools': return changedFields.value.has('Tools')
     case 'memory': return changedFields.value.has('Memory folders')
     case 'agents': return changedFields.value.has('Sub-agents')
-    case 'reasoning': return changedFields.value.has('Thinking mode') || changedFields.value.has('Reasoning effort')
     case 'prompt': return changedFields.value.has('System prompt')
     default: return false
   }
@@ -282,7 +269,7 @@ onBeforeUnmount(() => {
         <span class="text-xs font-semibold">{{ panel === 'tools' && toolNamespace ? toolGroups.find(group => group.id === toolNamespace)?.label : panel === 'memory' && activeFolder ? activeFolder.name : entries.find(item => item.id === panel)?.label }}</span>
       </div>
       <div
-        v-if="panel !== 'main' && panel !== 'reasoning' && panel !== 'files'"
+        v-if="panel !== 'main' && panel !== 'files'"
         class="border-b border-theme-800 p-2"
       >
         <label class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-2 focus-within:border-accent-500">
@@ -537,26 +524,6 @@ onBeforeUnmount(() => {
           >
             No subagents found
           </div>
-        </template>
-        <template v-else-if="panel === 'reasoning'">
-          <p class="px-2 pb-2 text-[10px] text-ink-muted">
-            Available levels vary by model. Models with mandatory reasoning cannot turn it off.
-          </p>
-          <button
-            v-for="level in reasoningLevels"
-            :key="level.value"
-            type="button"
-            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800"
-            role="radio"
-            :aria-checked="selectedReasoning === level.value"
-            @click="chatStore.setSessionReasoningEffort(level.value)"
-          >
-            <Icon
-              :icon="selectedReasoning === level.value ? 'lucide:circle-check' : 'lucide:circle'"
-              class="h-4 w-4"
-              :class="selectedReasoning === level.value ? 'text-accent-fg' : 'text-ink-muted'"
-            /><span><span class="block text-xs">{{ level.label }}</span><span class="block text-[10px] text-ink-muted">{{ level.detail }}</span></span>
-          </button>
         </template>
       </div>
     </div>

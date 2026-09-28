@@ -50,7 +50,6 @@ describe('ChatOptionsMenu', () => {
   test.each([
     { agentId: 'agent-1', field: 'Tools', label: 'Tools (MCPs)' },
     { agentId: null, field: 'Memory folders', label: 'Memories' },
-    { agentId: 'agent-1', field: 'Reasoning effort', label: 'Reasoning' },
     { agentId: 'agent-1', field: 'System prompt', label: 'System Prompt' },
     { agentId: null, field: 'Automatic memory', label: 'Automatic Memories' },
     { agentId: null, field: 'Automatic tool routing', label: 'Automatic Tools' },
@@ -83,6 +82,7 @@ describe('ChatOptionsMenu', () => {
     expect(menu.querySelector('input[type="search"]')).toBeNull()
     expect(menu.textContent).toContain('Files')
     expect(menu.textContent).toContain('Subagents')
+    expect(menu.textContent).not.toContain('Reasoning')
     const files = [...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Files')!
     files.click()
     await flushPromises()
