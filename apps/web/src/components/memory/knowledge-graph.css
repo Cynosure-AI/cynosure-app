@@ -144,6 +144,101 @@
   --memory-flow-shadow: color-mix(in srgb, black 28%, transparent);
 }
 
+/* The graph needs its own light palette: the general theme tokens are tuned
+   for app surfaces, while graph nodes need stronger category contrast. */
+[data-theme="light"] .knowledge-graph-panel {
+  --memory-flow-bg: #f4f7fb;
+  --memory-flow-grid: rgb(71 85 105 / 18%);
+  --memory-flow-node-fill: #ffffff;
+  --memory-flow-node-border: #9aabc0;
+  --memory-flow-node-text: #172b46;
+  --memory-flow-node-muted: #52647a;
+  --memory-flow-person-fill: #e0f2fe;
+  --memory-flow-person-border: #0284c7;
+  --memory-flow-place-fill: #ffe4e6;
+  --memory-flow-place-border: #e11d48;
+  --memory-flow-organization-fill: #dcfce7;
+  --memory-flow-organization-border: #16a34a;
+  --memory-flow-project-fill: #ede9fe;
+  --memory-flow-project-border: #7c3aed;
+  --memory-flow-event-fill: #fef3c7;
+  --memory-flow-event-border: #d97706;
+  --memory-flow-date-fill: #ecfccb;
+  --memory-flow-date-border: #65a30d;
+  --memory-flow-technology-fill: #f3e8ff;
+  --memory-flow-technology-border: #9333ea;
+  --memory-flow-product-fill: #cffafe;
+  --memory-flow-product-border: #0891b2;
+  --memory-flow-artifact-fill: #fae8ff;
+  --memory-flow-artifact-border: #c026d3;
+  --memory-flow-concept-fill: #ffedd5;
+  --memory-flow-concept-border: #ea580c;
+  --memory-flow-edge: #617b9c;
+  --memory-flow-edge-label-bg: #ffffff;
+  --memory-flow-shadow: rgb(35 54 78 / 14%);
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-flow-node-seed,
+[data-theme="light"] .knowledge-graph-panel .entity-flow-node.selected,
+[data-theme="light"] .knowledge-graph-panel .entity-flow-node-focus-root,
+[data-theme="light"] .knowledge-graph-panel .entity-flow-node:has(.entity-node-body-selected) {
+  border-color: #1d4ed8;
+  background: #dbeafe;
+  box-shadow:
+    0 0 0 2px rgb(37 99 235 / 20%),
+    0 10px 24px var(--memory-flow-shadow);
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-node-body-selected .entity-node-label,
+[data-theme="light"] .knowledge-graph-panel .entity-node-body-focus-highlighted .entity-node-label {
+  color: #172b46;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-edge-label-stack {
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-edge-label-direction-title {
+  color: #52647a;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-edge-label-row {
+  color: #24364d;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-edge-label-row:hover,
+[data-theme="light"] .knowledge-graph-panel .entity-edge-label-row-selected {
+  background: #dbeafe;
+  color: #174f9e;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-category-legend {
+  border-color: #cbd5e1;
+  background: rgb(255 255 255 / 94%);
+  color: #475569;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-node-sidebar {
+  border-left-color: #cbd5e1;
+  background: #ffffff;
+  box-shadow: -12px 0 28px rgb(35 54 78 / 12%);
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-node-sidebar-relation {
+  border-color: #d5deea;
+  background: #f5f7fb;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-node-sidebar-action-danger {
+  background: #fff1f2;
+  color: #b42318;
+}
+
+[data-theme="light"] .knowledge-graph-panel .entity-node-sidebar-action-danger:hover {
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
 .knowledge-graph-panel:fullscreen {
   width: 100vw;
   height: 100vh;
