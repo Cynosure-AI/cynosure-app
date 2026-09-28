@@ -76,7 +76,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       const calls = steps.flatMap(step => step.toolCalls || [])
       const resultStep = [...steps].reverse().find(step => step.results?.length && step.resultsAt !== undefined)
       const delegationHandoff = calls.length > 0
-        && calls.every(call => call.name === 'spawn_subagent' || call.name === 'continue_subagent')
+        && calls.some(call => call.name === 'spawn_subagent' || call.name === 'continue_subagent')
         && (!steps.some(step => step.results?.length) || Boolean(resultStep))
       entries.push({
         type: 'tool-group',

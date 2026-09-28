@@ -155,6 +155,35 @@ describe('chat timeline chronology', () => {
     expect(returned?.type === 'delegation-result' && returned.ts).toBe(6)
   })
 
+  it('uses the same chronological handoff for a spawn mixed with ordinary tools', () => {
+    const timeline = buildChatTimeline([
+      message('handoff', 2, { toolCallIds: ['todo', 'check', 'spawn'] }),
+      message('worker answer', 4, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+      message('parent answer', 7),
+    ], [
+      step(1, { taskId: 'parent', toolCalls: [
+        { id: 'todo', name: 'todo_update', arguments: '{}' },
+        { id: 'check', name: 'check_codex_cli', arguments: '{}' },
+        { id: 'spawn', name: 'spawn_subagent', arguments: '{"internalName":"worker","instructions":"Do the task"}' },
+      ] }),
+      step(3, { taskId: 'parent', status: 'executing', resultsAt: 6, results: [
+        { toolCallId: 'todo', name: 'todo_update', success: true, output: 'Updated' },
+        { toolCallId: 'check', name: 'check_codex_cli', success: true, output: 'Available' },
+        { toolCallId: 'spawn', name: 'spawn_subagent', success: true, output: 'Done', invocationId: 'worker-1' },
+      ] }),
+    ])
+
+    expect(timeline.map(entry => entry.type === 'message' ? entry.msg.id : entry.type)).toEqual([
+      'handoff', 'tool-group', 'sub-agent-group', 'delegation-result', 'parent answer',
+    ])
+    const call = timeline.find(entry => entry.type === 'tool-group')
+    expect(call?.type === 'tool-group' && call.group.delegationHandoff).toBe(true)
+    const returned = timeline.find(entry => entry.type === 'delegation-result')
+    expect(returned?.type === 'delegation-result' && returned.results.map(result => result.name)).toEqual([
+      'todo_update', 'check_codex_cli', 'spawn_subagent',
+    ])
+  })
+
   it('keeps a delegation call and response in timestamp order', () => {
     const timeline = buildChatTimeline(
       [
