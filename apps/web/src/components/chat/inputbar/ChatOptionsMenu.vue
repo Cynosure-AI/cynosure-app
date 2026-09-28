@@ -521,9 +521,15 @@ onBeforeUnmount(() => {
             class="h-4 w-4 accent-accent-500"
             :checked="chatStore.freeChatSubAgentIds.includes(agent.id)"
             @change="toggleAgent(agent.id)"
+          ><img
+            v-if="agent.iconUrl"
+            :src="agent.iconUrl"
+            alt=""
+            class="h-4 w-4 shrink-0 rounded-sm object-cover"
           ><Icon
+            v-else
             icon="lucide:bot"
-            class="h-4 w-4"
+            class="h-4 w-4 shrink-0"
           /><span class="min-w-0"><span class="block truncate text-xs">{{ agent.name }}</span><span class="block truncate text-[10px] text-ink-muted">{{ agent.description || agent.internalName }}</span></span></label>
           <div
             v-if="!visibleAgents.length"

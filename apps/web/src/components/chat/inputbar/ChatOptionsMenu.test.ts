@@ -144,4 +144,22 @@ describe('ChatOptionsMenu', () => {
     expect(chatStore.selectedToolNames).toEqual(['write-key'])
     wrapper.unmount()
   })
+
+  test('shows each subagent icon and falls back to the bot icon', async () => {
+    agentDefs.agents = [
+      { id: 'pictured', name: 'Pictured', iconUrl: '/pictured.png' },
+      { id: 'plain', name: 'Plain', iconUrl: null },
+    ]
+    const wrapper = mount(ChatOptionsMenu, {
+      attachTo: document.body,
+      global: { stubs: { SystemPromptModal: true, Icon: { template: '<i :data-icon="icon" />', props: ['icon'] } } },
+    })
+    await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
+    const menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
+    ;([...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Subagents') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(menu.querySelector('img[src="/pictured.png"]')).not.toBeNull()
+    expect(menu.querySelectorAll('i[data-icon="lucide:bot"]')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })
