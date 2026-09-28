@@ -213,6 +213,10 @@ describe('MemoryFileExplorer navigation and search', () => {
 
     await wrapper.get('[aria-label="Grid view"]').trigger('click')
     const grid = wrapper.get('[data-testid="memory-explorer-grid"]')
+    expect(grid.classes()).toContain('border-table-border')
+    expect(grid.find('[aria-label="Explorer view"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="Explorer view"]').exists()).toBe(true)
+    expect(grid.get('[role="button"]').classes()).not.toContain('border')
     expect(grid.text()).toContain('Projects')
     expect(localStorage.getItem('cy-memory-explorer-view')).toBe('grid')
     const folderCheckbox = grid.get('input[aria-label="Select Projects"]')
@@ -220,6 +224,7 @@ describe('MemoryFileExplorer navigation and search', () => {
     expect(wrapper.text()).toContain('1 selected')
     await folderCheckbox.trigger('click')
     await wrapper.get('[aria-label="List view"]').trigger('click')
+    expect(wrapper.find('[data-testid="memory-explorer-grid"]').exists()).toBe(false)
 
     const table = wrapper.getComponent({ name: 'DataTable' })
     const rows = table.props('items') as Array<{ kind: string; folder?: typeof child }>
@@ -407,7 +412,7 @@ describe('MemoryFileExplorer navigation and search', () => {
     const moon = wrapper.get('[aria-label="Updated by a dream within the last 24 hours"]')
     expect(moon.attributes('icon')).toBe('lucide:moon')
     expect(moon.element.parentElement?.textContent).toContain('recent.md')
-    expect(moon.element.parentElement?.className).toContain('text-[#f4c072]')
+    expect(moon.element.parentElement?.className).toContain('text-status-warning')
     expect(wrapper.findAll('[aria-label="Updated by a dream within the last 24 hours"]')).toHaveLength(1)
   })
 

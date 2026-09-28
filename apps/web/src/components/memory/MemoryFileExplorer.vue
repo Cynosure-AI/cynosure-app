@@ -967,17 +967,17 @@ function folderIndexSummary(folder: MemoryFolder): {
     };
   }
   if (total > 0 && indexed >= total) {
-    return { label: "Indexed", icon: "lucide:check-circle", colorClass: "text-green-400", ratio: 1 };
+    return { label: "Indexed", icon: "lucide:check-circle", colorClass: "text-status-green", ratio: 1 };
   }
   if (indexed > 0) {
     return {
       label: `${indexed}/${total} Partially Indexed`,
       icon: "lucide:alert-circle",
-      colorClass: "text-amber-400",
+      colorClass: "text-status-warning",
       ratio: indexed / total,
     };
   }
-  return { label: "Not Indexed", icon: "lucide:circle-dashed", colorClass: "text-theme-500", ratio: 0 };
+  return { label: "Not Indexed", icon: "lucide:circle-dashed", colorClass: "text-ink-muted", ratio: 0 };
 }
 
 function formatFileSize(bytes: number): string {
@@ -1082,7 +1082,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       <template #path-actions>
         <button
           type="button"
-          class="ml-1 shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200"
+          class="ml-1 shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
           :title="pathCopied ? 'Path copied' : 'Copy folder path'"
           aria-label="Copy current folder path"
           @click="copyCurrentFolderPath"
@@ -1097,7 +1097,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="currentSpace?.isUncategorized"
           :title="currentSpace?.isUncategorized ? 'Cannot edit memory root' : 'Edit folder'"
           :aria-label="currentSpace?.isUncategorized ? 'Memory root cannot be edited' : `Edit ${currentSpace?.name || 'folder'}`"
-          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+          class="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('editSpace')"
         >
           <Icon
@@ -1110,7 +1110,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="currentSpace?.isUncategorized"
           :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
           :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
-          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30"
+          class="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('deleteSpace')"
         >
           <Icon
@@ -1123,24 +1123,24 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <button
           v-if="currentSpace"
           type="button"
-          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover"
           @click="openNewFileDialog"
         >
           <Icon
             icon="lucide:file-plus-2"
-            class="h-4 w-4 text-accent-400"
+            class="h-4 w-4 text-accent-fg"
           />
           New file
         </button>
         <button
           v-if="currentSpace"
           type="button"
-          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover"
           @click="emit('createFolder', currentSpace)"
         >
           <Icon
             icon="lucide:folder-plus"
-            class="h-4 w-4 text-amber-400"
+            class="h-4 w-4 text-status-warning"
           />
           New folder
         </button>
@@ -1167,7 +1167,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             >
               <Icon
                 icon="lucide:folders"
-                class="h-4 w-4 shrink-0 text-accent-400"
+                class="h-4 w-4 shrink-0 text-accent-fg"
               />
               {{ recursiveIndexLabel }}
             </button>
@@ -1175,7 +1175,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </SplitButton>
         <button
           :disabled="uploading"
-          class="px-3 py-1.5 bg-theme-900/60 hover:bg-theme-800/60 border border-theme-800 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+          class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover disabled:opacity-50"
           @click="fileInput?.click()"
         >
           <Icon
@@ -1332,20 +1332,20 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           class="w-full rounded-lg border border-theme-700 bg-theme-950 px-3 py-2 text-sm text-theme-200 focus:outline-none focus:border-accent-500"
           :disabled="creatingFile"
         >
-        <p class="mt-2 text-xs text-theme-500">
+        <p class="mt-2 text-xs text-ink-muted">
           Files are created as Markdown unless you use a .txt extension.
         </p>
         <p
           v-if="newFileError"
           role="alert"
-          class="mt-2 text-sm text-red-400"
+          class="mt-2 text-sm text-status-danger"
         >
           {{ newFileError }}
         </p>
         <div class="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            class="rounded-lg px-3 py-2 text-sm text-theme-400 hover:bg-theme-800 hover:text-theme-200"
+            class="rounded-lg px-3 py-2 text-sm text-ink-secondary hover:bg-theme-800 hover:text-theme-200"
             :disabled="creatingFile"
             @click="showNewFileDialog = false"
           >
@@ -1353,7 +1353,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           </button>
           <button
             type="submit"
-            class="rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-white hover:bg-accent-400 disabled:opacity-50"
+            class="rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-medium text-accent-on hover:bg-accent-400 disabled:opacity-50"
             :disabled="creatingFile"
           >
             {{ creatingFile ? 'Creating…' : 'Create file' }}

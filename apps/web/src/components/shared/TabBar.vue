@@ -33,8 +33,8 @@ const emit = defineEmits<{
       :tabindex="modelValue === tab.value ? 0 : -1"
       class="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px"
       :class="modelValue === tab.value
-        ? 'text-accent-400 border-accent-400'
-        : 'text-theme-500 border-transparent hover:text-theme-300'"
+        ? 'text-accent-fg border-accent-400'
+        : 'text-ink-muted border-transparent hover:text-theme-300'"
       @click="emit('update:modelValue', tab.value)"
     >
       <Icon
@@ -53,7 +53,7 @@ const emit = defineEmits<{
       <Icon
         v-if="tab.warning"
         icon="lucide:alert-triangle"
-        class="h-3.5 w-3.5 shrink-0 text-amber-400"
+        class="h-3.5 w-3.5 shrink-0 text-status-warning"
         :title="tab.warning"
         :aria-label="tab.warning"
       />

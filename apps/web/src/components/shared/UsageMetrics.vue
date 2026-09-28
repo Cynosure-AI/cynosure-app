@@ -99,7 +99,7 @@ async function confirmReset(): Promise<void> {
 <template>
   <!-- Period selector -->
   <div class="flex items-center justify-between mb-3">
-    <h2 class="text-sm font-medium text-theme-400 uppercase tracking-wider">
+    <h2 class="text-sm font-medium text-ink-secondary uppercase tracking-wider">
       Usage Metrics
     </h2>
     <div class="flex items-center gap-2">
@@ -109,15 +109,15 @@ async function confirmReset(): Promise<void> {
           :key="d"
           class="px-2.5 py-1 text-xs rounded-md transition-colors"
           :class="selectedDays === d
-            ? 'bg-accent-600/20 text-accent-400 border border-accent-500/30'
-            : 'text-theme-500 hover:text-theme-300 border border-transparent'"
+            ? 'bg-accent-600/20 text-accent-fg border border-accent-500/30'
+            : 'text-ink-muted hover:text-theme-300 border border-transparent'"
           @click="selectedDays = d"
         >
           {{ d }}d
         </button>
       </div>
       <button
-        class="flex items-center gap-1.5 px-2.5 py-1 text-xs text-theme-500 hover:text-red-400 border border-transparent hover:border-red-500/30 hover:bg-red-500/10 rounded-md transition-colors"
+        class="flex items-center gap-1.5 px-2.5 py-1 text-xs text-ink-muted hover:text-status-danger border border-transparent hover:border-red-500/30 hover:bg-red-500/10 rounded-md transition-colors"
         title="Reset usage metrics"
         @click="showResetModal = true"
       >
@@ -138,13 +138,13 @@ async function confirmReset(): Promise<void> {
     icon-color="red"
     @close="showResetModal = false"
   >
-    <p class="text-sm text-theme-400">
+    <p class="text-sm text-ink-secondary">
       This will clear all recorded usage data up to this point. New metrics will be tracked from now on. Your chat history is not affected.
     </p>
     <template #actions>
       <button
         :disabled="resetting"
-        class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-xl transition-colors"
+        class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-theme-700 disabled:text-ink-muted text-white text-sm font-medium rounded-xl transition-colors"
         @click="confirmReset"
       >
         {{ resetting ? 'Resetting...' : 'Reset Usage' }}
@@ -161,7 +161,7 @@ async function confirmReset(): Promise<void> {
   <!-- Loading / Error -->
   <div
     v-if="loading"
-    class="flex items-center justify-center py-12 text-theme-500 text-sm"
+    class="flex items-center justify-center py-12 text-ink-muted text-sm"
   >
     <Icon
       icon="lucide:loader-2"
@@ -171,7 +171,7 @@ async function confirmReset(): Promise<void> {
   </div>
   <div
     v-else-if="error"
-    class="text-red-400 text-sm py-6 text-center"
+    class="text-status-danger text-sm py-6 text-center"
   >
     {{ error }}
   </div>
@@ -182,7 +182,7 @@ async function confirmReset(): Promise<void> {
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-ink-muted uppercase tracking-wider mb-1">
             Conversations
           </div>
           <div class="text-xl font-semibold text-theme-100">
@@ -193,17 +193,17 @@ async function confirmReset(): Promise<void> {
           <div class="font-medium text-theme-300 mb-1">
             Conversations
           </div>
-          <div class="text-theme-400">
+          <div class="text-ink-secondary">
             Total: {{ metrics.totals.conversations.toLocaleString() }}
           </div>
-          <div class="text-theme-500 text-[10px] mt-1">
+          <div class="text-ink-muted text-[10px] mt-1">
             Unique chat sessions in the selected period
           </div>
         </template>
       </HoverTooltip>
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-ink-muted uppercase tracking-wider mb-1">
             Messages
           </div>
           <div class="text-xl font-semibold text-theme-100">
@@ -214,23 +214,23 @@ async function confirmReset(): Promise<void> {
           <div class="font-medium text-theme-300 mb-1">
             Messages
           </div>
-          <div class="text-theme-400">
+          <div class="text-ink-secondary">
             Total: {{ metrics.totals.messages.toLocaleString() }}
           </div>
-          <div class="text-theme-500 text-[10px] mt-1">
+          <div class="text-ink-muted text-[10px] mt-1">
             User + assistant messages across all conversations
           </div>
         </template>
       </HoverTooltip>
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-ink-muted uppercase tracking-wider mb-1">
             Total Tokens
           </div>
           <div class="text-xl font-semibold text-theme-100">
             {{ formatNumber(metrics.totals.totalTokens) }}
           </div>
-          <div class="text-[10px] text-theme-600 mt-0.5">
+          <div class="text-[10px] text-ink-faint mt-0.5">
             {{ formatNumber(metrics.totals.promptTokens) }} in · {{ formatNumber(metrics.totals.completionTokens) }} out
           </div>
         </BaseCard>
@@ -238,29 +238,29 @@ async function confirmReset(): Promise<void> {
           <div class="font-medium text-theme-300 mb-1">
             Token Usage
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Prompt (input)</span><span class="text-theme-300">{{ metrics.totals.promptTokens.toLocaleString() }}</span>
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Completion (output)</span><span class="text-theme-300">{{ metrics.totals.completionTokens.toLocaleString() }}</span>
           </div>
-          <div class="flex justify-between text-theme-400 border-t border-theme-800 pt-1 mt-1">
+          <div class="flex justify-between text-ink-secondary border-t border-theme-800 pt-1 mt-1">
             <span>Total</span><span class="text-theme-200 font-medium">{{ metrics.totals.totalTokens.toLocaleString() }}</span>
           </div>
         </template>
       </HoverTooltip>
       <HoverTooltip>
         <BaseCard class="p-4 w-full">
-          <div class="text-[11px] text-theme-500 uppercase tracking-wider mb-1">
+          <div class="text-[11px] text-ink-muted uppercase tracking-wider mb-1">
             Est. Cost
           </div>
           <div
             class="text-xl font-semibold"
-            :class="metrics.totals.estimatedCost !== null ? 'text-amber-400' : 'text-theme-500'"
+            :class="metrics.totals.estimatedCost !== null ? 'text-status-warning' : 'text-ink-muted'"
           >
             {{ formatCost(metrics.totals.estimatedCost) }}
           </div>
-          <div class="text-[10px] text-theme-600 mt-0.5">
+          <div class="text-[10px] text-ink-faint mt-0.5">
             {{ metrics.totals.avgLatencyMs.toLocaleString() }}ms avg latency
           </div>
         </BaseCard>
@@ -268,25 +268,25 @@ async function confirmReset(): Promise<void> {
           <div class="font-medium text-theme-300 mb-1">
             Cost &amp; Latency
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
-            <span>Estimated cost</span><span class="text-amber-400">{{ formatCost(metrics.totals.estimatedCost) }}</span>
+          <div class="flex justify-between text-ink-secondary mb-0.5">
+            <span>Estimated cost</span><span class="text-status-warning">{{ formatCost(metrics.totals.estimatedCost) }}</span>
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Chat models</span><span class="text-theme-300">{{ formatCost(metrics.totals.chatEstimatedCost) }}</span>
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Memory</span><span class="text-theme-300">{{ formatCost(metrics.totals.memoryEstimatedCost) }}</span>
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Auto routing</span><span class="text-theme-300">{{ formatCost(metrics.totals.autoRoutingEstimatedCost) }}</span>
           </div>
-          <div class="flex justify-between text-theme-400 mb-0.5">
+          <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Dreaming</span><span class="text-theme-300">{{ formatCost(metrics.totals.dreamingEstimatedCost) }}</span>
           </div>
-          <div class="flex justify-between text-theme-400">
+          <div class="flex justify-between text-ink-secondary">
             <span>Avg latency</span><span class="text-theme-300">{{ metrics.totals.avgLatencyMs.toLocaleString() }}ms</span>
           </div>
-          <div class="text-theme-500 text-[10px] mt-1">
+          <div class="text-ink-muted text-[10px] mt-1">
             Cost estimates via models.dev pricing data
           </div>
         </template>
@@ -296,14 +296,14 @@ async function confirmReset(): Promise<void> {
     <!-- Cost attribution -->
     <p
       v-if="metrics.totals.estimatedCost !== null"
-      class="text-[10px] text-theme-600 mb-4 -mt-4 text-right"
+      class="text-[10px] text-ink-faint mb-4 -mt-4 text-right"
     >
       Cost estimates via
       <a
         href="https://models.dev"
         target="_blank"
         rel="noopener noreferrer"
-        class="text-theme-500 hover:text-theme-400 underline underline-offset-2"
+        class="text-ink-muted hover:text-ink-secondary underline underline-offset-2"
       >models.dev</a>
       pricing
     </p>
@@ -319,12 +319,12 @@ async function confirmReset(): Promise<void> {
     <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
       <!-- Model Usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-theme-400 mb-3">
+        <h3 class="text-xs font-medium text-ink-secondary mb-3">
           Agent Models
         </h3>
         <div
           v-if="!metrics.modelUsage.length"
-          class="text-xs text-theme-600 py-4 text-center"
+          class="text-xs text-ink-faint py-4 text-center"
         >
           No model data
         </div>
@@ -338,7 +338,7 @@ async function confirmReset(): Promise<void> {
           >
             <div class="flex items-center justify-between text-xs mb-0.5">
               <span class="text-theme-300 truncate mr-2">{{ m.model }}</span>
-              <span class="text-theme-500 shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
+              <span class="text-ink-muted shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
             </div>
             <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
               <div
@@ -346,11 +346,11 @@ async function confirmReset(): Promise<void> {
                 :style="{ width: (m.requestCount / maxModelRequests * 100) + '%' }"
               />
             </div>
-            <div class="text-[10px] text-theme-600 mt-0.5">
+            <div class="text-[10px] text-ink-faint mt-0.5">
               {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
-                class="text-amber-500/80 ml-1"
+                class="text-status-warning/80 ml-1"
               >· {{ formatCost(m.estimatedCost) }}</span>
             </div>
           </div>
@@ -359,12 +359,12 @@ async function confirmReset(): Promise<void> {
 
       <!-- Memory model usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-theme-400 mb-3">
+        <h3 class="text-xs font-medium text-ink-secondary mb-3">
           Memory
         </h3>
         <div
           v-if="!memoryModelUsage.length"
-          class="text-xs text-theme-600 py-4 text-center"
+          class="text-xs text-ink-faint py-4 text-center"
         >
           No memory model data
         </div>
@@ -378,7 +378,7 @@ async function confirmReset(): Promise<void> {
           >
             <div class="flex items-center justify-between text-xs mb-0.5">
               <span class="text-theme-300 truncate mr-2">{{ m.model }}</span>
-              <span class="text-theme-500 shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
+              <span class="text-ink-muted shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
             </div>
             <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
               <div
@@ -386,11 +386,11 @@ async function confirmReset(): Promise<void> {
                 :style="{ width: (m.requestCount / maxMemoryRequests * 100) + '%' }"
               />
             </div>
-            <div class="text-[10px] text-theme-600 mt-0.5">
+            <div class="text-[10px] text-ink-faint mt-0.5">
               {{ auxiliaryKindLabel(m.kind) }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
-                class="text-amber-500/80 ml-1"
+                class="text-status-warning/80 ml-1"
               >· {{ formatCost(m.estimatedCost) }}</span>
             </div>
           </div>
@@ -399,12 +399,12 @@ async function confirmReset(): Promise<void> {
 
       <!-- Pre-agent auto-routing usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-theme-400 mb-3">
+        <h3 class="text-xs font-medium text-ink-secondary mb-3">
           Auto Routing
         </h3>
         <div
           v-if="!autoRoutingUsage.length"
-          class="text-xs text-theme-600 py-4 text-center"
+          class="text-xs text-ink-faint py-4 text-center"
         >
           No auto-routing data
         </div>
@@ -418,7 +418,7 @@ async function confirmReset(): Promise<void> {
           >
             <div class="flex items-center justify-between text-xs mb-0.5">
               <span class="text-theme-300 truncate mr-2">{{ m.model }}</span>
-              <span class="text-theme-500 shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
+              <span class="text-ink-muted shrink-0">{{ formatNumber(m.requestCount) }} reqs</span>
             </div>
             <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
               <div
@@ -426,11 +426,11 @@ async function confirmReset(): Promise<void> {
                 :style="{ width: (m.requestCount / maxAutoRoutingRequests * 100) + '%' }"
               />
             </div>
-            <div class="text-[10px] text-theme-600 mt-0.5">
+            <div class="text-[10px] text-ink-faint mt-0.5">
               {{ auxiliaryKindLabel(m.kind) }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
-                class="text-amber-500/80 ml-1"
+                class="text-status-warning/80 ml-1"
               >· {{ formatCost(m.estimatedCost) }}</span>
             </div>
           </div>
@@ -439,12 +439,12 @@ async function confirmReset(): Promise<void> {
 
       <!-- Tool Usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-theme-400 mb-3">
+        <h3 class="text-xs font-medium text-ink-secondary mb-3">
           Tool Usage
         </h3>
         <div
           v-if="!metrics.toolUsage.length"
-          class="text-xs text-theme-600 py-4 text-center"
+          class="text-xs text-ink-faint py-4 text-center"
         >
           No tool data
         </div>
@@ -458,7 +458,7 @@ async function confirmReset(): Promise<void> {
           >
             <div class="flex items-center justify-between text-xs mb-0.5">
               <span class="text-theme-300 truncate mr-2 font-mono text-[11px]">{{ t.toolName }}</span>
-              <span class="text-theme-500 shrink-0">{{ formatNumber(t.callCount) }}</span>
+              <span class="text-ink-muted shrink-0">{{ formatNumber(t.callCount) }}</span>
             </div>
             <div class="w-full h-1.5 bg-theme-800 rounded-full overflow-hidden">
               <div
@@ -475,12 +475,12 @@ async function confirmReset(): Promise<void> {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <!-- Agent Usage -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-theme-400 mb-3">
+        <h3 class="text-xs font-medium text-ink-secondary mb-3">
           Agent Usage
         </h3>
         <div
           v-if="!metrics.agentUsage.length"
-          class="text-xs text-theme-600 py-4 text-center"
+          class="text-xs text-ink-faint py-4 text-center"
         >
           No agent data
         </div>
@@ -495,8 +495,8 @@ async function confirmReset(): Promise<void> {
           >
             <span class="text-xs text-theme-300 truncate mr-2">{{ resolveAgentName(a.agentId) }}</span>
             <div class="flex items-center gap-3 shrink-0 text-[11px]">
-              <span class="text-theme-500">{{ a.conversationCount }} convos</span>
-              <span class="text-theme-600">{{ formatNumber(a.messageCount) }} msgs</span>
+              <span class="text-ink-muted">{{ a.conversationCount }} convos</span>
+              <span class="text-ink-faint">{{ formatNumber(a.messageCount) }} msgs</span>
             </div>
           </div>
         </div>
@@ -504,12 +504,12 @@ async function confirmReset(): Promise<void> {
 
       <!-- Origin Breakdown -->
       <BaseCard class="p-4">
-        <h3 class="text-xs font-medium text-theme-400 mb-3">
+        <h3 class="text-xs font-medium text-ink-secondary mb-3">
           Trigger Origins
         </h3>
         <div
           v-if="!metrics.originBreakdown.length"
-          class="text-xs text-theme-600 py-4 text-center"
+          class="text-xs text-ink-faint py-4 text-center"
         >
           No origin data
         </div>
@@ -532,11 +532,11 @@ async function confirmReset(): Promise<void> {
                           : o.origin === 'discord' ? 'simple-icons:discord'
                             : o.origin === 'slack' ? 'simple-icons:slack'
                               : 'lucide:zap'"
-                class="w-3.5 h-3.5 text-theme-500"
+                class="w-3.5 h-3.5 text-ink-muted"
               />
               <span class="text-xs text-theme-300 capitalize">{{ o.origin }}</span>
             </div>
-            <span class="text-xs text-theme-500">{{ formatNumber(o.count) }}</span>
+            <span class="text-xs text-ink-muted">{{ formatNumber(o.count) }}</span>
           </div>
         </div>
       </BaseCard>

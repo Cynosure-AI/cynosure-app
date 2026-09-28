@@ -187,13 +187,13 @@ watch(query, () => {
         <span class="sr-only">Filter {{ activeTab }}</span>
         <Icon
           icon="lucide:search"
-          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-500"
+          class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
         />
         <input
           v-model="query"
           type="search"
           :placeholder="activeTab === 'attachments' ? 'Filter uploaded files…' : 'Filter generated files…'"
-          class="w-full rounded-lg border border-theme-700 bg-theme-800 py-2.5 pl-9 pr-3 text-sm text-theme-100 outline-none placeholder:text-theme-500 focus:border-accent-500"
+          class="w-full rounded-lg border border-theme-700 bg-theme-800 py-2.5 pl-9 pr-3 text-sm text-theme-100 outline-none placeholder:text-ink-muted focus:border-accent-500"
         >
       </label>
 
@@ -211,7 +211,7 @@ watch(query, () => {
       <div class="min-h-0 flex-1 overflow-y-auto pr-1">
         <div
           v-if="loading && !visibleCount"
-          class="flex h-full items-center justify-center text-sm text-theme-500"
+          class="flex h-full items-center justify-center text-sm text-ink-muted"
         >
           <Icon
             icon="lucide:loader-circle"
@@ -220,7 +220,7 @@ watch(query, () => {
         </div>
         <div
           v-else-if="!visibleCount"
-          class="flex h-full flex-col items-center justify-center text-center text-theme-500"
+          class="flex h-full flex-col items-center justify-center text-center text-ink-muted"
         >
           <Icon
             :icon="query ? 'lucide:search-x' : activeTab === 'attachments' ? 'lucide:files' : 'lucide:sparkles'"
@@ -260,31 +260,31 @@ watch(query, () => {
                   <span class="truncate text-sm font-medium text-theme-100">{{ upload.name }}</span><Icon
                     v-if="selectedUploadIds.has(upload.id)"
                     icon="lucide:circle-check"
-                    class="h-4 w-4 shrink-0 text-accent-400"
+                    class="h-4 w-4 shrink-0 text-accent-fg"
                   />
                 </div>
                 <p
                   v-if="upload.status && upload.status !== 'ready'"
                   class="mt-1 text-[11px]"
-                  :class="upload.status === 'failed' ? 'text-red-400' : 'text-accent-400'"
+                  :class="upload.status === 'failed' ? 'text-status-danger' : 'text-accent-fg'"
                 >
                   {{ upload.status === 'failed' ? 'Indexing failed' : `Indexing ${upload.progressCurrent || 0}/${upload.progressTotal || '?'} chunks` }}
                 </p>
                 <p
                   v-else-if="upload.staged"
-                  class="mt-1 text-[11px] text-accent-400"
+                  class="mt-1 text-[11px] text-accent-fg"
                 >
                   Ready in chat draft
                 </p>
-                <p class="mt-1 truncate text-xs text-theme-500">
+                <p class="mt-1 truncate text-xs text-ink-muted">
                   {{ upload.conversationTitle }}
                 </p>
-                <p class="mt-1 text-[11px] text-theme-600">
+                <p class="mt-1 text-[11px] text-ink-faint">
                   {{ formatSize(upload.sizeBytes) }} · {{ formatDate(upload.createdAt) }}
                 </p>
                 <p
                   v-if="unavailableIds.has(upload.id)"
-                  class="mt-1 text-[11px] text-theme-400"
+                  class="mt-1 text-[11px] text-ink-secondary"
                 >
                   Already attached
                 </p>
@@ -333,24 +333,24 @@ watch(query, () => {
                   <span class="truncate text-sm font-medium text-theme-100">{{ artifact.label }}</span><Icon
                     v-if="selectedArtifacts.has(artifact.id)"
                     icon="lucide:circle-check"
-                    class="h-4 w-4 shrink-0 text-accent-400"
+                    class="h-4 w-4 shrink-0 text-accent-fg"
                   />
                 </div>
-                <p class="mt-1 truncate text-xs text-theme-500">
+                <p class="mt-1 truncate text-xs text-ink-muted">
                   {{ artifact.conversationTitle }}
                 </p>
-                <p class="mt-1 text-[11px] text-theme-600">
+                <p class="mt-1 text-[11px] text-ink-faint">
                   {{ artifact.ext }} · {{ formatDate(artifact.createdAt) }}
                 </p>
                 <p
                   v-if="artifact.kind === 'video'"
-                  class="mt-1 text-[11px] text-theme-400"
+                  class="mt-1 text-[11px] text-ink-secondary"
                 >
                   Video context is not supported yet
                 </p>
                 <p
                   v-else-if="unavailableIds.has(artifact.id)"
-                  class="mt-1 text-[11px] text-theme-400"
+                  class="mt-1 text-[11px] text-ink-secondary"
                 >
                   Already attached
                 </p>
@@ -362,7 +362,7 @@ watch(query, () => {
         <button
           v-if="hasMore"
           type="button"
-          class="mx-auto mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-theme-400 hover:bg-theme-800 hover:text-theme-200 disabled:opacity-50"
+          class="mx-auto mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-ink-secondary hover:bg-theme-800 hover:text-theme-200 disabled:opacity-50"
           :disabled="loading"
           @click="loadEntries(false)"
         >
@@ -375,7 +375,7 @@ watch(query, () => {
       </div>
 
       <div class="flex shrink-0 items-center justify-between border-t border-theme-800 pt-4">
-        <span class="text-xs text-theme-500">{{ selectedCount }} selected</span>
+        <span class="text-xs text-ink-muted">{{ selectedCount }} selected</span>
         <div class="flex gap-2">
           <button
             type="button"
@@ -386,7 +386,7 @@ watch(query, () => {
           </button>
           <button
             type="button"
-            class="flex items-center gap-2 rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-50"
+            class="flex items-center gap-2 rounded-lg accent-action bg-accent-500 px-4 py-2 text-sm font-medium text-accent-on hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="!selectedCount || adding"
             @click="addSelected"
           >

@@ -104,7 +104,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               icon="lucide:list-tree"
-              class="h-5 w-5 text-theme-500"
+              class="h-5 w-5 text-ink-muted"
             />
             <span>Activity</span>
             <span
@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               icon="lucide:bar-chart-3"
-              class="h-5 w-5 text-theme-500"
+              class="h-5 w-5 text-ink-muted"
             />
             <span>Usage</span>
           </button>
@@ -139,24 +139,24 @@ onBeforeUnmount(() => {
           >
             <Icon
               :icon="link.icon"
-              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-accent-400"
+              class="h-5 w-5 shrink-0 text-ink-muted group-hover:text-accent-fg"
             />
             <span class="min-w-0 flex-1">{{ link.label }}</span>
             <Icon
               icon="lucide:chevron-right"
-              class="h-4 w-4 text-theme-600"
+              class="h-4 w-4 text-ink-faint"
             />
           </button>
 
           <button
             v-if="isElectron"
             type="button"
-            class="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-red-400"
+            class="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-status-danger"
             @click="quitApp"
           >
             <Icon
               icon="lucide:power"
-              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-red-400"
+              class="h-5 w-5 shrink-0 text-ink-muted group-hover:text-status-danger"
             />
             <span class="min-w-0 flex-1">Quit</span>
           </button>
@@ -174,26 +174,26 @@ onBeforeUnmount(() => {
           >
             <Icon
               :icon="updateState.status === 'downloaded' ? 'lucide:badge-check' : updateState.status === 'downloading' ? 'lucide:loader-circle' : 'lucide:download'"
-              class="h-5 w-5 shrink-0 text-accent-400"
+              class="h-5 w-5 shrink-0 text-accent-fg"
               :class="{ 'animate-spin': updateState.status === 'downloading' }"
             />
             <span class="min-w-0 flex-1">
               <span class="block font-medium">
                 {{ updateState.status === 'downloaded' ? 'Install and restart' : updateState.status === 'downloading' ? `Downloading update… ${progressPercent}%` : 'Update available' }}
               </span>
-              <span class="block text-[11px] text-theme-500">
+              <span class="block text-[11px] text-ink-muted">
                 Version {{ updateState.availableVersion }}
               </span>
             </span>
             <Icon
               v-if="updateState.status !== 'downloading'"
               icon="lucide:chevron-right"
-              class="h-4 w-4 text-theme-600"
+              class="h-4 w-4 text-ink-faint"
             />
           </button>
         </div>
 
-        <div class="mt-1 border-t border-theme-800 px-3 pb-1 pt-3 text-[10px] text-theme-600">
+        <div class="mt-1 border-t border-theme-800 px-3 pb-1 pt-3 text-[10px] text-ink-faint">
           Cynosure <span v-if="updateState.currentVersion || appVersion">v{{ updateState.currentVersion || appVersion }}</span>
         </div>
       </div>

@@ -46,7 +46,7 @@ const emit = defineEmits<{
         >
           <Icon
             icon="lucide:folder-open"
-            class="h-3.5 w-3.5 text-amber-400"
+            class="h-3.5 w-3.5 text-status-warning"
           /> Open
         </button>
         <button
@@ -57,7 +57,7 @@ const emit = defineEmits<{
         >
           <Icon
             icon="lucide:folder-plus"
-            class="h-3.5 w-3.5 text-accent-400"
+            class="h-3.5 w-3.5 text-accent-fg"
           /> Add subfolder
         </button>
         <button
@@ -80,7 +80,7 @@ const emit = defineEmits<{
           <Icon
             :icon="menu.folder.autoMemoryExcluded ? 'lucide:folder-check' : 'lucide:folder-x'"
             class="h-3.5 w-3.5"
-            :class="menu.folder.autoMemoryExcluded ? 'text-emerald-400' : 'text-orange-400'"
+            :class="menu.folder.autoMemoryExcluded ? 'text-status-success' : 'text-orange-400'"
           />
           {{ menu.folder.autoMemoryExcluded ? 'Include in Auto Memory Router' : 'Exclude from Auto Memory Router' }}
         </button>
@@ -97,7 +97,7 @@ const emit = defineEmits<{
         </button>
       </template>
       <template v-else-if="menu.kind === 'document' && menu.file">
-        <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-theme-500">
+        <div class="border-b border-theme-800 px-3 py-2 text-[11px] text-ink-muted">
           {{ menu.file.fileName }}
         </div>
         <button
@@ -121,7 +121,7 @@ const emit = defineEmits<{
         >
           <Icon
             icon="lucide:folder-input"
-            class="h-3.5 w-3.5 text-accent-400"
+            class="h-3.5 w-3.5 text-accent-fg"
           /> Move
         </button>
         <button

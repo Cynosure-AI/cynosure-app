@@ -26,7 +26,7 @@ defineEmits<{
     max-height="max-h-[85vh]"
     @close="$emit('close')"
   >
-    <p class="mb-4 text-sm text-theme-500">
+    <p class="mb-4 text-sm text-ink-muted">
       Select the destination memory folder.
     </p>
     <div class="grid max-h-[55vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
@@ -39,19 +39,19 @@ defineEmits<{
       >
         <Icon
           icon="lucide:folder"
-          class="w-4 h-4 text-theme-400 shrink-0"
+          class="w-4 h-4 text-ink-secondary shrink-0"
         />
         <div class="flex-1 min-w-0">
           <div class="text-sm text-theme-200 truncate">
             {{ space.name }}
           </div>
-          <div class="text-xs text-theme-500">
+          <div class="text-xs text-ink-muted">
             {{ space.fileCount }} file{{ space.fileCount !== 1 ? "s" : "" }}
           </div>
         </div>
         <Icon
           :icon="moving ? 'lucide:loader-2' : 'lucide:chevron-right'"
-          class="w-4 h-4 text-theme-600 shrink-0"
+          class="w-4 h-4 text-ink-faint shrink-0"
           :class="{ 'animate-spin': moving }"
         />
       </button>

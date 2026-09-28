@@ -508,14 +508,14 @@ onMounted(() => loadFolders());
   <div class="relative h-full min-w-0 overflow-y-auto">
     <div class="min-h-full min-w-0">
       <main class="flex min-h-full min-w-0 flex-col">
-        <header class="z-10 border-b border-theme-800/60 bg-theme-950/95 pt-4 backdrop-blur-sm sm:sticky sm:top-0 sm:pt-5">
+        <header class="z-10 border-b border-theme-700/60 bg-page-header/95 pt-4 backdrop-blur-sm sm:sticky sm:top-0 sm:pt-5">
           <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
                 <h1 class="text-2xl font-bold text-theme-100">
                   Memory
                 </h1>
-                <p class="mt-1 text-sm leading-relaxed text-theme-500">
+                <p class="mt-1 text-sm leading-relaxed text-ink-muted">
                   {{ activeSection.description }}
                 </p>
               </div>
@@ -525,8 +525,8 @@ onMounted(() => loadFolders());
                     type="button"
                     class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
                     :class="activeDocumentView === 'recent'
-                      ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
-                      : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
+                      ? 'border-accent-500/40 bg-accent-500/10 text-accent-fg'
+                      : 'border-theme-700/70 bg-control-surface text-ink-secondary hover:border-theme-700 hover:text-theme-200'"
                     @click="selectDocumentView('recent')"
                   >
                     <Icon
@@ -540,7 +540,7 @@ onMounted(() => loadFolders());
                     class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
                     :class="activeDocumentView === 'trash'
                       ? 'border-red-500/35 bg-red-500/10 text-red-300'
-                      : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
+                      : 'border-theme-700/70 bg-control-surface text-ink-secondary hover:border-theme-700 hover:text-theme-200'"
                     @click="selectDocumentView('trash')"
                   >
                     <Icon
@@ -552,7 +552,7 @@ onMounted(() => loadFolders());
                 </template>
                 <button
                   v-if="activePanel === 'visual'"
-                  class="p-2 text-theme-500 transition-colors hover:text-theme-200"
+                  class="p-2 text-ink-muted transition-colors hover:text-theme-200"
                   title="Refresh knowledge graph"
                   @click="loadGraph()"
                 >
@@ -581,7 +581,7 @@ onMounted(() => loadFolders());
         >
           <span>{{ graphOperationError }}</span>
           <button
-            class="shrink-0 text-red-400 transition-colors hover:text-red-200"
+            class="shrink-0 text-status-danger transition-colors hover:text-red-200"
             title="Dismiss"
             @click="graphOperationError = ''"
           >
@@ -594,7 +594,7 @@ onMounted(() => loadFolders());
 
         <div
           v-if="spacesLoading && spaces.length === 0"
-          class="flex items-center gap-2 py-8 justify-center text-theme-500"
+          class="flex items-center gap-2 py-8 justify-center text-ink-muted"
         >
           <Icon
             icon="lucide:loader-2"
@@ -666,20 +666,20 @@ onMounted(() => loadFolders());
             <div class="space-y-3">
               <div
                 v-if="!editingFolder"
-                class="text-xs text-theme-500"
+                class="text-xs text-ink-muted"
               >
                 Parent: <span class="text-theme-300">{{ parentForCreate?.name || "Uncategorized" }}</span>
               </div>
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Name</label>
+                <label class="block text-xs text-ink-secondary mb-1">Name</label>
                 <input
                   v-model="folderName"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder:text-ink-muted focus:outline-none focus:border-theme-500"
                   placeholder="e.g. Project Notes"
                   @keydown.enter="saveFolder"
                 >
-                <div class="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-theme-500">
+                <div class="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-muted">
                   <Icon
                     icon="lucide:info"
                     class="mt-0.5 h-3 w-3 shrink-0"
@@ -690,24 +690,24 @@ onMounted(() => loadFolders());
                 </div>
               </div>
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Description (optional)</label>
+                <label class="block text-xs text-ink-secondary mb-1">Description (optional)</label>
                 <input
                   v-model="folderDescription"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder:text-ink-muted focus:outline-none focus:border-theme-500"
                 >
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-5">
               <button
-                class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
+                class="px-3 py-1.5 text-sm text-ink-secondary hover:text-theme-200"
                 @click="showCreateDialog = false"
               >
                 Cancel
               </button>
               <button
                 :disabled="!folderName.trim()"
-                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                class="px-4 py-1.5 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on text-sm rounded-lg disabled:opacity-50"
                 @click="saveFolder"
               >
                 {{ editingFolder ? "Save" : "Create" }}
@@ -724,7 +724,7 @@ onMounted(() => loadFolders());
         icon-color="red"
         @close="showDeleteConfirm = false"
       >
-        <p class="text-theme-400 leading-relaxed">
+        <p class="text-ink-secondary leading-relaxed">
           Remove <strong class="text-theme-200">{{ pendingDeleteFolder?.name }}</strong>? Its folder will be moved to the memory trash and its indexes will be removed.
         </p>
         <template #actions>
@@ -755,17 +755,17 @@ onMounted(() => loadFolders());
             </h3>
             <div class="space-y-3">
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Name</label>
+                <label class="block text-xs text-ink-secondary mb-1">Name</label>
                 <input
                   v-model="nodeName"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder:text-ink-muted focus:outline-none focus:border-theme-500"
                   placeholder="e.g. Acme"
                   @keydown.enter="saveNode"
                 >
               </div>
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Type</label>
+                <label class="block text-xs text-ink-secondary mb-1">Type</label>
                 <select
                   v-model="nodeType"
                   class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 focus:outline-none focus:border-theme-500"
@@ -780,11 +780,11 @@ onMounted(() => loadFolders());
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Aliases</label>
+                <label class="block text-xs text-ink-secondary mb-1">Aliases</label>
                 <input
                   v-model="nodeAliases"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder:text-ink-muted focus:outline-none focus:border-theme-500"
                   placeholder="Comma-separated aliases"
                   @keydown.enter="saveNode"
                 >
@@ -792,14 +792,14 @@ onMounted(() => loadFolders());
             </div>
             <div class="flex justify-end gap-2 mt-5">
               <button
-                class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
+                class="px-3 py-1.5 text-sm text-ink-secondary hover:text-theme-200"
                 @click="editingNode = null"
               >
                 Cancel
               </button>
               <button
                 :disabled="!nodeName.trim()"
-                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                class="px-4 py-1.5 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on text-sm rounded-lg disabled:opacity-50"
                 @click="saveNode"
               >
                 Save
@@ -820,43 +820,43 @@ onMounted(() => loadFolders());
               Edit Relationship
             </h3>
             <div class="space-y-3">
-              <div class="text-sm text-theme-400">
+              <div class="text-sm text-ink-secondary">
                 <span class="text-theme-200">{{ editingEdge.fromName }}</span>
                 <Icon
                   icon="lucide:arrow-right"
-                  class="inline w-3.5 h-3.5 mx-1 text-theme-500"
+                  class="inline w-3.5 h-3.5 mx-1 text-ink-muted"
                 />
                 <span class="text-theme-200">{{ editingEdge.toName }}</span>
               </div>
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Relation</label>
+                <label class="block text-xs text-ink-secondary mb-1">Relation</label>
                 <input
                   v-model="edgeRelation"
                   type="text"
-                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder:text-ink-muted focus:outline-none focus:border-theme-500"
                   placeholder="e.g. works_at"
                   @keydown.enter="saveEdge"
                 >
               </div>
               <div>
-                <label class="block text-xs text-theme-400 mb-1">Note</label>
+                <label class="block text-xs text-ink-secondary mb-1">Note</label>
                 <textarea
                   v-model="edgeNote"
                   rows="3"
-                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder-theme-500 focus:outline-none focus:border-theme-500 resize-none"
+                  class="w-full px-3 py-2 text-sm bg-theme-800 border border-theme-700 rounded-lg text-theme-200 placeholder:text-ink-muted focus:outline-none focus:border-theme-500 resize-none"
                 />
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-5">
               <button
-                class="px-3 py-1.5 text-sm text-theme-400 hover:text-theme-200"
+                class="px-3 py-1.5 text-sm text-ink-secondary hover:text-theme-200"
                 @click="editingEdge = null"
               >
                 Cancel
               </button>
               <button
                 :disabled="!edgeRelation.trim()"
-                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                class="px-4 py-1.5 accent-action bg-accent-600 hover:bg-accent-500 text-accent-on text-sm rounded-lg disabled:opacity-50"
                 @click="saveEdge"
               >
                 Save
@@ -873,7 +873,7 @@ onMounted(() => loadFolders());
         icon-color="red"
         @close="pendingDeleteNode = null"
       >
-        <p class="text-theme-400 leading-relaxed">
+        <p class="text-ink-secondary leading-relaxed">
           <template v-if="pendingDeleteNodeIsLiteral">
             Delete the fact whose value is <strong class="text-theme-200">{{ pendingDeleteNode?.name }}</strong>?
           </template>
@@ -905,7 +905,7 @@ onMounted(() => loadFolders());
         icon-color="red"
         @close="pendingDeleteNodes = []"
       >
-        <p class="text-theme-400 leading-relaxed">
+        <p class="text-ink-secondary leading-relaxed">
           Delete <strong class="text-theme-200">{{ pendingDeleteNodes.length }}</strong> selected entities and all of their relationships?
         </p>
         <template #actions>
@@ -932,7 +932,7 @@ onMounted(() => loadFolders());
         icon-color="red"
         @close="pendingDeleteEdge = null"
       >
-        <p class="text-theme-400 leading-relaxed">
+        <p class="text-ink-secondary leading-relaxed">
           Delete
           <strong class="text-theme-200">{{ pendingDeleteEdge?.fromName }}</strong>
           -&gt; {{ pendingDeleteEdge ? formatRelation(pendingDeleteEdge.relation) : "" }} -&gt;

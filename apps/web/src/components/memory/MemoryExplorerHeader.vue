@@ -19,11 +19,11 @@ const emit = defineEmits<{
 <template>
   <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
     <div class="flex min-w-0 items-center gap-2">
-      <div class="flex shrink-0 items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5">
+      <div class="flex shrink-0 items-center rounded-lg border border-theme-700/70 bg-control-surface p-0.5">
         <button
           type="button"
           :disabled="homeDisabled"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-accent-400 transition-colors hover:bg-accent-500/10 hover:text-accent-300 disabled:cursor-not-allowed disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-accent-fg transition-colors hover:bg-accent-500/10 hover:text-accent-fg disabled:cursor-not-allowed disabled:opacity-30"
           title="Home"
           aria-label="Go to memory root"
           @click="emit('home')"
@@ -36,7 +36,7 @@ const emit = defineEmits<{
         <button
           type="button"
           :disabled="!canGoBack"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           title="Back"
           aria-label="Go back"
           @click="emit('back')"
@@ -49,7 +49,7 @@ const emit = defineEmits<{
         <button
           type="button"
           :disabled="!canGoForward"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-theme-500 transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           title="Forward"
           aria-label="Go forward"
           @click="emit('forward')"
@@ -63,7 +63,7 @@ const emit = defineEmits<{
 
       <nav
         v-if="segments.length"
-        class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-800 bg-theme-900/40 px-3 py-1.5 text-xs"
+        class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-xs"
         aria-label="Memory folder path"
       >
         <template
@@ -78,7 +78,7 @@ const emit = defineEmits<{
           <button
             type="button"
             :disabled="segment.disabled"
-            class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:text-accent-300 enabled:hover:bg-theme-800 enabled:hover:text-accent-200 disabled:cursor-default disabled:font-medium disabled:text-theme-200"
+            class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:text-accent-fg enabled:hover:bg-theme-800 enabled:hover:text-accent-fg disabled:cursor-default disabled:font-medium disabled:text-theme-200"
             @click="emit('segmentClick', index)"
           >
             {{ segment.label }}

@@ -288,12 +288,12 @@ onBeforeUnmount(() => {
         <label class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-800 px-2.5 py-2 focus-within:border-accent-500">
           <Icon
             icon="lucide:search"
-            class="h-4 w-4 text-theme-500"
+            class="h-4 w-4 text-ink-muted"
           />
           <input
             v-model="search"
             type="search"
-            class="min-w-0 flex-1 bg-transparent text-xs text-theme-100 outline-none placeholder:text-theme-500"
+            class="min-w-0 flex-1 bg-transparent text-xs text-theme-100 outline-none placeholder:text-ink-muted"
             :placeholder="`Search ${panel}…`"
             :aria-label="`Search ${panel}`"
           >
@@ -313,15 +313,15 @@ onBeforeUnmount(() => {
               <Icon
                 :icon="entry.icon"
                 class="h-5 w-5 shrink-0"
-                :class="entryChanged(entry.id) ? 'text-accent-400' : 'text-theme-300'"
+                :class="entryChanged(entry.id) ? 'text-accent-fg' : 'text-theme-300'"
               />
               <span class="min-w-0 flex-1"><span
                 class="block text-sm"
-                :class="entryChanged(entry.id) ? 'text-accent-400' : 'text-theme-100'"
+                :class="entryChanged(entry.id) ? 'text-accent-fg' : 'text-theme-100'"
               >{{ entry.label }}</span></span>
               <Icon
                 icon="lucide:chevron-right"
-                class="h-4 w-4 text-theme-500"
+                class="h-4 w-4 text-ink-muted"
               />
             </button>
             <template v-if="entry.id === 'files'">
@@ -336,11 +336,11 @@ onBeforeUnmount(() => {
                 <Icon
                   icon="lucide:database-zap"
                   class="h-5 w-5"
-                  :class="changedFields.has('Automatic memory') ? 'text-accent-400' : 'text-theme-300'"
+                  :class="changedFields.has('Automatic memory') ? 'text-accent-fg' : 'text-theme-300'"
                 /><span class="min-w-0 flex-1"><span
                   class="block text-sm"
-                  :class="changedFields.has('Automatic memory') ? 'text-accent-400' : ''"
-                >Automatic Memories</span><span class="block text-[11px] text-theme-500">Retrieve relevant memories</span></span><span
+                  :class="changedFields.has('Automatic memory') ? 'text-accent-fg' : ''"
+                >Automatic Memories</span><span class="block text-[11px] text-ink-muted">Retrieve relevant memories</span></span><span
                   class="relative h-5 w-9 rounded-full transition-colors"
                   :class="chatStore.sessionAutoMemory ? 'bg-accent-600' : 'bg-theme-600'"
                 ><span
@@ -359,11 +359,11 @@ onBeforeUnmount(() => {
                 <Icon
                   icon="lucide:sparkles"
                   class="h-5 w-5"
-                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-400' : 'text-theme-300'"
+                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-fg' : 'text-theme-300'"
                 /><span class="min-w-0 flex-1"><span
                   class="block text-sm"
-                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-400' : ''"
-                >Automatic Tools</span><span class="block text-[11px] text-theme-500">Use tools when helpful</span></span><span
+                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-fg' : ''"
+                >Automatic Tools</span><span class="block text-[11px] text-ink-muted">Use tools when helpful</span></span><span
                   class="relative h-5 w-9 rounded-full transition-colors"
                   :class="chatStore.sessionAutoToolRouting ? 'bg-accent-600' : 'bg-theme-600'"
                 ><span
@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
             <Icon
               icon="lucide:upload"
               class="h-5 w-5"
-            /><span class="flex-1"><span class="block text-sm">Upload files</span><span class="block text-[11px] text-theme-500">Choose files from your device</span></span>
+            /><span class="flex-1"><span class="block text-sm">Upload files</span><span class="block text-[11px] text-ink-muted">Choose files from your device</span></span>
           </button>
           <button
             type="button"
@@ -393,7 +393,7 @@ onBeforeUnmount(() => {
             <Icon
               icon="lucide:library"
               class="h-5 w-5"
-            /><span class="flex-1"><span class="block text-sm">Select from library</span><span class="block text-[11px] text-theme-500">Reuse a previous attachment</span></span>
+            /><span class="flex-1"><span class="block text-sm">Select from library</span><span class="block text-[11px] text-ink-muted">Reuse a previous attachment</span></span>
           </button>
         </template>
         <template v-else-if="panel === 'tools'">
@@ -413,7 +413,7 @@ onBeforeUnmount(() => {
               >
                 <span
                   class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
-                  :class="groupSelectionState(group) ? 'border-accent-500 bg-accent-500 text-white' : 'border-theme-600 bg-theme-950'"
+                  :class="groupSelectionState(group) ? 'border-accent-500 accent-action bg-accent-500 text-accent-on' : 'border-theme-600 bg-theme-950'"
                 >
                   <Icon
                     v-if="groupSelectionState(group)"
@@ -433,15 +433,15 @@ onBeforeUnmount(() => {
                     v-else
                     :icon="getToolNamespaceIcon(group.id)"
                     class="h-4 w-4"
-                    :class="isBuiltInNamespaceId(group.id) ? 'text-accent-400' : 'text-theme-400'"
+                    :class="isBuiltInNamespaceId(group.id) ? 'text-accent-fg' : 'text-ink-secondary'"
                   />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-xs">{{ group.label }}</span>
               </button>
-              <span class="text-[10px] text-theme-500">{{ group.tools.filter(tool => chatStore.selectedToolNames.includes(tool.key)).length }}/{{ group.tools.length }}</span>
+              <span class="text-[10px] text-ink-muted">{{ group.tools.filter(tool => chatStore.selectedToolNames.includes(tool.key)).length }}/{{ group.tools.length }}</span>
               <button
                 type="button"
-                class="rounded p-1 text-theme-500 hover:bg-theme-700 hover:text-theme-200"
+                class="rounded p-1 text-ink-muted hover:bg-theme-700 hover:text-theme-200"
                 :aria-label="`Open ${group.label} tools`"
                 @click.stop="toolNamespace = group.id; search = ''"
               >
@@ -453,7 +453,7 @@ onBeforeUnmount(() => {
             </div>
             <div
               v-if="!toolGroups.length"
-              class="px-3 py-5 text-center text-xs text-theme-500"
+              class="px-3 py-5 text-center text-xs text-ink-muted"
             >
               No tools found
             </div>
@@ -468,10 +468,10 @@ onBeforeUnmount(() => {
               class="mt-0.5 h-4 w-4 accent-accent-500"
               :checked="chatStore.selectedToolNames.includes(tool.key)"
               @change="toggleTool(tool)"
-            ><span class="min-w-0"><span class="block truncate text-xs">{{ tool.name }}</span><span class="block text-[10px] text-theme-500">{{ tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '') }}</span></span></label>
+            ><span class="min-w-0"><span class="block truncate text-xs">{{ tool.name }}</span><span class="block text-[10px] text-ink-muted">{{ tool.description.replace(/^\[MCP:\s*[^\]]*\]\s*/, '') }}</span></span></label>
             <div
               v-if="!activeTools.length"
-              class="px-3 py-5 text-center text-xs text-theme-500"
+              class="px-3 py-5 text-center text-xs text-ink-muted"
             >
               No tools found
             </div>
@@ -490,8 +490,8 @@ onBeforeUnmount(() => {
               @change="toggleFolder(folder)"
             ><Icon
               icon="lucide:folder"
-              class="h-4 w-4 text-theme-400"
-            /><span class="min-w-0"><span class="block truncate text-xs">{{ folder.isUncategorized ? 'All Memory' : folder.name }}</span><span class="block text-[10px] text-theme-500">{{ folder.isUncategorized ? 'Uncategorized and standard folders' : `${folder.fileCount} documents` }}</span></span></label><button
+              class="h-4 w-4 text-ink-secondary"
+            /><span class="min-w-0"><span class="block truncate text-xs">{{ folder.isUncategorized ? 'All Memory' : folder.name }}</span><span class="block text-[10px] text-ink-muted">{{ folder.isUncategorized ? 'Uncategorized and standard folders' : `${folder.fileCount} documents` }}</span></span></label><button
               v-if="hasChildren(folder)"
               type="button"
               class="rounded p-1 hover:bg-theme-700"
@@ -506,7 +506,7 @@ onBeforeUnmount(() => {
           </div>
           <div
             v-if="!visibleFolders.length"
-            class="px-3 py-5 text-center text-xs text-theme-500"
+            class="px-3 py-5 text-center text-xs text-ink-muted"
           >
             No memory folders found
           </div>
@@ -524,10 +524,10 @@ onBeforeUnmount(() => {
           ><Icon
             icon="lucide:bot"
             class="h-4 w-4"
-          /><span class="min-w-0"><span class="block truncate text-xs">{{ agent.name }}</span><span class="block truncate text-[10px] text-theme-500">{{ agent.description || agent.internalName }}</span></span></label>
+          /><span class="min-w-0"><span class="block truncate text-xs">{{ agent.name }}</span><span class="block truncate text-[10px] text-ink-muted">{{ agent.description || agent.internalName }}</span></span></label>
           <div
             v-if="!visibleAgents.length"
-            class="px-3 py-5 text-center text-xs text-theme-500"
+            class="px-3 py-5 text-center text-xs text-ink-muted"
           >
             No subagents found
           </div>
@@ -545,8 +545,8 @@ onBeforeUnmount(() => {
             <Icon
               :icon="selectedReasoning === level.value ? 'lucide:circle-check' : 'lucide:circle'"
               class="h-4 w-4"
-              :class="selectedReasoning === level.value ? 'text-accent-400' : 'text-theme-500'"
-            /><span><span class="block text-xs">{{ level.label }}</span><span class="block text-[10px] text-theme-500">{{ level.detail }}</span></span>
+              :class="selectedReasoning === level.value ? 'text-accent-fg' : 'text-ink-muted'"
+            /><span><span class="block text-xs">{{ level.label }}</span><span class="block text-[10px] text-ink-muted">{{ level.detail }}</span></span>
           </button>
         </template>
       </div>

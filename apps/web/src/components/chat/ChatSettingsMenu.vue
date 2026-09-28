@@ -118,7 +118,7 @@ async function saveAsNewAgent(): Promise<void> {
   <div class="relative shrink-0">
     <button
       type="button"
-      class="relative flex h-7 w-8 items-center justify-center rounded-lg text-theme-400 transition-colors hover:bg-theme-800 hover:text-theme-200"
+      class="relative flex h-7 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-theme-800 hover:text-theme-200"
       title="Chat / Agent Settings"
       aria-label="Chat / Agent Settings"
       aria-haspopup="menu"
@@ -143,7 +143,7 @@ async function saveAsNewAgent(): Promise<void> {
       class="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-theme-700 bg-theme-950 py-1.5 shadow-2xl shadow-black/40"
       @click.stop
     >
-      <div class="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-theme-500">
+      <div class="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
         Chat
       </div>
       <button
@@ -155,7 +155,7 @@ async function saveAsNewAgent(): Promise<void> {
       >
         <Icon
           icon="lucide:search"
-          class="h-3.5 w-3.5 text-theme-500"
+          class="h-3.5 w-3.5 text-ink-muted"
         />
         Search
       </button>
@@ -168,13 +168,13 @@ async function saveAsNewAgent(): Promise<void> {
       >
         <Icon
           :icon="activeConversationPinned ? 'lucide:pin-off' : 'lucide:pin'"
-          class="h-3.5 w-3.5 text-amber-400"
+          class="h-3.5 w-3.5 text-status-warning"
         />
         {{ activeConversationPinned ? 'Unpin Chat' : 'Pin Chat' }}
       </button>
       <p
         v-else
-        class="px-3 py-2 text-xs text-theme-600"
+        class="px-3 py-2 text-xs text-ink-faint"
       >
         No chat selected
       </p>
@@ -182,7 +182,7 @@ async function saveAsNewAgent(): Promise<void> {
       <div
         class="mx-3 my-1 border-t border-theme-800"
       />
-      <div class="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-theme-500">
+      <div class="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
         Agent
       </div>
       <div
@@ -191,7 +191,7 @@ async function saveAsNewAgent(): Promise<void> {
       >
         <p
           v-if="hasOverrides && chatStore.agentOverrideFields.length"
-          class="text-[10px] leading-relaxed text-theme-500"
+          class="text-[10px] leading-relaxed text-ink-muted"
         >
           Changed: {{ chatStore.agentOverrideFields.join(', ') }}
         </p>
@@ -219,7 +219,7 @@ async function saveAsNewAgent(): Promise<void> {
       >
         <Icon
           icon="lucide:rotate-ccw"
-          class="h-3.5 w-3.5 text-theme-500"
+          class="h-3.5 w-3.5 text-ink-muted"
         />
         Reset to Defaults
       </button>
@@ -232,13 +232,13 @@ async function saveAsNewAgent(): Promise<void> {
       >
         <Icon
           icon="lucide:bot"
-          class="h-3.5 w-3.5 text-accent-400"
+          class="h-3.5 w-3.5 text-accent-fg"
         />
         Save as New Agent
       </button>
       <p
         v-if="!hasAgentActions"
-        class="px-3 py-2 text-xs text-theme-600"
+        class="px-3 py-2 text-xs text-ink-faint"
       >
         No agent changes
       </p>
@@ -259,31 +259,31 @@ async function saveAsNewAgent(): Promise<void> {
     icon-color="accent"
     @close="saveModalOpen = false"
   >
-    <p class="mb-4 text-sm text-theme-400">
+    <p class="mb-4 text-sm text-ink-secondary">
       Create a new agent from the current session configuration, including tools, sub-agents, memory folders, and system prompt.
     </p>
     <div class="space-y-3">
       <div>
-        <label class="mb-1 block text-xs text-theme-400">Agent Name</label>
+        <label class="mb-1 block text-xs text-ink-secondary">Agent Name</label>
         <input
           v-model="newAgentName"
           type="text"
-          class="w-full rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 outline-none transition-colors placeholder-theme-500 focus:border-accent-500"
+          class="w-full rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 outline-none transition-colors placeholder:text-ink-muted focus:border-accent-500"
           placeholder="e.g. Research Assistant"
           @keydown.enter="saveAsNewAgent"
         >
       </div>
       <div>
-        <label class="mb-1 block text-xs text-theme-400">Description (optional)</label>
+        <label class="mb-1 block text-xs text-ink-secondary">Description (optional)</label>
         <input
           v-model="newAgentDescription"
           type="text"
-          class="w-full rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 outline-none transition-colors placeholder-theme-500 focus:border-accent-500"
+          class="w-full rounded-lg border border-theme-700 bg-theme-800 px-3 py-2 text-sm text-theme-200 outline-none transition-colors placeholder:text-ink-muted focus:border-accent-500"
           placeholder="What does this agent do?"
         >
       </div>
-      <div class="space-y-1.5 rounded-lg border border-theme-800 bg-theme-900/50 p-3 text-xs text-theme-400">
-        <p class="mb-1 text-[11px] font-medium uppercase tracking-wider text-theme-500">
+      <div class="space-y-1.5 rounded-lg border border-theme-800 bg-theme-900/50 p-3 text-xs text-ink-secondary">
+        <p class="mb-1 text-[11px] font-medium uppercase tracking-wider text-ink-muted">
           Configuration
         </p>
         <p v-if="chatStore.selectedToolNames.length">
@@ -303,14 +303,14 @@ async function saveAsNewAgent(): Promise<void> {
     <template #actions>
       <div class="flex justify-end gap-2">
         <button
-          class="px-3 py-1.5 text-sm text-theme-400 transition-colors hover:text-theme-200"
+          class="px-3 py-1.5 text-sm text-ink-secondary transition-colors hover:text-theme-200"
           @click="saveModalOpen = false"
         >
           Cancel
         </button>
         <button
           :disabled="!newAgentName.trim() || savingAgent"
-          class="flex items-center gap-1.5 rounded-lg bg-accent-600 px-4 py-1.5 text-sm text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
+          class="flex items-center gap-1.5 rounded-lg accent-action bg-accent-600 px-4 py-1.5 text-sm text-accent-on transition-colors hover:bg-accent-500 disabled:opacity-50"
           @click="saveAsNewAgent"
         >
           <Icon

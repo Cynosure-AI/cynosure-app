@@ -67,7 +67,7 @@ describe('ChatOptionsMenu', () => {
 
     const menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
     const button = [...menu.querySelectorAll('button')].find(item => item.textContent?.trim().startsWith(label))!
-    expect(button.querySelectorAll('.text-red-400')).toHaveLength(2)
+    expect(button.querySelectorAll('.text-accent-fg')).toHaveLength(2)
     wrapper.unmount()
   })
 

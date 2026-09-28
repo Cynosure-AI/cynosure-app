@@ -27,14 +27,14 @@ const badges = computed<BehaviorBadge[]>(() => {
           key: 'read-only',
           label: 'read only',
           icon: 'lucide:eye',
-          classes: 'bg-green-500/10 text-green-400',
+          classes: 'bg-green-500/10 text-status-green',
           title: 'Server-declared hint: this tool does not modify its environment.',
         }
       : {
           key: 'writes',
           label: 'writes',
           icon: 'lucide:pencil',
-          classes: 'bg-amber-500/10 text-amber-400',
+          classes: 'bg-amber-500/10 text-status-warning',
           title: 'Server-declared hint: this tool may modify its environment.',
         })
   }
@@ -46,7 +46,7 @@ const badges = computed<BehaviorBadge[]>(() => {
           key: 'destructive',
           label: 'destructive',
           icon: 'lucide:triangle-alert',
-          classes: 'bg-red-500/10 text-red-400',
+          classes: 'bg-red-500/10 text-status-danger',
           title: 'Server-declared hint: this tool may delete or overwrite existing state.',
         }
       : {
@@ -82,14 +82,14 @@ const badges = computed<BehaviorBadge[]>(() => {
           key: 'open-world',
           label: 'external',
           icon: 'lucide:globe-2',
-          classes: 'bg-violet-500/10 text-violet-400',
+          classes: 'bg-violet-500/10 text-status-violet',
           title: 'Server-declared hint: this tool may interact with external systems or data.',
         }
       : {
           key: 'closed-world',
           label: 'local scope',
           icon: 'lucide:box',
-          classes: 'bg-theme-800 text-theme-400',
+          classes: 'bg-theme-800 text-ink-secondary',
           title: 'Server-declared hint: this tool operates within a closed domain.',
         })
   }

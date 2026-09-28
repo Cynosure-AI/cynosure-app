@@ -127,10 +127,10 @@ describe('AgentsView assignment warnings', () => {
     const toolIcon = (row: typeof toolsOn) => row.get('[data-icon="lucide:wrench"]').element.parentElement!
     const memoryIcon = (row: typeof toolsOn) => row.get('[data-icon="lucide:database"]').element.parentElement!
 
-    expect(toolIcon(toolsOn).classList.contains('text-emerald-400')).toBe(true)
-    expect(memoryIcon(toolsOn).classList.contains('text-emerald-400')).toBe(false)
-    expect(toolIcon(memoryOn).classList.contains('text-emerald-400')).toBe(false)
-    expect(memoryIcon(memoryOn).classList.contains('text-emerald-400')).toBe(true)
+    expect(toolIcon(toolsOn).classList.contains('text-status-success')).toBe(true)
+    expect(memoryIcon(toolsOn).classList.contains('text-status-success')).toBe(false)
+    expect(toolIcon(memoryOn).classList.contains('text-status-success')).toBe(false)
+    expect(memoryIcon(memoryOn).classList.contains('text-status-success')).toBe(true)
     expect(toolIcon(toolsOn).parentElement?.textContent).toContain('Automatic tool discovery is enabled')
     expect(memoryIcon(memoryOn).parentElement?.textContent).toContain('Auto memory is enabled')
   })

@@ -156,14 +156,14 @@ onMounted(async () => {
           >
             <Icon
               icon="lucide:heading"
-              class="w-5 h-5 text-theme-400"
+              class="w-5 h-5 text-ink-secondary"
             />
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
-              Generate Chat Titles <span class="ml-1 text-xs text-theme-500">• Pre-response action</span>
+              Generate Chat Titles <span class="ml-1 text-xs text-ink-muted">• Pre-response action</span>
             </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               Generate a descriptive title when the first message is sent, before the agent response
             </p>
           </div>
@@ -178,7 +178,7 @@ onMounted(async () => {
         v-if="prefs.generateTitle"
         class="pt-1 border-t border-theme-700"
       >
-        <label class="block text-xs text-theme-400 mb-1.5">Provider / Model</label>
+        <label class="block text-xs text-ink-secondary mb-1.5">Provider / Model</label>
         <ProviderModelSelect
           :provider-id="prefs.titleProviderId"
           :model-value="prefs.titleModel"
@@ -201,14 +201,14 @@ onMounted(async () => {
           <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
             <Icon
               icon="lucide:message-circle-more"
-              class="w-5 h-5 text-theme-400"
+              class="w-5 h-5 text-ink-secondary"
             />
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
               Quick Responses
             </h3>
-            <p class="text-xs text-theme-500 mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5">
               Generate up to three relevant follow-up suggestions after each assistant turn
             </p>
           </div>
@@ -218,7 +218,7 @@ onMounted(async () => {
           label="Enable quick responses"
         />
       </div>
-      <p class="pt-3 border-t border-theme-700 text-[11px] leading-relaxed text-theme-500">
+      <p class="pt-3 border-t border-theme-700 text-[11px] leading-relaxed text-ink-muted">
         Selecting a suggestion fills the chat input so you can review or edit it before sending. Uses the same provider and model as the chat.
       </p>
     </BaseCard>
@@ -239,14 +239,14 @@ onMounted(async () => {
         >
           <Icon
             icon="lucide:paperclip"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Attachment Context
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Switch large document attachments from inline context to retrieval
           </p>
         </div>
@@ -254,14 +254,14 @@ onMounted(async () => {
 
       <div class="pt-1 border-t border-theme-700">
         <label class="block">
-          <span class="flex items-center justify-between gap-3 text-xs text-theme-400 mb-2">
+          <span class="flex items-center justify-between gap-3 text-xs text-ink-secondary mb-2">
             <span>Inline text limit</span>
             <output class="font-medium tabular-nums text-theme-200">
               {{ formatAttachmentTextLimit(prefs.inlineAttachmentTextLimit) }}
             </output>
           </span>
           <div class="flex items-center gap-3">
-            <span class="w-10 text-right text-[11px] tabular-nums text-theme-500">2 KB</span>
+            <span class="w-10 text-right text-[11px] tabular-nums text-ink-muted">2 KB</span>
             <input
               :value="attachmentLimitStepIndex(prefs.inlineAttachmentTextLimit)"
               type="range"
@@ -275,10 +275,10 @@ onMounted(async () => {
               @input="previewInlineAttachmentTextLimit"
               @change="updateInlineAttachmentTextLimit"
             >
-            <span class="w-12 text-[11px] tabular-nums text-theme-500">500 KB</span>
+            <span class="w-12 text-[11px] tabular-nums text-ink-muted">500 KB</span>
           </div>
         </label>
-        <p class="mt-2 text-[11px] leading-relaxed text-theme-500">
+        <p class="mt-2 text-[11px] leading-relaxed text-ink-muted">
           Larger extracted document text is indexed and retrieved as relevant excerpts instead of being fully resent each turn.
         </p>
       </div>
@@ -304,14 +304,14 @@ onMounted(async () => {
         >
           <Icon
             icon="lucide:scissors"
-            class="w-5 h-5 text-theme-400"
+            class="w-5 h-5 text-ink-secondary"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Context Strategy
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             How to manage conversation history when it exceeds the model's
             context window
           </p>
@@ -335,7 +335,7 @@ onMounted(async () => {
         v-if="prefs.contextStrategy === 'compact'"
         class="pt-1 border-t border-theme-700"
       >
-        <label class="block text-xs text-theme-400 mb-1.5">Summarization Provider / Model</label>
+        <label class="block text-xs text-ink-secondary mb-1.5">Summarization Provider / Model</label>
         <ProviderModelSelect
           :provider-id="prefs.compactProviderId"
           :model-value="prefs.compactModel"

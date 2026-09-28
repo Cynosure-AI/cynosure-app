@@ -97,7 +97,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-theme-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
-            :class="job.enabled ? 'text-theme-200' : 'text-theme-500'"
+            :class="job.enabled ? 'text-theme-200' : 'text-ink-muted'"
             :aria-label="`Open schedule ${job.name || job.prompt || 'Untitled schedule'}`"
             @click="openJob(job)"
           >

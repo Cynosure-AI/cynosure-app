@@ -96,9 +96,9 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         <div class="text-center">
           <Icon
             icon="lucide:upload-cloud"
-            class="mx-auto mb-2 h-12 w-12 text-accent-400"
+            class="mx-auto mb-2 h-12 w-12 text-accent-fg"
           />
-          <p class="font-medium text-accent-300">
+          <p class="font-medium text-accent-fg">
             Drop files into {{ selectedFolder?.name || "selected folder" }}
           </p>
         </div>

@@ -29,7 +29,7 @@ const emit = defineEmits<{
       <div class="shrink-0 border-b border-theme-800 bg-theme-950/95 px-3 py-2 lg:hidden">
         <button
           type="button"
-          class="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-theme-400 transition-colors hover:bg-theme-800 hover:text-theme-100"
+          class="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-theme-800 hover:text-theme-100"
           @click="emit('back')"
         >
           <Icon

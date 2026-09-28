@@ -26,7 +26,7 @@ describe('ToolSelector requirements', () => {
     })
 
     expect(wrapper.text()).toContain('1 require agent')
-    await wrapper.get('button.text-accent-400').trigger('click')
+    await wrapper.get('button.text-accent-fg').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[['builtin::read_file']]])
 
     await wrapper.get('section button').trigger('click')
@@ -50,7 +50,7 @@ describe('ToolSelector requirements', () => {
       },
     })
 
-    await wrapper.get('button.text-accent-400').trigger('click')
+    await wrapper.get('button.text-accent-fg').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[['builtin::schedule_create']]])
   })
 

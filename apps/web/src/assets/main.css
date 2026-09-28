@@ -9,6 +9,8 @@
 @import "./themes/emerald.css";
 @import "./themes/industrial.css";
 @import "./themes/monochrome.css";
+@import "./theme-effects.css";
+@import "./theme-decorations.css";
 
 @theme {
   --color-theme-50: #fafafa;
@@ -34,11 +36,57 @@
   --color-accent-800: #1e40af;
   --color-accent-900: #1e3a8a;
   --color-accent-950: #172554;
+
+  /* Component intent, shared by every palette. */
+  --color-accent-fg: #86c5ff;
+  --color-accent-on: #ffffff;
+  --color-status-info: #38bdf8;
+  --color-status-success: #34d399;
+  --color-status-warning: #fbbf24;
+  --color-status-danger: #f87171;
+  --color-status-green: #4ade80;
+  --color-status-indigo: #818cf8;
+  --color-status-violet: #a78bfa;
+  --color-quote-surface: color-mix(in srgb, var(--color-theme-800) 70%, var(--color-theme-900));
+  --color-code-surface: var(--color-theme-900);
+  --color-code-text: var(--color-theme-200);
+  --color-user-message: var(--color-accent-600);
+  --color-user-message-text: var(--color-accent-on);
+  --color-ink-secondary: #b0bccd;
+  --color-ink-muted: #9aa7ba;
+  --color-ink-faint: #8794a8;
+  --color-page-header: var(--color-theme-950);
+  --color-control-surface: color-mix(in srgb, var(--color-theme-900) 60%, transparent);
+  --color-table-surface: color-mix(in srgb, var(--color-theme-950) 45%, transparent);
+  --color-table-header: color-mix(in srgb, var(--color-theme-900) 70%, transparent);
+  --color-table-border: var(--color-theme-800);
+  --color-table-hover: color-mix(in srgb, var(--color-theme-800) 30%, transparent);
+  --color-table-selected: color-mix(in srgb, var(--color-accent-500) 6%, transparent);
 }
 
-:root {
-  /* Accent buttons default to light content; bright themes override this. */
-  --accent-button-foreground: #ffffff;
+:where(:root) {
+  --theme-shell-background: var(--color-theme-950);
+  --theme-content-background: var(--color-theme-900);
+  --theme-sidebar-background: var(--color-theme-950);
+  --theme-composer-background: var(--color-theme-800);
+  --theme-composer-shadow: none;
+  --theme-nav-active-color: var(--color-theme-100);
+  --theme-nav-active-background: color-mix(in srgb, var(--color-accent-500) 10%, var(--color-theme-800));
+  --theme-nav-active-shadow: inset 3px 0 0 var(--color-accent-500);
+  --theme-nav-active-border: 0 solid transparent;
+  --theme-heading-shadow: none;
+  --theme-heading-transform: none;
+  --theme-heading-spacing: normal;
+  --theme-scrollbar-track: var(--color-theme-950);
+  --theme-scrollbar-thumb: var(--color-theme-700);
+  --theme-scrollbar-hover: var(--color-theme-600);
+  --theme-selection-background: color-mix(in srgb, var(--color-accent-500) 28%, transparent);
+  --theme-selection-color: var(--color-theme-100);
+  --syntax-keyword: #c678dd;
+  --syntax-string: #98c379;
+  --syntax-muted: #7f848e;
+  --syntax-number: #d19a66;
+  --syntax-class: #e5c07b;
 }
 
 /* No theme attribute is the complete default dark presentation. */
@@ -70,20 +118,6 @@ body,
   cursor: not-allowed;
 }
 
-/*
- * Theme gradients have greater specificity than disabled background utilities.
- * Keep their contrast-safe foreground and communicate disabled state by muting
- * the whole accent treatment instead of turning only its content low-contrast.
- */
-button:is(.bg-accent-600, .bg-accent-500, .bg-accent-400):disabled {
-  background-color: var(--color-accent-600);
-  color: var(--accent-button-foreground);
-  cursor: not-allowed;
-  filter: saturate(0.55);
-  opacity: 0.62;
-  box-shadow: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -93,11 +127,6 @@ button:is(.bg-accent-600, .bg-accent-500, .bg-accent-400):disabled {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* ── Main content area: always keep rounded corners regardless of theme ── */
-main.rounded-xl {
-  border-radius: 0.75rem;
 }
 
 button:hover {
@@ -203,12 +232,16 @@ button:hover {
   margin: 0.125rem 0;
 }
 
+.msg-markdown strong {
+  color: var(--color-theme-100);
+}
+
 /* ── Blockquotes ── */
 .msg-markdown blockquote {
   margin: 0.5rem 0;
   padding: 0.375rem 0.75rem;
   border-left: 3px solid var(--color-theme-600);
-  background: rgba(39, 39, 42, 0.3);
+  background: var(--color-quote-surface);
   border-radius: 0 0.375rem 0.375rem 0;
   color: var(--color-theme-300);
 }
@@ -219,4 +252,170 @@ button:hover {
 
 .msg-markdown blockquote blockquote {
   margin-top: 0.25rem;
+}
+
+/* Highlight.js renders markup; these colors follow the active palette. */
+.msg-markdown .hljs { background: var(--color-code-surface); color: var(--color-code-text); }
+.msg-markdown .hljs-keyword,
+.msg-markdown .hljs-selector-tag,
+.msg-markdown .hljs-literal,
+.msg-markdown .hljs-section,
+.msg-markdown .hljs-link { color: var(--syntax-keyword); }
+.msg-markdown .hljs-string,
+.msg-markdown .hljs-title,
+.msg-markdown .hljs-name,
+.msg-markdown .hljs-type,
+.msg-markdown .hljs-attribute,
+.msg-markdown .hljs-symbol,
+.msg-markdown .hljs-bullet,
+.msg-markdown .hljs-addition,
+.msg-markdown .hljs-variable,
+.msg-markdown .hljs-template-tag,
+.msg-markdown .hljs-template-variable { color: var(--syntax-string); }
+.msg-markdown .hljs-comment,
+.msg-markdown .hljs-quote,
+.msg-markdown .hljs-deletion,
+.msg-markdown .hljs-meta { color: var(--syntax-muted); }
+.msg-markdown .hljs-built_in,
+.msg-markdown .hljs-doctag,
+.msg-markdown .hljs-number,
+.msg-markdown .hljs-params { color: var(--syntax-number); }
+.msg-markdown .hljs-title.class_,
+.msg-markdown .hljs-class .hljs-title { color: var(--syntax-class); }
+
+
+/* Shared rendered code and tables. */
+/* ── Code blocks ── */
+.msg-markdown pre {
+  background: var(--color-code-surface);
+  border: 1px solid var(--color-theme-700);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+
+.msg-markdown pre code {
+  color: inherit;
+  background: transparent;
+  padding: 0.75rem 1rem;
+  font-size: inherit;
+  border-radius: 0;
+}
+
+/* ── Inline code ── */
+.msg-markdown :not(pre) > code {
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  background: var(--color-code-surface);
+  color: var(--color-accent-fg);
+}
+.msg-markdown :not(pre) > code::before,
+.msg-markdown :not(pre) > code::after {
+  content: none;
+}
+
+/* ── Links ── */
+.msg-markdown a {
+  color: var(--color-accent-fg);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent-fg) 35%, transparent);
+  transition: text-decoration-color 0.15s;
+  word-break: break-all;
+}
+.msg-markdown a:hover {
+  text-decoration-color: var(--color-accent-fg);
+}
+
+/* ── Tables ── */
+.msg-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-theme-700);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.msg-markdown thead {
+  background: var(--color-theme-700);
+}
+.msg-markdown th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-theme-100);
+  border-bottom: 2px solid var(--color-theme-600);
+  border-right: 1px solid var(--color-theme-600);
+  white-space: nowrap;
+}
+.msg-markdown th:last-child {
+  border-right: none;
+}
+.msg-markdown td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-theme-700);
+  border-right: 1px solid var(--color-theme-700);
+  color: var(--color-theme-300);
+}
+.msg-markdown td:last-child {
+  border-right: none;
+}
+.msg-markdown tr:last-child td {
+  border-bottom: none;
+}
+.msg-markdown tbody tr:nth-child(even) {
+  background: var(--color-theme-800);
+}
+.msg-markdown tbody tr:nth-child(odd) {
+  background: color-mix(in srgb, var(--color-theme-800) 40%, var(--color-theme-900));
+}
+.msg-markdown tbody tr:hover {
+  background: var(--color-theme-700);
+}
+
+/* ── Code block wrapper ── */
+.code-block-wrapper {
+  position: relative;
+  margin: 0.75rem 0;
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 1rem;
+  font-size: 0.75rem;
+  color: var(--color-theme-500);
+  background: var(--color-code-surface);
+  border: 1px solid var(--color-theme-700);
+  border-bottom: none;
+  border-radius: 0.5rem 0.5rem 0 0;
+  user-select: none;
+}
+
+.code-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  color: var(--color-theme-500);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.code-copy-btn:hover {
+  color: var(--color-theme-100);
+  background: var(--color-theme-700);
+}
+.code-copy-btn.copied {
+  color: #34d399;
+}
+
+.code-header + pre {
+  margin-top: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
 }

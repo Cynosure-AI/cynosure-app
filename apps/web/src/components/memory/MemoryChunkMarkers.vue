@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
           :aria-label="marker.first ? 'Chunk 1 start' : `Chunk ${marker.chunk.chunkIndex + 1} boundary`"
         >
           <div class="h-px w-5 bg-linear-to-r from-transparent to-accent-500/60 transition-colors group-hover:to-accent-300" />
-          <span class="rounded-l-full border border-r-0 border-accent-400/50 bg-accent-500/15 py-1 pl-2.5 pr-3 text-[10px] font-bold uppercase tracking-wide text-accent-300 shadow-md shadow-black/30 backdrop-blur-sm transition-colors group-hover:bg-accent-500/25">
+          <span class="rounded-l-full border border-r-0 border-accent-400/50 bg-accent-500/15 py-1 pl-2.5 pr-3 text-[10px] font-bold uppercase tracking-wide text-accent-fg shadow-md shadow-black/30 backdrop-blur-sm transition-colors group-hover:bg-accent-500/25">
             Chunk {{ marker.chunk.chunkIndex + 1 }}
           </span>
         </div>
@@ -236,10 +236,10 @@ onBeforeUnmount(() => {
             class="min-w-64 text-[13px] leading-5 text-theme-200"
             :aria-label="`Summary for chunk ${marker.chunk.chunkIndex + 1}`"
           >
-            <div class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-400">
+            <div class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-fg">
               Chunk {{ marker.chunk.chunkIndex + 1 }}<span v-if="marker.chunk.sectionPath"> · {{ marker.chunk.sectionPath }}</span>
             </div>
-            <p :class="{ 'italic text-theme-500': !marker.chunk.summary }">
+            <p :class="{ 'italic text-ink-muted': !marker.chunk.summary }">
               {{ marker.chunk.summary || "Summary unavailable for this chunk." }}
             </p>
             <div
@@ -249,7 +249,7 @@ onBeforeUnmount(() => {
               <span
                 v-for="tag in marker.chunk.tags"
                 :key="tag"
-                class="rounded border border-theme-700 bg-theme-950 px-1.5 py-0.5 text-[11px] text-theme-400"
+                class="rounded border border-theme-700 bg-theme-950 px-1.5 py-0.5 text-[11px] text-ink-secondary"
               >{{ tag }}</span>
             </div>
           </div>

@@ -4,20 +4,20 @@
 
 /* ── Variable overrides ── */
 [data-theme="cyberpunk"] {
-  --accent-button-foreground: #060608;
-  /* Base: cold dark industrial tones */
+  --color-accent-fg: #fde047;
+  --color-accent-on: #060608;
+
   --color-theme-950: #111114;
   --color-theme-900: #181819;
   --color-theme-800: #202028;
   --color-theme-700: #2c2c38;
   --color-theme-600: #383848;
   --color-theme-500: #55556a;
-  --color-theme-400: #7a7a92;
+  --color-theme-400: #9999ab;
   --color-theme-300: #a0a0b4;
   --color-theme-200: #c4c4d0;
   --color-theme-100: #e8e8f0;
 
-  /* Accent: Cyberpunk 2077 yellow */
   --color-accent-50: #fffef0;
   --color-accent-100: #fefce8;
   --color-accent-200: #fef9c3;
@@ -30,15 +30,11 @@
   --color-accent-900: #5c5700;
   --color-accent-950: #363300;
 
-  /* Cyberpunk palette vars */
   --cp-yellow: #f9f002;
-  --cp-yellow-dim: rgba(249, 240, 2, 0.2);
   --cp-yellow-glow: rgba(249, 240, 2, 0.1);
   --cp-green: #8ae66e;
   --cp-green-dim: rgba(138, 230, 110, 0.15);
-  --cp-green-glow: rgba(138, 230, 110, 0.1);
 
-  /* Sharp edges — industrial, no rounding */
   --radius-xs: 0px;
   --radius-sm: 0px;
   --radius-md: 2px;
@@ -48,164 +44,27 @@
   --radius-3xl: 3px;
   --radius-4xl: 4px;
 
-  /* Theme effects */
-  --theme-glow: 0 0 6px var(--cp-yellow-glow), 0 0 20px rgba(249, 240, 2, 0.04);
-  --theme-glow-strong:
-    0 0 10px rgba(249, 240, 2, 0.22), 0 0 30px rgba(249, 240, 2, 0.07);
-  --theme-accent-rgb: 249, 240, 2;
+  --theme-glow-strong: 0 0 10px rgba(249, 240, 2, 0.22), 0 0 30px rgba(249, 240, 2, 0.07);
 
-  /* Oxanium font – geometric, techy */
   font-family: "Oxanium", "Barlow", "Advent Pro", sans-serif;
   letter-spacing: 0.02em;
-
   color-scheme: dark;
-}
 
-/* ── Focus glow ── */
-[data-theme="cyberpunk"] :is(button, a):focus-visible {
-  box-shadow: var(--theme-glow-strong);
-  outline: 1px solid var(--cp-yellow-dim);
-}
+  --theme-heading-shadow: 0 0 8px var(--cp-yellow-glow);
+  --theme-heading-transform: uppercase;
+  --theme-heading-spacing: .05em;
+  --theme-nav-active-background: rgba(249,240,2,.06);
+  --theme-nav-active-shadow: none;
+  --theme-nav-active-border: 1px solid rgba(249,240,2,.12);
+  --theme-nav-active-clip: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  --theme-selection-background: rgba(249,240,2,.25);
+  --theme-scrollbar-size: 5px;
+  --theme-scrollbar-thumb: rgba(249,240,2,.18);
+  --theme-scrollbar-hover: rgba(249,240,2,.32);
+  --theme-scrollbar-border: 1px solid var(--cp-green-dim);
+  --theme-action-border-right: 2px solid var(--cp-green);
 
-/* ── Green border accent on structural panels ── */
-[data-theme="cyberpunk"] .rounded-xl,
-[data-theme="cyberpunk"] .rounded-lg {
-  border-style: solid;
-  border-color: var(--cp-green-dim);
-}
-
-/* ── Yellow text glow on headings + uppercase industrial style ── */
-[data-theme="cyberpunk"] h1,
-[data-theme="cyberpunk"] h2 {
-  text-shadow: 0 0 8px var(--cp-yellow-glow);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-/* ── Decorative underline on h1/h2 — cyberpunk bar ── */
-[data-theme="cyberpunk"] h1::after,
-[data-theme="cyberpunk"] h2::after {
-  content: "";
-  display: block;
-  margin-top: 4px;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    var(--cp-yellow) 0%,
-    var(--cp-yellow) 60%,
-    transparent 60%,
-    transparent 61%,
-    var(--cp-green) 61%,
-    var(--cp-green) 80%,
-    transparent 80%
-  );
-}
-
-/* ── Input focus: yellow border + inner glow ── */
-[data-theme="cyberpunk"] input:focus,
-[data-theme="cyberpunk"] textarea:focus,
-[data-theme="cyberpunk"] select:focus {
-  box-shadow:
-    0 0 8px var(--cp-yellow-glow),
-    inset 0 0 4px rgba(249, 240, 2, 0.03);
-  border-color: rgba(249, 240, 2, 0.4) !important;
-  outline: none;
-}
-
-/* ── Button hover glow ── */
-[data-theme="cyberpunk"] button:hover {
-  text-shadow: 0 0 5px var(--cp-yellow-glow);
-}
-
-/* ── Black text on yellow accent backgrounds ── */
-[data-theme="cyberpunk"] .bg-accent-600,
-[data-theme="cyberpunk"] .bg-accent-500,
-[data-theme="cyberpunk"] .bg-accent-400 {
-  color: #060608;
-}
-[data-theme="cyberpunk"] .bg-accent-600 .text-white,
-[data-theme="cyberpunk"] .bg-accent-500 .text-white,
-[data-theme="cyberpunk"] .bg-accent-400 .text-white,
-[data-theme="cyberpunk"] .text-white.bg-accent-600,
-[data-theme="cyberpunk"] .text-white.bg-accent-500,
-[data-theme="cyberpunk"] .text-white.bg-accent-400 {
-  color: #060608;
-}
-/* Gradient accent backgrounds — force dark icon/text */
-[data-theme="cyberpunk"] .from-accent-500 .text-white,
-[data-theme="cyberpunk"] .from-accent-400 .text-white {
-  color: #060608;
-}
-
-/* ── Clipped-edge buttons — Entropism industrial cut ──
-   Only clip buttons with enough padding (actual action buttons),
-   skip tiny icon buttons, badge pills, and round close buttons */
-[data-theme="cyberpunk"]
-  button:is(.px-3, .px-4, .px-5, .px-6, .py-2, .py-2\.5, .py-3),
-[data-theme="cyberpunk"] .btn-clip {
-  clip-path: polygon(
-    0% 0%,
-    calc(100% - 10px) 0%,
-    100% 10px,
-    100% 100%,
-    10px 100%,
-    0% calc(100% - 10px)
-  );
-}
-
-/* ── Green accent border-right on primary buttons ── */
-[data-theme="cyberpunk"] button.bg-accent-600,
-[data-theme="cyberpunk"] button.bg-accent-500 {
-  border-right: 2px solid var(--cp-green);
-}
-
-/* ── Subtle scan-line overlay ── */
-[data-theme="cyberpunk"] body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 3px
-  );
-  pointer-events: none;
-  z-index: 10000;
-}
-
-/* ── Scrollbar styling ── */
-[data-theme="cyberpunk"] ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-[data-theme="cyberpunk"] ::-webkit-scrollbar-track {
-  background: #181819;
-}
-[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb {
-  background: rgba(249, 240, 2, 0.18);
-  border: 1px solid var(--cp-green-dim);
-}
-[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(249, 240, 2, 0.32);
-}
-
-/* ── Selection highlight ── */
-[data-theme="cyberpunk"] ::selection {
-  background: rgba(249, 240, 2, 0.25);
-  color: #e8e8f0;
-}
-
-/* ── Active sidebar nav item: Entropism corner cuts ── */
-[data-theme="cyberpunk"] .nav-item.active {
-  position: relative;
-  background-color: rgba(249, 240, 2, 0.06) !important;
-  box-shadow: none !important;
-  border: 1px solid rgba(249, 240, 2, 0.12);
-  border-radius: 0 !important;
-  border-right: 2px solid var(--cp-green);
-  transition:
-    color 150ms ease,
-    background-color 150ms ease !important;
+  --color-ink-secondary: #c5c5d1;
+  --color-ink-muted: #ababbe;
+  --color-ink-faint: #9999ab;
 }

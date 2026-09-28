@@ -18,7 +18,7 @@ const rendered = computed(() => renderMarkdown(formatted.value.markdown))
     class="rich-content msg-markdown min-w-0 overflow-auto text-xs leading-relaxed"
     :class="[
       `rich-content--${formatted.kind}`,
-      tone === 'error' ? 'text-red-700 dark:text-red-300' : tone === 'muted' ? 'text-theme-500' : 'text-theme-300',
+      tone === 'error' ? 'text-red-700 dark:text-red-300' : tone === 'muted' ? 'text-ink-muted' : 'text-theme-300',
     ]"
     :data-content-kind="formatted.kind"
     @click="handleMarkdownClick"

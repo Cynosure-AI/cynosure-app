@@ -30,14 +30,14 @@ function showSection(id: string): boolean {
         <div class="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center">
           <Icon
             icon="lucide:trash-2"
-            class="w-5 h-5 text-red-400"
+            class="w-5 h-5 text-status-danger"
           />
         </div>
         <div>
           <h3 class="text-sm font-medium text-theme-200">
             Reset Data
           </h3>
-          <p class="text-xs text-theme-500 mt-0.5">
+          <p class="text-xs text-ink-muted mt-0.5">
             Clear selected data areas or return to a clean state
           </p>
         </div>
