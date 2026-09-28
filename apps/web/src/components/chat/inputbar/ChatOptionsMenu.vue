@@ -363,7 +363,7 @@ onBeforeUnmount(() => {
                 /><span class="min-w-0 flex-1"><span
                   class="block text-sm"
                   :class="changedFields.has('Automatic tool routing') ? 'text-accent-fg' : ''"
-                >Automatic Tools</span><span class="block text-[11px] text-ink-muted">Use tools when helpful</span></span><span
+                >Automatic Tools</span><span class="block text-[11px] text-ink-muted">Auto-select the appropriate toolset</span></span><span
                   class="relative h-5 w-9 rounded-full transition-colors"
                   :class="chatStore.sessionAutoToolRouting ? 'bg-accent-600' : 'bg-theme-600'"
                 ><span
