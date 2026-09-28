@@ -11,9 +11,13 @@ import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import { Icon } from '@iconify/vue'
+import { useMcpServers } from '../../composables/useMcpServers'
+import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
 
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
+const { servers: mcpServers } = useMcpServers()
+const MCP_ICON_SELECTION_THRESHOLD = 0.7
 const providerStore = useProviderStore()
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +32,40 @@ let dragCounter = 0
 let syncingFromRoute = false
 const canUseChat = computed(() => providerStore.providersLoaded && providerStore.providers.length > 0)
 const hasNoProviders = computed(() => providerStore.providersLoaded && providerStore.providers.length === 0)
+const selectedMcpNamespaces = computed(() => {
+  if (chatStore.loadingMessages || chatStore.messages.length > 0) return []
+
+  const selectedTools = new Set(chatStore.selectedToolNames ?? [])
+  const availableTools = agentStore.availableTools ?? []
+  const groups = new Map<string, { id: string; label: string; tools: typeof availableTools }>()
+
+  for (const tool of availableTools) {
+    const namespaceId = tool.namespace.id
+    if (!namespaceId.startsWith('mcp:')) continue
+    const group = groups.get(namespaceId)
+    if (group) group.tools.push(tool)
+    else groups.set(namespaceId, { id: namespaceId, label: tool.namespace.label, tools: [tool] })
+  }
+
+  return [...groups.values()]
+    .filter((group) => group.tools.filter((tool) => selectedTools.has(tool.key)).length / group.tools.length >= MCP_ICON_SELECTION_THRESHOLD)
+    .map((group) => {
+      const server = mcpServers.value.find((candidate) => candidate.id === group.id.slice(4))
+      return {
+        id: group.id,
+        name: server?.customName || server?.name || group.label,
+        iconUrl: server?.icon_url,
+      }
+    })
+})
+
+function removeMcpSelection(namespaceId: string): void {
+  const toolKeys = new Set((agentStore.availableTools ?? [])
+    .filter((tool) => tool.namespace.id === namespaceId)
+    .map((tool) => tool.key))
+  chatStore.setSelectedToolNames((chatStore.selectedToolNames ?? []).filter((key) => !toolKeys.has(key)))
+  chatStore.markOverridesModified()
+}
 
 const showCenteredComposer = computed(() => {
   const routeConversationId = Array.isArray(route.params.conversationId)
@@ -68,7 +106,10 @@ async function loadOnboardingPills(): Promise<void> {
   ])
   if (agents.status === 'fulfilled') needsAgent.value = agents.value.length === 0
   if (embedding.status === 'fulfilled') needsMemory.value = !embedding.value.providerId && !embedding.value.baseUrl
-  if (servers.status === 'fulfilled') needsTools.value = servers.value.length === 0
+  if (servers.status === 'fulfilled') {
+    needsTools.value = servers.value.length === 0
+    mcpServers.value = servers.value
+  }
 }
 
 watch(wsConnected, (connected) => {
@@ -278,6 +319,54 @@ watch(
               @close="taskListOpen = false"
             />
           </div>
+
+          <!-- Selected MCPs -->
+          <TransitionGroup
+            tag="div"
+            appear
+            enter-active-class="transition duration-200 ease-out"
+            enter-from-class="translate-y-1 opacity-0"
+            enter-to-class="translate-y-0 opacity-100"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="translate-y-0 opacity-100"
+            leave-to-class="translate-y-1 opacity-0"
+            move-class="transition-transform duration-200"
+            class="mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-2 px-4"
+            :class="{ 'pb-2': selectedMcpNamespaces.length }"
+            aria-label="Selected MCPs"
+          >
+            <div
+              v-for="(mcp, index) in selectedMcpNamespaces"
+              :key="mcp.id"
+              :title="mcp.name"
+              :style="{ transitionDelay: `${index * 50}ms` }"
+              class="group inline-flex max-w-full items-center gap-2 rounded-full border border-theme-700 bg-theme-800 px-2.5 py-1.5 text-xs text-theme-200 shadow-sm"
+            >
+              <img
+                v-if="mcp.iconUrl"
+                :src="mcp.iconUrl"
+                :alt="mcp.name"
+                class="h-4 w-4 shrink-0 rounded-full object-cover"
+              >
+              <Icon
+                v-else
+                :icon="getToolNamespaceIcon(mcp.id)"
+                class="h-4 w-4 shrink-0 text-ink-secondary"
+              />
+              <span class="max-w-48 truncate">{{ mcp.name }}</span>
+              <button
+                type="button"
+                class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                :aria-label="`Remove ${mcp.name} tools from selection`"
+                @click="removeMcpSelection(mcp.id)"
+              >
+                <Icon
+                  icon="lucide:x"
+                  class="h-3 w-3"
+                />
+              </button>
+            </div>
+          </TransitionGroup>
 
           <!-- Input bar (full width of chat column) -->
           <InputBar
