@@ -95,7 +95,7 @@ const stateMeta = computed(() => {
       label: "Executing",
       description: "A run is currently in progress.",
       icon: "lucide:loader-2",
-      color: "text-emerald-400",
+      color: "text-status-success",
       bg: "bg-emerald-500/10",
       border: "border-emerald-500/25",
       spin: true,
@@ -106,7 +106,7 @@ const stateMeta = computed(() => {
       label: "Scheduled",
       description: "This job is enabled and will run on schedule.",
       icon: "lucide:calendar-check",
-      color: "text-sky-400",
+      color: "text-status-info",
       bg: "bg-sky-500/10",
       border: "border-sky-500/25",
       spin: false,
@@ -230,12 +230,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             </div>
             <span
               v-if="saveMessage"
-              class="text-sm text-green-400"
+              class="text-sm text-status-green"
               role="status"
             >{{ saveMessage }}</span>
             <button
               type="button"
-              class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
+              class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500 disabled:opacity-50"
               :disabled="saving || !dlgGeneratedExpr.trim()"
               @click="save"
             >
@@ -261,7 +261,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <Icon
               v-else
               icon="lucide:clock"
-              class="h-6 w-6 text-sky-400"
+              class="h-6 w-6 text-status-info"
             />
           </button>
           <div class="min-w-0">
@@ -345,7 +345,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               >
                 <Icon
                   icon="lucide:message-square"
-                  class="h-4 w-4 text-accent-400"
+                  class="h-4 w-4 text-accent-fg"
                 />
                 Free Chat configuration
               </div>
@@ -384,7 +384,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                     <span class="inline-flex min-w-0 items-center gap-2">
                       <Icon
                         :icon="selectedFrequencyOption.icon"
-                        class="w-4 h-4 shrink-0 text-indigo-400"
+                        class="w-4 h-4 shrink-0 text-status-indigo"
                       />
                       <span class="truncate">{{ selectedFrequencyOption.label }}</span>
                     </span>
@@ -409,7 +409,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                       class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] transition hover:bg-theme-800"
                       :class="
                         dlgFrequency === opt.value
-                          ? 'text-accent-400 bg-accent-500/10'
+                          ? 'text-accent-fg bg-accent-500/10'
                           : 'text-theme-300 hover:text-theme-100'
                       "
                       @click="dlgFrequency = opt.value; close()"
@@ -616,7 +616,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-theme-900/70 border border-theme-700/50">
               <Icon
                 icon="lucide:calendar-clock"
-                class="w-3.5 h-3.5 text-sky-400 shrink-0"
+                class="w-3.5 h-3.5 text-status-info shrink-0"
               />
               <span class="text-xs text-theme-300">{{ dlgHumanReadable }}</span>
               <code class="ml-auto text-[11px] text-theme-600 font-mono">{{ dlgGeneratedExpr }}</code>

@@ -184,7 +184,7 @@ const imageGridClass = computed(() => {
     <div
       class="relative md:max-w-[85%] max-w-[90%] rounded-3xl px-5 py-3 text-[15px] wrap-break-word leading-relaxed shadow-sm transition-all"
       :class="[
-        isUser ? 'chat-user-message bg-accent-600 text-white rounded-tr-sm' : 'bg-theme-800/60 border text-theme-200 rounded-tl-sm',
+        isUser ? 'chat-user-message bg-accent-600 text-accent-on rounded-tr-sm' : 'bg-theme-800/60 border text-theme-200 rounded-tl-sm',
         isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-theme-700/50' : '',
         isEditing ? 'w-[85%] md:w-[80%]' : ''
       ]"
@@ -249,7 +249,7 @@ const imageGridClass = computed(() => {
           header-label="Thinking"
           header-icon="lucide:database"
           header-class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] rounded-xl transition-colors hover:bg-indigo-500/10"
-          header-text-class="font-medium text-indigo-400"
+          header-text-class="font-medium text-status-indigo"
           chevron-class="h-3.5 w-3.5 text-indigo-300/70"
           :keyboard-shortcuts="true"
         >
@@ -406,7 +406,7 @@ const imageGridClass = computed(() => {
       <!-- Error message -->
       <div
         v-if="isError && !isUser"
-        class="flex items-start gap-2 text-red-400"
+        class="flex items-start gap-2 text-status-danger"
       >
         <Icon
           icon="lucide:alert-circle"
@@ -545,217 +545,3 @@ const imageGridClass = computed(() => {
     @close="lightboxSrc = null"
   />
 </template>
-
-<style>
-/* ── Heading hierarchy ── */
-.msg-markdown h1 {
-  font-size: 1.5rem;
-  line-height: 2rem;
-  font-weight: 700;
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
-  letter-spacing: 0;
-}
-.msg-markdown h2 {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
-  font-weight: 700;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
-  letter-spacing: 0;
-}
-.msg-markdown h3 {
-  font-size: 1.125rem;
-  line-height: 1.75rem;
-  font-weight: 600;
-  margin-top: 1rem;
-  margin-bottom: 0.5rem;
-}
-.msg-markdown h4 {
-  font-size: 1rem;
-  line-height: 1.5rem;
-  font-weight: 600;
-  margin-top: 0.75rem;
-  margin-bottom: 0.375rem;
-}
-.msg-markdown h5 {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  font-weight: 500;
-  margin-top: 0.75rem;
-  margin-bottom: 0.25rem;
-}
-.msg-markdown h6 {
-  font-size: 0.75rem;
-  line-height: 1rem;
-  font-weight: 500;
-  margin-top: 0.625rem;
-  margin-bottom: 0.25rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* ── Code blocks ── */
-.msg-markdown pre {
-  background: rgb(24 24 27);
-  border: 1px solid rgba(63, 63, 70, 0.5);
-  border-radius: 0.5rem;
-  overflow-x: auto;
-  margin: 0.75rem 0;
-}
-
-.msg-markdown pre code {
-  color: inherit;
-  background: transparent;
-  padding: 0.75rem 1rem;
-  font-size: inherit;
-  border-radius: 0;
-}
-
-/* ── Inline code ── */
-.msg-markdown :not(pre) > code {
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  font-size: 0.85em;
-  background: rgba(63, 63, 70, 0.5);
-  color: #93c5fd;
-}
-.msg-markdown :not(pre) > code::before,
-.msg-markdown :not(pre) > code::after {
-  content: none;
-}
-
-/* ── Links ── */
-.msg-markdown a {
-  color: #93c5fd;
-  text-decoration: underline;
-  text-decoration-color: rgba(147, 197, 253, 0.3);
-  transition: text-decoration-color 0.15s;
-  word-break: break-all;
-}
-.msg-markdown a:hover {
-  text-decoration-color: rgba(147, 197, 253, 0.8);
-}
-
-/* ── Spacing ── */
-.msg-markdown p { margin: 0.5rem 0; }
-.msg-markdown ul, .msg-markdown ol {
-  margin: 0.5rem 0 0.5rem 1.25rem;
-  padding-left: 1rem;
-}
-.msg-markdown ul { list-style-type: disc; }
-.msg-markdown ol { list-style-type: decimal; }
-.msg-markdown ul ul, .msg-markdown ol ul { list-style-type: circle; }
-.msg-markdown ul ul ul, .msg-markdown ol ul ul { list-style-type: square; }
-.msg-markdown li {
-  margin: 0.125rem 0;
-  padding-left: 0.125rem;
-}
-.msg-markdown li > p { margin: 0.125rem 0; }
-.msg-markdown strong { color: rgba(244, 244, 245, 1); }
-
-/* ── Blockquotes ── */
-.msg-markdown blockquote {
-  margin: 0.5rem 0;
-  padding: 0.375rem 0.75rem;
-  border-left: 3px solid var(--color-theme-600);
-  background: rgba(39, 39, 42, 0.3);
-  border-radius: 0 0.375rem 0.375rem 0;
-  color: var(--color-theme-300);
-}
-.msg-markdown blockquote p { margin: 0.25rem 0; }
-.msg-markdown blockquote blockquote { margin-top: 0.25rem; }
-
-/* ── Tables ── */
-.msg-markdown table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.75rem 0;
-  font-size: 0.85rem;
-  border: 1px solid var(--color-theme-700);
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-.msg-markdown thead {
-  background: var(--color-theme-700);
-}
-.msg-markdown th {
-  padding: 0.5rem 0.75rem;
-  text-align: left;
-  font-weight: 600;
-  color: var(--color-theme-100);
-  border-bottom: 2px solid var(--color-theme-600);
-  border-right: 1px solid var(--color-theme-600);
-  white-space: nowrap;
-}
-.msg-markdown th:last-child {
-  border-right: none;
-}
-.msg-markdown td {
-  padding: 0.4rem 0.75rem;
-  border-bottom: 1px solid var(--color-theme-700);
-  border-right: 1px solid var(--color-theme-700);
-  color: var(--color-theme-300);
-}
-.msg-markdown td:last-child {
-  border-right: none;
-}
-.msg-markdown tr:last-child td {
-  border-bottom: none;
-}
-.msg-markdown tbody tr:nth-child(even) {
-  background: var(--color-theme-800);
-}
-.msg-markdown tbody tr:nth-child(odd) {
-  background: color-mix(in srgb, var(--color-theme-800) 40%, var(--color-theme-900));
-}
-.msg-markdown tbody tr:hover {
-  background: var(--color-theme-700);
-}
-
-/* ── Code block wrapper ── */
-.code-block-wrapper {
-  position: relative;
-  margin: 0.75rem 0;
-}
-
-.code-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.375rem 1rem;
-  font-size: 0.75rem;
-  color: rgba(161, 161, 170, 0.8);
-  background: rgba(24, 24, 27, 0.9);
-  border: 1px solid rgba(63, 63, 70, 0.5);
-  border-bottom: none;
-  border-radius: 0.5rem 0.5rem 0 0;
-  user-select: none;
-}
-
-.code-copy-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.25rem;
-  border-radius: 0.25rem;
-  color: rgba(161, 161, 170, 0.6);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-.code-copy-btn:hover {
-  color: rgba(244, 244, 245, 0.9);
-  background: rgba(63, 63, 70, 0.5);
-}
-.code-copy-btn.copied {
-  color: #34d399;
-}
-
-.code-header + pre {
-  margin-top: 0 !important;
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
-}
-</style>

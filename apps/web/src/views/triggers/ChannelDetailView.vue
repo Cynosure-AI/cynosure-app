@@ -79,7 +79,7 @@ const stateMeta = computed(() => {
       label: 'Connected',
       description: 'This channel is online and listening for messages.',
       icon: 'lucide:radio',
-      color: 'text-emerald-400',
+      color: 'text-status-success',
       bg: 'bg-emerald-500/10',
       border: 'border-emerald-500/25',
       spin: false,
@@ -90,7 +90,7 @@ const stateMeta = computed(() => {
       label: 'Error',
       description: channel.value.status.error,
       icon: 'lucide:circle-alert',
-      color: 'text-red-400',
+      color: 'text-status-danger',
       bg: 'bg-red-500/10',
       border: 'border-red-500/25',
       spin: false,
@@ -100,7 +100,7 @@ const stateMeta = computed(() => {
     label: 'Starting',
     description: 'This channel is enabled and waiting for a connection.',
     icon: 'lucide:loader-2',
-    color: 'text-amber-400',
+    color: 'text-status-warning',
     bg: 'bg-amber-500/10',
     border: 'border-amber-500/25',
     spin: true,
@@ -268,7 +268,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             <Icon
               :icon="channelTypeMeta.icon"
               class="w-5 h-5"
-              :class="channel.type === 'telegram' ? 'text-sky-400' : channel.type === 'discord' ? 'text-indigo-400' : 'text-purple-400'"
+              :class="channel.type === 'telegram' ? 'text-status-info' : channel.type === 'discord' ? 'text-status-indigo' : 'text-purple-400'"
             />
           </div>
           <div>
@@ -287,7 +287,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             :state="saveStatus === 'error' ? 'error' : saving ? 'saving' : isDirty ? 'dirty' : saveStatus"
           />
           <button
-            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             :disabled="saving || !canSave || !isDirty"
             @click="save"
           >
@@ -302,7 +302,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           <div class="flex items-center gap-2">
             <Icon
               icon="lucide:tag"
-              class="w-4 h-4 text-sky-400"
+              class="w-4 h-4 text-status-info"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Identity
@@ -332,7 +332,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           <div class="flex items-center gap-2 mb-1">
             <Icon
               icon="lucide:plug"
-              class="w-4 h-4 text-violet-400"
+              class="w-4 h-4 text-status-violet"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Platform
@@ -349,7 +349,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               disabled
               class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors"
               :class="channel.type === opt.value
-                ? 'border-accent-500 bg-accent-500/10 text-accent-400'
+                ? 'border-accent-500 bg-accent-500/10 text-accent-fg'
                 : 'border-theme-700 bg-theme-900 text-theme-500 opacity-40'"
             >
               <Icon
@@ -366,7 +366,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           <div class="flex items-center gap-2">
             <Icon
               icon="lucide:key-round"
-              class="w-4 h-4 text-amber-400"
+              class="w-4 h-4 text-status-warning"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Credentials
@@ -447,7 +447,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           <div class="flex items-center gap-2 mb-1">
             <Icon
               icon="lucide:users"
-              class="w-4 h-4 text-emerald-400"
+              class="w-4 h-4 text-status-success"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Allowed Agents
@@ -468,7 +468,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           <div class="flex items-center gap-2 mb-1">
             <Icon
               icon="lucide:radio"
-              class="w-4 h-4 text-emerald-400"
+              class="w-4 h-4 text-status-success"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Status
@@ -527,9 +527,9 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               :disabled="testing || !canSave"
               class="flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors disabled:opacity-40 shrink-0"
               :class="testResult?.success
-                ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400'
+                ? 'border-emerald-500/30 bg-emerald-500/5 text-status-success'
                 : testResult && !testResult.success
-                  ? 'border-red-500/30 bg-red-500/5 text-red-400'
+                  ? 'border-red-500/30 bg-red-500/5 text-status-danger'
                   : 'border-theme-700 bg-theme-900 text-theme-400 hover:text-theme-200 hover:border-theme-600'"
               @click="testConnection"
             >

@@ -89,7 +89,7 @@
         >
           <Icon
             icon="lucide:sparkles"
-            class="mt-0.5 h-3 w-3 shrink-0 text-accent-400"
+            class="mt-0.5 h-3 w-3 shrink-0 text-accent-fg"
           />
           We recommend <span class="font-mono text-theme-400">{{ recommendedModel }}</span> for this provider.
         </p>
@@ -102,7 +102,7 @@
       </div>
 
       <button
-        class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+        class="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-sm font-medium rounded-lg transition-colors"
         :disabled="!embProviderId || !embModel || savingEmb || resolvingModel"
         @click="saveEmbeddings"
       >
@@ -122,10 +122,10 @@
       >
         <Icon
           icon="lucide:check-circle-2"
-          class="w-5 h-5 text-accent-400 shrink-0 mt-0.5"
+          class="w-5 h-5 text-accent-fg shrink-0 mt-0.5"
         />
         <div>
-          <p class="text-sm font-medium text-accent-300">
+          <p class="text-sm font-medium text-accent-fg">
             Memory embeddings are ready
           </p>
           <p class="text-xs text-theme-400 mt-0.5">

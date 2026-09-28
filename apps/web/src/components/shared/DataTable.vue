@@ -525,7 +525,7 @@ defineExpose({ startEditing, closeEditor })
         >
           <input
             type="checkbox"
-            class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950"
+            class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950"
             :checked="allSelected"
             :indeterminate="someSelected"
             :aria-label="allSelected ? 'Deselect all visible rows' : 'Select all visible rows'"
@@ -550,7 +550,7 @@ defineExpose({ startEditing, closeEditor })
             <Icon
               :icon="sortIcon(col)"
               class="h-3.5 w-3.5 shrink-0"
-              :class="sortColumnKey === col.key ? 'text-accent-400' : 'text-theme-600'"
+              :class="sortColumnKey === col.key ? 'text-accent-fg' : 'text-theme-600'"
             />
           </button>
           <template v-else>
@@ -592,7 +592,7 @@ defineExpose({ startEditing, closeEditor })
               <input
                 v-if="isSelectable(item)"
                 type="checkbox"
-                class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950 sm:opacity-0 sm:group-hover:opacity-100"
+                class="h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg opacity-100 transition-opacity focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-theme-950 sm:opacity-0 sm:group-hover:opacity-100"
                 :class="{ 'sm:!opacity-100': anySelected || isSelected(item.id) }"
                 :checked="isSelected(item.id)"
                 :aria-label="`${isSelected(item.id) ? 'Deselect' : 'Select'} row`"
@@ -704,7 +704,7 @@ defineExpose({ startEditing, closeEditor })
           </p>
           <p
             v-if="editingItems.length > 1"
-            class="mt-0.5 text-[10px] text-accent-400"
+            class="mt-0.5 text-[10px] text-accent-fg"
           >
             Applies to {{ editingItems.length }} selected rows
           </p>

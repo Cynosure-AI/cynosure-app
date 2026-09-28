@@ -88,7 +88,7 @@ onClickOutside(root, () => { open.value = false })
   >
     <button
       type="button"
-      class="relative flex h-8 w-8 items-center justify-center rounded-full border border-theme-700 text-accent-300 transition-colors hover:border-theme-500 hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+      class="relative flex h-8 w-8 items-center justify-center rounded-full border border-theme-700 text-accent-fg transition-colors hover:border-theme-500 hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
       :aria-label="`${kind === 'video' ? 'Video' : 'Image'} generation settings`"
       :aria-expanded="open"
       :title="`${kind === 'video' ? 'Video' : 'Image'} generation settings`"

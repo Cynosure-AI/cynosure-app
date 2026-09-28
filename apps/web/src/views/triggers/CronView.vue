@@ -252,7 +252,7 @@ onUnmounted(() => {
             >
           </label>
           <button
-            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
             @click="openAddCronDialog"
           >
             <Icon
@@ -298,7 +298,7 @@ onUnmounted(() => {
             Create a cron job to run an agent on a recurring schedule.
           </p>
           <button
-            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-accent-on transition-colors"
             @click="openAddCronDialog"
           >
             <Icon
@@ -325,7 +325,7 @@ onUnmounted(() => {
           <template #col-agent="{ item: job }">
             <button
               type="button"
-              class="flex min-w-0 items-center gap-2 text-left hover:text-accent-300"
+              class="flex min-w-0 items-center gap-2 text-left hover:text-accent-fg"
               :title="`Open ${job.agentName} agent details`"
               :aria-label="`Open ${job.agentName} agent details`"
               @click.stop="openAgentDetails(job.agentId)"
@@ -367,13 +367,13 @@ onUnmounted(() => {
                 <Icon
                   icon="lucide:clock"
                   class="w-3 h-3"
-                  :class="job.enabled ? 'text-sky-400' : 'text-theme-500'"
+                  :class="job.enabled ? 'text-status-info' : 'text-theme-500'"
                 />
                 <span>{{ cronToHuman(job.schedule) }}</span>
               </div>
               <div
                 v-if="job.enabled && job.nextRunAt && !job.isRunning"
-                class="mt-1 text-emerald-400/80 tabular-nums"
+                class="mt-1 text-status-success/80 tabular-nums"
               >
                 <Icon
                   icon="lucide:timer"
@@ -387,11 +387,11 @@ onUnmounted(() => {
             <div class="flex flex-wrap items-center gap-1.5">
               <span
                 v-if="job.isRunning"
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-400"
+                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-status-success"
               >EXECUTING</span>
               <span
                 v-else-if="job.enabled"
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-sky-500/20 text-sky-400"
+                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-sky-500/20 text-status-info"
               >SCHEDULED</span>
               <span
                 v-else
@@ -399,7 +399,7 @@ onUnmounted(() => {
               >PAUSED</span>
               <span
                 v-if="job.oneOff"
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/10 text-amber-400"
+                class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/10 text-status-warning"
               >One-off</span>
             </div>
           </template>
@@ -407,7 +407,7 @@ onUnmounted(() => {
           <template #col-actions="{ item: job }">
             <div class="flex items-center gap-1">
               <button
-                class="p-1.5 rounded-lg text-theme-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
+                class="p-1.5 rounded-lg text-theme-400 hover:text-status-success hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
                 title="Execute now"
                 :disabled="runningNow.has(job.id) || job.isRunning"
                 @click.stop="runJobNow(job.id)"
@@ -429,7 +429,7 @@ onUnmounted(() => {
                 />
               </button>
               <button
-                class="p-1.5 rounded-lg text-theme-400 hover:text-sky-400 hover:bg-sky-500/10 transition-colors disabled:opacity-40"
+                class="p-1.5 rounded-lg text-theme-400 hover:text-status-info hover:bg-sky-500/10 transition-colors disabled:opacity-40"
                 title="Duplicate Cron Job"
                 :disabled="duplicatingNow.has(job.id)"
                 @click.stop="duplicateCronJob(job)"
@@ -441,7 +441,7 @@ onUnmounted(() => {
                 />
               </button>
               <button
-                class="p-1.5 rounded-lg text-theme-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                class="p-1.5 rounded-lg text-theme-400 hover:text-status-danger hover:bg-red-500/10 transition-colors"
                 title="Delete"
                 @click.stop="confirmDeleteCron(job)"
               >
@@ -704,7 +704,7 @@ onUnmounted(() => {
               <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-theme-800/50 border border-theme-800">
                 <Icon
                   icon="lucide:calendar-clock"
-                  class="w-3.5 h-3.5 text-sky-400 shrink-0"
+                  class="w-3.5 h-3.5 text-status-info shrink-0"
                 />
                 <span class="text-xs text-theme-300">{{ dlgHumanReadable }}</span>
                 <code class="ml-auto text-[11px] text-theme-600 font-mono">{{ dlgGeneratedExpr }}</code>
@@ -733,7 +733,7 @@ onUnmounted(() => {
             </button>
             <button
               :disabled="!cronAgentId || !dlgGeneratedExpr.trim() || cronSaving"
-              class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+              class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-accent-on transition-colors"
               @click="saveCronJob"
             >
               {{ cronSaving ? 'Creating…' : 'Create' }}

@@ -267,7 +267,7 @@ onMounted(() => {
       </span>
       <div class="flex items-center gap-3">
         <button
-          class="text-[11px] text-accent-400 hover:text-accent-300 transition-colors"
+          class="text-[11px] text-accent-fg hover:text-accent-fg transition-colors"
           @click="selectAllTools"
         >
           Enable all
@@ -365,7 +365,7 @@ onMounted(() => {
                     <div class="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
                       <p
                         class="min-w-0 truncate text-[11px] uppercase tracking-wider"
-                        :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : ''"
+                        :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-fg' : ''"
                       >
                         {{ group.namespace.label }}
                       </p>
@@ -453,8 +453,8 @@ onMounted(() => {
                     class="flex shrink-0 items-center gap-1 self-end rounded px-1.5 py-0.5 text-[9px] transition-colors sm:self-auto"
                     :class="
                       agentStore.isToolAutoApproved(approvalName(tool))
-                        ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
-                        : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20'
+                        ? 'bg-green-500/15 text-status-green hover:bg-green-500/25'
+                        : 'bg-amber-500/10 text-status-warning/80 hover:bg-amber-500/20'
                     "
                     :title="
                       agentStore.isToolAutoApproved(approvalName(tool))

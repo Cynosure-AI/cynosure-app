@@ -317,7 +317,7 @@ onUnmounted(() => {
         <Icon
           :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : row.fileName.endsWith('.md') ? 'lucide:file-text' : 'lucide:file'"
           class="mb-3 h-10 w-10"
-          :class="mode === 'trash' ? 'text-red-400' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
+          :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
         />
         <span
           class="w-full truncate text-sm font-medium"
@@ -334,7 +334,7 @@ onUnmounted(() => {
               Open
             </button>
             <button
-              class="rounded-lg bg-accent-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-50"
+              class="rounded-lg bg-accent-600 px-2.5 py-1.5 text-xs font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
               :disabled="restoringRef === row.documentRef"
               @click.stop="restore(row)"
             >
@@ -376,7 +376,7 @@ onUnmounted(() => {
           <Icon
             :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : 'lucide:file-text'"
             class="h-5 w-5 shrink-0"
-            :class="mode === 'trash' ? 'text-red-400' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
+            :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-400'"
           /><span
             class="truncate text-sm font-medium"
             :class="hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-200'"
@@ -402,7 +402,7 @@ onUnmounted(() => {
               Open
             </button>
             <button
-              class="rounded px-2 py-1 text-xs text-accent-300 hover:bg-accent-500/10 disabled:opacity-50"
+              class="rounded px-2 py-1 text-xs text-accent-fg hover:bg-accent-500/10 disabled:opacity-50"
               :disabled="restoringRef === row.documentRef"
               @click="restore(row)"
             >

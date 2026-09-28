@@ -222,7 +222,7 @@ function clearSelection(): void { emit("close"); }
             class="mt-1 rounded-md border border-theme-800 bg-theme-950/70 p-2"
             @toggle="hydrateSourceChunk(selectedGraphEdge.sourceChunk, $event)"
           >
-            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-400 hover:text-accent-300">
+            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-fg hover:text-accent-fg">
               {{ sourceChunkLabel(selectedGraphEdge.sourceChunk) }}
             </summary>
             <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-theme-500">
@@ -342,7 +342,7 @@ function clearSelection(): void { emit("close"); }
               class="group/source mt-1"
               @toggle="hydrateSourceChunk(chunk, $event)"
             >
-              <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-400 hover:text-accent-300">
+              <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-fg hover:text-accent-fg">
                 {{ sourceChunkLabel(chunk) }}
               </summary>
               <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-theme-500">
@@ -403,7 +403,7 @@ function clearSelection(): void { emit("close"); }
             class="mt-2 rounded-md border border-theme-800 bg-theme-950/70 p-2"
             @toggle="hydrateSourceChunk(edge.sourceChunk, $event)"
           >
-            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-400 hover:text-accent-300">
+            <summary class="cursor-pointer list-none text-[10px] font-medium text-accent-fg hover:text-accent-fg">
               {{ sourceChunkLabel(edge.sourceChunk) }}
             </summary>
             <div class="mt-2 whitespace-pre-wrap break-words border-l border-theme-700 pl-2 text-[10px] leading-4 text-theme-500">

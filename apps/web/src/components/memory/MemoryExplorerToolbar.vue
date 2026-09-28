@@ -134,7 +134,7 @@ const emit = defineEmits<{
       <button
         v-if="spaceCount > 1"
         :disabled="moving"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-accent-400 transition-colors hover:bg-accent-500/10 disabled:opacity-50"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-accent-fg transition-colors hover:bg-accent-500/10 disabled:opacity-50"
         @click="emit('move')"
       >
         <Icon
@@ -159,7 +159,7 @@ const emit = defineEmits<{
       <button
         v-if="canResearch || selectedFolderCount > 0"
         :disabled="selectedFolderCount === 0 && researchIdleCount === 0"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-status-success transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
         title="Extract and classify facts from the selected searchable documents"
         @click="emit('research')"
       >
@@ -184,7 +184,7 @@ const emit = defineEmits<{
       </button>
       <button
         :disabled="deleting"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-status-danger transition-colors hover:bg-red-500/10 disabled:opacity-50"
         title="Remove the selected source files and their indexes"
         @click="emit('remove')"
       >

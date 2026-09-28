@@ -1,6 +1,7 @@
 /* Emerald — deep green glass framed by fine, architectural gold geometry. */
 [data-theme="emerald"] {
-  --accent-button-foreground: #03130d;
+  --color-accent-fg: #6ee7b7;
+  --color-accent-on: #03130d;
   --color-theme-950: #06100d; --color-theme-900: #0b1914; --color-theme-800: #12251d;
   --color-theme-700: #203b30; --color-theme-600: #365747; --color-theme-500: #587968;
   --color-theme-400: #82a392; --color-theme-300: #adccbb; --color-theme-200: #d3e7dc; --color-theme-100: #edf8f2;

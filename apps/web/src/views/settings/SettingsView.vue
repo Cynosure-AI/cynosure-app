@@ -664,7 +664,7 @@ function scoreSection(section: SettingsSection, query: string): number {
                   <span class="ml-auto flex items-center gap-2">
                     <span
                       v-if="isSearching && matchCountByCategory.get(category.id)"
-                      class="rounded-full bg-accent-600/20 px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-400"
+                      class="rounded-full bg-accent-600/20 px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent-fg"
                     >
                       {{ matchCountByCategory.get(category.id) }}
                     </span>

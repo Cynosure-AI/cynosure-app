@@ -97,7 +97,7 @@ const formattedDate = computed(() => props.createdAt
           v-else-if="artifact.kind === 'audio'"
           class="flex w-full max-w-2xl flex-col items-center gap-6 px-6 py-14"
         >
-          <div class="flex h-24 w-24 items-center justify-center rounded-3xl bg-accent-500/15 text-accent-300 ring-1 ring-accent-400/20">
+          <div class="flex h-24 w-24 items-center justify-center rounded-3xl bg-accent-500/15 text-accent-fg ring-1 ring-accent-400/20">
             <Icon
               icon="lucide:audio-lines"
               class="h-11 w-11"
@@ -182,7 +182,7 @@ const formattedDate = computed(() => props.createdAt
           v-if="artifact"
           :href="artifact.href"
           :download="artifact.label"
-          class="inline-flex items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-500"
+          class="inline-flex items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-500"
         >
           <Icon
             icon="lucide:download"
@@ -193,7 +193,7 @@ const formattedDate = computed(() => props.createdAt
         <RouterLink
           v-if="conversationId"
           :to="`/chat/${encodeURIComponent(conversationId)}`"
-          class="inline-flex items-center justify-center gap-2 rounded-xl border border-accent-500/40 bg-accent-500/10 px-4 py-2.5 text-sm font-semibold text-accent-200 transition-colors hover:border-accent-400/60 hover:bg-accent-500/20"
+          class="inline-flex items-center justify-center gap-2 rounded-xl border border-accent-500/40 bg-accent-500/10 px-4 py-2.5 text-sm font-semibold text-accent-fg transition-colors hover:border-accent-400/60 hover:bg-accent-500/20"
           @click="emit('close')"
         >
           <Icon

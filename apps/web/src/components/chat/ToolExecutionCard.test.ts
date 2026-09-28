@@ -417,6 +417,6 @@ describe('ToolExecutionCard', () => {
     const trigger = wrapper.get('button')
     expect(trigger.text()).toContain('0/2 ok · Failed')
     expect(trigger.get('icon-stub').attributes('icon')).toBe('lucide:alert-circle')
-    expect(trigger.get('icon-stub').classes()).toContain('text-red-500/70')
+    expect(trigger.get('icon-stub').classes()).toContain('text-status-danger/70')
   })
 })

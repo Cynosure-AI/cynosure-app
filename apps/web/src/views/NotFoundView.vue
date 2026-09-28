@@ -11,7 +11,7 @@ import { Icon } from '@iconify/vue'
           class="h-7 w-7"
         />
       </div>
-      <p class="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-accent-400">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-accent-fg">
         Page not found
       </p>
       <h1 class="text-2xl font-semibold text-theme-100">
@@ -22,7 +22,7 @@ import { Icon } from '@iconify/vue'
       </p>
       <RouterLink
         to="/chat"
-        class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+        class="mt-6 inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
       >
         <Icon
           icon="lucide:message-square"

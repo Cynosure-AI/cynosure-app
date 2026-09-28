@@ -139,7 +139,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               :icon="link.icon"
-              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-accent-400"
+              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-accent-fg"
             />
             <span class="min-w-0 flex-1">{{ link.label }}</span>
             <Icon
@@ -151,12 +151,12 @@ onBeforeUnmount(() => {
           <button
             v-if="isElectron"
             type="button"
-            class="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-red-400"
+            class="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-300 transition hover:bg-theme-800 hover:text-status-danger"
             @click="quitApp"
           >
             <Icon
               icon="lucide:power"
-              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-red-400"
+              class="h-5 w-5 shrink-0 text-theme-500 group-hover:text-status-danger"
             />
             <span class="min-w-0 flex-1">Quit</span>
           </button>
@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               :icon="updateState.status === 'downloaded' ? 'lucide:badge-check' : updateState.status === 'downloading' ? 'lucide:loader-circle' : 'lucide:download'"
-              class="h-5 w-5 shrink-0 text-accent-400"
+              class="h-5 w-5 shrink-0 text-accent-fg"
               :class="{ 'animate-spin': updateState.status === 'downloading' }"
             />
             <span class="min-w-0 flex-1">

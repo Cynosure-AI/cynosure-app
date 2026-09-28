@@ -3,7 +3,8 @@
    ========================================================================== */
 
 [data-theme="industrial"] {
-  --accent-button-foreground: #171008;
+  --color-accent-fg: #fcd34d;
+  --color-accent-on: #171008;
   --color-theme-950: #100e0b;
   --color-theme-900: #181510;
   --color-theme-800: #211c16;

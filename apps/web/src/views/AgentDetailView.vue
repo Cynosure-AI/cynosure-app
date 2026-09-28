@@ -172,7 +172,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
 
           <button
             type="button"
-            class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-400"
+            class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-400"
             @click="goToChat"
           >
             <Icon
@@ -196,7 +196,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
             <Icon
               v-else
               icon="lucide:bot"
-              class="h-6 w-6 text-accent-400"
+              class="h-6 w-6 text-accent-fg"
             />
           </div>
           <div class="min-w-0">

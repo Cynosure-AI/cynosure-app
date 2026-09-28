@@ -299,7 +299,7 @@ onUnmounted(() => {
           </p>
         </div>
         <button
-          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-accent-on transition-colors"
           @click="openAddDialog"
         >
           <Icon
@@ -314,7 +314,7 @@ onUnmounted(() => {
         class="flex justify-end mb-4"
       >
         <button
-          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-accent-on transition-colors"
           @click="openAddDialog"
         >
           <Icon
@@ -361,7 +361,7 @@ onUnmounted(() => {
           Connect a messaging platform like Telegram so users can interact with your agents via chat.
         </p>
         <button
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-white transition-colors"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-sm font-medium text-accent-on transition-colors"
           @click="openAddDialog"
         >
           <Icon
@@ -394,7 +394,7 @@ onUnmounted(() => {
               <Icon
                 :icon="ch.type === 'telegram' ? 'mdi:telegram' : ch.type === 'discord' ? 'ic:baseline-discord' : ch.type === 'slack' ? 'mdi:slack' : 'lucide:radio'"
                 class="w-5 h-5"
-                :class="ch.type === 'telegram' ? 'text-sky-400' : ch.type === 'discord' ? 'text-indigo-400' : ch.type === 'slack' ? 'text-purple-400' : 'text-theme-500'"
+                :class="ch.type === 'telegram' ? 'text-status-info' : ch.type === 'discord' ? 'text-status-indigo' : ch.type === 'slack' ? 'text-purple-400' : 'text-theme-500'"
               />
             </div>
           </div>
@@ -431,7 +431,7 @@ onUnmounted(() => {
             </div>
             <div
               v-if="ch.status?.error"
-              class="text-xs text-red-400 mt-0.5 truncate max-w-sm"
+              class="text-xs text-status-danger mt-0.5 truncate max-w-sm"
             >
               {{ ch.status.error }}
             </div>
@@ -453,7 +453,7 @@ onUnmounted(() => {
                 />
               </button>
               <button
-                class="p-1.5 rounded-lg hover:bg-red-500/10 text-theme-500 hover:text-red-400 transition-colors"
+                class="p-1.5 rounded-lg hover:bg-red-500/10 text-theme-500 hover:text-status-danger transition-colors"
                 title="Delete"
                 @click.stop="confirmDelete(ch)"
               >
@@ -479,15 +479,15 @@ onUnmounted(() => {
             <!-- Status -->
             <template v-if="ch.status?.connected">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span class="text-xs text-emerald-400">Connected</span>
+              <span class="text-xs text-status-success">Connected</span>
             </template>
             <template v-else-if="ch.enabled && ch.status?.error">
               <span class="w-2 h-2 rounded-full bg-red-500" />
-              <span class="text-xs text-red-400">Error</span>
+              <span class="text-xs text-status-danger">Error</span>
             </template>
             <template v-else-if="ch.enabled">
               <span class="w-2 h-2 rounded-full bg-amber-500" />
-              <span class="text-xs text-amber-400">Starting</span>
+              <span class="text-xs text-status-warning">Starting</span>
             </template>
             <template v-else>
               <span class="w-2 h-2 rounded-full bg-theme-600" />
@@ -545,7 +545,7 @@ onUnmounted(() => {
               type="button"
               class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors"
               :class="dlgType === opt.value
-                ? 'border-accent-500 bg-accent-500/10 text-accent-400'
+                ? 'border-accent-500 bg-accent-500/10 text-accent-fg'
                 : 'border-theme-700 bg-theme-800 text-theme-400 hover:text-theme-200 hover:border-theme-600 disabled:opacity-50'"
               @click="dlgType = opt.value"
             >
@@ -678,9 +678,9 @@ onUnmounted(() => {
             :disabled="dlgTesting || (!dlgBotToken.trim() && dlgType !== 'slack') || (dlgType === 'slack' && (!dlgBotToken.trim() || !dlgAppToken.trim()))"
             class="flex items-center gap-2 px-3 py-2 mb-4 rounded-lg border text-sm transition-colors"
             :class="dlgTestResult?.success
-              ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400'
+              ? 'border-emerald-500/30 bg-emerald-500/5 text-status-success'
               : dlgTestResult && !dlgTestResult.success
-                ? 'border-red-500/30 bg-red-500/5 text-red-400'
+                ? 'border-red-500/30 bg-red-500/5 text-status-danger'
                 : 'border-theme-700 bg-theme-800 text-theme-400 hover:text-theme-200 hover:border-theme-600 disabled:opacity-40'"
             @click="testConnection"
           >
@@ -731,7 +731,7 @@ onUnmounted(() => {
             </button>
             <button
               :disabled="!canSaveChannel || !addDraftDirty"
-              class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+              class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-accent-on transition-colors"
               @click="saveChannel"
             >
               {{ dlgSaving ? 'Saving…' : 'Create Channel' }}

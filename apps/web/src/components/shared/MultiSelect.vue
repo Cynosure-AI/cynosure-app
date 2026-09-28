@@ -127,7 +127,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', handleClickOutsi
       >
         <button
           type="button"
-          class="text-xs text-accent-400 hover:text-accent-300"
+          class="text-xs text-accent-fg hover:text-accent-fg"
           @click="selectAll"
         >
           Select All

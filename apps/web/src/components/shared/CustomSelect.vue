@@ -180,9 +180,9 @@ const currentSizeClasses = computed(() => sizeClasses[props.size]);
 
 function tagVariantClasses(variant: SelectOption['tagVariant']): string {
   if (variant === 'cyan') return 'bg-cyan-500/10 text-cyan-400'
-  if (variant === 'green') return 'bg-emerald-500/10 text-emerald-400'
+  if (variant === 'green') return 'bg-emerald-500/10 text-status-success'
   if (variant === 'blue') return 'bg-blue-500/10 text-blue-400'
-  return 'bg-violet-500/10 text-violet-400'
+  return 'bg-violet-500/10 text-status-violet'
 }
 
 function open(): void {
@@ -345,7 +345,7 @@ onBeforeUnmount(() =>
 
       <span
         v-if="showSelectedTag && selectedOption?.tagIconName"
-        class="shrink-0 inline-flex items-center justify-center text-amber-400"
+        class="shrink-0 inline-flex items-center justify-center text-status-warning"
         :title="selectedOption.tag"
       >
         <Icon
@@ -488,7 +488,7 @@ onBeforeUnmount(() =>
             <!-- Optional tag icon badge -->
             <span
               v-if="opt.tagIconName"
-              class="shrink-0 inline-flex items-center justify-center text-amber-400"
+              class="shrink-0 inline-flex items-center justify-center text-status-warning"
               :title="opt.tag"
             >
               <Icon
@@ -514,8 +514,8 @@ onBeforeUnmount(() =>
               class="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-md transition-all"
               :class="[
                 opt.actionActive
-                  ? 'text-amber-400 opacity-100 hover:text-amber-300 [&>svg]:fill-current'
-                  : 'text-theme-500 opacity-0 hover:text-amber-400 group-hover/select-option:opacity-100 group-focus-visible/select-option:opacity-100',
+                  ? 'text-status-warning opacity-100 hover:text-amber-300 [&>svg]:fill-current'
+                  : 'text-theme-500 opacity-0 hover:text-status-warning group-hover/select-option:opacity-100 group-focus-visible/select-option:opacity-100',
               ]"
               :title="opt.actionLabel"
               :aria-label="opt.actionLabel"
@@ -531,7 +531,7 @@ onBeforeUnmount(() =>
             <Icon
               v-if="opt.value === modelValue"
               icon="lucide:check"
-              class="w-3 h-3 text-accent-400 shrink-0"
+              class="w-3 h-3 text-accent-fg shrink-0"
             />
           </button>
         </template>

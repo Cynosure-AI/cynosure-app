@@ -72,7 +72,7 @@
           <div class="shrink-0">
             <div
               v-if="installedIds.has(mcp.id)"
-              class="flex items-center gap-1.5 text-emerald-400"
+              class="flex items-center gap-1.5 text-status-success"
             >
               <Icon
                 icon="lucide:check-circle-2"
@@ -112,7 +112,7 @@
               {{ envVar.label }}
               <span
                 v-if="envVar.required"
-                class="text-red-400"
+                class="text-status-danger"
               > *</span>
             </label>
             <input
@@ -124,7 +124,7 @@
           </div>
           <div class="flex gap-2">
             <button
-              class="flex items-center gap-1.5 px-3 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-xs font-medium rounded-lg transition-colors"
               :disabled="loadingId === mcp.id || !canInstallWithEnv(mcp)"
               @click="installWithEnv(mcp)"
             >
@@ -147,7 +147,7 @@
         <!-- Error -->
         <div
           v-if="errors[mcp.id]"
-          class="px-4 pb-3 text-xs text-red-400"
+          class="px-4 pb-3 text-xs text-status-danger"
         >
           {{ errors[mcp.id] }}
         </div>
@@ -216,16 +216,16 @@ const mcpOptions = ref<McpOption[]>([])
 
 const iconByName: Record<string, Pick<McpOption, 'icon' | 'iconBg' | 'iconColor'>> = {
   time: { icon: 'lucide:clock', iconBg: 'bg-cyan-500/10', iconColor: 'text-cyan-400' },
-  tavily: { icon: 'lucide:search', iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-400' },
-  weather: { icon: 'lucide:cloud-sun', iconBg: 'bg-sky-500/10', iconColor: 'text-sky-400' },
-  chrome: { icon: 'lucide:globe', iconBg: 'bg-amber-500/10', iconColor: 'text-amber-400' },
-  computer: { icon: 'lucide:monitor', iconBg: 'bg-violet-500/10', iconColor: 'text-violet-400' },
+  tavily: { icon: 'lucide:search', iconBg: 'bg-emerald-500/10', iconColor: 'text-status-success' },
+  weather: { icon: 'lucide:cloud-sun', iconBg: 'bg-sky-500/10', iconColor: 'text-status-info' },
+  chrome: { icon: 'lucide:globe', iconBg: 'bg-amber-500/10', iconColor: 'text-status-warning' },
+  computer: { icon: 'lucide:monitor', iconBg: 'bg-violet-500/10', iconColor: 'text-status-violet' },
   filesystem: { icon: 'lucide:folder-open', iconBg: 'bg-theme-600/40', iconColor: 'text-theme-300' },
-  gmail: { icon: 'lucide:mail', iconBg: 'bg-red-500/10', iconColor: 'text-red-400' },
+  gmail: { icon: 'lucide:mail', iconBg: 'bg-red-500/10', iconColor: 'text-status-danger' },
   github: { icon: 'lucide:github', iconBg: 'bg-theme-600/40', iconColor: 'text-theme-100' },
-  youtube: { icon: 'lucide:youtube', iconBg: 'bg-red-500/10', iconColor: 'text-red-400' },
-  cynosure: { icon: 'lucide:sparkles', iconBg: 'bg-accent-500/10', iconColor: 'text-accent-400' },
-  media: { icon: 'lucide:file-cog', iconBg: 'bg-indigo-500/10', iconColor: 'text-indigo-400' },
+  youtube: { icon: 'lucide:youtube', iconBg: 'bg-red-500/10', iconColor: 'text-status-danger' },
+  cynosure: { icon: 'lucide:sparkles', iconBg: 'bg-accent-500/10', iconColor: 'text-accent-fg' },
+  media: { icon: 'lucide:file-cog', iconBg: 'bg-indigo-500/10', iconColor: 'text-status-indigo' },
 }
 
 function slugify(value: string): string {
@@ -243,7 +243,7 @@ function getIcon(srv: McpRegistryServer['server']): Pick<McpOption, 'icon' | 'ic
 }
 
 function getBadge(pkgType: string): Pick<McpOption, 'badge' | 'badgeClass'> {
-  if (pkgType === 'smithery') return { badge: 'Smithery', badgeClass: 'bg-accent-500/20 text-accent-400' }
+  if (pkgType === 'smithery') return { badge: 'Smithery', badgeClass: 'bg-accent-500/20 text-accent-fg' }
   if (pkgType === 'pypi') return { badge: 'PyPI', badgeClass: 'bg-indigo-500/20 text-indigo-300' }
   return { badge: 'npm', badgeClass: 'bg-theme-600/60 text-theme-300' }
 }

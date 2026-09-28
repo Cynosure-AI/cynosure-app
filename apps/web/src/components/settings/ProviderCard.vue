@@ -60,7 +60,7 @@ function getProviderIcon(type: string): string {
         <span class="font-medium text-theme-200">{{ provider.name }}</span>
         <span
           v-if="isLastUsed"
-          class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-400 font-medium"
+          class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-fg font-medium"
         >Last used</span>
       </div>
       <div class="text-sm text-theme-500 truncate">
@@ -74,9 +74,9 @@ function getProviderIcon(type: string): string {
         class="px-2.5 py-1 text-xs rounded-md transition-colors"
         :class="
           testStatus === true
-            ? 'bg-green-600/20 text-green-400'
+            ? 'bg-green-600/20 text-status-green'
             : testStatus === false
-              ? 'bg-red-600/20 text-red-400'
+              ? 'bg-red-600/20 text-status-danger'
               : 'bg-theme-700 hover:bg-theme-600 text-theme-300'
         "
         @click="emit('test', provider.id)"
@@ -99,7 +99,7 @@ function getProviderIcon(type: string): string {
       </button>
       <button
         type="button"
-        class="p-1 text-theme-500 hover:text-red-400 transition-colors"
+        class="p-1 text-theme-500 hover:text-status-danger transition-colors"
         :aria-label="`Remove ${provider.name}`"
         @click="emit('remove', provider.id)"
       >

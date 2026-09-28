@@ -281,7 +281,7 @@ function formatDate(timestamp: number): string {
             </select>
           </label>
           <button
-            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-white hover:bg-accent-500"
+            class="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent-600 px-4 text-sm font-medium text-accent-on hover:bg-accent-500"
             @click="showCreateDialog = true"
           >
             <Icon
@@ -337,7 +337,7 @@ function formatDate(timestamp: number): string {
         <template #col-favorite="{ item }">
           <button
             class="rounded-md p-1"
-            :class="item.favorite ? 'text-amber-400 [&>svg]:fill-current' : 'text-theme-600 hover:text-amber-400'"
+            :class="item.favorite ? 'text-status-warning [&>svg]:fill-current' : 'text-theme-600 hover:text-status-warning'"
             :title="item.favorite ? 'Remove from favorites' : 'Add to favorites'"
             @click.stop="toggleFavorite(item)"
           >
@@ -362,7 +362,7 @@ function formatDate(timestamp: number): string {
               <Icon
                 v-else
                 icon="lucide:bot"
-                class="h-4 w-4 text-accent-400"
+                class="h-4 w-4 text-accent-fg"
               />
             </div>
             <div class="min-w-0 flex-1">
@@ -370,7 +370,7 @@ function formatDate(timestamp: number): string {
                 <span class="truncate">{{ item.name }}</span><Icon
                   v-if="agentIssues.get(item.id)?.length"
                   icon="lucide:alert-triangle"
-                  class="h-3.5 w-3.5 shrink-0 text-amber-400"
+                  class="h-3.5 w-3.5 shrink-0 text-status-warning"
                   :title="agentIssues.get(item.id)?.join('\n')"
                   :aria-label="`Unavailable assignments: ${agentIssues.get(item.id)?.join(', ')}`"
                 />
@@ -418,7 +418,7 @@ function formatDate(timestamp: number): string {
               Cancel
             </button>
             <button
-              class="rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:opacity-50"
+              class="rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
               :disabled="!editProviderId || editSaving"
               @click="saveInlineModel(items, finish)"
             >
@@ -434,7 +434,7 @@ function formatDate(timestamp: number): string {
             >
               <span
                 class="flex items-center gap-1 rounded px-1.5 py-0.5"
-                :class="item.autoToolRouting ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-500'"
+                :class="item.autoToolRouting ? 'bg-emerald-500/15 text-status-success' : 'bg-theme-700/50 text-theme-500'"
               ><Icon
                 icon="lucide:wrench"
                 class="h-3 w-3"
@@ -442,7 +442,7 @@ function formatDate(timestamp: number): string {
               <template #content>
                 <div
                   class="mb-2 font-medium"
-                  :class="item.autoToolRouting ? 'text-emerald-400' : 'text-theme-400'"
+                  :class="item.autoToolRouting ? 'text-status-success' : 'text-theme-400'"
                 >
                   Automatic tool discovery is {{ item.autoToolRouting ? 'enabled' : 'disabled' }}
                 </div>
@@ -516,7 +516,7 @@ function formatDate(timestamp: number): string {
             >
               <span
                 class="flex items-center rounded px-1.5 py-1"
-                :class="item.autoMemory ? 'bg-emerald-500/15 text-emerald-400' : 'bg-theme-700/50 text-theme-600'"
+                :class="item.autoMemory ? 'bg-emerald-500/15 text-status-success' : 'bg-theme-700/50 text-theme-600'"
               ><Icon
                 icon="lucide:database"
                 class="h-3 w-3"
@@ -524,7 +524,7 @@ function formatDate(timestamp: number): string {
               <template #content>
                 <div
                   class="font-medium"
-                  :class="item.autoMemory ? 'text-emerald-400' : 'text-theme-400'"
+                  :class="item.autoMemory ? 'text-status-success' : 'text-theme-400'"
                 >
                   Auto memory is {{ item.autoMemory ? 'enabled' : 'disabled' }}
                 </div>
@@ -543,7 +543,7 @@ function formatDate(timestamp: number): string {
         <template #col-actions="{ item }">
           <div class="flex items-center justify-end gap-1">
             <button
-              class="rounded-md p-1.5 text-theme-500 hover:text-accent-400"
+              class="rounded-md p-1.5 text-theme-500 hover:text-accent-fg"
               title="Duplicate agent"
               @click.stop="duplicateAgent(item.id)"
             >
@@ -553,7 +553,7 @@ function formatDate(timestamp: number): string {
               />
             </button>
             <button
-              class="rounded-md p-1.5 text-theme-500 hover:text-red-400"
+              class="rounded-md p-1.5 text-theme-500 hover:text-status-danger"
               title="Delete agent"
               @click.stop="confirmDelete(item)"
             >
@@ -587,7 +587,7 @@ function formatDate(timestamp: number): string {
           Create an agent with the model, instructions, and tools for the way you work.
         </p>
         <button
-          class="inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+          class="inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
           @click="showCreateDialog = true"
         >
           <Icon
@@ -653,7 +653,7 @@ function formatDate(timestamp: number): string {
               Cancel
             </button><button
               type="button"
-              class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:opacity-50"
+              class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on hover:bg-accent-500 disabled:opacity-50"
               :disabled="!newName.trim()"
               @click="createAgent"
             >

@@ -77,7 +77,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
         :aria-pressed="semantic"
         aria-label="Toggle semantic search"
         class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors"
-        :class="semantic ? 'border-accent-500/50 bg-accent-500/15 text-accent-300' : 'border-theme-800 bg-theme-900/60 text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
+        :class="semantic ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg' : 'border-theme-800 bg-theme-900/60 text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
         :title="semantic ? 'Semantic search is on' : 'Search document vectors by meaning'"
         @click="semantic = !semantic"
       >
@@ -92,7 +92,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
 
   <div
     v-if="uploading"
-    class="mb-4 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-300"
+    class="mb-4 rounded-lg border border-accent-500/20 bg-accent-500/10 px-3 py-2 text-xs text-accent-fg"
   >
     Uploading {{ uploadProgress.current }}/{{ uploadProgress.total }}…
   </div>
@@ -118,7 +118,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
       >Uploaded — indexing is manual</span>
       <span
         v-else
-        class="text-red-400"
+        class="text-status-danger"
       >{{ result.error }}</span>
     </div>
     <button
@@ -146,13 +146,13 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
         <div class="font-medium">
           {{ jobKindLabel(job.kind) }} failed for {{ job.fileName }}
         </div>
-        <div class="mt-0.5 break-words text-red-400/80">
+        <div class="mt-0.5 break-words text-status-danger/80">
           {{ job.error || "Unknown error" }}
         </div>
       </div>
       <button
         type="button"
-        class="shrink-0 rounded px-1.5 py-0.5 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-200"
+        class="shrink-0 rounded px-1.5 py-0.5 text-status-danger transition-colors hover:bg-red-500/10 hover:text-red-200"
         title="Dismiss"
         aria-label="Dismiss failure"
         @click="emit('dismissFailure', job.id)"

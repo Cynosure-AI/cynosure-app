@@ -23,7 +23,7 @@ const emit = defineEmits<{
         <button
           type="button"
           :disabled="homeDisabled"
-          class="flex h-7 w-7 items-center justify-center rounded-md text-accent-400 transition-colors hover:bg-accent-500/10 hover:text-accent-300 disabled:cursor-not-allowed disabled:opacity-30"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-accent-fg transition-colors hover:bg-accent-500/10 hover:text-accent-fg disabled:cursor-not-allowed disabled:opacity-30"
           title="Home"
           aria-label="Go to memory root"
           @click="emit('home')"
@@ -78,7 +78,7 @@ const emit = defineEmits<{
           <button
             type="button"
             :disabled="segment.disabled"
-            class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:text-accent-300 enabled:hover:bg-theme-800 enabled:hover:text-accent-200 disabled:cursor-default disabled:font-medium disabled:text-theme-200"
+            class="shrink-0 rounded px-1.5 py-0.5 transition-colors enabled:text-accent-fg enabled:hover:bg-theme-800 enabled:hover:text-accent-fg disabled:cursor-default disabled:font-medium disabled:text-theme-200"
             @click="emit('segmentClick', index)"
           >
             {{ segment.label }}

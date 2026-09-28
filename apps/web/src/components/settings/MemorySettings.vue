@@ -458,7 +458,7 @@ function cancelDrop() {
         />
         <button
           :disabled="embSaving || embProbing || !embModel || !embDirty"
-          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
           @click="saveEmbeddings"
         >
           <span v-if="embSaving || embProbing">Saving...</span>
@@ -515,7 +515,7 @@ function cancelDrop() {
           />
           <p
             v-if="openRouterProviders.length === 0"
-            class="text-xs text-amber-400 mt-1"
+            class="text-xs text-status-warning mt-1"
           >
             Add an OpenRouter provider before enabling reranking.
           </p>
@@ -544,7 +544,7 @@ function cancelDrop() {
         />
         <button
           :disabled="rerankSaving || !rerankDirty || (rerankEnabled && (!rerankProviderId || !rerankModel))"
-          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
           @click="saveReranker"
         >
           <span v-if="rerankSaving">Saving...</span>
@@ -650,7 +650,7 @@ function cancelDrop() {
       <p
         v-if="dreamError"
         role="alert"
-        class="text-xs text-red-400"
+        class="text-xs text-status-danger"
       >
         {{ dreamError }}
       </p>
@@ -661,7 +661,7 @@ function cancelDrop() {
         />
         <button
           :disabled="!dreamLoaded || dreamSaving || !dreamDirty || (dreamEnabled && !dreamSelectionValid)"
-          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg"
+          class="ml-auto px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg"
           @click="saveDream"
         >
           {{ dreamSaving ? 'Saving...' : 'Save Dream Config' }}
@@ -704,7 +704,7 @@ function cancelDrop() {
       <template #actions>
         <button
           :disabled="embSaving"
-          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 text-white rounded-xl text-center font-medium transition-colors"
+          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 text-accent-on rounded-xl text-center font-medium transition-colors"
           @click="confirmReembed"
         >
           {{ embSaving ? 'Re-Embedding...' : 'Re-Embed All Memories' }}

@@ -321,7 +321,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
       class="flex justify-end"
     >
       <button
-        class="px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg transition-colors"
+        class="px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm rounded-lg transition-colors"
         @click="showAddForm ? cancelForm() : startAddProvider()"
       >
         {{ showAddForm ? 'Cancel' : 'Add Provider' }}
@@ -469,7 +469,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
         />
         <button
           :disabled="!canSaveProvider || !draftDirty || savingProvider"
-          class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+          class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
           @click="addProvider"
         >
           {{ savingProvider ? 'Saving…' : 'Add Provider' }}
@@ -644,7 +644,7 @@ const modelSelectGroups = computed<SelectOptionGroup[]>(() => {
             </button>
             <button
               :disabled="!canSaveProvider || !draftDirty || savingProvider"
-              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
               @click="addProvider"
             >
               {{ savingProvider ? 'Saving…' : 'Save changes' }}

@@ -967,13 +967,13 @@ function folderIndexSummary(folder: MemoryFolder): {
     };
   }
   if (total > 0 && indexed >= total) {
-    return { label: "Indexed", icon: "lucide:check-circle", colorClass: "text-green-400", ratio: 1 };
+    return { label: "Indexed", icon: "lucide:check-circle", colorClass: "text-status-green", ratio: 1 };
   }
   if (indexed > 0) {
     return {
       label: `${indexed}/${total} Partially Indexed`,
       icon: "lucide:alert-circle",
-      colorClass: "text-amber-400",
+      colorClass: "text-status-warning",
       ratio: indexed / total,
     };
   }
@@ -1110,7 +1110,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           :disabled="currentSpace?.isUncategorized"
           :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
           :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
-          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30"
+          class="shrink-0 rounded p-1 text-theme-500 transition-colors hover:bg-theme-800 hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('deleteSpace')"
         >
           <Icon
@@ -1128,7 +1128,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         >
           <Icon
             icon="lucide:file-plus-2"
-            class="h-4 w-4 text-accent-400"
+            class="h-4 w-4 text-accent-fg"
           />
           New file
         </button>
@@ -1140,7 +1140,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         >
           <Icon
             icon="lucide:folder-plus"
-            class="h-4 w-4 text-amber-400"
+            class="h-4 w-4 text-status-warning"
           />
           New folder
         </button>
@@ -1167,7 +1167,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             >
               <Icon
                 icon="lucide:folders"
-                class="h-4 w-4 shrink-0 text-accent-400"
+                class="h-4 w-4 shrink-0 text-accent-fg"
               />
               {{ recursiveIndexLabel }}
             </button>
@@ -1338,7 +1338,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <p
           v-if="newFileError"
           role="alert"
-          class="mt-2 text-sm text-red-400"
+          class="mt-2 text-sm text-status-danger"
         >
           {{ newFileError }}
         </p>
@@ -1353,7 +1353,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           </button>
           <button
             type="submit"
-            class="rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-white hover:bg-accent-400 disabled:opacity-50"
+            class="rounded-lg bg-accent-500 px-3 py-2 text-sm font-medium text-accent-on hover:bg-accent-400 disabled:opacity-50"
             :disabled="creatingFile"
           >
             {{ creatingFile ? 'Creating…' : 'Create file' }}

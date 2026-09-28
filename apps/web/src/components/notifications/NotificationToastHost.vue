@@ -59,7 +59,7 @@ function iconFor(priority: AppNotification['priority']): string {
           >
             <span
               class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-              :class="toast.priority === 'alert' ? 'bg-red-500/15 text-red-400' : toast.priority === 'action' ? 'bg-amber-500/15 text-amber-400' : 'bg-accent-500/15 text-accent-400'"
+              :class="toast.priority === 'alert' ? 'bg-red-500/15 text-status-danger' : toast.priority === 'action' ? 'bg-amber-500/15 text-status-warning' : 'bg-accent-500/15 text-accent-fg'"
             >
               <Icon
                 :icon="iconFor(toast.priority)"
@@ -75,10 +75,10 @@ function iconFor(priority: AppNotification['priority']): string {
             <div
               class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
               :class="toast.priority === 'alert'
-                ? 'bg-red-500/15 text-red-400'
+                ? 'bg-red-500/15 text-status-danger'
                 : toast.priority === 'action'
-                  ? 'bg-amber-500/15 text-amber-400'
-                  : 'bg-accent-500/15 text-accent-400'"
+                  ? 'bg-amber-500/15 text-status-warning'
+                  : 'bg-accent-500/15 text-accent-fg'"
             >
               <Icon
                 :icon="iconFor(toast.priority)"

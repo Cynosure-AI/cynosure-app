@@ -152,7 +152,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-200">
+  <div class="flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-fg">
     <!-- Mobile sidebar backdrop -->
     <Transition
       v-if="!isOnboardingRoute"
@@ -237,7 +237,7 @@ onUnmounted(() => {
           v-if="!mcpAuthOpened.has(mcpAuthRequests[0]?.serverId)"
           :href="mcpAuthRequests[0]?.authUrl"
           target="_blank"
-          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 text-white rounded-xl text-center font-medium transition-colors shadow-lg shadow-accent-500/20"
+          class="w-full px-4 py-3 bg-accent-600 hover:bg-accent-500 text-accent-on rounded-xl text-center font-medium transition-colors shadow-lg shadow-accent-500/20"
           @click.prevent="openAuthPage(mcpAuthRequests[0]?.serverId, mcpAuthRequests[0]?.authUrl)"
         >
           Open Authorization Page

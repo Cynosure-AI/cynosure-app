@@ -83,9 +83,9 @@ onMounted(async () => {
             class="mt-0.5 h-5 w-5 shrink-0"
             :class="{
               'animate-spin text-theme-400': state.status === 'checking' || state.status === 'downloading',
-              'text-emerald-400': state.status === 'up-to-date' || state.status === 'downloaded',
-              'text-amber-400': state.status === 'available',
-              'text-red-400': state.status === 'error',
+              'text-status-success': state.status === 'up-to-date' || state.status === 'downloaded',
+              'text-status-warning': state.status === 'available',
+              'text-status-danger': state.status === 'error',
               'text-theme-500': state.status === 'idle' || state.status === 'unavailable'
             }"
           />
@@ -112,7 +112,7 @@ onMounted(async () => {
           <button
             v-if="state.status === 'available'"
             type="button"
-            class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-500"
+            class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition hover:bg-accent-500"
             @click="download"
           >
             Download update
@@ -120,7 +120,7 @@ onMounted(async () => {
           <button
             v-else-if="state.status === 'downloaded'"
             type="button"
-            class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-500"
+            class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition hover:bg-accent-500"
             @click="install"
           >
             Install and restart

@@ -11,7 +11,7 @@ const prefs = usePreferencesStore()
       <div class="mb-6 flex h-12 w-12 items-center justify-center rounded-xl border border-accent-500/25 bg-accent-500/10">
         <Icon
           icon="lucide:hand"
-          class="h-5 w-5 text-accent-400"
+          class="h-5 w-5 text-accent-fg"
         />
       </div>
 

@@ -132,14 +132,14 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     </template>
     <template #col-similarity="{ item: file }">
       <span
-        class="inline-flex rounded-full border border-accent-500/25 bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-300"
+        class="inline-flex rounded-full border border-accent-500/25 bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-fg"
         :title="`Best chunk cosine similarity: ${((file.similarity || 0) * 100).toFixed(1)}%`"
       >{{ Math.round((file.similarity || 0) * 100) }}%</span>
     </template>
     <template #col-status="{ item: file }">
       <span
         class="inline-flex items-center gap-1.5 text-xs"
-        :class="file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        :class="file.status === 'indexed' ? 'text-status-green' : 'text-theme-500'"
       >
         <Icon
           :icon="statusIcon(file.status)"
@@ -181,7 +181,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     >
       <input
         type="checkbox"
-        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFolders.has(folder.id) }"
         :checked="selectedFolders.has(folder.id)"
         :aria-label="`${selectedFolders.has(folder.id) ? 'Deselect' : 'Select'} ${folder.name}`"
@@ -190,7 +190,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <Icon
         :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
         class="mb-3 h-11 w-11"
-        :class="folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400'"
+        :class="folder.autoMemoryExcluded ? 'text-orange-400' : 'text-status-warning'"
       />
       <span class="w-full truncate text-sm font-medium text-theme-200">{{ folder.name }}</span>
       <span class="mt-1 text-[11px] text-theme-600">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
@@ -223,7 +223,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <input
         v-if="file.supported"
         type="checkbox"
-        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-500 opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        class="absolute left-3 top-3 h-4 w-4 cursor-pointer rounded border-theme-600 bg-theme-900 text-accent-fg opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         :class="{ 'sm:!opacity-100': selectedItemCount > 0 || selectedFiles.has(file.fileName) }"
         :checked="selectedFiles.has(file.fileName)"
         :aria-label="`${selectedFiles.has(file.fileName) ? 'Deselect' : 'Select'} ${file.fileName}`"
@@ -249,7 +249,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <span class="mt-1 text-[11px] text-theme-600">{{ formatFileSize(file.size) }}</span>
       <span
         class="mt-2 inline-flex items-center gap-1 text-[10px]"
-        :class="isJobActive('reindex', file.fileName) ? 'text-orange-400' : file.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        :class="isJobActive('reindex', file.fileName) ? 'text-orange-400' : file.status === 'indexed' ? 'text-status-green' : 'text-theme-500'"
       >
         <Icon
           :icon="isJobActive('reindex', file.fileName) ? 'lucide:loader-2' : statusIcon(file.status)"
@@ -260,7 +260,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       </span>
       <span
         v-if="isJobActive('deep-research', file.fileName)"
-        class="mt-1 inline-flex items-center gap-1 text-[10px] text-emerald-400"
+        class="mt-1 inline-flex items-center gap-1 text-[10px] text-status-success"
       >
         <Icon
           icon="lucide:loader-2"
@@ -302,7 +302,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         <Icon
           :icon="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder' : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
           class="h-5 w-5 shrink-0"
-          :class="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'text-orange-400' : 'text-amber-400' : item.supported ? 'text-theme-400' : 'text-theme-600'"
+          :class="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'text-orange-400' : 'text-status-warning' : item.supported ? 'text-theme-400' : 'text-theme-600'"
         />
         <div class="min-w-0">
           <div
@@ -347,7 +347,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       >Recursive</span>
       <span
         v-else-if="isJobActive('deep-research', item.fileName)"
-        class="inline-flex items-center gap-1.5 text-xs text-emerald-400"
+        class="inline-flex items-center gap-1.5 text-xs text-status-success"
       ><Icon
         icon="lucide:loader-2"
         class="h-3.5 w-3.5 animate-spin"
@@ -355,7 +355,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <span
         v-else
         class="inline-flex items-center gap-1.5 text-xs"
-        :class="item.deepResearched ? 'text-green-400' : 'text-theme-500'"
+        :class="item.deepResearched ? 'text-status-green' : 'text-theme-500'"
       ><Icon
         :icon="item.deepResearched ? 'lucide:check-circle' : 'lucide:circle-dashed'"
         class="h-3.5 w-3.5"
@@ -381,7 +381,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       <span
         v-else
         class="inline-flex items-center gap-1.5 text-xs"
-        :class="item.status === 'indexed' ? 'text-green-400' : 'text-theme-500'"
+        :class="item.status === 'indexed' ? 'text-status-green' : 'text-theme-500'"
       ><Icon
         :icon="statusIcon(item.status)"
         class="h-3.5 w-3.5"

@@ -14,9 +14,9 @@ const totalCount = computed(() => state.value?.items.length ?? 0)
 
 const statusMeta: Record<PlanningTaskStatus, { icon: string; cls: string }> = {
   pending: { icon: 'lucide:circle', cls: 'text-theme-500' },
-  in_progress: { icon: 'svg-spinners:ring-resize', cls: 'text-accent-400' },
-  completed: { icon: 'lucide:check-circle-2', cls: 'text-emerald-400' },
-  blocked: { icon: 'lucide:octagon-alert', cls: 'text-amber-400' },
+  in_progress: { icon: 'svg-spinners:ring-resize', cls: 'text-accent-fg' },
+  completed: { icon: 'lucide:check-circle-2', cls: 'text-status-success' },
+  blocked: { icon: 'lucide:octagon-alert', cls: 'text-status-warning' },
   cancelled: { icon: 'lucide:circle-x', cls: 'text-theme-500' },
 }
 
@@ -36,7 +36,7 @@ function itemClass(item: PlanningTaskItem): string {
     class="absolute right-3 top-3 z-20 flex max-h-[min(24rem,calc(100%_-_1.5rem))] w-[min(24rem,calc(100%_-_1.5rem))] flex-col overflow-hidden rounded-xl border border-theme-700 bg-theme-950/95 shadow-2xl shadow-black/40 backdrop-blur"
   >
     <div class="flex min-w-0 items-center gap-3 border-b border-theme-800 px-3 py-2.5">
-      <span class="h-6 w-6 flex items-center justify-center rounded-md text-accent-400 shrink-0">
+      <span class="h-6 w-6 flex items-center justify-center rounded-md text-accent-fg shrink-0">
         <Icon
           icon="lucide:list-checks"
           class="w-4 h-4"

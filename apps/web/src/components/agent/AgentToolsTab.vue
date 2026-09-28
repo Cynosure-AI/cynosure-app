@@ -75,14 +75,14 @@ function removeMissing() {
           <div class="flex flex-wrap items-center gap-2">
             <Icon
               icon="lucide:route"
-              class="h-4 w-4 text-accent-400"
+              class="h-4 w-4 text-accent-fg"
             />
             <p class="text-sm font-medium text-theme-200">
               Automatic tool discovery
             </p>
             <span
               v-if="usesSelectionCapRouting && !agent.autoToolRouting"
-              class="rounded bg-accent-500/10 px-1.5 py-0.5 text-[10px] text-accent-300"
+              class="rounded bg-accent-500/10 px-1.5 py-0.5 text-[10px] text-accent-fg"
             >
               Auto for {{ agent.tools.length }} tools
             </span>
@@ -110,13 +110,13 @@ function removeMissing() {
       <div class="flex items-start gap-2">
         <Icon
           icon="lucide:alert-triangle"
-          class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"
+          class="w-4 h-4 text-status-warning shrink-0 mt-0.5"
         />
         <div class="flex-1 min-w-0">
           <p class="text-xs font-medium text-amber-300">
             {{ missingTools.length }} assigned tool{{ missingTools.length > 1 ? 's' : '' }} unavailable
           </p>
-          <p class="text-[11px] text-amber-400/60 mt-0.5">
+          <p class="text-[11px] text-status-warning/60 mt-0.5">
             These tools are assigned to the agent but no longer found in any MCP server or built-in tools.
           </p>
           <div class="mt-2 flex flex-wrap gap-1.5">
@@ -133,7 +133,7 @@ function removeMissing() {
             </span>
           </div>
           <button
-            class="mt-2.5 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1"
+            class="mt-2.5 text-[11px] font-medium text-status-warning hover:text-amber-300 transition-colors flex items-center gap-1"
             @click="removeMissing"
           >
             <Icon

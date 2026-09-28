@@ -355,7 +355,7 @@ async function toggleMic(): Promise<void> {
         <div class="flex items-start gap-2">
           <Icon
             icon="mdi:information"
-            class="h-4 w-4 text-amber-400 mt-0.5 shrink-0"
+            class="h-4 w-4 text-status-warning mt-0.5 shrink-0"
           />
           <span>{{ voiceInputUnavailableReason }}</span>
         </div>
@@ -372,9 +372,9 @@ async function toggleMic(): Promise<void> {
           whisperStatus === 'recording'
             ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'
             : whisperStatus === 'transcribing'
-              ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
+              ? 'bg-amber-500/20 text-status-warning shadow-[0_0_16px_rgba(245,158,11,0.4)] animate-whisper-glow cursor-wait'
               : whisperStatus === 'loading'
-                ? 'text-amber-400 cursor-wait'
+                ? 'text-status-warning cursor-wait'
                 : 'text-theme-500 hover:text-theme-300'
         "
         :title="
@@ -416,7 +416,7 @@ async function toggleMic(): Promise<void> {
             stroke-width="2"
             stroke-dasharray="94.2"
             :stroke-dashoffset="94.2 - (94.2 * whisperProgress) / 100"
-            class="text-amber-400 transition-all duration-300"
+            class="text-status-warning transition-all duration-300"
           />
         </svg>
         <!-- Transcribing badge with animated dots -->
@@ -487,7 +487,7 @@ async function toggleMic(): Promise<void> {
         >
           <Icon
             icon="lucide:corner-up-left"
-            class="mt-0.5 h-4 w-4 shrink-0 text-accent-400"
+            class="mt-0.5 h-4 w-4 shrink-0 text-accent-fg"
           />
           <span>
             <span class="block text-xs font-medium text-theme-100">Steer current run</span>
@@ -501,7 +501,7 @@ async function toggleMic(): Promise<void> {
       v-if="!isRunning || editingQueue"
       type="button"
       :disabled="!canSend"
-      class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-accent-600 px-2.5 text-white transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
+      class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-accent-600 px-2.5 text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-theme-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-300"
       :title="editingQueue ? 'Save queued message' : 'Send message'"
       :aria-label="editingQueue ? 'Save queued message' : 'Send message'"
       @click="queueMessage"

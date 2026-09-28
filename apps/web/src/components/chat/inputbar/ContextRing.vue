@@ -67,14 +67,14 @@ const contextUsage = computed(() => {
           stroke-linecap="round"
           :stroke-dasharray="87.96"
           :stroke-dashoffset="Math.max(0, 87.96 - (87.96 * contextUsage.percent) / 100)"
-          :class="contextUsage.percent > 90 ? 'text-red-500' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-accent-500'"
+          :class="contextUsage.percent > 90 ? 'text-status-danger' : contextUsage.percent > 70 ? 'text-status-warning' : 'text-accent-fg'"
           class="transition-all duration-500"
         />
       </svg>
       <span
         v-if="contextUsage"
         class="absolute text-[8px] font-bold leading-none"
-        :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-theme-400'"
+        :class="contextUsage.percent > 90 ? 'text-status-danger' : contextUsage.percent > 70 ? 'text-status-warning' : 'text-theme-400'"
       >{{ Math.round(contextUsage.percent) }}%</span>
     </div>
     <template #content>
@@ -108,7 +108,7 @@ const contextUsage = computed(() => {
         <div class="flex justify-between text-theme-400">
           <span>Usage</span>
           <span
-            :class="contextUsage.percent > 90 ? 'text-red-400' : contextUsage.percent > 70 ? 'text-amber-400' : 'text-theme-300'"
+            :class="contextUsage.percent > 90 ? 'text-status-danger' : contextUsage.percent > 70 ? 'text-status-warning' : 'text-theme-300'"
           >{{ Math.round(contextUsage.percent) }}%</span>
         </div>
         <div class="text-theme-600 text-[10px] mt-1.5 border-t border-theme-800 pt-1.5">

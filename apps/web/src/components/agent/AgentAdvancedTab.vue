@@ -126,7 +126,7 @@ function onMaxCtxSliderInput(event: Event) {
           <div class="flex items-center gap-2 mb-1">
             <Icon
               icon="lucide:shield-check"
-              class="w-4 h-4 text-amber-400"
+              class="w-4 h-4 text-status-warning"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Auto-Approve All Tools
@@ -154,7 +154,7 @@ function onMaxCtxSliderInput(event: Event) {
       <div class="flex items-center gap-2 mb-1">
         <Icon
           icon="lucide:sparkles"
-          class="w-4 h-4 text-accent-400"
+          class="w-4 h-4 text-accent-fg"
         />
         <h3 class="text-sm font-medium text-theme-200">
           Context Routing Model
@@ -184,7 +184,7 @@ function onMaxCtxSliderInput(event: Event) {
       <div class="flex items-center gap-2 mb-1">
         <Icon
           icon="lucide:lightbulb"
-          class="w-4 h-4 text-indigo-400"
+          class="w-4 h-4 text-status-indigo"
         />
         <h3 class="text-sm font-medium text-theme-200">
           Thinking / Reasoning
@@ -243,7 +243,7 @@ function onMaxCtxSliderInput(event: Event) {
           <div class="flex items-center gap-2 mb-1">
             <Icon
               icon="lucide:ruler"
-              class="w-4 h-4 text-amber-400"
+              class="w-4 h-4 text-status-warning"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Max Context Tokens

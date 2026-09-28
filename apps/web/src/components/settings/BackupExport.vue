@@ -123,7 +123,7 @@ async function doExport(): Promise<void> {
           </div>
           <div
             v-if="summaryLoading || moduleCountLabel(key)"
-            class="text-[11px] font-medium text-accent-400 mt-1"
+            class="text-[11px] font-medium text-accent-fg mt-1"
           >
             <span v-if="summaryLoading">Counting…</span>
             <span v-else>{{ moduleCountLabel(key) }}</span>
@@ -135,14 +135,14 @@ async function doExport(): Promise<void> {
 
     <div
       v-if="exportError"
-      class="text-xs text-red-400"
+      class="text-xs text-status-danger"
     >
       {{ exportError }}
     </div>
 
     <button
       :disabled="exporting || !Object.values(exportModules).some(Boolean)"
-      class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+      class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
       @click="doExport"
     >
       <Icon

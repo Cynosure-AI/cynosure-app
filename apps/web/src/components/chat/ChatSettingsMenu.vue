@@ -168,7 +168,7 @@ async function saveAsNewAgent(): Promise<void> {
       >
         <Icon
           :icon="activeConversationPinned ? 'lucide:pin-off' : 'lucide:pin'"
-          class="h-3.5 w-3.5 text-amber-400"
+          class="h-3.5 w-3.5 text-status-warning"
         />
         {{ activeConversationPinned ? 'Unpin Chat' : 'Pin Chat' }}
       </button>
@@ -232,7 +232,7 @@ async function saveAsNewAgent(): Promise<void> {
       >
         <Icon
           icon="lucide:bot"
-          class="h-3.5 w-3.5 text-accent-400"
+          class="h-3.5 w-3.5 text-accent-fg"
         />
         Save as New Agent
       </button>
@@ -310,7 +310,7 @@ async function saveAsNewAgent(): Promise<void> {
         </button>
         <button
           :disabled="!newAgentName.trim() || savingAgent"
-          class="flex items-center gap-1.5 rounded-lg bg-accent-600 px-4 py-1.5 text-sm text-white transition-colors hover:bg-accent-500 disabled:opacity-50"
+          class="flex items-center gap-1.5 rounded-lg bg-accent-600 px-4 py-1.5 text-sm text-accent-on transition-colors hover:bg-accent-500 disabled:opacity-50"
           @click="saveAsNewAgent"
         >
           <Icon

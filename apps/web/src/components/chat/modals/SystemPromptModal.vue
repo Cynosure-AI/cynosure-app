@@ -80,7 +80,7 @@ function insertSmartTag(tag: string): void {
           Cancel
         </button>
         <button
-          class="px-4 py-2 text-sm rounded-lg bg-accent-600 text-white hover:bg-accent-500 transition-colors"
+          class="px-4 py-2 text-sm rounded-lg bg-accent-600 text-accent-on hover:bg-accent-500 transition-colors"
           @click="save"
         >
           Save

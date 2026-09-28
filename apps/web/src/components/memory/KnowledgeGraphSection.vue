@@ -251,7 +251,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           @select-suggestion="emit('select-suggestion', $event)"
         />
         <button
-          class="p-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
+          class="p-2 bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg transition-colors"
           title="Walk graph"
         >
           <Icon
@@ -326,7 +326,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           v-for="node in walkNodes"
           :key="node.id"
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 px-2 py-1 text-xs text-accent-200"
+          class="inline-flex items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 px-2 py-1 text-xs text-accent-fg"
           :title="`Remove ${node.name} from the graph walk`"
           @click="emit('remove-selected-node', node.id)"
         >
@@ -335,10 +335,10 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
             class="w-3 h-3"
           />
           {{ node.name }}
-          <span class="text-accent-300/70">{{ node.type }}</span>
+          <span class="text-accent-fg/70">{{ node.type }}</span>
           <Icon
             icon="lucide:x"
-            class="h-3 w-3 text-accent-300/70"
+            class="h-3 w-3 text-accent-fg/70"
           />
         </button>
       </div>
@@ -410,7 +410,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
                 :key="mode.id"
                 type="button"
                 class="inline-flex h-7 w-7 items-center justify-center rounded text-xs transition-colors"
-                :class="edgePathType === mode.id ? 'bg-accent-500/18 text-accent-200' : 'text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
+                :class="edgePathType === mode.id ? 'bg-accent-500/18 text-accent-fg' : 'text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
                 :title="`${mode.label} edges`"
                 :aria-pressed="edgePathType === mode.id"
                 @click="emit('update:edgePathType', mode.id)"
@@ -426,7 +426,7 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
-            :class="edgeLabelsVisible ? 'bg-accent-500/15 text-accent-200' : 'text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
+            :class="edgeLabelsVisible ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-500 hover:bg-theme-800 hover:text-theme-200'"
             :title="edgeLabelsVisible ? 'Hide edge labels' : 'Show edge labels'"
             :aria-pressed="edgeLabelsVisible"
             @click="emit('update:edgeLabelsVisible', !edgeLabelsVisible)"

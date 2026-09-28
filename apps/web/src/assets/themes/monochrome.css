@@ -3,7 +3,8 @@
    ========================================================================== */
 
 [data-theme="monochrome"] {
-  --accent-button-foreground: #080808;
+  --color-accent-fg: #d4d4d4;
+  --color-accent-on: #080808;
   --color-theme-950: #080808;
   --color-theme-900: #101010;
   --color-theme-800: #181818;

@@ -381,7 +381,7 @@ onBeforeUnmount(() => {
           >
             <Icon
               icon="lucide:loader-circle"
-              class="h-3.5 w-3.5 animate-spin text-accent-300 drop-shadow-sm"
+              class="h-3.5 w-3.5 animate-spin text-accent-fg drop-shadow-sm"
             />
           </span>
           <span
@@ -396,7 +396,7 @@ onBeforeUnmount(() => {
             <Icon
               v-if="conversation.pinned"
               icon="lucide:pin"
-              class="h-3 w-3 shrink-0 text-amber-400"
+              class="h-3 w-3 shrink-0 text-status-warning"
             />
             <input
               v-if="editingId === conversation.id"
@@ -452,7 +452,7 @@ onBeforeUnmount(() => {
             >
               <Icon
                 :icon="conversation.pinned ? 'lucide:pin-off' : 'lucide:pin'"
-                class="h-3.5 w-3.5 text-amber-400"
+                class="h-3.5 w-3.5 text-status-warning"
               />
               {{ conversation.pinned ? 'Unpin' : 'Pin' }}
             </button>

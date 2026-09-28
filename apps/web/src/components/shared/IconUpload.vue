@@ -175,7 +175,7 @@ function removeImage() {
 
     <p
       v-if="errorMessage"
-      class="text-xs text-red-500 mt-2 font-medium"
+      class="text-xs text-status-danger mt-2 font-medium"
     >
       {{ errorMessage }}
     </p>

@@ -353,7 +353,7 @@ defineExpose({ loadServers })
   <div>
     <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
       <button
-        class="h-10 px-4 bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium rounded-lg transition-colors self-start"
+        class="h-10 px-4 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm font-medium rounded-lg transition-colors self-start"
         @click="showAddForm = true"
       >
         Add Manually
@@ -474,7 +474,7 @@ defineExpose({ loadServers })
         </div>
         <div
           v-if="actionError['add']"
-          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400"
+          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-status-danger"
           role="alert"
         >
           {{ actionError['add'] }}
@@ -503,7 +503,7 @@ defineExpose({ loadServers })
           <button
             v-if="actionError['add']"
             :disabled="!canSubmitNewServer || isLoading('add')"
-            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
             @click="addServer"
           >
             {{ isLoading('add') ? 'Reconnecting...' : 'Re-connect' }}
@@ -511,7 +511,7 @@ defineExpose({ loadServers })
           <button
             v-if="!addConnected && !actionError['add']"
             :disabled="!canSubmitNewServer || isLoading('add')"
-            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white text-sm rounded-lg transition-colors"
+            class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on text-sm rounded-lg transition-colors"
             @click="addServer"
           >
             {{ isLoading('add') ? 'Connecting...' : 'Save & Connect' }}
@@ -553,7 +553,7 @@ defineExpose({ loadServers })
             <div
               v-else
               class="w-10 h-10 rounded-lg flex items-center justify-center"
-              :class="server.connected ? 'bg-accent-500/15 text-accent-300' : 'bg-theme-700/50 text-theme-500'"
+              :class="server.connected ? 'bg-accent-500/15 text-accent-fg' : 'bg-theme-700/50 text-theme-500'"
             >
               <Icon
                 icon="lucide:plug"
@@ -581,13 +581,13 @@ defineExpose({ loadServers })
             </div>
             <div
               v-if="server.envHints?.length && server.envHints.some(h => h.required && !server.env[h.name])"
-              class="text-[11px] text-accent-400/90 mt-1"
+              class="text-[11px] text-accent-fg/90 mt-1"
             >
               Requires: {{ server.envHints.filter(h => h.required && !server.env[h.name]).map(h => h.name).join(', ') }}
             </div>
             <div
               v-if="actionError[server.id]"
-              class="text-xs text-red-400 mt-1"
+              class="text-xs text-status-danger mt-1"
             >
               {{ actionError[server.id] }}
             </div>
@@ -633,7 +633,7 @@ defineExpose({ loadServers })
       <template #col-status="{ item: server }">
         <span
           class="mcp-server-status inline-flex items-center gap-1.5 text-xs"
-          :class="server.connected ? 'text-emerald-400' : server.enabled ? (server.pendingAuthUrl ? 'text-accent-400' : 'text-red-400') : 'text-theme-500'"
+          :class="server.connected ? 'text-status-success' : server.enabled ? (server.pendingAuthUrl ? 'text-accent-fg' : 'text-status-danger') : 'text-theme-500'"
         >
           <span
             class="w-1.5 h-1.5 rounded-full"
@@ -657,7 +657,7 @@ defineExpose({ loadServers })
 
           <button
             v-if="server.enabled && server.pendingAuthUrl && authInProgress !== server.id"
-            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-accent-on rounded-md transition-colors"
             @click="startAuth(server)"
           >
             Authorize
@@ -665,7 +665,7 @@ defineExpose({ loadServers })
           <button
             v-else-if="server.enabled && server.pendingAuthUrl && authInProgress === server.id"
             :disabled="isLoading(server.id)"
-            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
+            class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-md transition-colors"
             @click="finishAuth(server.id)"
           >
             {{ isLoading(server.id) ? 'Reconnecting...' : 'Reconnect' }}
@@ -681,7 +681,7 @@ defineExpose({ loadServers })
 
           <button
             type="button"
-            class="p-1.5 text-theme-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
+            class="p-1.5 text-theme-600 hover:text-status-danger rounded-md hover:bg-red-500/10 transition-colors"
             :aria-label="`Remove ${server.name}`"
             @click="promptRemoveServer(server.id)"
           >
@@ -723,7 +723,7 @@ defineExpose({ loadServers })
         Browse the registry to discover and add servers, or add one manually.
       </p>
       <button
-        class="text-sm text-accent-400 hover:text-accent-300 transition-colors"
+        class="text-sm text-accent-fg hover:text-accent-fg transition-colors"
         @click="emit('goToBrowse')"
       >
         Browse Registry ->
@@ -812,7 +812,7 @@ defineExpose({ loadServers })
                     <span class="font-mono">{{ hint.name }}</span>
                     <span
                       v-if="hint.required"
-                      class="text-red-400/80"
+                      class="text-status-danger/80"
                     >*</span>
                     <span
                       v-if="hint.description"
@@ -848,7 +848,7 @@ defineExpose({ loadServers })
           </div>
           <div
             v-if="actionError['edit']"
-            class="text-xs text-red-400"
+            class="text-xs text-status-danger"
           >
             {{ actionError['edit'] }}
           </div>
@@ -868,7 +868,7 @@ defineExpose({ loadServers })
           <div class="flex flex-wrap items-center gap-2">
             <button
               v-if="editingServer.enabled && editingServer.pendingAuthUrl && authInProgress !== editingServer.id"
-              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-md transition-colors"
+              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-accent-on rounded-md transition-colors"
               :disabled="isLoading(editingServer.id)"
               @click="startAuth(editingServer)"
             >
@@ -877,7 +877,7 @@ defineExpose({ loadServers })
             <button
               v-else-if="editingServer.enabled && editingServer.pendingAuthUrl && authInProgress === editingServer.id"
               :disabled="isLoading(editingServer.id)"
-              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
+              class="px-2.5 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-md transition-colors"
               @click="finishAuth(editingServer.id)"
             >
               {{ isLoading(editingServer.id) ? 'Reconnecting...' : 'Reconnect' }}
@@ -893,7 +893,7 @@ defineExpose({ loadServers })
 
             <button
               type="button"
-              class="p-1.5 text-theme-600 hover:text-red-400 rounded-md hover:bg-red-500/10 transition-colors"
+              class="p-1.5 text-theme-600 hover:text-status-danger rounded-md hover:bg-red-500/10 transition-colors"
               :aria-label="`Remove ${editingServer.name}`"
               :disabled="isLoading(editingServer.id)"
               @click="promptRemoveServer(editingServer.id)"
@@ -907,7 +907,7 @@ defineExpose({ loadServers })
 
             <button
               v-if="editingServer.enabled && !editingServer.pendingAuthUrl && (editingServer.origin === 'smithery.ai' || editingServer.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
-              class="p-1.5 text-theme-600 hover:text-accent-400 rounded-md hover:bg-accent-500/10 transition-colors"
+              class="p-1.5 text-theme-600 hover:text-accent-fg rounded-md hover:bg-accent-500/10 transition-colors"
               :disabled="isLoading(editingServer.id)"
               title="Clear cached OAuth tokens and re-authorize"
               @click="reauthServer(editingServer.id)"
@@ -921,7 +921,7 @@ defineExpose({ loadServers })
           </div>
           <p
             v-if="actionError[editingServer.id]"
-            class="text-xs text-red-400"
+            class="text-xs text-status-danger"
             role="alert"
           >
             {{ actionError[editingServer.id] }}
@@ -940,7 +940,7 @@ defineExpose({ loadServers })
             </button>
             <button
               :disabled="!editServer.command.trim() || isLoading(editingServer.id)"
-              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-md transition-colors"
+              class="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-md transition-colors"
               @click="saveEditing(editingServer.id)"
             >
               {{ isSaving ? 'Saving...' : 'Save' }}

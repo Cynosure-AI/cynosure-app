@@ -525,7 +525,7 @@ onMounted(() => loadFolders());
                     type="button"
                     class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
                     :class="activeDocumentView === 'recent'
-                      ? 'border-accent-500/40 bg-accent-500/10 text-accent-300'
+                      ? 'border-accent-500/40 bg-accent-500/10 text-accent-fg'
                       : 'border-theme-800 bg-theme-900/60 text-theme-400 hover:border-theme-700 hover:text-theme-200'"
                     @click="selectDocumentView('recent')"
                   >
@@ -581,7 +581,7 @@ onMounted(() => loadFolders());
         >
           <span>{{ graphOperationError }}</span>
           <button
-            class="shrink-0 text-red-400 transition-colors hover:text-red-200"
+            class="shrink-0 text-status-danger transition-colors hover:text-red-200"
             title="Dismiss"
             @click="graphOperationError = ''"
           >
@@ -707,7 +707,7 @@ onMounted(() => loadFolders());
               </button>
               <button
                 :disabled="!folderName.trim()"
-                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm rounded-lg disabled:opacity-50"
                 @click="saveFolder"
               >
                 {{ editingFolder ? "Save" : "Create" }}
@@ -799,7 +799,7 @@ onMounted(() => loadFolders());
               </button>
               <button
                 :disabled="!nodeName.trim()"
-                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm rounded-lg disabled:opacity-50"
                 @click="saveNode"
               >
                 Save
@@ -856,7 +856,7 @@ onMounted(() => loadFolders());
               </button>
               <button
                 :disabled="!edgeRelation.trim()"
-                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-white text-sm rounded-lg disabled:opacity-50"
+                class="px-4 py-1.5 bg-accent-600 hover:bg-accent-500 text-accent-on text-sm rounded-lg disabled:opacity-50"
                 @click="saveEdge"
               >
                 Save

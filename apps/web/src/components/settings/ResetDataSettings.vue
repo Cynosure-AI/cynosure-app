@@ -30,7 +30,7 @@ function showSection(id: string): boolean {
         <div class="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center">
           <Icon
             icon="lucide:trash-2"
-            class="w-5 h-5 text-red-400"
+            class="w-5 h-5 text-status-danger"
           />
         </div>
         <div>

@@ -241,7 +241,7 @@ watch(
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-500/10">
               <Icon
                 icon="lucide:brain-circuit"
-                class="h-8 w-8 text-accent-400"
+                class="h-8 w-8 text-accent-fg"
               />
             </div>
             <h2 class="mb-2 text-xl font-medium text-theme-100">
@@ -252,7 +252,7 @@ watch(
             </p>
             <button
               type="button"
-              class="inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+              class="inline-flex items-center gap-2 rounded-lg bg-accent-600 px-4 py-2.5 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
               @click="router.push({ name: 'settings', query: { category: 'providers' } })"
             >
               <Icon
@@ -294,7 +294,7 @@ watch(
               v-for="(pill, index) in onboardingPills"
               :key="pill.label"
               :to="pill.to"
-              class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-accent-500/35 bg-accent-500/10 px-3 py-1.5 text-xs text-accent-300 shadow-sm transition-colors hover:border-accent-500/70 hover:bg-accent-500/20 hover:text-accent-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
+              class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-accent-500/35 bg-accent-500/10 px-3 py-1.5 text-xs text-accent-fg shadow-sm transition-colors hover:border-accent-500/70 hover:bg-accent-500/20 hover:text-accent-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
               :style="{ animationDelay: `${120 + index * 80}ms` }"
             >
               <Icon
@@ -334,7 +334,7 @@ watch(
             <div class="text-4xl mb-2">
               📎
             </div>
-            <div class="text-accent-400 text-sm font-medium">
+            <div class="text-accent-fg text-sm font-medium">
               Drop files here
             </div>
             <div class="text-theme-500 text-xs mt-1">

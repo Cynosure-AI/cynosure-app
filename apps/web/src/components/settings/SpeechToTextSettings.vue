@@ -302,7 +302,7 @@ onMounted(() => {
         <div class="flex items-center gap-2 text-xs">
           <Icon
             icon="lucide:shield-check"
-            class="w-3.5 h-3.5 text-green-400 shrink-0"
+            class="w-3.5 h-3.5 text-status-green shrink-0"
           />
           <span class="text-theme-400">
             Local mode keeps microphone audio on this device and uses the cached browser Whisper model.
@@ -359,7 +359,7 @@ onMounted(() => {
         <div class="flex items-center gap-2 text-xs">
           <Icon
             icon="lucide:info"
-            class="w-3.5 h-3.5 text-accent-400 shrink-0"
+            class="w-3.5 h-3.5 text-accent-fg shrink-0"
           />
           <span class="text-theme-400">
             <span class="text-theme-300 font-medium">{{ selectedModelInfo.label }}</span>
@@ -435,7 +435,7 @@ onMounted(() => {
         <div class="flex items-center gap-2 text-xs">
           <Icon
             icon="lucide:info"
-            class="w-3.5 h-3.5 text-amber-400 shrink-0"
+            class="w-3.5 h-3.5 text-status-warning shrink-0"
           />
           <span class="text-theme-400">
             No microphones detected. Please allow microphone access when prompted.
@@ -517,7 +517,7 @@ onMounted(() => {
               <template v-if="entry.done">
                 <Icon
                   icon="lucide:check"
-                  class="w-3 h-3 text-green-400 inline"
+                  class="w-3 h-3 text-status-green inline"
                 />
               </template>
               <template v-else-if="entry.total > 0">
@@ -544,7 +544,7 @@ onMounted(() => {
           class="px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500"
           :class="isLoading
             ? 'bg-theme-700 text-theme-500 cursor-not-allowed'
-            : 'bg-accent-600 hover:bg-accent-500 text-white'"
+            : 'bg-accent-600 hover:bg-accent-500 text-accent-on'"
           @click="downloadModel"
         >
           <Icon
@@ -579,7 +579,7 @@ onMounted(() => {
         >
           <Icon
             icon="lucide:check-circle-2"
-            class="w-4 h-4 text-green-400 shrink-0"
+            class="w-4 h-4 text-status-green shrink-0"
           />
           <span class="text-xs text-theme-300 flex-1 truncate">
             {{ modelLabel(dl.model) }}
@@ -589,7 +589,7 @@ onMounted(() => {
           </span>
           <span
             v-if="dl.model === prefs.whisperModel && dl.quantization === prefs.whisperQuantization"
-            class="text-[10px] text-accent-400 font-medium"
+            class="text-[10px] text-accent-fg font-medium"
           >
             active
           </span>

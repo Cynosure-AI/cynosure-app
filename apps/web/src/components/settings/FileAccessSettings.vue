@@ -83,23 +83,23 @@ onMounted(refresh)
       <button
         type="submit"
         :disabled="busy || !folderPath.trim()"
-        class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        class="rounded-lg bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on disabled:opacity-50"
       >Add folder</button>
     </form>
 
-    <p v-if="error" role="alert" class="text-sm text-red-400">{{ error }}</p>
+    <p v-if="error" role="alert" class="text-sm text-status-danger">{{ error }}</p>
     <p v-if="loading" class="text-sm text-theme-500">Loading folders…</p>
     <p v-else-if="!folders.length" class="rounded-lg border border-theme-800 bg-theme-900/50 p-4 text-sm text-theme-500">
       No folders allowed yet. Cynosure will ask when an AI file tool first needs access.
     </p>
     <ul v-else class="divide-y divide-theme-800 rounded-lg border border-theme-800">
       <li v-for="folder in folders" :key="folder" class="flex items-center gap-3 px-4 py-3">
-        <Icon icon="lucide:folder" class="h-4 w-4 shrink-0 text-accent-400" />
+        <Icon icon="lucide:folder" class="h-4 w-4 shrink-0 text-accent-fg" />
         <span class="min-w-0 flex-1 break-all font-mono text-xs text-theme-200">{{ folder }}</span>
         <button
           type="button"
           :disabled="busy"
-          class="shrink-0 rounded-md px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+          class="shrink-0 rounded-md px-2 py-1 text-xs text-status-danger hover:bg-red-500/10 disabled:opacity-50"
           :aria-label="`Remove ${folder}`"
           @click="removeFolder(folder)"
         >Remove</button>

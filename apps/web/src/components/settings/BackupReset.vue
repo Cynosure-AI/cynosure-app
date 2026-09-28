@@ -122,16 +122,16 @@ async function doReset(): Promise<void> {
     <div class="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
       <Icon
         icon="lucide:alert-triangle"
-        class="w-4 h-4 text-red-400 shrink-0"
+        class="w-4 h-4 text-status-danger shrink-0"
       />
-      <p class="text-xs text-red-400/90">
+      <p class="text-xs text-status-danger/90">
         Selected reset actions are irreversible. Export a backup first if you may need this data later.
       </p>
     </div>
 
     <div
       v-if="resetError"
-      class="text-xs text-red-400"
+      class="text-xs text-status-danger"
     >
       {{ resetError }}
     </div>
@@ -148,7 +148,7 @@ async function doReset(): Promise<void> {
         <Icon
           :icon="resetResults[module.key].errors.length === 0 ? 'lucide:check' : 'lucide:alert-circle'"
           class="w-3.5 h-3.5"
-          :class="resetResults[module.key].errors.length === 0 ? 'text-green-400' : 'text-amber-400'"
+          :class="resetResults[module.key].errors.length === 0 ? 'text-status-green' : 'text-status-warning'"
         />
         <span>{{ module.label }} {{ resetResults[module.key].errors.length === 0 ? 'cleared' : 'completed with errors' }}</span>
       </div>
@@ -188,7 +188,7 @@ async function doReset(): Promise<void> {
       </span>
     </div>
     <p class="text-sm text-theme-400 mb-2">
-      Type <strong class="text-red-400">{{ confirmationWord }}</strong> to confirm:
+      Type <strong class="text-status-danger">{{ confirmationWord }}</strong> to confirm:
     </p>
     <input
       v-model="resetConfirmText"

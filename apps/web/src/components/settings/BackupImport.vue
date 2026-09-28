@@ -131,13 +131,13 @@ onBeforeUnmount(() => {
     >
       <Icon
         icon="lucide:loader-2"
-        class="w-5 h-5 text-amber-400 animate-spin shrink-0"
+        class="w-5 h-5 text-status-warning animate-spin shrink-0"
       />
       <div>
         <p class="text-sm font-medium text-amber-300">
           Import in progress — please keep this page open
         </p>
-        <p class="text-xs text-amber-400/70 mt-0.5">
+        <p class="text-xs text-status-warning/70 mt-0.5">
           Navigating away or closing the browser may interrupt the restore process.
         </p>
       </div>
@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-2 min-w-0">
           <Icon
             icon="lucide:loader-2"
-            class="w-4 h-4 text-accent-400 animate-spin shrink-0"
+            class="w-4 h-4 text-accent-fg animate-spin shrink-0"
           />
           <span class="text-sm font-medium text-theme-200 truncate">
             Restoring {{ moduleLabels[restoreProgress.module]?.label || restoreProgress.module }}
@@ -172,9 +172,9 @@ onBeforeUnmount(() => {
             :icon="status === 'completed' ? 'lucide:check-circle' : status === 'failed' ? 'lucide:alert-circle' : status === 'started' ? 'lucide:loader-2' : 'lucide:circle'"
             class="w-3.5 h-3.5 shrink-0"
             :class="[
-              status === 'completed' ? 'text-green-400' : '',
-              status === 'failed' ? 'text-amber-400' : '',
-              status === 'started' ? 'text-accent-400 animate-spin' : '',
+              status === 'completed' ? 'text-status-green' : '',
+              status === 'failed' ? 'text-status-warning' : '',
+              status === 'started' ? 'text-accent-fg animate-spin' : '',
               status === 'pending' ? 'text-theme-600' : ''
             ]"
           />
@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
             <span :class="status === 'pending' ? 'text-theme-500' : 'text-theme-300'">
               {{ moduleLabels[key]?.label || key }}
             </span>
-            <p v-for="(error, index) in restoreErrors[key] || []" :key="index" class="mt-1 text-amber-400 break-words">
+            <p v-for="(error, index) in restoreErrors[key] || []" :key="index" class="mt-1 text-status-warning break-words">
               {{ error }}
             </p>
           </div>
@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
         >
           <Icon
             icon="lucide:loader-2"
-            class="w-5 h-5 text-accent-400 animate-spin"
+            class="w-5 h-5 text-accent-fg animate-spin"
           />
         </div>
       </div>
@@ -272,9 +272,9 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
           <Icon
             icon="lucide:alert-triangle"
-            class="w-4 h-4 text-amber-400 shrink-0"
+            class="w-4 h-4 text-status-warning shrink-0"
           />
-          <p class="text-xs text-amber-400/90">
+          <p class="text-xs text-status-warning/90">
             Restoring will overwrite existing data for the selected modules.
           </p>
         </div>
@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
             <Icon
               :icon="Object.values(importResults).some(result => result.errors.length > 0) ? 'lucide:alert-circle' : 'lucide:check-circle'"
               class="w-5 h-5"
-              :class="Object.values(importResults).some(result => result.errors.length > 0) ? 'text-amber-400' : 'text-green-400'"
+              :class="Object.values(importResults).some(result => result.errors.length > 0) ? 'text-status-warning' : 'text-status-green'"
             />
             <span class="text-sm font-medium text-theme-200">
               {{ Object.values(importResults).some(result => result.errors.length > 0) ? 'Restore completed with issues' : 'Restore Complete' }}
@@ -323,17 +323,17 @@ onBeforeUnmount(() => {
             />
             <div class="flex-1">
               <span class="text-sm text-theme-200">{{ moduleLabels[key]?.label || key }}</span>
-              <span class="text-xs text-green-400 ml-2">{{ res.restored }} restored</span>
+              <span class="text-xs text-status-green ml-2">{{ res.restored }} restored</span>
             </div>
             <Icon
               v-if="res.errors.length === 0"
               icon="lucide:check"
-              class="w-4 h-4 text-green-400"
+              class="w-4 h-4 text-status-green"
             />
             <Icon
               v-else
               icon="lucide:alert-circle"
-              class="w-4 h-4 text-amber-400"
+              class="w-4 h-4 text-status-warning"
             />
           </div>
 
@@ -343,7 +343,7 @@ onBeforeUnmount(() => {
           >
             <div
               v-if="res.errors.length > 0"
-              class="text-xs text-red-400 space-y-1"
+              class="text-xs text-status-danger space-y-1"
             >
               <p
                 v-for="(err, i) in res.errors"
@@ -365,7 +365,7 @@ onBeforeUnmount(() => {
 
       <div
         v-if="importError"
-        class="text-xs text-red-400"
+        class="text-xs text-status-danger"
       >
         {{ importError }}
       </div>

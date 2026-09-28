@@ -306,7 +306,7 @@ const chatRoute = computed(() =>
               icon="lucide:bell"
               class="w-4 h-4"
               :class="notificationStore.unreadCount > 0
-                ? 'text-accent-400'
+                ? 'text-accent-fg'
                 : 'text-theme-500'
               "
             />
@@ -346,14 +346,14 @@ const chatRoute = computed(() =>
                   <div class="flex items-center gap-1">
                     <RouterLink
                       to="/notifications"
-                      class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
+                      class="text-[10px] text-accent-fg hover:text-accent-fg transition-colors px-1.5 py-0.5"
                       @click="showNotifications = false"
                     >
                       View all
                     </RouterLink>
                     <button
                       v-if="notificationStore.unreadCount > 0"
-                      class="text-[10px] text-accent-400 hover:text-accent-300 transition-colors px-1.5 py-0.5"
+                      class="text-[10px] text-accent-fg hover:text-accent-fg transition-colors px-1.5 py-0.5"
                       @click.stop="notificationStore.markAllRead()"
                     >
                       Mark all read
@@ -393,9 +393,9 @@ const chatRoute = computed(() =>
                         :icon="notificationPriorityIcon(notif.priority)"
                         class="w-3.5 h-3.5"
                         :class="{
-                          'text-red-400': notif.priority === 'alert',
-                          'text-amber-400': notif.priority === 'action',
-                          'text-accent-400': notif.priority === 'notice',
+                          'text-status-danger': notif.priority === 'alert',
+                          'text-status-warning': notif.priority === 'action',
+                          'text-accent-fg': notif.priority === 'notice',
                         }"
                       />
                     </div>
@@ -594,7 +594,7 @@ const chatRoute = computed(() =>
               <Icon
                 v-if="recentChatFilter.includes(option.value)"
                 icon="lucide:check"
-                class="h-3.5 w-3.5 text-accent-400"
+                class="h-3.5 w-3.5 text-accent-fg"
               />
             </button>
           </div>
@@ -669,7 +669,7 @@ const chatRoute = computed(() =>
         <Icon
           icon="lucide:settings"
           class="h-4 w-4 shrink-0 text-theme-500 transition-colors"
-          :class="{ 'text-accent-400': showStatusPopover }"
+          :class="{ 'text-accent-fg': showStatusPopover }"
         />
       </button>
 
@@ -722,7 +722,7 @@ const chatRoute = computed(() =>
 
 .nav-item.active {
   color: var(--color-theme-100, #f4f4f5);
-  background-color: var(--color-theme-800, #27272a);
+  background-color: color-mix(in srgb, var(--color-accent-500) 10%, var(--color-theme-800));
   box-shadow: inset 3px 0 0 var(--color-accent-500, #3b82f6);
 }
 

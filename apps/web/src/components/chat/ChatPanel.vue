@@ -610,7 +610,7 @@ onMounted(() => {
     <div
       v-if="forkError"
       role="alert"
-      class="p-3 text-sm text-red-400"
+      class="p-3 text-sm text-status-danger"
     >
       {{ forkError }}
     </div>
@@ -715,13 +715,13 @@ onMounted(() => {
           <Icon
             v-else
             icon="lucide:bot-message-square"
-            class="w-10 h-10 text-accent-400"
+            class="w-10 h-10 text-accent-fg"
           />
         </RouterLink>
         <Icon
           v-else
           icon="lucide:message-square"
-          class="w-10 h-10 text-accent-400"
+          class="w-10 h-10 text-accent-fg"
         />
       </div>
       <template v-if="!wsConnected">
@@ -783,7 +783,7 @@ onMounted(() => {
                 <Icon
                   v-else
                   icon="lucide:bot"
-                  class="w-3.5 h-3.5 text-indigo-400"
+                  class="w-3.5 h-3.5 text-status-indigo"
                 />
               </div>
               <!-- Agent name + codename -->
@@ -791,22 +791,22 @@ onMounted(() => {
                 <span class="text-[13px] font-medium text-indigo-300 truncate">{{ entry.agentName || entry.codename }}</span>
                 <span
                   v-if="entry.agentName && entry.agentName !== entry.codename"
-                  class="text-[10px] text-indigo-400/50 truncate shrink-0"
+                  class="text-[10px] text-status-indigo/50 truncate shrink-0"
                 >{{ entry.codename }}</span>
               </div>
               <!-- Running indicator -->
               <Icon
                 v-if="activeSubAgentGroupKey === entry.key"
                 icon="svg-spinners:ring-resize"
-                class="w-3.5 h-3.5 text-indigo-400 shrink-0"
+                class="w-3.5 h-3.5 text-status-indigo shrink-0"
               />
               <!-- Step count badge -->
-              <span class="text-[10px] text-indigo-400/50 tabular-nums shrink-0">
+              <span class="text-[10px] text-status-indigo/50 tabular-nums shrink-0">
                 {{ entry.entries.length }} step{{ entry.entries.length !== 1 ? 's' : '' }}
               </span>
               <button
                 v-if="!collapsedSubAgentGroups.has(entry.key)"
-                class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-400/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-status-indigo/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
                 :title="fullHeightSubAgentGroups.has(entry.key) ? 'Collapse to compact view' : 'Expand to full height'"
                 @click.stop="toggleSubAgentFullHeight(entry.key)"
               >
@@ -817,7 +817,7 @@ onMounted(() => {
               </button>
               <!-- Height toggle icon -->
               <button
-                class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-400/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-status-indigo/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
                 :title="collapsedSubAgentGroups.has(entry.key) ? 'Expand sub-agent steps' : 'Collapse sub-agent steps'"
                 @click.stop="toggleSubAgentCollapsed(entry.key)"
               >

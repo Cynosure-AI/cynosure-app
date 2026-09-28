@@ -199,7 +199,7 @@ const gridLines = computed(() => {
             class="flex justify-between text-theme-400 mt-0.5"
           >
             <span>Est. Cost</span>
-            <span class="text-amber-400">
+            <span class="text-status-warning">
               ${{ hoveredDay.estimatedCost < 0.01 ? hoveredDay.estimatedCost.toFixed(4) : hoveredDay.estimatedCost.toFixed(2) }}
             </span>
           </div>
@@ -226,7 +226,7 @@ const gridLines = computed(() => {
                 <span class="text-right tabular-nums">{{ m.messages }}</span>
                 <span
                   class="text-right tabular-nums"
-                  :class="m.estimatedCost != null ? 'text-amber-400' : 'text-theme-600'"
+                  :class="m.estimatedCost != null ? 'text-status-warning' : 'text-theme-600'"
                 >
                   <template v-if="m.estimatedCost != null">
                     ${{ m.estimatedCost < 0.01 ? m.estimatedCost.toFixed(4) : m.estimatedCost.toFixed(2) }}

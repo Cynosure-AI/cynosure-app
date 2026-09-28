@@ -15,7 +15,7 @@ defineEmits<{ cancel: [] }>()
 
 <template>
   <div class="flex items-center gap-1.5 text-[11px] text-theme-500" role="status">
-    <Icon :icon="icon" class="h-3 w-3 text-accent-400" />
+    <Icon :icon="icon" class="h-3 w-3 text-accent-fg" />
     <span>{{ label }}</span>
     <button
       v-if="cancelLabel"

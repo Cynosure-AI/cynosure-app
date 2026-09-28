@@ -172,7 +172,7 @@ onMounted(() => loadFolders())
           <div class="flex items-center gap-2 mb-1">
             <Icon
               icon="lucide:moon-star"
-              class="w-4 h-4 text-accent-400"
+              class="w-4 h-4 text-accent-fg"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Dreaming
@@ -199,7 +199,7 @@ onMounted(() => loadFolders())
           <div class="flex items-center gap-2 mb-1">
             <Icon
               icon="lucide:brain-circuit"
-              class="w-4 h-4 text-accent-400"
+              class="w-4 h-4 text-accent-fg"
             />
             <h3 class="text-sm font-medium text-theme-200">
               Automatic memory retrieval
@@ -225,7 +225,7 @@ onMounted(() => loadFolders())
         <div class="flex items-center gap-2">
           <Icon
             icon="lucide:database"
-            class="w-4 h-4 text-accent-400"
+            class="w-4 h-4 text-accent-fg"
           />
           <h3 class="text-sm font-medium text-theme-200">
             Memory Folders
@@ -266,13 +266,13 @@ onMounted(() => loadFolders())
         <div class="flex items-start gap-2">
           <Icon
             icon="lucide:alert-triangle"
-            class="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+            class="mt-0.5 h-4 w-4 shrink-0 text-status-warning"
           />
           <div class="min-w-0 flex-1">
             <p class="text-xs font-medium text-amber-300">
               {{ missingFolderIds.length }} assigned memory folder{{ missingFolderIds.length > 1 ? 's' : '' }} unavailable
             </p>
-            <p class="mt-0.5 text-[11px] text-amber-400/60">
+            <p class="mt-0.5 text-[11px] text-status-warning/60">
               These folders are assigned to this agent but no longer found in Memory.
             </p>
             <div class="mt-2 flex flex-wrap gap-1.5">
@@ -289,7 +289,7 @@ onMounted(() => loadFolders())
               </span>
             </div>
             <button
-              class="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-amber-400 transition-colors hover:text-amber-300"
+              class="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-status-warning transition-colors hover:text-amber-300"
               @click="removeMissingFolders"
             >
               <Icon
@@ -313,7 +313,7 @@ onMounted(() => loadFolders())
         <div class="flex items-center gap-3">
           <button
             v-if="effectiveAssignedCount < allSpaces.length"
-            class="text-accent-400 hover:text-accent-300 transition-colors"
+            class="text-accent-fg hover:text-accent-fg transition-colors"
             @click="selectAll"
           >
             Select all
@@ -391,7 +391,7 @@ onMounted(() => loadFolders())
               <Icon
                 :icon="space.isUncategorized ? 'lucide:hard-drive' : 'lucide:folder'"
                 class="w-3.5 h-3.5"
-                :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-400' : 'text-theme-500'"
+                :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-fg' : 'text-theme-500'"
               />
             </div>
             <div class="flex-1 min-w-0">
@@ -405,13 +405,13 @@ onMounted(() => loadFolders())
             <Icon
               v-if="isSelected(space) && !isPartiallySelected(space)"
               icon="mdi:check-circle"
-              class="w-4 h-4 text-accent-400 shrink-0"
+              class="w-4 h-4 text-accent-fg shrink-0"
             />
 
             <Icon
               v-else-if="isPartiallySelected(space)"
               icon="mdi:minus-circle"
-              class="w-4 h-4 text-accent-300 shrink-0"
+              class="w-4 h-4 text-accent-fg shrink-0"
             />
           </div>
         </div>

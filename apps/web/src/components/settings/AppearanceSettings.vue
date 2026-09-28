@@ -108,7 +108,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           <span class="mt-0.5 block text-xs text-theme-500">
             Agents can reference this value with the <code
               v-pre
-              class="text-accent-400"
+              class="text-accent-fg"
             >{{userName}}</code> smart tag.
           </span>
           <span class="mt-3 flex items-center gap-2">
@@ -132,7 +132,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           </span>
           <span
             v-if="nameSaveError"
-            class="mt-2 block text-xs text-red-400"
+            class="mt-2 block text-xs text-status-danger"
           >{{ nameSaveError }}</span>
         </span>
       </label>
@@ -244,7 +244,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           >
             <Icon
               icon="lucide:check-circle-2"
-              class="w-4 h-4 text-accent-400"
+              class="w-4 h-4 text-accent-fg"
             />
           </div>
         </button>

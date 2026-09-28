@@ -61,7 +61,7 @@
         </div>
         <div
           v-else-if="currentStep === STEP_DONE"
-          class="flex items-center gap-2 text-emerald-400"
+          class="flex items-center gap-2 text-status-success"
         >
           <Icon
             icon="lucide:check-circle-2"
@@ -97,7 +97,7 @@
           <div class="w-14 h-14 rounded-full border border-theme-700 bg-theme-900/60 flex items-center justify-center mx-auto mb-4">
             <Icon
               icon="lucide:loader-2"
-              class="w-7 h-7 text-accent-400 animate-spin"
+              class="w-7 h-7 text-accent-fg animate-spin"
             />
           </div>
           <h2 class="text-lg font-semibold text-theme-100 mb-1">
@@ -147,7 +147,7 @@
             <div class="w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center mb-6">
               <Icon
                 icon="lucide:check"
-                class="w-10 h-10 text-emerald-400"
+                class="w-10 h-10 text-status-success"
               />
             </div>
             <h2 class="text-2xl font-bold text-theme-100 mb-3">
@@ -211,14 +211,14 @@
           <!-- Required step note -->
           <span
             v-if="serverReady && currentStep === STEP_PROVIDER && !canContinue"
-            class="text-xs text-amber-400/80 hidden sm:block"
+            class="text-xs text-status-warning/80 hidden sm:block"
           >
             Add a provider first
           </span>
 
           <span
             v-if="serverReady && currentStep === STEP_AGENT && agentDraftState.hasDraft && !agentDraftState.valid"
-            class="text-xs text-amber-400/80 hidden sm:block"
+            class="text-xs text-status-warning/80 hidden sm:block"
           >
             Add an agent name
           </span>
@@ -227,7 +227,7 @@
             v-if="serverReady && currentStep < STEP_DONE"
             class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium rounded-lg transition-colors"
             :class="canContinue
-              ? 'bg-accent-600 hover:bg-accent-500 text-white'
+              ? 'bg-accent-600 hover:bg-accent-500 text-accent-on'
               : 'bg-theme-800 text-theme-500 cursor-not-allowed'"
             :disabled="!canContinue || advancing"
             @click="goNext"
@@ -247,7 +247,7 @@
 
           <button
             v-else-if="serverReady"
-            class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
+            class="flex items-center gap-1.5 px-5 py-2 text-sm font-medium bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg transition-colors"
             @click="goToChat"
           >
             Start chatting
@@ -330,10 +330,10 @@ const showBreadcrumb = computed(() =>
 
 function stepCircleClass(bIndex: number): string {
   if (breadcrumbStepIndex.value > bIndex) {
-    return 'border-accent-500 bg-accent-500 text-white'
+    return 'border-accent-500 bg-accent-500 text-accent-on'
   }
   if (breadcrumbStepIndex.value === bIndex) {
-    return 'border-accent-500 bg-transparent text-accent-400'
+    return 'border-accent-500 bg-transparent text-accent-fg'
   }
   return 'border-theme-700 bg-transparent text-theme-600'
 }

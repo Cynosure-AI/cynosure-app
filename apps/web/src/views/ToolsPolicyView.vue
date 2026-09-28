@@ -168,10 +168,10 @@ function stateIcon(state: ApprovalState): string {
 }
 
 function stateClass(state: ApprovalState): string {
-  if (state === 'all') return 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
-  if (state === 'defaults') return 'bg-sky-500/15 text-sky-400 hover:bg-sky-500/25'
-  if (state === 'none') return 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-  return 'bg-accent-500/15 text-accent-300 hover:bg-accent-500/25'
+  if (state === 'all') return 'bg-green-500/15 text-status-green hover:bg-green-500/25'
+  if (state === 'defaults') return 'bg-sky-500/15 text-status-info hover:bg-sky-500/25'
+  if (state === 'none') return 'bg-amber-500/10 text-status-warning hover:bg-amber-500/20'
+  return 'bg-accent-500/15 text-accent-fg hover:bg-accent-500/25'
 }
 
 function toolParams(tool: ToolInfo): ToolParam[] {
@@ -318,7 +318,7 @@ onMounted(loadPolicyTools)
         </div>
         <RouterLink
           to="/settings/mcp"
-          class="inline-flex h-10 shrink-0 items-center gap-2 self-start rounded-lg bg-accent-600 px-4 text-sm font-medium text-white transition-colors hover:bg-accent-500"
+          class="inline-flex h-10 shrink-0 items-center gap-2 self-start rounded-lg bg-accent-600 px-4 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
         >
           <Icon
             icon="lucide:plus"
@@ -338,13 +338,13 @@ onMounted(loadPolicyTools)
             </span>
             <div class="flex items-center gap-3">
               <button
-                class="text-xs text-green-400 hover:text-green-300 transition-colors"
+                class="text-xs text-status-green hover:text-green-300 transition-colors"
                 @click="confirmAll"
               >
                 Auto-confirm all
               </button>
               <button
-                class="text-xs text-sky-400 hover:text-sky-300 transition-colors"
+                class="text-xs text-status-info hover:text-sky-300 transition-colors"
                 title="Use annotation defaults: read-only tools auto-confirm; write, destructive, and unannotated tools ask"
                 @click="defaultsAll"
               >
@@ -386,7 +386,7 @@ onMounted(loadPolicyTools)
                 <div class="flex flex-wrap items-center gap-2">
                   <span
                     class="text-sm font-semibold"
-                    :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : 'text-theme-100'"
+                    :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-fg' : 'text-theme-100'"
                   >{{ group.namespace.label }}</span>
                   <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
                     {{ group.tools.length }} tool{{ group.tools.length === 1 ? '' : 's' }}
@@ -444,7 +444,7 @@ onMounted(loadPolicyTools)
                       <div class="flex flex-wrap items-center gap-2">
                         <span
                           class="font-mono text-sm"
-                          :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-400' : 'text-theme-200'"
+                          :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-fg' : 'text-theme-200'"
                         >{{ displayName(tool) }}</span>
                         <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-theme-500">
                           {{ toolInjectionCondition(tool.name, tool.namespace.id) }}
@@ -487,7 +487,7 @@ onMounted(loadPolicyTools)
 
                   <button
                     class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
-                    :class="isAutoApproved(approvalName(tool)) ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'"
+                    :class="isAutoApproved(approvalName(tool)) ? 'bg-green-500/15 text-status-green hover:bg-green-500/25' : 'bg-amber-500/10 text-status-warning hover:bg-amber-500/20'"
                     :title="isAutoApproved(approvalName(tool)) ? 'Auto-confirmed - click to require approval' : 'Requires approval - click to auto-confirm'"
                     @click.stop="toggleApproval(approvalName(tool))"
                   >

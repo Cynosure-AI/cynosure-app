@@ -47,7 +47,7 @@
           <span class="text-xs text-theme-500">Added</span>
         </div>
         <button
-          class="p-1.5 text-theme-600 hover:text-red-400 transition-colors"
+          class="p-1.5 text-theme-600 hover:text-status-danger transition-colors"
           @click="providerStore.removeProvider(provider.id)"
         >
           <Icon
@@ -67,7 +67,7 @@
         <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
           <Icon
             icon="lucide:check"
-            class="w-4 h-4 text-emerald-400"
+            class="w-4 h-4 text-status-success"
           />
         </div>
         <div class="flex-1">
@@ -220,14 +220,14 @@
       <!-- Error -->
       <p
         v-if="error"
-        class="text-xs text-red-400"
+        class="text-xs text-status-danger"
       >
         {{ error }}
       </p>
 
       <!-- Add button -->
       <button
-        class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+        class="w-full px-4 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-accent-on text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         :disabled="!canAdd || saving"
         @click="addProvider"
       >
@@ -249,7 +249,7 @@
     <!-- Validation note -->
     <p
       v-if="!providerStore.providers.length"
-      class="text-xs text-amber-400/80 mt-3 flex items-center gap-1.5"
+      class="text-xs text-status-warning/80 mt-3 flex items-center gap-1.5"
     >
       <Icon
         icon="lucide:info"

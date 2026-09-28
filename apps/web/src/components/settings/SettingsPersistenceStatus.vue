@@ -39,10 +39,10 @@ const icon = computed(() => ({
     class="inline-flex items-center gap-1.5 text-[11px]"
     :class="{
       'text-theme-500': state === 'idle',
-      'text-amber-400': state === 'dirty',
+      'text-status-warning': state === 'dirty',
       'text-theme-400': state === 'saving',
-      'text-emerald-400': state === 'saved',
-      'text-red-400': state === 'error',
+      'text-status-success': state === 'saved',
+      'text-status-danger': state === 'error',
     }"
     role="status"
     aria-live="polite"

@@ -109,7 +109,7 @@ async function confirmReset(): Promise<void> {
           :key="d"
           class="px-2.5 py-1 text-xs rounded-md transition-colors"
           :class="selectedDays === d
-            ? 'bg-accent-600/20 text-accent-400 border border-accent-500/30'
+            ? 'bg-accent-600/20 text-accent-fg border border-accent-500/30'
             : 'text-theme-500 hover:text-theme-300 border border-transparent'"
           @click="selectedDays = d"
         >
@@ -117,7 +117,7 @@ async function confirmReset(): Promise<void> {
         </button>
       </div>
       <button
-        class="flex items-center gap-1.5 px-2.5 py-1 text-xs text-theme-500 hover:text-red-400 border border-transparent hover:border-red-500/30 hover:bg-red-500/10 rounded-md transition-colors"
+        class="flex items-center gap-1.5 px-2.5 py-1 text-xs text-theme-500 hover:text-status-danger border border-transparent hover:border-red-500/30 hover:bg-red-500/10 rounded-md transition-colors"
         title="Reset usage metrics"
         @click="showResetModal = true"
       >
@@ -171,7 +171,7 @@ async function confirmReset(): Promise<void> {
   </div>
   <div
     v-else-if="error"
-    class="text-red-400 text-sm py-6 text-center"
+    class="text-status-danger text-sm py-6 text-center"
   >
     {{ error }}
   </div>
@@ -256,7 +256,7 @@ async function confirmReset(): Promise<void> {
           </div>
           <div
             class="text-xl font-semibold"
-            :class="metrics.totals.estimatedCost !== null ? 'text-amber-400' : 'text-theme-500'"
+            :class="metrics.totals.estimatedCost !== null ? 'text-status-warning' : 'text-theme-500'"
           >
             {{ formatCost(metrics.totals.estimatedCost) }}
           </div>
@@ -269,7 +269,7 @@ async function confirmReset(): Promise<void> {
             Cost &amp; Latency
           </div>
           <div class="flex justify-between text-theme-400 mb-0.5">
-            <span>Estimated cost</span><span class="text-amber-400">{{ formatCost(metrics.totals.estimatedCost) }}</span>
+            <span>Estimated cost</span><span class="text-status-warning">{{ formatCost(metrics.totals.estimatedCost) }}</span>
           </div>
           <div class="flex justify-between text-theme-400 mb-0.5">
             <span>Chat models</span><span class="text-theme-300">{{ formatCost(metrics.totals.chatEstimatedCost) }}</span>
@@ -350,7 +350,7 @@ async function confirmReset(): Promise<void> {
               {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
-                class="text-amber-500/80 ml-1"
+                class="text-status-warning/80 ml-1"
               >· {{ formatCost(m.estimatedCost) }}</span>
             </div>
           </div>
@@ -390,7 +390,7 @@ async function confirmReset(): Promise<void> {
               {{ auxiliaryKindLabel(m.kind) }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
-                class="text-amber-500/80 ml-1"
+                class="text-status-warning/80 ml-1"
               >· {{ formatCost(m.estimatedCost) }}</span>
             </div>
           </div>
@@ -430,7 +430,7 @@ async function confirmReset(): Promise<void> {
               {{ auxiliaryKindLabel(m.kind) }} · {{ m.provider }} · {{ formatNumber(m.totalPromptTokens + m.totalCompletionTokens) }} tokens
               <span
                 v-if="m.estimatedCost !== null"
-                class="text-amber-500/80 ml-1"
+                class="text-status-warning/80 ml-1"
               >· {{ formatCost(m.estimatedCost) }}</span>
             </div>
           </div>

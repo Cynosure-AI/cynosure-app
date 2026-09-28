@@ -313,11 +313,11 @@ onBeforeUnmount(() => {
               <Icon
                 :icon="entry.icon"
                 class="h-5 w-5 shrink-0"
-                :class="entryChanged(entry.id) ? 'text-accent-400' : 'text-theme-300'"
+                :class="entryChanged(entry.id) ? 'text-accent-fg' : 'text-theme-300'"
               />
               <span class="min-w-0 flex-1"><span
                 class="block text-sm"
-                :class="entryChanged(entry.id) ? 'text-accent-400' : 'text-theme-100'"
+                :class="entryChanged(entry.id) ? 'text-accent-fg' : 'text-theme-100'"
               >{{ entry.label }}</span></span>
               <Icon
                 icon="lucide:chevron-right"
@@ -336,10 +336,10 @@ onBeforeUnmount(() => {
                 <Icon
                   icon="lucide:database-zap"
                   class="h-5 w-5"
-                  :class="changedFields.has('Automatic memory') ? 'text-accent-400' : 'text-theme-300'"
+                  :class="changedFields.has('Automatic memory') ? 'text-accent-fg' : 'text-theme-300'"
                 /><span class="min-w-0 flex-1"><span
                   class="block text-sm"
-                  :class="changedFields.has('Automatic memory') ? 'text-accent-400' : ''"
+                  :class="changedFields.has('Automatic memory') ? 'text-accent-fg' : ''"
                 >Automatic Memories</span><span class="block text-[11px] text-theme-500">Retrieve relevant memories</span></span><span
                   class="relative h-5 w-9 rounded-full transition-colors"
                   :class="chatStore.sessionAutoMemory ? 'bg-accent-600' : 'bg-theme-600'"
@@ -359,10 +359,10 @@ onBeforeUnmount(() => {
                 <Icon
                   icon="lucide:sparkles"
                   class="h-5 w-5"
-                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-400' : 'text-theme-300'"
+                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-fg' : 'text-theme-300'"
                 /><span class="min-w-0 flex-1"><span
                   class="block text-sm"
-                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-400' : ''"
+                  :class="changedFields.has('Automatic tool routing') ? 'text-accent-fg' : ''"
                 >Automatic Tools</span><span class="block text-[11px] text-theme-500">Use tools when helpful</span></span><span
                   class="relative h-5 w-9 rounded-full transition-colors"
                   :class="chatStore.sessionAutoToolRouting ? 'bg-accent-600' : 'bg-theme-600'"
@@ -413,7 +413,7 @@ onBeforeUnmount(() => {
               >
                 <span
                   class="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
-                  :class="groupSelectionState(group) ? 'border-accent-500 bg-accent-500 text-white' : 'border-theme-600 bg-theme-950'"
+                  :class="groupSelectionState(group) ? 'border-accent-500 bg-accent-500 text-accent-on' : 'border-theme-600 bg-theme-950'"
                 >
                   <Icon
                     v-if="groupSelectionState(group)"
@@ -433,7 +433,7 @@ onBeforeUnmount(() => {
                     v-else
                     :icon="getToolNamespaceIcon(group.id)"
                     class="h-4 w-4"
-                    :class="isBuiltInNamespaceId(group.id) ? 'text-accent-400' : 'text-theme-400'"
+                    :class="isBuiltInNamespaceId(group.id) ? 'text-accent-fg' : 'text-theme-400'"
                   />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-xs">{{ group.label }}</span>
@@ -545,7 +545,7 @@ onBeforeUnmount(() => {
             <Icon
               :icon="selectedReasoning === level.value ? 'lucide:circle-check' : 'lucide:circle'"
               class="h-4 w-4"
-              :class="selectedReasoning === level.value ? 'text-accent-400' : 'text-theme-500'"
+              :class="selectedReasoning === level.value ? 'text-accent-fg' : 'text-theme-500'"
             /><span><span class="block text-xs">{{ level.label }}</span><span class="block text-[10px] text-theme-500">{{ level.detail }}</span></span>
           </button>
         </template>

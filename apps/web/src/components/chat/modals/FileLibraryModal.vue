@@ -260,19 +260,19 @@ watch(query, () => {
                   <span class="truncate text-sm font-medium text-theme-100">{{ upload.name }}</span><Icon
                     v-if="selectedUploadIds.has(upload.id)"
                     icon="lucide:circle-check"
-                    class="h-4 w-4 shrink-0 text-accent-400"
+                    class="h-4 w-4 shrink-0 text-accent-fg"
                   />
                 </div>
                 <p
                   v-if="upload.status && upload.status !== 'ready'"
                   class="mt-1 text-[11px]"
-                  :class="upload.status === 'failed' ? 'text-red-400' : 'text-accent-400'"
+                  :class="upload.status === 'failed' ? 'text-status-danger' : 'text-accent-fg'"
                 >
                   {{ upload.status === 'failed' ? 'Indexing failed' : `Indexing ${upload.progressCurrent || 0}/${upload.progressTotal || '?'} chunks` }}
                 </p>
                 <p
                   v-else-if="upload.staged"
-                  class="mt-1 text-[11px] text-accent-400"
+                  class="mt-1 text-[11px] text-accent-fg"
                 >
                   Ready in chat draft
                 </p>
@@ -333,7 +333,7 @@ watch(query, () => {
                   <span class="truncate text-sm font-medium text-theme-100">{{ artifact.label }}</span><Icon
                     v-if="selectedArtifacts.has(artifact.id)"
                     icon="lucide:circle-check"
-                    class="h-4 w-4 shrink-0 text-accent-400"
+                    class="h-4 w-4 shrink-0 text-accent-fg"
                   />
                 </div>
                 <p class="mt-1 truncate text-xs text-theme-500">
@@ -386,7 +386,7 @@ watch(query, () => {
           </button>
           <button
             type="button"
-            class="flex items-center gap-2 rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-50"
+            class="flex items-center gap-2 rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-accent-on hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="!selectedCount || adding"
             @click="addSelected"
           >

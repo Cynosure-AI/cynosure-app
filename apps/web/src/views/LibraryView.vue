@@ -363,7 +363,7 @@ onUnmounted(() => {
             class="library-filter-button inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition"
             :aria-pressed="selectedFilter === option.value"
             :class="selectedFilter === option.value
-              ? 'border-accent-500/50 bg-accent-500/15 text-accent-200'
+              ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg'
               : 'border-theme-700 bg-theme-950/50 text-theme-400 hover:border-theme-600 hover:text-theme-200'"
             @click="selectedFilter = option.value"
           >
@@ -381,7 +381,7 @@ onUnmounted(() => {
         >
           <Icon
             icon="lucide:shield-check"
-            class="h-4 w-4 shrink-0 text-accent-400"
+            class="h-4 w-4 shrink-0 text-accent-fg"
           />
           <span>Stored copies used when messages are edited or retried</span>
         </div>
@@ -444,7 +444,7 @@ onUnmounted(() => {
       >
         <Icon
           icon="lucide:triangle-alert"
-          class="mb-3 h-8 w-8 text-red-400"
+          class="mb-3 h-8 w-8 text-status-danger"
         />
         <p class="font-medium text-theme-200">
           Couldn't load {{ activePanel === 'uploads' ? 'uploads' : 'generated files' }}
@@ -520,7 +520,7 @@ onUnmounted(() => {
               :class="viewMode === 'grid' ? 'gap-3' : 'gap-1.5'"
             >
               <div
-                class="flex items-center justify-center bg-theme-800/80 ring-1 ring-theme-700/70 transition group-hover:text-accent-300"
+                class="flex items-center justify-center bg-theme-800/80 ring-1 ring-theme-700/70 transition group-hover:text-accent-fg"
                 :class="viewMode === 'grid' ? 'h-16 w-16 rounded-2xl' : 'h-10 w-10 rounded-xl'"
               >
                 <Icon
@@ -542,7 +542,7 @@ onUnmounted(() => {
             <span
               v-if="entry.status && entry.status !== 'ready'"
               class="absolute right-3 top-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold backdrop-blur-sm"
-              :class="entry.status === 'failed' ? 'border-red-500/30 bg-red-950/80 text-red-300' : 'border-accent-500/30 bg-theme-950/85 text-accent-300'"
+              :class="entry.status === 'failed' ? 'border-red-500/30 bg-red-950/80 text-red-300' : 'border-accent-500/30 bg-theme-950/85 text-accent-fg'"
               :title="entry.error"
             >
               <Icon

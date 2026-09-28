@@ -130,9 +130,9 @@ onBeforeUnmount(() => {
               v-if="icon"
               class="p-2 rounded-lg"
               :class="{
-                'bg-accent-500/20 text-accent-400': iconColor === 'accent' || !iconColor,
-                'bg-red-500/20 text-red-400': iconColor === 'red',
-                'bg-amber-500/20 text-amber-400': iconColor === 'amber',
+                'bg-accent-500/20 text-accent-fg': iconColor === 'accent' || !iconColor,
+                'bg-red-500/20 text-status-danger': iconColor === 'red',
+                'bg-amber-500/20 text-status-warning': iconColor === 'amber',
               }"
             >
               <Icon

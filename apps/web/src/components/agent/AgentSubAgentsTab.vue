@@ -89,7 +89,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
         </p>
       </div>
       <button
-        class="flex items-center gap-2 px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-xs font-medium transition-colors"
+        class="flex items-center gap-2 px-3 py-1.5 bg-accent-600 hover:bg-accent-500 text-accent-on rounded-lg text-xs font-medium transition-colors"
         @click="showAddDialog = true"
       >
         <Icon
@@ -108,13 +108,13 @@ const subAgentColumns: Column<SubAgentItem>[] = [
       <div class="flex items-start gap-2">
         <Icon
           icon="lucide:alert-triangle"
-          class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"
+          class="w-4 h-4 text-status-warning shrink-0 mt-0.5"
         />
         <div class="flex-1 min-w-0">
           <p class="text-xs font-medium text-amber-300">
             {{ missingSubAgents.length }} assigned sub-agent{{ missingSubAgents.length > 1 ? 's' : '' }} unavailable
           </p>
-          <p class="text-[11px] text-amber-400/60 mt-0.5">
+          <p class="text-[11px] text-status-warning/60 mt-0.5">
             These sub-agents are assigned but no longer found in your agent library.
           </p>
           <div class="mt-2 flex flex-wrap gap-1.5">
@@ -131,7 +131,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
             </span>
           </div>
           <button
-            class="mt-2.5 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1"
+            class="mt-2.5 text-[11px] font-medium text-status-warning hover:text-amber-300 transition-colors flex items-center gap-1"
             @click="removeMissing"
           >
             <Icon
@@ -162,7 +162,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
             <Icon
               v-else
               icon="lucide:bot"
-              class="w-3.5 h-3.5 text-accent-400"
+              class="w-3.5 h-3.5 text-accent-fg"
             />
           </div>
           <div class="min-w-0 flex items-center gap-1.5">
@@ -170,7 +170,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
             <Icon
               v-if="!agentDefs.get(item.agentId)"
               icon="lucide:alert-triangle"
-              class="w-3.5 h-3.5 text-amber-400 shrink-0"
+              class="w-3.5 h-3.5 text-status-warning shrink-0"
             />
           </div>
         </div>
@@ -188,7 +188,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
 
       <template #col-actions="{ item }">
         <button
-          class="p-1.5 text-theme-500 hover:text-red-400 rounded-md transition-all"
+          class="p-1.5 text-theme-500 hover:text-status-danger rounded-md transition-all"
           @click.stop="removeSubAgent(item.agentId)"
         >
           <Icon
@@ -204,7 +204,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
       <h3 class="text-sm font-medium text-theme-300 mb-2 flex items-center gap-2">
         <Icon
           icon="lucide:info"
-          class="w-4 h-4 text-accent-400"
+          class="w-4 h-4 text-accent-fg"
         />
         How Sub-Agent Orchestration Works
       </h3>
@@ -262,7 +262,7 @@ const subAgentColumns: Column<SubAgentItem>[] = [
             </button>
             <button
               :disabled="!addAgentId"
-              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-white rounded-lg text-sm font-medium transition-colors"
+              class="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-theme-500 text-accent-on rounded-lg text-sm font-medium transition-colors"
               @click="addSubAgent"
             >
               Add

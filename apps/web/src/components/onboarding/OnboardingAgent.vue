@@ -110,7 +110,7 @@ defineExpose({ createAgent })
 <template>
   <div class="mx-auto w-full max-w-2xl px-4 py-6">
     <div class="mb-6">
-      <div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent-400">
+      <div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent-fg">
         <Icon
           icon="lucide:sparkles"
           class="h-3.5 w-3.5"
@@ -132,7 +132,7 @@ defineExpose({ createAgent })
           for="onboarding-agent-name"
           class="mb-1.5 block text-sm font-medium text-theme-300"
         >
-          Name <span class="text-red-400">*</span>
+          Name <span class="text-status-danger">*</span>
         </label>
         <input
           id="onboarding-agent-name"

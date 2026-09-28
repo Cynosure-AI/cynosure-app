@@ -659,7 +659,7 @@ watch(searchQuery, () => {
             <button
               type="button"
               class="inline-flex w-full items-center justify-between gap-3 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-theme-300 transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 sm:w-48"
-              :class="{ 'filter-chip-active text-accent-700 dark:text-accent-300': selectedKinds.length > 0 }"
+              :class="{ 'filter-chip-active text-accent-700 dark:text-accent-fg': selectedKinds.length > 0 }"
               aria-haspopup="menu"
               :aria-expanded="open"
               @click.stop="toggle"
@@ -693,7 +693,7 @@ watch(searchQuery, () => {
               <button
                 type="button"
                 class="mb-1 flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
-                :class="{ 'filter-menu-active text-accent-700 dark:text-accent-300': allKindsSelected || defaultKindsSelected }"
+                :class="{ 'filter-menu-active text-accent-700 dark:text-accent-fg': allKindsSelected || defaultKindsSelected }"
                 @click="toggleAllKinds"
               >
                 <span class="inline-flex items-center gap-2">
@@ -719,7 +719,7 @@ watch(searchQuery, () => {
                 v-for="option in filterOptions"
                 :key="option.value"
                 class="flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-[13px] text-theme-300 transition hover:bg-theme-800 hover:text-theme-100"
-                :class="{ 'filter-menu-active text-accent-700 dark:text-accent-300': selectedKinds.includes(option.value) }"
+                :class="{ 'filter-menu-active text-accent-700 dark:text-accent-fg': selectedKinds.includes(option.value) }"
               >
                 <span class="inline-flex min-w-0 items-center gap-2">
                   <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-theme-600">
@@ -807,8 +807,8 @@ watch(searchQuery, () => {
             <span
               class="text-[13px]"
               :class="{
-                'text-emerald-400': group.kind === 'active',
-                'text-amber-400': group.kind === 'attention',
+                'text-status-success': group.kind === 'active',
+                'text-status-warning': group.kind === 'attention',
                 'text-theme-400': group.kind === 'queued',
               }"
             >{{ group.label }}</span>

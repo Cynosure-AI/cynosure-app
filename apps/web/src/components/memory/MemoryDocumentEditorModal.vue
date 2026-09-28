@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
         <button
           class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100"
-          :class="{ 'bg-accent-500/15 text-accent-300': showHistory }"
+          :class="{ 'bg-accent-500/15 text-accent-fg': showHistory }"
           :disabled="!documentRef || loading"
           title="Revision history"
           @click="toggleHistory"
@@ -390,7 +390,7 @@ onBeforeUnmount(() => {
         </button>
         <button
           class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-theme-400 transition hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40"
-          :class="{ 'bg-accent-500/15 text-accent-300': analysisExpanded }"
+          :class="{ 'bg-accent-500/15 text-accent-fg': analysisExpanded }"
           :disabled="analysisLoading"
           title="Extracted facts and entities"
           @click="toggleFacts"
@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
           ]"
           :key="button.title"
           :title="button.title"
-          :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          :class="button.active ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
           :disabled="!editor || loading"
           @click="button.action"
@@ -427,7 +427,7 @@ onBeforeUnmount(() => {
           v-for="level in headingLevels"
           :key="level"
           :title="`Heading ${level}`"
-          :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          :class="editor?.isActive('heading', { level }) ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="px-2.5 py-2 rounded-lg transition-colors text-xs font-semibold shrink-0 disabled:opacity-40"
           :disabled="!editor || loading"
           @click="toggleHeading(level)"
@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
           ]"
           :key="button.title"
           :title="button.title"
-          :class="button.active ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
+          :class="button.active ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400 hover:text-theme-100 hover:bg-theme-800/70'"
           class="p-2 rounded-lg transition-colors shrink-0 disabled:opacity-40"
           :disabled="!editor || loading"
           @click="button.action"
@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
             v-for="revision in revisions"
             :key="revision.id"
             class="mb-1 block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-theme-800"
-            :class="selectedRevisionId === revision.id ? 'bg-accent-500/15 text-accent-300' : 'text-theme-400'"
+            :class="selectedRevisionId === revision.id ? 'bg-accent-500/15 text-accent-fg' : 'text-theme-400'"
             @click="selectRevision(revision.id)"
           >
             <span class="block font-medium">Revision {{ revision.revisionNumber }}</span>
@@ -538,7 +538,7 @@ onBeforeUnmount(() => {
               </div>
               <div
                 v-else-if="analysisError"
-                class="py-3 text-xs text-red-400"
+                class="py-3 text-xs text-status-danger"
               >
                 {{ analysisError }}
               </div>
@@ -584,7 +584,7 @@ onBeforeUnmount(() => {
                       >
                         <span class="font-medium text-theme-200">{{ item.subject || 'Unknown subject' }}</span>
                         <span class="mx-1.5 text-theme-600">·</span>
-                        <span class="font-mono text-accent-400">{{ item.relation }}</span>
+                        <span class="font-mono text-accent-fg">{{ item.relation }}</span>
                         <span class="mx-1.5 text-theme-600">→</span>
                         <span>{{ item.entity }}</span>
                       </span>
@@ -603,7 +603,7 @@ onBeforeUnmount(() => {
                         class="min-w-64 text-[12px] leading-5 text-theme-200"
                         :aria-label="`Reasoning for ${item.label}`"
                       >
-                        <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent-400">
+                        <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent-fg">
                           Why this was extracted
                         </div>
                         <p>{{ item.reasoning }}</p>
@@ -660,7 +660,7 @@ onBeforeUnmount(() => {
         </button>
         <button
           :disabled="loading || saving || !canSave"
-          class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-fg rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           @click="saveContent"
         >
           <Icon

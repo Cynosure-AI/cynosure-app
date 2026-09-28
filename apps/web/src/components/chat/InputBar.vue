@@ -431,7 +431,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           <button
             v-if="!chatStore.isConversationLocked"
             type="button"
-            class="text-accent-400 hover:text-accent-300"
+            class="text-accent-fg hover:text-accent-fg"
             @click="chatStore.runNextQueuedMessage()"
           >
             Run next
@@ -453,7 +453,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
               <span class="truncate">{{ attachment.name }}</span>
               <button
                 type="button"
-                class="hover:text-red-400"
+                class="hover:text-status-danger"
                 :aria-label="`Remove ${attachment.name}`"
                 @click.stop="chatStore.removeQueuedAttachment(item.id, attachment.id)"
               >×</button>
@@ -462,10 +462,10 @@ defineExpose({ processFiles, focus, sendSuggestion })
           <button type="button" class="text-theme-500 hover:text-theme-200" title="Edit queued message" @click="editQueued(item.id, item.content)">
             <Icon icon="lucide:pencil" class="h-3.5 w-3.5" />
           </button>
-          <button type="button" class="text-accent-500 hover:text-accent-300" :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'" @click="chatStore.steerQueuedMessage(item.id)">
+          <button type="button" class="text-accent-fg hover:text-accent-fg" :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'" @click="chatStore.steerQueuedMessage(item.id)">
             <Icon icon="lucide:corner-up-left" class="h-3.5 w-3.5" />
           </button>
-          <button type="button" class="text-theme-500 hover:text-red-400" title="Remove queued message" @click="chatStore.removeQueuedMessage(item.id)">
+          <button type="button" class="text-theme-500 hover:text-status-danger" title="Remove queued message" @click="chatStore.removeQueuedMessage(item.id)">
             <Icon icon="lucide:x" class="h-3.5 w-3.5" />
           </button>
         </div>
@@ -526,7 +526,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           <Icon
             :icon="file.status === 'processing' ? 'lucide:loader-2' : file.status === 'error' ? 'lucide:circle-alert' : 'mdi:file-document-outline'"
             class="h-4 w-4 shrink-0"
-            :class="file.status === 'processing' ? 'animate-spin text-accent-400' : file.status === 'error' ? 'text-red-400' : 'text-theme-400'"
+            :class="file.status === 'processing' ? 'animate-spin text-accent-fg' : file.status === 'error' ? 'text-status-danger' : 'text-theme-400'"
           />
           <span class="text-xs text-theme-300 max-w-32 truncate">{{ file.name }}</span>
           <span
@@ -539,7 +539,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           >Cancel</span>
           <span
             v-else-if="file.status === 'error'"
-            class="text-[10px] text-red-400"
+            class="text-[10px] text-status-danger"
             :title="file.error"
           >Failed</span>
           <button
@@ -601,7 +601,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
       <!-- Input area: textarea + bottom bar inside a unified container -->
       <div
         class="rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 transition-shadow duration-300"
-        :class="{ 'shadow-2xl shadow-black/40': floating }"
+        :class="{ 'shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40': floating }"
       >
         <input
           ref="fileInputRef"
