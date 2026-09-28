@@ -7,6 +7,7 @@ import { useAgentStore, type ToolInfo, type ToolNamespace } from '../../../store
 import { useChatStore } from '../../../stores/chat.store'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
+import { getToolNamespaceIcon } from '../../../utils/tool-namespace-icons'
 import ToggleSwitch from '../../shared/ToggleSwitch.vue'
 
 interface NamespaceGroup {
@@ -113,7 +114,7 @@ function serverId(namespaceId: string): string | null {
   return namespaceId.startsWith('mcp:') ? namespaceId.slice(4) : null
 }
 
-function namespaceIcon(namespaceId: string): string | null {
+function namespaceImage(namespaceId: string): string | null {
   const id = serverId(namespaceId)
   if (!id || brokenIcons.value.has(namespaceId)) return null
   return servers.value.find((server) => server.id === id)?.icon_url ?? null
@@ -355,15 +356,15 @@ onBeforeUnmount(() => {
               </button>
               <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
                 <img
-                  v-if="namespaceIcon(group.namespace.id)"
-                  :src="namespaceIcon(group.namespace.id)!"
+                  v-if="namespaceImage(group.namespace.id)"
+                  :src="namespaceImage(group.namespace.id)!"
                   alt=""
                   class="h-5 w-5 object-contain"
                   @error="markIconBroken(group.namespace.id)"
                 >
                 <Icon
                   v-else
-                  :icon="isBuiltInNamespaceId(group.namespace.id) ? 'lucide:blocks' : 'lucide:plug'"
+                  :icon="getToolNamespaceIcon(group.namespace.id)"
                   class="h-4 w-4 text-theme-400"
                 />
               </span>

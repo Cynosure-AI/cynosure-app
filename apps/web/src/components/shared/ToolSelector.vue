@@ -7,6 +7,7 @@ import CollapsibleSection from './CollapsibleSection.vue'
 import HoverTooltip from './HoverTooltip.vue'
 import ToolBehaviorBadges from './ToolBehaviorBadges.vue'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../utils/internal-tools'
+import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
 
 const props = withDefaults(
   defineProps<{
@@ -357,7 +358,7 @@ onMounted(() => {
                       >
                       <Icon
                         v-else
-                        :icon="isBuiltInNamespaceId(group.namespace.id) ? 'lucide:blocks' : 'lucide:plug'"
+                        :icon="getToolNamespaceIcon(group.namespace.id)"
                         class="h-4 w-4 text-theme-400"
                       />
                     </span>

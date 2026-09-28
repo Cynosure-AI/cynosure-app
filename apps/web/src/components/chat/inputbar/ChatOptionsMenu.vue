@@ -11,6 +11,7 @@ import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
+import { getToolNamespaceIcon } from '../../../utils/tool-namespace-icons'
 import { isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../../utils/memory-folder-selection'
 import SystemPromptModal from '../modals/SystemPromptModal.vue'
 
@@ -430,7 +431,7 @@ onBeforeUnmount(() => {
                   >
                   <Icon
                     v-else
-                    :icon="isBuiltInNamespaceId(group.id) ? 'lucide:blocks' : 'lucide:plug'"
+                    :icon="getToolNamespaceIcon(group.id)"
                     class="h-4 w-4 text-theme-400"
                   />
                 </span>
