@@ -140,7 +140,7 @@ async function saveAsNewAgent(): Promise<void> {
       v-if="menuOpen"
       role="menu"
       aria-label="Chat / Agent Settings"
-      class="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-theme-700 bg-theme-950 py-1.5 shadow-2xl shadow-black/40"
+      class="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-theme-700 bg-theme-950 py-1.5 shadow-2xl"
       @click.stop
     >
       <div class="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">

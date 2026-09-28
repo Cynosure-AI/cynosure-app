@@ -104,7 +104,7 @@ function toggle(): void {
     <Transition name="fade">
       <div
         v-if="open"
-        class="rounded-lg border border-theme-700 bg-theme-900 shadow-xl shadow-black/40 p-1.5 text-xs z-50"
+        class="rounded-lg border border-theme-700 bg-theme-900 shadow-xl  p-1.5 text-xs z-50"
         :style="menuStyle"
         @mouseenter="show"
         @mouseleave="scheduleClose"
