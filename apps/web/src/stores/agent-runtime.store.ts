@@ -37,6 +37,7 @@ export interface ToolCallDisplay {
   name: string
   arguments: string
   annotations?: ToolBehaviorAnnotations
+  fileAccess?: { path: string; folder: string; toolName: string }
 }
 
 export interface HITLRequest {

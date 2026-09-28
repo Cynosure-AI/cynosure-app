@@ -12,6 +12,7 @@ import { makeNotificationTool } from "./builtin/notification.js";
 import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
 import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import { makeManageMcpTool } from "./builtin/manage-mcp.js";
+import { makeFileTools } from "./builtin/file-tools.js";
 import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
@@ -66,6 +67,7 @@ export const BUILTIN_NAMESPACE_IDS = {
     scheduling: "builtin:scheduling",
     notifications: "builtin:notifications",
     utility: "builtin:utility",
+    files: "builtin:files",
 } as const;
 
 export const BUILTIN_NAMESPACES = {
@@ -89,6 +91,11 @@ export const BUILTIN_NAMESPACES = {
         label: "Built-In: Utility",
         description: "Work with attachments, MCP tools, planning, and sub-agent delegation.",
     },
+    files: {
+        id: BUILTIN_NAMESPACE_IDS.files,
+        label: "Built-In: Files",
+        description: "Browse, read, edit, move, archive, and delete local files within allowed directories.",
+    },
 } as const satisfies Record<string, ToolNamespace>;
 
 type BuiltInToolSpec = Pick<
@@ -108,6 +115,7 @@ interface BuiltInHydrationContext {
 }
 
 const BUILTIN_TOOL_HYDRATORS = {
+    ...Object.fromEntries(makeFileTools().map((tool) => [tool.name, () => tool])),
     manage_mcp: () => makeManageMcpTool(),
     notify_user_in_app: (ctx: BuiltInHydrationContext) => makeNotificationTool({
         agentId: ctx.agentId || "",
@@ -146,6 +154,7 @@ export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
 export type BuiltinToolName = keyof typeof BUILTIN_TOOL_HYDRATORS;
 
 export function getBuiltInNamespace(toolName: string): ToolNamespace {
+    if (toolName.startsWith('file_')) return BUILTIN_NAMESPACES.files;
     if (MEMORY_TOOL_NAMES.includes(toolName as never) || KNOWLEDGE_TOOL_NAMES.includes(toolName as never)) {
         return BUILTIN_NAMESPACES.memory;
     }

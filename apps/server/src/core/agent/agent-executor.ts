@@ -10,7 +10,7 @@ import {
     type ContextStrategy,
 } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import { IncompleteModelResponseError, type ChatMessage, type ToolCall, type ToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
+import { IncompleteModelResponseError, type ChatMessage, type ToolCall, type ToolDefinition, type RegistryAwareToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
 import type { ChatEventPayload, ReasoningEffort } from '@shared/types'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
 import {
@@ -21,6 +21,7 @@ import {
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { getPlanningState } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
+import { preflightFileToolAccess } from '../tools/builtin/file-access-policy.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
@@ -995,6 +996,16 @@ export class AgentExecutor {
                     output: `Invalid tool arguments: ${validation.errors.join('; ')}`,
                     success: false,
                 }
+            }
+
+            const registryTool = tool as RegistryAwareToolDefinition
+            if (registryTool.namespaceId === 'builtin:files') {
+                await preflightFileToolAccess({
+                    toolName: registryTool.originalName || tool.name,
+                    arguments: args as Record<string, unknown>,
+                    conversationId: this.config.conversationId,
+                    signal,
+                })
             }
 
             const timeoutSignal = AbortSignal.timeout(tool.timeout)

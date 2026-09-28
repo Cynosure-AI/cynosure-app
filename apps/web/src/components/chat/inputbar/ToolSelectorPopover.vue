@@ -19,6 +19,7 @@ const BUILT_IN_NAMESPACE_DESCRIPTIONS: Record<string, string> = {
   'builtin:scheduling': 'Create, review, update, and remove scheduled agent tasks.',
   'builtin:notifications': 'Send notifications in Cynosure or through connected channels.',
   'builtin:utility': 'Work with attachments, MCP tools, planning, and sub-agent delegation.',
+  'builtin:files': 'Browse, read, edit, move, archive, and delete local files within allowed directories.',
   builtin: 'Tools provided directly by Cynosure.',
 }
 

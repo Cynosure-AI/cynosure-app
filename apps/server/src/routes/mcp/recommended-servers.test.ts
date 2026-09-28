@@ -20,7 +20,6 @@ const expectedRepositories: Record<string, string> = {
     '@cynosure-mcp/computer-controller': 'mcp-computer-controller',
     '@cynosure-mcp/defuddle': 'mcp-defuddle',
     '@cynosure-mcp/document-parser': 'mcp-document-parser',
-    '@cynosure-mcp/file-access': 'mcp-file-access',
     '@cynosure-mcp/imap-email': 'mcp-imap-email',
     '@cynosure-mcp/media-file-converter': 'mcp-media-file-converter',
     '@cynosure-mcp/mermaid-diagrams': 'mcp-mermaid-diagrams',

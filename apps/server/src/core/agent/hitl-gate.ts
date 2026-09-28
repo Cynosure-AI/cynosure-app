@@ -20,6 +20,15 @@ export class HITLGate {
     return new Set(this.pendingByConversation.values())
   }
 
+  /** Track a permission prompt that uses the HITL transport outside the normal tool approval gate. */
+  trackExternalRequest(taskId: string, conversationId: string): void {
+    this.pendingByConversation.set(taskId, conversationId)
+  }
+
+  clearExternalRequest(taskId: string): void {
+    this.pendingByConversation.delete(taskId)
+  }
+
   /** Clear pending HITL bookkeeping for a conversation and return affected task IDs. */
   clearPendingForConversation(conversationId: string): string[] {
     const taskIds: string[] = []
