@@ -61,13 +61,18 @@ onMounted(refresh)
 <template>
   <BaseCard class="space-y-4 p-5">
     <div>
-      <h3 class="text-sm font-medium text-theme-200">File Access</h3>
+      <h3 class="text-sm font-medium text-theme-200">
+        File Access
+      </h3>
       <p class="mt-0.5 text-xs text-ink-muted">
         AI file tools can access these folders and everything inside them. Other folders require your approval when a tool tries to use them.
       </p>
     </div>
 
-    <form class="flex flex-col gap-2 sm:flex-row" @submit.prevent="addFolder">
+    <form
+      class="flex flex-col gap-2 sm:flex-row"
+      @submit.prevent="addFolder"
+    >
       <input
         v-model="folderPath"
         type="text"
@@ -80,22 +85,50 @@ onMounted(refresh)
         type="button"
         class="rounded-lg border border-theme-700 px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
         @click="chooseFolder"
-      >Browse</button>
+      >
+        Browse
+      </button>
       <button
         type="submit"
         :disabled="busy || !folderPath.trim()"
         class="rounded-lg accent-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on disabled:opacity-50"
-      >Add folder</button>
+      >
+        Add folder
+      </button>
     </form>
 
-    <p v-if="error" role="alert" class="text-sm text-status-danger">{{ error }}</p>
-    <p v-if="loading" class="text-sm text-ink-muted">Loading folders…</p>
-    <p v-else-if="!folders.length" class="rounded-lg border border-theme-800 bg-theme-900/50 p-4 text-sm text-ink-muted">
+    <p
+      v-if="error"
+      role="alert"
+      class="text-sm text-status-danger"
+    >
+      {{ error }}
+    </p>
+    <p
+      v-if="loading"
+      class="text-sm text-ink-muted"
+    >
+      Loading folders…
+    </p>
+    <p
+      v-else-if="!folders.length"
+      class="rounded-lg border border-theme-800 bg-theme-900/50 p-4 text-sm text-ink-muted"
+    >
       No folders allowed yet. Cynosure will ask when an AI file tool first needs access.
     </p>
-    <ul v-else class="divide-y divide-theme-800 rounded-lg border border-theme-800">
-      <li v-for="folder in folders" :key="folder" class="flex items-center gap-3 px-4 py-3">
-        <Icon icon="lucide:folder" class="h-4 w-4 shrink-0 text-accent-fg" />
+    <ul
+      v-else
+      class="max-h-64 overflow-y-auto divide-y divide-theme-800 rounded-lg border border-theme-800"
+    >
+      <li
+        v-for="folder in folders"
+        :key="folder"
+        class="flex items-center gap-3 px-4 py-3"
+      >
+        <Icon
+          icon="lucide:folder"
+          class="h-4 w-4 shrink-0 text-accent-fg"
+        />
         <span class="min-w-0 flex-1 break-all font-mono text-xs text-theme-200">{{ folder }}</span>
         <button
           type="button"
@@ -103,7 +136,9 @@ onMounted(refresh)
           class="shrink-0 rounded-md px-2 py-1 text-xs text-status-danger hover:bg-red-500/10 disabled:opacity-50"
           :aria-label="`Remove ${folder}`"
           @click="removeFolder(folder)"
-        >Remove</button>
+        >
+          Remove
+        </button>
       </li>
     </ul>
   </BaseCard>
