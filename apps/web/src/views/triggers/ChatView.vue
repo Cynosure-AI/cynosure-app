@@ -3,7 +3,7 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
@@ -21,6 +21,9 @@ const providerStore = useProviderStore()
 const route = useRoute()
 const router = useRouter()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
+const mcpChipRow = ref<HTMLElement | null>(null)
+const visibleMcpCount = ref(Number.POSITIVE_INFINITY)
+let mcpResizeObserver: ResizeObserver | null = null
 const isDragOver = ref(false)
 const taskListOpen = ref(false)
 const chatSearchOpen = ref(false)
@@ -62,6 +65,35 @@ const selectedMcpNamespaces = computed(() => {
     }
   })
 })
+
+const hiddenMcpNamespaces = computed(() => selectedMcpNamespaces.value.slice(visibleMcpCount.value))
+const hiddenMcpTitle = computed(() => hiddenMcpNamespaces.value.map((mcp) => mcp.name).join('\n'))
+
+async function fitMcpChips(): Promise<void> {
+  await nextTick()
+  const row = mcpChipRow.value
+  if (!row) return
+  const chips = [...row.querySelectorAll<HTMLElement>('[data-mcp-chip]')]
+  const available = row.clientWidth
+  const gap = 6
+  let used = 0
+  let count = chips.length
+  for (let index = 0; index < chips.length; index++) {
+    const nextUsed = used + (index ? gap : 0) + chips[index].offsetWidth
+    const hasMore = index < chips.length - 1
+    const overflowWidth = 48
+    if (nextUsed + (hasMore ? gap + overflowWidth : 0) > available) {
+      count = index
+      break
+    }
+    used = nextUsed
+  }
+  visibleMcpCount.value = count
+}
+
+watch(selectedMcpNamespaces, () => {
+  void fitMcpChips()
+}, { flush: 'post' })
 
 function removeMcpSelection(namespaceId: string): void {
   const toolKeys = new Set((agentStore.availableTools ?? [])
@@ -141,6 +173,9 @@ function onChatSearchShortcut(event: KeyboardEvent): void {
 }
 
 onMounted(() => {
+  void fitMcpChips()
+  mcpResizeObserver = new ResizeObserver(() => { void fitMcpChips() })
+  if (mcpChipRow.value) mcpResizeObserver.observe(mcpChipRow.value)
   document.addEventListener('keydown', onChatSearchShortcut)
 })
 
@@ -192,6 +227,7 @@ async function openRecentChat(conversation: Conversation): Promise<void> {
 }
 
 onUnmounted(() => {
+  mcpResizeObserver?.disconnect()
   document.removeEventListener('keydown', onChatSearchShortcut)
   const conversationId = chatStore.activeConversationId
   if (conversationId) chatStore.markConversationRead(conversationId)
@@ -330,7 +366,11 @@ watch(
             :floating="showCenteredComposer"
           >
             <template #leading-actions>
-              <TransitionGroup
+              <div
+                ref="mcpChipRow"
+                class="relative min-w-0 flex-1 overflow-hidden"
+              >
+                <TransitionGroup
                 tag="div"
                 appear
                 enter-active-class="transition duration-200 ease-out"
@@ -340,15 +380,17 @@ watch(
                 leave-from-class="translate-y-0 opacity-100"
                 leave-to-class="translate-y-1 opacity-0"
                 move-class="transition-transform duration-200"
-                class="flex min-w-0 flex-wrap items-center gap-1.5"
+                class="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden"
                 aria-label="Selected MCPs"
               >
                 <div
                   v-for="(mcp, index) in selectedMcpNamespaces"
                   :key="mcp.id"
+                  data-mcp-chip
+                  :class="{ 'invisible absolute': index >= visibleMcpCount }"
                   :title="mcp.name"
                   :style="{ transitionDelay: `${index * 50}ms` }"
-                  class="group inline-flex max-w-full items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-theme-200 shadow-sm"
+                  class="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-theme-200 shadow-sm"
                 >
                   <img
                     v-if="mcp.iconUrl"
@@ -374,7 +416,17 @@ watch(
                     />
                   </button>
                 </div>
-              </TransitionGroup>
+                <button
+                  v-if="hiddenMcpNamespaces.length"
+                  type="button"
+                  class="inline-flex shrink-0 items-center rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-ink-secondary hover:text-theme-100"
+                  :title="hiddenMcpTitle"
+                  :aria-label="`${hiddenMcpNamespaces.length} more MCPs: ${hiddenMcpTitle}`"
+                >
+                  (+{{ hiddenMcpNamespaces.length }})
+                </button>
+                </TransitionGroup>
+              </div>
             </template>
           </InputBar>
 

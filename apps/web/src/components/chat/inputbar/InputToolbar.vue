@@ -208,7 +208,7 @@ async function toggleMic(): Promise<void> {
     />
 
     
-    <div class="flex-1" />
+    <div class="ml-auto" />
 
     <ThinkingModeButton v-if="currentProviderId" />
 
