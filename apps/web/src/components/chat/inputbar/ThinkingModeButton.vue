@@ -78,9 +78,9 @@ function selectIndex(event: Event): void {
 }
 
 const gaugeColors = [
-  '#fff', // off //formerly: #64748b
-  '#ddd', // minimal //formerly: #38bdf8
-  '#bbb', // low //formerly:#22c55e
+  '#64748b', // off
+  '#38bdf8', // minimal
+  '#22c55e', // low
   '#a3e635', // medium
   '#eab308', // high
   '#f97316', // xhigh
