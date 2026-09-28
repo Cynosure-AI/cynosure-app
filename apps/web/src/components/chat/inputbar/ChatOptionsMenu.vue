@@ -73,7 +73,7 @@ const visibleFolders = computed(() => {
   return folders.value.filter(folder => (folder.isUncategorized && folderPath.value === null) || (!folder.isUncategorized && parentPath(folder) === folderPath.value))
 })
 const reasoningLevels: { value: ReasoningEffort | 'off'; label: string; detail: string }[] = [
-  { value: 'off', label: 'Off', detail: 'Use the model without reasoning' },
+  { value: 'off', label: 'Off', detail: 'Disable reasoning if the model permits it' },
   { value: 'minimal', label: 'Minimal', detail: 'Lowest latency and token use' },
   { value: 'low', label: 'Low', detail: 'Quick reasoning' },
   { value: 'medium', label: 'Medium', detail: 'Balanced reasoning' },
@@ -533,6 +533,9 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <template v-else-if="panel === 'reasoning'">
+          <p class="px-2 pb-2 text-[10px] text-ink-muted">
+            Available levels vary by model. Models with mandatory reasoning cannot turn it off.
+          </p>
           <button
             v-for="level in reasoningLevels"
             :key="level.value"

@@ -152,6 +152,42 @@ describe('OpenRouter dedicated media generation', () => {
 })
 
 describe('OpenRouter completion termination', () => {
+    test.each(['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const)(
+        'sends %s reasoning effort in streaming requests', async (effort) => {
+            vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })))
+            const provider = new OpenRouterProvider(config)
+            const create = vi.fn().mockResolvedValue((async function* () {
+                yield { choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }], usage: null }
+            })())
+            ;(provider as unknown as { client: { chat: { completions: { create: typeof create } } } }).client = {
+                chat: { completions: { create } }
+            }
+
+            for await (const _chunk of provider.streamComplete({
+                model: 'test/model', messages: [{ role: 'user', content: 'hello' }],
+                thinkingEnabled: true, reasoningEffort: effort,
+            })) { /* consume stream */ }
+
+            expect(create.mock.calls[0][0]).toMatchObject({ reasoning: { effort } })
+        }
+    )
+
+    test('requests reasoning disabled when off is selected', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })))
+        const provider = new OpenRouterProvider(config)
+        const create = vi.fn().mockResolvedValue((async function* () {
+            yield { choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }], usage: null }
+        })())
+        ;(provider as unknown as { client: { chat: { completions: { create: typeof create } } } }).client = {
+            chat: { completions: { create } }
+        }
+        for await (const _chunk of provider.streamComplete({
+            model: 'test/model', messages: [{ role: 'user', content: 'hello' }],
+            thinkingEnabled: false, reasoningEffort: 'high',
+        })) { /* consume stream */ }
+        expect(create.mock.calls[0][0]).toMatchObject({ reasoning: { enabled: false } })
+    })
+
     test('accepts a natural stop as a completed stream', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })))
         const provider = new OpenRouterProvider(config)

@@ -25,7 +25,7 @@ const REASONING_LEVELS: Array<{
   label: string;
   description: string;
 }> = [
-  { value: 'off', label: 'Off', description: 'Plain model mode. Reasoning and planning tools are disabled.' },
+  { value: 'off', label: 'Off', description: 'Disables reasoning when the selected model permits it. Also disables the task planner.' },
   { value: 'minimal', label: 'Minimal', description: 'Minimal reasoning for the lowest latency and token use.' },
   { value: 'low', label: 'Low', description: 'Quick reasoning for straightforward tasks.' },
   { value: 'medium', label: 'Medium', description: 'Balanced reasoning, speed, and token use.' },
