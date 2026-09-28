@@ -94,7 +94,7 @@ export const BUILTIN_NAMESPACES = {
     files: {
         id: BUILTIN_NAMESPACE_IDS.files,
         label: "Built-In: Files",
-        description: "Browse, read, edit, move, archive, and delete local files within allowed directories.",
+        description: "Browse and manage local files and directories within allowed folders.",
     },
 } as const satisfies Record<string, ToolNamespace>;
 
@@ -154,7 +154,7 @@ export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
 export type BuiltinToolName = keyof typeof BUILTIN_TOOL_HYDRATORS;
 
 export function getBuiltInNamespace(toolName: string): ToolNamespace {
-    if (toolName.startsWith('file_')) return BUILTIN_NAMESPACES.files;
+    if (toolName.startsWith('file_') || toolName.startsWith('directory_')) return BUILTIN_NAMESPACES.files;
     if (MEMORY_TOOL_NAMES.includes(toolName as never) || KNOWLEDGE_TOOL_NAMES.includes(toolName as never)) {
         return BUILTIN_NAMESPACES.memory;
     }

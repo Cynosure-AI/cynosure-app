@@ -663,7 +663,7 @@ export function makeFileTools(): ToolDefinition[] {
                 if (inputPath === undefined) return jsonResult({ allowedDirectories: listFileAccessRoots() });
                 return jsonResult(await toFileEntry(await resolveAllowedPath(inputPath)));
             }),
-        define('file_list_directory', 'List a directory or return a tree. Common dependency, build, and cache folders are excluded.',
+        define('directory_list', 'List a directory or return a tree. Common dependency, build, and cache folders are excluded.',
             z.object({
                 path: pathField,
                 tree: z.boolean().optional(),
@@ -772,14 +772,14 @@ export function makeFileTools(): ToolDefinition[] {
                 if (!previewOnly) await fs.writeFile(absPath, updated, 'utf8');
                 return textResult(`${previewOnly ? 'Dry run only.' : `Edited file: ${absPath}`}\n\n${unifiedDiff(original, updated)}`);
             }),
-        define('file_create_directory', 'Create a directory and any missing parent directories.',
+        define('directory_create', 'Create a directory and any missing parent directories.',
             z.object({ path: pathField }), false, true,
             async ({ path: inputPath }) => {
                 const absPath = await resolveAllowedPath(inputPath);
                 await fs.mkdir(absPath, { recursive: true });
                 return textResult(`Created directory: ${absPath}`);
             }),
-        define('file_move', 'Move or rename a file or directory. A directory destination must be an exact new path; existing directories require file_merge.',
+        define('file_move', 'Move or rename a file or directory. A directory destination must be an exact new path; existing directories require directory_merge.',
             z.object({ source: pathField, destination: pathField, overwrite: z.boolean().optional() }), false, true,
             async ({ source, destination, overwrite }) => {
                 const absSource = await resolveAllowedPath(source);
@@ -791,13 +791,13 @@ export function makeFileTools(): ToolDefinition[] {
                 }
                 if (stats.isDirectory()) {
                     await assertNotAllowedRoot(absSource);
-                    if (overwrite) throw new Error('overwrite is only supported when moving files. Use file_merge to combine directories.');
+                    if (overwrite) throw new Error('overwrite is only supported when moving files. Use directory_merge to combine directories.');
                     await moveDirectoryPath(absSource, absDestination);
                     return textResult(`Moved directory ${absSource} to ${absDestination}`);
                 }
                 throw new Error('Source is neither a regular file nor a directory.');
             }),
-        define('file_merge', 'Merge the contents of a source directory into an existing destination directory and remove the empty source. Conflicts require overwrite: true.',
+        define('directory_merge', 'Merge the contents of a source directory into an existing destination directory and remove the empty source. Conflicts require overwrite: true.',
             z.object({ source: pathField, destination: pathField, overwrite: z.boolean().optional() }), false, true,
             async ({ source, destination, overwrite }) => {
                 const absSource = await resolveAllowedPath(source);

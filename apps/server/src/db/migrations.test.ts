@@ -24,7 +24,7 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('execution_steps')
@@ -117,7 +117,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -129,7 +129,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
         db.close()
     })
 
@@ -154,13 +154,43 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
         expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
             .toContain('builtin:notifications::notify_user_in_app')
         expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
             .toContain('builtin:notifications::notify_user_in_app')
         expect((db.prepare("SELECT execution_config_json FROM cron_jobs WHERE id = 'cron-1'").get() as { execution_config_json: string }).execution_config_json)
             .toContain('builtin:notifications::notify_user_in_app')
+        db.close()
+    })
+
+    test('renames saved directory tool selections and approval settings', () => {
+        const db = memoryDb()
+        applySchemaMigrations(db)
+        db.pragma('user_version = 12')
+        const now = Date.now()
+        db.prepare('INSERT INTO agents (id, name, tools_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+            .run('agent-1', 'Agent', JSON.stringify(['builtin:files::file_list_directory', 'builtin:files::file_create_directory', 'builtin:files::file_merge']), now, now)
+        db.prepare('INSERT INTO conversations (id, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?)')
+            .run('conversation-1', JSON.stringify({ allowedTools: ['builtin:files::file_merge'], note: 'file_merge is mentioned here' }), now, now)
+        db.prepare('INSERT INTO cron_jobs (id, agent_id, schedule, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('cron-1', 'agent-1', '0 9 * * *', JSON.stringify({ allowedTools: ['builtin:files::file_create_directory'] }), now, now)
+        db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('file_merge', 1)
+        db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('built_in_files__file_create_directory', 0)
+        db.prepare('INSERT INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)').run('conversation-1', 'file_merge', now)
+
+        expect(applySchemaMigrations(db).applied).toEqual([13])
+        const agent = db.prepare('SELECT tools_json FROM agents WHERE id = ?').get('agent-1') as { tools_json: string }
+        expect(JSON.parse(agent.tools_json)).toEqual([
+            'builtin:files::directory_list', 'builtin:files::directory_create', 'builtin:files::directory_merge',
+        ])
+        const conversation = db.prepare('SELECT execution_config_json FROM conversations WHERE id = ?').get('conversation-1') as { execution_config_json: string }
+        expect(JSON.parse(conversation.execution_config_json)).toEqual({ allowedTools: ['builtin:files::directory_merge'], note: 'file_merge is mentioned here' })
+        const cron = db.prepare('SELECT execution_config_json FROM cron_jobs WHERE id = ?').get('cron-1') as { execution_config_json: string }
+        expect(JSON.parse(cron.execution_config_json)).toEqual({ allowedTools: ['builtin:files::directory_create'] })
+        expect(db.prepare('SELECT auto_approve FROM tool_approvals WHERE tool_name = ?').get('directory_merge')).toEqual({ auto_approve: 1 })
+        expect(db.prepare('SELECT auto_approve FROM tool_approvals WHERE tool_name = ?').get('built_in_files__directory_create')).toEqual({ auto_approve: 0 })
+        expect(db.prepare('SELECT tool_name FROM session_tool_approvals WHERE conversation_id = ?').get('conversation-1')).toEqual({ tool_name: 'directory_merge' })
         db.close()
     })
 
@@ -177,7 +207,7 @@ describe('schema migrations', () => {
         insert.run('archive-child', '2024', '/memory/Archive/2024', now)
         insert.run('ordinary', 'Projects', '/memory/Projects', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12])
+        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12, 13])
         const rows = db.prepare('SELECT id, auto_memory_excluded FROM memory_folders ORDER BY id').all() as Array<{
             id: string
             auto_memory_excluded: number

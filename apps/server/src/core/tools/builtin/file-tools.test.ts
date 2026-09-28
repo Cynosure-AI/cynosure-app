@@ -52,14 +52,14 @@ describe('native file tools', () => {
     it('publishes schemas accepted by the agent tool validator', () => {
         const examples: Record<string, unknown> = {
             file_info: {},
-            file_list_directory: { path: root },
+            directory_list: { path: root },
             file_search: { path: root, pattern: '*.txt' },
             file_read: { path: path.join(root, 'one.txt') },
             file_write: { path: path.join(root, 'one.txt'), content: 'test' },
             file_edit: { path: path.join(root, 'one.txt'), edits: [{ oldText: 'a', newText: 'b' }] },
-            file_create_directory: { path: path.join(root, 'new') },
+            directory_create: { path: path.join(root, 'new') },
             file_move: { source: root, destination: outside },
-            file_merge: { source: root, destination: outside },
+            directory_merge: { source: root, destination: outside },
             file_archive: { action: 'extract', archivePath: path.join(root, 'one.zip') },
             file_delete: { path: path.join(root, 'one.txt') },
         };
@@ -71,6 +71,9 @@ describe('native file tools', () => {
     it('registers in the Files namespace and hydrates an executable tool', async () => {
         expect(getBuiltInNamespace('file_read').id).toBe('builtin:files');
         expect(getBuiltInToolKey('file_read')).toBe('builtin:files::file_read');
+        for (const name of ['directory_list', 'directory_create', 'directory_merge']) {
+            expect(getBuiltInToolKey(name)).toBe(`builtin:files::${name}`);
+        }
         const definition = makeFileTools().find(tool => tool.name === 'file_info')!;
         const [hydrated] = hydrateBuiltInTools([{
             ...definition,
@@ -95,7 +98,19 @@ describe('native file tools', () => {
         expect(await fs.readFile(file, 'utf8')).toBe('hello world\n');
         expect((await call('file_edit', { ...edit, dryRun: false })).success).toBe(true);
         expect((await call('file_search', { path: root, pattern: '*.txt' })).output).toContain(file);
-        expect((await call('file_list_directory', { path: path.dirname(file) })).output).toContain('one.txt');
+        expect((await call('directory_list', { path: path.dirname(file) })).output).toContain('one.txt');
+    });
+
+    it('creates and merges directories through their directory tools', async () => {
+        const source = path.join(root, 'source');
+        const destination = path.join(root, 'destination');
+        expect((await call('directory_create', { path: source })).success).toBe(true);
+        expect((await call('directory_create', { path: destination })).success).toBe(true);
+        await fs.writeFile(path.join(source, 'note.txt'), 'moved');
+        const result = await call('directory_merge', { source, destination });
+        expect(result.success, result.output).toBe(true);
+        expect(await fs.readFile(path.join(destination, 'note.txt'), 'utf8')).toBe('moved');
+        await expect(fs.access(source)).rejects.toThrow();
     });
 
     it('rejects paths outside roots and symlinks escaping a root', async () => {
@@ -150,6 +165,26 @@ describe('native file tools', () => {
             await expect(preflightFileToolAccess({ toolName: 'file_read', arguments: { path: target }, conversationId: 'conversation-test' })).rejects.toThrow('denied by the user');
             expect((await call('file_read', { path: target })).success).toBe(false);
             expect(listFileAccessRoots()).not.toContain(outside);
+        } finally {
+            unsubscribe();
+        }
+    });
+
+    it('checks both directory_merge paths before execution', async () => {
+        const source = path.join(root, 'source');
+        await fs.mkdir(source);
+        const unsubscribe = getEventBus().on('hitl:request', (event) => {
+            const request = event as { toolCalls: Array<{ fileAccess?: { path: string } }>; resolve: (result: { approved: boolean }) => void };
+            expect(request.toolCalls[0].fileAccess?.path).toBe(outside);
+            request.resolve({ approved: false });
+        });
+        try {
+            await expect(preflightFileToolAccess({
+                toolName: 'directory_merge',
+                arguments: { source, destination: outside },
+                conversationId: 'conversation-test',
+            })).rejects.toThrow('denied by the user');
+            expect(listFileAccessRoots()).toEqual([root]);
         } finally {
             unsubscribe();
         }

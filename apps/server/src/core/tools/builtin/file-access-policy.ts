@@ -141,7 +141,7 @@ export async function preflightFileToolAccess(input: {
     if (input.toolName === 'file_read') {
         addPath(args.path)
         if (Array.isArray(args.paths)) args.paths.forEach(addPath)
-    } else if (input.toolName === 'file_move' || input.toolName === 'file_merge') {
+    } else if (input.toolName === 'file_move' || input.toolName === 'directory_merge') {
         addPath(args.source)
         addPath(args.destination)
     } else if (input.toolName === 'file_archive') {
