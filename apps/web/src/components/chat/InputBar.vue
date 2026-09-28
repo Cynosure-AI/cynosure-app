@@ -639,7 +639,9 @@ defineExpose({ processFiles, focus, sendSuggestion })
           @cancel-edit="cancelQueueEdit"
           @transcription="onTranscription"
           @media-settings="mediaSettings = $event"
-        />
+        >
+          <slot name="leading-actions" />
+        </InputToolbar>
       </div>
 
       <div

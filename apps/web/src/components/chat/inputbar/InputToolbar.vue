@@ -196,6 +196,8 @@ async function toggleMic(): Promise<void> {
       @browse-library="emit('browseLibrary')"
     />
 
+    <slot />
+
     <MediaSettingsButton
       v-if="mediaKind && mediaProviderId && mediaModel"
       :kind="mediaKind"
@@ -206,7 +208,7 @@ async function toggleMic(): Promise<void> {
     />
 
     
-    <div class="flex-1" />
+    <div class="ml-auto" />
 
     <ThinkingModeButton v-if="currentProviderId" />
 
