@@ -432,7 +432,8 @@ onBeforeUnmount(() => {
                   <Icon
                     v-else
                     :icon="getToolNamespaceIcon(group.id)"
-                    class="h-4 w-4 text-theme-400"
+                    class="h-4 w-4"
+                    :class="isBuiltInNamespaceId(group.id) ? 'text-accent-400' : 'text-theme-400'"
                   />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-xs">{{ group.label }}</span>
