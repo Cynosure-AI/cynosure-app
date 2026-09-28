@@ -134,6 +134,27 @@ describe('chat timeline chronology', () => {
     expect(groups[1]?.continued).toBe(true)
   })
 
+  it('places a delegation return after the sub-agent activity instead of updating the earlier call card', () => {
+    const timeline = buildChatTimeline([
+      message('handoff', 2, { toolCallIds: ['delegate-1'] }),
+      message('sub-agent work', 4, { maInvocationId: 'worker-1', maCodename: 'worker' }),
+      message('main follow-up', 7),
+    ], [
+      step(1, { taskId: 'parent', toolCalls: [{ id: 'delegate-1', name: 'spawn_subagent', arguments: '{"internalName":"worker","instructions":"Do the task"}' }] }),
+      step(3, { taskId: 'parent', status: 'executing', resultsAt: 6, resultsSequence: 60, results: [
+        { toolCallId: 'delegate-1', name: 'spawn_subagent', success: true, output: 'Done', invocationId: 'worker-1' },
+      ] }),
+    ])
+
+    expect(timeline.map(entry => entry.type === 'message' ? entry.msg.id : entry.type)).toEqual([
+      'handoff', 'tool-group', 'sub-agent-group', 'delegation-result', 'main follow-up',
+    ])
+    const call = timeline.find(entry => entry.type === 'tool-group')
+    expect(call?.type === 'tool-group' && call.group.delegationHandoff).toBe(true)
+    const returned = timeline.find(entry => entry.type === 'delegation-result')
+    expect(returned?.type === 'delegation-result' && returned.ts).toBe(6)
+  })
+
   it('keeps a delegation call and response in timestamp order', () => {
     const timeline = buildChatTimeline(
       [

@@ -61,6 +61,8 @@ const props = defineProps<{
   steps: ToolExecStep[]
   /** Whether this iteration is actively executing */
   isActive: boolean
+  /** The delegation's outcome is rendered later in the timeline. */
+  delegationHandoff?: boolean
 }>()
 
 // Tool-call details are collapsed until the user opens them.
@@ -489,6 +491,7 @@ const rawToolCallArgs = computed(() => latestToolCalls.value)
 const toolCallArgs = computed(() => visibleToolCalls(rawToolCallArgs.value))
 
 const results = computed(() => {
+  if (props.delegationHandoff) return []
   return [...props.steps].reverse().find((step) => step.results?.length)?.results ?? []
 })
 
@@ -711,6 +714,7 @@ const headerLabel = computed(() => {
 })
 
 const headerIcon = computed(() => {
+  if (props.delegationHandoff) return 'lucide:corner-down-right'
   if (currentPhase.value.label === 'Denied') return 'lucide:shield-x'
   if (isRoutingWorkPending.value) return 'svg-spinners:ring-resize'
   if (isRoutingStatus.value) return currentPhase.value.icon
@@ -720,6 +724,7 @@ const headerIcon = computed(() => {
 })
 
 const headerIconClass = computed(() => {
+  if (props.delegationHandoff) return 'text-status-indigo'
   if (currentPhase.value.label === 'Denied') return 'text-status-danger'
   if (isRoutingWorkPending.value) return 'text-accent-fg'
   if (isTaskContext.value) return 'text-cyan-600 dark:text-cyan-300'
@@ -785,6 +790,10 @@ const hasDisplayableActivity = computed(() =>
               </template>
 
               <template v-else-if="headerToolNames.length">
+                <span
+                  v-if="delegationHandoff"
+                  class="text-status-indigo shrink-0"
+                >Delegation requested</span>
                 <span
                   v-if="isRoutingStatus"
                   class="text-ink-secondary shrink-0"

@@ -5,12 +5,14 @@ interface ToolGroup {
   iteration: number
   steps: ExecutionStep[]
   ts: number
+  delegationHandoff?: boolean
 }
 
 export type TimelineEntry =
   | { type: 'message'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'tool-group'; group: ToolGroup; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'continuation'; step: ExecutionStep; ts: number; key: string; isSubAgent?: false }
+  | { type: 'delegation-result'; results: NonNullable<ExecutionStep['results']>; ts: number; sequence?: number; key: string; isSubAgent?: false }
   | { type: 'tool-fallback'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
   | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; openingMessage: string | null; continued: boolean; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
@@ -71,13 +73,27 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       // A tool-group is from a sub-agent if any step has maCodename set
       steps.sort((a, b) => a.timestamp - b.timestamp)
       const isSubAgent = steps.some(s => Boolean(s.maInvocationId))
+      const calls = steps.flatMap(step => step.toolCalls || [])
+      const resultStep = [...steps].reverse().find(step => step.results?.length && step.resultsAt !== undefined)
+      const delegationHandoff = calls.length > 0
+        && calls.every(call => call.name === 'spawn_subagent' || call.name === 'continue_subagent')
+        && (!steps.some(step => step.results?.length) || Boolean(resultStep))
       entries.push({
         type: 'tool-group',
-        group: { iteration: steps[0].iteration, steps, ts: steps[0].timestamp },
+        group: { iteration: steps[0].iteration, steps, ts: steps[0].timestamp, delegationHandoff },
         ts: steps[0].timestamp,
         key: `tg-${groupKey}`,
         isSubAgent
       })
+      if (delegationHandoff && resultStep?.resultsAt !== undefined && resultStep.results) {
+        entries.push({
+          type: 'delegation-result',
+          results: resultStep.results,
+          ts: resultStep.resultsAt,
+          sequence: resultStep.resultsSequence,
+          key: `dr-${groupKey}`,
+        })
+      }
     }
   }
 
@@ -88,6 +104,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     if (entry.type === 'message' || entry.type === 'tool-fallback' || entry.type === 'compact-event') return entry.msg.sequence
     if (entry.type === 'tool-group') return entry.group.steps.find((step) => step.sequence !== undefined)?.sequence
     if (entry.type === 'continuation') return entry.step.sequence
+    if (entry.type === 'delegation-result') return entry.sequence
     return undefined
   }
   entries.sort((a, b) => {
