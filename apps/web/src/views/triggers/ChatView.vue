@@ -17,7 +17,6 @@ import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const { servers: mcpServers } = useMcpServers()
-const MCP_ICON_SELECTION_THRESHOLD = 0.7
 const providerStore = useProviderStore()
 const route = useRoute()
 const router = useRouter()
@@ -48,15 +47,20 @@ const selectedMcpNamespaces = computed(() => {
   }
 
   return [...groups.values()]
-    .filter((group) => group.tools.filter((tool) => selectedTools.has(tool.key)).length / group.tools.length >= MCP_ICON_SELECTION_THRESHOLD)
-    .map((group) => {
-      const server = mcpServers.value.find((candidate) => candidate.id === group.id.slice(4))
-      return {
-        id: group.id,
-        name: server?.customName || server?.name || group.label,
-        iconUrl: server?.icon_url,
-      }
-    })
+  .filter((group) =>
+    group.tools.some((tool) => selectedTools.has(tool.key))
+  )
+  .map((group) => {
+    const server = mcpServers.value.find(
+      (candidate) => candidate.id === group.id.slice(4)
+    )
+
+    return {
+      id: group.id,
+      name: server?.customName || server?.name || group.label,
+      iconUrl: server?.icon_url,
+    }
+  })
 })
 
 function removeMcpSelection(namespaceId: string): void {
