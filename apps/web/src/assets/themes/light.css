@@ -1,9 +1,9 @@
 /* Paper surfaces and ink. Components use these tokens through Tailwind utilities. */
 [data-theme="light"] {
-  --color-theme-950: #e8edf3;
-  --color-theme-900: #f3f6f9;
+  --color-theme-950: #e4ebf3;
+  --color-theme-900: #f5f7fb;
   --color-theme-800: #ffffff;
-  --color-theme-700: #c6d1de;
+  --color-theme-700: #b7c5d5;
   --color-theme-600: #56657a;
   --color-theme-500: #475569;
   --color-theme-400: #334155;
@@ -50,4 +50,11 @@
   --color-ink-secondary: #334155;
   --color-ink-muted: #475569;
   --color-ink-faint: #56657a;
+  --color-page-header: #ffffff;
+  --color-control-surface: #ffffff;
+  --color-table-surface: #ffffff;
+  --color-table-header: #ebf0f6;
+  --color-table-border: #cbd5e1;
+  --color-table-hover: #edf4ff;
+  --color-table-selected: #dfeaff;
 }

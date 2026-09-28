@@ -1123,7 +1123,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <button
           v-if="currentSpace"
           type="button"
-          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover"
           @click="openNewFileDialog"
         >
           <Icon
@@ -1135,7 +1135,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         <button
           v-if="currentSpace"
           type="button"
-          class="flex items-center gap-2 rounded-lg border border-theme-800 bg-theme-900/60 px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-theme-800/60"
+          class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover"
           @click="emit('createFolder', currentSpace)"
         >
           <Icon
@@ -1175,7 +1175,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </SplitButton>
         <button
           :disabled="uploading"
-          class="px-3 py-1.5 bg-theme-900/60 hover:bg-theme-800/60 border border-theme-800 text-theme-300 rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+          class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover disabled:opacity-50"
           @click="fileInput?.click()"
         >
           <Icon

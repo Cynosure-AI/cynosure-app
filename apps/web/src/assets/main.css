@@ -55,6 +55,13 @@
   --color-ink-secondary: #b0bccd;
   --color-ink-muted: #9aa7ba;
   --color-ink-faint: #8794a8;
+  --color-page-header: var(--color-theme-950);
+  --color-control-surface: color-mix(in srgb, var(--color-theme-900) 60%, transparent);
+  --color-table-surface: color-mix(in srgb, var(--color-theme-950) 45%, transparent);
+  --color-table-header: color-mix(in srgb, var(--color-theme-900) 70%, transparent);
+  --color-table-border: var(--color-theme-800);
+  --color-table-hover: color-mix(in srgb, var(--color-theme-800) 30%, transparent);
+  --color-table-selected: color-mix(in srgb, var(--color-accent-500) 6%, transparent);
 }
 
 :where(:root) {

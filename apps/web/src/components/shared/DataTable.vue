@@ -484,14 +484,14 @@ defineExpose({ startEditing, closeEditor })
 </script>
 
 <template>
-  <div class="data-table rounded-xl border border-theme-800 overflow-x-auto overscroll-x-contain bg-theme-950/45">
+  <div class="data-table overflow-x-auto overscroll-x-contain rounded-xl border border-table-border bg-table-surface">
     <div
       class="dt-content"
       :style="{ '--dt-min-width': gridMinWidth }"
     >
       <div
         v-if="showTopPagination"
-        class="flex items-center justify-center gap-2 px-4 py-2 border-b border-theme-800/70 bg-theme-900/40"
+        class="flex items-center justify-center gap-2 border-b border-table-border bg-table-header px-4 py-2"
       >
         <button
           type="button"
@@ -515,7 +515,7 @@ defineExpose({ startEditing, closeEditor })
       <!-- Header Row -->
       <div
         v-if="showHeader"
-        class="grid gap-4 px-5 py-3 text-[11px] tracking-wider uppercase text-ink-secondary bg-theme-900/70 border-b border-theme-800 dt-grid items-start"
+        class="dt-grid grid items-start gap-4 border-b border-table-border bg-table-header px-5 py-3 text-[11px] uppercase tracking-wider text-ink-secondary"
         :style="{ '--dt-cols': gridColsTemplate }"
       >
         <!-- Select All Checkbox -->
@@ -564,8 +564,8 @@ defineExpose({ startEditing, closeEditor })
         <div
           v-for="item in visibleItems"
           :key="item.id"
-          class="group border-b border-theme-800/70 last:border-b-0 hover:bg-theme-800/30 transition-colors"
-          :class="[rowClass?.(item), { 'cursor-pointer': rowClickable, 'bg-accent-500/[0.06]': isSelected(item.id) }]"
+          class="group border-b border-table-border/70 transition-colors last:border-b-0 hover:bg-table-hover"
+          :class="[rowClass?.(item), { 'cursor-pointer': rowClickable, 'bg-table-selected': isSelected(item.id) }]"
           :draggable="isDraggable(item)"
           :tabindex="rowClickable ? 0 : undefined"
           :aria-selected="showSelectableColumn ? isSelected(item.id) : undefined"
@@ -664,7 +664,7 @@ defineExpose({ startEditing, closeEditor })
 
       <div
         v-if="showBottomPagination"
-        class="flex items-center justify-center gap-2 px-4 py-2 border-t border-theme-800/70 bg-theme-900/40"
+        class="flex items-center justify-center gap-2 border-t border-table-border bg-table-header px-4 py-2"
       >
         <button
           type="button"

@@ -70,7 +70,7 @@ const emit = defineEmits<{
       </template>
       <div
         v-if="!searching"
-        class="flex items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5"
+        class="flex items-center rounded-lg border border-theme-700/70 bg-control-surface p-0.5"
         aria-label="Explorer view"
       >
         <button

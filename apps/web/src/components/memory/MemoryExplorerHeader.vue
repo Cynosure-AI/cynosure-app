@@ -19,7 +19,7 @@ const emit = defineEmits<{
 <template>
   <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
     <div class="flex min-w-0 items-center gap-2">
-      <div class="flex shrink-0 items-center rounded-lg border border-theme-800 bg-theme-900/60 p-0.5">
+      <div class="flex shrink-0 items-center rounded-lg border border-theme-700/70 bg-control-surface p-0.5">
         <button
           type="button"
           :disabled="homeDisabled"
@@ -63,7 +63,7 @@ const emit = defineEmits<{
 
       <nav
         v-if="segments.length"
-        class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-800 bg-theme-900/40 px-3 py-1.5 text-xs"
+        class="flex min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-xs"
         aria-label="Memory folder path"
       >
         <template

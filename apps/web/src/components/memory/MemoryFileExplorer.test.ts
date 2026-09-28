@@ -407,7 +407,7 @@ describe('MemoryFileExplorer navigation and search', () => {
     const moon = wrapper.get('[aria-label="Updated by a dream within the last 24 hours"]')
     expect(moon.attributes('icon')).toBe('lucide:moon')
     expect(moon.element.parentElement?.textContent).toContain('recent.md')
-    expect(moon.element.parentElement?.className).toContain('text-[#f4c072]')
+    expect(moon.element.parentElement?.className).toContain('text-status-warning')
     expect(wrapper.findAll('[aria-label="Updated by a dream within the last 24 hours"]')).toHaveLength(1)
   })
 

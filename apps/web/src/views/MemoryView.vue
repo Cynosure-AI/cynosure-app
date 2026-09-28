@@ -508,7 +508,7 @@ onMounted(() => loadFolders());
   <div class="relative h-full min-w-0 overflow-y-auto">
     <div class="min-h-full min-w-0">
       <main class="flex min-h-full min-w-0 flex-col">
-        <header class="z-10 border-b border-theme-800/60 bg-theme-950/95 pt-4 backdrop-blur-sm sm:sticky sm:top-0 sm:pt-5">
+        <header class="z-10 border-b border-theme-700/60 bg-page-header/95 pt-4 backdrop-blur-sm sm:sticky sm:top-0 sm:pt-5">
           <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="min-w-0">
@@ -526,7 +526,7 @@ onMounted(() => loadFolders());
                     class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
                     :class="activeDocumentView === 'recent'
                       ? 'border-accent-500/40 bg-accent-500/10 text-accent-fg'
-                      : 'border-theme-800 bg-theme-900/60 text-ink-secondary hover:border-theme-700 hover:text-theme-200'"
+                      : 'border-theme-700/70 bg-control-surface text-ink-secondary hover:border-theme-700 hover:text-theme-200'"
                     @click="selectDocumentView('recent')"
                   >
                     <Icon
@@ -540,7 +540,7 @@ onMounted(() => loadFolders());
                     class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
                     :class="activeDocumentView === 'trash'
                       ? 'border-red-500/35 bg-red-500/10 text-red-300'
-                      : 'border-theme-800 bg-theme-900/60 text-ink-secondary hover:border-theme-700 hover:text-theme-200'"
+                      : 'border-theme-700/70 bg-control-surface text-ink-secondary hover:border-theme-700 hover:text-theme-200'"
                     @click="selectDocumentView('trash')"
                   >
                     <Icon

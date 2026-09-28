@@ -38,7 +38,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
   </p>
   <div
     id="memory-document-search"
-    class="mb-3 rounded-lg border border-theme-800 bg-theme-950/30 p-2"
+    class="mb-3 rounded-lg border border-theme-700/70 bg-control-surface p-2"
   >
     <div class="flex min-w-0 items-center gap-2">
       <div class="relative min-w-0 flex-1">
@@ -50,7 +50,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
           v-model="query"
           type="text"
           placeholder="Search this folder and subfolders…"
-          class="w-full rounded-lg border border-theme-800 bg-theme-900/60 py-2 pl-9 pr-14 text-sm text-theme-200 placeholder:text-ink-muted transition-colors focus:border-theme-600 focus:outline-none"
+          class="w-full rounded-lg border border-theme-700/70 bg-control-surface py-2 pl-9 pr-14 text-sm text-theme-200 placeholder:text-ink-muted transition-colors focus:border-accent-500 focus:outline-none"
           @input="emit('searchInput')"
         >
         <Icon
@@ -77,7 +77,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
         :aria-pressed="semantic"
         aria-label="Toggle semantic search"
         class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors"
-        :class="semantic ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg' : 'border-theme-800 bg-theme-900/60 text-ink-muted hover:bg-theme-800 hover:text-theme-200'"
+        :class="semantic ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg' : 'border-theme-700/70 bg-control-surface text-ink-muted hover:bg-table-hover hover:text-theme-200'"
         :title="semantic ? 'Semantic search is on' : 'Search document vectors by meaning'"
         @click="semantic = !semantic"
       >
@@ -105,7 +105,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
       v-for="(result, index) in uploadResults"
       :key="index"
       class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs"
-      :class="result.error ? 'bg-red-500/10 text-red-300' : 'bg-green-500/10 text-green-300'"
+      :class="result.error ? 'bg-status-danger/10 text-status-danger' : 'bg-status-success/10 text-status-success'"
     >
       <Icon
         :icon="result.error ? 'lucide:x-circle' : 'lucide:check-circle'"
@@ -136,7 +136,7 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
     <div
       v-for="job in failedJobs"
       :key="job.id"
-      class="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+      class="flex items-start gap-2 rounded-lg border border-status-danger/20 bg-status-danger/10 px-3 py-2 text-xs text-status-danger"
     >
       <Icon
         icon="lucide:circle-alert"
