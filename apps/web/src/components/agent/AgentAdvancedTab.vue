@@ -34,12 +34,10 @@ const REASONING_LEVELS: Array<{
   { value: 'max', label: 'Maximum', description: "The provider's maximum available reasoning effort." },
 ];
 const selectedReasoning = computed(() => props.agent.thinkingEnabled === false ? 'off' : props.agent.reasoningEffort || 'medium');
-const reasoningIndex = computed(() => Math.max(0, REASONING_LEVELS.findIndex(level => level.value === selectedReasoning.value)));
-const selectedReasoningOption = computed(() => REASONING_LEVELS[reasoningIndex.value]);
-const reasoningFill = computed(() => `${reasoningIndex.value / (REASONING_LEVELS.length - 1) * 100}%`);
+const selectedReasoningOption = computed(() => REASONING_LEVELS.find(level => level.value === selectedReasoning.value) || REASONING_LEVELS[3]);
 
-function onReasoningSliderInput(event: Event): void {
-  const level = REASONING_LEVELS[Number((event.target as HTMLInputElement).value)];
+function onReasoningChange(event: Event): void {
+  const level = REASONING_LEVELS.find(item => item.value === (event.target as HTMLSelectElement).value);
   if (!level) return;
   emit('updateReasoning', level.value !== 'off', level.value === 'off' ? props.agent.reasoningEffort || 'medium' : level.value);
 }
@@ -194,42 +192,17 @@ function onMaxCtxSliderInput(event: Event) {
         Set the default reasoning effort for this agent. Higher levels can improve complex answers but use more time and tokens.
       </p>
       <div class="mt-4 max-w-md">
-        <div class="flex items-baseline justify-between gap-3">
-          <span class="text-xs font-medium text-theme-300">Reasoning</span>
-          <span class="text-xs font-medium text-indigo-300">{{ selectedReasoningOption.label }}</span>
-        </div>
-        <div class="reasoning-slider mt-3">
-          <div
-            class="reasoning-slider__rail"
-            aria-hidden="true"
-          >
-            <div
-              class="reasoning-slider__fill"
-              :style="{ width: reasoningFill }"
-            />
-            <span
-              v-for="(level, index) in REASONING_LEVELS"
-              :key="level.value"
-              class="reasoning-slider__dot"
-              :class="{
-                'reasoning-slider__dot--active': index <= reasoningIndex,
-                'reasoning-slider__dot--endpoint': index === 0 || index === REASONING_LEVELS.length - 1,
-              }"
-              :style="{ left: `${index / (REASONING_LEVELS.length - 1) * 100}%` }"
-            />
-          </div>
-          <input
-            class="reasoning-slider__input"
-            type="range"
-            min="0"
-            :max="REASONING_LEVELS.length - 1"
-            step="1"
-            :value="reasoningIndex"
-            aria-label="Default reasoning level"
-            :aria-valuetext="selectedReasoningOption.label"
-            @input="onReasoningSliderInput"
-          >
-        </div>
+        <label for="agent-reasoning-level" class="block text-xs font-medium text-theme-300 mb-1.5">Reasoning</label>
+        <select
+          id="agent-reasoning-level"
+          :value="selectedReasoning"
+          class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:border-indigo-500/50"
+          @change="onReasoningChange"
+        >
+          <option v-for="level in REASONING_LEVELS" :key="level.value" :value="level.value">
+            {{ level.label }}
+          </option>
+        </select>
         <p class="mt-3 min-h-4 text-xs text-ink-muted">
           {{ selectedReasoningOption.description }}
         </p>
@@ -299,89 +272,3 @@ function onMaxCtxSliderInput(event: Event) {
     </div>
   </div>
 </template>
-
-<style scoped>
-.reasoning-slider {
-  position: relative;
-  height: 2rem;
-}
-
-.reasoning-slider__rail {
-  position: absolute;
-  inset: 0.375rem 0.875rem;
-  height: 1.25rem;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-theme-600) 42%, transparent);
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--color-theme-700) 38%, transparent);
-  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12);
-}
-
-.reasoning-slider__fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: inherit;
-  background: var(--color-accent-500);
-  transition: width 120ms ease;
-}
-
-.reasoning-slider__dot {
-  position: absolute;
-  top: 50%;
-  width: 0.25rem;
-  height: 0.25rem;
-  border-radius: 9999px;
-  background: var(--color-theme-500);
-  transform: translate(-50%, -50%);
-}
-
-.reasoning-slider__dot--active {
-  background: color-mix(in srgb, white 40%, var(--color-accent-300));
-}
-
-.reasoning-slider__dot--endpoint {
-  opacity: 0;
-}
-
-.reasoning-slider__input {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 2rem;
-  margin: 0;
-  cursor: pointer;
-  appearance: none;
-  background: transparent;
-}
-
-.reasoning-slider__input::-webkit-slider-runnable-track {
-  height: 1.25rem;
-  background: transparent;
-}
-
-.reasoning-slider__input::-webkit-slider-thumb {
-  width: 1.75rem;
-  height: 1.75rem;
-  margin-top: -0.25rem;
-  appearance: none;
-  border: 1px solid color-mix(in srgb, var(--color-theme-500) 35%, transparent);
-  border-radius: 9999px;
-  background: var(--color-theme-50);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.24);
-}
-
-.reasoning-slider__input::-moz-range-track {
-  height: 1.25rem;
-  background: transparent;
-}
-
-.reasoning-slider__input::-moz-range-thumb {
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 1px solid color-mix(in srgb, var(--color-theme-500) 35%, transparent);
-  border-radius: 9999px;
-  background: var(--color-theme-50);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.24);
-}
-</style>

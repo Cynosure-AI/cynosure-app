@@ -19,7 +19,7 @@ export interface SelectOption {
   /** Small badge shown to the right of the label (e.g. "+3") */
   tag?: string;
   /** Visual variant for the tag badge. */
-  tagVariant?: 'default' | 'cyan' | 'green' | 'blue';
+  tagVariant?: 'default' | 'cyan' | 'green' | 'blue' | 'amber';
   /** Iconify icon name shown as a small badge instead of text */
   tagIconName?: string;
   actionIconName?: string;
@@ -227,6 +227,7 @@ function tagVariantClasses(variant: SelectOption['tagVariant']): string {
   if (variant === 'cyan') return 'bg-cyan-500/10 text-cyan-400'
   if (variant === 'green') return 'bg-emerald-500/10 text-status-success'
   if (variant === 'blue') return 'bg-blue-500/10 text-blue-400'
+  if (variant === 'amber') return 'bg-amber-500/10 text-amber-400'
   return 'bg-violet-500/10 text-status-violet'
 }
 
