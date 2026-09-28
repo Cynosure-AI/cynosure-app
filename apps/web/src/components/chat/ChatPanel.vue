@@ -235,6 +235,14 @@ const activeSubAgentGroupKey = computed(() => {
   return null
 })
 
+function delegationResultLabel(results: Extract<TimelineEntry, { type: 'delegation-result' }>['results']): string {
+  if (results.some(result => !result.success && (result.name === 'spawn_subagent' || result.name === 'continue_subagent'))) {
+    return 'Delegation failed'
+  }
+  if (results.some(result => !result.success)) return 'Sub-agent returned · tool error'
+  return 'Sub-agent returned'
+}
+
 function toggleSubAgentFullHeight(key: string): void {
   if (fullHeightSubAgentGroups.has(key)) {
     fullHeightSubAgentGroups.delete(key)
@@ -999,15 +1007,37 @@ onMounted(() => {
               class="w-3.5 h-3.5 shrink-0"
               :class="entry.results.every(result => result.success) ? 'text-status-success' : 'text-status-danger'"
             />
-            <span>{{ entry.results.every(result => result.success) ? 'Sub-agent returned' : 'Delegation failed' }}</span>
+            <span>{{ delegationResultLabel(entry.results) }}</span>
             <span class="ml-auto text-[10px] text-ink-muted">{{ entry.results.filter(result => result.success).length }}/{{ entry.results.length }} ok</span>
           </div>
           <div
-            v-if="entry.results.some(result => !result.success)"
+            v-if="entry.results.some(result => !result.success && (result.name === 'spawn_subagent' || result.name === 'continue_subagent'))"
             class="max-w-[80%] ml-3 md:ml-12 mt-1 max-h-40 overflow-y-auto break-words text-xs text-status-danger whitespace-pre-wrap"
           >
-            {{ entry.results.filter(result => !result.success).map(result => result.error || result.output).join('\n') }}
+            {{ entry.results.filter(result => !result.success && (result.name === 'spawn_subagent' || result.name === 'continue_subagent')).map(result => result.error || result.output).join('\n') }}
           </div>
+          <details
+            v-if="entry.results.some(result => result.name !== 'spawn_subagent' && result.name !== 'continue_subagent')"
+            class="max-w-[80%] ml-3 md:ml-12 mt-1 rounded-xl border border-theme-700/40 bg-theme-800/40 px-3 py-2 text-xs text-ink-secondary"
+          >
+            <summary class="cursor-pointer">
+              Other tool results
+            </summary>
+            <div
+              v-for="(result, index) in entry.results.filter(result => result.name !== 'spawn_subagent' && result.name !== 'continue_subagent')"
+              :key="`${result.toolCallId || result.name}-${index}`"
+              class="mt-2 border-t border-theme-700/40 pt-2"
+            >
+              <div class="font-medium">
+                {{ result.name }} · {{ result.success ? 'Success' : 'Failed' }}
+              </div>
+              <RichContent
+                v-if="result.output"
+                :content="result.output"
+                class="mt-1 max-h-48 overflow-y-auto break-words text-xs"
+              />
+            </div>
+          </details>
         </div>
 
         <ContinuationRoundMarker
