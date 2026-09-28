@@ -165,19 +165,23 @@ onMounted(async () => {
 
 async function loadEmbeddingConfig() {
   loadingEmbeddingConfig.value = true
+  let persisted = false
   try {
     const config = await api.memory.getEmbeddingConfig()
     if (config.providerId) {
       embProviderId.value = config.providerId
       embModel.value = config.model
       embDimensions.value = config.dimensions
+      persisted = true
     } else {
       applyDefaultEmbeddingConfig()
     }
   } catch {
     applyDefaultEmbeddingConfig()
   }
-  savedEmbedding.value = { providerId: embProviderId.value, model: embModel.value }
+  savedEmbedding.value = persisted
+    ? { providerId: embProviderId.value, model: embModel.value }
+    : { providerId: '', model: '' }
   loadingEmbeddingConfig.value = false
 }
 
