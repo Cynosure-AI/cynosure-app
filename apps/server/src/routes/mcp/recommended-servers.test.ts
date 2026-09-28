@@ -18,13 +18,11 @@ const expectedRepositories: Record<string, string> = {
     '@cynosure-mcp/clockify': 'mcp-clockify',
     '@cynosure-mcp/codex-terminal': 'mcp-codex-terminal',
     '@cynosure-mcp/computer-controller': 'mcp-computer-controller',
-    '@cynosure-mcp/defuddle': 'mcp-defuddle',
     '@cynosure-mcp/document-parser': 'mcp-document-parser',
     '@cynosure-mcp/imap-email': 'mcp-imap-email',
     '@cynosure-mcp/media-file-converter': 'mcp-media-file-converter',
     '@cynosure-mcp/mermaid-diagrams': 'mcp-mermaid-diagrams',
     '@cynosure-mcp/music-tagger': 'mcp-music-tagger',
-    '@cynosure-mcp/nullpointer-file-share': 'mcp-nullpointer-file-share',
     '@cynosure-mcp/qr-code': 'mcp-qr-code',
     '@cynosure-mcp/sftp-ssh': 'mcp-sftp-ssh',
     '@cynosure-mcp/stability-ai': 'mcp-stability-ai',
@@ -42,6 +40,14 @@ function cynosureEntries(): RecommendedServer[] {
 }
 
 describe('recommended Cynosure MCP servers', () => {
+    it('excludes servers removed from recommendations', () => {
+        const names = recommendedServers.map((entry) => (entry.server as RecommendedServer).name)
+
+        expect(names).not.toContain('@cynosure-mcp/defuddle')
+        expect(names).not.toContain('@modelcontextprotocol/server-filesystem')
+        expect(names).not.toContain('@cynosure-mcp/nullpointer-file-share')
+    })
+
     it('maps every package to its standalone repository and public npm icon', () => {
         const servers = cynosureEntries()
 

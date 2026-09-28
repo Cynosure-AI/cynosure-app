@@ -156,12 +156,6 @@ export const recommendedServers: RegistryServerEntry[] = [
         'mcp-claude-code-terminal',
     ),
     cynosureMcp(
-        '@cynosure-mcp/defuddle',
-        'Defuddle',
-        'Extract clean content and metadata from web pages, including YouTube transcripts.',
-        'mcp-defuddle',
-    ),
-    cynosureMcp(
         '@cynosure-mcp/document-parser',
         'Document Reader & Writer',
         'Read documents as Markdown, and create or edit DOCX files for downloadable artifacts.',
@@ -214,12 +208,6 @@ export const recommendedServers: RegistryServerEntry[] = [
             format: 'password',
             isSecret: true,
         }],
-    ),
-    cynosureMcp(
-        '@cynosure-mcp/nullpointer-file-share',
-        'Nullpointer File Share',
-        'Upload files to 0x0.st for temporary file sharing.',
-        'mcp-nullpointer-file-share',
     ),
     cynosureMcp(
         '@cynosure-mcp/qr-code',
@@ -321,19 +309,6 @@ export const recommendedServers: RegistryServerEntry[] = [
         'Chrome DevTools',
         'Control and inspect Chrome tabs for browser automation, screenshots, console output, and page debugging.',
         { packageIdentifier: 'chrome-devtools-mcp@latest' },
-    ),
-    npmServer(
-        '@modelcontextprotocol/server-filesystem',
-        'Filesystem',
-        'Read and write files within a directory you explicitly allow.',
-        {
-            environmentVariables: [{
-                name: 'DIRECTORY',
-                description: 'Directory path to grant this MCP access to',
-                isRequired: true,
-            }],
-            arguments: [{ fromEnv: 'DIRECTORY' }],
-        },
     ),
     {
         server: {

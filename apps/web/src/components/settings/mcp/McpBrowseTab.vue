@@ -24,7 +24,6 @@ const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
 const selectedCategory = ref('all')
 const viewMode = ref<'grid' | 'list'>('grid')
-const catalogRef = ref<HTMLElement | null>(null)
 
 type RegistryRow = McpRegistryServer & { id: string }
 type InstallInfo = {
@@ -255,11 +254,6 @@ function clearSearchAndFilters(): void {
   selectedCategory.value = 'all'
 }
 
-function browseRecommendations(): void {
-  selectedCategory.value = 'all'
-  catalogRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
   const install = getInstallInfo(srv.server)
   if (!install) return
@@ -408,47 +402,7 @@ onMounted(() => {
       >
     </div>
 
-    <div
-      v-if="registrySource === 'recommended' && !registrySearch"
-      class="mcp-store-hero relative isolate overflow-hidden rounded-2xl border border-accent-500/20 px-5 py-6 sm:px-7"
-    >
-      <div class="relative z-10 max-w-xl">
-        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-fg">
-          Featured
-        </p>
-        <h2 class="mt-2 text-xl font-bold text-theme-50 sm:text-2xl">
-          Supercharge your workflow
-        </h2>
-        <p class="mt-1.5 text-sm text-theme-300">
-          Explore MCP servers built and handpicked by Cynosure to expand what your agents can do.
-        </p>
-        <button
-          type="button"
-          class="mt-4 inline-flex items-center gap-2 rounded-lg accent-action bg-accent-600 px-4 py-2 text-xs font-semibold text-accent-on transition hover:bg-accent-500"
-          @click="browseRecommendations"
-        >
-          Explore recommendations
-          <Icon
-            icon="lucide:arrow-right"
-            class="h-3.5 w-3.5"
-          />
-        </button>
-      </div>
-      <div class="pointer-events-none absolute -right-8 top-1/2 hidden -translate-y-1/2 items-center gap-2 opacity-80 md:flex">
-        <span
-          v-for="icon in ['lucide:github', 'lucide:globe-2', 'lucide:terminal', 'lucide:file-text']"
-          :key="icon"
-          class="flex h-16 w-16 -skew-x-6 items-center justify-center rounded-xl border border-accent-500/20 bg-theme-950/75 shadow-xl"
-        >
-          <Icon
-            :icon="icon"
-            class="h-7 w-7 skew-x-6 text-theme-200"
-          />
-        </span>
-      </div>
-    </div>
-
-    <div ref="catalogRef">
+    <div>
       <div class="mb-2 flex items-center justify-between gap-3">
         <h2 class="text-sm font-semibold text-theme-200">
           Browse by category
@@ -886,19 +840,3 @@ onMounted(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.mcp-store-hero {
-  background:
-    radial-gradient(circle at 85% 30%, color-mix(in srgb, var(--color-accent-500) 24%, transparent), transparent 30%),
-    linear-gradient(115deg, color-mix(in srgb, var(--color-accent-950) 45%, var(--color-theme-900)), var(--color-theme-900) 70%);
-}
-
-.mcp-store-hero::after {
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(120deg, transparent 25%, color-mix(in srgb, var(--color-accent-400) 8%, transparent) 50%, transparent 70%);
-  content: '';
-  pointer-events: none;
-}
-</style>
