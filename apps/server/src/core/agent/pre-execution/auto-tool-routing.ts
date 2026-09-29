@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
+import { makeSearchAvailableMcpToolsTool, TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
 import { MCP_CANDIDATE_COUNT, routeTools, routeToolsLexically, shouldRouteTools, type RoutedToolDefinition } from './../tool-router.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
@@ -10,7 +10,6 @@ import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, runRou
 const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
 const TOOLSET_DESCRIPTION_CHAR_LIMIT = 1_200
 const AUTO_INCLUDE_TOOLSET_MAX_TOOLS = 9
-const AUTO_INCLUDE_TOOLSET_TOKEN_LIMIT = 6_000
 
 export interface ApplyAutoToolRoutingInput {
     enabled: boolean
@@ -97,6 +96,8 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
             )
             const namespaceFilteredTools = filterToolsByNamespace(tools, selectedNamespaceIds, protectedNames)
             const autoIncludedToolNames = collectAutoIncludedToolNames(namespaceFilteredTools, selectedNamespaceIds)
+            const toolsToRank = namespaceFilteredTools.filter((tool) =>
+                !autoIncludedToolNames.has(tool.name) && !protectedNames.has(tool.name))
             emitToolRoutingStatus(
                 conversationId,
                 taskId,
@@ -104,19 +105,28 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
                 `Filtering tools from ${selectedNamespaceIds.size} selected toolset${selectedNamespaceIds.size === 1 ? '' : 's'}...`,
                 eventMeta,
             )
-            const routedTools = await routeTools({
+            const rankedTools = toolsToRank.length ? await routeTools({
                 userQuery: userQuery || '',
                 recentMessages: recentMessages || [],
-                allTools: namespaceFilteredTools,
+                allTools: namespaceFilteredTools.filter((tool) => !autoIncludedToolNames.has(tool.name)),
                 availableTools: tools,
                 mcpMetadata,
                 preferredToolNames,
                 usedToolNames,
-                // Complete small toolsets remain included after ordinary semantic
-                // ranking, so they keep a routerScore without consuming the normal cap.
-                requiredScoredToolNames: autoIncludedToolNames,
                 onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
+            }) : []
+            let routedTools: ToolDefinition[] = [
+                ...namespaceFilteredTools.filter((tool) => autoIncludedToolNames.has(tool.name) || protectedNames.has(tool.name)),
+                ...rankedTools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME),
+            ]
+            routedTools = [...new Map(routedTools.filter((tool) => tool.name !== TOOL_SEARCH_TOOL_NAME)
+                .map((tool) => [tool.name, tool])).values()]
+            const searchTool = makeSearchAvailableMcpToolsTool({
+                allTools: tools,
+                mcpMetadata,
+                getLoadedToolNames: () => new Set(routedTools.map((tool) => tool.name)),
             })
+            routedTools.push(searchTool)
             signal?.throwIfAborted()
             emitToolRoutingSelection(
                 conversationId,
@@ -124,7 +134,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
                 routedTools,
                 'gathered-context',
                 eventMeta,
-                routedTools.length ? undefined : 'none-found',
+                routedTools.length > 1 ? undefined : 'none-found',
                 autoIncludedToolNames.size > 0
                     ? 'automatic'
                     : routedTools.some((tool) => typeof (tool as RoutedToolDefinition).routerScore === 'number') ? 'semantic' : 'lexical',
@@ -316,9 +326,7 @@ function filterToolsByNamespace(
     return tools.filter((tool) => selectedNamespaceIds.has(toolNamespaceId(tool)) || protectedNames.has(tool.name))
 }
 
-/** Small selected toolsets are cheaper and more reliable to include whole than
- * to run through a second lossy selection pass. The token ceiling prevents a
- * handful of schema-heavy tools from unexpectedly consuming the context. */
+/** Selected toolsets of at most nine tools bypass semantic ranking entirely. */
 export function collectAutoIncludedToolNames(
     tools: RegistryAwareToolDefinition[],
     selectedNamespaceIds: Set<string>,
@@ -333,12 +341,6 @@ export function collectAutoIncludedToolNames(
     const included = new Set<string>()
     for (const namespaceTools of grouped.values()) {
         if (namespaceTools.length > AUTO_INCLUDE_TOOLSET_MAX_TOOLS) continue
-        const estimatedTokens = namespaceTools.reduce((total, tool) => total + Math.ceil(JSON.stringify({
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.parameters,
-        }).length / 4), 0)
-        if (estimatedTokens > AUTO_INCLUDE_TOOLSET_TOKEN_LIMIT) continue
         namespaceTools.forEach((tool) => included.add(tool.name))
     }
     return included
