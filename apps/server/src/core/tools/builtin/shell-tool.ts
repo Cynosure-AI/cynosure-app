@@ -7,9 +7,15 @@ const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
 const MAX_COMMAND_TIMEOUT_SECONDS = 600
 
 export function makeShellTool(): ToolDefinition {
+    const operatingSystems: Partial<Record<NodeJS.Platform, string>> = { linux: 'Linux', win32: 'Windows', darwin: 'macOS' }
+    const operatingSystem = operatingSystems[process.platform] ?? process.platform
+    // Match Node's default shell and use the same executable advertised to the model.
+    const shell = process.platform === 'win32'
+        ? process.env.ComSpec || process.env.comspec || 'cmd.exe'
+        : process.platform === 'android' ? '/system/bin/sh' : '/bin/sh'
     return {
         name: 'shell_execute',
-        description: 'Execute a shell command on the host system. Use this for command-line operations such as inspecting files and directories, running scripts or programs, invoking installed CLI tools, managing processes, and performing system-level tasks. Commands run with the permissions and environment of the Cynosure server process and may modify the filesystem or system state.', parameters: {
+        description: `Execute a shell command on the Cynosure server host running ${operatingSystem} (${process.platform}), using ${shell}. Write commands for this operating system and shell. Use this for command-line operations such as inspecting files and directories, running scripts or programs, invoking installed CLI tools, managing processes, and performing system-level tasks. Commands run with the permissions and environment of the Cynosure server process and may modify the filesystem or system state.`, parameters: {
             type: 'object',
             additionalProperties: false,
             required: ['command'],
@@ -50,7 +56,7 @@ export function makeShellTool(): ToolDefinition {
             const timeoutMs = Number(input.timeoutSeconds ?? DEFAULT_COMMAND_TIMEOUT_SECONDS) * 1000
             try {
                 signal?.throwIfAborted()
-                return await runCommand(input.command, cwd, timeoutMs, signal)
+                return await runCommand(input.command, cwd, timeoutMs, shell, signal)
             } catch (error) {
                 if (signal?.aborted) throw error
                 return { success: false, output: `Error: ${(error as Error).message}` }
@@ -59,9 +65,9 @@ export function makeShellTool(): ToolDefinition {
     }
 }
 
-function runCommand(command: string, cwd: string, timeoutMs: number, signal?: AbortSignal): Promise<ToolResult> {
+function runCommand(command: string, cwd: string, timeoutMs: number, shell: string, signal?: AbortSignal): Promise<ToolResult> {
     return new Promise((resolve) => {
-        const child = spawn(command, { shell: true, cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' })
+        const child = spawn(command, { shell, cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' })
         const chunks: Buffer[] = []
         let bytes = 0
         let stopped: string | undefined

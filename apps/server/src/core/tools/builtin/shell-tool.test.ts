@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
@@ -29,6 +29,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
     closeDb()
     if (previousDataDir === undefined) delete process.env.CYNOSURE_DATA_DIR
     else process.env.CYNOSURE_DATA_DIR = previousDataDir
@@ -36,6 +38,23 @@ afterEach(async () => {
 })
 
 describe('built-in shell access', () => {
+    it.each([
+        ['linux', 'Linux', '/bin/sh'],
+        ['darwin', 'macOS', '/bin/sh'],
+        ['win32', 'Windows', 'cmd.exe'],
+    ] as const)('describes the server OS and execution shell on %s', (platform, label, shell) => {
+        vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+        vi.stubEnv('ComSpec', '')
+        vi.stubEnv('comspec', '')
+        expect(makeShellTool().description).toContain(`${label} (${platform}), using ${shell}`)
+    })
+
+    it('describes the configured Windows command interpreter', () => {
+        vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+        vi.stubEnv('ComSpec', 'C:\\Windows\\System32\\cmd.exe')
+        expect(makeShellTool().description).toContain('using C:\\Windows\\System32\\cmd.exe')
+    })
+
     it('registers in its own namespace and runs in the requested working directory', async () => {
         expect(getBuiltInNamespace('shell_execute').id).toBe('builtin:shell')
         expect(getBuiltInToolKey('shell_execute')).toBe('builtin:shell::shell_execute')
