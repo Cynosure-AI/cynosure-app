@@ -106,31 +106,36 @@ export function useMemoryDocumentJobs(options: {
     pollTimer = null;
   }
 
-  async function startFileJob(kind: "reindex" | "deep-research", fileName: string): Promise<void> {
+  async function startFileJob(kind: "reindex" | "deep-research", fileName: string): Promise<MemoryIndexJob | undefined> {
     try {
       const job = kind === "reindex"
         ? await api.memoryFolders.startReindexFile(options.folderId.value, fileName)
         : await api.memoryFolders.startDeepResearchFile(options.folderId.value, fileName);
       upsertJob(job);
+      return job;
     } catch {
       // The next authoritative refresh exposes failures without inventing a
       // second client-side job state machine.
     }
   }
 
-  async function reindexFile(fileName: string): Promise<void> {
-    await startFileJob("reindex", fileName);
+  async function reindexFile(fileName: string): Promise<MemoryIndexJob | undefined> {
+    return startFileJob("reindex", fileName);
   }
 
   async function extractKnowledgeFromFile(fileName: string): Promise<void> {
     await startFileJob("deep-research", fileName);
   }
 
-  async function reindexAll(): Promise<void> {
+  async function reindexAll(): Promise<MemoryIndexJob[]> {
+    const started: MemoryIndexJob[] = [];
     for (const file of options.files.value.filter((item) =>
       item.supported && (item.status === "needs_reindex" || item.status === "not_indexed"))) {
-      if (!isJobActive("reindex", file.fileName)) await reindexFile(file.fileName);
+      if (isJobActive("reindex", file.fileName)) continue;
+      const job = await reindexFile(file.fileName);
+      if (job) started.push(job);
     }
+    return started;
   }
 
   async function cancelJob(job?: MemoryIndexJob): Promise<void> {

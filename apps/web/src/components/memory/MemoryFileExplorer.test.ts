@@ -187,6 +187,43 @@ describe('MemoryFileExplorer navigation and search', () => {
     expect(mocks.startReindexFile).toHaveBeenCalledWith('category', 'notes.md')
   })
 
+  test('confirms bulk indexing and shows processing until its queued jobs finish', async () => {
+    const files = ['one.md', 'two.md'].map((fileName) => ({
+      fileName, extension: '.md', size: 12, modifiedAt: 1,
+      supported: true, textDirect: true, status: 'not_indexed', estimatedChunkCount: 1,
+      deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
+    }))
+    mocks.listFiles.mockResolvedValue(files)
+    const jobs = files.map((file, index) => ({
+      id: `job-${index}`, kind: 'reindex', folderId: 'category', fileName: file.fileName,
+      status: 'queued', progressCurrent: 0, progressTotal: 0, createdAt: 1, updatedAt: 1,
+    })) as MemoryIndexJob[]
+    let resolveSecond!: (job: MemoryIndexJob) => void
+    mocks.startReindexFile
+      .mockResolvedValueOnce(jobs[0])
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve }))
+    const wrapper = mountList()
+    await flushPromises()
+
+    await wrapper.get('button[title="Indexing files makes them available for semantic searching."]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Adding to queue…')
+    expect(wrapper.text()).not.toContain('added to the indexing queue')
+
+    resolveSecond(jobs[1])
+    await flushPromises()
+    expect(wrapper.text()).toContain('Processing…')
+    expect(wrapper.get('[role="status"]').text()).toBe('2 files added to the indexing queue.')
+    expect(wrapper.get('button[aria-label="Processing indexing queue"]').attributes('disabled')).toBeDefined()
+
+    mocks.listJobs.mockResolvedValue(jobs.map((job) => ({ ...job, status: 'completed' })))
+    await new Promise((resolve) => window.setTimeout(resolve, 2100))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Processing…')
+    expect(wrapper.text()).toContain('Index all 2 files')
+    wrapper.unmount()
+  })
+
   test('shows immediate subfolders in the explorer and opens them on click', async () => {
     const child = {
       id: 'child', name: 'Projects', description: '', directoryPath: '/notes/projects',
