@@ -22,7 +22,7 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { cancelCronRunsByConversation } from '../core/triggers/cron-scheduler.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
-import { listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
+import { commitStagedChatAttachments, discardStagedChatAttachments, listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
@@ -308,7 +308,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           id: userMsgId, content: normalizedContent, imageDataUrls: storedImageUrls, audioDataUrls: storedAudioUrls,
         }), now)
         persistMessageFileAttachments(db, userMsgId, conversationId, storedFileAttachments, now)
-        releaseStagedChatAttachments(conversationId, stagedIds, false)
+        commitStagedChatAttachments(conversationId, stagedIds)
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
         if (request.fromQueue) markQueuedMessagePromoted(conversationId, userMsgId)
       })()
@@ -762,10 +762,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.delete<{ Params: { id: string; attachmentId: string } }>(
     '/conversations/:id/attachments/stage/:attachmentId',
     async (req) => {
-      releaseStagedChatAttachments(req.params.id, [req.params.attachmentId])
+      await releaseStagedChatAttachments(req.params.id, [req.params.attachmentId])
       return { success: true }
     },
   )
+
+  app.delete<{ Params: { id: string } }>('/conversations/:id/attachments/stage', async (req) => {
+    await discardStagedChatAttachments(req.params.id)
+    return { success: true }
+  })
 
   app.get<{ Params: { id: string } }>('/conversations/:id/queue', async (req) => {
     return getChatQueueState(req.params.id)

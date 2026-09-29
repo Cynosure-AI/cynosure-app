@@ -20,11 +20,11 @@ export function conversationAttachmentSpaceId(conversationId: string): string {
 }
 
 export function buildAttachmentFilter(conversationId: string, attachmentIds?: string[]): string | undefined {
-    const requested = attachmentIds?.length ? new Set(attachmentIds) : null
+    const requested = attachmentIds !== undefined ? new Set(attachmentIds) : null
     const ids = listConversationFileAttachments(getDb(), conversationId)
         .filter(item => !requested || requested.has(item.id) || requested.has(item.assetId || item.id))
         .map(item => item.assetId || item.id)
-    return lanceDbInFilter('sourceFile', [...new Set(ids)])
+    return lanceDbInFilter('sourceFile', [...new Set(ids)]) ?? '1 = 0'
 }
 
 export async function indexConversationAttachment(
@@ -94,7 +94,7 @@ async function ensureConversationAttachmentsIndexed(
     attachments: FileAttachmentArtifact[],
     attachmentIds?: string[],
 ): Promise<FileAttachmentArtifact[]> {
-    const wanted = attachmentIds?.length ? new Set(attachmentIds) : null
+    const wanted = attachmentIds !== undefined ? new Set(attachmentIds) : null
     const candidates = wanted ? attachments.filter((attachment) => wanted.has(attachment.id) || wanted.has(attachment.assetId || attachment.id)) : attachments
     const indexed: FileAttachmentArtifact[] = []
 
@@ -130,6 +130,7 @@ export async function searchConversationAttachments(
 ): Promise<RetrievedChunk[]> {
     const filter = buildAttachmentFilter(conversationId, attachmentIds)
     const attachments = listConversationFileAttachments(getDb(), conversationId)
+    if (!attachments.length || filter === '1 = 0') return []
     await ensureConversationAttachmentsIndexed(conversationId, attachments, attachmentIds)
 
     try {
@@ -156,9 +157,10 @@ export async function getConversationAttachmentChunks(
     maxIndex: number,
 ): Promise<{ text: string; chunkIndex: number; sourceFile: string; folderId?: string }[]> {
     const attachments = listConversationFileAttachments(getDb(), conversationId)
+    const attachment = attachments.find(item => item.id === attachmentId || item.assetId === attachmentId)
+    if (!attachment) return []
     await ensureConversationAttachmentsIndexed(conversationId, attachments, [attachmentId])
     const filter = buildAttachmentFilter(conversationId)
-    const attachment = attachments.find(item => item.id === attachmentId || item.assetId === attachmentId)
     return getRAGStore().getChunksByRange(CONVERSATION_ATTACHMENTS_TABLE, attachment?.assetId || attachmentId, minIndex, maxIndex, filter)
 }
 

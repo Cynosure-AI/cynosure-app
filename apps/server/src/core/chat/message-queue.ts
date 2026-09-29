@@ -136,7 +136,7 @@ async function stageRequest(conversationId: string, request: ChatQueueRequest): 
       ]
     : []
   for (const file of files) if (file.chunkCount === undefined) file.chunkCount = await indexConversationAttachment(conversationId, file)
-  releaseStagedChatAttachments(conversationId, request.files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || [], false)
+  await releaseStagedChatAttachments(conversationId, request.files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || [], false)
   return { images, audio, files }
 }
 

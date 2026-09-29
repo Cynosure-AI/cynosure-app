@@ -22,6 +22,8 @@ export interface StagedChatAttachmentState {
 
 type StageUpdate = Omit<StagedChatAttachmentState, 'artifact' | 'createdAt' | 'updatedAt'>
 const activeIndexJobs = new Map<string, AbortController>()
+const indexCompletions = new Map<string, Promise<void>>()
+const pendingStages = new Map<string, Set<Promise<StagedChatAttachmentState>>>()
 
 function rowToState(row: {
   id: string; conversation_id: string; client_id: string | null; artifact_json: string
@@ -79,7 +81,7 @@ function startIndexing(state: StagedChatAttachmentState, onUpdate?: (update: Sta
   const controller = new AbortController()
   activeIndexJobs.set(state.id, controller)
 
-  void (async () => {
+  const completion = (async () => {
     try {
       // A process may have stopped midway through a previous attempt. Always
       // rebuild this asset from a clean source-specific slice before resuming.
@@ -127,11 +129,30 @@ function startIndexing(state: StagedChatAttachmentState, onUpdate?: (update: Sta
       await deleteConversationAttachmentChunks(state.conversationId, [state.artifact.assetId || state.artifact.id]).catch(() => undefined)
     } finally {
       activeIndexJobs.delete(state.id)
+      indexCompletions.delete(state.id)
     }
   })()
+  indexCompletions.set(state.id, completion)
 }
 
-export async function stageChatAttachment(
+export function stageChatAttachment(
+  conversationId: string,
+  file: FileAttachmentInput & { clientId?: string },
+  opts?: { onUpdate?: (update: StageUpdate) => void },
+): Promise<StagedChatAttachmentState> {
+  const pending = pendingStages.get(conversationId) ?? new Set<Promise<StagedChatAttachmentState>>()
+  pendingStages.set(conversationId, pending)
+  const job = materializeAndStage(conversationId, file, opts)
+  pending.add(job)
+  const settled = (): void => {
+    pending.delete(job)
+    if (!pending.size) pendingStages.delete(conversationId)
+  }
+  void job.then(settled, settled)
+  return job
+}
+
+async function materializeAndStage(
   conversationId: string,
   file: FileAttachmentInput & { clientId?: string },
   opts?: { onUpdate?: (update: StageUpdate) => void },
@@ -151,12 +172,17 @@ export async function stageChatAttachment(
     updatedAt: now,
     artifact,
   }
-  getDb().prepare(`
-    INSERT INTO staged_chat_attachments
-      (id, conversation_id, client_id, artifact_json, status, progress_current,
-       progress_total, error, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 'processing', 0, 0, NULL, ?, ?)
-  `).run(artifact.id, conversationId, file.clientId || null, JSON.stringify(artifact), now, now)
+  try {
+    getDb().prepare(`
+      INSERT INTO staged_chat_attachments
+        (id, conversation_id, client_id, artifact_json, status, progress_current,
+         progress_total, error, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'processing', 0, 0, NULL, ?, ?)
+    `).run(artifact.id, conversationId, file.clientId || null, JSON.stringify(artifact), now, now)
+  } catch (error) {
+    for (const path of [artifact.originalPath, artifact.textPath]) rmSync(path, { force: true })
+    throw error
+  }
   startIndexing(state, opts?.onUpdate)
   return state
 }
@@ -175,26 +201,48 @@ export function takeStagedChatAttachments(conversationId: string, ids: string[])
     SELECT artifact_json FROM staged_chat_attachments
     WHERE id = ? AND conversation_id = ? AND status = 'ready'
   `)
-  return ids.map(id => select.get(id, conversationId) as { artifact_json: string } | undefined)
-    .filter((row): row is { artifact_json: string } => Boolean(row))
-    .map(row => JSON.parse(row.artifact_json) as FileAttachmentArtifact)
+  return ids.map(id => {
+    const row = select.get(id, conversationId) as { artifact_json: string } | undefined
+    if (!row) throw new Error('A selected attachment is no longer available or is still processing')
+    return JSON.parse(row.artifact_json) as FileAttachmentArtifact
+  })
 }
 
-export function releaseStagedChatAttachments(conversationId: string, ids: string[], deleteArtifacts = true): void {
+/** Release draft references after durable message/queue ownership is established. */
+export function commitStagedChatAttachments(conversationId: string, ids: string[]): void {
+  const remove = getDb().prepare('DELETE FROM staged_chat_attachments WHERE id = ? AND conversation_id = ?')
+  for (const id of ids) remove.run(id, conversationId)
+}
+
+export async function releaseStagedChatAttachments(conversationId: string, ids: string[], deleteArtifacts = true): Promise<void> {
   if (!ids.length) return
+  if (!deleteArtifacts) {
+    commitStagedChatAttachments(conversationId, ids)
+    return
+  }
   const artifacts = readStagedRows(conversationId)
     .filter((state) => ids.includes(state.id))
     .map((state) => state.artifact)
+  const ownedIds = artifacts.map(artifact => artifact.id)
   const remove = getDb().prepare('DELETE FROM staged_chat_attachments WHERE id = ? AND conversation_id = ?')
-  for (const id of ids) {
+  for (const id of ownedIds) {
     activeIndexJobs.get(id)?.abort()
     remove.run(id, conversationId)
   }
-  if (!deleteArtifacts) return
+  // Settle writes and cancellation rollback before the final source deletion.
+  await Promise.all(ownedIds.map(id => indexCompletions.get(id)))
+  await deleteConversationAttachmentChunks(conversationId, artifacts.map((artifact) => artifact.assetId || artifact.id))
   for (const artifact of artifacts) {
     for (const path of [artifact.originalPath, artifact.textPath]) {
       try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
     }
   }
-  void deleteConversationAttachmentChunks(conversationId, artifacts.map((artifact) => artifact.assetId || artifact.id))
+}
+
+export async function discardStagedChatAttachments(conversationId: string): Promise<void> {
+  // Parsing an upload may still be materializing its files when discard arrives.
+  while (pendingStages.get(conversationId)?.size) {
+    await Promise.allSettled([...pendingStages.get(conversationId)!])
+  }
+  await releaseStagedChatAttachments(conversationId, readStagedRows(conversationId).map(state => state.id))
 }

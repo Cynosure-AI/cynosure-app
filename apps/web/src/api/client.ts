@@ -150,6 +150,8 @@ export const api = {
       onWsEvent('attachment:stage-progress', cb as WsHandler),
     removeStagedAttachment: (conversationId: string, attachmentId: string) =>
       del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage/${encodeURIComponent(attachmentId)}`),
+    discardStagedAttachments: (conversationId: string) =>
+      del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`),
     getQueue: (conversationId: string) =>
       get<ChatQueueStateDto>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue`),
     enqueue: (conversationId: string, request: ChatQueueRequest) =>

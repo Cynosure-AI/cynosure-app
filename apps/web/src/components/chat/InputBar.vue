@@ -63,6 +63,8 @@ const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
 const liveCleanups: Array<() => void> = []
 const cancelledStageClientIds = new Set<string>()
+const discardedStageIds = new Set<string>()
+let fileReadGeneration = 0
 let stagedPollTimer: number | null = null
 let stagedLoadGeneration = 0
 
@@ -197,9 +199,11 @@ async function stageFile(name: string, content: string, sourceId?: string): Prom
   attachedFiles.value.push(draft)
   try {
     const conversationId = chatStore.activeConversationId || await chatStore.createConversation()
+    if (cancelledStageClientIds.has(draft.clientId)) return
     const staged = await api.chat.stageAttachment(conversationId, { name, content, clientId: draft.clientId }, controller.signal)
     const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
-    if (cancelledStageClientIds.delete(draft.clientId)) {
+    if (cancelledStageClientIds.has(draft.clientId)) {
+      discardedStageIds.add(staged.id)
       await api.chat.removeStagedAttachment(conversationId, staged.id)
       return
     }
@@ -224,6 +228,7 @@ async function stageFile(name: string, content: string, sourceId?: string): Prom
 }
 
 function applyStagedState(staged: StagedChatAttachment): void {
+  if (discardedStageIds.has(staged.id) || (staged.clientId && cancelledStageClientIds.has(staged.clientId))) return
   let file = attachedFiles.value.find(item => item.stagedId === staged.id)
     || attachedFiles.value.find(item => item.clientId === staged.clientId)
   if (!file) {
@@ -268,12 +273,14 @@ function scheduleStagedRefresh(delay: number): void {
 }
 
 function processFiles(files: File[]): void {
+  const generation = fileReadGeneration
   for (const file of files) {
     if (file.size > 20 * 1024 * 1024) continue // 20MB limit
 
     if (file.type.startsWith('image/')) {
       const reader = new FileReader()
       reader.onload = () => {
+        if (generation !== fileReadGeneration) return
         attachedImages.value.push({
           url: reader.result as string,
           name: file.name
@@ -283,6 +290,7 @@ function processFiles(files: File[]): void {
     } else if (file.type.startsWith('audio/')) {
       const reader = new FileReader()
       reader.onload = () => {
+        if (generation !== fileReadGeneration) return
         attachedAudio.value.push({
           url: reader.result as string,
           name: file.name
@@ -293,12 +301,14 @@ function processFiles(files: File[]): void {
       // Read document files as base64 for server-side parsing (officeparser)
       const reader = new FileReader()
       reader.onload = () => {
+        if (generation !== fileReadGeneration) return
         void stageFile(file.name, reader.result as string)
       }
       reader.readAsDataURL(file)
     } else {
       const reader = new FileReader()
       reader.onload = () => {
+        if (generation !== fileReadGeneration) return
         void stageFile(file.name, reader.result as string)
       }
       reader.readAsText(file)
@@ -316,7 +326,7 @@ function removeFile(idx: number): void {
   attachedFiles.value.splice(idx, 1)
   cancelledStageClientIds.add(file.clientId)
   if (file.stagedId && file.stagedConversationId) {
-    cancelledStageClientIds.delete(file.clientId)
+    discardedStageIds.add(file.stagedId)
     void api.chat.removeStagedAttachment(file.stagedConversationId, file.stagedId)
   }
 }
@@ -357,6 +367,19 @@ function resetHeight(): void {
 watch(inputText, () => {
   nextTick(autoResize)
 })
+
+watch(() => chatStore.draftDiscardRevision, () => {
+  fileReadGeneration++
+  stagedLoadGeneration++
+  if (stagedPollTimer !== null) window.clearTimeout(stagedPollTimer)
+  for (const file of attachedFiles.value) {
+    cancelledStageClientIds.add(file.clientId)
+    if (file.stagedId) discardedStageIds.add(file.stagedId)
+  }
+  attachedFiles.value = []
+  attachedImages.value = []
+  attachedAudio.value = []
+}, { flush: 'sync' })
 
 watch(draftStorageKey, (newKey, oldKey) => {
   persistDraft(oldKey, inputText.value)
