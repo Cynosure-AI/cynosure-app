@@ -161,11 +161,7 @@ const activeAgentName = computed(() => {
 })
 
 const emptyStateSubAgents = computed(() => {
-  const assignedIds = conversationAgentId.value
-    ? agentDefs.get(conversationAgentId.value)?.subAgents?.map(({ agentId }) => agentId) ?? []
-    : chatStore.freeChatSubAgentIds
-
-  return assignedIds
+  return chatStore.freeChatSubAgentIds
     .map((id) => agentDefs.get(id))
     .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
 })
