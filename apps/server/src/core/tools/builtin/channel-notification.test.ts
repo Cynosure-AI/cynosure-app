@@ -6,6 +6,9 @@ describe('notify_user_on_channel built-in tool', () => {
         const notify = vi.fn().mockResolvedValue({ channelId: 'channel-1', target: 'user-1' })
         const tool = makeChannelNotificationTool({ availableChannels: ['telegram'], notify })
 
+        expect(tool.description).toContain('Available configured channels: telegram.')
+        expect(tool.description).not.toContain('slack')
+
         const result = await tool.execute({ channel: 'telegram', message: '  Hello this is the agent  ' }, {} as never)
 
         expect(notify).toHaveBeenCalledWith('telegram', 'Hello this is the agent')
@@ -43,6 +46,21 @@ describe('notify_user_on_channel built-in tool', () => {
         expect((tool.parameters.properties as Record<string, { enum?: string[] }>).channel.enum).toEqual(['discord'])
         await expect(tool.execute({ channel: 'telegram', message: 'Hello' }, {} as never))
             .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: discord.' })
+        expect(notify).not.toHaveBeenCalled()
+    })
+
+    it('describes multiple configured channels', () => {
+        const tool = makeChannelNotificationTool({ availableChannels: ['telegram', 'slack'] })
+        expect(tool.description).toContain('Available configured channels: telegram, slack.')
+    })
+
+    it('states when no channels are available and rejects delivery', async () => {
+        const notify = vi.fn()
+        const tool = makeChannelNotificationTool({ availableChannels: [], notify })
+        expect(tool.description).toContain('Available configured channels: none.')
+        expect((tool.parameters.properties as Record<string, { enum?: string[] }>).channel.enum?.length).toBeGreaterThan(0)
+        await expect(tool.execute({ channel: 'slack', message: 'Hello' }, {} as never))
+            .resolves.toEqual({ success: false, output: 'channel must be one of the available configured channels: none.' })
         expect(notify).not.toHaveBeenCalled()
     })
 })
