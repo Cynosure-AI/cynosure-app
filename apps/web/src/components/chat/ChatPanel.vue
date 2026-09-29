@@ -170,8 +170,8 @@ const emptyStateSubAgents = computed(() => {
     .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
 })
 const visibleEmptyStateSubAgents = computed(() =>
-  emptyStateSubAgents.value.length > 10
-    ? emptyStateSubAgents.value.slice(0, 9)
+  emptyStateSubAgents.value.length > 8
+    ? emptyStateSubAgents.value.slice(0, 7)
     : emptyStateSubAgents.value,
 )
 const overflowEmptyStateSubAgents = computed(() =>
