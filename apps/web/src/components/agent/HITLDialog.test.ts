@@ -51,14 +51,43 @@ describe('HITLDialog', () => {
       taskId: 'file-permission',
       toolCalls: [{
         name: 'file_access_permission',
-        arguments: '{}',
-        fileAccess: { path: '/projects/private/report.txt', folder: '/projects/private', toolName: 'file_read' },
+        arguments: JSON.stringify({ path: '/projects/private/report.txt', content: 'draft' }),
+        fileAccess: { path: '/projects/private/report.txt', folder: '/projects/private', toolName: 'file_write' },
       }],
     })
     const wrapper = mount(HITLDialog, { global: { plugins: [pinia], stubs: { Icon: true } } })
     expect(wrapper.text()).toContain('/projects/private')
     expect(wrapper.text()).toContain('Allowing adds this folder')
-    await wrapper.findAll('button').find(button => button.text() === 'Allow folder')!.trigger('click')
+    expect(wrapper.text()).toContain('draft')
+    await wrapper.findAll('button').find(button => button.text() === 'Allow folder and run')!.trigger('click')
     expect(response).toHaveBeenCalledWith(true, undefined, 'once')
+  })
+
+  test('shows shell commands in the regular tool approval card', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const agent = useAgentStore()
+    const response = vi.spyOn(agent, 'respondHITL').mockResolvedValue()
+    agent.handleHITLRequest({ taskId: 'shell-review', toolCalls: [{ name: 'shell_execute', arguments: JSON.stringify({ command: 'cat report.txt', cwd: '/projects/private' }) }] })
+    const wrapper = mount(HITLDialog, { global: { plugins: [pinia], stubs: { Icon: true } } })
+    expect(wrapper.text()).toContain('cat report.txt')
+    expect(wrapper.text()).toContain('/projects/private')
+    expect(wrapper.text()).toContain('shell_execute')
+    await wrapper.findAll('button').find(button => button.text() === 'Allow')!.trigger('click')
+    expect(response).toHaveBeenCalledWith(true, undefined, 'once')
+  })
+
+  test('offers session and saved approvals for shell commands', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const agent = useAgentStore()
+    const response = vi.spyOn(agent, 'respondHITL').mockResolvedValue()
+    agent.handleHITLRequest({ taskId: 'shell-options', toolCalls: [{ name: 'shell_execute', arguments: JSON.stringify({ command: 'echo hello' }) }] })
+    const wrapper = mount(HITLDialog, { global: { plugins: [pinia], stubs: { Icon: true } } })
+    await wrapper.findAll('button').find(button => button.findComponent({ name: 'Icon' }).exists())!.trigger('click')
+    expect(wrapper.text()).toContain('Allow in this Session')
+    expect(wrapper.text()).toContain('Allow All (shell_execute)')
+    await wrapper.findAll('button').find(button => button.text() === 'Allow in this Session')!.trigger('click')
+    expect(response).toHaveBeenCalledWith(true, undefined, 'session')
   })
 })

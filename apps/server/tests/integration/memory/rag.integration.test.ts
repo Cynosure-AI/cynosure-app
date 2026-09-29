@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -55,6 +55,67 @@ test('hybrid search retains LanceDB fusion scores for lexical candidates', async
 
   } finally {
     await store.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('concurrent searches share a refresh and reuse a complete index after restart', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-fts-refresh-'))
+  const first = new RAGStore()
+  const reopened = new RAGStore()
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    await first.initialize(directory)
+    await first.addDocuments('memory', [
+      { id: 'initial', text: 'startup context', vector: [1, 0], source: 'test', createdAt: 1 },
+    ], 2)
+    await first.rebuildFtsIndex('memory')
+    await first.close()
+    log.mockClear()
+
+    await reopened.initialize(directory)
+    const coldResults = await Promise.all(Array.from({ length: 8 }, () =>
+      reopened.lexicalSearch('memory', 'startup', 5)))
+    expect(coldResults.every(results => results.some(result => result.id === 'initial'))).toBe(true)
+    expect(log.mock.calls.filter(([message]) => String(message).includes('FTS index rebuilt for table "memory"'))).toHaveLength(0)
+
+    await reopened.addDocuments('memory', [
+      { id: 'new', text: 'fresh context', vector: [0, 1], source: 'test', createdAt: 2 },
+    ], 2)
+    const updatedResults = await Promise.all(Array.from({ length: 8 }, () =>
+      reopened.lexicalSearch('memory', 'fresh', 5)))
+    expect(updatedResults.every(results => results.some(result => result.id === 'new'))).toBe(true)
+    expect(log.mock.calls.filter(([message]) => String(message).includes('FTS index rebuilt for table "memory"'))).toHaveLength(1)
+  } finally {
+    log.mockRestore()
+    await first.close()
+    await reopened.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('concurrent cold searches refresh an index left stale by a restart once', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-stale-fts-'))
+  const first = new RAGStore()
+  const reopened = new RAGStore()
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  try {
+    await first.initialize(directory)
+    await first.addDocuments('memory', [
+      { id: 'pending', text: 'restart recovery', vector: [1, 0], source: 'test', createdAt: 1 },
+    ], 2)
+    await first.close()
+    log.mockClear()
+
+    await reopened.initialize(directory)
+    const results = await Promise.all(Array.from({ length: 8 }, () =>
+      reopened.lexicalSearch('memory', 'recovery', 5)))
+    expect(results.every(matches => matches.some(match => match.id === 'pending'))).toBe(true)
+    expect(log.mock.calls.filter(([message]) => String(message).includes('FTS index rebuilt for table "memory"'))).toHaveLength(1)
+  } finally {
+    log.mockRestore()
+    await first.close()
+    await reopened.close()
     await rm(directory, { recursive: true, force: true })
   }
 })

@@ -2,6 +2,7 @@ import type { ToolBehaviorAnnotations, ToolCall, ToolDefinition } from '../gatew
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
 import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
+import { fileToolNeedsFolderApproval } from '../tools/builtin/file-access-policy.js'
 
 export interface ApprovalResult {
   approved: boolean
@@ -101,18 +102,31 @@ export class HITLGate {
     conversationId?: string,
     tools: ToolDefinition[] = []
   ): Promise<ApprovalResult> {
-    // Only ask for approval on user-visible tool actions that are not already
-    // allowed by system policy, saved user preferences, or this conversation.
+    // A folder card authorizes that file tool invocation. All other calls use
+    // the normal tool approval policy.
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
+    const toolsByName = new Map(tools.map((tool) => [tool.name, tool]))
     const annotationsByName = new Map(tools.map((tool) => [tool.name, tool.annotations]))
+    const specificallyApprovedCalls = new Set<string>()
+    for (const tc of toolCalls) {
+      const tool = toolsByName.get(tc.function.name) as (ToolDefinition & { namespaceId?: string; originalName?: string }) | undefined
+      if (tool?.namespaceId !== 'builtin:files') continue
+      try {
+        const args = JSON.parse(tc.function.arguments) as Record<string, unknown>
+        if (await fileToolNeedsFolderApproval(tool.originalName || tool.name, args)) {
+          specificallyApprovedCalls.add(tc.id)
+        }
+      } catch { /* Invalid arguments are handled by the executor. */ }
+    }
     const needsApproval = toolCalls.filter(
-      (tc) => !isSystemAutoApprovedTool(tc.function.name)
+      (tc) => !specificallyApprovedCalls.has(tc.id)
+        && !isSystemAutoApprovedTool(tc.function.name)
         && !this.isAutoApproved(tc.function.name, annotationsByName.get(tc.function.name))
         && !sessionSet?.has(this.allToolsApproval)
         && !sessionSet?.has(tc.function.name)
     )
 
-    // If every tool call is whitelisted, auto-approve
+    // All calls either have an invocation-specific review or follow saved policy.
     if (needsApproval.length === 0) {
       return { approved: true }
     }

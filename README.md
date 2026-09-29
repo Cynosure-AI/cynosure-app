@@ -79,6 +79,10 @@ Native file and directory tools are listed under **Built-In: Files** in agent an
 
 The tools are `file_info`, `directory_list`, `file_search`, `file_read`, `file_write`, `file_edit`, `directory_create`, `file_move`, `directory_merge`, `file_archive`, and `file_delete`. `file_edit` previews changes unless `dryRun: false` is supplied. `file_read` supports text, media, thumbnails, and image collages.
 
+### Native shell access
+
+Select **Built-In: Shell** to give an agent the `shell_execute` tool. Commands use the regular tool approval flow, including one-time, session, and saved approvals. The working directory defaults to the server working directory; `cwd` can select another directory. Shell access is independent of **Settings → File Access**. Commands stop after 120 seconds by default (`timeoutSeconds` can raise this to 600) or 128 KiB of output.
+
 ## Building
 
 ```bash

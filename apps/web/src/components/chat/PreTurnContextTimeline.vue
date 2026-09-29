@@ -289,9 +289,10 @@ const cards = computed<ContextCard[]>(() => {
     const items = pipelines[channel]
     if (!items.length) return []
     const latest = items.reduce((current, item) => item.updatedAt >= current.updatedAt ? item : current)
-    const toolsets = channel === 'tools'
-      ? items.flatMap((item) => item.details.filter((detail) => item.key.includes('toolset-router') && !detail.empty))
-      : []
+    const latestToolsetSelection = channel === 'tools'
+      ? [...items].reverse().find((item) => item.key.includes('toolset-router'))
+      : undefined
+    const toolsets = latestToolsetSelection?.details.filter((detail) => !detail.empty) || []
     const finalMemoryCalls = channel === 'memory'
       ? [...props.steps].reverse()
         .map((step) => (step.toolCalls || []).filter((call) => (
@@ -302,10 +303,15 @@ const cards = computed<ContextCard[]>(() => {
     const selected = channel === 'tools'
       ? toolsets
       : details(finalMemoryCalls).filter((detail) => !detail.empty)
-    const selectedTools = channel === 'tools'
-      ? props.steps.flatMap((step) => details((step.toolCalls || []).filter((call) => (
+    const latestToolSelection = channel === 'tools'
+      ? [...props.steps].reverse().find((step) => (step.toolCalls || []).some((call) => (
         args(call).type === 'tool-router' && args(call).contextPhase === 'gathered-context'
-      )))).filter((detail) => !detail.empty)
+      )))
+      : undefined
+    const selectedTools = latestToolSelection
+      ? details((latestToolSelection.toolCalls || []).filter((call) => (
+        args(call).type === 'tool-router' && args(call).contextPhase === 'gathered-context'
+      ))).filter((detail) => !detail.empty)
       : []
     return [{ channel, title: channel === 'memory' ? 'Auto memory' : 'Auto tools', icon: channel === 'memory' ? 'lucide:brain-circuit' : 'lucide:wrench', items, latest, selected, toolsets, selectedTools }]
   })
