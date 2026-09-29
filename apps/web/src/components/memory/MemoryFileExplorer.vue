@@ -70,6 +70,9 @@ const selectedFiles = ref<Set<string>>(new Set());
 const selectedFolders = ref<Set<string>>(new Set());
 const trackedFolderJobs = ref<MemoryIndexJob[]>([]);
 const trackedFolderBaselines = ref<Record<string, number>>({});
+const bulkIndexJobIds = ref<Set<string>>(new Set());
+const bulkQueueing = ref(false);
+const bulkIndexFeedback = ref("");
 let folderJobPollTimer: ReturnType<typeof setInterval> | null = null;
 let folderJobPollInFlight = false;
 const gridSelectionAnchor = ref<string | null>(null);
@@ -490,6 +493,20 @@ const {
   onCompleted: () => emit("spacesChanged"),
 });
 
+const bulkIndexProcessing = computed(() => bulkQueueing.value ||
+  runningJobs.value.some((job) => bulkIndexJobIds.value.has(job.id)) ||
+  trackedFolderJobs.value.some((job) => bulkIndexJobIds.value.has(job.id) && isActiveFolderJob(job)));
+
+function rememberBulkJobs(jobs: MemoryIndexJob[]): void {
+  bulkIndexJobIds.value = new Set([...bulkIndexJobIds.value, ...jobs.map((job) => job.id)]);
+}
+
+function confirmBulkQueue(count: number): void {
+  bulkIndexFeedback.value = count
+    ? `${count} ${count === 1 ? "file" : "files"} added to the indexing queue.`
+    : "No files were added to the indexing queue.";
+}
+
 function estimatedChunks(file: MemoryFileStatus): number {
   return file.estimatedChunkCount ?? file.chunkCount ?? 0;
 }
@@ -523,7 +540,18 @@ async function reindexAll(): Promise<void> {
   const candidates = files.value.filter((file) =>
     file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"),
   );
-  await indexWithWarning(candidates, reindexAllNow);
+  if (bulkIndexProcessing.value) return;
+  await indexWithWarning(candidates, async () => {
+    bulkQueueing.value = true;
+    bulkIndexFeedback.value = "";
+    try {
+      const jobs = await reindexAllNow();
+      rememberBulkJobs(jobs);
+      confirmBulkQueue(jobs.length);
+    } finally {
+      bulkQueueing.value = false;
+    }
+  });
 }
 
 async function reindexAllIncludingSubfolders(): Promise<void> {
@@ -537,13 +565,29 @@ async function reindexAllIncludingSubfolders(): Promise<void> {
   })));
   const candidates = [files.value, ...groups.map((group) => group.files)]
     .flat().filter((file) => file.supported && (file.status === "needs_reindex" || file.status === "not_indexed"));
+  if (bulkIndexProcessing.value) return;
   await indexWithWarning(candidates, async () => {
-    await reindexAllNow();
-    for (const group of groups) {
-      for (const file of group.files.filter((item) =>
-        item.supported && (item.status === "needs_reindex" || item.status === "not_indexed"))) {
-        trackFolderJob(await api.memoryFolders.startReindexFile(group.folderId, file.fileName));
+    bulkQueueing.value = true;
+    bulkIndexFeedback.value = "";
+    let queuedCount = 0;
+    try {
+      const directJobs = await reindexAllNow();
+      rememberBulkJobs(directJobs);
+      queuedCount += directJobs.length;
+      for (const group of groups) {
+        for (const file of group.files.filter((item) =>
+          item.supported && (item.status === "needs_reindex" || item.status === "not_indexed"))) {
+          const job = await api.memoryFolders.startReindexFile(group.folderId, file.fileName);
+          trackFolderJob(job);
+          rememberBulkJobs([job]);
+          queuedCount++;
+        }
       }
+      confirmBulkQueue(queuedCount);
+    } catch {
+      bulkIndexFeedback.value = `${queuedCount} ${queuedCount === 1 ? "file was" : "files were"} added to the indexing queue; some files could not be queued.`;
+    } finally {
+      bulkQueueing.value = false;
     }
   });
 }
@@ -993,6 +1037,9 @@ watch(
     stopFolderJobPolling();
     trackedFolderJobs.value = [];
     trackedFolderBaselines.value = {};
+    bulkIndexJobIds.value = new Set();
+    bulkQueueing.value = false;
+    bulkIndexFeedback.value = "";
     files.value = [];
     clearSelection();
     resetJobs();
@@ -1145,19 +1192,21 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           New folder
         </button>
         <SplitButton
-          v-if="recursiveNeedsAttentionCount > 0"
+          v-if="recursiveNeedsAttentionCount > 0 || bulkIndexProcessing"
           title="Indexing files makes them available for semantic searching."
+          :disabled="bulkIndexProcessing"
           :primary-disabled="needsAttentionCount === 0"
-          :primary-label="`${currentIndexLabel} in this folder`"
+          :primary-label="bulkIndexProcessing ? 'Processing indexing queue' : `${currentIndexLabel} in this folder`"
           menu-label="Indexing scope options"
           class="h-8 text-sm"
           @primary="reindexAll"
         >
           <Icon
-            icon="lucide:refresh-cw"
+            :icon="bulkIndexProcessing ? 'lucide:loader-2' : 'lucide:refresh-cw'"
             class="w-4 h-4"
+            :class="{ 'animate-spin': bulkIndexProcessing }"
           />
-          {{ currentIndexLabel }}
+          {{ bulkQueueing ? 'Adding to queue…' : bulkIndexProcessing ? 'Processing…' : currentIndexLabel }}
           <template #menu="{ close }">
             <button
               type="button"
@@ -1173,6 +1222,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             </button>
           </template>
         </SplitButton>
+        <span v-if="bulkIndexFeedback" role="status" class="text-xs text-accent-fg">{{ bulkIndexFeedback }}</span>
         <button
           :disabled="uploading"
           class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover disabled:opacity-50"
