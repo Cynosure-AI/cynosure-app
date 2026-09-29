@@ -136,6 +136,8 @@ export class RAGStore {
   private folderIdIndexReady = new Set<string>()
   // Tables whose FTS index covers all current data
   private ftsIndexCurrent = new Set<string>()
+  private ftsIndexPromises = new Map<string, Promise<void>>()
+  private ftsMutationVersions = new Map<string, number>()
   // Debounce timers for FTS rebuilds after writes
   private ftsRebuildTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private optimizePromises = new Map<string, Promise<RAGOptimizeResult>>()
@@ -289,27 +291,68 @@ export class RAGStore {
     } catch { /* will retry next time */ }
   }
 
-  /**
-   * Rebuild the FTS index so it covers all current data.
-   * `replace: true` (the default) replaces any existing index.
-   *
-   * Called eagerly after bulk writes (uploads, deletes) so that search
-   * never pays the rebuild cost. Also called lazily in hybridSearch as
-   * a safety fallback if the index is still stale.
-   */
+  private markFtsIndexStale(tableName: string): void {
+    this.ftsIndexCurrent.delete(tableName)
+    this.ftsMutationVersions.set(tableName, (this.ftsMutationVersions.get(tableName) ?? 0) + 1)
+  }
+
+  /** Share index checks and rebuilds across concurrent searches on a table. */
+  private async ensureFtsIndex(tableName: string): Promise<void> {
+    if (this.ftsIndexCurrent.has(tableName)) return
+    const inflight = this.ftsIndexPromises.get(tableName)
+    if (inflight) return inflight
+
+    const promise = (async () => {
+      const table = await this.openExistingTable(tableName)
+      if (!table) return
+      try {
+        while (!this.ftsIndexCurrent.has(tableName)) {
+          const version = this.ftsMutationVersions.get(tableName) ?? 0
+          // A persisted index may already cover every row. Check it once on
+          // first use rather than rebuilding it on every process start.
+          if (version === 0) {
+            try {
+              const index = (await table.listIndices()).find(idx =>
+                idx.columns?.includes('searchText') && idx.indexType.toLowerCase().includes('fts'))
+              if (index && (await table.indexStats(index.name))?.numUnindexedRows === 0) {
+                if ((this.ftsMutationVersions.get(tableName) ?? 0) === version) {
+                  this.ftsIndexCurrent.add(tableName)
+                  return
+                }
+              }
+            } catch {
+              // If index metadata is unavailable, try rebuilding below.
+            }
+          }
+
+          await table.createIndex('searchText', {
+            config: lancedb.Index.fts(),
+            replace: true,
+          })
+          console.log(`[rag] FTS index rebuilt for table "${tableName}"`)
+          // A write during createIndex invalidates its result. Retry after
+          // writes settle so no search observes a stale "current" flag.
+          if ((this.ftsMutationVersions.get(tableName) ?? 0) === version) {
+            this.ftsIndexCurrent.add(tableName)
+            const timer = this.ftsRebuildTimers.get(tableName)
+            if (timer) clearTimeout(timer)
+            this.ftsRebuildTimers.delete(tableName)
+          }
+        }
+      } catch {
+        // FTS not available — lexical search will return no matches.
+      }
+    })().finally(() => {
+      this.ftsIndexPromises.delete(tableName)
+    })
+    this.ftsIndexPromises.set(tableName, promise)
+    return promise
+  }
+
+  /** Force a refresh after writes or an explicit reindex request. */
   async rebuildFtsIndex(tableName: string): Promise<void> {
-    const table = await this.openExistingTable(tableName)
-    if (!table) return
-    try {
-      await table.createIndex('searchText', {
-        config: lancedb.Index.fts(),
-        replace: true
-      })
-      this.ftsIndexCurrent.add(tableName)
-      console.log(`[rag] FTS index rebuilt for table "${tableName}"`)
-    } catch {
-      // FTS not available — hybrid search will fall back to vector-only
-    }
+    this.markFtsIndexStale(tableName)
+    await this.ensureFtsIndex(tableName)
   }
 
   /**
@@ -328,7 +371,7 @@ export class RAGStore {
 
     const timer = setTimeout(() => {
       this.ftsRebuildTimers.delete(tableName)
-      this.rebuildFtsIndex(tableName).catch(() => { })
+      this.ensureFtsIndex(tableName).catch(() => { })
     }, 15_000)
 
     this.ftsRebuildTimers.set(tableName, timer)
@@ -415,7 +458,7 @@ export class RAGStore {
 
     // New data invalidates the FTS index — schedule a debounced rebuild
     // (fires 15s after the last write, so bulk uploads only rebuild once)
-    this.ftsIndexCurrent.delete(tableName)
+    this.markFtsIndexStale(tableName)
     this.scheduleFtsRebuild(tableName)
 
     // Ensure scalar index on folderId
@@ -506,7 +549,7 @@ export class RAGStore {
     if (fieldNames.has('representationType')) cols.push('representationType', 'sourceChunkId')
     if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
-    if (!this.ftsIndexCurrent.has(tableName)) await this.rebuildFtsIndex(tableName)
+    await this.ensureFtsIndex(tableName)
     await this.ensureFolderIdIndex(table, tableName)
 
     try {
@@ -570,9 +613,7 @@ export class RAGStore {
     if (fieldNames.has('sourceStart')) cols.push('sourceStart', 'sourceEnd')
 
     // Safety fallback: rebuild FTS if callers didn't trigger it eagerly
-    if (!this.ftsIndexCurrent.has(tableName)) {
-      await this.rebuildFtsIndex(tableName)
-    }
+    await this.ensureFtsIndex(tableName)
     await this.ensureFolderIdIndex(table, tableName)
 
     // Native hybrid: vector + FTS + RRF in a single chained query
@@ -637,7 +678,7 @@ export class RAGStore {
       const table = await this.openExistingTable(tableName)
       if (!table) return
       await table.delete(filter)
-      this.ftsIndexCurrent.delete(tableName)
+      this.markFtsIndexStale(tableName)
       if (opts.rebuildFts !== false) {
         await this.rebuildFtsIndex(tableName)
       }
@@ -715,7 +756,7 @@ export class RAGStore {
     this.ftsRebuildTimers.delete(tableName)
     this.tables.delete(tableName)
     this.fieldNamesCache.delete(tableName)
-    this.ftsIndexCurrent.delete(tableName)
+    this.markFtsIndexStale(tableName)
     this.folderIdIndexReady.delete(tableName)
   }
 
@@ -848,7 +889,7 @@ export class RAGStore {
         ? `(${whereClause}) AND representationType = 'raw'`
         : whereClause)
       await table.delete(whereClause)
-      this.ftsIndexCurrent.delete(tableName)
+      this.markFtsIndexStale(tableName)
       if (opts.rebuildFts !== false) {
         await this.rebuildFtsIndex(tableName)
       }
@@ -876,7 +917,7 @@ export class RAGStore {
       const filter = lanceDbInFilter('id', ids)
       if (!filter) return
       await table.delete(filter)
-      this.ftsIndexCurrent.delete(tableName)
+      this.markFtsIndexStale(tableName)
       if (opts.rebuildFts !== false) {
         await this.rebuildFtsIndex(tableName)
       }
@@ -892,6 +933,8 @@ export class RAGStore {
     this.tables.clear()
     this.fieldNamesCache.clear()
     this.ftsIndexCurrent.clear()
+    this.ftsIndexPromises.clear()
+    this.ftsMutationVersions.clear()
     this.folderIdIndexReady.clear()
     this.rerankerPromise = null
     this.db = null
@@ -988,7 +1031,7 @@ export class RAGStore {
     }
     if (projections.length) await this.addDocuments(tableName, projections, embeddings[0].dimensions)
     if (updated > 0) {
-      this.ftsIndexCurrent.delete(tableName)
+      this.markFtsIndexStale(tableName)
       this.scheduleFtsRebuild(tableName)
     }
     return updated
@@ -1022,7 +1065,7 @@ export class RAGStore {
       updated++
     }
     if (updated > 0) {
-      this.ftsIndexCurrent.delete(tableName)
+      this.markFtsIndexStale(tableName)
       this.scheduleFtsRebuild(tableName)
     }
     return updated
