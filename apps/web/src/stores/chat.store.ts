@@ -65,6 +65,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
+  const draftDiscardRevision = ref(0)
   const messages = ref<DisplayMessage[]>([])
   const mediaGenerationSettings = ref<MediaGenerationSettings | null>(null)
   const loadingMessages = ref(false)
@@ -507,6 +508,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function startNewChat(): Promise<void> {
+    const previousConversationId = activeConversationId.value
+    draftDiscardRevision.value++
+    if (previousConversationId) await api.chat.discardStagedAttachments(previousConversationId)
     if (!memoryFolders.value.length) await loadMemoryFolders()
     // Every new chat starts from its selected agent or Free Chat defaults.
     agentConfig.syncAgentBaseline()
@@ -655,6 +659,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations,
     sortedConversations,
     activeConversationId,
+    draftDiscardRevision,
     messages,
     mediaGenerationSettings,
     loadingMessages,

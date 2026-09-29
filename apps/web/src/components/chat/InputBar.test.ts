@@ -7,6 +7,7 @@ import { api } from '../../api/client'
 
 const chatStore = reactive({
   activeConversationId: 'conversation-1' as string | null,
+  draftDiscardRevision: 0,
   activeAgentId: 'agent-1' as string | null,
   isConversationLocked: false,
   queuedMessages: [] as Array<{ id: string; content: string; attachments: unknown[] }>,
@@ -48,6 +49,7 @@ describe('InputBar drafts', () => {
   beforeEach(() => {
     localStorage.clear()
     chatStore.activeConversationId = 'conversation-1'
+    chatStore.draftDiscardRevision = 0
     chatStore.activeAgentId = 'agent-1'
     chatStore.isConversationLocked = false
     chatStore.queuedMessages = []
@@ -282,6 +284,47 @@ describe('InputBar drafts', () => {
     await flushPromises()
 
     expect(remove).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  test('does not restore a removed upload from a stale polling response or progress event', async () => {
+    const staged = {
+      id: 'removed-1', conversationId: 'conversation-1', clientId: 'removed-client', name: 'removed.txt',
+      status: 'ready' as const, progressCurrent: 1, progressTotal: 1, chunkCount: 1,
+    }
+    let progress!: Parameters<typeof api.chat.onAttachmentStageProgress>[0]
+    vi.spyOn(api.chat, 'onAttachmentStageProgress').mockImplementation(callback => {
+      progress = callback
+      return () => {}
+    })
+    vi.mocked(api.chat.listStagedAttachments).mockResolvedValue([staged])
+    vi.spyOn(api.chat, 'removeStagedAttachment').mockResolvedValue({ success: true })
+    const wrapper = mountInputBar()
+    await flushPromises()
+    await wrapper.get('button[aria-label="Remove removed.txt"]').trigger('click')
+    progress(staged)
+    chatStore.activeConversationId = 'conversation-2'
+    await flushPromises()
+    chatStore.activeConversationId = 'conversation-1'
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('removed.txt')
+    wrapper.unmount()
+  })
+
+  test('New Chat discards an in-flight upload when its response arrives late', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof api.chat.stageAttachment>>) => void
+    const stage = vi.spyOn(api.chat, 'stageAttachment').mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const remove = vi.spyOn(api.chat, 'removeStagedAttachment').mockResolvedValue({ success: true })
+    const wrapper = mountInputBar()
+    wrapper.vm.processFiles([new File(['draft'], 'discarded.txt', { type: 'text/plain' })])
+    await vi.waitFor(() => expect(stage).toHaveBeenCalled())
+    chatStore.draftDiscardRevision++
+    chatStore.activeConversationId = null
+    await flushPromises()
+    finish({ id: 'discarded-1', conversationId: 'conversation-1', name: 'discarded.txt', status: 'ready', progressCurrent: 1, progressTotal: 1, chunkCount: 1 })
+    await flushPromises()
+    expect(remove).toHaveBeenCalledWith('conversation-1', 'discarded-1')
+    expect(wrapper.text()).not.toContain('discarded.txt')
     wrapper.unmount()
   })
 })

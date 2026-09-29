@@ -15,7 +15,7 @@ import {
     type MediaArtifactKind,
 } from '../core/artifacts/image-artifacts.js'
 import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, preserveReferencedAttachmentAssets } from '../core/artifacts/attachment-rag.js'
-import { listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
+import { discardStagedChatAttachments, listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { ContentBlock, ConversationExecutionConfig } from '@shared/types'
@@ -69,6 +69,7 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
     const db = getDb()
     preserveReferencedAttachmentAssets(conversationIds)
     for (const convId of conversationIds) {
+        await discardStagedChatAttachments(convId)
         const rows = db.prepare(
             'SELECT content_blocks_json FROM messages WHERE conversation_id = ?'
         ).all(convId) as { content_blocks_json: string | null }[]

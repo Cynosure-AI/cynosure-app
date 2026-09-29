@@ -154,7 +154,9 @@ export class MemoryParser {
 
         // Start embedding current batch immediately so it runs concurrently
         // with the previous batch's LanceDB write (sliding-window pipeline).
-        const embedPromise = MemoryParser.withRetry(() => embedder.embedBatch(batch.map((item) => item.searchText)))
+        const embedPromise = MemoryParser.withRetry(() => embedder.embedBatch(batch.map((item) => item.searchText), opts?.signal))
+        // It can reject while the previous write is still settling.
+        void embedPromise.catch(() => undefined)
 
         // Wait for the previous write to finish, then count it.
         const completedWrite = pendingWrite
@@ -239,6 +241,7 @@ export class MemoryParser {
       try {
         return await fn()
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') throw err
         if (attempt === retries) throw err
         await new Promise(r => setTimeout(r, 300 * 2 ** attempt))
       }
