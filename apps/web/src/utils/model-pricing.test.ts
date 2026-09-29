@@ -41,6 +41,13 @@ describe('reranker model pricing', () => {
 })
 
 describe('extended model pricing', () => {
+  test('does not display an unknown output rate as free', () => {
+    expect(pricingTooltipLines({
+      id: 'partial-price',
+      pricing: { prompt: 0.00000015 },
+    })).toContain('Input / Output: $0.15 / — per 1M tokens')
+  })
+
   test('shows the generated-image price ahead of input and variant SKUs', () => {
     expect(compactPricingTag({
       id: 'x-ai/grok-imagine-image-2.0',

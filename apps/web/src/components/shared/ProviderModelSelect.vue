@@ -91,7 +91,9 @@ const { logoUrl } = useProviderLogos();
 const sharedModelCache = new Map<string, {
   models: ModelListItem[];
   types: Record<string, ModelListType[]>;
+  fetchedAt: number;
 }>();
+const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const providerModels = ref<Record<string, ModelListItem[]>>({});
 const providerModelTypes = ref<Record<string, Record<string, ModelListType[]>>>({});
@@ -155,16 +157,6 @@ function pricingTagVariant(model: ModelListItem): SelectOption['tagVariant'] {
 }
 
 function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): ModelListItem {
-  const pricing = existing.pricing || incoming.pricing
-    ? {
-        ...existing.pricing,
-        ...incoming.pricing,
-        skus: {
-          ...existing.pricing?.skus,
-          ...incoming.pricing?.skus,
-        },
-      }
-    : undefined;
   return {
     ...existing,
     ...incoming,
@@ -173,7 +165,7 @@ function mergeModelItems(existing: ModelListItem, incoming: ModelListItem): Mode
     inputModalities: incoming.inputModalities?.length ? incoming.inputModalities : existing.inputModalities,
     outputModalities: incoming.outputModalities?.length ? incoming.outputModalities : existing.outputModalities,
     supportsToolCalls: incoming.supportsToolCalls ?? existing.supportsToolCalls,
-    pricing,
+    pricing: incoming.pricing ?? existing.pricing,
   };
 }
 
@@ -329,8 +321,8 @@ function toggleFavorite(option: SelectOption): void {
 async function ensureProviderModels(providerId: string): Promise<void> {
   if (!providerId) return;
   const key = cacheKey(providerId);
-  if (sharedModelCache.has(key)) {
-    const cached = sharedModelCache.get(key)!;
+  const cached = sharedModelCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < MODEL_CACHE_TTL_MS) {
     providerModels.value = {
       ...providerModels.value,
       [providerId]: cached.models,
@@ -338,6 +330,7 @@ async function ensureProviderModels(providerId: string): Promise<void> {
     providerModelTypes.value = { ...providerModelTypes.value, [providerId]: cached.types };
     return;
   }
+  if (cached) sharedModelCache.delete(key);
   if (loadingByProvider.value[providerId]) return;
 
   loadingByProvider.value = { ...loadingByProvider.value, [providerId]: true };
@@ -366,7 +359,7 @@ async function ensureProviderModels(providerId: string): Promise<void> {
     const provider = props.providers.find((item) => item.id === providerId);
     const hasMetadata = models.some(modelHasMetadata);
     if (hasMetadata || provider?.type === 'ollama' || provider?.type === 'lmstudio') {
-      sharedModelCache.set(key, { models, types: typeMap });
+      sharedModelCache.set(key, { models, types: typeMap, fetchedAt: Date.now() });
     }
     providerModels.value = { ...providerModels.value, [providerId]: models };
     providerModelTypes.value = { ...providerModelTypes.value, [providerId]: typeMap };
@@ -394,7 +387,9 @@ function modelHasMetadata(model: ModelListItem): boolean {
 function refreshIncompleteModels(): void {
   for (const provider of props.providers) {
     const models = providerModels.value[provider.id] || [];
-    if (!models.length || !models.some(modelHasMetadata)) {
+    const cached = sharedModelCache.get(cacheKey(provider.id));
+    if (!models.length || !models.some(modelHasMetadata) ||
+        (cached && Date.now() - cached.fetchedAt >= MODEL_CACHE_TTL_MS)) {
       sharedModelCache.delete(cacheKey(provider.id));
       void ensureProviderModels(provider.id);
     }
