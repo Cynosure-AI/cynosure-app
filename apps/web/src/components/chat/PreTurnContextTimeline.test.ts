@@ -209,6 +209,28 @@ describe('PreTurnContextTimeline', () => {
     expect(includedTools.text()).toContain('read_document')
   })
 
+  test('shows the latest toolset selection once when routing runs twice', async () => {
+    const toolsets = ['TickNotes MCP', 'Built-In: Notifications', 'Built-In: Memory']
+    const selection = (timestamp: number) => ({
+      iteration: 0, taskId: 'tools', status: 'routing-tools', timestamp,
+      toolCalls: toolsets.map((name) => ({
+        name,
+        arguments: JSON.stringify({ type: 'toolset-router', namespaceId: name, selectionMethod: 'llm' }),
+      })),
+    })
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: { steps: [selection(100), selection(200)], isActive: false },
+      global,
+    })
+
+    expect(wrapper.get('.count-chip').text()).toBe('3 MCPs/toolsets')
+    const chips = wrapper.findAll('[aria-label="Auto tools selected results"] .collapsed-result-chip')
+    expect(chips.map((chip) => chip.text())).toEqual(toolsets)
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    expect(wrapper.findAll('.toolset-card')).toHaveLength(3)
+    expect(wrapper.findAll('[aria-label="Auto tools pipeline"] > li').length).toBeGreaterThan(1)
+  })
+
   test('lists all retained tools in the completion step without presenting them as auto-selected toolsets', async () => {
     const wrapper = mount(PreTurnContextTimeline, {
       props: {
