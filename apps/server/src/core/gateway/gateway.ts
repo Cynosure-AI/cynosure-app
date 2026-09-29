@@ -150,7 +150,9 @@ export class LLMGateway {
     }
 
     // Keep native provider metadata authoritative (OpenRouter is especially
-    // rich), then fill every missing field from the shared models.dev index.
+    // rich), then fill missing metadata from the shared models.dev index.
+    // Pricing is one quote: mixing its fields with another host's quote can
+    // show a rate that neither provider actually charges.
     // All selector types use this path, so favorites and ordinary rows receive
     // the same normalized metadata.
     await ensurePricingLoaded().catch(() => { /* pricing is best-effort */ })
@@ -164,7 +166,9 @@ export class LLMGateway {
         inputModalities: model.inputModalities?.length ? model.inputModalities : metadata.inputModalities,
         outputModalities: model.outputModalities?.length ? model.outputModalities : metadata.outputModalities,
         supportsToolCalls: model.supportsToolCalls ?? metadata.supportsToolCalls,
-        pricing: mergePricing(metadata.cost ? pricingFromCost(metadata.cost) : undefined, model.pricing)
+        pricing: model.pricing ?? (hasProviderPricingCatalog(provider.config.type)
+          ? undefined
+          : metadata.cost ? pricingFromCost(metadata.cost) : undefined)
       }
     })
   }
@@ -305,14 +309,16 @@ export class LLMGateway {
     if (!info.inputModalities?.length) info.inputModalities = metadata?.inputModalities
     if (!info.outputModalities?.length) info.outputModalities = metadata?.outputModalities
     info.supportsToolCalls ??= metadata?.supportsToolCalls
-    info.pricing = mergePricing(metadata?.cost ? pricingFromCost(metadata.cost) : undefined, info.pricing)
+    if (!info.pricing && !hasProviderPricingCatalog(provider.config.type)) {
+      info.pricing = metadata?.cost ? pricingFromCost(metadata.cost) : undefined
+    }
 
     if (info.pricing && (info.pricing.prompt != null || info.pricing.completion != null)) {
       info.cost = {
         input: (info.pricing.prompt ?? 0) * 1_000_000,
         output: (info.pricing.completion ?? 0) * 1_000_000
       }
-    } else {
+    } else if (!hasProviderPricingCatalog(provider.config.type)) {
       info.cost ??= metadata?.cost
     }
 
@@ -385,14 +391,8 @@ function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>[
   }
 }
 
-function mergePricing(fallback?: ModelPricing, native?: ModelPricing): ModelPricing | undefined {
-  if (!fallback && !native) return undefined
-  const skus = { ...fallback?.skus, ...native?.skus }
-  return {
-    ...fallback,
-    ...native,
-    ...(Object.keys(skus).length ? { skus } : {})
-  }
+function hasProviderPricingCatalog(type: LLMProviderConfig['type']): boolean {
+  return type === 'openrouter' || type === 'requesty'
 }
 
 // Singleton gateway instance

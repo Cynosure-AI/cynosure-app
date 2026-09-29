@@ -70,6 +70,25 @@ describe('LLMGateway model metadata enrichment', () => {
         expect(metadataMocks.getModelMetadata).toHaveBeenCalledWith('openai', 'gpt-test')
     })
 
+    test('does not mix OpenRouter pricing with an upstream models.dev quote', async () => {
+        const gateway = new LLMGateway()
+        const provider = {
+            config: { id: 'openrouter-1', type: 'openrouter' },
+            listModelItems: vi.fn().mockResolvedValue([
+                { id: 'deepseek/deepseek-v4.1-flash', pricing: { prompt: 0.00000015, completion: 0.0000006 } },
+                { id: 'partial-price', pricing: { prompt: 0.00000015 } },
+                { id: 'no-native-price' },
+            ]),
+        } as unknown as BaseLLMProvider
+        gateway.getAllProviders().set('openrouter-1', provider)
+
+        const result = await gateway.listModelItems('openrouter-1', 'llm')
+
+        expect(result[0].pricing).toEqual({ prompt: 0.00000015, completion: 0.0000006 })
+        expect(result[1].pricing).toEqual({ prompt: 0.00000015 })
+        expect(result[2].pricing).toBeUndefined()
+    })
+
     test('returns the same normalized pricing from single-model metadata', async () => {
         const gateway = new LLMGateway()
         const provider = {
@@ -87,6 +106,23 @@ describe('LLMGateway model metadata enrichment', () => {
             completion: 0.00001,
             inputCacheRead: 0.00000025,
         })
+    })
+
+    test('keeps native single-model pricing when models.dev has a different quote', async () => {
+        const gateway = new LLMGateway()
+        const provider = {
+            config: { id: 'openrouter-1', type: 'openrouter' },
+            getModelInfo: vi.fn().mockResolvedValue({
+                id: 'deepseek/deepseek-v4.1-flash',
+                pricing: { prompt: 0.00000015, completion: 0.0000006 },
+            }),
+        } as unknown as BaseLLMProvider
+        gateway.getAllProviders().set('openrouter-1', provider)
+
+        const result = await gateway.getModelInfo('deepseek/deepseek-v4.1-flash', 'openrouter-1')
+
+        expect(result.pricing).toEqual({ prompt: 0.00000015, completion: 0.0000006 })
+        expect(result.cost).toEqual({ input: 0.15, output: 0.6 })
     })
 
     test('does not cache an empty metadata response', async () => {

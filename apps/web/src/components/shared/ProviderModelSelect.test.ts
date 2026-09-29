@@ -95,6 +95,44 @@ describe('ProviderModelSelect favorites', () => {
     expect(matchingRows[0].text()).toContain('$2.50 / $10.00/M')
   })
 
+  test('shows the OpenRouter rate and refreshes it after the cache expires', async () => {
+    const now = vi.spyOn(Date, 'now')
+    now.mockReturnValue(1_000_000)
+    const store = useProviderStore()
+    store.listModelItems = vi.fn()
+      .mockResolvedValueOnce([{
+        id: 'deepseek/deepseek-v4.1-flash',
+        pricing: { prompt: 0.00000015, completion: 0.0000006 },
+      }])
+      .mockResolvedValueOnce([{
+        id: 'deepseek/deepseek-v4.1-flash',
+        pricing: { prompt: 0.00000015, completion: 0.0000005 },
+      }])
+
+    const wrapper = mount(ProviderModelSelect, {
+      props: {
+        providerId: 'openrouter-pricing', modelValue: '',
+        providers: [{ id: 'openrouter-pricing', name: 'OpenRouter', type: 'openrouter', defaultModel: '' }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+    expect(wrapper.findAll('[role="option"]')
+      .find((row) => row.text().includes('deepseek-v4.1-flash'))?.attributes('title'))
+      .toContain('Input / Output: $0.15 / $0.6 per 1M tokens')
+
+    await wrapper.get('[role="combobox"]').trigger('click')
+    now.mockReturnValue(1_000_000 + 5 * 60 * 1000)
+    await wrapper.get('[role="combobox"]').trigger('click')
+    await flushPromises()
+    expect(store.listModelItems).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('[role="option"]')
+      .find((row) => row.text().includes('deepseek-v4.1-flash'))?.attributes('title'))
+      .toContain('Input / Output: $0.15 / $0.5 per 1M tokens')
+    now.mockRestore()
+  })
+
   test('persists the actual media model type from a combined selector', async () => {
     const store = useProviderStore()
     store.listModelItems = vi.fn().mockImplementation(async (_providerId, type) =>

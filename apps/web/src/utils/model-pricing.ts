@@ -63,6 +63,10 @@ function shouldShowTokenPair(model: PricingModel, prompt?: number, completion?: 
   return true;
 }
 
+function formatTokenRate(value?: number): string {
+  return value == null ? "—" : formatMoney(value * 1_000_000);
+}
+
 export function formatSkuCost(key: string, value: number): string {
   if (key.startsWith("cents_per_")) {
     return `${formatMoney(value / 100)} / ${humanizePricingKey(key.replace(/^cents_per_/, "")).toLowerCase()}`;
@@ -127,7 +131,7 @@ export function modelPricingSummary(model: PricingModel): PricingSummary {
     const label = isTranscriptionModel(model) ? "Audio tokens" : "Input / Output";
     tokenRows.push({
       label,
-      value: `${formatMoney((prompt ?? 0) * 1_000_000)} / ${formatMoney((completion ?? 0) * 1_000_000)} per 1M tokens`,
+      value: `${formatTokenRate(prompt)} / ${formatTokenRate(completion)} per 1M tokens`,
     });
   }
 
@@ -163,7 +167,7 @@ export function modelPricingSummary(model: PricingModel): PricingSummary {
     if (tier.prompt != null || tier.completion != null) {
       extraRows.push({
         label: threshold,
-        value: `${formatMoney((tier.prompt ?? 0) * 1_000_000)} / ${formatMoney((tier.completion ?? 0) * 1_000_000)} per 1M tokens`,
+        value: `${formatTokenRate(tier.prompt)} / ${formatTokenRate(tier.completion)} per 1M tokens`,
       });
     }
   }
