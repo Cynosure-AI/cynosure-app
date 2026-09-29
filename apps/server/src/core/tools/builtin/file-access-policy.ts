@@ -96,6 +96,7 @@ export async function requestFileAccess(input: {
     toolName: string
     conversationId: string
     signal?: AbortSignal
+    toolArguments?: Record<string, unknown>
 }): Promise<boolean> {
     const taskId = randomUUID()
     const eventBus = getEventBus()
@@ -115,7 +116,7 @@ export async function requestFileAccess(input: {
             toolCalls: [{
                 id: taskId,
                 type: 'function',
-                function: { name: 'file_access_permission', arguments: JSON.stringify({ path: input.path, folder: input.folder, tool: input.toolName }) },
+                function: { name: 'file_access_permission', arguments: JSON.stringify(input.toolArguments ?? { path: input.path, folder: input.folder, tool: input.toolName }) },
                 fileAccess: { path: input.path, folder: input.folder, toolName: input.toolName },
             }],
             resolve: (result: { approved: boolean }) => {
@@ -128,23 +129,17 @@ export async function requestFileAccess(input: {
     return approved
 }
 
-/** Ask for missing folder permissions before the file tool's execution timer starts. */
-export async function preflightFileToolAccess(input: {
-    toolName: string
-    arguments: Record<string, unknown>
-    conversationId: string
-    signal?: AbortSignal
-}): Promise<void> {
-    const args = input.arguments
+/** Collect the paths a native file tool will access. */
+export function getFileToolPaths(toolName: string, args: Record<string, unknown>): string[] {
     const paths: string[] = []
     const addPath = (value: unknown) => { if (typeof value === 'string') paths.push(value) }
-    if (input.toolName === 'file_read') {
+    if (toolName === 'file_read') {
         addPath(args.path)
         if (Array.isArray(args.paths)) args.paths.forEach(addPath)
-    } else if (input.toolName === 'file_move' || input.toolName === 'directory_merge') {
+    } else if (toolName === 'file_move' || toolName === 'file_merge' || toolName === 'directory_merge') {
         addPath(args.source)
         addPath(args.destination)
-    } else if (input.toolName === 'file_archive') {
+    } else if (toolName === 'file_archive') {
         if (args.action === 'create') {
             if (Array.isArray(args.filePaths)) args.filePaths.forEach(addPath)
             addPath(args.destination)
@@ -159,6 +154,28 @@ export async function preflightFileToolAccess(input: {
     } else {
         addPath(args.path)
     }
+    return paths
+}
+
+/** True when the folder card will approve this specific invocation. */
+export async function fileToolNeedsFolderApproval(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+    for (const requestedPath of getFileToolPaths(toolName, args)) {
+        try { await resolveFileAccessPath(requestedPath) }
+        catch (error) {
+            if (error instanceof FileAccessDeniedError) return true
+        }
+    }
+    return false
+}
+
+/** Ask for missing folder permissions before the file tool's execution timer starts. */
+export async function preflightFileToolAccess(input: {
+    toolName: string
+    arguments: Record<string, unknown>
+    conversationId: string
+    signal?: AbortSignal
+}): Promise<void> {
+    const paths = getFileToolPaths(input.toolName, input.arguments)
     for (const requestedPath of paths) {
         input.signal?.throwIfAborted()
         const prompted = new Set<string>()
@@ -176,6 +193,7 @@ export async function preflightFileToolAccess(input: {
                     toolName: input.toolName,
                     conversationId: input.conversationId,
                     signal: input.signal,
+                    toolArguments: input.arguments,
                 })
                 if (!approved) throw new Error(`Access to ${error.suggestedFolder} was denied by the user.`)
             }
