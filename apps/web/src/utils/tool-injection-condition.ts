@@ -1,6 +1,6 @@
 import { isBuiltInNamespaceId } from './internal-tools'
 
-/** Human-readable explanation of when a tool is added to a chat turn. */
+/** Human-readable explanation for tools with a specific injection condition; empty for regular tools. */
 export function toolInjectionCondition(toolName: string, namespaceId: string): string {
     if (!isBuiltInNamespaceId(namespaceId)) return 'MCP'
     if (toolName.startsWith('memory_') || toolName.startsWith('knowledge_')) return 'Memory enabled + folder available'
@@ -9,5 +9,5 @@ export function toolInjectionCondition(toolName: string, namespaceId: string): s
     if (toolName === 'expand_available_toolset') return 'Auto-tool routing enabled'
     if (toolName === 'spawn_subagent' || toolName === 'continue_subagent') return 'Sub-agent assigned'
     if (toolName === 'manage_mcp') return 'Selected explicitly'
-    return 'Selected or auto-routed'
+    return ''
 }
