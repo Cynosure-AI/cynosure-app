@@ -99,10 +99,8 @@ describe('automatic tool routing', () => {
             preferredToolNames: new Set(['preferred']),
         })
 
-        expect(result.map(({ name }) => name)).toEqual(['preferred', 'used', 'optional_b'])
-        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({
-            allTools: [preferred, used, optionalB],
-        }))
+        expect(result.map(({ name }) => name)).toEqual(['preferred', 'used', 'optional_b', 'expand_available_toolset'])
+        expect(routerMocks.route).not.toHaveBeenCalled()
         expect(gateway.complete).toHaveBeenCalledWith(
             expect.objectContaining({
                 thinkingEnabled: false,
@@ -132,8 +130,8 @@ describe('automatic tool routing', () => {
             userQuery: 'unrelated request',
             gateway,
             tools: [tool('optional')],
-        })).resolves.toEqual([])
-        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({ allTools: [] }))
+        })).resolves.toEqual([expect.objectContaining({ name: 'expand_available_toolset' })])
+        expect(routerMocks.route).not.toHaveBeenCalled()
         expect(events[0]?.toolCalls).toEqual([{
             name: 'No toolsets selected',
             arguments: JSON.stringify({
@@ -198,14 +196,13 @@ describe('automatic tool routing', () => {
             tools,
         })
 
-        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({
-            availableTools: tools,
-        }))
+        expect(routerMocks.route).not.toHaveBeenCalled()
     })
 
-    test('automatically includes complete small toolsets within the schema token budget', () => {
+    test('automatically includes complete small toolsets based on count alone', () => {
         const small = Array.from({ length: 9 }, (_, index) => namespacedTool(`small_${index}`, 'mcp:small', 'Small MCP'))
         const large = Array.from({ length: 10 }, (_, index) => namespacedTool(`large_${index}`, 'mcp:large', 'Large MCP'))
+        small[0].description = 'Large schema '.repeat(3_000)
 
         expect([...collectAutoIncludedToolNames(
             [...small, ...large],
@@ -213,22 +210,18 @@ describe('automatic tool routing', () => {
         )]).toEqual(small.map(({ name }) => name))
     })
 
-    test('still ranks every automatically included tool so match scores remain visible', async () => {
+    test('includes a small selected toolset without semantic ranking', async () => {
         const tools = [
             namespacedTool('browser_snapshot', 'mcp:browser', 'Browser MCP'),
             namespacedTool('browser_find', 'mcp:browser', 'Browser MCP'),
         ]
-        routerMocks.route.mockImplementation(async ({ allTools }) => allTools.map((candidate: RegistryAwareToolDefinition, index: number) => ({
-            ...candidate,
-            routerScore: .9 - index / 10,
-        })))
         const gateway = { complete: vi.fn().mockResolvedValue({
             toolCalls: [{ function: { name: 'select_toolsets', arguments: JSON.stringify({ namespaceIds: ['mcp:browser'] }) } }],
         }) } as unknown as LLMGateway
         const events: Array<Record<string, unknown>> = []
         captureRoutingEvents(events)
 
-        await applyAutoToolRouting({
+        const result = await applyAutoToolRouting({
             enabled: true,
             conversationId: 'conversation-scored-small-set',
             userQuery: 'inspect the browser',
@@ -236,11 +229,29 @@ describe('automatic tool routing', () => {
             tools,
         })
 
-        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({
-            preferredToolNames: undefined,
-            requiredScoredToolNames: new Set(['browser_snapshot', 'browser_find']),
-        }))
+        expect(routerMocks.route).not.toHaveBeenCalled()
+        expect(result.map(({ name }) => name)).toEqual(['browser_snapshot', 'browser_find', 'expand_available_toolset'])
         const finalCalls = events.at(-1)!.toolCalls as Array<{ arguments: string }>
-        expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).routerScore)).toEqual([.9, .8])
+        expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).selectionMethod)).toEqual(['automatic', 'automatic'])
+    })
+
+    test('ranks only larger selected toolsets when small and large toolsets are selected together', async () => {
+        const small = [namespacedTool('small_a', 'mcp:small', 'Small'), namespacedTool('small_b', 'mcp:small', 'Small')]
+        const large = Array.from({ length: 10 }, (_, index) => namespacedTool(`large_${index}`, 'mcp:large', 'Large'))
+        routerMocks.route.mockImplementation(async ({ allTools }) => [allTools[0]])
+        const gateway = { complete: vi.fn().mockResolvedValue({
+            toolCalls: [{ function: { name: 'select_toolsets', arguments: JSON.stringify({ namespaceIds: ['mcp:small', 'mcp:large'] }) } }],
+        }) } as unknown as LLMGateway
+
+        const result = await applyAutoToolRouting({
+            enabled: true,
+            conversationId: 'conversation-mixed',
+            userQuery: 'use both services',
+            gateway,
+            tools: [...small, ...large],
+        })
+
+        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({ allTools: large }))
+        expect(result.map(({ name }) => name)).toEqual(['small_a', 'small_b', 'large_0', 'expand_available_toolset'])
     })
 })
