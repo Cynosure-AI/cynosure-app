@@ -364,6 +364,7 @@ watch(
           <InputBar
             ref="inputBarRef"
             :floating="showCenteredComposer"
+            class="order-2 md:order-0"
           >
             <template #leading-actions>
               <div
@@ -432,7 +433,7 @@ watch(
 
           <div
             v-if="showCenteredComposer && (onboardingPills.length || latestAgentChats.length)"
-            class="recent-agent-chats mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-2 px-4 pb-3"
+            class="recent-agent-chats order-1 md:order-0 mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-2 px-4 pb-3"
             aria-label="Getting started and recent chats"
           >
             <RouterLink
