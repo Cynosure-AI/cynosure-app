@@ -424,7 +424,10 @@ watch(
                     :title="hiddenMcpTitle"
                     :aria-label="`${hiddenMcpNamespaces.length} more MCPs: ${hiddenMcpTitle}`"
                   >
-                    (+{{ hiddenMcpNamespaces.length }})
+                    +{{ hiddenMcpNamespaces.length }} <Icon
+                      icon="lucide:wrench"
+                      class="ml-1"
+                    />
                   </button>
                 </TransitionGroup>
               </div>
