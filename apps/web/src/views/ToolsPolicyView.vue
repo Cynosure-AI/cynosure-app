@@ -142,9 +142,8 @@ function isAutoApproved(name: string): boolean {
 }
 
 function toolApprovalLabel(tool: ToolInfo): string {
-  return defaultApprovalNames.value.has(approvalName(tool))
-    ? 'default'
-    : isAutoApproved(approvalName(tool)) ? 'allow' : 'ask'
+  if (defaultApprovalNames.value.has(approvalName(tool))) return 'auto'
+  return isAutoApproved(approvalName(tool)) ? 'allow' : 'ask'
 }
 
 function namespaceAutoApprovedCount(group: NamespaceGroup): number {
@@ -186,9 +185,9 @@ function markIconBroken(namespaceId: string): void {
 
 function stateIcon(state: ApprovalState): string {
   if (state === 'all') return 'lucide:shield-check'
-  if (state === 'defaults') return 'lucide:rotate-ccw'
+  if (state === 'defaults') return 'lucide:shield'
   if (state === 'none') return 'lucide:shield-alert'
-  return 'lucide:shield'
+  return 'lucide:shield-question'
 }
 
 function stateClass(state: ApprovalState): string {
@@ -473,11 +472,11 @@ onMounted(() => {
               v-if="isExpanded(group.id)"
               class="border-t border-theme-800 bg-theme-950/55 px-5 py-4"
             >
-              <div class="space-y-3">
+              <div class="divide-y divide-theme-800/70 overflow-hidden rounded-lg border border-theme-800 bg-theme-900/40">
                 <div
                   v-for="tool in group.tools"
                   :key="tool.key"
-                  class="flex items-center justify-between gap-3 rounded-lg border border-theme-800 bg-theme-900/55 p-3"
+                  class="flex items-center justify-between gap-3 p-3 hover:bg-theme-800/30"
                 >
                   <HoverTooltip
                     :block="true"
@@ -490,12 +489,15 @@ onMounted(() => {
                           class="font-mono text-sm"
                           :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-fg' : 'text-theme-200'"
                         >{{ displayName(tool) }}</span>
-                        <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">
+                        <span
+                          v-if="toolInjectionCondition(tool.name, tool.namespace.id)"
+                          class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted"
+                        >
                           {{ toolInjectionCondition(tool.name, tool.namespace.id) }}
                         </span>
                         <ToolBehaviorBadges :annotations="tool.annotations" />
                       </div>
-                      <p class="mt-1 text-xs leading-relaxed text-ink-muted">
+                      <p class="mt-0.5 text-xs leading-snug text-ink-muted">
                         {{ displayDescription(tool) }}
                       </p>
                     </div>
