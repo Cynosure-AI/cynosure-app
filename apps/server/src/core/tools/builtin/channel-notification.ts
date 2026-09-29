@@ -13,12 +13,16 @@ export interface ChannelNotificationToolOptions {
 export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions): ToolDefinition {
     const staticChannels = opts.availableChannels
     const resolveChannels = (): ChannelType[] => staticChannels ?? getAvailableNotificationChannels()
+    const availableChannels = resolveChannels()
+    const channelDescription = availableChannels.length
+        ? `Available configured channels: ${availableChannels.join(', ')}.`
+        : 'Available configured channels: none. No channel is currently enabled, connected, and has a known recipient.'
     return {
         name: 'notify_user_on_channel',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
         description:
-            'Send an immediate message to the user through an enabled messaging channel. The channel must be connected and have a configured or previously active recipient.',
+            `Send an immediate message to the user through an enabled messaging channel. The channel must be connected and have a configured or previously active recipient. ${channelDescription}`,
         parameters: {
             type: 'object',
             properties: {
@@ -28,8 +32,8 @@ export function makeChannelNotificationTool(opts: ChannelNotificationToolOptions
                     // (Ajv rejects the whole schema). When no channel is currently
                     // available, fall back to all known channel types so the schema
                     // stays valid — execute() enforces the real availability check.
-                    enum: resolveChannels().length ? resolveChannels() : (['telegram', 'discord', 'slack'] as ChannelType[]),
-                    description: 'Available configured messaging channel to use. If none of these are actually configured/connected, the tool will return an error explaining what is missing.'
+                    enum: availableChannels.length ? availableChannels : (['telegram', 'discord', 'slack'] as ChannelType[]),
+                    description: `${channelDescription} Availability is checked again when sending; unavailable channels will return an error.`
                 },
                 message: {
                     type: 'string',
