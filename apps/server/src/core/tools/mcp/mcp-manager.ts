@@ -168,7 +168,7 @@ export class McpManager {
         const ver = client.getServerVersion()
         const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
         const displayConfig = { ...config, name: serverInfo?.title || config.name }
-        const { tools: mcpTools } = await client.listTools()
+        const mcpTools = await this.listAllTools(client)
         const slug = this.sanitiseName(displayConfig.name)
         const tools = this.buildToolDefinitions(mcpTools, client, displayConfig)
 
@@ -197,7 +197,7 @@ export class McpManager {
         const ver = pending.client.getServerVersion()
         const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
         const displayConfig = { ...pending.config, name: serverInfo?.title || pending.config.name }
-        const { tools: mcpTools } = await pending.client.listTools()
+        const mcpTools = await this.listAllTools(pending.client)
         const slug = this.sanitiseName(displayConfig.name)
         const tools = this.buildToolDefinitions(mcpTools, pending.client, displayConfig)
 
@@ -308,12 +308,37 @@ export class McpManager {
         const ver = client.getServerVersion()
         const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
         const displayConfig = { ...config, name: serverInfo?.title || config.name }
-        const { tools: mcpTools } = await client.listTools()
+        const mcpTools = await this.listAllTools(client)
         const slug = this.sanitiseName(displayConfig.name)
         const tools = this.buildToolDefinitions(mcpTools, client, displayConfig)
 
         this.connections.set(config.id, { client, transport, config: displayConfig, tools, slug, serverInfo })
         return tools
+    }
+
+    /** Fetch the complete catalogue before publishing a connection to consumers. */
+    private async listAllTools(client: Client): Promise<McpTool[]> {
+        const tools = new Map<string, McpTool>()
+        const seenCursors = new Set<string>()
+        let cursor: string | undefined
+        try {
+            do {
+                const page = cursor === undefined
+                    ? await client.listTools()
+                    : await client.listTools({ cursor })
+                for (const tool of page.tools) tools.set(tool.name, tool)
+                cursor = page.nextCursor
+                if (cursor !== undefined) {
+                    if (seenCursors.has(cursor)) throw new Error('MCP tool pagination returned a repeated cursor')
+                    seenCursors.add(cursor)
+                }
+            } while (cursor !== undefined)
+        } catch (error) {
+            // Discovery failed before the connection was stored; do not leak it.
+            try { await client.close() } catch { /* preserve the discovery error */ }
+            throw error
+        }
+        return [...tools.values()]
     }
 
     /** Build ToolDefinition wrappers from raw MCP tool descriptors. */
@@ -462,7 +487,7 @@ export class McpManager {
             const v = pending.client.getServerVersion()
             const serverInfo = v ? { title: v.title, description: v.description, websiteUrl: v.websiteUrl, icons: v.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
             const displayConfig = { ...pending.config, name: serverInfo?.title || pending.config.name }
-            const { tools: mcpTools } = await pending.client.listTools()
+            const mcpTools = await this.listAllTools(pending.client)
             const slug = this.sanitiseName(displayConfig.name)
             const tools = this.buildToolDefinitions(mcpTools, pending.client, displayConfig)
 
