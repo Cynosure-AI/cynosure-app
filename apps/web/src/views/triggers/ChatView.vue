@@ -371,60 +371,60 @@ watch(
                 class="relative min-w-0 flex-1 overflow-hidden"
               >
                 <TransitionGroup
-                tag="div"
-                appear
-                enter-active-class="transition duration-200 ease-out"
-                enter-from-class="translate-y-1 opacity-0"
-                enter-to-class="translate-y-0 opacity-100"
-                leave-active-class="transition duration-150 ease-in"
-                leave-from-class="translate-y-0 opacity-100"
-                leave-to-class="translate-y-1 opacity-0"
-                move-class="transition-transform duration-200"
-                class="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden"
-                aria-label="Selected MCPs"
-              >
-                <div
-                  v-for="(mcp, index) in selectedMcpNamespaces"
-                  :key="mcp.id"
-                  data-mcp-chip
-                  :class="{ 'invisible absolute': index >= visibleMcpCount }"
-                  :title="mcp.name"
-                  :style="{ transitionDelay: `${index * 50}ms` }"
-                  class="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-theme-200 shadow-sm"
+                  tag="div"
+                  appear
+                  enter-active-class="transition duration-200 ease-out"
+                  enter-from-class="translate-y-1 opacity-0"
+                  enter-to-class="translate-y-0 opacity-100"
+                  leave-active-class="transition duration-150 ease-in"
+                  leave-from-class="translate-y-0 opacity-100"
+                  leave-to-class="translate-y-1 opacity-0"
+                  move-class="transition-transform duration-200"
+                  class="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden"
+                  aria-label="Selected MCPs"
                 >
-                  <img
-                    v-if="mcp.iconUrl"
-                    :src="mcp.iconUrl"
-                    :alt="mcp.name"
-                    class="h-4 w-4 shrink-0 rounded-full object-cover"
+                  <div
+                    v-for="(mcp, index) in selectedMcpNamespaces"
+                    :key="mcp.id"
+                    data-mcp-chip
+                    :class="{ 'invisible absolute': index >= visibleMcpCount }"
+                    :title="mcp.name"
+                    :style="{ transitionDelay: `${index * 50}ms` }"
+                    class="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-theme-200 shadow-sm"
                   >
-                  <Icon
-                    v-else
-                    :icon="getToolNamespaceIcon(mcp.id)"
-                    class="h-4 w-4 shrink-0 text-ink-secondary"
-                  />
-                  <span class="max-w-32 truncate">{{ mcp.name }}</span>
-                  <button
-                    type="button"
-                    class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-                    :aria-label="`Remove ${mcp.name} tools from selection`"
-                    @click="removeMcpSelection(mcp.id)"
-                  >
+                    <img
+                      v-if="mcp.iconUrl"
+                      :src="mcp.iconUrl"
+                      :alt="mcp.name"
+                      class="h-4 w-4 shrink-0 rounded-full object-cover"
+                    >
                     <Icon
-                      icon="lucide:x"
-                      class="h-3 w-3"
+                      v-else
+                      :icon="getToolNamespaceIcon(mcp.id)"
+                      class="h-4 w-4 shrink-0 text-ink-secondary"
                     />
+                    <span class="max-w-32 truncate">{{ mcp.name }}</span>
+                    <button
+                      type="button"
+                      class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                      :aria-label="`Remove ${mcp.name} tools from selection`"
+                      @click="removeMcpSelection(mcp.id)"
+                    >
+                      <Icon
+                        icon="lucide:x"
+                        class="h-3 w-3"
+                      />
+                    </button>
+                  </div>
+                  <button
+                    v-if="hiddenMcpNamespaces.length"
+                    type="button"
+                    class="inline-flex shrink-0 items-center rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-ink-secondary hover:text-theme-100"
+                    :title="hiddenMcpTitle"
+                    :aria-label="`${hiddenMcpNamespaces.length} more MCPs: ${hiddenMcpTitle}`"
+                  >
+                    (+{{ hiddenMcpNamespaces.length }})
                   </button>
-                </div>
-                <button
-                  v-if="hiddenMcpNamespaces.length"
-                  type="button"
-                  class="inline-flex shrink-0 items-center rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-ink-secondary hover:text-theme-100"
-                  :title="hiddenMcpTitle"
-                  :aria-label="`${hiddenMcpNamespaces.length} more MCPs: ${hiddenMcpTitle}`"
-                >
-                  (+{{ hiddenMcpNamespaces.length }})
-                </button>
                 </TransitionGroup>
               </div>
             </template>
