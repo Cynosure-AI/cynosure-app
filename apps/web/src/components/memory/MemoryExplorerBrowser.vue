@@ -189,7 +189,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       >
       <Icon
         :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
-        class="mb-3 h-12 w-12"
+        class="mb-3 h-8 w-8"
         :class="folder.autoMemoryExcluded ? 'text-status-danger' : 'text-status-warning'"
       />
       <span
@@ -234,7 +234,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       >
       <Icon
         :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-        class="mb-3 h-12 w-12"
+        class="mb-3 h-8 w-8"
         :class="file.supported ? 'text-ink-secondary' : 'text-ink-faint'"
       />
       <span
