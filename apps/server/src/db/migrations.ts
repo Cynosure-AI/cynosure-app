@@ -267,6 +267,52 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 14,
+        description: 'Merge user notification tools with app as the default channel',
+        up: (db) => {
+            const oldNames = ['notify_user_in_app', 'notify_user_on_channel', 'create_app_notification']
+            const oldKeys = new Set(oldNames.flatMap(name => [name, `builtin::${name}`, `builtin:notifications::${name}`]))
+            const renameTools = (tools: unknown[]): unknown[] => [...new Set(tools.map(tool =>
+                typeof tool === 'string' && oldKeys.has(tool) ? 'builtin:notifications::notify_user' : tool,
+            ))]
+            for (const { table, column } of [
+                { table: 'agents', column: 'tools_json' },
+                { table: 'conversations', column: 'execution_config_json' },
+                { table: 'cron_jobs', column: 'execution_config_json' },
+            ]) {
+                const rows = db.prepare(`SELECT rowid, ${column} AS value FROM ${table}`).all() as Array<{ rowid: number; value: string }>
+                const update = db.prepare(`UPDATE ${table} SET ${column} = ? WHERE rowid = ?`)
+                for (const row of rows) {
+                    if (!row.value || !oldNames.some(name => row.value.includes(name))) continue
+                    const value = JSON.parse(row.value) as unknown
+                    if (column === 'tools_json' && Array.isArray(value)) {
+                        update.run(JSON.stringify(renameTools(value)), row.rowid)
+                    } else if (value && typeof value === 'object' && 'allowedTools' in value && Array.isArray(value.allowedTools)) {
+                        value.allowedTools = renameTools(value.allowedTools)
+                        update.run(JSON.stringify(value), row.rowid)
+                    }
+                }
+            }
+            for (const prefix of ['', 'built_in_notifications__']) {
+                const approval = db.prepare('SELECT auto_approve FROM tool_approvals WHERE tool_name = ?')
+                const app = approval.get(`${prefix}notify_user_in_app`) as { auto_approve: number } | undefined
+                const channel = approval.get(`${prefix}notify_user_on_channel`) as { auto_approve: number } | undefined
+                // An approval for app-only delivery must not silently authorize messaging channels.
+                if (app || channel) {
+                    db.prepare('INSERT OR IGNORE INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)')
+                        .run(`${prefix}notify_user`, channel?.auto_approve === 1 && app?.auto_approve !== 0 ? 1 : 0)
+                }
+                db.prepare('INSERT OR IGNORE INTO session_tool_approvals (conversation_id, tool_name, created_at) SELECT conversation_id, ?, created_at FROM session_tool_approvals WHERE tool_name = ?')
+                    .run(`${prefix}notify_user`, `${prefix}notify_user_on_channel`)
+                for (const name of oldNames) {
+                    db.prepare('DELETE FROM tool_approvals WHERE tool_name = ?').run(`${prefix}${name}`)
+                    db.prepare('DELETE FROM session_tool_approvals WHERE tool_name = ?').run(`${prefix}${name}`)
+                }
+            }
+            for (const name of oldNames) db.prepare('DELETE FROM tool_router_tool_embeddings WHERE tool_name = ?').run(name)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

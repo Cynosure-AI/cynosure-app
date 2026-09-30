@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { BUILTIN_TOOL_NAMES, getBuiltInMemoryToolKeys, getBuiltInNamespace, getBuiltInToolKey } from './built-in-tools.js'
 
 describe('built-in tool categories', () => {
+    it('exposes one unified notification tool', () => {
+        expect(BUILTIN_TOOL_NAMES).toContain('notify_user')
+        expect(BUILTIN_TOOL_NAMES).not.toContain('notify_user_in_app')
+        expect(BUILTIN_TOOL_NAMES).not.toContain('notify_user_on_channel')
+    })
     it.each([
         'knowledge_assert', 'knowledge_delete',
         'knowledge_entity_merge',
@@ -14,8 +19,7 @@ describe('built-in tool categories', () => {
         ['memory_search', 'builtin:memory', 'Built-In: Memory'],
         ['knowledge_assert', 'builtin:memory', 'Built-In: Memory'],
         ['schedule_create', 'builtin:scheduling', 'Built-In: Scheduling'],
-        ['notify_user_in_app', 'builtin:notifications', 'Built-In: Notifications'],
-        ['notify_user_on_channel', 'builtin:notifications', 'Built-In: Notifications'],
+        ['notify_user', 'builtin:notifications', 'Built-In: Notifications'],
         ['manage_mcp', 'builtin:utility', 'Built-In: Utility'],
         ['attachment_search', 'builtin:utility', 'Built-In: Utility'],
         ['spawn_subagent', 'builtin:utility', 'Built-In: Utility'],

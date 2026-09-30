@@ -24,7 +24,7 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('execution_steps')
@@ -117,7 +117,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -129,7 +129,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
         db.close()
     })
 
@@ -154,13 +154,41 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
         expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
-            .toContain('builtin:notifications::notify_user_in_app')
+            .toContain('builtin:notifications::notify_user')
         expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
-            .toContain('builtin:notifications::notify_user_in_app')
+            .toContain('builtin:notifications::notify_user')
         expect((db.prepare("SELECT execution_config_json FROM cron_jobs WHERE id = 'cron-1'").get() as { execution_config_json: string }).execution_config_json)
-            .toContain('builtin:notifications::notify_user_in_app')
+            .toContain('builtin:notifications::notify_user')
+        db.close()
+    })
+
+    test('merges notification selections, deduplicates them, and preserves unrelated config', () => {
+        const db = memoryDb()
+        applySchemaMigrations(db)
+        db.pragma('user_version = 13')
+        const app = 'builtin:notifications::notify_user_in_app'
+        const channel = 'builtin:notifications::notify_user_on_channel'
+        db.prepare('INSERT INTO agents (id, name, tools_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+            .run('agent', 'Agent', JSON.stringify([app, channel, 'builtin:utility::manage_mcp']), 1, 1)
+        const config = { allowedTools: [channel, app], note: 'notify_user_in_app is mentioned here' }
+        db.prepare('INSERT INTO conversations (id, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?)')
+            .run('chat', JSON.stringify(config), 1, 1)
+        db.prepare('INSERT INTO cron_jobs (id, agent_id, schedule, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('cron', 'agent', '* * * * *', JSON.stringify(config), 1, 1)
+        db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('notify_user_in_app', 1)
+        db.prepare('INSERT INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)')
+            .run('chat', 'notify_user_in_app', 1)
+        expect(applySchemaMigrations(db).applied).toEqual([14])
+        const agent = db.prepare('SELECT tools_json FROM agents').get() as { tools_json: string }
+        expect(JSON.parse(agent.tools_json)).toEqual(['builtin:notifications::notify_user', 'builtin:utility::manage_mcp'])
+        for (const table of ['conversations', 'cron_jobs']) {
+            const row = db.prepare(`SELECT execution_config_json FROM ${table}`).get() as { execution_config_json: string }
+            expect(JSON.parse(row.execution_config_json)).toEqual({ ...config, allowedTools: ['builtin:notifications::notify_user'] })
+        }
+        expect(db.prepare('SELECT * FROM tool_approvals').all()).toEqual([{ tool_name: 'notify_user', auto_approve: 0 }])
+        expect(db.prepare('SELECT * FROM session_tool_approvals').all()).toEqual([])
         db.close()
     })
 
@@ -179,7 +207,7 @@ describe('schema migrations', () => {
         db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('built_in_files__file_create_directory', 0)
         db.prepare('INSERT INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)').run('conversation-1', 'file_merge', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([13])
+        expect(applySchemaMigrations(db).applied).toEqual([13, 14])
         const agent = db.prepare('SELECT tools_json FROM agents WHERE id = ?').get('agent-1') as { tools_json: string }
         expect(JSON.parse(agent.tools_json)).toEqual([
             'builtin:files::directory_list', 'builtin:files::directory_create', 'builtin:files::directory_merge',
@@ -207,7 +235,7 @@ describe('schema migrations', () => {
         insert.run('archive-child', '2024', '/memory/Archive/2024', now)
         insert.run('ordinary', 'Projects', '/memory/Projects', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12, 13])
+        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14])
         const rows = db.prepare('SELECT id, auto_memory_excluded FROM memory_folders ORDER BY id').all() as Array<{
             id: string
             auto_memory_excluded: number
