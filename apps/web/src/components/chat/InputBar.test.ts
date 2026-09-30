@@ -60,6 +60,11 @@ describe('InputBar drafts', () => {
     chatStore.sendMessage.mockResolvedValue()
     chatStore.queueMessage.mockReset()
     chatStore.queueMessage.mockResolvedValue()
+    chatStore.createConversation.mockReset()
+    chatStore.createConversation.mockImplementation(async () => {
+      chatStore.activeConversationId = 'conversation-1'
+      return 'conversation-1'
+    })
     vi.spyOn(api.chat, 'listStagedAttachments').mockResolvedValue([])
   })
 
@@ -116,6 +121,19 @@ describe('InputBar drafts', () => {
     expect(chatStore.sendMessage).toHaveBeenCalledWith('Send this', undefined, undefined, undefined, undefined)
     expect(localStorage.getItem(draftKey)).toBeNull()
     expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('')
+  })
+
+  test('loads the separate saved draft when navigating from a new chat to an existing conversation', async () => {
+    chatStore.activeConversationId = null
+    localStorage.setItem(`${SK_CHAT_DRAFT_PREFIX}conversation:conversation-1`, 'Existing conversation draft')
+    const wrapper = mountInputBar()
+    await wrapper.get('textarea').setValue('New chat draft')
+
+    chatStore.activeConversationId = 'conversation-1'
+    await flushPromises()
+
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('Existing conversation draft')
+    expect(localStorage.getItem(`${SK_CHAT_DRAFT_PREFIX}new:agent-1`)).toBe('New chat draft')
   })
 
   test('sends selected video settings with the message', async () => {
@@ -250,6 +268,50 @@ describe('InputBar drafts', () => {
     expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(true)
 
     stage.mockRestore()
+  })
+
+  test('preserves the new-chat draft and attachments when uploading creates a conversation', async () => {
+    chatStore.activeConversationId = null
+    let finish!: (value: Awaited<ReturnType<typeof api.chat.stageAttachment>>) => void
+    const stage = vi.spyOn(api.chat, 'stageAttachment').mockReturnValue(new Promise(resolve => { finish = resolve }))
+    let progress!: Parameters<typeof api.chat.onAttachmentStageProgress>[0]
+    vi.spyOn(api.chat, 'onAttachmentStageProgress').mockImplementation(callback => {
+      progress = callback
+      return () => {}
+    })
+    const wrapper = mountInputBar()
+    await wrapper.get('textarea').setValue('Read this document and summarize it')
+
+    wrapper.vm.processFiles([new File(['notes'], 'notes.txt', { type: 'text/plain' })])
+    await vi.waitFor(() => expect(stage).toHaveBeenCalled())
+    await flushPromises()
+
+    expect(chatStore.createConversation).toHaveBeenCalledTimes(1)
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('Read this document and summarize it')
+    expect(wrapper.text()).toContain('notes.txt')
+    expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(false)
+    expect(localStorage.getItem(`${SK_CHAT_DRAFT_PREFIX}new:agent-1`)).toBeNull()
+    expect(localStorage.getItem(`${SK_CHAT_DRAFT_PREFIX}conversation:conversation-1`)).toBe('Read this document and summarize it')
+
+    const staged = {
+      id: 'staged-new-chat', conversationId: 'conversation-1', name: 'notes.txt',
+      status: 'processing' as const, progressCurrent: 1, progressTotal: 2, chunkCount: 0,
+    }
+    finish(staged)
+    await flushPromises()
+    progress({ ...staged, status: 'ready', progressCurrent: 2, chunkCount: 2 })
+    await flushPromises()
+
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('Read this document and summarize it')
+    expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(true)
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(chatStore.sendMessage).toHaveBeenCalledWith(
+      'Read this document and summarize it', undefined,
+      [{ name: 'notes.txt', content: undefined, stagedId: 'staged-new-chat', existingAttachmentId: undefined }],
+      undefined, undefined,
+    )
+    wrapper.unmount()
   })
 
   test('restores server-side attachment indexing progress after remounting', async () => {
