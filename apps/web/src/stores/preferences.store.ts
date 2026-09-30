@@ -25,8 +25,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const userAvatarUrl = ref<string | null>(null)
     const userSettingsLoaded = ref(false)
     const userSettingsSaving = ref(false)
-    const theme = useLocalStorage<ThemeId>(SK_THEME, 'dark')
-    if (!THEME_IDS.has(theme.value)) theme.value = 'dark'
+    const theme = useLocalStorage<ThemeId>(SK_THEME, 'crimson')
+    if (!THEME_IDS.has(theme.value)) theme.value = 'crimson'
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const generateTitle = useLocalStorage(SK_GENERATE_TITLE, true)
     const quickResponses = useLocalStorage(SK_QUICK_RESPONSES, false)
@@ -77,7 +77,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     )
 
     function toggleTheme() {
-        theme.value = theme.value === 'dark' ? 'light' : 'dark'
+        theme.value = theme.value === 'light' ? 'crimson' : 'light'
     }
 
     async function loadUserSettings() {

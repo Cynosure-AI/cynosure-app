@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import { api } from '../api/client'
+import { useAgentHealthStore } from '../stores/agent-health.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
@@ -18,6 +18,7 @@ import type { AgentDefinition } from '../api/types'
 
 const agentDefs = useAgentDefinitionsStore()
 const agentStore = useAgentStore()
+const agentHealth = useAgentHealthStore()
 const providerStore = useProviderStore()
 const router = useRouter()
 const { logoUrl } = useProviderLogos()
@@ -41,13 +42,10 @@ const editSaving = ref(false)
 const dragReorderId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
 const brokenIcons = ref<Set<string>>(new Set())
-const availableMemoryFolderIds = ref<Set<string> | null>(null)
 
 onMounted(() => {
   void agentDefs.load()
-  void api.memoryFolders.list()
-    .then(folders => { availableMemoryFolderIds.value = new Set(folders.map(folder => folder.id)) })
-    .catch(() => undefined)
+  void agentHealth.loadMemoryFolders()
   if (servers.value.length === 0) void loadServers().catch(() => undefined)
 })
 
@@ -82,22 +80,13 @@ const agentColumns: Column<AgentDefinition>[] = [
   { key: 'date', label: 'Date', width: '140px', sortable: true, sortValue: agent => agent.createdAt },
   { key: 'actions', label: 'Actions', width: '84px', class: 'text-right' },
 ]
-const agentIssues = computed(() => {
-  const availableKeys = new Set(agentStore.availableTools.map(tool => tool.key))
-  const allAgentIds = new Set(agentDefs.agents.map(agent => agent.id))
-  return new Map(agentDefs.agents.map(agent => [agent.id, [
-    ...agent.tools.filter(tool => !availableKeys.has(tool)).map(tool => `Tool: ${tool}`),
-    ...(availableMemoryFolderIds.value
-      ? (agent.memoryFolders || []).filter(id => !availableMemoryFolderIds.value!.has(id)).map(id => `Memory folder: ${id}`)
-      : []),
-    ...(agent.subAgents || []).filter(subAgent => !allAgentIds.has(subAgent.agentId))
-      .map(subAgent => `Sub-agent: ${subAgent.agentId}`),
-  ]] as const))
-})
+const agentIssues = computed(() => new Map(
+  [...agentHealth.healthByAgent].map(([id, health]) => [id, health.issues]),
+))
 const filteredTableAgents = computed(() => tableAgents.value.filter(agent => {
   if (stateFilter.value === 'all') return true
   const hasIssues = Boolean(agentIssues.value.get(agent.id)?.length)
-  return stateFilter.value === 'warning' ? hasIssues : !hasIssues
+  return stateFilter.value === 'warning' ? hasIssues : agentHealth.healthByAgent.get(agent.id)?.status === 'ready'
 }))
 
 watch([searchQuery, stateFilter], () => { page.value = 0 })

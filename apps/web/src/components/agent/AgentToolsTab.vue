@@ -2,18 +2,18 @@
 import { computed } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import type { AgentDefinition } from '../../api/types'
-import { useAgentStore } from '../../stores/agent-runtime.store'
+import { useAgentHealthStore } from '../../stores/agent-health.store'
 import { Icon } from '@iconify/vue'
 import ToolSelector from '../shared/ToolSelector.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import BaseCard from '../shared/BaseCard.vue'
-import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId, memoryAutomaticToolStates } from '../../utils/internal-tools'
+import { memoryAutomaticToolStates } from '../../utils/internal-tools'
 import { DIRECT_TOOL_SELECTION_LIMIT } from '@shared/runtime-limits'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
-const agentStore = useAgentStore()
+const agentHealth = useAgentHealthStore()
 const desktopToolList = useMediaQuery('(min-width: 640px)')
 
 const hasMemoryScope = computed(() => (props.agent.memoryFolders?.length ?? 0) > 0)
@@ -52,14 +52,7 @@ const automaticToolStates = computed(() => ({
   },
 }))
 
-const missingTools = computed(() => {
-  const availableKeys = new Set(
-    agentStore.availableTools
-      .filter(t => !(isBuiltInNamespaceId(t.namespace.id) && isAutoManagedBuiltInToolName(t.name)))
-      .map(t => t.key)
-  )
-  return props.agent.tools.filter(name => !availableKeys.has(name))
-})
+const missingTools = computed(() => agentHealth.validate(props.agent).tools)
 
 function removeMissing() {
   const missing = new Set(missingTools.value)

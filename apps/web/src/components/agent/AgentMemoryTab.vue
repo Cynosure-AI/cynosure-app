@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAgentHealthStore } from '../../stores/agent-health.store'
 import { api } from '../../api/client'
 import type { AgentDefinition, MemoryFolder } from '../../api/types'
 import { Icon } from '@iconify/vue'
@@ -11,11 +12,11 @@ import { allMemoryFolderSelectionIds, isAutoExcludedMemoryFolder, isMemoryFolder
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 const router = useRouter()
+const agentHealth = useAgentHealthStore()
 
 // --- Memory Folders ---
 const allSpaces = ref<MemoryFolder[]>([])
 const spacesLoading = ref(false)
-const spacesLoaded = ref(false)
 const collapsedFolders = ref<Set<string>>(new Set())
 
 const assignedIds = computed(() => new Set(props.agent.memoryFolders ?? []))
@@ -26,11 +27,7 @@ const assignedFolders = computed(() =>
   allSpaces.value.filter(s => assignedIds.value.has(s.id))
 )
 const effectiveAssignedCount = computed(() => allSpaces.value.filter(isSelected).length)
-const missingFolderIds = computed(() => {
-  if (!spacesLoaded.value) return []
-  const availableIds = new Set(allSpaces.value.map(space => space.id))
-  return (props.agent.memoryFolders ?? []).filter(id => !availableIds.has(id))
-})
+const missingFolderIds = computed(() => agentHealth.validate(props.agent).memoryFolders)
 
 const visibleSpaces = computed(() =>
   allSpaces.value.filter((space) => {
@@ -52,7 +49,7 @@ async function loadFolders() {
       if (b.isUncategorized) return 1
       return (a.folderPath || '').localeCompare(b.folderPath || '')
     })
-    spacesLoaded.value = true
+    agentHealth.memoryFolderIds = new Set(spaces.map(space => space.id))
     collapseFoldersWithChildren(allSpaces.value)
   } catch (err) {
     console.error('[memory] Failed to load spaces:', err)

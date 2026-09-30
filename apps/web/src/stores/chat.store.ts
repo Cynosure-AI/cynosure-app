@@ -1,3 +1,4 @@
+import { useAgentHealthStore } from './agent-health.store'
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
@@ -196,6 +197,7 @@ export const useChatStore = defineStore('chat', () => {
   async function loadMemoryFolders(): Promise<void> {
     try {
       const spaces = await api.memoryFolders.list()
+      useAgentHealthStore().memoryFolderIds = new Set(spaces.map(space => space.id))
       memoryFolders.value = [...spaces].sort((a, b) => {
         if (a.isUncategorized) return -1
         if (b.isUncategorized) return 1

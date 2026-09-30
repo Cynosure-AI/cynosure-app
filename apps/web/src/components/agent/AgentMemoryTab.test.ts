@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { AgentDefinition, MemoryFolder } from '../../api/types'
 import AgentMemoryTab from './AgentMemoryTab.vue'
@@ -66,6 +67,7 @@ describe('AgentMemoryTab', () => {
   })
 
   beforeEach(() => {
+    setActivePinia(createPinia())
     mocks.listSpaces.mockReset().mockResolvedValue(spaces)
     mocks.push.mockReset()
   })
