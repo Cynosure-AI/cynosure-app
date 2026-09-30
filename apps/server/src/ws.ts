@@ -2,6 +2,25 @@ import type { WebSocket } from 'ws'
 import { getDb } from './db/database.js'
 import { persistChatEvent } from './core/chat/transcript.js'
 import type { ChatEventDraft } from '@shared/types'
+import { getEventBus } from './core/telemetry/event-bus.js'
+
+/** Notify all UIs after a batch of tool registrations or removals. */
+export function startToolRegistryUpdates(): () => void {
+  let queued = false
+  let active = true
+  const unsubscribe = getEventBus().on('tools:registry-changed', () => {
+    if (queued) return
+    queued = true
+    queueMicrotask(() => {
+      queued = false
+      if (active) broadcast('tools:registry-changed', {})
+    })
+  })
+  return () => {
+    active = false
+    unsubscribe()
+  }
+}
 
 /** Per-client subscription state */
 interface ClientState {
@@ -29,6 +48,7 @@ const globalEventNames = new Set([
   'notification:created',
   'mcp-auth-needed',
   'mcp-auth-complete',
+  'tools:registry-changed',
   // Carries only execution discovery metadata so clients can subscribe to a
   // remotely-created channel conversation before its scoped stream events.
   'channel:conversation-state',

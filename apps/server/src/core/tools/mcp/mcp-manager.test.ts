@@ -1,3 +1,6 @@
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import { McpOAuthProvider } from './oauth-provider.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -45,6 +48,56 @@ describe('McpManager paginated discovery', () => {
     expect(tools.map(tool => tool.name)).toEqual(['first', 'second', 'third'])
     expect(manager.getTools('server')).toEqual(tools)
     expect(manager.getAllTools()).toEqual(tools)
+  })
+
+  test('completes remote OAuth with validated state and original connection headers', async () => {
+    let provider: McpOAuthProvider | undefined
+    const connect = vi.spyOn(Client.prototype, 'connect')
+      .mockImplementationOnce(async (transport) => {
+        provider = (transport as unknown as { _authProvider: McpOAuthProvider })._authProvider
+        provider.redirectToAuthorization(new URL(`https://auth.example.test/authorize?state=${provider.state()}`))
+        throw new UnauthorizedError()
+      })
+      .mockResolvedValueOnce()
+    const exchange = vi.spyOn(StreamableHTTPClientTransport.prototype, 'finishAuth').mockResolvedValue()
+    vi.spyOn(Client.prototype, 'getServerVersion').mockReturnValue({ name: 'test', version: '1' })
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({ tools: [descriptor('authorized_tool')] })
+    const manager = new McpManager()
+    manager.setServerBaseUrl('http://localhost:3099')
+    const registered = vi.fn()
+    manager.setOnAuthComplete(registered)
+    await expect(manager.connect({ id: 'oauth', name: 'OAuth', command: 'remote',
+      args: ['--url', 'https://example.test/mcp', '--header=X-Tenant: team'], enabled: true,
+    })).rejects.toThrow('Authorization required')
+    expect(manager.getPendingAuths().oauth).toContain('https://auth.example.test/authorize')
+    await expect(manager.finishHttpAuth('oauth', 'code', 'wrong-state')).rejects.toThrow('Invalid OAuth state')
+    expect(exchange).not.toHaveBeenCalled()
+    const tools = await manager.finishHttpAuth('oauth', 'code', provider!.state())
+    expect(exchange).toHaveBeenCalledWith('code')
+    const resumed = connect.mock.calls[1][0] as unknown as { _requestInit: { headers: Record<string, string> } }
+    expect(resumed._requestInit.headers).toEqual({ 'X-Tenant': 'team' })
+    expect(tools.map(tool => tool.name)).toEqual(['authorized_tool'])
+    expect(manager.isConnected('oauth')).toBe(true)
+    expect(manager.hasPendingHttpAuth('oauth')).toBe(false)
+    expect(manager.getPendingAuths()).toEqual({})
+    expect(registered).toHaveBeenCalledWith('oauth', tools, expect.objectContaining({ id: 'oauth' }))
+    await expect(manager.finishHttpAuth('oauth', 'code', provider!.state())).rejects.toThrow('No pending HTTP auth')
+  })
+
+  test('disabling a server cancels pending remote OAuth', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockImplementationOnce(async (transport) => {
+      const provider = (transport as unknown as { _authProvider: McpOAuthProvider })._authProvider
+      provider.redirectToAuthorization(new URL('https://auth.example.test/authorize'))
+      throw new UnauthorizedError()
+    })
+    const manager = new McpManager()
+    manager.setServerBaseUrl('http://localhost:3099')
+    await expect(manager.connect({ id: 'oauth', name: 'OAuth', command: 'remote',
+      args: ['https://example.test/mcp'], enabled: true,
+    })).rejects.toThrow('Authorization required')
+    await manager.disconnect('oauth')
+    expect(manager.hasPendingHttpAuth('oauth')).toBe(false)
+    expect(manager.getPendingAuths()).toEqual({})
   })
 
   test('keeps single-page discovery unchanged', async () => {

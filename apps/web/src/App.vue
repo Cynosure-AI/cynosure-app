@@ -126,6 +126,9 @@ onMounted(async () => {
       void chatStore.handleChannelConversationState(data)
     }),
     // Agent event listeners
+    api.agent.onToolsChanged(() => {
+      void agentStore.loadTools().catch(console.error)
+    }),
     api.agent.onHITLRequest((data) => {
       if (isHITLRequestPayload(data)) agentStore.handleHITLRequest(data)
     }),

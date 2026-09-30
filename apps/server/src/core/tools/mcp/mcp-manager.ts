@@ -57,6 +57,7 @@ interface PendingHttpAuth {
     provider: McpOAuthProvider
     config: McpServerConfig
     serverUrl: string
+    headers: Record<string, string>
 }
 
 /** Callback invoked when a pending OAuth flow completes and an MCP server auto-connects. */
@@ -158,7 +159,7 @@ export class McpManager {
             if (err instanceof UnauthorizedError || authUrl) {
                 // OAuth is required — store pending auth and wait for callback
                 console.warn(`MCP server "${config.name}" requires OAuth authorization (HTTP transport).`)
-                this.pendingHttpAuths.set(config.id, { client, provider, config, serverUrl: remoteUrl })
+                this.pendingHttpAuths.set(config.id, { client, provider, config, serverUrl: remoteUrl, headers })
                 throw new Error('Authorization required — use the Authorize button to connect.')
             }
             try { await transport.close() } catch { /* ignore */ }
@@ -180,13 +181,15 @@ export class McpManager {
      * Complete an HTTP OAuth flow after the user authorized in the browser.
      * Called from the OAuth callback route with the authorization code.
      */
-    async finishHttpAuth(serverId: string, code: string): Promise<ToolDefinition[]> {
+    async finishHttpAuth(serverId: string, code: string, state?: string): Promise<ToolDefinition[]> {
         const pending = this.pendingHttpAuths.get(serverId)
         if (!pending) throw new Error('No pending HTTP auth for this server')
+        if (!pending.provider.validateState(state)) throw new Error('Invalid OAuth state')
 
         // Create a fresh transport with the same provider (which holds the code verifier)
         const transport = new StreamableHTTPClientTransport(new URL(pending.serverUrl), {
-            authProvider: pending.provider
+            authProvider: pending.provider,
+            requestInit: Object.keys(pending.headers).length ? { headers: pending.headers } : undefined,
         })
 
         // Exchange the authorization code for tokens
@@ -209,11 +212,11 @@ export class McpManager {
         this.pendingHttpAuths.delete(serverId)
         this.pendingAuths.delete(serverId)
 
-        broadcast('mcp-auth-complete', { serverId, serverName: displayConfig.name, toolCount: tools.length })
-
         if (this.onAuthCompleteCallback) {
             this.onAuthCompleteCallback(serverId, tools, displayConfig)
         }
+
+        broadcast('mcp-auth-complete', { serverId, serverName: displayConfig.name, toolCount: tools.length })
 
         return tools
     }
@@ -401,6 +404,7 @@ export class McpManager {
         // Cancel any pending OAuth connection first (stdio or HTTP)
         await this.cancelPendingAuth(serverId)
         this.pendingHttpAuths.delete(serverId)
+        this.pendingAuths.delete(serverId)
 
         const conn = this.connections.get(serverId)
         if (!conn) return
@@ -502,15 +506,16 @@ export class McpManager {
 
             console.log(`MCP server "${displayConfig.name}" connected after OAuth (${tools.length} tools)`)
 
+            if (this.onAuthCompleteCallback) {
+                this.onAuthCompleteCallback(serverId, tools, displayConfig)
+            }
+
             broadcast('mcp-auth-complete', {
                 serverId,
                 serverName: displayConfig.name,
                 toolCount: tools.length
             })
 
-            if (this.onAuthCompleteCallback) {
-                this.onAuthCompleteCallback(serverId, tools, displayConfig)
-            }
         } catch (err) {
             console.warn(`OAuth wait for MCP server "${pending.config.name}" failed:`, (err as Error).message)
             this.pendingAuthConnections.delete(serverId)

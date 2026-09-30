@@ -69,6 +69,7 @@ const newServer = reactive({
   env: '',
   remoteUrl: '',
   bearerToken: '',
+  authMode: 'oauth' as 'oauth' | 'bearer',
 })
 const pendingAddId = ref<string | null>(null)
 const addConnected = ref(false)
@@ -109,6 +110,7 @@ function resetNewServer(): void {
     env: '',
     remoteUrl: '',
     bearerToken: '',
+    authMode: 'oauth',
   })
 }
 
@@ -120,13 +122,13 @@ function remoteTokenEnvName(): string {
 
 function buildRemoteArgs(): string[] {
   const args = ['--transport', 'streamable-http', '--url', newServer.remoteUrl.trim()]
-  const token = newServer.bearerToken.trim()
+  const token = newServer.authMode === 'bearer' ? newServer.bearerToken.trim() : ''
   if (token) args.push(`--bearer-token-env=${token.startsWith('$') ? token.slice(1) : remoteTokenEnvName()}`)
   return args
 }
 
 function buildRemoteEnv(): Record<string, string> {
-  const token = newServer.bearerToken.trim()
+  const token = newServer.authMode === 'bearer' ? newServer.bearerToken.trim() : ''
   if (!token || token.startsWith('$')) return {}
   return { [remoteTokenEnvName()]: token }
 }
@@ -451,6 +453,26 @@ defineExpose({ loadServers })
         </template>
         <template v-else>
           <div>
+            <label class="block text-sm text-ink-secondary mb-1">Authentication</label>
+            <select
+              v-model="newServer.authMode"
+              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="oauth">
+                OAuth / automatic
+              </option>
+              <option value="bearer">
+                Bearer token
+              </option>
+            </select>
+            <p
+              v-if="newServer.authMode === 'oauth'"
+              class="mt-1 text-xs text-ink-muted"
+            >
+              Add the server to start connecting. If sign-in is required, use Authorize to sign in through your browser. Public servers connect directly.
+            </p>
+          </div>
+          <div v-if="newServer.authMode === 'bearer'">
             <label class="block text-sm text-ink-secondary mb-1">Bearer token</label>
             <input
               v-model="newServer.bearerToken"

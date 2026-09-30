@@ -140,8 +140,12 @@ export const useAgentStore = defineStore('agent', () => {
     toolApprovals.value = await api.agent.getToolApprovals()
   }
 
+  let toolsRequestVersion = 0
   async function loadTools(): Promise<void> {
-    availableTools.value = await api.agent.listTools()
+    const version = ++toolsRequestVersion
+    const tools = await api.agent.listTools()
+    if (version !== toolsRequestVersion) return
+    availableTools.value = tools
     toolsLoaded.value = true
 
     syncToolApprovals(availableTools.value)

@@ -229,7 +229,7 @@ export function makeManageMcpTool(): ToolDefinition {
     name: MANAGE_MCP_TOOL_NAME,
     execution: { readOnly: false },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-    description: 'Install and manage MCP servers. Defaults to an idempotent upsert: use the returned serverId for follow-up corrections. Supports stdio command/args or a Streamable HTTP url, environment-variable patches, enable/disable, listing, and removal. Explicit reconnects and OAuth reauthorization must be performed manually in MCP settings. Never invent credentials; ask the user for missing secrets.',
+    description: 'Install and manage MCP servers. Defaults to an idempotent upsert: use the returned serverId for follow-up corrections. Supports stdio command/args or a Streamable HTTP url, environment-variable patches, enable/disable, listing, and removal. Remote OAuth is discovered automatically: if pendingAuthUrl is returned, tell the user to complete browser authorization through the Authorize prompt. Explicit reconnects and OAuth reauthorization must be performed manually in MCP settings. Never invent credentials; ask the user for missing secrets.',
     timeout: 70_000,
     parameters: {
       type: 'object',
