@@ -15,7 +15,7 @@ function setup(activeId = 'conversation') {
   const contextWindow = ref<number | null>(null)
   const streaming = useChatStreaming(activeConversationId, messages, conversations, contextWindow)
 
-  return { messages, streaming }
+  return { activeConversationId, messages, streaming }
 }
 
 describe('chat streaming completion', () => {
@@ -252,5 +252,73 @@ describe('persisted streaming message identities', () => {
     const originalId = messages.value[0].id
     streaming.handleNewMessage({ conversationId: 'other', streamId: 'stream', message: { id: 'other-id', conversationId: 'other', role: 'assistant', content: 'Other', createdAt: 1 } })
     expect(messages.value[0].id).toBe(originalId)
+  })
+})
+
+
+describe('restoring a running conversation', () => {
+  test('keeps earlier tool rounds intact when returning during a later round', () => {
+    const { activeConversationId, messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'stream' }
+    streaming.handleStreamStart({ ...event, sequence: 1, createdAt: 1 })
+    streaming.handleStreamChunk({ ...event, content: 'First tool round' })
+    streaming.handleNewMessage({ ...event, message: {
+      id: 'first', conversationId: 'conversation', role: 'assistant', content: 'First tool round', sequence: 3, createdAt: 3,
+    } })
+    activeConversationId.value = 'other'
+    messages.value = []
+    streaming.handleStreamReset({ ...event, sequence: 4, createdAt: 4 })
+    streaming.handleStreamChunk({ ...event, content: 'Second tool round' })
+    streaming.handleNewMessage({ ...event, message: {
+      id: 'second', conversationId: 'conversation', role: 'assistant', content: 'Second tool round', sequence: 6, createdAt: 6,
+    } })
+    activeConversationId.value = 'conversation'
+    messages.value = [
+      { id: 'first', role: 'assistant', streamId: 'stream', content: 'First tool round', sequence: 3, createdAt: 3 },
+      { id: 'second', role: 'assistant', streamId: 'stream', content: 'Second tool round', sequence: 6, createdAt: 6 },
+    ]
+    streaming.restorePrimaryStream('conversation')
+    expect(messages.value.map(m => [m.id, m.content])).toEqual([
+      ['first', 'First tool round'], ['second', 'Second tool round'],
+    ])
+    streaming.handleStreamReset({ ...event, sequence: 7, createdAt: 7 })
+    streaming.handleStreamChunk({ ...event, content: 'Final answer' })
+    streaming.handleStreamEnd(event)
+    streaming.handleNewMessage({ ...event, message: {
+      id: 'final', conversationId: 'conversation', role: 'assistant', content: 'Final answer', sequence: 10, createdAt: 10,
+    } })
+    expect(messages.value.map(m => [m.id, m.content])).toEqual([
+      ['first', 'First tool round'], ['second', 'Second tool round'], ['final', 'Final answer'],
+    ])
+  })
+
+  test.each(['text', 'thinking'])('creates a current round without overwriting saved messages during %s streaming', (kind) => {
+    const { activeConversationId, messages, streaming } = setup('other')
+    const event = { conversationId: 'conversation', streamId: 'stream' }
+    streaming.handleStreamStart({ ...event, sequence: 1, createdAt: 1 })
+    streaming.handleStreamReset({ ...event, sequence: 4, createdAt: 4 })
+    if (kind === 'text') streaming.handleStreamChunk({ ...event, content: 'Partial answer' })
+    else streaming.handleStreamThinking({ ...event, thinking: 'Still thinking' })
+    activeConversationId.value = 'conversation'
+    messages.value = [{ id: 'first', role: 'assistant', streamId: 'stream', content: 'First tool round', sequence: 3, createdAt: 3 }]
+    streaming.restorePrimaryStream('conversation')
+    streaming.restorePrimaryStream('conversation')
+    expect(messages.value).toHaveLength(2)
+    expect(messages.value[0]).toMatchObject({ id: 'first', content: 'First tool round' })
+    expect(messages.value[0].isStreaming).toBeFalsy()
+    expect(messages.value[1]).toMatchObject({ isStreaming: true, createdAt: 4,
+      ...(kind === 'text' ? { content: 'Partial answer' } : { thinking: 'Still thinking' }),
+    })
+  })
+
+  test('does not replace a saved earlier round when its stream has no current placeholder', () => {
+    const { messages, streaming } = setup()
+    messages.value = [{ id: 'first', role: 'assistant', streamId: 'stream', content: 'First tool round', createdAt: 1 }]
+    streaming.handleNewMessage({ conversationId: 'conversation', streamId: 'stream', message: {
+      id: 'second', conversationId: 'conversation', role: 'assistant', content: 'Second tool round', createdAt: 2,
+    } })
+    expect(messages.value.map(m => [m.id, m.content])).toEqual([
+      ['first', 'First tool round'], ['second', 'Second tool round'],
+    ])
   })
 })

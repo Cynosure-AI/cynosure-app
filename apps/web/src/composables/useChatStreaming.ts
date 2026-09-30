@@ -27,6 +27,7 @@ interface StreamBuffer {
     maInvocationId?: string
     createdAt: number
     sequence?: number
+    persistedMessageId?: string
 }
 
 export interface ChatStreamingState {
@@ -51,7 +52,7 @@ export interface ChatStreamingState {
     handleStreamThinking(data: { streamId: string; conversationId: string; thinking: string }): void
     handleStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleStreamVideos(data: { streamId: string; conversationId: string; videos: string[] }): void
-    handleStreamReset(data: { streamId: string; conversationId: string }): void
+    handleStreamReset(data: { streamId: string; conversationId: string; sequence?: number; createdAt?: number }): void
     handleStreamDiscard(data: { streamId: string; conversationId: string }): void
     handleStreamUsage(data: { conversationId: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number }; scope?: 'main' | 'subagent'; model?: string; contextWindow?: number; contextTokens?: number }): void
     handleStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; usage?: { promptTokens: number; completionTokens: number; totalTokens: number }; model?: string; contextWindow?: number; contextTokens?: number; images?: string[] }): void
@@ -139,7 +140,14 @@ export function useChatStreaming(
     }
 
     function findPersistedMatchForBuffer(buf: StreamBuffer): DisplayMessage | undefined {
-        return messages.value.find((message) => message.role === 'assistant' && message.streamId === buf.streamId)
+        // A primary stream ID spans multiple tool rounds. Only the saved ID
+        // for this round, or a transcript sequence after its reset, can match.
+        return [...messages.value].reverse().find((message) => message.role === 'assistant' && !message.isError && (
+            buf.persistedMessageId
+                ? message.id === buf.persistedMessageId
+                : message.streamId === buf.streamId && buf.sequence !== undefined
+                    && message.sequence !== undefined && message.sequence > buf.sequence
+        ))
     }
 
     function hydrateMessageFromBuffer(msg: DisplayMessage, buf: StreamBuffer): void {
@@ -465,7 +473,7 @@ export function useChatStreaming(
         }
     }
 
-    function handleStreamReset(data: { streamId: string; conversationId: string }): void {
+    function handleStreamReset(data: { streamId: string; conversationId: string; sequence?: number; createdAt?: number }): void {
         let buf = streamBuffers.get(data.conversationId)
         if (buf && buf.streamId !== data.streamId) return
         if (buf) {
@@ -473,11 +481,13 @@ export function useChatStreaming(
             buf.thinking = ''
             buf.images = []
             buf.videos = []
-            buf.createdAt = Date.now()
+            buf.createdAt = data.createdAt ?? Date.now()
+            buf.sequence = data.sequence
+            buf.persistedMessageId = undefined
         } else {
             buf = {
                 streamId: data.streamId, conversationId: data.conversationId, content: '', thinking: '', images: [], videos: [], active: true,
-                createdAt: Date.now()
+                createdAt: data.createdAt ?? Date.now(), sequence: data.sequence
             }
             streamBuffers.set(data.conversationId, buf)
         }
@@ -502,7 +512,8 @@ export function useChatStreaming(
                         maCodename: buf.maCodename,
                         maAgentName: buf.maAgentName,
                         maInvocationId: buf.maInvocationId,
-                        createdAt: Date.now(),
+                        createdAt: buf.createdAt,
+                        sequence: buf.sequence,
                         isStreaming: true
                     }
                     messages.value.push(newMsg)
@@ -512,7 +523,8 @@ export function useChatStreaming(
                     // after tool-group and sub-agent entries that appeared
                     // during tool execution (they have earlier timestamps).
                     streamMsg.content = ''
-                    streamMsg.createdAt = Date.now()
+                    streamMsg.createdAt = buf.createdAt
+                    streamMsg.sequence = buf.sequence
                 }
             } else {
                 const newMsg: DisplayMessage = {
@@ -526,7 +538,8 @@ export function useChatStreaming(
                     maCodename: buf.maCodename,
                     maAgentName: buf.maAgentName,
                     maInvocationId: buf.maInvocationId,
-                    createdAt: Date.now(),
+                    createdAt: buf.createdAt,
+                    sequence: buf.sequence,
                     isStreaming: true
                 }
                 messages.value.push(newMsg)
@@ -875,6 +888,13 @@ export function useChatStreaming(
                 target.fileAttachments = data.message.fileAttachments
             }
         }
+        // Keep the current round's saved identity even while viewing another
+        // conversation, so navigation can join its buffer to the transcript.
+        if (data.streamId && data.message.role === 'assistant' && !data.message.isError) {
+            const buf = subAgentStreamBuffers.get(scopedStreamKey(data.conversationId, data.streamId))
+                ?? streamBuffers.get(data.conversationId)
+            if (buf?.streamId === data.streamId) buf.persistedMessageId = data.message.id
+        }
         // Bump updatedAt so the conversation shows as recently updated / unread
         const conv = conversations.value.find(c => c.id === data.conversationId)
         if (conv) {
@@ -895,7 +915,7 @@ export function useChatStreaming(
             // such as forking can address this message on the server.
             if (data.streamId && data.message.role === 'assistant' && !data.message.isError) {
                 const round = findMsgByStreamId(data.streamId)
-                if (round) {
+                if (round && (round.isStreaming || round.id.startsWith('streaming_') || round.id.startsWith('sa_stream_'))) {
                     round.id = data.message.id
                     hydratePersisted(round)
                     return
