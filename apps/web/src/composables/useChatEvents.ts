@@ -92,7 +92,7 @@ export function useChatEvents(): () => void {
         return
       }
       case 'stream-reset':
-        if (event.scope === 'main') chatStore.handleStreamReset(base)
+        if (event.scope === 'main') chatStore.handleStreamReset({ ...base, sequence: event.sequence, createdAt: event.createdAt })
         return
       case 'stream-discard':
         if (event.scope === 'main') chatStore.handleStreamDiscard(base)
@@ -145,7 +145,7 @@ export function useChatEvents(): () => void {
         }
         if (event.item.type !== 'message') return
         const item: MessageItem = event.item
-        chatStore.handleNewMessage({ conversationId: event.conversationId, streamId: event.executionId, message: {
+        chatStore.handleNewMessage({ conversationId: event.conversationId, streamId: item.executionId ?? event.executionId, message: {
           ...toDisplayMessage(item, event.sequence), conversationId: event.conversationId,
         } })
         return
