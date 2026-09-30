@@ -67,6 +67,7 @@ const discardedStageIds = new Set<string>()
 let fileReadGeneration = 0
 let stagedPollTimer: number | null = null
 let stagedLoadGeneration = 0
+let attachmentConversation: { draftKey: string; discardRevision: number; promise: Promise<string> } | null = null
 
 function modelHasInputModality(modality: string): boolean | null {
   const inputModalities = chatStore.modelModalities?.input
@@ -198,7 +199,21 @@ async function stageFile(name: string, content: string, sourceId?: string): Prom
   const draft: DraftFile = { clientId: crypto.randomUUID(), name, content, sourceId, status: 'processing', progressCurrent: 0, progressTotal: 0, controller }
   attachedFiles.value.push(draft)
   try {
-    const conversationId = chatStore.activeConversationId || await chatStore.createConversation()
+    let conversationId = chatStore.activeConversationId
+    if (!conversationId) {
+      // Several files can finish reading together. Create one conversation for
+      // the whole draft and let the draft watcher recognize this transition.
+      const creation = attachmentConversation ??= {
+        draftKey: draftStorageKey.value,
+        discardRevision: chatStore.draftDiscardRevision,
+        promise: chatStore.createConversation(),
+      }
+      try {
+        conversationId = await creation.promise
+      } finally {
+        if (attachmentConversation === creation) attachmentConversation = null
+      }
+    }
     if (cancelledStageClientIds.has(draft.clientId)) return
     const staged = await api.chat.stageAttachment(conversationId, { name, content, clientId: draft.clientId }, controller.signal)
     const current = attachedFiles.value.find(file => file.clientId === draft.clientId)
@@ -381,8 +396,20 @@ watch(() => chatStore.draftDiscardRevision, () => {
   attachedAudio.value = []
 }, { flush: 'sync' })
 
-watch(draftStorageKey, (newKey, oldKey) => {
+watch(draftStorageKey, async (newKey, oldKey) => {
   persistDraft(oldKey, inputText.value)
+  const creation = attachmentConversation
+  if (creation?.draftKey === oldKey && creation.discardRevision === chatStore.draftDiscardRevision) {
+    const conversationId = await creation.promise.catch(() => null)
+    if (draftStorageKey.value !== newKey || creation.discardRevision !== chatStore.draftDiscardRevision) return
+    if (conversationId && newKey === getDraftStorageKey(conversationId, chatStore.activeAgentId)) {
+      // Staging persisted the current new-chat draft; it did not switch chats.
+      persistDraft(newKey, inputText.value)
+      persistDraft(oldKey, '')
+      void refreshStagedAttachments()
+      return
+    }
+  }
   inputText.value = readDraft(newKey)
   attachedFiles.value = []
   void refreshStagedAttachments()
