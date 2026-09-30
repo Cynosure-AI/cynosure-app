@@ -3,6 +3,7 @@ import { ref, watch, nextTick, computed, onMounted, reactive } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import { useAgentHealthStore } from '../../stores/agent-health.store'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
@@ -33,6 +34,7 @@ const route = useRoute()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const prefs = usePreferencesStore()
+const agentHealth = useAgentHealthStore()
 const forkError = ref('')
 async function forkMessage(messageId: string): Promise<void> {
   forkError.value = ''
@@ -149,6 +151,10 @@ const conversationAgentId = computed(() => {
   if (conversation) return conversation.agentId ?? null
   return chatStore.activeAgentId
 })
+
+const activeAgentIssues = computed(() => conversationAgentId.value
+  ? agentHealth.healthByAgent.get(conversationAgentId.value)?.issues ?? []
+  : [])
 
 const activeAgentIconUrl = computed(() => {
   if (!conversationAgentId.value) return null
@@ -764,9 +770,24 @@ onMounted(() => {
         </p>
       </template>
       <template v-else>
-        <h2 class="text-3xl font-semibold text-theme-200 tracking-tight text-center">
-          {{ greeting }}
-        </h2>
+        <div class="flex items-center justify-center gap-3">
+          <h2 class="text-3xl font-semibold text-theme-200 tracking-tight text-center">
+            {{ greeting }}
+          </h2>
+          <RouterLink
+            v-if="activeAgentIssues.length"
+            :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"
+            class="inline-flex shrink-0 rounded p-1 text-status-warning focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+            :title="`Agent health warning\n${activeAgentIssues.join('\n')}\nOpen agent settings to resolve.`"
+            :aria-label="`Agent health warning: ${activeAgentIssues.join(', ')}. Open agent settings.`"
+          >
+            <Icon
+              icon="lucide:triangle-alert"
+              class="h-5 w-5"
+              aria-hidden="true"
+            />
+          </RouterLink>
+        </div>
         <p class="text-sm mt-2 text-ink-muted max-w-sm text-center">
           Type a message below to begin a new conversation, or choose an agent to assist you.
         </p>

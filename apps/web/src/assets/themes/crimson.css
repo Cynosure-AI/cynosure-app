@@ -1,7 +1,7 @@
 /* ==========================================================================
    Crimson Theme - black graphite surfaces with restrained scarlet accents
    ========================================================================== */
-[data-theme="crimson"] {
+:is([data-theme="crimson"], :root:not([data-theme])) {
   --color-accent-fg: #ff8181;
   --color-accent-on: #fff7f8;
 

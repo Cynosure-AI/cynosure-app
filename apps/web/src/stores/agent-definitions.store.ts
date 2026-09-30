@@ -7,9 +7,11 @@ export type { AgentDefinition }
 
 export const useAgentDefinitionsStore = defineStore('agent-definitions', () => {
     const agents = ref<AgentDefinition[]>([])
+    const loaded = ref(false)
 
     async function load() {
         agents.value = await api.agents.list()
+        loaded.value = true
     }
 
     async function create(
@@ -43,7 +45,7 @@ export const useAgentDefinitionsStore = defineStore('agent-definitions', () => {
         return agents.value.find((a) => a.id === id)
     }
 
-    return { agents, load, create, update, remove, duplicate, get }
+    return { agents, loaded, load, create, update, remove, duplicate, get }
 })
 
 if (import.meta.hot) {

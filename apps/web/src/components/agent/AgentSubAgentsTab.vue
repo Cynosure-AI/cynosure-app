@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useAgentHealthStore } from '../../stores/agent-health.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
@@ -12,6 +13,7 @@ const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
 
 const agentDefs = useAgentDefinitionsStore()
+const agentHealth = useAgentHealthStore()
 
 const showAddDialog = ref(false)
 const addAgentId = ref('')
@@ -22,9 +24,10 @@ const availableAgents = computed(() => {
   return agentDefs.agents.filter(a => !assignedIds.has(a.id))
 })
 
-const missingSubAgents = computed(() =>
-  (props.agent.subAgents || []).filter(sa => !agentDefs.get(sa.agentId))
-)
+const missingSubAgents = computed(() => {
+  const missingIds = new Set(agentHealth.validate(props.agent).subAgents)
+  return (props.agent.subAgents || []).filter(sa => missingIds.has(sa.agentId))
+})
 
 
 function removeMissing() {

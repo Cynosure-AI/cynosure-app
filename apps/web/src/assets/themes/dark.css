@@ -1,7 +1,7 @@
 /* ==========================================================================
-   Dark Theme - graphite depth, cool light, and a crisp electric-blue accent
+   Midnight Theme - graphite depth, cool light, and a crisp electric-blue accent
    ========================================================================== */
-:is([data-theme="dark"], :root:not([data-theme])) {
+[data-theme="dark"] {
   --color-accent-fg: #86c5ff;
   --color-accent-on: #ffffff;
 

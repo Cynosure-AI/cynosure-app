@@ -282,7 +282,7 @@ const sections: SettingsSection[] = [
     categoryId: 'general',
     label: 'Theme',
     description: 'Choose your visual style.',
-    terms: ['theme', 'themes', 'visual style', 'dark', 'light', 'virtualboy', 'scanlines', 'crimson', 'red', 'glyphs', 'gold', 'green', 'cyberpunk', 'emerald', 'industrial', 'amber', 'monochrome', 'palette', 'appearance']
+    terms: ['theme', 'themes', 'visual style', 'dark', 'midnight', 'light', 'virtualboy', 'scanlines', 'crimson', 'red', 'glyphs', 'gold', 'green', 'cyberpunk', 'emerald', 'industrial', 'amber', 'monochrome', 'palette', 'appearance']
   },
   {
     id: 'auto-expand-thinking',

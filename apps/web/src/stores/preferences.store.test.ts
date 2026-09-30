@@ -60,14 +60,29 @@ describe('preferences profile', () => {
     expect(localStorage.getItem(SK_RECENT_CHAT_FILTER)).toBe(JSON.stringify(['all']))
   })
 
-  test('replaces an unsupported persisted theme with the dark fallback', async () => {
+  test('replaces an unsupported persisted theme with the Crimson fallback', async () => {
     localStorage.setItem(SK_THEME, 'obsidian')
 
     const store = usePreferencesStore()
     await nextTick()
 
-    expect(store.theme).toBe('dark')
-    expect(localStorage.getItem(SK_THEME)).toBe('dark')
+    expect(store.theme).toBe('crimson')
+    expect(localStorage.getItem(SK_THEME)).toBe('crimson')
+    expect(document.documentElement.dataset.theme).toBe('crimson')
+  })
+
+  test('defaults to Crimson and toggles between Crimson and Light', () => {
+    const store = usePreferencesStore()
+    expect(store.theme).toBe('crimson')
+    store.toggleTheme()
+    expect(store.theme).toBe('light')
+    store.toggleTheme()
+    expect(store.theme).toBe('crimson')
+  })
+
+  test('preserves an existing Midnight theme preference', () => {
+    localStorage.setItem(SK_THEME, 'dark')
+    expect(usePreferencesStore().theme).toBe('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
   })
 

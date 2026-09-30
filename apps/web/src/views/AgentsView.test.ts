@@ -66,8 +66,10 @@ describe('AgentsView assignment warnings', () => {
       agent('missing-folder', { memoryFolders: ['removed-folder'] }),
       agent('missing-agent', { subAgents: [{ agentId: 'removed-agent' }] }),
     ]
+    definitions.loaded = true
     definitions.load = vi.fn().mockResolvedValue(undefined)
     useAgentStore().availableTools = []
+    useAgentStore().toolsLoaded = true
 
     const wrapper = mount(AgentsView, {
       global: {
@@ -108,8 +110,10 @@ describe('AgentsView assignment warnings', () => {
       agent('tools-on', { autoToolRouting: true, autoMemory: false }),
       agent('memory-on', { autoToolRouting: false, autoMemory: true }),
     ]
+    definitions.loaded = true
     definitions.load = vi.fn().mockResolvedValue(undefined)
     useAgentStore().availableTools = []
+    useAgentStore().toolsLoaded = true
 
     const wrapper = mount(AgentsView, {
       global: {

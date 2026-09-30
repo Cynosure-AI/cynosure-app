@@ -87,6 +87,7 @@ export const useAgentStore = defineStore('agent', () => {
   const toolApprovals = ref<Record<string, boolean>>({})
 
   const availableTools = ref<ToolInfo[]>([])
+  const toolsLoaded = ref(false)
   const selectedToolNames = ref<string[]>([])
 
   function isSelectableTool(tool: ToolInfo): boolean {
@@ -141,6 +142,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   async function loadTools(): Promise<void> {
     availableTools.value = await api.agent.listTools()
+    toolsLoaded.value = true
 
     syncToolApprovals(availableTools.value)
 
@@ -774,6 +776,7 @@ export const useAgentStore = defineStore('agent', () => {
     planningState,
     toolApprovals,
     availableTools,
+    toolsLoaded,
     selectedToolNames,
     hasSteps,
     hasPlanningTasks,

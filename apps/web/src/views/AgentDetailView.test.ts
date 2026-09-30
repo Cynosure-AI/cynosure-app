@@ -45,8 +45,10 @@ describe('AgentDetailView category warnings', () => {
       tools: ['missing-tool'], memoryFolders: ['missing-folder'],
       subAgents: [{ agentId: 'missing-agent' }],
     })]
+    definitions.loaded = true
     definitions.load = vi.fn().mockResolvedValue(undefined)
     useAgentStore().availableTools = []
+    useAgentStore().toolsLoaded = true
 
     const wrapper = mount(AgentDetailView, {
       global: {
@@ -78,6 +80,7 @@ describe('AgentDetailView category warnings', () => {
     setActivePinia(pinia)
     const definitions = useAgentDefinitionsStore()
     definitions.agents = [agent({})]
+    definitions.loaded = true
     definitions.load = vi.fn().mockResolvedValue(undefined)
 
     const wrapper = mount(AgentDetailView, {

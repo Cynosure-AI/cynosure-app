@@ -3,12 +3,10 @@ import { ref, computed, onMounted } from 'vue'
 import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
-import { useAgentStore } from '../stores/agent-runtime.store'
+import { useAgentHealthStore } from '../stores/agent-health.store'
 import { useChatStore } from '../stores/chat.store'
 import { Icon } from '@iconify/vue'
-import { api } from '../api/client'
 import type { AgentDefinition } from '../api/types'
-import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
 import AgentGeneralTab from '../components/agent/AgentGeneralTab.vue'
 import AgentToolsTab from '../components/agent/AgentToolsTab.vue'
 import AgentMemoryTab from '../components/agent/AgentMemoryTab.vue'
@@ -29,11 +27,10 @@ interface AgentSection {
 const route = useRoute()
 const router = useRouter()
 const agentDefs = useAgentDefinitionsStore()
-const agentStore = useAgentStore()
+const agentHealth = useAgentHealthStore()
 const chatStore = useChatStore()
 
 const activeSectionId = ref<AgentSectionId>('general')
-const availableMemoryFolderIds = ref<Set<string> | null>(null)
 
 const agentId = computed(() => route.params.id as string)
 const agent = computed(() => agentDefs.get(agentId.value))
@@ -52,9 +49,7 @@ function goBack(): void {
 }
 
 onMounted(async () => {
-  void api.memoryFolders.list()
-    .then(folders => { availableMemoryFolderIds.value = new Set(folders.map(folder => folder.id)) })
-    .catch(() => undefined)
+  void agentHealth.loadMemoryFolders()
   await agentDefs.load()
   if (!agent.value) {
     router.push('/agents')
@@ -116,21 +111,10 @@ const sections: AgentSection[] = [
   }
 ]
 
-const missingTools = computed(() => {
-  const availableKeys = new Set(agentStore.availableTools
-    .filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name)))
-    .map(tool => tool.key))
-  return (agent.value?.tools ?? []).filter(key => !availableKeys.has(key))
-})
-const missingMemoryFolders = computed(() => {
-  const availableIds = availableMemoryFolderIds.value
-  if (!availableIds) return []
-  return (agent.value?.memoryFolders ?? []).filter(id => !availableIds.has(id))
-})
-const missingSubAgents = computed(() => {
-  const agentIds = new Set(agentDefs.agents.map(item => item.id))
-  return (agent.value?.subAgents ?? []).filter(item => !agentIds.has(item.agentId)).map(item => item.agentId)
-})
+const health = computed(() => agent.value ? agentHealth.validate(agent.value) : null)
+const missingTools = computed(() => health.value?.tools ?? [])
+const missingMemoryFolders = computed(() => health.value?.memoryFolders ?? [])
+const missingSubAgents = computed(() => health.value?.subAgents ?? [])
 
 const tabs = computed<TabDef<AgentSectionId>[]>(() => {
   const warnings: Partial<Record<AgentSectionId, string>> = {
