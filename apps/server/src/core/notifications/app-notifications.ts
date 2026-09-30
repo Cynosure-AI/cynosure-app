@@ -21,7 +21,6 @@ export interface CreateAppNotificationInput {
     conversationId: string | null
     title: string
     body: string
-    priority?: string
     broadcast: BroadcastFn
 }
 
@@ -66,7 +65,7 @@ export function createAppNotification(input: CreateAppNotificationInput): AppNot
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
-    const priority = normalizeNotificationPriority(input.priority)
+    const priority: NotificationPriority = 'notice'
 
     db.prepare(
         `INSERT INTO notifications (id, agent_id, conversation_id, title, body, severity, read, created_at)

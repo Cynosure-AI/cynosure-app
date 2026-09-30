@@ -11,7 +11,7 @@ describe('toolInjectionCondition', () => {
         ['spawn_subagent', 'builtin:utility', 'Sub-agent assigned'],
         ['schedule_create', 'builtin:scheduling', ''],
         ['manage_mcp', 'builtin:utility', 'Selected explicitly'],
-        ['notify_user_in_app', 'builtin:notifications', ''],
+        ['notify_user', 'builtin:notifications', ''],
         ['search', 'mcp:example', 'MCP'],
     ])('%s uses its runtime injection condition', (name, namespace, expected) => {
         expect(toolInjectionCondition(name, namespace)).toBe(expected)

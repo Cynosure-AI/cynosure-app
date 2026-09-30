@@ -9,7 +9,6 @@ import {
 } from "../memory/memory-folder-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
-import { makeChannelNotificationTool } from "./builtin/channel-notification.js";
 import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import { makeManageMcpTool } from "./builtin/manage-mcp.js";
 import { makeFileTools } from "./builtin/file-tools.js";
@@ -29,7 +28,6 @@ import {
 } from "./builtin/memory-tools.js";
 export {
     makeNotificationTool,
-    makeChannelNotificationTool,
     makeMemorySearchTool,
     makeMemoryCreateTool,
     makeMemoryPatchTool,
@@ -44,7 +42,6 @@ export {
     SCHEDULE_TOOL_NAMES,
 };
 export type { NotificationToolOptions } from "./builtin/notification.js";
-export type { ChannelNotificationToolOptions } from "./builtin/channel-notification.js";
 export {
     MEMORY_READ_TOOL_NAMES,
     MEMORY_WRITE_TOOL_NAMES,
@@ -125,12 +122,11 @@ const BUILTIN_TOOL_HYDRATORS = {
     ...Object.fromEntries(makeFileTools().map((tool) => [tool.name, () => tool])),
     shell_execute: () => makeShellTool(),
     manage_mcp: () => makeManageMcpTool(),
-    notify_user_in_app: (ctx: BuiltInHydrationContext) => makeNotificationTool({
+    notify_user: (ctx: BuiltInHydrationContext) => makeNotificationTool({
         agentId: ctx.agentId || "",
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
     }),
-    notify_user_on_channel: () => makeChannelNotificationTool({}),
     schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[0],
     schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[1],
     schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[2],
@@ -168,7 +164,7 @@ export function getBuiltInNamespace(toolName: string): ToolNamespace {
         return BUILTIN_NAMESPACES.memory;
     }
     if (SCHEDULE_TOOL_NAMES.includes(toolName as never)) return BUILTIN_NAMESPACES.scheduling;
-    if (toolName === 'notify_user_in_app' || toolName === 'notify_user_on_channel') {
+    if (toolName === 'notify_user') {
         return BUILTIN_NAMESPACES.notifications;
     }
     return BUILTIN_NAMESPACES.utility;
