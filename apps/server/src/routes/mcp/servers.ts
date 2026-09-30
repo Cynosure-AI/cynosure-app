@@ -487,11 +487,11 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
     })
 
     // GET /api/mcp/oauth/callback/:serverId — OAuth redirect callback for HTTP transport
-    app.get<{ Params: { serverId: string }; Querystring: { code?: string; error?: string } }>(
+    app.get<{ Params: { serverId: string }; Querystring: { code?: string; error?: string; state?: string } }>(
         '/oauth/callback/:serverId',
         async (req, reply) => {
             const { serverId } = req.params
-            const { code, error: oauthError } = req.query
+            const { code, error: oauthError, state } = req.query
 
             if (oauthError) {
                 return reply.type('text/html').send(renderOAuthCallbackPage({
@@ -514,7 +514,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
             const registry = getToolRegistry()
 
             try {
-                const tools = await manager.finishHttpAuth(serverId, code)
+                const tools = await manager.finishHttpAuth(serverId, code, state)
                 // Tools were auto-registered via the auth-complete callback,
                 // but register explicitly in case the callback wasn't set up
                 const db = getDb()

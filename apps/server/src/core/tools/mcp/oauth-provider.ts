@@ -1,6 +1,6 @@
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, rmSync } from 'fs'
-import { createHash } from 'crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { getAppDataDir } from '../../data-dir.js'
 import type { OAuthClientProvider, OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
 import type {
@@ -19,6 +19,18 @@ export class McpOAuthProvider implements OAuthClientProvider {
     private _tokens?: OAuthTokens
     private _clientInfo?: OAuthClientInformationMixed
     private _codeVerifier?: string
+    private _state = randomBytes(32).toString('hex')
+
+    state(): string {
+        return this._state
+    }
+
+    validateState(state?: string): boolean {
+        if (!state || state.length !== this._state.length) return false
+        const actual = Buffer.from(state)
+        const expected = Buffer.from(this._state)
+        return actual.length === expected.length && timingSafeEqual(actual, expected)
+    }
 
     constructor(
         private serverUrl: string,
@@ -46,7 +58,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
             redirect_uris: [this._redirectUrl],
             grant_types: ['authorization_code', 'refresh_token'],
             response_types: ['code'],
-            token_endpoint_auth_method: 'client_secret_post',
+            token_endpoint_auth_method: 'none',
         }
     }
 
@@ -128,7 +140,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
     private saveJson(filename: string, data: unknown): void {
         if (!existsSync(this.storageDir)) mkdirSync(this.storageDir, { recursive: true })
-        writeFileSync(join(this.storageDir, filename), JSON.stringify(data, null, 2))
+        writeFileSync(join(this.storageDir, filename), JSON.stringify(data, null, 2), { mode: 0o600 })
     }
 
     private deleteFile(filename: string): void {

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { ChatEvent } from '@shared/types'
 
-vi.mock('../api/client', () => ({ api: {} }))
+const listTools = vi.hoisted(() => vi.fn())
+vi.mock('../api/client', () => ({ api: { agent: { listTools } } }))
 
 import { useAgentStore } from './agent-runtime.store'
 
@@ -111,4 +112,22 @@ describe('agent runtime hard-stop latch', () => {
       toolCalls: [expect.objectContaining({ name: 'notes.md', arguments: '{"type":"memory"}' })],
     })])
   })
+})
+
+
+test('a stale tool refresh cannot hide a newly installed MCP', async () => {
+  setActivePinia(createPinia())
+  const store = useAgentStore()
+  let resolveOld!: (tools: []) => void
+  listTools.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+  const tool = { key: 'mcp:installed::search', name: 'search', executionName: 'search', description: '',
+    namespace: { id: 'mcp:installed', label: 'Installed MCP' }, autoApprove: false, parameters: {}, ambiguous: false }
+  listTools.mockResolvedValueOnce([tool])
+  const old = store.loadTools()
+  await store.loadTools()
+  resolveOld([])
+  await old
+  expect(store.availableTools).toEqual([tool])
+  store.toggleTool(tool.key)
+  expect(store.selectedToolNames).toContain(tool.key)
 })

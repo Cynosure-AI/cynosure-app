@@ -43,7 +43,7 @@ import { registerFileRoutes } from './routes/files.js'
 import { registerFileAccessRoutes } from './routes/file-access.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
-import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat } from './ws.js'
+import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat, startToolRegistryUpdates } from './ws.js'
 import { executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
 import { loadEmbeddingServiceFromDb } from './core/memory/embedding.js'
@@ -395,6 +395,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   const heartbeat = startHeartbeat()
   const eventBus = getEventBus()
+  const removeRegistryListener = startToolRegistryUpdates()
 
   const hitlRequestListener = (...args: unknown[]) => {
     const data = args[0] as {
@@ -577,6 +578,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
       isClosed = true
 
       clearInterval(heartbeat)
+      removeRegistryListener()
       removeHitlRequestListener()
       removeHitlResolvedListener()
       removeHitlCancelRequestListener()

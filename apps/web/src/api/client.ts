@@ -196,6 +196,7 @@ export const api = {
   },
 
   agent: {
+    onToolsChanged: (cb: () => void) => onWsEvent('tools:registry-changed', cb),
     onHITLRequest: (cb: (data: unknown) => void) =>
       onWsEvent('agent:hitl-request', cb),
     onHITLResolved: (cb: (data: unknown) => void) =>
