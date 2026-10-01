@@ -1175,6 +1175,7 @@ export class AgentExecutor {
         publishChatEvent(this.config.broadcast, { conversationId, executionId: this._streamId, payload: {
             type: 'transcript-item', item: messageToTranscriptItem({ id, role: 'assistant', content: assistantContent || '',
                 thinking, createdAt, agentId, toolCallIds: visibleToolCalls.map((call) => call.id),
+                toolCalls: visibleToolCalls.map((call) => ({ id: call.id, name: call.function.name, arguments: call.function.arguments })),
                 maCodename: meta?.maCodename as string | undefined,
                 maAgentName: meta?.maAgentName as string | undefined, maInvocationId: meta?.maInvocationId as string | undefined,
                 provider: providerId, model }, streamId),
@@ -1212,6 +1213,7 @@ export class AgentExecutor {
             publishChatEvent(broadcast, { conversationId, executionId: this._streamId, payload: {
                 type: 'transcript-item', item: messageToTranscriptItem({
                     id: toolMsgId, role: 'tool', content: tr.output,
+                    toolCallId: tr.toolCallId, toolSuccess: tr.success,
                     agentId, agentName, agentIconUrl,
                     maCodename: meta?.maCodename as string | undefined,
                     maAgentName: meta?.maAgentName as string | undefined,

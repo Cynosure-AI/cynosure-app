@@ -1,3 +1,4 @@
+import type { MessageToolCall } from '@shared/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ExecutionStep } from '../stores/agent-runtime.store'
 
@@ -13,13 +14,27 @@ export type TimelineEntry =
   | { type: 'tool-group'; group: ToolGroup; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'continuation'; step: ExecutionStep; ts: number; key: string; isSubAgent?: false }
   | { type: 'delegation-result'; results: NonNullable<ExecutionStep['results']>; ts: number; sequence?: number; key: string; isSubAgent?: false }
-  | { type: 'tool-fallback'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: boolean }
+  | { type: 'saved-tool-result'; msg: DisplayMessage; call: MessageToolCall | null; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
   | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; openingMessage: string | null; continued: boolean; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
 
 export function buildChatTimeline(messages: DisplayMessage[], executionSteps: ExecutionStep[]): TimelineEntry[] {
   const entries: TimelineEntry[] = []
   const hasExecSteps = executionSteps.length > 0
+  const callKey = (id: string, invocationId?: string) => JSON.stringify([invocationId ?? '', id])
+  const savedCalls = new Map<string, MessageToolCall>()
+  const representedResults = new Set<string>()
+  for (const message of messages) {
+    for (const call of message.toolCalls ?? []) savedCalls.set(callKey(call.id, message.maInvocationId), call)
+  }
+  for (const step of executionSteps) {
+    for (const call of step.toolCalls ?? []) {
+      if (call.id) savedCalls.set(callKey(call.id, step.maInvocationId), { id: call.id, name: call.name, arguments: call.arguments })
+    }
+    for (const result of step.results ?? []) {
+      if (result.toolCallId) representedResults.add(callKey(result.toolCallId, step.maInvocationId))
+    }
+  }
 
   for (const msg of messages) {
     // Compact event markers — rendered as divider cards, not regular messages
@@ -29,8 +44,8 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     }
     // Skip plain system messages (agent prompts etc. are not shown to user)
     if (msg.role === 'system') continue
-    // When we have execution steps, hide tool messages (shown via ToolExecutionCard)
-    if (hasExecSteps && msg.role === 'tool') continue
+    // Suppress only results whose call is actually represented by execution history.
+    if (msg.role === 'tool' && msg.toolCallId && representedResults.has(callKey(msg.toolCallId, msg.maInvocationId))) continue
     // Always hide empty assistant messages (tool-calling bookkeeping, no visible content)
     if (
       msg.role === 'assistant' &&
@@ -45,8 +60,8 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     const isSubAgent = Boolean(msg.maInvocationId)
 
     if (msg.role === 'tool') {
-      // No exec steps available — render tool messages as compact fallback cards
-      entries.push({ type: 'tool-fallback', msg, ts: msg.createdAt, key: `tf-${msg.id}`, isSubAgent })
+      const call = msg.toolCallId ? savedCalls.get(callKey(msg.toolCallId, msg.maInvocationId)) ?? null : null
+      entries.push({ type: 'saved-tool-result', msg, call, ts: msg.createdAt, key: `tr-${msg.id}`, isSubAgent })
     } else {
       entries.push({ type: 'message', msg, ts: msg.createdAt, key: `m-${msg.id}`, isSubAgent })
     }
@@ -74,6 +89,29 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       steps.sort((a, b) => a.timestamp - b.timestamp)
       const isSubAgent = steps.some(s => Boolean(s.maInvocationId))
       const calls = steps.flatMap(step => step.toolCalls || [])
+      const callIds = new Set(calls.filter(call => call.id).map(call => callKey(call.id!, steps[0].maInvocationId)))
+      const savedResults = entries.filter((entry): entry is Extract<TimelineEntry, { type: 'saved-tool-result' }> =>
+        entry.type === 'saved-tool-result' && Boolean(entry.msg.toolCallId && callIds.has(callKey(entry.msg.toolCallId, entry.msg.maInvocationId))),
+      )
+      if (savedResults.length) {
+        // Recover missing result events from transcript messages without mutating the store.
+        const latestResults = [...steps].reverse().find(step => step.results?.length)?.results ?? []
+        const recoveredResults = savedResults.map(({ msg, call }) => ({
+          toolCallId: msg.toolCallId,
+          name: call?.name ?? 'Tool result',
+          output: msg.content,
+          success: msg.toolSuccess ?? (msg.isError ? false : undefined),
+          images: msg.imageDataUrls,
+          structuredContent: msg.structuredContent,
+        }))
+        steps.push({
+          ...steps.at(-1)!,
+          timestamp: Math.max(steps.at(-1)!.timestamp, ...savedResults.map(entry => entry.ts)),
+          results: [...latestResults, ...recoveredResults],
+          resultsAt: Math.max(...savedResults.map(entry => entry.ts)),
+        })
+        for (const entry of savedResults) entries.splice(entries.indexOf(entry), 1)
+      }
       const resultStep = [...steps].reverse().find(step => step.results?.length && step.resultsAt !== undefined)
       const delegationHandoff = calls.length > 0
         && calls.some(call => call.name === 'spawn_subagent' || call.name === 'continue_subagent')
@@ -101,7 +139,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
   // Event sequence records persistence order, which can differ from when a
   // message or tool step actually happened. Use it only for equal timestamps.
   function sequenceOf(entry: TimelineEntry): number | undefined {
-    if (entry.type === 'message' || entry.type === 'tool-fallback' || entry.type === 'compact-event') return entry.msg.sequence
+    if (entry.type === 'message' || entry.type === 'saved-tool-result' || entry.type === 'compact-event') return entry.msg.sequence
     if (entry.type === 'tool-group') return entry.group.steps.find((step) => step.sequence !== undefined)?.sequence
     if (entry.type === 'continuation') return entry.step.sequence
     if (entry.type === 'delegation-result') return entry.sequence
@@ -147,7 +185,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       const firstStep = entry.group.steps[0]
       return firstStep?.maInvocationId ?? null
     }
-    if (entry.type === 'message' || entry.type === 'tool-fallback') {
+    if (entry.type === 'message' || entry.type === 'saved-tool-result') {
       return entry.msg.maInvocationId ?? null
     }
     return null
@@ -198,10 +236,10 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
     let agentId: string | null = null
     let codename: string | null = null
     for (const e of innerEntries) {
-      if ((e.type === 'message' || e.type === 'tool-fallback') && e.msg.agentName) agentName = agentName ?? e.msg.agentName
-      if ((e.type === 'message' || e.type === 'tool-fallback') && e.msg.agentId) agentId = agentId ?? e.msg.agentId
-      if ((e.type === 'message' || e.type === 'tool-fallback') && e.msg.maCodename) codename = codename ?? e.msg.maCodename
-      if ((e.type === 'message' || e.type === 'tool-fallback') && e.msg.maAgentName) agentName = agentName ?? e.msg.maAgentName
+      if ((e.type === 'message' || e.type === 'saved-tool-result') && e.msg.agentName) agentName = agentName ?? e.msg.agentName
+      if ((e.type === 'message' || e.type === 'saved-tool-result') && e.msg.agentId) agentId = agentId ?? e.msg.agentId
+      if ((e.type === 'message' || e.type === 'saved-tool-result') && e.msg.maCodename) codename = codename ?? e.msg.maCodename
+      if ((e.type === 'message' || e.type === 'saved-tool-result') && e.msg.maAgentName) agentName = agentName ?? e.msg.maAgentName
       if (e.type === 'tool-group' && e.group.steps[0]?.maAgentName) agentName = agentName ?? e.group.steps[0].maAgentName
       if (e.type === 'tool-group' && e.group.steps[0]?.maCodename) codename = codename ?? e.group.steps[0].maCodename
       if (agentName && agentId && codename) break

@@ -11,6 +11,58 @@ const ids = (timeline: ReturnType<typeof buildChatTimeline>) => timeline.map(ent
   entry.type === 'message' ? entry.msg.id : entry.type === 'sub-agent-group' ? entry.entries.map(inner => inner.key) : entry.ts)
 
 describe('chat timeline chronology', () => {
+  it('recovers saved call metadata without execution events', () => {
+    const timeline = buildChatTimeline([
+      message('request', 1, { content: '', toolCalls: [{ id: 'call', name: 'lookup', arguments: '{"query":"jobs"}' }] }),
+      message('result', 2, { role: 'tool', toolCallId: 'call', content: 'Found jobs', toolSuccess: true }),
+    ], [])
+    expect(timeline).toHaveLength(1)
+    expect(timeline[0]).toMatchObject({ type: 'saved-tool-result', call: { id: 'call', name: 'lookup', arguments: '{"query":"jobs"}' }, msg: { content: 'Found jobs', toolSuccess: true } })
+  })
+
+  it('keeps unmatched raw results when another call has execution history', () => {
+    const timeline = buildChatTimeline([
+      message('represented', 2, { role: 'tool', toolCallId: 'known' }),
+      message('unmatched', 3, { role: 'tool', toolCallId: 'other' }),
+      message('legacy', 4, { role: 'tool' }),
+    ], [step(1, { results: [{ toolCallId: 'known', name: 'lookup', output: 'Known result', success: true }] })])
+    expect(timeline.filter(entry => entry.type === 'saved-tool-result').map(entry => entry.msg.id)).toEqual(['unmatched', 'legacy'])
+  })
+
+  it('fills missing result events by call ID, including repeated tool names', () => {
+    const original = step(1, {
+      toolCalls: [{ id: 'first', name: 'lookup', arguments: '{"query":"one"}' }, { id: 'second', name: 'lookup', arguments: '{"query":"two"}' }],
+      results: [{ toolCallId: 'second', name: 'lookup', output: 'Two', success: true }],
+    })
+    const timeline = buildChatTimeline([
+      message('first-result', 2, { role: 'tool', toolCallId: 'first', content: 'One', toolSuccess: false }),
+      message('second-result', 3, { role: 'tool', toolCallId: 'second', content: 'Two', toolSuccess: true }),
+    ], [original])
+    expect(timeline).toHaveLength(1)
+    const entry = timeline[0]!
+    expect(entry.type).toBe('tool-group')
+    if (entry.type !== 'tool-group') throw new Error('Expected tool group')
+    expect(entry.group.steps.at(-1)?.results).toEqual([
+      { toolCallId: 'second', name: 'lookup', output: 'Two', success: true },
+      expect.objectContaining({ toolCallId: 'first', name: 'lookup', output: 'One', success: false }),
+    ])
+    expect(original.results).toHaveLength(1)
+  })
+
+  it('matches saved results within their sub-agent invocation', () => {
+    const timeline = buildChatTimeline([
+      message('child-result', 2, { role: 'tool', toolCallId: 'call', maInvocationId: 'child' }),
+    ], [step(1, { results: [{ toolCallId: 'call', name: 'lookup', output: 'Parent result', success: true }] })])
+    expect(timeline.some(entry => entry.type === 'sub-agent-group' && entry.entries.some(inner => inner.type === 'saved-tool-result'))).toBe(true)
+  })
+
+  it('preserves results with missing metadata without inventing a call or outcome', () => {
+    const timeline = buildChatTimeline([message('legacy-result', 1, { role: 'tool', content: '{"event":{}}' })], [])
+    expect(timeline[0]).toMatchObject({ type: 'saved-tool-result', call: null })
+    if (timeline[0]?.type !== 'saved-tool-result') throw new Error('Expected saved result')
+    expect(timeline[0].msg.toolSuccess).toBeUndefined()
+  })
+
   it('uses displayed timestamps when persistence sequence disagrees', () => {
     const timeline = buildChatTimeline([
       message('later', 1, { sequence: 20 }),
@@ -236,7 +288,7 @@ describe('chat timeline chronology', () => {
       message('a', 1, { maInvocationId: 'same' }), message('tool', 2, { role: 'tool', maInvocationId: 'same' }),
       message('user', 3, { role: 'user' }), message('b', 4, { maInvocationId: 'same' }),
     ], [])
-    expect(ids(timeline)).toEqual([['m-a', 'tf-tool'], 'user', ['m-b']])
+    expect(ids(timeline)).toEqual([['m-a', 'tr-tool'], 'user', ['m-b']])
     expect(new Set(timeline.map(entry => entry.key)).size).toBe(3)
   })
 

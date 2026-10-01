@@ -23,7 +23,7 @@ describe('conversation message attachment resolution', () => {
         await rm(directory, { recursive: true, force: true })
     })
 
-    test('returns saved tool-call IDs for ordering execution cards', async () => {
+    test('returns saved tool-call metadata and result linkage without execution events', async () => {
         const db = getDb()
         db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)')
             .run('c1', 'Chat', 1, 1)
@@ -31,12 +31,35 @@ describe('conversation message attachment resolution', () => {
             .run('m1', 'c1', 'assistant', 'I will write it now', JSON.stringify([
                 { id: 'write-1', type: 'function', function: { name: 'memory_patch', arguments: '{}' } },
             ]), 2)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, tool_call_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('result', 'c1', 'tool', 'Saved output', 'write-1', 3)
         const app = Fastify()
         await app.register(registerConversationRoutes, { prefix: '/api/chat' })
         try {
             const response = await app.inject({ method: 'GET', url: '/api/chat/conversations/c1/messages' })
             expect(response.statusCode, response.body).toBe(200)
             expect(response.json().messages[0].toolCallIds).toEqual(['write-1'])
+            expect(response.json().messages[0].toolCalls).toEqual([{ id: 'write-1', name: 'memory_patch', arguments: '{}' }])
+            expect(response.json().messages[1]).toMatchObject({ toolCallId: 'write-1', content: [{ type: 'text', text: 'Saved output' }] })
+            expect(response.json().messages[1].toolSuccess).toBeUndefined()
+        } finally {
+            await app.close()
+        }
+    })
+
+    test('includes known tool outcomes in the message response for legacy result events', async () => {
+        const db = getDb()
+        db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+        db.prepare('INSERT INTO messages (id, conversation_id, role, content, tool_call_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('result', 'c1', 'tool', 'Failed', 'call-1', 2)
+        db.prepare('INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at) VALUES (?, ?, ?, ?)')
+            .run('c1', 'run', JSON.stringify({ type: 'tool-results', items: [{ callId: 'call-1', success: false }] }), 2)
+        const app = Fastify()
+        await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+        try {
+            const response = await app.inject({ method: 'GET', url: '/api/chat/conversations/c1/messages' })
+            expect(response.statusCode, response.body).toBe(200)
+            expect(response.json().messages[0].toolSuccess).toBe(false)
         } finally {
             await app.close()
         }

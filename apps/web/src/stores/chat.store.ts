@@ -3,7 +3,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
-import type { ChatQueueDelivery, ContextEvidence, MediaGenerationSettings, QueuedChatMessageDto } from '@shared/types'
+import type { ChatQueueDelivery, MessageToolCall, ContextEvidence, MediaGenerationSettings, QueuedChatMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -28,6 +28,9 @@ export interface DisplayMessage {
   id: string
   sequence?: number
   toolCallIds?: string[]
+  toolCalls?: MessageToolCall[]
+  toolCallId?: string
+  toolSuccess?: boolean
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   thinking?: string

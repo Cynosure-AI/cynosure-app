@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { ChatEvent, ChatEventDraft, ChatEventPayload, ContentBlock, ContextEvidence, MessageItem } from '@shared/types'
+import type { ChatEvent, ChatEventDraft, ChatEventPayload, ContentBlock, ContextEvidence, MessageItem, MessageToolCall } from '@shared/types'
 import type { ContentPart } from '../gateway/providers/base.provider.js'
 
 export interface MessageFields {
@@ -29,6 +29,9 @@ export interface MessageFields {
   contextTokens?: number | null
   latencyMs?: number | null
   toolCallIds?: string[]
+  toolCalls?: MessageToolCall[]
+  toolCallId?: string
+  toolSuccess?: boolean
 }
 
 export function messageContentBlocks(message: MessageFields): ContentBlock[] {
@@ -84,6 +87,9 @@ export function messageToTranscriptItem(message: MessageFields, executionId?: st
     contextTokens: message.contextTokens,
     latencyMs: message.latencyMs,
     toolCallIds: message.toolCallIds,
+    toolCalls: message.toolCalls,
+    toolCallId: message.toolCallId,
+    toolSuccess: message.toolSuccess,
   }
 }
 
