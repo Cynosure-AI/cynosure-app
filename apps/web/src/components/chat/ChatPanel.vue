@@ -14,7 +14,9 @@ import QuickResponses from '../chat/QuickResponses.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
-import HistoricalToolResult from './HistoricalToolResult.vue'
+import ToolExecutionList from './ToolExecutionList.vue'
+import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
+import { useToolPresentation } from '../../composables/useToolPresentation'
 import RichContent from '../shared/RichContent.vue'
 import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
@@ -46,7 +48,8 @@ async function forkMessage(messageId: string): Promise<void> {
 }
 
 const scrollContainer = ref<HTMLDivElement | null>(null)
-const expandedFallback = ref<Set<string>>(new Set())
+const toolPresentation = useToolPresentation()
+const lightboxSrc = ref<string | null>(null)
 const collapsedSubAgentGroups = reactive(new Set<string>())
 const fullHeightSubAgentGroups = reactive(new Set<string>())
 const searchInput = ref<HTMLInputElement | null>(null)
@@ -259,10 +262,11 @@ const activeSubAgentGroupKey = computed(() => {
 })
 
 function delegationResultLabel(results: Extract<TimelineEntry, { type: 'delegation-result' }>['results']): string {
-  if (results.some(result => !result.success && (result.name === 'spawn_subagent' || result.name === 'continue_subagent'))) {
+  if (results.some(result => result.success === false && (result.name === 'spawn_subagent' || result.name === 'continue_subagent'))) {
     return 'Delegation failed'
   }
-  if (results.some(result => !result.success)) return 'Sub-agent returned · tool error'
+  if (results.some(result => result.success === false)) return 'Sub-agent returned · tool error'
+  if (results.some(result => result.success === undefined)) return 'Sub-agent returned · outcome unavailable'
   return 'Sub-agent returned'
 }
 
@@ -351,9 +355,22 @@ function toggleSubAgentCollapsed(key: string): void {
   }
 }
 
-function setFallbackExpanded(id: string, expanded: boolean): void {
-  if (expanded) expandedFallback.value.add(id)
-  else expandedFallback.value.delete(id)
+function savedToolRows(entry: Extract<TimelineEntry, { type: 'saved-tool-result' }>) {
+  const { msg, call } = entry
+  const name = call?.name ?? 'Tool result'
+  return [{
+    call,
+    name: toolPresentation.toolDisplayName(name),
+    icon: toolPresentation.toolNamespaceIcon(name),
+    iconUrl: toolPresentation.toolIconUrl(name),
+    internal: toolPresentation.isBuiltInTool(name),
+    result: {
+      name,
+      output: msg.content,
+      success: msg.toolSuccess ?? (msg.isError ? false : undefined),
+      images: msg.imageDataUrls,
+    },
+  }]
 }
 
 // ─── Sub-agent box scroll ───────────────────────────────────
@@ -997,14 +1014,15 @@ onMounted(() => {
                   :delegation-handoff="inner.group.delegationHandoff"
                 />
                 <div
-                  v-else-if="inner.type === 'tool-fallback'"
+                  v-else-if="inner.type === 'saved-tool-result'"
                   class="px-4 py-1.5"
                 >
-                  <div class="max-w-[80%] ml-10">
-                    <HistoricalToolResult
-                      :content="inner.msg.content"
-                      :model-value="expandedFallback.has(inner.msg.id)"
-                      @update:model-value="setFallbackExpanded(inner.msg.id, $event)"
+                  <div class="ml-3 md:ml-12">
+                    <ToolExecutionList
+                      :rows="savedToolRows(inner)"
+                      :is-active="false"
+                      status="Result received"
+                      @preview-image="lightboxSrc = $event"
                     />
                   </div>
                 </div>
@@ -1047,18 +1065,21 @@ onMounted(() => {
         >
           <div class="max-w-[80%] ml-3 md:ml-12 flex items-center gap-2 rounded-xl border border-indigo-500/20 bg-indigo-950/10 px-3 py-2 text-xs text-ink-secondary">
             <Icon
-              :icon="entry.results.every(result => result.success) ? 'lucide:check-circle-2' : 'lucide:circle-alert'"
+              :icon="entry.results.some(result => result.success === false) ? 'lucide:circle-alert' : entry.results.some(result => result.success === undefined) ? 'lucide:circle-help' : 'lucide:check-circle-2'"
               class="w-3.5 h-3.5 shrink-0"
-              :class="entry.results.every(result => result.success) ? 'text-status-success' : 'text-status-danger'"
+              :class="entry.results.some(result => result.success === false) ? 'text-status-danger' : entry.results.some(result => result.success === undefined) ? 'text-ink-muted' : 'text-status-success'"
             />
             <span>{{ delegationResultLabel(entry.results) }}</span>
-            <span class="ml-auto text-[10px] text-ink-muted">{{ entry.results.filter(result => result.success).length }}/{{ entry.results.length }} ok</span>
+            <span
+              v-if="entry.results.every(result => result.success !== undefined)"
+              class="ml-auto text-[10px] text-ink-muted"
+            >{{ entry.results.filter(result => result.success).length }}/{{ entry.results.length }} ok</span>
           </div>
           <div
-            v-if="entry.results.some(result => !result.success && (result.name === 'spawn_subagent' || result.name === 'continue_subagent'))"
+            v-if="entry.results.some(result => result.success === false && (result.name === 'spawn_subagent' || result.name === 'continue_subagent'))"
             class="max-w-[80%] ml-3 md:ml-12 mt-1 max-h-40 overflow-y-auto break-words text-xs text-status-danger whitespace-pre-wrap"
           >
-            {{ entry.results.filter(result => !result.success && (result.name === 'spawn_subagent' || result.name === 'continue_subagent')).map(result => result.error || result.output).join('\n') }}
+            {{ entry.results.filter(result => result.success === false && (result.name === 'spawn_subagent' || result.name === 'continue_subagent')).map(result => result.error || result.output).join('\n') }}
           </div>
           <details
             v-if="entry.results.some(result => result.name !== 'spawn_subagent' && result.name !== 'continue_subagent')"
@@ -1073,7 +1094,7 @@ onMounted(() => {
               class="mt-2 border-t border-theme-700/40 pt-2"
             >
               <div class="font-medium">
-                {{ result.name }} · {{ result.success ? 'Success' : 'Failed' }}
+                {{ result.name }} · {{ result.success === undefined ? 'Result received' : result.success ? 'Success' : 'Failed' }}
               </div>
               <RichContent
                 v-if="result.output"
@@ -1098,16 +1119,17 @@ onMounted(() => {
           :created-at="entry.msg.compactEventData.createdAt"
         />
 
-        <!-- Fallback tool result (historical, no execution steps available) -->
+        <!-- Saved result not represented by execution events -->
         <div
-          v-else-if="entry.type === 'tool-fallback'"
+          v-else-if="entry.type === 'saved-tool-result'"
           class="px-4 py-1.5"
         >
-          <div class="max-w-[80%] ml-10">
-            <HistoricalToolResult
-              :content="entry.msg.content"
-              :model-value="expandedFallback.has(entry.msg.id)"
-              @update:model-value="setFallbackExpanded(entry.msg.id, $event)"
+          <div class="ml-3 md:ml-12">
+            <ToolExecutionList
+              :rows="savedToolRows(entry)"
+              :is-active="false"
+              status="Result received"
+              @preview-image="lightboxSrc = $event"
             />
           </div>
         </div>
@@ -1140,4 +1162,8 @@ onMounted(() => {
       <HITLDialog />
     </div>
   </div>
+  <ArtifactImageModal
+    :src="lightboxSrc"
+    @close="lightboxSrc = null"
+  />
 </template>

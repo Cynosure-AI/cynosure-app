@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, test } from 'vitest'
 import ToolExecutionCard from './ToolExecutionCard.vue'
+import ToolExecutionList from './ToolExecutionList.vue'
 import { useAgentStore, type ToolInfo } from '../../stores/agent-runtime.store'
 import { useMcpServers } from '../../composables/useMcpServers'
 
@@ -106,6 +107,34 @@ describe('ToolExecutionCard', () => {
     await row.trigger('click')
     expect(wrapper.text()).toContain('report.pdf')
     expect(wrapper.text()).toContain('Indexed report')
+  })
+
+  test('pairs repeated tools with out-of-order results by call ID', async () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: { iteration: 1, isActive: false, steps: [{
+        iteration: 1, status: 'executing', timestamp: Date.now(),
+        toolCalls: [{ id: 'first', name: 'lookup', arguments: '{"query":"one"}' }, { id: 'second', name: 'lookup', arguments: '{"query":"two"}' }],
+        results: [{ toolCallId: 'second', name: 'lookup', output: 'Second output', success: false }, { toolCallId: 'first', name: 'lookup', output: 'First output', success: true }],
+      }] },
+      global: { stubs: { Icon: true } },
+    })
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('First output')
+    expect(wrapper.text()).not.toContain('Second output')
+    expect(wrapper.get('button').text()).toContain('Completed')
+  })
+
+  test('renders saved output with unknown outcome through the shared list', async () => {
+    const wrapper = mount(ToolExecutionList, {
+      props: { isActive: false, status: 'Result received', rows: [{ name: 'Tool result', icon: 'lucide:terminal', internal: false, call: null, result: { name: 'Tool result', output: '{"event":{}}' } }] },
+      global: { stubs: { Icon: true } },
+    })
+    expect(wrapper.get('button').text()).toContain('Result received')
+    expect(wrapper.get('[aria-label="Result received"]').attributes('icon')).toBe('lucide:circle-help')
+    expect(wrapper.text()).not.toContain('Failed')
+    expect(wrapper.text()).not.toContain('Completed')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('event')
   })
 
   test('starts collapsed even when the removed preference remains in local storage', () => {

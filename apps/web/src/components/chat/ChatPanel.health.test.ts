@@ -2,15 +2,17 @@ import { shallowMount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import ChatPanel from './ChatPanel.vue'
+import ToolExecutionList from './ToolExecutionList.vue'
+import type { DisplayMessage } from '../../stores/chat.store'
 
 const mocks = vi.hoisted(() => ({
   chat: {
     activeAgentId: 'agent' as string | null, activeConversationId: null as string | null,
     conversations: [] as Array<{ id: string; agentId: string }>,
-    messages: [], freeChatSubAgentIds: [] as string[], activeQuickResponses: [],
+    messages: [] as DisplayMessage[], freeChatSubAgentIds: [] as string[], activeQuickResponses: [],
     activePostActions: new Set(), loadingMessages: false,
   },
-  runtime: { executionSteps: [], isExecuting: false },
+  runtime: { availableTools: [], executionSteps: [], isExecuting: false },
   health: { healthByAgent: new Map(), loadMemoryFolders: vi.fn() },
 }))
 vi.mock('../../stores/chat.store', () => ({ useChatStore: () => reactive(mocks.chat) }))
@@ -34,6 +36,21 @@ describe('chat greeting health warning', () => {
     mocks.chat.conversations = []
     mocks.health.healthByAgent.clear()
     mocks.chat.freeChatSubAgentIds = []
+    mocks.chat.messages = []
+  })
+
+  test('renders saved tool messages with the shared list when events are unavailable', () => {
+    mocks.chat.messages = [
+      { id: 'request', role: 'assistant', content: '', createdAt: 1, toolCalls: [{ id: 'call', name: 'lookup', arguments: '{"query":"jobs"}' }] },
+      { id: 'result', role: 'tool', content: 'Found jobs', createdAt: 2, toolCallId: 'call', toolSuccess: true },
+    ]
+    const wrapper = mountPanel()
+    const list = wrapper.getComponent(ToolExecutionList)
+    expect(list.props('isActive')).toBe(false)
+    expect(list.props('rows')).toEqual([expect.objectContaining({
+      name: 'lookup', call: { id: 'call', name: 'lookup', arguments: '{"query":"jobs"}' },
+      result: expect.objectContaining({ output: 'Found jobs', success: true }),
+    })])
   })
 
   test.each([8, 9, 10, 11])('accounts for all %i empty-state sub-agents', (count) => {

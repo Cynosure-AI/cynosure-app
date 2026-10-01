@@ -15,7 +15,7 @@ test('projects the same canonical message for loading and live replay', () => {
     ],
   }
   expect(toDisplayMessage(item, 9)).toEqual({
-    id: 'message-1', sequence: 9, toolCallIds: ['call-1'], role: 'assistant', createdAt: 42,
+    id: 'message-1', sequence: 9, toolCallIds: ['call-1'], toolCalls: undefined, toolCallId: undefined, toolSuccess: undefined, role: 'assistant', createdAt: 42,
     content: 'Here is the result', thinking: 'Checked the source',
     imageDataUrls: ['/api/files?path=image'], videoDataUrls: [], audioDataUrls: [],
     fileAttachments: [{ name: 'report.pdf', href: '/api/files?path=report' }],
@@ -35,4 +35,10 @@ test('restores a saved assistant error as an error bubble', () => {
   expect(toDisplayMessage(item)).toMatchObject({
     id: 'error-message', isError: true, content: 'Generated image rejected by content moderation.',
   })
+})
+
+test('preserves saved tool metadata for event-independent rendering', () => {
+  const call = { id: 'call', name: 'lookup', arguments: '{}' }
+  expect(toDisplayMessage({ type: 'message', id: 'request', role: 'assistant', createdAt: 1, content: [], toolCalls: [call] }).toolCalls).toEqual([call])
+  expect(toDisplayMessage({ type: 'message', id: 'result', role: 'tool', createdAt: 2, content: [], toolCallId: 'call', toolSuccess: false })).toMatchObject({ toolCallId: 'call', toolSuccess: false })
 })

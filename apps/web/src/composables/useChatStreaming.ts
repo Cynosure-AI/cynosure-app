@@ -1,5 +1,6 @@
 import { reactive, ref, type Ref } from 'vue'
 import { api } from '../api/client'
+import type { MessageToolCall } from '@shared/types'
 import type { DisplayMessage } from '../stores/chat.store'
 
 export interface TokenUsage {
@@ -63,7 +64,7 @@ export interface ChatStreamingState {
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
-    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; toolCallIds?: string[]; role: string; isError?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
+    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; toolCallIds?: string[]; toolCalls?: MessageToolCall[]; toolCallId?: string; toolSuccess?: boolean; role: string; isError?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
     handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
     handleCompactStart(data: { conversationId: string }): void
     handleCompactError(data: { conversationId: string; error: string }): void
@@ -853,6 +854,9 @@ export function useChatStreaming(
             conversationId: string
             sequence?: number
             toolCallIds?: string[]
+            toolCalls?: MessageToolCall[]
+            toolCallId?: string
+            toolSuccess?: boolean
             role: string
             isError?: boolean
             content: string
@@ -874,6 +878,9 @@ export function useChatStreaming(
         function hydratePersisted(target: DisplayMessage): void {
             if (data.message.sequence !== undefined) target.sequence = data.message.sequence
             if (data.message.toolCallIds) target.toolCallIds = data.message.toolCallIds
+            if (data.message.toolCalls) target.toolCalls = data.message.toolCalls
+            if (data.message.toolCallId) target.toolCallId = data.message.toolCallId
+            if (data.message.toolSuccess !== undefined) target.toolSuccess = data.message.toolSuccess
             target.isError = data.message.isError
             target.content = data.message.content
             if (data.message.thinking !== undefined) target.thinking = data.message.thinking
@@ -926,6 +933,9 @@ export function useChatStreaming(
                     id: data.message.id,
                     sequence: data.message.sequence,
                     toolCallIds: data.message.toolCallIds,
+                    toolCalls: data.message.toolCalls,
+                    toolCallId: data.message.toolCallId,
+                    toolSuccess: data.message.toolSuccess,
                     role: data.message.role as DisplayMessage['role'],
                     isError: data.message.isError,
                     streamId: data.message.role === 'assistant' ? data.streamId : undefined,

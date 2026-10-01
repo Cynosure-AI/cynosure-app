@@ -7,11 +7,8 @@ import FileArtifactLinks from './FileArtifactLinks.vue'
 import ToolExecutionList from './ToolExecutionList.vue'
 import ToolNamespaceIcon from './ToolNamespaceIcon.vue'
 import { fileArtifactKey, fileArtifactLinks } from '../../utils/file-artifacts'
-import { isBuiltInNamespaceId, isInternalToolName } from '../../utils/internal-tools'
 import RichContent from '../shared/RichContent.vue'
-import { useAgentStore } from '../../stores/agent-runtime.store'
-import { useMcpServers } from '../../composables/useMcpServers'
-import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
+import { useToolPresentation } from '../../composables/useToolPresentation'
 
 export interface ToolExecStep {
   iteration: number
@@ -29,8 +26,8 @@ export interface ToolExecStep {
   maPhase?: string
 }
 
-type ToolCall = { name: string; arguments: string }
-type ToolResult = { name: string; success: boolean; output: string; error?: string; images?: string[] }
+type ToolCall = { id?: string; name: string; arguments: string }
+type ToolResult = { toolCallId?: string; name: string; success?: boolean; output: string; error?: string; images?: string[] }
 type StatusMeta = { label: string; icon: string; color: string }
 type ResultOutcomeMeta = { label: string; icon: string; color: string }
 type ContextSectionKind = 'tool' | 'memory' | 'entity'
@@ -69,32 +66,7 @@ const props = defineProps<{
   delegationHandoff?: boolean
 }>()
 
-const agentStore = useAgentStore()
-const { servers } = useMcpServers()
-const toolsByName = computed(() => {
-  const tools = new Map(agentStore.availableTools.map((tool) => [tool.executionName, tool]))
-  for (const tool of agentStore.availableTools) {
-    tools.set(tool.key, tool)
-    if (!tool.ambiguous && !tools.has(tool.name)) tools.set(tool.name, tool)
-  }
-  return tools
-})
-
-function isBuiltInTool(name = ''): boolean {
-  const tool = toolsByName.value.get(name)
-  return tool ? isBuiltInNamespaceId(tool.namespace.id) : isInternalToolName(name)
-}
-
-function toolNamespaceIcon(name = ''): string {
-  const namespaceId = toolsByName.value.get(name)?.namespace.id
-  return namespaceId ? getToolNamespaceIcon(namespaceId) : toolCallIcon({ name, arguments: '{}' })
-}
-
-function toolIconUrl(name = ''): string | undefined {
-  const namespaceId = toolsByName.value.get(name)?.namespace.id
-  if (!namespaceId?.startsWith('mcp:')) return undefined
-  return servers.value.find((server) => server.id === namespaceId.slice(4))?.icon_url || undefined
-}
+const { isBuiltInTool, toolDisplayName, toolNamespaceIcon, toolIconUrl } = useToolPresentation()
 
 // Context preparation details are collapsed independently of tool execution rows.
 const expanded = ref(false)
@@ -204,13 +176,6 @@ function contextCallKind(call: ToolCall, status: string): ContextSectionKind | n
   return contextSectionKind(status)
 }
 
-function toolDisplayName(name = 'Tool'): string {
-  if (name === 'Task context') return 'Preparing Context'
-  if (name === 'spawn_subagent') return 'Spawn sub-agent'
-  if (name === 'continue_subagent') return 'Continue sub-agent'
-  return toolsByName.value.get(name)?.name ?? name
-}
-
 function memoryFileName(call?: ToolCall | null): string | null {
   if (!call || !isMemoryCall(call)) return null
   const parsed = parseArgs(call.arguments)
@@ -272,8 +237,10 @@ function isCandidateRow(execution: ToolExecution | ContextRow): execution is Con
 function buildExecutions(calls: ToolCall[], availableResults: ToolResult[] = []): ToolExecution[] {
   const remainingResults = [...availableResults]
   const executions = calls.map((call, index) => {
-    let resultIndex = remainingResults.findIndex((result) => result.name === call.name)
-    if (resultIndex === -1 && remainingResults[index]) resultIndex = index
+    let resultIndex = remainingResults.findIndex((result) =>
+      call.id && result.toolCallId ? call.id === result.toolCallId : result.name === call.name,
+    )
+    if (resultIndex === -1 && !call.id && remainingResults[index] && !remainingResults[index].toolCallId) resultIndex = index
 
     return {
       call,
@@ -436,12 +403,12 @@ function toolCallIconClass(call?: ToolCall | null): string {
 
 function executionIcon(execution: ToolExecution): string {
   if (!execution.result) return toolCallIcon(execution.call)
-  return execution.result.success ? 'lucide:check' : 'lucide:x'
+  return execution.result.success === undefined ? 'lucide:circle-help' : execution.result.success ? 'lucide:check' : 'lucide:x'
 }
 
 function executionIconClass(execution: ToolExecution): string {
   if (!execution.result) return toolCallIconClass(execution.call)
-  return execution.result.success ? 'text-status-success' : 'text-status-danger'
+  return execution.result.success === undefined ? 'text-ink-muted' : execution.result.success ? 'text-status-success' : 'text-status-danger'
 }
 
 function executionCardClass(execution: ToolExecution | ContextRow): string {
@@ -531,6 +498,9 @@ const resultFileArtifacts = computed(() => {
 })
 const resultOutcome = computed<ResultOutcomeMeta | null>(() => {
   if (!results.value.length) return null
+  if (results.value.some(result => result.success === undefined)) {
+    return { label: 'Results received', icon: 'lucide:circle-help', color: 'text-ink-muted' }
+  }
   if (successfulResultCount.value === results.value.length) {
     return {
       label: 'Success',
@@ -865,7 +835,9 @@ const hasDisplayableActivity = computed(() =>
               v-if="resultOutcome"
               class="text-[10px] shrink-0"
               :class="resultOutcome.color"
-            >{{ successfulResultCount }}/{{ results.length }} ok · {{ resultOutcome.label }}</span>
+            >
+              <template v-if="results.every(result => result.success !== undefined)">{{ successfulResultCount }}/{{ results.length }} ok · </template>{{ resultOutcome.label }}
+            </span>
 
             <span
               v-if="elapsedMs > 0"

@@ -7,6 +7,13 @@ export type ContentBlock =
   | { type: 'file'; artifactId: string; name: string; url?: string }
   | { type: 'structured'; value: unknown }
 
+/** Saved call identity and arguments, independent of execution-event history. */
+export interface MessageToolCall {
+  id: string
+  name: string
+  arguments: string
+}
+
 export interface MessageItem {
   type: 'message'
   id: string
@@ -25,6 +32,9 @@ export interface MessageItem {
   sequence?: number
   /** Tool calls requested by this assistant message, for transcript ordering. */
   toolCallIds?: string[]
+  toolCalls?: MessageToolCall[]
+  toolCallId?: string
+  toolSuccess?: boolean
   contextEvidence?: ContextEvidence[]
   provider?: string | null
   model?: string | null

@@ -53,7 +53,7 @@ export interface ExecutionStep {
   message?: string
   streamingChoosing?: string
   toolCalls?: ToolCallDisplay[]
-  results?: { toolCallId?: string; name: string; success: boolean; output: string; error?: string; images?: string[]; invocationId?: string; structuredContent?: unknown }[]
+  results?: { toolCallId?: string; name: string; success?: boolean; output: string; error?: string; images?: string[]; invocationId?: string; structuredContent?: unknown }[]
   resultsAt?: number
   resultsSequence?: number
   timestamp: number

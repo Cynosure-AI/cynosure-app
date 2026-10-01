@@ -12,7 +12,7 @@ type ExecutionRow = {
   iconUrl?: string
   internal: boolean
   call: { name: string; arguments: string } | null
-  result?: { name: string; success: boolean; output: string; error?: string; images?: string[] }
+  result?: { name: string; success?: boolean; output: string; error?: string; images?: string[] }
 }
 
 const props = defineProps<{
@@ -24,13 +24,13 @@ const props = defineProps<{
 const emit = defineEmits<{ previewImage: [src: string] }>()
 
 function statusLabel(row: ExecutionRow): string {
-  if (row.result) return row.result.success ? 'Completed' : 'Failed'
+  if (row.result) return row.result.success === undefined ? 'Result received' : row.result.success ? 'Completed' : 'Failed'
   if (props.status === 'Denied' || props.status === 'Awaiting approval') return props.status
   return props.isActive ? props.status : 'Pending'
 }
 
 function statusIcon(row: ExecutionRow): string {
-  if (row.result) return row.result.success ? 'lucide:circle-check' : 'lucide:circle-x'
+  if (row.result) return row.result.success === undefined ? 'lucide:circle-help' : row.result.success ? 'lucide:circle-check' : 'lucide:circle-x'
   if (props.status === 'Denied') return 'lucide:shield-x'
   if (props.status === 'Awaiting approval') return 'lucide:shield-question'
   return props.isActive ? 'svg-spinners:ring-resize' : 'lucide:clock'
@@ -75,7 +75,7 @@ function tone(row: ExecutionRow): string {
             <Icon
               :icon="statusIcon(row)"
               class="h-4 w-4 shrink-0"
-              :class="row.result ? row.result.success ? 'text-status-success' : 'text-status-danger' : 'text-ink-muted'"
+              :class="row.result?.success === true ? 'text-status-success' : row.result?.success === false ? 'text-status-danger' : 'text-ink-muted'"
               :aria-label="statusLabel(row)"
               role="img"
             />
@@ -118,7 +118,7 @@ function tone(row: ExecutionRow): string {
         <RichContent
           v-if="row.result?.output"
           :content="row.result.output"
-          :tone="row.result.success ? 'default' : 'error'"
+          :tone="row.result.success === false ? 'error' : 'default'"
           class="max-h-64 overflow-auto rounded-lg bg-theme-900/40 px-3 py-2 text-[11px]"
         />
         <div

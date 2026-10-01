@@ -18,7 +18,7 @@ import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, p
 import { discardStagedChatAttachments, listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
-import type { ContentBlock, ConversationExecutionConfig } from '@shared/types'
+import type { ContentBlock, ConversationExecutionConfig, MessageToolCall } from '@shared/types'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
@@ -34,17 +34,21 @@ function parseMessageBlocks(json: string | null): ContentBlock[] {
     } catch { return [] }
 }
 
-function parseToolCallIds(json: string | null): string[] | undefined {
-    if (!json) return undefined
+function parseMessageToolCalls(json: string | null): { ids?: string[]; calls?: MessageToolCall[] } {
+    if (!json) return {}
     try {
         const calls = JSON.parse(json) as unknown
-        if (!Array.isArray(calls)) return undefined
-        const ids = calls.flatMap((call) => {
-            if (!call || typeof call !== 'object' || !('id' in call)) return []
-            return typeof call.id === 'string' ? [call.id] : []
+        if (!Array.isArray(calls)) return {}
+        const ids: string[] = []
+        const parsed = calls.flatMap((call) => {
+            if (!call || typeof call !== 'object' || typeof call.id !== 'string') return []
+            ids.push(call.id)
+            const details = call.function ?? call
+            if (typeof details.name !== 'string' || typeof details.arguments !== 'string') return []
+            return [{ id: call.id, name: details.name, arguments: details.arguments }]
         })
-        return ids.length ? ids : undefined
-    } catch { return undefined }
+        return { ids: ids.length ? ids : undefined, calls: parsed.length ? parsed : undefined }
+    } catch { return {} }
 }
 
 async function cloneMediaBlocks(blocks: ContentBlock[], conversationId: string): Promise<ContentBlock[]> {
@@ -577,12 +581,23 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             'SELECT id, message_id, name, original_path FROM message_attachments WHERE conversation_id = ? ORDER BY created_at ASC'
         ).all(req.params.id) as { id: string; message_id: string; name: string; original_path: string | null }[]
         const sequencedMessageRows = db.prepare(`
-            SELECT sequence, execution_id, json_extract(event_json, '$.item.id') AS message_id
+            SELECT sequence, execution_id, json_extract(event_json, '$.item.id') AS message_id,
+                   json_extract(event_json, '$.item.toolSuccess') AS tool_success
             FROM chat_events
             WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
               AND json_extract(event_json, '$.item.type') = 'message'
-        `).all(req.params.id) as { sequence: number; execution_id: string; message_id: string }[]
+        `).all(req.params.id) as { sequence: number; execution_id: string; message_id: string; tool_success: number | null }[]
         const eventByMessageId = new Map(sequencedMessageRows.map((row) => [row.message_id, row]))
+        // Include outcomes in the message response so rendering does not depend
+        // on the separate execution-history request succeeding.
+        const resultRows = db.prepare(`
+            SELECT json_extract(result.value, '$.callId') AS call_id,
+                   json_extract(result.value, '$.success') AS success
+            FROM chat_events, json_each(chat_events.event_json, '$.items') AS result
+            WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'tool-results'
+            ORDER BY chat_events.sequence
+        `).all(req.params.id) as { call_id: string; success: number | null }[]
+        const outcomesByCallId = new Map(resultRows.map((row) => [row.call_id, row.success]))
         const attachmentsByMessage = new Map<string, { id: string; name: string; originalPath: string }[]>()
         for (const row of attachmentRows) {
             if (!row.original_path) continue
@@ -624,15 +639,21 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     name: file.name,
                     href: toFileUrl(file.originalPath, file.name),
                 }))
-                const blocks = JSON.parse(row.content_blocks_json || '[]') as ContentBlock[]
+                const blocks = parseMessageBlocks(row.content_blocks_json)
+                if (!blocks.length && row.content) blocks.push({ type: 'text', text: row.content })
                 const fileBlocks: ContentBlock[] = attachmentArtifacts?.map((file) => ({
                     type: 'file', artifactId: file.id, name: file.name, url: file.href,
                 })) || []
+                const savedTools = parseMessageToolCalls(row.tool_calls_json)
+                const toolSuccess = eventByMessageId.get(row.id)?.tool_success ?? (row.tool_call_id ? outcomesByCallId.get(row.tool_call_id) : undefined)
                 return {
                     type: 'message' as const,
                     id: row.id,
                     sequence: eventByMessageId.get(row.id)?.sequence,
-                    toolCallIds: parseToolCallIds(row.tool_calls_json),
+                    toolCallIds: savedTools.ids,
+                    toolCalls: savedTools.calls,
+                    toolCallId: row.tool_call_id || undefined,
+                    toolSuccess: toolSuccess === 0 ? false : toolSuccess === 1 ? true : undefined,
                     executionId: eventByMessageId.get(row.id)?.execution_id,
                     role: row.role,
                     isError: row.is_error === 1,
