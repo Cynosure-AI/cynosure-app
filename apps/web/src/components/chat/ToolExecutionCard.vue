@@ -4,6 +4,7 @@ import { Icon } from '@iconify/vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
+import ToolExecutionList from './ToolExecutionList.vue'
 import { fileArtifactKey, fileArtifactLinks } from '../../utils/file-artifacts'
 import { isBuiltInNamespaceId, isInternalToolName } from '../../utils/internal-tools'
 import RichContent from '../shared/RichContent.vue'
@@ -748,6 +749,17 @@ const headerIconClass = computed(() => {
   return currentPhase.value.color
 })
 
+const executionRows = computed(() => toolExecutions.value.map((execution) => {
+  const name = execution.call?.name || execution.result?.name || 'Tool'
+  return {
+    ...execution,
+    name: toolDisplayName(name),
+    icon: toolNamespaceIcon(name),
+    iconUrl: toolIconUrl(name),
+    internal: isBuiltInTool(name),
+  }
+}))
+
 const hasDisplayableActivity = computed(() =>
   isTaskContext.value ||
   isRoutingStatus.value ||
@@ -762,8 +774,22 @@ const hasDisplayableActivity = computed(() =>
     v-if="hasDisplayableActivity"
     class="px-4 py-1.5"
   >
-    <div class="max-w-[80%] ml-3 md:ml-12">
-      <CollapsibleSection v-model="expanded">
+    <div
+      class="ml-3 md:ml-12"
+      :class="isTaskContext || isRoutingStatus ? 'max-w-[80%]' : ''"
+    >
+      <ToolExecutionList
+        v-if="!isTaskContext && !isRoutingStatus && executionRows.length"
+        :rows="executionRows"
+        :is-active="isActive"
+        :status="currentPhase.label"
+        :streaming-text="streamingText?.text"
+        @preview-image="lightboxSrc = $event"
+      />
+      <CollapsibleSection
+        v-else
+        v-model="expanded"
+      >
         <template #trigger="{ expanded: isExpanded, toggle, triggerAttrs }">
           <button
             v-bind="triggerAttrs"
