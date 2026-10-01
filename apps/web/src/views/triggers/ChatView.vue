@@ -39,28 +39,19 @@ const selectedMcpNamespaces = computed(() => {
 
   const selectedTools = new Set(chatStore.selectedToolNames ?? [])
   const availableTools = agentStore.availableTools ?? []
-  const groups = new Map<string, { id: string; label: string; tools: typeof availableTools }>()
-
+  const namespaces = new Map<string, { id: string; label: string }>()
   for (const tool of availableTools) {
-    const namespaceId = tool.namespace.id
-    if (!namespaceId.startsWith('mcp:')) continue
-    const group = groups.get(namespaceId)
-    if (group) group.tools.push(tool)
-    else groups.set(namespaceId, { id: namespaceId, label: tool.namespace.label, tools: [tool] })
+    if (tool.namespace.id.startsWith('mcp:') && selectedTools.has(tool.key)) {
+      namespaces.set(tool.namespace.id, tool.namespace)
+    }
   }
 
-  return [...groups.values()]
-  .filter((group) =>
-    group.tools.some((tool) => selectedTools.has(tool.key))
-  )
-  .map((group) => {
-    const server = mcpServers.value.find(
-      (candidate) => candidate.id === group.id.slice(4)
-    )
-
+  const serversById = new Map(mcpServers.value.map((server) => [server.id, server]))
+  return [...namespaces.values()].map((namespace) => {
+    const server = serversById.get(namespace.id.slice(4))
     return {
-      id: group.id,
-      name: server?.customName || server?.name || group.label,
+      id: namespace.id,
+      name: server?.customName || server?.name || namespace.label,
       iconUrl: server?.icon_url,
     }
   })

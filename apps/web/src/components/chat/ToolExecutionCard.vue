@@ -5,8 +5,11 @@ import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import { fileArtifactKey, fileArtifactLinks } from '../../utils/file-artifacts'
-import { isInternalToolName } from '../../utils/internal-tools'
+import { isBuiltInNamespaceId, isInternalToolName } from '../../utils/internal-tools'
 import RichContent from '../shared/RichContent.vue'
+import { useAgentStore } from '../../stores/agent-runtime.store'
+import { useMcpServers } from '../../composables/useMcpServers'
+import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
 
 export interface ToolExecStep {
   iteration: number
@@ -64,6 +67,34 @@ const props = defineProps<{
   /** The delegation's outcome is rendered later in the timeline. */
   delegationHandoff?: boolean
 }>()
+
+const agentStore = useAgentStore()
+const { servers } = useMcpServers()
+const brokenToolIcons = ref(new Set<string>())
+const toolsByName = computed(() => {
+  const tools = new Map(agentStore.availableTools.map((tool) => [tool.executionName, tool]))
+  for (const tool of agentStore.availableTools) {
+    tools.set(tool.key, tool)
+    if (!tool.ambiguous && !tools.has(tool.name)) tools.set(tool.name, tool)
+  }
+  return tools
+})
+
+function isBuiltInTool(name = ''): boolean {
+  const tool = toolsByName.value.get(name)
+  return tool ? isBuiltInNamespaceId(tool.namespace.id) : isInternalToolName(name)
+}
+
+function toolNamespaceIcon(name = ''): string {
+  const namespaceId = toolsByName.value.get(name)?.namespace.id
+  return namespaceId ? getToolNamespaceIcon(namespaceId) : toolCallIcon({ name, arguments: '{}' })
+}
+
+function toolIconUrl(name = ''): string | undefined {
+  const namespaceId = toolsByName.value.get(name)?.namespace.id
+  if (!namespaceId?.startsWith('mcp:') || brokenToolIcons.value.has(name)) return undefined
+  return servers.value.find((server) => server.id === namespaceId.slice(4))?.icon_url || undefined
+}
 
 // Tool-call details are collapsed until the user opens them.
 const expanded = ref(false)
@@ -177,7 +208,7 @@ function toolDisplayName(name = 'Tool'): string {
   if (name === 'Task context') return 'Preparing Context'
   if (name === 'spawn_subagent') return 'Spawn sub-agent'
   if (name === 'continue_subagent') return 'Continue sub-agent'
-  return name
+  return toolsByName.value.get(name)?.name ?? name
 }
 
 function memoryFileName(call?: ToolCall | null): string | null {
@@ -240,12 +271,8 @@ function formatTimestamp(timestamp?: number): string {
   }).format(timestamp)
 }
 
-function visibleToolCalls(calls: ToolCall[] = []): ToolCall[] {
-  return calls
-}
-
 function isInternalExecution(execution: ToolExecution): boolean {
-  return isInternalToolName(execution.call?.name || execution.result?.name)
+  return isBuiltInTool(execution.call?.name || execution.result?.name)
 }
 
 function isCandidateRow(execution: ToolExecution | ContextRow): execution is ContextRow {
@@ -393,10 +420,8 @@ function contextSectionOrder(section: Pick<ContextSection, 'kind'>): number {
 }
 
 function toolChipClass(name: string): string {
-  if (isInternalToolName(name)) return 'bg-purple-500/10 text-purple-600 ring-1 ring-purple-400/25 dark:text-purple-300 dark:ring-purple-500/20'
-  if (name === 'Task context') return 'bg-cyan-200/40 text-cyan-700 ring-1 ring-cyan-400/25 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/15'
-  return isSubAgentSpawnCall(name)
-    ? 'bg-indigo-200/40 text-indigo-700 ring-1 ring-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/20'
+  return isBuiltInTool(name)
+    ? 'bg-purple-500/10 text-purple-600 ring-1 ring-purple-400/25 dark:text-purple-300 dark:ring-purple-500/20'
     : 'bg-accent-200/40 text-accent-700 dark:bg-accent-500/10 dark:text-accent-fg'
 }
 
@@ -415,7 +440,7 @@ function toolCallIconClass(call?: ToolCall | null): string {
   if (isAttachmentIndexCall(call)) return 'text-sky-600 dark:text-sky-300'
   if (isTaskContextCall(call)) return 'text-cyan-600 dark:text-cyan-300'
   if (isKnowledgeGraphCall(call)) return 'text-status-violet dark:text-violet-300'
-  if (isInternalToolName(call.name)) return 'text-purple-500 dark:text-purple-300'
+  if (isBuiltInTool(call.name)) return 'text-purple-500 dark:text-purple-300'
   return isSubAgentSpawnCall(call.name) ? 'text-status-indigo' : 'text-accent-fg'
 }
 
@@ -430,26 +455,15 @@ function executionIconClass(execution: ToolExecution): string {
 }
 
 function executionCardClass(execution: ToolExecution | ContextRow): string {
-  if (isCandidateRow(execution)) return 'bg-theme-900/45 border-theme-700/35 opacity-70'
-  if (isInternalExecution(execution)) {
-    return execution.result?.success === false
-      ? 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'
-      : 'bg-purple-50/80 border-purple-300/30 dark:bg-purple-500/5 dark:border-purple-500/20'
-  }
-  if (isSubAgentSpawnCall(execution.call?.name)) return 'bg-indigo-500/10 border-indigo-500/20 dark:bg-indigo-950/15 dark:border-indigo-500/25'
-  if (execution.result?.success === false) return 'bg-red-50/80 border-red-300/30 dark:bg-red-500/5 dark:border-red-500/15'
-  return execution.result
-    ? 'bg-emerald-50/80 border-emerald-300/30 dark:bg-emerald-500/5 dark:border-emerald-500/15'
-    : 'bg-theme-950 border-theme-700 dark:bg-theme-900/60 dark:border-theme-700/30'
+  const tone = isInternalExecution(execution)
+    ? 'bg-purple-50/80 border-purple-300/30 dark:bg-purple-500/5 dark:border-purple-500/20'
+    : 'bg-accent-500/5 border-accent-500/20'
+  return isCandidateRow(execution) ? `${tone} opacity-70` : tone
 }
 
 function executionNameClass(execution: ToolExecution | ContextRow): string {
-  if (isCandidateRow(execution)) return 'text-ink-muted line-through decoration-theme-500/70'
-  if (execution.result?.success === false) return 'text-red-600 dark:text-red-300'
-  if (isInternalExecution(execution)) return 'text-purple-600 dark:text-purple-300'
-  return isSubAgentSpawnCall(execution.call?.name)
-    ? 'text-indigo-600 dark:text-indigo-300'
-    : 'text-accent-fg'
+  const tone = isInternalExecution(execution) ? 'text-purple-600 dark:text-purple-300' : 'text-accent-fg'
+  return isCandidateRow(execution) ? `${tone} line-through decoration-theme-500/70` : tone
 }
 
 function scoreBadgeClass(execution: ToolExecution | ContextRow): string {
@@ -488,14 +502,14 @@ const currentPhase = computed(() => meta(currentStatus.value))
 
 const latestToolCalls = computed(() => [...props.steps].reverse().find((step) => step.toolCalls?.length)?.toolCalls ?? [])
 const rawToolCallArgs = computed(() => latestToolCalls.value)
-const toolCallArgs = computed(() => visibleToolCalls(rawToolCallArgs.value))
+const toolCallArgs = computed(() => rawToolCallArgs.value)
 
 const results = computed(() => {
   if (props.delegationHandoff) return []
   return [...props.steps].reverse().find((step) => step.results?.length)?.results ?? []
 })
 
-const toolNames = computed(() => visibleToolCalls(latestToolCalls.value).map((call) => call.name))
+const toolNames = computed(() => latestToolCalls.value.map((call) => call.name))
 const isSubAgentSpawnIteration = computed(() => toolNames.value.some(isSubAgentSpawnCall))
 
 const isTaskContext = computed(() => props.steps.some((step) => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall)))
@@ -605,7 +619,7 @@ const taskContextQueryLabels = computed(() => taskContextQueries.value.map((quer
 const contextSections = computed<ContextSection[]>(() => props.steps
   .filter((step) => step.toolCalls?.length && !step.toolCalls.some(isTaskContextCall))
   .flatMap((step) => {
-    const calls = visibleToolCalls(step.toolCalls).filter(isContextGatheringCall)
+    const calls = (step.toolCalls ?? []).filter(isContextGatheringCall)
     const grouped = new Map<ContextSectionKind, ToolCall[]>()
     for (const call of calls) {
       const kind = contextCallKind(call, step.status)
@@ -805,11 +819,20 @@ const hasDisplayableActivity = computed(() =>
                   class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium truncate max-w-35"
                   :class="toolChipClass(name)"
                 >
-                  <Icon
-                    v-if="isSubAgentSpawnCall(name)"
-                    icon="lucide:bot"
-                    class="w-3 h-3 shrink-0"
-                  />
+                  <span class="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-current/10">
+                    <img
+                      v-if="toolIconUrl(name)"
+                      :src="toolIconUrl(name)"
+                      alt=""
+                      class="h-full w-full object-contain"
+                      @error="brokenToolIcons.add(name)"
+                    >
+                    <Icon
+                      v-else
+                      :icon="toolNamespaceIcon(name)"
+                      class="h-3 w-3"
+                    />
+                  </span>
                   {{ toolDisplayName(name) }}
                 </span>
                 <span
@@ -966,7 +989,7 @@ const hasDisplayableActivity = computed(() =>
               <time class="ml-auto text-[10px] tabular-nums text-ink-faint">{{ formatTimestamp(section.timestamp) }}</time>
             </div>
 
-            <div :class="section.compactContext ? 'space-y-1.5' : 'space-y-1.5'">
+            <div class="space-y-1.5">
               <div
                 v-for="(execution, i) in section.rows"
                 :key="i"
@@ -979,6 +1002,23 @@ const hasDisplayableActivity = computed(() =>
                     class="w-3 h-3"
                     :class="executionIconClass(execution)"
                   />
+                  <span
+                    class="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-current/10"
+                    :class="executionNameClass(execution)"
+                  >
+                    <img
+                      v-if="toolIconUrl(execution.call?.name || execution.result?.name)"
+                      :src="toolIconUrl(execution.call?.name || execution.result?.name)"
+                      alt=""
+                      class="h-full w-full object-contain"
+                      @error="brokenToolIcons.add(execution.call?.name || execution.result?.name || '')"
+                    >
+                    <Icon
+                      v-else
+                      :icon="toolNamespaceIcon(execution.call?.name || execution.result?.name)"
+                      class="h-3 w-3"
+                    />
+                  </span>
                   <span
                     class="text-[11px] font-medium"
                     :class="executionNameClass(execution)"

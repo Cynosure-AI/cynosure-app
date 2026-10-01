@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   chat: {
     activeAgentId: 'agent' as string | null, activeConversationId: null as string | null,
     conversations: [] as Array<{ id: string; agentId: string }>,
-    messages: [], freeChatSubAgentIds: [], activeQuickResponses: [],
+    messages: [], freeChatSubAgentIds: [] as string[], activeQuickResponses: [],
     activePostActions: new Set(), loadingMessages: false,
   },
   runtime: { executionSteps: [], isExecuting: false },
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('../../stores/chat.store', () => ({ useChatStore: () => reactive(mocks.chat) }))
 vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => mocks.runtime }))
-vi.mock('../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ get: () => ({ name: 'Agent' }) }) }))
+vi.mock('../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ get: (id: string) => ({ id, name: id }) }) }))
 vi.mock('../../stores/preferences.store', () => ({ usePreferencesStore: () => ({ quickResponses: false }) }))
 vi.mock('../../stores/agent-health.store', () => ({ useAgentHealthStore: () => reactive(mocks.health) }))
 vi.mock('../../api/http', () => ({ wsConnected: { __v_isRef: true, value: true } }))
@@ -33,6 +33,23 @@ describe('chat greeting health warning', () => {
     mocks.chat.activeConversationId = null
     mocks.chat.conversations = []
     mocks.health.healthByAgent.clear()
+    mocks.chat.freeChatSubAgentIds = []
+  })
+
+  test.each([8, 9, 10, 11])('accounts for all %i empty-state sub-agents', (count) => {
+    mocks.chat.activeAgentId = null
+    mocks.chat.freeChatSubAgentIds = Array.from({ length: count }, (_, index) => `agent-${index}`)
+    const wrapper = mountPanel()
+    const overflow = wrapper.find('[aria-label="Additional assigned sub-agents"]')
+    const visibleCount = count > 8 ? 7 : count
+    for (const id of mocks.chat.freeChatSubAgentIds.slice(0, visibleCount)) {
+      expect(wrapper.find(`[title="${id}"]`).exists()).toBe(true)
+    }
+    expect(overflow.exists()).toBe(count > 8)
+    if (count > 8) {
+      expect(overflow.text()).toBe(`+${count - visibleCount}`)
+      expect(overflow.attributes('title')).toBe(mocks.chat.freeChatSubAgentIds.slice(visibleCount).join('\n'))
+    }
   })
 
   test('shows missing tools and sub-agents beside the greeting and links to settings', () => {
