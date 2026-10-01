@@ -508,8 +508,8 @@ describe('MemoryFileExplorer navigation and search', () => {
 
     await wrapper.get('[aria-label="List view"]').trigger('click')
     const table = wrapper.getComponent({ name: 'DataTable' })
-    expect(table.props('initialSortKey')).toBe('modifiedAt')
-    expect(table.props('initialSortDirection')).toBe('desc')
+    expect(table.props('initialSortKey')).toBe('name')
+    expect(table.props('initialSortDirection')).toBe('asc')
     const groupValue = table.props('sortGroupValue') as (item: { kind: string }) => number
     expect(groupValue({ kind: 'folder' })).toBe(0)
     expect(groupValue({ kind: 'file' })).toBe(1)
