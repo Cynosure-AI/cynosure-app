@@ -914,6 +914,25 @@ export function useChatStreaming(
         }
         if (data.conversationId === activeConversationId.value) {
             const existing = messages.value.find(message => message.id === data.message.id)
+            // History can already contain the saved reply when live/replayed
+            // completion events arrive. Reconcile its temporary bubble even
+            // when the database ID is present, keeping the object tracked by
+            // the streaming handlers. Sequence bounds keep earlier tool-round
+            // events from consuming a newer reply in the same stream.
+            const round = data.streamId && data.message.role === 'assistant' && !data.message.isError
+                ? [...messages.value].reverse().find(message => message !== existing
+                    && message.streamId === data.streamId
+                    && (message.id.startsWith('streaming_') || message.id.startsWith('sa_stream_'))
+                    && (data.message.sequence === undefined || message.sequence === undefined
+                        || message.sequence < data.message.sequence))
+                : undefined
+            if (existing && round) {
+                const isStreaming = round.isStreaming
+                Object.assign(round, existing, { isStreaming })
+                hydratePersisted(round)
+                messages.value.splice(messages.value.indexOf(existing), 1)
+                return
+            }
             if (existing) {
                 hydratePersisted(existing)
                 return

@@ -12,6 +12,7 @@ import { getAssignedMemoryFolderIds, getAssignedMemoryFolders } from '../memory/
 import { buildPersistedChatConfig } from '../chat/run-config.js'
 import { resolveMemoryFolderOverrides } from '../chat/run-config.js'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
+import { persistAssistantTurn } from '../chat/persist-assistant.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -158,16 +159,15 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             closePlanningRun(planningRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
 
-        // Save assistant message
-        const assistantMsgId = nanoid()
-        const now = Date.now()
-        db.prepare(
-            'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(assistantMsgId, conversationId, 'assistant', result.content,
-            messageContentJson({ id: assistantMsgId, content: result.content, thinking: result.thinking, imageDataUrls: result.images }),
-            planned.providerId || null, planned.responseModel || null, result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null, result.contextTokens ?? null, now - startMs, now)
-
-        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(Date.now(), conversationId)
+        // Publish the saved identity for the final per-round stream as well as
+        // storing it, so history loading and event replay join the same reply.
+        persistAssistantTurn(db, broadcast, {
+            conversationId, streamId: executor.lastStreamId,
+            content: result.content, thinking: result.thinking, images: result.images,
+            provider: planned.providerId, model: planned.responseModel,
+            promptTokens: result.usage?.promptTokens, completionTokens: result.usage?.completionTokens,
+            contextTokens: result.contextTokens, startedAt: startMs,
+        })
 
         return { conversationId, result }
     } catch (err) {

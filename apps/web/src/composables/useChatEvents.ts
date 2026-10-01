@@ -63,6 +63,20 @@ export function useChatEvents(): () => void {
     const previous = eventCursors.get(event.conversationId) || 0
     if (event.sequence <= previous) return
     eventCursors.set(event.conversationId, event.sequence)
+    // Older trigger runs saved their final reply without a transcript event.
+    // Their history cursor therefore precedes the final stream, which replay
+    // would render again. The saved reply's timestamp bounds those legacy
+    // stream events; newer streams and canonical transcript items still apply.
+    if (chatStore.activeConversationId === event.conversationId && (
+      event.type === 'stream-start' || event.type === 'content-delta' || event.type === 'media-added'
+      || event.type === 'stream-reset' || event.type === 'stream-discard' || event.type === 'stream-end'
+    )) {
+      const savedLegacyReply = chatStore.messages.find(message => message.role === 'assistant'
+        && message.sequence === undefined && !message.isStreaming
+        && !message.id.startsWith('streaming_') && !message.id.startsWith('sa_stream_')
+        && message.createdAt >= event.createdAt)
+      if (savedLegacyReply) return
+    }
     const base = { streamId: 'streamId' in event ? event.streamId : event.executionId, conversationId: event.conversationId }
     switch (event.type) {
       case 'stream-start': {
