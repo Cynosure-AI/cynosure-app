@@ -3,7 +3,8 @@ import { expect, test, vi } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
 import { getDb } from '../../db/database.js'
 import { persistChatEvent } from '../chat/transcript.js'
-import type { ChatEventDraft } from '@shared/types'
+import type { ChatEventDraft, ConversationExecutionConfig } from '@shared/types'
+import { planExecution } from '../agent/pre-execution/execution-planner.js'
 
 vi.mock('../../db/database.js', () => ({ getDb: vi.fn() }))
 vi.mock('../gateway/gateway.js', () => ({ getGateway: () => ({}) }))
@@ -58,6 +59,42 @@ test('publishes a cron final reply with its saved ID and final round stream for 
             type: 'transcript-item', item: { id: saved.id, executionId: 'final-round-stream', role: 'assistant' },
         })
     } finally {
+        db.close()
+    }
+})
+
+
+test('the Free Chat configuration is visible when a cron chat is created, even if planning fails', async () => {
+    const db = new Database(':memory:')
+    applySchemaMigrations(db)
+    vi.mocked(getDb).mockReturnValue(db)
+    vi.mocked(planExecution).mockRejectedValueOnce(new Error('Planning failed'))
+    const executionConfig: ConversationExecutionConfig = {
+        allowedTools: ['builtin:memory::memory_search'], subAgents: [], memoryFolderIds: [],
+        systemPrompt: 'Maintain knowledge', providerId: 'research-provider', model: 'research-model',
+        thinkingEnabled: true, reasoningEffort: 'high', autoToolRouting: false, autoMemory: false,
+    }
+    let conversationId = ''
+    const onConversationCreated = vi.fn((id: string) => {
+        conversationId = id
+        const row = db.prepare('SELECT execution_config_json, title, origin FROM conversations WHERE id = ?')
+            .get(id) as { execution_config_json: string; title: string; origin: string }
+        expect(JSON.parse(row.execution_config_json)).toEqual(executionConfig)
+        expect(row).toMatchObject({ title: 'Knowledge Graph Housekeeping', origin: 'cron' })
+    })
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+        await expect(runTriggerExecution({
+            agent: null, executionConfig, userContent: 'Maintain the graph', origin: 'cron',
+            title: 'Knowledge Graph Housekeeping', systemPromptSuffix: '',
+            broadcast: () => undefined, signal: new AbortController().signal,
+            logPrefix: '[test]', onConversationCreated,
+        })).rejects.toThrow('Planning failed')
+        expect(onConversationCreated).toHaveBeenCalledOnce()
+        expect(db.prepare('SELECT content FROM messages WHERE conversation_id = ?').get(conversationId))
+            .toEqual({ content: 'Maintain the graph' })
+    } finally {
+        errorLog.mockRestore()
         db.close()
     }
 })

@@ -22,8 +22,8 @@ import { MemoryKnowledgeProjectionStore } from './memory-knowledge-projection.js
 import { MemoryKnowledgeGraphStore, type DocumentAnalysisRecord, type DocumentKnowledgePreview } from './memory-knowledge-graph.js'
 export type { DocumentAnalysisChunk, DocumentAnalysisItem, DocumentAnalysisRecord, DocumentKnowledgePreview, DocumentKnowledgePreviewItem } from './memory-knowledge-graph.js'
 
-export const MEMORY_KNOWLEDGE_PIPELINE_VERSION = 'knowledge-v4.2.0'
-export const MEMORY_KNOWLEDGE_PROMPT_VERSION = 'deep-research-v6'
+export const MEMORY_KNOWLEDGE_PIPELINE_VERSION = 'knowledge-v4.3.1'
+export const MEMORY_KNOWLEDGE_PROMPT_VERSION = 'deep-research-v8-neighbor-context'
 export const MEMORY_KNOWLEDGE_VECTOR_TABLE = 'memory_knowledge_v2'
 
 export interface DeepResearchExtractedEntity {

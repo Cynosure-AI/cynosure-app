@@ -964,9 +964,9 @@ export class RAGStore {
     }
   }
 
-  /** Replace search-only representations for analyzed chunks. The raw row is
-   * never enriched or returned from generated metadata; every projection keeps
-   * the raw text and sourceChunkId so retrieval can collapse back to evidence. */
+  /** Prepend chunk-specific document context to the raw retrieval surface for
+   * both embeddings and BM25. Original text remains authoritative evidence.
+   * Keywords and facts remain additional search-only representations. */
   async updateChunkSearchAnalysis(
     tableName: string,
     filter: string,
@@ -977,28 +977,34 @@ export class RAGStore {
     const table = await this.openExistingTable(tableName)
     if (!table) return 0
     const rows = await table.query()
-      .select(['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'folderId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash'])
+      .select(['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'folderId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', 'sourceStart', 'sourceEnd'])
       .where(`(${filter}) AND representationType = 'raw'`)
       .toArray()
     const pending: Array<Omit<VectorDocument, 'vector' | 'embeddingModel'> & { id: string; searchText: string }> = []
+    const analyzedIds: string[] = []
     for (const row of rows) {
       throwIfAborted(signal)
       if (row.id === '__seed__' || row.chunkIndex == null) continue
       const analyzed = chunks.get(Number(row.chunkIndex))
       if (!analyzed || String(row.contentHash || '') !== analyzed.contentHash) continue
-      const rawSearchText = String(row.searchText || row.text || '').split(SEARCH_KEYWORDS_MARKER, 1)[0]
+      analyzedIds.push(String(row.id))
+      // Reconstruct the base so repeated analysis replaces prior context.
+      const rawSearchText = [
+        analyzed.summary.trim(),
+        row.documentTitle ? `Document: ${row.documentTitle}` : '',
+        row.sectionPath && row.sectionPath !== row.documentTitle ? `Section: ${row.sectionPath}` : '',
+        String(row.text || ''),
+      ].filter(Boolean).join('\n')
       const common = {
         text: String(row.text || ''), source: String(row.source || ''), sourceFile: String(row.sourceFile || ''),
         chunkIndex: Number(row.chunkIndex), folderId: String(row.folderId || ''), createdAt: Number(row.createdAt || Date.now()),
         documentTitle: String(row.documentTitle || ''), sectionPath: String(row.sectionPath || ''),
         contentHash: String(row.contentHash || ''), sourceChunkId: String(row.id),
+        sourceStart: Number(row.sourceStart ?? -1), sourceEnd: Number(row.sourceEnd ?? -1),
       }
       if (String(row.searchText || '') !== rawSearchText) {
         pending.push({ ...common, id: String(row.id), searchText: rawSearchText, representationType: 'raw' })
       }
-      if (analyzed.summary.trim()) pending.push({
-        ...common, id: `${row.id}:summary`, searchText: analyzed.summary.trim(), representationType: 'summary',
-      })
       if (analyzed.keywords.length) pending.push({
         ...common, id: `${row.id}:keywords`, searchText: analyzed.keywords.join(' · '), representationType: 'keywords',
       })
@@ -1006,12 +1012,12 @@ export class RAGStore {
         pending.push({ ...common, id: `${row.id}:fact:${factIndex}`, searchText: fact, representationType: 'fact' })
       }
     }
-    if (!pending.length) return 0
+    if (!analyzedIds.length) return 0
     const embedder = getEmbeddingService()
     await this.assertProfile(table, embedder.profile.fingerprint)
     const embeddings = await embedder.embedBatch(pending.map((item) => item.searchText))
     throwIfAborted(signal)
-    await table.delete(`(${filter}) AND representationType != 'raw'`)
+    await table.delete(`(${filter}) AND representationType != 'raw' AND ${lanceDbInFilter('sourceChunkId', analyzedIds)}`)
     const projections: VectorDocument[] = []
     let updated = 0
     for (let index = 0; index < pending.length; index++) {
@@ -1030,10 +1036,8 @@ export class RAGStore {
       updated++
     }
     if (projections.length) await this.addDocuments(tableName, projections, embeddings[0].dimensions)
-    if (updated > 0) {
-      this.markFtsIndexStale(tableName)
-      this.scheduleFtsRebuild(tableName)
-    }
+    this.markFtsIndexStale(tableName)
+    this.scheduleFtsRebuild(tableName)
     return updated
   }
 

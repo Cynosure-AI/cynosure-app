@@ -206,7 +206,7 @@ onMounted(async () => {
           </div>
           <div>
             <h3 class="text-sm font-medium text-theme-200">
-              Quick Responses
+              Quick Responses <span class="ml-1 text-xs text-ink-muted">• Post-response action</span>
             </h3>
             <p class="text-xs text-ink-muted mt-0.5">
               Generate up to three relevant follow-up suggestions after each assistant turn

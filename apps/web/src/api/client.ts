@@ -239,6 +239,8 @@ export const api = {
   },
 
   memory: {
+    startKnowledgeHousekeeping: () =>
+      post<{ jobId: string; conversationId: string }>('/api/memory/knowledge/housekeeping'),
     getLimits: () => get<RuntimeLimits>('/api/memory/limits'),
     getDreamConfig: () => get<DreamConfig>('/api/memory/dream/config'),
     configureDream: (config: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),

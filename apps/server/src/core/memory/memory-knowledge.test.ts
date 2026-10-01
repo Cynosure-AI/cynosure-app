@@ -88,7 +88,7 @@ describe('memory knowledge v3', () => {
         expect(getDb().prepare("SELECT count(*) AS count FROM memory_knowledge_assertions WHERE status = 'active'").get()).toEqual({ count: 1 })
     })
 
-    test('reuses unchanged chunk knowledge across a partial document edit', () => {
+    test('regenerates contextual descriptions when any part of the document changes', () => {
         addDocument('doc-incremental', 'incremental.md', 'revision-1')
         const originalChunks = [
             { ...chunk('Ada uses TypeScript.', 0), contentHash: 'stable-ada' },
@@ -111,15 +111,17 @@ describe('memory knowledge v3', () => {
             ],
         })
 
+        expect(planReusableKnowledgeChunks('doc-incremental', originalChunks, 'revision-1').reusableChunks).toHaveLength(2)
+
         const revisedChunks = [
             { ...chunk('New project context.', 0), contentHash: 'new-context' },
             { ...chunk('Ada uses TypeScript.', 1), contentHash: 'stable-ada' },
         ]
-        const plan = planReusableKnowledgeChunks('doc-incremental', revisedChunks)
-        expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([0])
-        expect(plan.reusableChunks).toEqual([{ sourceChunkIndex: 1, priorTextUnitId: expect.any(String) }])
-        expect(plan.chunkTags).toEqual([{ sourceChunkIndex: 1, tags: ['ada', 'typescript'] }])
-        expect(plan.chunkSummaries).toEqual([{ sourceChunkIndex: 1, summary: 'Ada uses TypeScript.' }])
+        const plan = planReusableKnowledgeChunks('doc-incremental', revisedChunks, 'revision-2')
+        expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([0, 1])
+        expect(plan.reusableChunks).toEqual([])
+        expect(plan.chunkTags).toEqual([])
+        expect(plan.chunkSummaries).toEqual([])
 
         getDb().prepare(`UPDATE memory_file_index SET content_hash = 'revision-2' WHERE document_id = 'doc-incremental'`).run()
         store.publishDocument({
@@ -129,9 +131,9 @@ describe('memory knowledge v3', () => {
                 from: { name: 'Cynosure', type: 'project' }, relation: 'has_goal',
                 to: { name: 'New project context', type: 'concept' }, sourceChunkIndex: 0,
                 note: 'Cynosure has new project context.',
-            }],
-            chunkTags: [...plan.chunkTags, { sourceChunkIndex: 0, tags: ['project context'] }],
-            chunkSummaries: [...plan.chunkSummaries, { sourceChunkIndex: 0, summary: 'New project context is recorded.' }],
+            }, { from: { name: 'Ada', type: 'person' }, relation: 'uses', to: { name: 'TypeScript', type: 'technology' }, sourceChunkIndex: 1, note: 'Ada uses TypeScript.' }],
+            chunkTags: [{ sourceChunkIndex: 0, tags: ['project context'] }, { sourceChunkIndex: 1, tags: ['ada', 'typescript'] }],
+            chunkSummaries: [{ sourceChunkIndex: 0, summary: 'New project context is recorded.' }, { sourceChunkIndex: 1, summary: 'Ada uses TypeScript.' }],
             reusableChunks: plan.reusableChunks,
         })
 
@@ -182,10 +184,10 @@ describe('memory knowledge v3', () => {
             { ...chunk('Ada uses TypeScript.', 0), contentHash: 'stable-ada' },
             { ...chunk('Bob now uses Rust.', 1), contentHash: 'changed-bob' },
         ]
-        const plan = planReusableKnowledgeChunks('doc-reindexed', revisedChunks)
-        expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([1])
-        expect(plan.reusableChunks).toEqual([{ sourceChunkIndex: 0, priorTextUnitId: expect.any(String) }])
-        expect(plan.chunkSummaries).toEqual([{ sourceChunkIndex: 0, summary: 'Ada uses TypeScript.' }])
+        const plan = planReusableKnowledgeChunks('doc-reindexed', revisedChunks, 'revision-2')
+        expect(plan.chunksToExtract.map((item) => item.chunkIndex)).toEqual([0, 1])
+        expect(plan.reusableChunks).toEqual([])
+        expect(plan.chunkSummaries).toEqual([])
     })
 
     test('backs up and restores manual knowledge corrections', async () => {

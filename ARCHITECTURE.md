@@ -99,10 +99,12 @@ flowchart TD
   B --> D[Split into indexed text chunks]
   D --> E[Chunk text with title, section path, and source position]
   D --> F[Chunk tags / keywords]
-  D --> G[One-sentence chunk summary]
+  E --> G[Contextual description using title and one chunk on either side]
+  D --> G
   D --> H[Derived search representations]
-  H --> H1[Raw text]
-  H --> H2[Summary and keyword projections]
+  H --> H1[Contextual description prepended to original chunk text]
+  G --> H1
+  H --> H2[Keyword projections]
   H --> H3[Extracted fact projections]
   H1 --> I[Embeddings and lexical search index]
   H2 --> I
@@ -115,7 +117,9 @@ flowchart TD
   M --> N[Quotes, source spans, confidence, and validity/status metadata]
 ```
 
-The document-level file index can also hold aggregate tags and indexing timestamps/status. Chunk summaries and tags are generated per source chunk. Entity mentions and fact/relationship assertions are optional extracted knowledge, not edits to the Markdown; their evidence records point back to a supporting chunk and preserve a quote/span. Search projections and embeddings are rebuildable indexes, while the Markdown and its revision history remain authoritative.
+The document-level file index can also hold aggregate tags and indexing timestamps/status. Deep research generates a contextual description of roughly 50–100 tokens for each chunk using the document title, the target chunk, and the immediately preceding and following chunks when available. Neighbors come from the canonical document chunks, including when analysis resumes with only some chunks remaining. Neighboring chunks supply context for the description; facts, mentions, and tags are extracted only from the target chunk. The existing summary field stores this description. It is prepended to the original chunk text for both embeddings and BM25 indexing; retrieval still returns the original source text as evidence. Keyword and fact projections remain additional retrieval channels. Descriptions are reused only within the same document revision and analysis version, so document edits regenerate context even for unchanged chunks. Existing documents receive contextual retrieval when analysis runs again; re-embedding alone preserves their current search text.
+
+Entity mentions and fact/relationship assertions are optional extracted knowledge, not edits to the Markdown; their evidence records point back to a supporting chunk and preserve a quote/span. Search projections and embeddings are rebuildable indexes, while the Markdown and its revision history remain authoritative. Each analysis request includes at most three chunks plus the title and instructions, so source input tokens grow linearly with the number of chunks.
 
 ## Code landmarks
 

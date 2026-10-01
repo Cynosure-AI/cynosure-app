@@ -32,6 +32,7 @@ const props = defineProps<{
   flowId: string;
   graph: KnowledgeGraph | null;
   graphLoading: boolean;
+  housekeepingPending?: boolean;
   graphQuery: string;
   graphSearchQuery: string;
   graphSuggestions: KnowledgeGraphNode[];
@@ -94,6 +95,7 @@ const emit = defineEmits<{
   "update:factLevel": [value: FactLevelFilter];
   "update:entityLimit": [value: GraphEntityLimit];
   "load-graph": [query?: string];
+  "start-housekeeping": [];
   "clear-walk": [];
   "select-suggestion": [node: KnowledgeGraphNode];
   "explore-node": [node: KnowledgeGraphNode];
@@ -272,6 +274,21 @@ function stackedEdgePath(edge: EdgeProps<FlowEdgeData>): ReturnType<typeof getBe
           />
         </button>
       </form>
+      <button
+        type="button"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent-600 px-3 py-2 text-sm text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-wait disabled:opacity-60"
+        :disabled="housekeepingPending"
+        :aria-busy="housekeepingPending"
+        title="Start a one-off cron chat using the Deep Research Model to maintain all memory spaces except those excluded from auto-route"
+        @click="emit('start-housekeeping')"
+      >
+        <Icon
+          :icon="housekeepingPending ? 'lucide:loader-2' : 'lucide:brush-cleaning'"
+          class="h-4 w-4"
+          :class="{ 'animate-spin': housekeepingPending }"
+        />
+        {{ housekeepingPending ? 'Starting housekeeping...' : 'Run housekeeping' }}
+      </button>
     </div>
 
     <p class="mb-4 flex flex-wrap items-center gap-1 text-xs text-ink-muted">
