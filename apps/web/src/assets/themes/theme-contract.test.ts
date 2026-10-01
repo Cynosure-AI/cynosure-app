@@ -23,19 +23,34 @@ function contrast(a: string, b: string): number {
 }
 
 describe('theme palette contract', () => {
-  test.each(themes)('%s keeps components readable without utility overrides', theme => {
+  test.each(themes)('%s keeps readable palette tokens and scoped decorative overrides', theme => {
     const css = readFileSync(resolve(process.cwd(), 'src/assets/themes', `${theme}.css`), 'utf8')
     const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '')
-    expect(withoutComments.match(/{/g)).toHaveLength(1)
-    expect(withoutComments.match(/}/g)).toHaveLength(1)
+    const rules = [...withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    const scope = `[data-theme="${theme}"]`
+    const paletteSelector = theme === 'crimson'
+      ? `:is(${scope}, :root:not([data-theme]))`
+      : scope
+    expect(rules[0]?.[1]?.trim()).toBe(paletteSelector)
+    expect(rules.filter(rule => rule[1]?.trim() === paletteSelector)).toHaveLength(1)
 
-    const surface = color(css, 'color-theme-800')
-    for (const role of ['secondary', 'muted', 'faint']) {
-      expect(contrast(color(css, `color-ink-${role}`), surface)).toBeGreaterThanOrEqual(4.5)
+    // Themes may decorate structural surfaces without overriding utility colors.
+    const decorativeProperties = new Set(['box-shadow', 'border-color', 'backdrop-filter'])
+    for (const rule of rules.slice(1)) {
+      expect(rule[1]?.trim().startsWith(`${scope} `)).toBe(true)
+      for (const declaration of rule[2]!.split(';').filter(value => value.trim())) {
+        expect(decorativeProperties.has(declaration.split(':')[0]!.trim())).toBe(true)
+      }
     }
-    const onAccent = color(css, 'color-accent-on')
+
+    const palette = rules[0]![2]!
+    const surface = color(palette, 'color-theme-800')
+    for (const role of ['secondary', 'muted', 'faint']) {
+      expect(contrast(color(palette, `color-ink-${role}`), surface)).toBeGreaterThanOrEqual(4.5)
+    }
+    const onAccent = color(palette, 'color-accent-on')
     for (const step of ['500', '600']) {
-      expect(contrast(onAccent, color(css, `color-accent-${step}`))).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(onAccent, color(palette, `color-accent-${step}`))).toBeGreaterThanOrEqual(4.5)
     }
   })
 })
