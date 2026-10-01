@@ -36,6 +36,28 @@ const message = (id: string, content: string, sequence: number): MessageItem => 
   executionId: 'execution', sequence, createdAt: sequence,
 })
 
+test('opening an older cron chat does not replay its unsequenced saved final reply', () => {
+  const store = useChatStore()
+  store.activeConversationId = 'conversation'
+  store.messages = [{ id: 'legacy-final', role: 'assistant', content: 'Housekeeping complete', createdAt: 10 }]
+  const { emit, stop } = listen()
+  try {
+    emit(7, { type: 'stream-start', streamId: 'final-round', scope: 'main' })
+    emit(8, { type: 'content-delta', streamId: 'final-round', scope: 'main', block: { type: 'text', text: 'Housekeeping complete' } })
+    emit(9, { type: 'stream-end', streamId: 'final-round', scope: 'main' })
+    expect(store.messages.map(item => item.content)).toEqual(['Housekeeping complete'])
+    expect(store.isStreaming).toBe(false)
+    // A subsequent run must remain visible even if its answer is identical.
+    emit(11, { type: 'stream-start', streamId: 'next-run', scope: 'main' })
+    emit(12, { type: 'content-delta', streamId: 'next-run', scope: 'main', block: { type: 'text', text: 'Housekeeping complete' } })
+    emit(13, { type: 'stream-end', streamId: 'next-run', scope: 'main' })
+    emit(14, { type: 'transcript-item', item: { ...message('next-final', 'Housekeeping complete', 14), executionId: 'next-run' } })
+    expect(store.messages.map(item => item.id)).toEqual(['legacy-final', 'next-final'])
+  } finally {
+    stop()
+  }
+})
+
 test('navigation restores distinct tool rounds and continues the current live reply', async () => {
   const store = useChatStore()
   store.activeConversationId = 'other'

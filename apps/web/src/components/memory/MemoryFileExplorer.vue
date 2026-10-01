@@ -1228,7 +1228,11 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
             </button>
           </template>
         </SplitButton>
-        <span v-if="bulkIndexFeedback" role="status" class="text-xs text-accent-fg">{{ bulkIndexFeedback }}</span>
+        <span
+          v-if="bulkIndexFeedback"
+          role="status"
+          class="text-xs text-accent-fg"
+        >{{ bulkIndexFeedback }}</span>
         <button
           :disabled="uploading"
           class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover disabled:opacity-50"

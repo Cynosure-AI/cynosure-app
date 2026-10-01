@@ -190,6 +190,62 @@ describe('chat streaming completion', () => {
 
 
 describe('persisted streaming message identities', () => {
+  test.each(['main', 'subagent'] as const)('joins a %s reply already present in loaded history to its completed stream', (scope) => {
+    const { messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'stream', sequence: 7 }
+    messages.value.push({ id: 'saved-final', role: 'assistant', streamId: 'stream',
+      sequence: 10, content: 'Answer', model: 'saved-model', createdAt: 10 })
+    if (scope === 'main') {
+      streaming.handleStreamStart(event)
+      streaming.handleStreamChunk({ ...event, content: 'Answer' })
+      streaming.handleStreamEnd(event)
+    } else {
+      streaming.handleSubAgentStreamStart(event)
+      streaming.handleSubAgentStreamChunk({ ...event, content: 'Answer' })
+      streaming.handleSubAgentStreamEnd(event)
+    }
+    const saved = { ...event, message: { id: 'saved-final', conversationId: 'conversation',
+      role: 'assistant', sequence: 10, content: 'Answer', createdAt: 10 } }
+    streaming.handleNewMessage(saved)
+    streaming.handleNewMessage(saved)
+    expect(messages.value).toHaveLength(1)
+    expect(messages.value[0]).toMatchObject({ id: 'saved-final', content: 'Answer', model: 'saved-model', isStreaming: false })
+  })
+
+  test('does not join a saved earlier tool round to a newer streaming round', () => {
+    const { messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'stream' }
+    messages.value.push({ id: 'saved-first', role: 'assistant', streamId: 'stream',
+      sequence: 3, content: 'Checking tools', createdAt: 3 })
+    streaming.handleStreamStart({ ...event, sequence: 7 })
+    streaming.handleStreamChunk({ ...event, content: 'Answer' })
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-first', conversationId: 'conversation',
+      role: 'assistant', sequence: 3, content: 'Checking tools', createdAt: 3 } })
+    expect(messages.value.map(message => message.content)).toEqual(['Checking tools', 'Answer'])
+    expect(messages.value[1].isStreaming).toBe(true)
+  })
+
+  test.each(['main', 'subagent'] as const)('keeps %s stream tracking when history arrives after the temporary reply', (scope) => {
+    const { messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'stream', sequence: 7 }
+    if (scope === 'main') {
+      streaming.handleStreamStart(event)
+      streaming.handleStreamChunk({ ...event, content: 'Answer' })
+    } else {
+      streaming.handleSubAgentStreamStart(event)
+      streaming.handleSubAgentStreamChunk({ ...event, content: 'Answer' })
+    }
+    messages.value.push({ id: 'saved-final', role: 'assistant', streamId: 'stream',
+      sequence: 10, content: 'Answer', createdAt: 10 })
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-final', conversationId: 'conversation',
+      role: 'assistant', sequence: 10, content: 'Answer', createdAt: 10 } })
+    expect(messages.value).toHaveLength(1)
+    expect(messages.value[0].isStreaming).toBe(true)
+    if (scope === 'main') streaming.handleStreamEnd({ ...event, model: 'final-model' })
+    else streaming.handleSubAgentStreamEnd({ ...event, model: 'final-model' })
+    expect(messages.value[0]).toMatchObject({ id: 'saved-final', model: 'final-model', isStreaming: false })
+  })
+
   test('hydrates clickable attachment links onto an optimistic user message', () => {
     const { messages, streaming } = setup()
     messages.value.push({
