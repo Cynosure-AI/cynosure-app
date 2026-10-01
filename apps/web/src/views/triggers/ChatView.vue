@@ -488,16 +488,6 @@ watch(
 </template>
 
 <style scoped>
-/* Backdrop fade */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
 .chat-column > :deep(.chat-input-bar) {
   flex: 0 0 auto;
 }

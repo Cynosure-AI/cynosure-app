@@ -85,6 +85,29 @@ describe('ToolExecutionCard', () => {
     expect(wrapper.find('[icon="svg-spinners:ring-resize"]').exists()).toBe(false)
   })
 
+  test('uses the shared execution list inside attachment-indexing details', async () => {
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1, isActive: false,
+        steps: [{
+          iteration: 1, status: 'indexing-attachments', timestamp: Date.now(),
+          toolCalls: [{ name: 'attachment_index', arguments: '{"type":"attachment-index","path":"report.pdf"}' }],
+          results: [{ name: 'attachment_index', success: true, output: 'Indexed report' }],
+        }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    expect(wrapper.get('button').text()).toContain('Indexing Attachments')
+    expect(wrapper.text()).not.toContain('report.pdf')
+    await wrapper.get('button').trigger('click')
+    const row = wrapper.findAll('button[aria-expanded]').at(-1)!
+    expect(row.text()).toContain('attachment_index')
+    expect(row.attributes('aria-expanded')).toBe('false')
+    await row.trigger('click')
+    expect(wrapper.text()).toContain('report.pdf')
+    expect(wrapper.text()).toContain('Indexed report')
+  })
+
   test('starts collapsed even when the removed preference remains in local storage', () => {
     localStorage.setItem('cy-auto-expand-tools', 'true')
     const wrapper = mount(ToolExecutionCard, {

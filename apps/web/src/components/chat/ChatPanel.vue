@@ -14,7 +14,7 @@ import QuickResponses from '../chat/QuickResponses.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
-import CollapsibleSection from '../shared/CollapsibleSection.vue'
+import HistoricalToolResult from './HistoricalToolResult.vue'
 import RichContent from '../shared/RichContent.vue'
 import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
@@ -314,6 +314,34 @@ function assistantFileArtifacts(entry: TimelineEntry, entries = unifiedTimeline.
   return artifacts.reverse()
 }
 
+/** Keep main and delegated messages consistent, including their artifact timeline. */
+function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, entries = unifiedTimeline.value) {
+  const { msg } = entry
+  return {
+    role: msg.role,
+    messageId: msg.id,
+    forkDisabled: chatStore.isConversationLocked,
+    createdAt: msg.createdAt,
+    content: msg.content,
+    thinking: msg.thinking,
+    imageDataUrls: msg.imageDataUrls,
+    videoDataUrls: msg.videoDataUrls,
+    audioDataUrls: msg.audioDataUrls,
+    fileAttachments: msg.fileAttachments,
+    fileArtifacts: assistantFileArtifacts(entry, entries),
+    agentId: resolveAgentId(msg),
+    agentIconUrl: resolveAgentIconUrl(msg),
+    agentName: resolveAgentName(msg),
+    model: msg.model,
+    promptTokens: msg.promptTokens,
+    completionTokens: msg.completionTokens,
+    contextTokens: msg.contextTokens,
+    latencyMs: msg.latencyMs,
+    isStreaming: msg.isStreaming,
+    isError: msg.isError,
+  }
+}
+
 function toggleSubAgentCollapsed(key: string): void {
   if (collapsedSubAgentGroups.has(key)) {
     collapsedSubAgentGroups.delete(key)
@@ -375,11 +403,16 @@ function scrollSubAgentBoxesIfNear(): void {
 }
 
 // Scroll triggers
-watch(() => chatStore.messages.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
-watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
-watch(() => chatStore.messages[chatStore.messages.length - 1]?.imageDataUrls?.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
-watch(() => chatStore.messages[chatStore.messages.length - 1]?.videoDataUrls?.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
-watch(() => agentStore.executionSteps.length, () => { scrollMainToBottomIfNear(); scrollSubAgentBoxesIfNear() })
+watch([
+  () => chatStore.messages.length,
+  () => chatStore.messages.at(-1)?.content,
+  () => chatStore.messages.at(-1)?.imageDataUrls?.length,
+  () => chatStore.messages.at(-1)?.videoDataUrls?.length,
+  () => agentStore.executionSteps.length,
+], () => {
+  scrollMainToBottomIfNear()
+  scrollSubAgentBoxesIfNear()
+})
 watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
 watch([
   () => chatStore.activeQuickResponses.length,
@@ -945,27 +978,7 @@ onMounted(() => {
                   :class="{ 'ring-1 ring-inset ring-accent-400/60 rounded-2xl bg-accent-500/5': activeSearchMessageId === inner.msg.id }"
                 >
                   <MessageBubble
-                    :role="inner.msg.role"
-                    :message-id="inner.msg.id"
-                    :fork-disabled="chatStore.isConversationLocked"
-                    :created-at="inner.msg.createdAt"
-                    :content="inner.msg.content"
-                    :thinking="inner.msg.thinking"
-                    :image-data-urls="inner.msg.imageDataUrls"
-                    :video-data-urls="inner.msg.videoDataUrls"
-                    :audio-data-urls="inner.msg.audioDataUrls"
-                    :file-attachments="inner.msg.fileAttachments"
-                    :file-artifacts="assistantFileArtifacts(inner, entry.entries)"
-                    :agent-id="resolveAgentId(inner.msg)"
-                    :agent-icon-url="resolveAgentIconUrl(inner.msg)"
-                    :agent-name="resolveAgentName(inner.msg)"
-                    :model="inner.msg.model"
-                    :prompt-tokens="inner.msg.promptTokens"
-                    :completion-tokens="inner.msg.completionTokens"
-                    :context-tokens="inner.msg.contextTokens"
-                    :latency-ms="inner.msg.latencyMs"
-                    :is-streaming="inner.msg.isStreaming"
-                    :is-error="inner.msg.isError"
+                    v-bind="messageBubbleProps(inner, entry.entries)"
                     @retry="chatStore.retryFromMessage(inner.msg.id)"
                     @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
                     @fork="forkMessage(inner.msg.id)"
@@ -988,42 +1001,11 @@ onMounted(() => {
                   class="px-4 py-1.5"
                 >
                   <div class="max-w-[80%] ml-10">
-                    <CollapsibleSection
+                    <HistoricalToolResult
+                      :content="inner.msg.content"
                       :model-value="expandedFallback.has(inner.msg.id)"
-                      :keyboard-shortcuts="true"
                       @update:model-value="setFallbackExpanded(inner.msg.id, $event)"
-                    >
-                      <template #trigger="{ expanded, toggle, triggerAttrs, onTriggerKeydown }">
-                        <button
-                          v-bind="triggerAttrs"
-                          class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-colors group"
-                          :class="expanded
-                            ? 'bg-theme-800/80 border border-theme-700/60'
-                            : 'bg-theme-800/40 hover:bg-theme-800/70 border border-theme-800/40 hover:border-theme-700/40'"
-                          @click="toggle"
-                          @keydown="onTriggerKeydown"
-                        >
-                          <Icon
-                            icon="lucide:wrench"
-                            class="w-3.5 h-3.5 text-ink-muted shrink-0"
-                          />
-                          <span class="text-ink-secondary truncate flex-1 text-left">
-                            {{ inner.msg.content.slice(0, 80) }}{{ inner.msg.content.length > 80 ? '…' : '' }}
-                          </span>
-                          <Icon
-                            icon="lucide:chevron-down"
-                            class="w-3 h-3 text-ink-faint shrink-0 transition-transform"
-                            :class="{ 'rotate-180': expanded }"
-                          />
-                        </button>
-                      </template>
-                      <div class="mt-1.5 ml-3">
-                        <RichContent
-                          :content="inner.msg.content"
-                          class="max-h-60 rounded-lg border border-theme-700/30 bg-theme-900/60 px-3 py-2 text-[10px]"
-                        />
-                      </div>
-                    </CollapsibleSection>
+                    />
                   </div>
                 </div>
               </template>
@@ -1038,27 +1020,7 @@ onMounted(() => {
           :class="{ 'ring-1 ring-inset ring-accent-400/60 rounded-2xl bg-accent-500/5': activeSearchMessageId === entry.msg.id }"
         >
           <MessageBubble
-            :role="entry.msg.role"
-            :message-id="entry.msg.id"
-            :fork-disabled="chatStore.isConversationLocked"
-            :created-at="entry.msg.createdAt"
-            :content="entry.msg.content"
-            :thinking="entry.msg.thinking"
-            :image-data-urls="entry.msg.imageDataUrls"
-            :video-data-urls="entry.msg.videoDataUrls"
-            :audio-data-urls="entry.msg.audioDataUrls"
-            :file-attachments="entry.msg.fileAttachments"
-            :file-artifacts="assistantFileArtifacts(entry)"
-            :agent-id="resolveAgentId(entry.msg)"
-            :agent-icon-url="resolveAgentIconUrl(entry.msg)"
-            :agent-name="resolveAgentName(entry.msg)"
-            :model="entry.msg.model"
-            :prompt-tokens="entry.msg.promptTokens"
-            :completion-tokens="entry.msg.completionTokens"
-            :context-tokens="entry.msg.contextTokens"
-            :latency-ms="entry.msg.latencyMs"
-            :is-streaming="entry.msg.isStreaming"
-            :is-error="entry.msg.isError"
+            v-bind="messageBubbleProps(entry)"
             @retry="chatStore.retryFromMessage(entry.msg.id)"
             @edit="(content) => chatStore.editMessage(entry.msg.id, content)"
             @fork="forkMessage(entry.msg.id)"
@@ -1142,42 +1104,11 @@ onMounted(() => {
           class="px-4 py-1.5"
         >
           <div class="max-w-[80%] ml-10">
-            <CollapsibleSection
+            <HistoricalToolResult
+              :content="entry.msg.content"
               :model-value="expandedFallback.has(entry.msg.id)"
-              :keyboard-shortcuts="true"
               @update:model-value="setFallbackExpanded(entry.msg.id, $event)"
-            >
-              <template #trigger="{ expanded, toggle, triggerAttrs, onTriggerKeydown }">
-                <button
-                  v-bind="triggerAttrs"
-                  class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-colors group"
-                  :class="expanded
-                    ? 'bg-theme-800/80 border border-theme-700/60'
-                    : 'bg-theme-800/40 hover:bg-theme-800/70 border border-theme-800/40 hover:border-theme-700/40'"
-                  @click="toggle"
-                  @keydown="onTriggerKeydown"
-                >
-                  <Icon
-                    icon="lucide:wrench"
-                    class="w-3.5 h-3.5 text-ink-muted shrink-0"
-                  />
-                  <span class="text-ink-secondary truncate flex-1 text-left">
-                    {{ entry.msg.content.slice(0, 80) }}{{ entry.msg.content.length > 80 ? '…' : '' }}
-                  </span>
-                  <Icon
-                    icon="lucide:chevron-down"
-                    class="w-3 h-3 text-ink-faint shrink-0 transition-transform"
-                    :class="{ 'rotate-180': expanded }"
-                  />
-                </button>
-              </template>
-              <div class="mt-1.5 ml-3">
-                <RichContent
-                  :content="entry.msg.content"
-                  class="max-h-60 rounded-lg border border-theme-700/30 bg-theme-900/60 px-3 py-2 text-[10px]"
-                />
-              </div>
-            </CollapsibleSection>
+            />
           </div>
         </div>
       </template>

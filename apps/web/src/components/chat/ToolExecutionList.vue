@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import ToolNamespaceIcon from './ToolNamespaceIcon.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import RichContent from '../shared/RichContent.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
@@ -22,7 +22,6 @@ const props = defineProps<{
   streamingText?: string
 }>()
 const emit = defineEmits<{ previewImage: [src: string] }>()
-const brokenIcons = ref(new Set<string>())
 
 function statusLabel(row: ExecutionRow): string {
   if (row.result) return row.result.success ? 'Completed' : 'Failed'
@@ -59,23 +58,13 @@ function tone(row: ExecutionRow): string {
               class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
               :class="row.internal ? 'bg-purple-500/10' : 'bg-accent-500/10'"
             >
-              <span
-                class="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full"
+              <ToolNamespaceIcon
+                :src="row.iconUrl"
+                :icon="row.icon"
+                icon-class="h-4 w-4"
+                class="h-5 w-5"
                 :class="tone(row)"
-              >
-                <img
-                  v-if="row.iconUrl && !brokenIcons.has(row.iconUrl)"
-                  :src="row.iconUrl"
-                  alt=""
-                  class="h-full w-full object-contain"
-                  @error="brokenIcons.add(row.iconUrl)"
-                >
-                <Icon
-                  v-else
-                  :icon="row.icon"
-                  class="h-4 w-4"
-                />
-              </span>
+              />
             </span>
             <span
               class="min-w-0 flex-1 truncate text-[13px] font-medium"
