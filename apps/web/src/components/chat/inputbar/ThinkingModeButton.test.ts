@@ -18,10 +18,9 @@ vi.mock('../../../stores/chat.store', async () => {
 
 describe('ThinkingModeButton', () => {
   beforeEach(() => {
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: { clear() {} },
-    })
+    const chatStore = useChatStore()
+    chatStore.sessionThinkingEnabled = true
+    chatStore.sessionReasoningEffort = 'medium'
   })
 
   afterEach(() => {
@@ -52,7 +51,9 @@ describe('ThinkingModeButton', () => {
     await new DOMWrapper(slider!).setValue('6')
     expect(chatStore.sessionThinkingEnabled).toBe(true)
     expect(chatStore.sessionReasoningEffort).toBe('max')
-    expect(document.body.textContent).toContain('maximum available reasoning effort')
+    expect(slider!.getAttribute('aria-valuetext')).toBe('Maximum')
+    expect(wrapper.get('button').attributes('aria-label')).toBe('Reasoning level: Maximum')
+    expect(document.body.textContent).toContain('Planning available')
 
     wrapper.unmount()
   })
