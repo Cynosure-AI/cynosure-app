@@ -41,6 +41,7 @@ export interface DeepResearchConfig {
 
 export interface DeepResearchCheckpoint extends DeepResearchedKnowledge {
   contentHash: string
+  promptVersion?: string
   completedChunkIndexes: number[]
 }
 
@@ -53,15 +54,15 @@ interface ReusableChunkPlan {
   chunksToExtract: PreparedMemoryChunk[]
 }
 
-/** Match exact chunks against the last compatible active extraction. Buckets
- * make duplicate chunks occurrence-aware, while hashes allow unchanged chunks
- * to move when an insertion shifts their numeric indexes. */
-export function planReusableKnowledgeChunks(documentId: string, chunks: PreparedMemoryChunk[]): ReusableChunkPlan {
+/** Match exact chunks against the last compatible active extraction of the
+ * same document revision. Contextual descriptions depend on the whole document.
+ * Hash buckets make duplicate chunks occurrence-aware. */
+export function planReusableKnowledgeChunks(documentId: string, chunks: PreparedMemoryChunk[], contentHash: string): ReusableChunkPlan {
   const priorRun = getDb().prepare(`
     SELECT id FROM memory_knowledge_index_runs
-    WHERE document_id = ? AND pipeline_version = ? AND prompt_version = ? AND status = 'active'
+    WHERE document_id = ? AND pipeline_version = ? AND prompt_version = ? AND content_hash = ? AND status = 'active'
     ORDER BY activated_at DESC LIMIT 1
-  `).get(documentId, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as { id: string } | undefined
+  `).get(documentId, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION, contentHash) as { id: string } | undefined
   if (!priorRun) return { reusableChunks: [], chunkTags: [], chunkSummaries: [], chunksToExtract: chunks }
 
   const priorChunks = getDb().prepare(`
@@ -290,8 +291,9 @@ export async function deepResearchMemoryContent(opts: {
       chunksReused: 0,
     }
   }
-  const reusePlan = planReusableKnowledgeChunks(indexedDocument.document_id, chunks)
-  const resumable = opts.resumeCheckpoint?.contentHash === contentHash ? opts.resumeCheckpoint : undefined
+  const reusePlan = planReusableKnowledgeChunks(indexedDocument.document_id, chunks, contentHash)
+  const resumable = opts.resumeCheckpoint?.contentHash === contentHash
+    && opts.resumeCheckpoint.promptVersion === MEMORY_KNOWLEDGE_PROMPT_VERSION ? opts.resumeCheckpoint : undefined
   const extractableIndexes = new Set(reusePlan.chunksToExtract.map((chunk) => chunk.chunkIndex))
   const resumableSummaryIndexes = new Set((resumable?.chunkSummaries || []).filter((item) => item.summary.trim()).map((item) => item.sourceChunkIndex))
   const completedIndexes = new Set((resumable?.completedChunkIndexes || []).filter((index) => extractableIndexes.has(index) && resumableSummaryIndexes.has(index)))
@@ -306,6 +308,7 @@ export async function deepResearchMemoryContent(opts: {
   const extracted = remainingChunks.length > 0
     ? await deepResearchContent({
       segments: buildDeepResearchSegments(remainingChunks),
+      documentContent: opts.content,
       providerId: opts.providerId || configuredTarget.providerId,
       model: opts.model || configuredTarget.model,
       signal: opts.signal,
@@ -317,6 +320,7 @@ export async function deepResearchMemoryContent(opts: {
         }
         const checkpoint: DeepResearchCheckpoint = {
           contentHash,
+          promptVersion: MEMORY_KNOWLEDGE_PROMPT_VERSION,
           completedChunkIndexes: [...completedIndexes].sort((a, b) => a - b),
           ...partial,
         }

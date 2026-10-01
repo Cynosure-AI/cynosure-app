@@ -4,7 +4,63 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as lancedb from '@lancedb/lancedb'
 import { RAGStore } from '../../../src/core/memory/rag.js'
+import { setEmbeddingService } from '../../../src/core/memory/embedding.js'
 import { andLanceDbFilters, lanceDbEqFilter } from '../../../src/core/memory/lancedb-filter.js'
+
+test('embeds and lexically indexes contextualized chunks while preserving raw evidence', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-context-'))
+  const store = new RAGStore()
+  const embedder = setEmbeddingService({ baseUrl: 'http://127.0.0.1:1/v1', model: 'test', dimensions: 2 }, false)
+  const embeddingProfileFingerprint = embedder.profile.fingerprint
+  const embedBatch = vi.spyOn(embedder, 'embedBatch').mockImplementation(async (texts) => texts.map(() => ({
+    vector: [0, 1], model: 'test', dimensions: 2, profileFingerprint: embeddingProfileFingerprint,
+  })))
+  const text = 'Revenue grew by 3% over the previous quarter.'
+  const context = 'This chunk covers ACME financial results for Q2 2023.'
+  try {
+    await store.initialize(directory)
+    await store.addDocuments('memory', [{
+      id: 'revenue', text, searchText: text, vector: [1, 0], source: 'memory',
+      sourceFile: 'report.md', chunkIndex: 0, contentHash: 'current', createdAt: 1,
+      sourceStart: 100, sourceEnd: 145, embeddingProfileFingerprint,
+    }, {
+      id: 'revenue:summary', text, searchText: 'Legacy summary', vector: [1, 0], source: 'memory',
+      sourceFile: 'report.md', chunkIndex: 0, contentHash: 'current', createdAt: 1,
+      representationType: 'summary', sourceChunkId: 'revenue', embeddingProfileFingerprint,
+    }], 2)
+    const filter = lanceDbEqFilter('sourceFile', 'report.md')
+    const analysis = new Map([[0, { contentHash: 'current', summary: context, keywords: [], facts: [] }]])
+    await store.updateChunkSearchAnalysis('memory', filter, analysis)
+    expect(embedBatch).toHaveBeenCalledWith([`${context}\n${text}`])
+    expect(await store.listDocuments('memory')).toMatchObject([
+      { id: 'revenue', text, searchText: `${context}\n${text}`, representationType: 'raw' },
+    ])
+    expect(await store.lexicalSearch('memory', 'ACME', 5)).toMatchObject([
+      { id: 'revenue', text, sourceStart: 100, sourceEnd: 145 },
+    ])
+    expect(await store.search('memory', [0, 1], 5)).toMatchObject([{ id: 'revenue', text, denseScore: 1 }])
+
+    embedBatch.mockClear()
+    await store.updateChunkSearchAnalysis('memory', filter, analysis)
+    expect(embedBatch).toHaveBeenCalledWith([])
+    await store.updateChunkSearchAnalysis('memory', filter, new Map([[0, {
+      contentHash: 'wrong-revision', summary: 'Stale context', keywords: [],
+    }]]))
+    expect((await store.listDocuments('memory'))[0]?.searchText).toBe(`${context}\n${text}`)
+
+    const replacement = 'This chunk covers Globex quarterly financial performance.'
+    await store.updateChunkSearchAnalysis('memory', filter, new Map([[0, {
+      contentHash: 'current', summary: replacement, keywords: [],
+    }]]))
+    expect((await store.listDocuments('memory'))[0]?.searchText).toBe(`${replacement}\n${text}`)
+    expect(await store.lexicalSearch('memory', 'ACME', 5)).toEqual([])
+    expect(await store.lexicalSearch('memory', 'Globex', 5)).toMatchObject([{ id: 'revenue', text }])
+  } finally {
+    embedBatch.mockRestore()
+    await store.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
 
 test('migrates legacy categoryId metadata to folderId in place', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'cynosure-rag-folder-migration-'))
