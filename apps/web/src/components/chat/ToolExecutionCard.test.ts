@@ -54,7 +54,7 @@ describe('ToolExecutionCard', () => {
     expect(wrapper.get('img').attributes('src')).toBe('/example.svg')
     expect(wrapper.get('img').element.parentElement?.classList.contains('rounded-full')).toBe(true)
     await wrapper.get('button').trigger('click')
-    const labels = wrapper.findAll('span.text-\\[11px\\]')
+    const labels = wrapper.findAll('span[title]')
     const builtIn = labels.find((label) => label.text() === 'schedule_list')
     const external = labels.find((label) => label.text() === 'search')
     expect(builtIn?.classes()).toContain('text-purple-600')
@@ -62,6 +62,27 @@ describe('ToolExecutionCard', () => {
     await wrapper.findAll('img').at(-1)!.trigger('error')
     expect(wrapper.findAll('img')).toHaveLength(0)
     servers.value = []
+  })
+
+  test('keeps an expanded call open when its live result arrives', async () => {
+    const step = {
+      iteration: 1, status: 'executing', timestamp: Date.now(),
+      toolCalls: [{ name: 'search', arguments: '{"query":"jobs"}' }],
+    }
+    const wrapper = mount(ToolExecutionCard, {
+      props: { iteration: 1, isActive: true, steps: [step] },
+      global: { stubs: { Icon: true } },
+    })
+    expect(wrapper.find('[icon="svg-spinners:ring-resize"]').exists()).toBe(true)
+    await wrapper.get('button').trigger('click')
+    await wrapper.setProps({
+      isActive: false,
+      steps: [{ ...step, results: [{ name: 'search', success: true, output: 'Found jobs' }] }],
+    })
+    expect(wrapper.get('button').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.text()).toContain('Found jobs')
+    expect(wrapper.get('[aria-label="Completed"]').attributes('icon')).toBe('lucide:circle-check')
+    expect(wrapper.find('[icon="svg-spinners:ring-resize"]').exists()).toBe(false)
   })
 
   test('starts collapsed even when the removed preference remains in local storage', () => {
@@ -390,7 +411,7 @@ describe('ToolExecutionCard', () => {
     expect(wrapper.find('a[href="/api/files?path=%2Ftmp%2Freport.md"]').exists()).toBe(false)
   })
 
-  test('shows mixed tool outcomes as an amber partial success', () => {
+  test('shows each call outcome independently in a mixed round', async () => {
     const wrapper = mount(ToolExecutionCard, {
       props: {
         iteration: 1,
@@ -416,13 +437,21 @@ describe('ToolExecutionCard', () => {
       },
     })
 
-    const trigger = wrapper.get('button')
-    expect(trigger.text()).toContain('2/3 ok · Partial success')
-    expect(trigger.get('icon-stub').attributes('icon')).toBe('lucide:triangle-alert')
-    expect(trigger.get('icon-stub').classes()).toContain('text-amber-600/80')
+    const triggers = wrapper.findAll('button[aria-expanded]')
+    expect(triggers).toHaveLength(3)
+    expect(triggers.map((trigger) => trigger.text())).toEqual([
+      'create_directoryCompleted', 'create_directoryCompleted', 'create_directoryFailed',
+    ])
+    expect(wrapper.findAll('[aria-label="Completed"]')).toHaveLength(2)
+    expect(wrapper.get('[aria-label="Failed"]').classes()).toContain('text-status-danger')
+    await triggers[1]!.trigger('click')
+    expect(triggers.map((trigger) => trigger.attributes('aria-expanded'))).toEqual(['false', 'true', 'false'])
+    expect(wrapper.text()).toContain('two')
+    expect(wrapper.text()).not.toContain('one')
+    expect(wrapper.text()).not.toContain('three')
   })
 
-  test('reserves the red failed state for rounds where every tool failed', () => {
+  test('shows failed status on every failed call', () => {
     const wrapper = mount(ToolExecutionCard, {
       props: {
         iteration: 1,
@@ -446,9 +475,11 @@ describe('ToolExecutionCard', () => {
       },
     })
 
-    const trigger = wrapper.get('button')
-    expect(trigger.text()).toContain('0/2 ok · Failed')
-    expect(trigger.get('icon-stub').attributes('icon')).toBe('lucide:alert-circle')
-    expect(trigger.get('icon-stub').classes()).toContain('text-status-danger/70')
+    const statuses = wrapper.findAll('[aria-label="Failed"]')
+    expect(statuses).toHaveLength(2)
+    for (const status of statuses) {
+      expect(status.attributes('icon')).toBe('lucide:circle-x')
+      expect(status.classes()).toContain('text-status-danger')
+    }
   })
 })
