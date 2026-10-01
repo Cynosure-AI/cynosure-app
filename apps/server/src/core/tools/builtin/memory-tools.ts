@@ -764,12 +764,15 @@ export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefin
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
         description:
-            'Assert or update a durable relationship in the knowledge. ' +
+            'Assert or update a durable relationship in the knowledge, or correct an entity alias list. ' +
+            'To replace aliases, provide only entityId and aliases (an empty array clears non-canonical aliases). Use IDs from knowledge_search. This changes aliases only; it does not undo a merge of entities or relationships. ' +
             'Use this for stable facts the user explicitly wants remembered as connected entities. ' +
             'This creates missing entities, merges repeated relationships, and may replace older functional relationships such as works_at or lives_in.',
         parameters: {
             type: 'object',
             properties: {
+                entityId: { type: 'string', description: 'Full or readable entity ID from knowledge_search for alias correction. Use with aliases instead of from/relation/to.' },
+                aliases: { type: 'array', items: { type: 'string' }, description: 'Complete replacement alias list for entityId. Omitted aliases are removed; [] clears aliases. The canonical name remains searchable.' },
                 from: {
                     type: 'object',
                     description: 'Source entity.',
@@ -795,12 +798,24 @@ export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefin
                 note: { type: 'string', description: 'Short contextual note explaining the relationship.' },
                 folder: { type: 'string', description: 'Target memory folder name or ID. Required when multiple memory folders are selected.' },
             },
-            required: ['from', 'relation', 'to'],
+            anyOf: [{ required: ['from', 'relation', 'to'] }, { required: ['entityId', 'aliases'] }],
         },
         timeout: 15_000,
         execute: async (params: unknown) => {
-            const { from, relation, to, importance, note, folder } = (params || {}) as {
-                from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; note?: unknown; folder?: string
+            const { from, relation, to, importance, note, folder, entityId, aliases } = (params || {}) as {
+                entityId?: unknown; aliases?: unknown; from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; note?: unknown; folder?: string
+            }
+            if (entityId !== undefined || aliases !== undefined) {
+                if (typeof entityId !== 'string' || !entityId.trim()) return { success: false, output: 'entityId is required for alias correction.' }
+                if (!Array.isArray(aliases) || !aliases.every((alias) => typeof alias === 'string' && alias.trim())) {
+                    return { success: false, output: 'aliases must be an array of non-empty strings; use [] to clear aliases.' }
+                }
+                if (from !== undefined || relation !== undefined || to !== undefined) return { success: false, output: 'Use entityId and aliases separately from relationship assertions.' }
+                const resolved = resolveKnowledgeEntityIds([entityId], assignedFolders.map((folder) => folder.id))
+                if ('error' in resolved) return { success: false, output: resolved.error }
+                const entity = getMemoryKnowledgeStore().updateEntity(resolved.ids[0], { aliases, replaceAliases: true })
+                if (!entity) return { success: false, output: 'Entity not found.' }
+                return { success: true, output: `Aliases updated for ${entity.name} (${readableKnowledgeEntityId(entity.name, entity.id)}): ${entity.aliases.join(', ') || 'none'}.` }
             }
             const targetSpace = resolveKnowledgeSpace(assignedFolders, folder)
             if ('error' in targetSpace) return { success: false, output: targetSpace.error }

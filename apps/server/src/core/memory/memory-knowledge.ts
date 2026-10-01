@@ -1102,7 +1102,7 @@ export class MemoryKnowledgeStore {
     }
   }
 
-  updateEntity(id: string, patch: { name?: string; type?: KnowledgeEntityType; aliases?: string[]; importance?: ImportanceLevel }): KnowledgeEntity | null {
+  updateEntity(id: string, patch: { name?: string; type?: KnowledgeEntityType; aliases?: string[]; replaceAliases?: boolean; importance?: ImportanceLevel }): KnowledgeEntity | null {
     const existing = this.getNode(id)
     if (!existing) return null
     const nextName = cleanDisplay(patch.name || existing.name, 160)
@@ -1120,8 +1120,9 @@ export class MemoryKnowledgeStore {
     db.transaction(() => {
       db.prepare(`UPDATE memory_knowledge_entities SET canonical_name = ?, normalized_name = ?, entity_type = ?, updated_at = ? WHERE id = ?`)
         .run(nextName, normalize(nextName), patch.type || existing.type, now, id)
+      if (patch.replaceAliases && patch.aliases !== undefined) db.prepare('DELETE FROM memory_knowledge_entity_aliases WHERE entity_id = ?').run(id)
       const insertAlias = db.prepare(`INSERT INTO memory_knowledge_entity_aliases (id, entity_id, display_alias, normalized_alias, source, confidence, created_at) VALUES (?, ?, ?, ?, 'manual', 1, ?) ON CONFLICT(entity_id, normalized_alias) DO UPDATE SET display_alias = excluded.display_alias, source = 'manual', confidence = 1`)
-      for (const alias of Array.from(new Set([existing.name, nextName, ...(patch.aliases || [])].map((value) => cleanDisplay(value, 160)).filter(Boolean)))) {
+      for (const alias of Array.from(new Set([...(patch.replaceAliases ? [] : [existing.name, nextName]), ...(patch.aliases || [])].map((value) => cleanDisplay(value, 160)).filter(Boolean)))) {
         insertAlias.run(nanoid(), id, alias, normalize(alias), now)
       }
       if (patch.importance !== undefined) db.prepare(`UPDATE memory_knowledge_assertions SET importance = ?, updated_at = ? WHERE (subject_entity_id = ? OR object_entity_id = ?) AND status IN ('active', 'disputed')`).run(patch.importance, now, id, id)

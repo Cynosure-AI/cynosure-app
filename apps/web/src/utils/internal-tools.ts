@@ -37,6 +37,7 @@ const AUTO_MANAGED_BUILT_IN_TOOL_PREFIXES = [
 
 const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set<string>([
   ...AUTO_MEMORY_TOOL_NAMES,
+  'knowledge_search',
   'expand_available_toolset',
   'spawn_subagent',
   'continue_subagent',

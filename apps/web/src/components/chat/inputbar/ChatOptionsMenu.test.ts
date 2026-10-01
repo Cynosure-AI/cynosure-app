@@ -114,10 +114,11 @@ describe('ChatOptionsMenu', () => {
     wrapper.unmount()
   })
 
-  test('selects an entire MCP namespace and opens its searchable tool list', async () => {
+  test('omits automatic knowledge search while selecting an MCP namespace', async () => {
     agentStore.availableTools = [
       { key: 'search-key', name: 'Search', description: 'Find documents', namespace: { id: 'mcp:docs', label: 'Documents' } },
       { key: 'write-key', name: 'Write', description: 'Create documents', namespace: { id: 'mcp:docs', label: 'Documents' } },
+      { key: 'builtin:memory::knowledge_search', name: 'knowledge_search', description: 'Automatic knowledge retrieval', namespace: { id: 'builtin:memory', label: 'Memory' } },
     ]
     const wrapper = mount(ChatOptionsMenu, {
       attachTo: document.body,
@@ -129,6 +130,7 @@ describe('ChatOptionsMenu', () => {
     ;([...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Tools (MCPs)') as HTMLButtonElement).click()
     await flushPromises()
     expect(menu.querySelector('img[src="/docs-icon.png"]')).not.toBeNull()
+    expect(menu.textContent).not.toContain('knowledge_search')
     ;(menu.querySelector('[aria-label="Select all tools in Documents"]') as HTMLButtonElement).click()
     expect(chatStore.selectedToolNames).toEqual(['search-key', 'write-key'])
     ;(menu.querySelector('[aria-label="Open Documents tools"]') as HTMLButtonElement).click()
