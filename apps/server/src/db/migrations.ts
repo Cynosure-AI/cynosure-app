@@ -313,6 +313,19 @@ const MIGRATIONS: SchemaMigration[] = [
             for (const name of oldNames) db.prepare('DELETE FROM tool_router_tool_embeddings WHERE tool_name = ?').run(name)
         },
     },
+    {
+        version: 15,
+        description: 'Move user notifications into built-in utilities',
+        up: (db) => {
+            for (const { table, column } of [
+                { table: 'agents', column: 'tools_json' },
+                { table: 'conversations', column: 'execution_config_json' },
+                { table: 'cron_jobs', column: 'execution_config_json' },
+            ]) {
+                db.prepare(`UPDATE ${table} SET ${column} = replace(${column}, 'builtin:notifications::notify_user', 'builtin:utility::notify_user') WHERE ${column} LIKE '%builtin:notifications::notify_user%'`).run()
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

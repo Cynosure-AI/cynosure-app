@@ -164,9 +164,6 @@ export function getBuiltInNamespace(toolName: string): ToolNamespace {
         return BUILTIN_NAMESPACES.memory;
     }
     if (SCHEDULE_TOOL_NAMES.includes(toolName as never)) return BUILTIN_NAMESPACES.scheduling;
-    if (toolName === 'notify_user') {
-        return BUILTIN_NAMESPACES.notifications;
-    }
     return BUILTIN_NAMESPACES.utility;
 }
 

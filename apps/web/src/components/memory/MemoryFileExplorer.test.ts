@@ -135,13 +135,13 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
     const toggle = wrapper.get('[aria-label="Toggle semantic search"]')
 
-    expect(toggle.attributes('aria-pressed')).toBe('false')
+    expect(toggle.attributes('aria-checked')).toBe('false')
     await toggle.trigger('click')
     await wrapper.get('input[placeholder="Search this folder and subfolders…"]').setValue('deployment guidance')
     await new Promise((resolve) => window.setTimeout(resolve, 250))
     await flushPromises()
 
-    expect(toggle.attributes('aria-pressed')).toBe('true')
+    expect(toggle.attributes('aria-checked')).toBe('true')
     expect(mocks.searchFiles).toHaveBeenLastCalledWith('deployment guidance', {
       folderId: 'category',
       semantic: true,
@@ -551,6 +551,9 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
     await wrapper.get('[aria-label="Grid view"]').trigger('click')
     await wrapper.get('input[aria-label="Select Projects"]').trigger('click')
+    expect(wrapper.findAll('button').some((button) => button.text().trim() === 'Drop Index')).toBe(false)
+    await wrapper.setProps({ spaces: [...wrapper.props('spaces').slice(0, 1), { ...child, descendantIndexedFileCount: 1 }] })
+    expect(wrapper.findAll('button').some((button) => button.text().trim() === 'Drop Index')).toBe(true)
     const indexButton = wrapper.findAll('button').find((button) => button.text().trim() === 'Index files')
     await indexButton?.trigger('click')
     await flushPromises()

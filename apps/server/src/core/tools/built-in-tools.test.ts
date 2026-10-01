@@ -19,7 +19,7 @@ describe('built-in tool categories', () => {
         ['memory_search', 'builtin:memory', 'Built-In: Memory'],
         ['knowledge_assert', 'builtin:memory', 'Built-In: Memory'],
         ['schedule_create', 'builtin:scheduling', 'Built-In: Scheduling'],
-        ['notify_user', 'builtin:notifications', 'Built-In: Notifications'],
+        ['notify_user', 'builtin:utility', 'Built-In: Utility'],
         ['manage_mcp', 'builtin:utility', 'Built-In: Utility'],
         ['attachment_search', 'builtin:utility', 'Built-In: Utility'],
         ['spawn_subagent', 'builtin:utility', 'Built-In: Utility'],

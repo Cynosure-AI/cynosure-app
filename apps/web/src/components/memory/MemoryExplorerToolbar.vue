@@ -170,7 +170,7 @@ const emit = defineEmits<{
         /> Deep Research
       </button>
       <button
-        v-if="canForget || selectedFolderCount > 0"
+        v-if="canForget"
         :disabled="forgetting"
         class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-orange-400 transition-colors hover:bg-orange-500/10 disabled:opacity-50"
         title="Remove semantic search vectors and extracted facts while keeping the source files"
