@@ -54,22 +54,22 @@ interface ReusableChunkPlan {
   chunksToExtract: PreparedMemoryChunk[]
 }
 
-/** Match exact chunks against the last compatible active extraction of the
- * same document revision. Edits may change neighboring context or the title.
- * Hash buckets make duplicate chunks occurrence-aware. */
-export function planReusableKnowledgeChunks(documentId: string, chunks: PreparedMemoryChunk[], contentHash: string): ReusableChunkPlan {
+/** Match exact chunks against the latest compatible extraction. Hash buckets
+ * make duplicate chunks occurrence-aware. Changed chunks and immediate
+ * neighbors are re-extracted because each extraction includes adjacent context. */
+export function planReusableKnowledgeChunks(documentId: string, chunks: PreparedMemoryChunk[], _contentHash: string): ReusableChunkPlan {
   const priorRun = getDb().prepare(`
     SELECT id FROM memory_knowledge_index_runs
-    WHERE document_id = ? AND pipeline_version = ? AND prompt_version = ? AND content_hash = ? AND status = 'active'
+    WHERE document_id = ? AND pipeline_version = ? AND prompt_version = ? AND status = 'active'
     ORDER BY activated_at DESC LIMIT 1
-  `).get(documentId, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION, contentHash) as { id: string } | undefined
+  `).get(documentId, MEMORY_KNOWLEDGE_PIPELINE_VERSION, MEMORY_KNOWLEDGE_PROMPT_VERSION) as { id: string } | undefined
   if (!priorRun) return { reusableChunks: [], chunkTags: [], chunkSummaries: [], chunksToExtract: chunks }
 
   const priorChunks = getDb().prepare(`
-    SELECT id, text_hash, tags_json, summary FROM memory_knowledge_text_units
+    SELECT id, chunk_index, text_hash, tags_json, summary FROM memory_knowledge_text_units
     WHERE run_id = ? ORDER BY chunk_index
-  `).all(priorRun.id) as Array<{ id: string; text_hash: string; tags_json: string; summary: string }>
-  const byHash = new Map<string, Array<{ id: string; tags: string[]; summary: string }>>()
+  `).all(priorRun.id) as Array<{ id: string; chunk_index: number; text_hash: string; tags_json: string; summary: string }>
+  const byHash = new Map<string, Array<{ id: string; chunkIndex: number; tags: string[]; summary: string }>>()
   for (const prior of priorChunks) {
     let tags: string[] = []
     try {
@@ -77,18 +77,40 @@ export function planReusableKnowledgeChunks(documentId: string, chunks: Prepared
       if (Array.isArray(parsed)) tags = parsed.filter((tag): tag is string => typeof tag === 'string')
     } catch { /* malformed tags are treated as empty */ }
     const bucket = byHash.get(prior.text_hash)
-    if (bucket) bucket.push({ id: prior.id, tags, summary: prior.summary })
-    else byHash.set(prior.text_hash, [{ id: prior.id, tags, summary: prior.summary }])
+    if (bucket) bucket.push({ id: prior.id, chunkIndex: prior.chunk_index, tags, summary: prior.summary })
+    else byHash.set(prior.text_hash, [{ id: prior.id, chunkIndex: prior.chunk_index, tags, summary: prior.summary }])
   }
 
+  const matchesByIndex = new Map<number, { id: string; priorChunkIndex: number; tags: string[]; summary: string }>()
+  const unmatchedIndexes = new Set<number>()
+  for (const chunk of chunks) {
+    const match = byHash.get(chunk.contentHash)?.shift()
+    if (match) matchesByIndex.set(chunk.chunkIndex, { id: match.id, priorChunkIndex: match.chunkIndex, tags: match.tags, summary: match.summary })
+    else unmatchedIndexes.add(chunk.chunkIndex)
+  }
+  // Deletions and insertions also change context for otherwise identical chunks.
+  // A matched chunk whose old neighbors no longer map to its current neighbors
+  // is treated as changed, then the adjacent current chunks are invalidated too.
+  const previousMatches = new Map([...matchesByIndex].map(([index, match]) => [index, match.priorChunkIndex]))
+  for (const [index, match] of matchesByIndex) {
+    const hasCurrentPrevious = index > 0
+    const hasCurrentNext = index < chunks.length - 1
+    if ((hasCurrentPrevious && previousMatches.get(index - 1) !== match.priorChunkIndex - 1)
+      || (!hasCurrentPrevious && match.priorChunkIndex > 0)
+      || (hasCurrentNext && previousMatches.get(index + 1) !== match.priorChunkIndex + 1)
+      || (!hasCurrentNext && match.priorChunkIndex < priorChunks.length - 1)) unmatchedIndexes.add(index)
+  }
+  const reextractIndexes = new Set<number>()
+  for (const index of unmatchedIndexes) {
+    for (const nearby of [index - 1, index, index + 1]) if (nearby >= 0 && nearby < chunks.length) reextractIndexes.add(nearby)
+  }
   const reusableChunks: ReusableKnowledgeChunk[] = []
   const chunkTags: DeepResearchExtractedChunkTags[] = []
   const chunkSummaries: DeepResearchExtractedChunkSummary[] = []
   const chunksToExtract: PreparedMemoryChunk[] = []
   for (const chunk of chunks) {
-    const matches = byHash.get(chunk.contentHash)
-    const match = matches?.shift()
-    if (!match) {
+    const match = matchesByIndex.get(chunk.chunkIndex)
+    if (!match || reextractIndexes.has(chunk.chunkIndex)) {
       chunksToExtract.push(chunk)
       continue
     }
