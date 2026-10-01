@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, test } from 'vitest'
 import ToolExecutionCard from './ToolExecutionCard.vue'
+import { useAgentStore, type ToolInfo } from '../../stores/agent-runtime.store'
+import { useMcpServers } from '../../composables/useMcpServers'
 
 describe('ToolExecutionCard', () => {
   test.each([
@@ -30,6 +32,36 @@ describe('ToolExecutionCard', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
+  })
+
+  test('uses MCP icons and namespace colors for built-in and external tools', async () => {
+    useAgentStore().availableTools = [
+      { key: 'builtin:scheduling::schedule_list', name: 'schedule_list', executionName: 'schedule_list', namespace: { id: 'builtin:scheduling', label: 'Scheduling' } },
+      { key: 'mcp:example::search', name: 'search', executionName: 'search', namespace: { id: 'mcp:example', label: 'Example' } },
+    ] as ToolInfo[]
+    const { servers } = useMcpServers()
+    servers.value = [{ id: 'example', icon_url: '/example.svg' }] as typeof servers.value
+    const wrapper = mount(ToolExecutionCard, {
+      props: {
+        iteration: 1, isActive: false,
+        steps: [{ iteration: 1, status: 'executing', timestamp: Date.now(),
+          toolCalls: [{ name: 'schedule_list', arguments: '{}' }, { name: 'search', arguments: '{}' }],
+          results: [{ name: 'schedule_list', success: false, output: '', error: 'Failed' }, { name: 'search', success: true, output: 'Found' }],
+        }],
+      },
+      global: { stubs: { Icon: true } },
+    })
+    expect(wrapper.get('img').attributes('src')).toBe('/example.svg')
+    expect(wrapper.get('img').element.parentElement?.classList.contains('rounded-full')).toBe(true)
+    await wrapper.get('button').trigger('click')
+    const labels = wrapper.findAll('span.text-\\[11px\\]')
+    const builtIn = labels.find((label) => label.text() === 'schedule_list')
+    const external = labels.find((label) => label.text() === 'search')
+    expect(builtIn?.classes()).toContain('text-purple-600')
+    expect(external?.classes()).toContain('text-accent-fg')
+    await wrapper.findAll('img').at(-1)!.trigger('error')
+    expect(wrapper.findAll('img')).toHaveLength(0)
+    servers.value = []
   })
 
   test('starts collapsed even when the removed preference remains in local storage', () => {

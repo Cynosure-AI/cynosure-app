@@ -177,9 +177,7 @@ const visibleEmptyStateSubAgents = computed(() =>
     : emptyStateSubAgents.value,
 )
 const overflowEmptyStateSubAgents = computed(() =>
-  emptyStateSubAgents.value.length > 10
-    ? emptyStateSubAgents.value.slice(9)
-    : [],
+  emptyStateSubAgents.value.slice(visibleEmptyStateSubAgents.value.length),
 )
 const overflowEmptyStateSubAgentsTitle = computed(() =>
   overflowEmptyStateSubAgents.value.map((agent) => agent.name).join('\n'),
