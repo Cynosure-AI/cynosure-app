@@ -55,7 +55,7 @@ interface ReusableChunkPlan {
 }
 
 /** Match exact chunks against the last compatible active extraction of the
- * same document revision. Contextual descriptions depend on the whole document.
+ * same document revision. Edits may change neighboring context or the title.
  * Hash buckets make duplicate chunks occurrence-aware. */
 export function planReusableKnowledgeChunks(documentId: string, chunks: PreparedMemoryChunk[], contentHash: string): ReusableChunkPlan {
   const priorRun = getDb().prepare(`
@@ -102,17 +102,26 @@ export function planReusableKnowledgeChunks(documentId: string, chunks: Prepared
  * produce much more JSON than source text, so combining chunks risks hitting
  * the model's output limit. One chunk per batch also gives users meaningful,
  * predictable progress without relying on automatic retries. */
-function buildDeepResearchSegments(chunks: PreparedMemoryChunk[]) {
-  return chunks.map((chunk) => ({
-    chunkIndex: chunk.chunkIndex,
-    chunkIndexes: [chunk.chunkIndex],
-    content: [
-      `Document: ${chunk.documentTitle}`,
-      `<source_chunk index="${chunk.chunkIndex}" section="${chunk.sectionPath.replace(/"/g, '&quot;')}">`,
-      chunk.text,
-      '</source_chunk>',
-    ].join('\n'),
-  }))
+export function buildDeepResearchSegments(chunks: PreparedMemoryChunk[], targetChunks: PreparedMemoryChunk[] = chunks) {
+  const positions = new Map(chunks.map((chunk, index) => [chunk.chunkIndex, index]))
+  return targetChunks.map((chunk) => {
+    const position = positions.get(chunk.chunkIndex)
+    if (position === undefined) throw new Error('Analysis target chunk is missing from the document')
+    const previous = chunks[position - 1]
+    const next = chunks[position + 1]
+    return {
+      chunkIndex: chunk.chunkIndex,
+      chunkIndexes: [chunk.chunkIndex],
+      content: [
+        `Document: ${chunk.documentTitle}`,
+        ...(previous ? ['<previous_chunk_context>', previous.text, '</previous_chunk_context>'] : []),
+        `<source_chunk index="${chunk.chunkIndex}">`,
+        chunk.text,
+        '</source_chunk>',
+        ...(next ? ['<next_chunk_context>', next.text, '</next_chunk_context>'] : []),
+      ].join('\n'),
+    }
+  })
 }
 
 function normalizeDeepResearchConfig(config: Partial<DeepResearchConfig> | undefined): DeepResearchConfig {
@@ -307,8 +316,7 @@ export async function deepResearchMemoryContent(opts: {
   let checkpointStep = 0
   const extracted = remainingChunks.length > 0
     ? await deepResearchContent({
-      segments: buildDeepResearchSegments(remainingChunks),
-      documentContent: opts.content,
+      segments: buildDeepResearchSegments(chunks, remainingChunks),
       providerId: opts.providerId || configuredTarget.providerId,
       model: opts.model || configuredTarget.model,
       signal: opts.signal,

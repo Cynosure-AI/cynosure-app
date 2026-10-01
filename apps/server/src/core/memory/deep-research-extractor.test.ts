@@ -15,20 +15,21 @@ import { deepResearchContent, mergeDeepResearchChunkTags, normalizeKnowledgeTags
 describe('Deep Research notes', () => {
   beforeEach(() => complete.mockReset())
 
-  test('provides the whole document as context while keeping extraction tied to the target chunk', async () => {
+  test('uses neighboring context while keeping extraction tied to the target chunk', async () => {
     complete.mockResolvedValue({ content: JSON.stringify([
       { action: 'summary', summary: 'This chunk covers ACME revenue in Q2 2023.', source_chunk_index: 1 },
       { action: 'summary', summary: 'Wrong chunk.', source_chunk_index: 0 },
     ]) })
     const result = await deepResearchContent({
-      documentContent: 'ACME Q2 2023 report. Revenue grew by 3%.',
-      segments: [{ content: '<source_chunk index="1">Revenue grew by 3%.</source_chunk>', chunkIndexes: [1] }],
+      segments: [{ content: 'Document: ACME Q2 2023 report.\n<previous_chunk_context>Financial results.</previous_chunk_context>\n<source_chunk index="1">Revenue grew by 3%.</source_chunk>\n<next_chunk_context>Outlook.</next_chunk_context>', chunkIndexes: [1] }],
     })
     const request = complete.mock.calls[0][0]
     expect(request.messages[0].content).toContain('50-100 tokens')
     expect(request.messages[0].content).toContain('supported by the numbered source chunk itself')
+    expect(request.messages[0].content).toContain('Neighboring chunks are context only')
+    expect(request.messages).toHaveLength(2)
     expect(request.messages[1].content).toContain('ACME Q2 2023 report.')
-    expect(request.messages[2].content).toContain('<source_chunk index="1">')
+    expect(request.messages[1].content).toContain('<source_chunk index="1">')
     expect(result.chunkSummaries).toEqual([{ sourceChunkIndex: 1, summary: 'This chunk covers ACME revenue in Q2 2023.' }])
   })
 
