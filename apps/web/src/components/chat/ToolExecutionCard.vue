@@ -5,6 +5,7 @@ import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import ToolExecutionList from './ToolExecutionList.vue'
+import ToolNamespaceIcon from './ToolNamespaceIcon.vue'
 import { fileArtifactKey, fileArtifactLinks } from '../../utils/file-artifacts'
 import { isBuiltInNamespaceId, isInternalToolName } from '../../utils/internal-tools'
 import RichContent from '../shared/RichContent.vue'
@@ -45,17 +46,16 @@ type ContextSection = {
   executions: ToolExecution[]
 }
 type MergedContextSection = ContextSection & { rows: ContextRow[] }
-type ExecutionSection = {
+type ContextExecutionSection = {
   key: string
-  title?: string
-  icon?: string
-  class?: string
-  iconClass?: string
-  rows: (ToolExecution | ContextRow)[]
-  compactContext?: boolean
-  isLoading?: boolean
-  timestamp?: number
-  tone?: 'cyan' | 'green' | 'violet'
+  title: string
+  icon: string
+  class: string
+  iconClass: string
+  rows: ContextRow[]
+  isLoading: boolean
+  timestamp: number
+  tone: 'cyan' | 'green' | 'violet'
 }
 
 const props = defineProps<{
@@ -71,7 +71,6 @@ const props = defineProps<{
 
 const agentStore = useAgentStore()
 const { servers } = useMcpServers()
-const brokenToolIcons = ref(new Set<string>())
 const toolsByName = computed(() => {
   const tools = new Map(agentStore.availableTools.map((tool) => [tool.executionName, tool]))
   for (const tool of agentStore.availableTools) {
@@ -93,11 +92,11 @@ function toolNamespaceIcon(name = ''): string {
 
 function toolIconUrl(name = ''): string | undefined {
   const namespaceId = toolsByName.value.get(name)?.namespace.id
-  if (!namespaceId?.startsWith('mcp:') || brokenToolIcons.value.has(name)) return undefined
+  if (!namespaceId?.startsWith('mcp:')) return undefined
   return servers.value.find((server) => server.id === namespaceId.slice(4))?.icon_url || undefined
 }
 
-// Tool-call details are collapsed until the user opens them.
+// Context preparation details are collapsed independently of tool execution rows.
 const expanded = ref(false)
 const lightboxSrc = ref<string | null>(null)
 
@@ -242,16 +241,6 @@ function scoreTitleForCall(call: ToolCall): string {
 function callContent(call?: ToolCall | null): string | null {
   if (!call || (!isMemoryCall(call) && !isToolRouterCall(call))) return null
   return visibleText(parseArgs(call.arguments)?.content)
-}
-
-function memoryCallMetadata(call: ToolCall): string {
-  const parsed = parseArgs(call.arguments)
-  if (!parsed) return call.arguments
-
-  const metadata = { ...parsed }
-  delete metadata.content
-  delete metadata.contextPhase
-  return Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : ''
 }
 
 function subAgentCodenameFromArgs(args: string): string | null {
@@ -480,12 +469,6 @@ function headerButtonClass(isExpanded: boolean): string {
       : 'bg-cyan-50/80 hover:bg-cyan-100/60 hover:border-cyan-400/35 border border-cyan-300/30 dark:bg-cyan-950/10 dark:hover:bg-cyan-950/20 dark:hover:border-cyan-500/25 dark:border-cyan-500/15'
   }
 
-  if (isSubAgentSpawnIteration.value) {
-    return isExpanded
-      ? 'bg-indigo-100/60 border border-indigo-400/40 shadow-md shadow-indigo-500/5 dark:bg-indigo-950/20 dark:border-indigo-500/35 dark:shadow-indigo-950/20'
-      : 'bg-indigo-50/80 hover:bg-indigo-100/60 hover:border-indigo-400/35 border border-indigo-300/30 dark:bg-indigo-950/10 dark:hover:bg-indigo-950/20 dark:hover:border-indigo-500/35 dark:border-indigo-500/20'
-  }
-
   if (isToolRouting.value || isMemoryRouting.value) {
     return isExpanded
       ?'bg-green-100/60 border border-green-400/40 shadow-md shadow-green-500/5 dark:bg-green-950/20 dark:border-green-500/30 dark:shadow-green-950/10'
@@ -502,8 +485,6 @@ const currentStatus = computed(() => latestStep.value?.status ?? 'executing')
 const currentPhase = computed(() => meta(currentStatus.value))
 
 const latestToolCalls = computed(() => [...props.steps].reverse().find((step) => step.toolCalls?.length)?.toolCalls ?? [])
-const rawToolCallArgs = computed(() => latestToolCalls.value)
-const toolCallArgs = computed(() => rawToolCallArgs.value)
 
 const results = computed(() => {
   if (props.delegationHandoff) return []
@@ -511,7 +492,6 @@ const results = computed(() => {
 })
 
 const toolNames = computed(() => latestToolCalls.value.map((call) => call.name))
-const isSubAgentSpawnIteration = computed(() => toolNames.value.some(isSubAgentSpawnCall))
 
 const isTaskContext = computed(() => props.steps.some((step) => step.status === 'building-task-context' || step.toolCalls?.some(isTaskContextCall)))
 const isAttachmentIndexing = computed(() => props.steps.some((step) => step.status === 'indexing-attachments' || step.toolCalls?.some(isAttachmentIndexCall)))
@@ -591,7 +571,7 @@ const maContext = computed(() => {
 })
 
 const taskContext = computed(() => {
-  const parsed = parseArgs(rawToolCallArgs.value.find(isTaskContextCall)?.arguments)
+  const parsed = parseArgs(latestToolCalls.value.find(isTaskContextCall)?.arguments)
   if (!parsed) return null
 
   const memorySearchQueries = Array.isArray(parsed.memorySearchQueries)
@@ -638,14 +618,14 @@ const contextSections = computed<ContextSection[]>(() => props.steps
   }))
 
 const mergedContextSections = computed(() => mergeContextSections(contextSections.value))
-const toolExecutions = computed(() => buildExecutions(toolCallArgs.value, results.value))
+const toolExecutions = computed(() => buildExecutions(latestToolCalls.value, results.value))
 const latestContextSection = computed(() => [...mergedContextSections.value].reverse()[0])
 const finalContextSections = computed(() => mergedContextSections.value.filter((section) => section.phase === 'gathered-context'))
 const hasFinalContext = computed(() => finalContextSections.value.length > 0)
 const isRoutingWorkPending = computed(() => {
   if (!props.isActive || !isRoutingStatus.value) return false
-  if (isTaskContext.value) return !rawToolCallArgs.value.some(isTaskContextCall)
-  if (isAttachmentIndexing.value) return !rawToolCallArgs.value.some(isAttachmentIndexCall)
+  if (isTaskContext.value) return !latestToolCalls.value.some(isTaskContextCall)
+  if (isAttachmentIndexing.value) return !latestToolCalls.value.some(isAttachmentIndexCall)
   return !hasFinalContext.value
 })
 
@@ -696,28 +676,21 @@ const headerToolNames = computed(() => {
   return toolNames.value
 })
 
-const executionSections = computed<ExecutionSection[]>(() => {
+const contextExecutionSections = computed<ContextExecutionSection[]>(() => {
   if (isTaskContext.value) return []
-
-  if (mergedContextSections.value.length) {
-    return [...mergedContextSections.value]
-      .sort((a, b) => contextSectionOrder(a) - contextSectionOrder(b))
-      .map((section, index) => ({
+  return [...mergedContextSections.value]
+    .sort((a, b) => contextSectionOrder(a) - contextSectionOrder(b))
+    .map((section, index) => ({
       key: `${section.status}-${section.phase}-${index}`,
       title: contextSectionTitle(section),
       icon: contextSectionIcon(section),
       class: contextSectionClass(section),
       iconClass: contextSectionIconClass(section),
       rows: section.rows,
-      compactContext: true,
       isLoading: props.isActive && index === mergedContextSections.value.length - 1 && section.phase === 'gathered-results',
       timestamp: section.timestamp,
       tone: section.kind === 'entity' ? 'violet' : 'green',
-      }))
-  }
-
-  if (!toolExecutions.value.length) return []
-  return [{ key: 'tool-executions', rows: toolExecutions.value }]
+    }))
 })
 
 const headerLabel = computed(() => {
@@ -763,7 +736,7 @@ const executionRows = computed(() => toolExecutions.value.map((execution) => {
 const hasDisplayableActivity = computed(() =>
   isTaskContext.value ||
   isRoutingStatus.value ||
-  toolCallArgs.value.length > 0 ||
+  latestToolCalls.value.length > 0 ||
   results.value.length > 0 ||
   Boolean(streamingText.value && props.isActive),
 )
@@ -845,20 +818,11 @@ const hasDisplayableActivity = computed(() =>
                   class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium truncate max-w-35"
                   :class="toolChipClass(name)"
                 >
-                  <span class="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-current/10">
-                    <img
-                      v-if="toolIconUrl(name)"
-                      :src="toolIconUrl(name)"
-                      alt=""
-                      class="h-full w-full object-contain"
-                      @error="brokenToolIcons.add(name)"
-                    >
-                    <Icon
-                      v-else
-                      :icon="toolNamespaceIcon(name)"
-                      class="h-3 w-3"
-                    />
-                  </span>
+                  <ToolNamespaceIcon
+                    :src="toolIconUrl(name)"
+                    :icon="toolNamespaceIcon(name)"
+                    class="h-4 w-4 bg-current/10"
+                  />
                   {{ toolDisplayName(name) }}
                 </span>
                 <span
@@ -995,19 +959,24 @@ const hasDisplayableActivity = computed(() =>
             </p>
           </div>
 
+          <ToolExecutionList
+            v-if="!isTaskContext && !mergedContextSections.length && executionRows.length"
+            :rows="executionRows"
+            :is-active="isActive"
+            :status="currentPhase.label"
+            @preview-image="lightboxSrc = $event"
+          />
+
           <div
-            v-for="section in executionSections"
+            v-for="section in contextExecutionSections"
             :key="section.key"
-            :class="section.compactContext
-              ? ['context-timeline-item rounded-lg border px-2.5 py-2', `context-timeline-item--${section.tone || 'cyan'}`, section.class]
-              : 'space-y-1.5'"
+            :class="['context-timeline-item rounded-lg border px-2.5 py-2', `context-timeline-item--${section.tone}`, section.class]"
           >
             <div
-              v-if="section.compactContext"
               class="mb-1.5 flex items-center gap-1.5"
             >
               <Icon
-                :icon="section.isLoading ? 'svg-spinners:ring-resize' : section.icon || 'lucide:terminal'"
+                :icon="section.isLoading ? 'svg-spinners:ring-resize' : section.icon"
                 class="h-3 w-3"
                 :class="section.iconClass"
               />
@@ -1028,23 +997,12 @@ const hasDisplayableActivity = computed(() =>
                     class="w-3 h-3"
                     :class="executionIconClass(execution)"
                   />
-                  <span
-                    class="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-current/10"
+                  <ToolNamespaceIcon
+                    :src="toolIconUrl(execution.call?.name || execution.result?.name)"
+                    :icon="toolNamespaceIcon(execution.call?.name || execution.result?.name)"
+                    class="h-5 w-5 bg-current/10"
                     :class="executionNameClass(execution)"
-                  >
-                    <img
-                      v-if="toolIconUrl(execution.call?.name || execution.result?.name)"
-                      :src="toolIconUrl(execution.call?.name || execution.result?.name)"
-                      alt=""
-                      class="h-full w-full object-contain"
-                      @error="brokenToolIcons.add(execution.call?.name || execution.result?.name || '')"
-                    >
-                    <Icon
-                      v-else
-                      :icon="toolNamespaceIcon(execution.call?.name || execution.result?.name)"
-                      class="h-3 w-3"
-                    />
-                  </span>
+                  />
                   <span
                     class="text-[11px] font-medium"
                     :class="executionNameClass(execution)"
@@ -1074,55 +1032,6 @@ const hasDisplayableActivity = computed(() =>
                   :content="callContent(execution.call)"
                   class="max-h-64 rounded bg-theme-900/70 px-2 py-1.5 dark:bg-theme-950/50"
                 />
-
-                <template v-if="!section.compactContext">
-                  <RichContent
-                    v-if="execution.call && isMemoryCall(execution.call) && memoryCallMetadata(execution.call)"
-                    :content="memoryCallMetadata(execution.call)"
-                    tone="muted"
-                    class="mt-1.5 max-h-50 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
-                  />
-                  <RichContent
-                    v-else-if="execution.call?.arguments && execution.call.arguments !== '{}' && !scoreForCall(execution.call)"
-                    :content="execution.call.arguments"
-                    tone="muted"
-                    class="max-h-50 rounded bg-theme-900 px-2 py-1.5 text-[10px] dark:bg-theme-950/50"
-                  />
-
-                  <RichContent
-                    v-if="execution.result"
-                    :content="execution.result.output"
-                    :tone="execution.result.success ? 'default' : 'error'"
-                    class="max-h-64 rounded px-2 py-1.5 text-[10px]"
-                    :class="[
-                      execution.call?.arguments && execution.call.arguments !== '{}' ? 'mt-1.5' : '',
-                      execution.result.success
-                        ? 'bg-theme-900/50'
-                        : 'bg-red-100/80 dark:bg-red-950/30',
-                    ]"
-                  />
-
-                  <div
-                    v-if="execution.result?.images?.length"
-                    class="flex gap-2 mt-2 flex-wrap"
-                  >
-                    <img
-                      v-for="(img, imageIndex) in execution.result.images"
-                      :key="imageIndex"
-                      :src="img"
-                      class="h-24 rounded-lg border border-theme-600 object-cover cursor-pointer hover:border-accent-500 transition-colors"
-                      :title="`Click to enlarge - Image ${imageIndex + 1} from ${execution.result.name}`"
-                      @click.stop="lightboxSrc = img"
-                    >
-                  </div>
-
-                  <p
-                    v-if="execution.result?.error"
-                    class="mt-1 text-[10px] text-red-600 dark:text-status-danger"
-                  >
-                    {{ execution.result.error }}
-                  </p>
-                </template>
               </div>
             </div>
           </div>
