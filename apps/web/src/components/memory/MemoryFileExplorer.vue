@@ -447,6 +447,12 @@ const selectedRememberedFiles = computed(() =>
     selectedFiles.value.has(f.fileName),
   ),
 );
+const canForgetSelected = computed(() =>
+  selectedRememberedFiles.value.length > 0 || props.spaces.some((folder) =>
+    selectedFolders.value.has(folder.id) &&
+    (folder.indexedFileCount || 0) + (folder.descendantIndexedFileCount || 0) > 0,
+  ),
+);
 const selectedDeepResearchIdleCount = computed(() =>
   selectedDeepResearchFiles.value.filter((f) => !isJobActive("deep-research", f.fileName)).length,
 );
@@ -1271,7 +1277,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :index-idle-count="selectedSearchIndexIdleCount"
       :can-research="selectedDeepResearchFiles.length > 0"
       :research-idle-count="selectedDeepResearchIdleCount"
-      :can-forget="selectedRememberedFiles.length > 0"
+      :can-forget="canForgetSelected"
       :moving="moving"
       :forgetting="forgettingMemories"
       :deleting="deleting"

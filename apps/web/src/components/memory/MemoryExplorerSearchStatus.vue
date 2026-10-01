@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Icon } from "@iconify/vue";
+import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import type { MemoryIndexJob } from "../../api/types";
 import type { UploadResult } from "./memory-file-explorer-types";
 
@@ -72,21 +73,17 @@ function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
           />
         </button>
       </div>
-      <button
-        type="button"
-        :aria-pressed="semantic"
-        aria-label="Toggle semantic search"
-        class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors"
-        :class="semantic ? 'border-accent-500/50 bg-accent-500/15 text-accent-fg' : 'border-theme-700/70 bg-control-surface text-ink-muted hover:bg-table-hover hover:text-theme-200'"
+      <label
+        class="flex h-9 shrink-0 cursor-pointer items-center gap-2 px-1 text-xs font-medium text-ink-secondary"
         :title="semantic ? 'Semantic search is on' : 'Search document vectors by meaning'"
-        @click="semantic = !semantic"
       >
-        <Icon
-          icon="lucide:sparkles"
-          class="h-3.5 w-3.5"
-        />
         <span class="hidden sm:inline">Semantic</span>
-      </button>
+        <ToggleSwitch
+          v-model="semantic"
+          size="sm"
+          label="Toggle semantic search"
+        />
+      </label>
     </div>
   </div>
 
