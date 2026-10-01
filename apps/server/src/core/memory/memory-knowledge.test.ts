@@ -21,6 +21,7 @@ vi.mock('./rag.js', () => ({
 }))
 
 import { closeDb, getDb } from '../../db/database.js'
+import { makeKnowledgeAssertTool } from '../tools/builtin/memory-tools.js'
 import { MemoryKnowledgeStore } from './memory-knowledge.js'
 import { planReusableKnowledgeChunks } from './memory-deep-research.js'
 import { upsertMemoryFileIndex } from './agent-memory.js'
@@ -69,6 +70,24 @@ afterEach(() => {
 })
 
 describe('memory knowledge v3', () => {
+    test('knowledge_assert replaces and clears aliases without changing relationships', async () => {
+        const edge = store.assertRelationship({ folderId: 'test-space', from: { name: 'Ada', type: 'person', aliases: ['Wrong person', 'A. Lovelace'] }, relation: 'uses', to: { name: 'TypeScript', type: 'technology', aliases: [] }, importance: 2, note: '' })
+        expect(edge).toBeTruthy()
+        const entity = store.suggestNodes('Ada', 1, ['test-space'])[0]
+        const tool = makeKnowledgeAssertTool({ assignedFolders: [{ id: 'test-space', name: 'Test' }] })
+        expect(await tool.execute({ entityId: entity.id, aliases: ['A. Lovelace'] })).toMatchObject({ success: true })
+        expect(store.getNode(entity.id)?.aliases).toContain('A. Lovelace')
+        expect(store.getNode(entity.id)?.aliases).not.toContain('Wrong person')
+        expect(await tool.execute({ entityId: entity.id, aliases: [] })).toMatchObject({ success: true })
+        expect(store.getNode(entity.id)?.aliases).toEqual([])
+        expect(store.suggestNodes('Ada', 1, ['test-space'])[0]?.id).toBe(entity.id)
+        expect(store.getNode(entity.id)?.name).toBe('Ada')
+        expect(await makeKnowledgeAssertTool({ assignedFolders: [] }).execute({ entityId: entity.id, aliases: ['Forbidden'] })).toMatchObject({ success: false })
+        expect(await tool.execute({ entityId: entity.id, aliases: [''] })).toMatchObject({ success: false })
+        expect(await makeKnowledgeAssertTool({ assignedFolders: [{ id: 'other-space', name: 'Other' }] }).execute({ entityId: entity.id, aliases: ['Forbidden'] })).toMatchObject({ success: false })
+        expect(getDb().prepare("SELECT count(*) AS count FROM memory_knowledge_assertions WHERE status = 'active'").get()).toEqual({ count: 1 })
+    })
+
     test('reuses unchanged chunk knowledge across a partial document edit', () => {
         addDocument('doc-incremental', 'incremental.md', 'revision-1')
         const originalChunks = [
