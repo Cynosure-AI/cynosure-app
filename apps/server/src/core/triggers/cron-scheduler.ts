@@ -291,7 +291,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
             executionConfig: job.executionConfig ?? undefined,
             userContent,
             origin: 'cron',
-            title: 'New Chat',
+            title: job.name.trim() || 'New Chat',
             systemPromptSuffix: '\nUse your tools to perform the scheduled task.',
             broadcast,
             signal: abortController.signal,

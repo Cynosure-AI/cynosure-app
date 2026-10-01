@@ -99,6 +99,21 @@ const edgeRelation = ref("");
 const edgeNote = ref("");
 const graphOperationError = ref("");
 const graphMutationPending = ref(false);
+const housekeepingPending = ref(false);
+
+async function startKnowledgeHousekeeping(): Promise<void> {
+  if (housekeepingPending.value) return;
+  housekeepingPending.value = true;
+  graphOperationError.value = "";
+  try {
+    const { conversationId } = await api.memory.startKnowledgeHousekeeping();
+    await router.push({ name: "conversation", params: { conversationId } });
+  } catch (error) {
+    graphOperationError.value = error instanceof Error ? error.message : "Could not start knowledge graph housekeeping.";
+  } finally {
+    housekeepingPending.value = false;
+  }
+}
 const nodeSpacing = useLocalStorage(SK_KNOWLEDGE_GRAPH_NODE_SPACING, 1.0);
 const showGraphEdgeLabels = useLocalStorage(SK_KNOWLEDGE_GRAPH_EDGE_LABELS, true);
 const graphEdgePathType = useLocalStorage<GraphEdgePathType>(SK_KNOWLEDGE_GRAPH_EDGE_PATH_TYPE, "bezier");
@@ -634,11 +649,13 @@ onMounted(() => loadFolders());
           :graph-search-query="graphSearchQuery"
           :graph="activeGraph"
           :graph-loading="graphLoading"
+          :housekeeping-pending="housekeepingPending"
           :graph-flow-nodes="graphFlowNodes"
           :graph-flow-edges="graphFlowEdges"
           :graph-suggestions="graphSuggestions"
           :walk-nodes="graphSelectedNodes"
           @load-graph="submitGraphSearch"
+          @start-housekeeping="startKnowledgeHousekeeping"
           @clear-walk="clearGraphWalk"
           @select-suggestion="selectGraphSuggestion"
           @explore-node="selectGraphSuggestion"

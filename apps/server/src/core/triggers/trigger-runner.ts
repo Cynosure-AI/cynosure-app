@@ -61,8 +61,8 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     // Create conversation
     const conversationId = nanoid()
     db.prepare(
-        'INSERT INTO conversations (id, title, agent_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(conversationId, title, agent?.id ?? null, origin, Date.now(), Date.now())
+        'INSERT INTO conversations (id, title, agent_id, origin, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(conversationId, title, agent?.id ?? null, origin, JSON.stringify(executionConfig ?? {}), Date.now(), Date.now())
 
     // Notify the caller and persist the trigger input before any fallible
     // context preparation. Failed/cancelled pre-turn work must still leave a
