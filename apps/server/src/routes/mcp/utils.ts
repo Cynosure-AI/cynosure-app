@@ -56,7 +56,7 @@ const MIME_MAP: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', 
  * relative path (e.g. `node server.js`) still pick up an icon.png in the
  * user's project directory.
  */
-export function findMcpIcon(command: string, argsJson: string): { path: string; mime: string } | null {
+export function findMcpIcon(argsJson: string): { path: string; mime: string } | null {
     const args = JSON.parse(argsJson) as string[]
     const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
 
@@ -110,7 +110,7 @@ function parseServerJsonHints(content: string): McpEnvHint[] | null {
  * Try to find a `server.json` next to the MCP server's entry file
  * and extract env var hints from it.
  */
-export function findEnvHints(command: string, argsJson: string): McpEnvHint[] | null {
+export function findEnvHints(argsJson: string): McpEnvHint[] | null {
     const args = JSON.parse(argsJson) as string[]
     const entryPath = args.find(a => isAbsolute(a) && !a.startsWith('-'))
     if (!entryPath) return null

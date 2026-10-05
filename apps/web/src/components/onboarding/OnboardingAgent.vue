@@ -8,6 +8,7 @@ import BaseCard from '../shared/BaseCard.vue'
 import IconUpload from '../shared/IconUpload.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import PromptSmartTagPicker from '../shared/PromptSmartTagPicker.vue'
+import { NEW_AGENT_BEHAVIOR } from '../../utils/agent-defaults'
 
 interface DraftState {
   hasDraft: boolean
@@ -86,13 +87,10 @@ async function createAgent(): Promise<boolean> {
       providerId: providerId.value,
       model: model.value,
       systemPrompt: systemPrompt.value.trim(),
-      cronPrompt: '',
       tools: [],
-      autoApproveTools: false,
-      autoToolRouting: false,
-      autoMemory: false,
-      generateTitle: true,
-      memoryFolders: [],
+      ...NEW_AGENT_BEHAVIOR,
+      // Omitted on purpose: the server then assigns the default memory folders,
+      // while an empty list would switch retrieval off for this agent.
     })
 
     return true

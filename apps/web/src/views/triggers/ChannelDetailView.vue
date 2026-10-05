@@ -35,7 +35,7 @@ const dlgBotToken = ref('')
 const dlgAppToken = ref('')
 const dlgEnabled = ref(true)
 const dlgAllowedAgentIds = ref<string[]>([])
-const dlgAllowedTelegramUserIds = ref('')
+const dlgAllowedUserIds = ref('')
 const draftBaseline = ref('')
 const showDiscardConfirm = ref(false)
 
@@ -43,7 +43,7 @@ const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
 )
 
-function parseTelegramUserIds(value: string): string[] {
+function parseUserIds(value: string): string[] {
   return [...new Set(value.split(/[\s,]+/).map(id => id.trim()).filter(id => /^\d+$/.test(id) && id !== '0'))]
 }
 
@@ -112,7 +112,7 @@ const canSave = computed(() => {
   if (channel.value?.type === 'slack') {
     return !!dlgBotToken.value.trim() && !!dlgAppToken.value.trim()
   }
-  if (channel.value?.type === 'telegram' && parseTelegramUserIds(dlgAllowedTelegramUserIds.value).length === 0) {
+  if ((channel.value?.type === 'telegram' || channel.value?.type === 'discord') && parseUserIds(dlgAllowedUserIds.value).length === 0) {
     return false
   }
   return !!dlgBotToken.value.trim()
@@ -125,7 +125,7 @@ const serializedDraft = computed(() => JSON.stringify({
   appToken: dlgAppToken.value,
   enabled: dlgEnabled.value,
   allowedAgentIds: dlgAllowedAgentIds.value,
-  allowedTelegramUserIds: dlgAllowedTelegramUserIds.value,
+  allowedUserIds: dlgAllowedUserIds.value,
 }))
 const isDirty = computed(() => !loading.value && serializedDraft.value !== draftBaseline.value)
 
@@ -135,7 +135,7 @@ function populateFields(ch: ChannelDefinition) {
   dlgBotToken.value = (ch.config.botToken as string) || ''
   dlgAppToken.value = (ch.config.appToken as string) || ''
   dlgAllowedAgentIds.value = (ch.config.allowedAgentIds as string[]) || []
-  dlgAllowedTelegramUserIds.value = Array.isArray(ch.config.allowedUserIds)
+  dlgAllowedUserIds.value = Array.isArray(ch.config.allowedUserIds)
     ? ch.config.allowedUserIds.map(String).join(', ')
     : ''
   dlgEnabled.value = ch.enabled
@@ -151,8 +151,8 @@ function buildConfig(): Record<string, unknown> {
   if (channel.value.type === 'telegram' || channel.value.type === 'discord') {
     config.botToken = dlgBotToken.value.trim()
   }
-  if (channel.value.type === 'telegram') {
-    config.allowedUserIds = parseTelegramUserIds(dlgAllowedTelegramUserIds.value)
+  if (channel.value.type === 'telegram' || channel.value.type === 'discord') {
+    config.allowedUserIds = parseUserIds(dlgAllowedUserIds.value)
   }
   if (channel.value.type === 'slack') {
     config.botToken = dlgBotToken.value.trim()
@@ -377,7 +377,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             <div>
               <label class="block text-xs text-ink-secondary mb-1.5">Allowed Telegram User IDs</label>
               <input
-                v-model="dlgAllowedTelegramUserIds"
+                v-model="dlgAllowedUserIds"
                 type="text"
                 inputmode="numeric"
                 placeholder="e.g. 123456789"
@@ -402,6 +402,19 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
           </template>
 
           <template v-else-if="channel.type === 'discord'">
+            <div>
+              <label class="block text-xs text-ink-secondary mb-1.5">Allowed Discord User IDs</label>
+              <input
+                v-model="dlgAllowedUserIds"
+                type="text"
+                inputmode="numeric"
+                placeholder="e.g. 123456789012345678"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
+              >
+              <p class="text-[11px] text-ink-faint mt-1.5">
+                Required. Only these Discord user IDs can message the bot or approve tools, in servers and DMs. Separate multiple IDs with commas.
+              </p>
+            </div>
             <div>
               <label class="block text-xs text-ink-secondary mb-1.5">Bot Token</label>
               <input

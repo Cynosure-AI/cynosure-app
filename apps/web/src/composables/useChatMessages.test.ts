@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
     cancelPostActions: vi.fn(),
   },
   agentStore: {
-    clearExecutionState: vi.fn(),
     setConversationExecutionState: vi.fn(),
     prepareConversationExecution: vi.fn(),
     stopConversationExecution: vi.fn(),

@@ -47,7 +47,12 @@ export class LLMGateway {
     }
   }
 
-  private createProvider(config: LLMProviderConfig): BaseLLMProvider {
+  /**
+   * Build a provider client without registering it. Used to validate a config
+   * before it is saved and to query an unsaved config (for example to list its
+   * models while the user is still filling in the form). Throws for unknown types.
+   */
+  createProvider(config: LLMProviderConfig): BaseLLMProvider {
     switch (config.type) {
       case 'openai':
         return new OpenAIProvider(config)
@@ -135,6 +140,7 @@ export class LLMGateway {
       ? this.providers.get(providerId)
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
+    if (type === 'decision' && !supportsDecisionModels(provider)) return []
     return provider.listModels(type)
   }
 
@@ -143,6 +149,7 @@ export class LLMGateway {
       ? this.providers.get(providerId)
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
+    if (type === 'decision' && !supportsDecisionModels(provider)) return []
 
     const models = await provider.listModelItems(type)
     if (provider.config.type === 'ollama' || provider.config.type === 'lmstudio') {
@@ -389,6 +396,11 @@ function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>[
       }))
     } : {})
   }
+}
+
+/** Decision models (typed judgments instead of text) are an OpenRouter catalog. */
+function supportsDecisionModels(provider: BaseLLMProvider): boolean {
+  return provider.config.type === 'openrouter'
 }
 
 function hasProviderPricingCatalog(type: LLMProviderConfig['type']): boolean {

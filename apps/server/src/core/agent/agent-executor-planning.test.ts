@@ -34,7 +34,7 @@ describe('AgentExecutor planning recovery', () => {
 
   test('allows more than one consecutive continuation before the plan resumes', async () => {
     const run = createPlanningRun('planning-retries', 'Finish the task')
-    applyTodoUpdate(run.runId, { op: 'set', tasks: [{ title: 'Finish it', status: 'in_progress' }] })
+    applyTodoUpdate(run.runId, { tasks: [{ title: 'Finish it', status: 'in_progress' }] })
     let call = 0
     const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
       call++
@@ -70,7 +70,7 @@ describe('AgentExecutor planning recovery', () => {
 
   test('refreshes the continuation budget after resumed tool work', async () => {
     const run = createPlanningRun('planning-reset', 'Finish both tasks')
-    applyTodoUpdate(run.runId, { op: 'set', tasks: [{ title: 'Look up data' }, { title: 'Close the plan' }] })
+    applyTodoUpdate(run.runId, { tasks: [{ title: 'Look up data' }, { title: 'Close the plan' }] })
     const lookup: ToolDefinition = {
       name: 'lookup',
       description: 'Looks up data',

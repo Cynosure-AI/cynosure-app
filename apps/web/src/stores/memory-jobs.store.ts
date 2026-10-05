@@ -12,11 +12,8 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
     const activeJobs = computed(() => jobs.value.filter(job => job.status === 'queued' || job.status === 'running' || job.status === 'retrying'))
     const runningJobs = computed(() => jobs.value.filter(job => job.status === 'running' || job.status === 'retrying'))
     const runningReindexJobs = computed(() => activeJobs.value.filter(job => job.kind === 'reindex'))
-    const runningDeepResearchJobs = computed(() => activeJobs.value.filter(job => job.kind === 'deep-research'))
     const hasRunningJobs = computed(() => activeJobs.value.length > 0)
     const statusLabel = computed(() => {
-        if (runningDeepResearchJobs.value.length > 0 && runningReindexJobs.value.length > 0) return 'Memory jobs active...'
-        if (runningDeepResearchJobs.value.length > 0) return 'Deep Research active...'
         if (runningReindexJobs.value.length > 0) return 'Memory indexing active...'
         if (activeJobs.value.some(job => job.kind === 'tool-embeddings')) return 'Tool indexing active...'
         return ''
@@ -78,7 +75,6 @@ export const useMemoryJobsStore = defineStore('memory-jobs', () => {
         runningJobs,
         activeJobs,
         runningReindexJobs,
-        runningDeepResearchJobs,
         hasRunningJobs,
         statusLabel,
         refresh,

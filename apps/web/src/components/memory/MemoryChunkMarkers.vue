@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Marked } from "marked";
-import type { MemoryDocumentAnalysis } from "../../api/types";
-import HoverTooltip from "../shared/HoverTooltip.vue";
+import type { MemoryDocumentChunks } from "../../api/types";
 
 interface TextNodeLike {
   isText?: boolean;
@@ -26,15 +25,14 @@ interface MarkerEditor {
 
 const props = defineProps<{
   editor: MarkerEditor | null | undefined;
-  chunks: MemoryDocumentAnalysis["chunks"];
-  showDetails?: boolean;
+  chunks: MemoryDocumentChunks["chunks"];
 }>();
 
 /** Minimum vertical distance between two badges so boundaries never stack up. */
 const MARKER_SPACING = 22;
 
 const layerRef = ref<HTMLElement | null>(null);
-const markers = ref<Array<{ chunk: MemoryDocumentAnalysis["chunks"][number]; top: number; first: boolean }>>([]);
+const markers = ref<Array<{ chunk: MemoryDocumentChunks["chunks"][number]; top: number; first: boolean }>>([]);
 const hoveredIndex = ref<number | null>(null);
 const hoveredMarker = computed(() =>
   hoveredIndex.value === null
@@ -216,45 +214,15 @@ onBeforeUnmount(() => {
       @mouseenter="hoveredIndex = marker.chunk.chunkIndex"
       @mouseleave="hoveredIndex = hoveredIndex === marker.chunk.chunkIndex ? null : hoveredIndex"
     >
-      <HoverTooltip
-        placement="mouse"
-        :max-width="460"
-        :disabled="showDetails === false"
-        block
+      <div
+        class="group flex items-center"
+        :aria-label="marker.first ? 'Chunk 1 start' : `Chunk ${marker.chunk.chunkIndex + 1} boundary`"
       >
-        <div
-          class="group flex items-center"
-          :aria-label="marker.first ? 'Chunk 1 start' : `Chunk ${marker.chunk.chunkIndex + 1} boundary`"
-        >
-          <div class="h-px w-5 bg-linear-to-r from-transparent to-accent-500/60 transition-colors group-hover:to-accent-300" />
-          <span class="rounded-l-full border border-r-0 border-accent-400/50 bg-accent-500/15 py-1 pl-2.5 pr-3 text-[10px] font-bold uppercase tracking-wide text-accent-fg shadow-md shadow-black/30 backdrop-blur-sm transition-colors group-hover:bg-accent-500/25">
-            Chunk {{ marker.chunk.chunkIndex + 1 }}
-          </span>
-        </div>
-        <template #content>
-          <div
-            class="min-w-64 text-[13px] leading-5 text-theme-200"
-            :aria-label="`Summary for chunk ${marker.chunk.chunkIndex + 1}`"
-          >
-            <div class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent-fg">
-              Chunk {{ marker.chunk.chunkIndex + 1 }}<span v-if="marker.chunk.sectionPath"> · {{ marker.chunk.sectionPath }}</span>
-            </div>
-            <p :class="{ 'italic text-ink-muted': !marker.chunk.summary }">
-              {{ marker.chunk.summary || "Summary unavailable for this chunk." }}
-            </p>
-            <div
-              v-if="marker.chunk.tags.length"
-              class="mt-2 flex flex-wrap gap-1"
-            >
-              <span
-                v-for="tag in marker.chunk.tags"
-                :key="tag"
-                class="rounded border border-theme-700 bg-theme-950 px-1.5 py-0.5 text-[11px] text-ink-secondary"
-              >{{ tag }}</span>
-            </div>
-          </div>
-        </template>
-      </HoverTooltip>
+        <div class="h-px w-5 bg-linear-to-r from-transparent to-accent-500/60 transition-colors group-hover:to-accent-300" />
+        <span class="rounded-l-full border border-r-0 border-accent-400/50 bg-accent-500/15 py-1 pl-2.5 pr-3 text-[10px] font-bold uppercase tracking-wide text-accent-fg shadow-md shadow-black/30 backdrop-blur-sm transition-colors group-hover:bg-accent-500/25">
+          Chunk {{ marker.chunk.chunkIndex + 1 }}
+        </span>
+      </div>
     </div>
   </div>
 </template>

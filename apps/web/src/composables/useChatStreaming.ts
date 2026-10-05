@@ -64,7 +64,7 @@ export interface ChatStreamingState {
     handleSubAgentStreamImages(data: { streamId: string; conversationId: string; images: string[] }): void
     handleSubAgentStreamEnd(data: { streamId: string; conversationId: string; cancelled?: boolean; model?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }): void
     handleTitleUpdated(data: { conversationId: string; title: string }): void
-    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; toolCallIds?: string[]; toolCalls?: MessageToolCall[]; toolCallId?: string; toolSuccess?: boolean; role: string; isError?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
+    handleNewMessage(data: { conversationId: string; streamId?: string; message: { id: string; conversationId: string; sequence?: number; toolCallIds?: string[]; toolCalls?: MessageToolCall[]; toolCallId?: string; toolSuccess?: boolean; role: string; isError?: boolean; stopped?: boolean; content: string; thinking?: string; createdAt: number; imageDataUrls?: string[]; videoDataUrls?: string[]; audioDataUrls?: string[]; structuredContent?: unknown; fileAttachments?: { name: string; href?: string }[]; agentId?: string; agentName?: string; agentIconUrl?: string | null; maCodename?: string; maAgentName?: string; maInvocationId?: string } }): void
     handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void
     handleCompactStart(data: { conversationId: string }): void
     handleCompactError(data: { conversationId: string; error: string }): void
@@ -500,7 +500,11 @@ export function useChatStreaming(
             isStreaming.value = true
             const streamMsg = findStreamingMsg(data.streamId)
             if (streamMsg) {
-                if (streamMsg.content || streamMsg.thinking || streamMsg.imageDataUrls?.length || streamMsg.videoDataUrls?.length) {
+                // Only a temporary, still-empty bubble can carry the next round.
+                // Once a saved message (for example a tool-only round) has been
+                // joined to it, it belongs to that earlier round and must stay put.
+                const belongsToEarlierRound = hasVisibleContent(streamMsg) || !streamMsg.id.startsWith('streaming_')
+                if (belongsToEarlierRound) {
                     streamMsg.isStreaming = false
                     const newMsg: DisplayMessage = {
                         id: `streaming_${Date.now()}`,
@@ -610,6 +614,10 @@ export function useChatStreaming(
                 }
                 if (data.images?.length) {
                     appendUniqueImages(streamMsg, data.images)
+                }
+                if (data.cancelled && hasVisibleContent(streamMsg)) {
+                    // The server saves the partial reply as stopped; mirror it right away.
+                    streamMsg.stopped = true
                 }
                 if (!hasVisibleContent(streamMsg)) {
                     // A completed round may contain only tool calls. Those calls
@@ -859,6 +867,7 @@ export function useChatStreaming(
             toolSuccess?: boolean
             role: string
             isError?: boolean
+            stopped?: boolean
             content: string
             thinking?: string
             createdAt: number
@@ -882,6 +891,7 @@ export function useChatStreaming(
             if (data.message.toolCallId) target.toolCallId = data.message.toolCallId
             if (data.message.toolSuccess !== undefined) target.toolSuccess = data.message.toolSuccess
             target.isError = data.message.isError
+            target.stopped = data.message.stopped
             target.content = data.message.content
             if (data.message.thinking !== undefined) target.thinking = data.message.thinking
             if (data.message.imageDataUrls) target.imageDataUrls = data.message.imageDataUrls
@@ -957,6 +967,7 @@ export function useChatStreaming(
                     toolSuccess: data.message.toolSuccess,
                     role: data.message.role as DisplayMessage['role'],
                     isError: data.message.isError,
+                    stopped: data.message.stopped,
                     streamId: data.message.role === 'assistant' ? data.streamId : undefined,
                     content: data.message.content,
                     thinking: data.message.thinking,

@@ -186,6 +186,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 content_blocks_json: string | null
                 context_tokens: number | null
                 generated_media: number
+                stopped: number
                 created_at: number
             }[]
 
@@ -196,8 +197,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     id, conversation_id, role, content, tool_calls_json, tool_call_id,
                     provider, model, prompt_tokens, completion_tokens, latency_ms,
                     content_blocks_json, agent_id, memory_sources_json,
-                    context_tokens, generated_media, is_error, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    context_tokens, generated_media, is_error, stopped, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `)
 
             for (const row of messageRows) {
@@ -224,6 +225,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     row.context_tokens,
                     row.generated_media,
                     row.is_error,
+                    row.stopped,
                     row.created_at,
                 )
             }
@@ -433,7 +435,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             }
             return { id: row.id, name: row.name, existingAttachmentId: row.id }
         })
-        const missing = ids.filter((id, index) => !files[index])
+        const missing = ids.filter((_, index) => !files[index])
         if (missing.length) {
             return reply.status(404).send({ error: 'One or more selected uploads are no longer available' })
         }
@@ -559,6 +561,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 conversation_id: string
                 role: string
                 is_error: number
+                stopped: number
                 content: string
                 tool_calls_json: string | null
                 tool_call_id: string | null
@@ -657,6 +660,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                     executionId: eventByMessageId.get(row.id)?.execution_id,
                     role: row.role,
                     isError: row.is_error === 1,
+                    stopped: row.stopped === 1 || undefined,
                     content: [...blocks, ...fileBlocks],
                     contextEvidence: contextEvidence as import('@shared/types').ContextEvidence[] | undefined,
                     agentId: row.agent_id || undefined,

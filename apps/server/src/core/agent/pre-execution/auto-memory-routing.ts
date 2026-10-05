@@ -4,19 +4,23 @@ import { getMemoryAggregator, type AggregatedMemory } from '../../memory/memory-
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { MemoryRetrievalStatusDetails, RetrievedChunk } from '../../memory/parser.js'
-import { getMemoryReranker } from '../../memory/reranker.js'
-import { getUserSettings } from '../../user-settings.js'
-import type { KnowledgeAssertion, KnowledgeGraphProjection } from '../../memory/knowledge-types.js'
+import { getMemoryReranker, type MemoryRerankerConfig } from '../../memory/reranker.js'
+import { OpenRouterProvider } from '../../gateway/providers/openrouter.provider.js'
+import { recordAuxiliaryModelUsage } from '../../usage-metering.js'
+import { getMemoryRetrievalOptions, type MemoryRetrievalOptions } from '../../memory/retrieval-options.js'
 import type { ContextEvidence } from '@shared/types'
-import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, routerQuery, runRoutingPhase, selectRoutingCandidates, type RoutingDecision } from './routing-kernel.js'
+import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, ROUTER_TURN_CHAR_LIMIT, routerQuery, runRoutingPhase, selectRoutingCandidates, type RoutingDecision } from './routing-kernel.js'
 
 const MAX_SELECTED_MEMORIES = 5
 const AUTO_MEMORY_RETRIEVAL_RESULT_COUNT = 10
-const MAX_SELECTED_GRAPH_EDGES = 3
-const TURN_CHAR_LIMIT = 200
+const RETRIEVAL_TURN_CHAR_LIMIT = 200 // Per-turn history folded into the embedding retrieval query
 const CANDIDATE_CHAR_LIMIT = 1_200
-const MIN_RELATIVE_MEMORY_SCORE = 0.65
+/** Reranker scores are comparable across chunks, so a relative cut removes their weak tail. */
+const MIN_RELATIVE_RERANKER_SCORE = 0.65
+const RANK_FUSION_CONSTANT = 60
 const MEMORY_CONTEXT_SELECTION_TOOL_NAME = 'select_memory_context'
+/** A decision model's probability of "directly supports" needed to inject a candidate. */
+const MIN_DECISION_PROBABILITY = 0.5
 
 export interface ApplyAutoMemoryRoutingInput {
     enabled: boolean
@@ -37,7 +41,6 @@ export interface ApplyAutoMemoryRoutingInput {
 
 interface MemoryContextSelection {
     memoryIds: string[]
-    graphEdgeIds: string[]
     answerable: boolean
     correctiveQuery?: string
 }
@@ -56,10 +59,8 @@ interface MemoryPipelineStats {
     searchMatches: Array<{
         name: string
         content: string
-        matchScore: number
+        matchScore?: number
         scoreType?: string
-        matchedRepresentations?: RetrievedChunk['matchedRepresentations']
-        matchedFacts?: RetrievedChunk['matchedFacts']
     }>
 }
 
@@ -88,14 +89,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         signal,
     } = input
 
-    if (!shouldRouteMemory(userQuery, { enabled })) {
-        emitAutoMemoryRoutingSkipped(
-            conversationId,
-            !userQuery?.trim() ? 'no-query' : 'disabled',
-            eventMeta,
-        )
-        return null
-    }
+    if (!shouldRouteMemory(userQuery, { enabled })) return null
 
     const taskId = `memory_router_${nanoid()}`
     const aggregator = getMemoryAggregator()
@@ -106,14 +100,18 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         run: async () => {
             emitMemoryRoutingStatus(conversationId, taskId, eventMeta)
             const primaryQuery = userQuery?.trim() || ''
-            const contextualQuery = routerQuery({ query: primaryQuery, recentMessages }, TURN_CHAR_LIMIT)
+            const contextualQuery = routerQuery({ query: primaryQuery, recentMessages }, RETRIEVAL_TURN_CHAR_LIMIT)
             const retrievalQueries = Array.from(new Set([
                 primaryQuery,
                 ...(plannedQueries || []),
                 contextualQuery,
             ].map((query) => query?.trim() || '').filter(Boolean)))
-            const retrievalCount = AUTO_MEMORY_RETRIEVAL_RESULT_COUNT
-            const rerankerEnabled = getMemoryReranker().getConfig().enabled
+            const options = getMemoryRetrievalOptions()
+            // A larger curation pool needs every query to contribute enough candidates.
+            const retrievalCount = Math.max(AUTO_MEMORY_RETRIEVAL_RESULT_COUNT, options.curationPool - 2)
+            const rerankerConfig = getMemoryReranker().getConfig()
+            const rerankerEnabled = rerankerConfig.enabled
+            const curator = rerankerEnabled ? null : await resolveMemoryCurator(gateway, rerankerConfig, { providerId, model })
             let pipelineStage = 0
             const retrievalStats: MemoryRetrievalStatusDetails[] = retrievalQueries.map(() => ({}))
             const reportRetrievalStage = (stage: 'rag' | 'reranking') => {
@@ -127,8 +125,6 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                     agentId,
                     folderIds: memoryFolderIds,
                     permanentTopK: retrievalCount,
-                    includeGraph: true,
-                    graphQuery: qualifyFirstPersonGraphQuery(primaryQuery),
                     onStatus: (stage, details) => {
                         reportRetrievalStage(stage)
                         if (details?.candidateCount !== undefined) retrievalStats[queryIndex].candidateCount = details.candidateCount
@@ -139,12 +135,12 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             )
             emitMemoryPipelineStatus(conversationId, taskId, 'filtering-memory', eventMeta)
             let fusedCandidates = fuseAutoMemoryResults(retrievalResults)
-            let candidates = filterAutoMemoryCandidates(fusedCandidates)
+            let candidates = filterAutoMemoryCandidates(fusedCandidates, options)
             let pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled)
             signal?.throwIfAborted()
 
-            if (!candidates.permanent.length && !candidates.graph?.edges.length) {
-                emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found', undefined, 'retrieval', pipelineStats)
+            if (!candidates.permanent.length) {
+                emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found', 'retrieval', pipelineStats)
                 return null
             }
 
@@ -155,20 +151,19 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 'gathered-results',
                 eventMeta,
                 undefined,
-                formatGraphOnly(aggregator, candidates.graph),
                 'retrieval',
                 pipelineStats,
             )
             if (rerankerEnabled) emitMemoryPipelineStatus(conversationId, taskId, 'selecting-memory', eventMeta)
             else emitMemoryCurationStatus(conversationId, taskId, eventMeta)
-            let selection = rerankerEnabled ? null : await selectMemoryContext({
+            let selection = !curator ? null : await selectMemoryContext({
                 conversationId,
                 gateway,
-                providerId,
-                model,
+                curator,
                 query: primaryQuery,
                 recentMessages,
                 candidates,
+                documentContext: options.curatorDocumentContext,
                 signal,
             })
 
@@ -181,8 +176,6 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                     agentId,
                     folderIds: memoryFolderIds,
                     permanentTopK: retrievalCount,
-                    includeGraph: true,
-                    graphQuery: qualifyFirstPersonGraphQuery(correctiveQuery),
                     onStatus: (stage, details) => {
                         reportRetrievalStage(stage)
                         if (details?.candidateCount !== undefined) correctedStats.candidateCount = details.candidateCount
@@ -193,7 +186,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 retrievalResults = [...retrievalResults, corrected]
                 retrievalStats.push(correctedStats)
                 fusedCandidates = fuseAutoMemoryResults(retrievalResults)
-                candidates = filterAutoMemoryCandidates(fusedCandidates)
+                candidates = filterAutoMemoryCandidates(fusedCandidates, options)
                 pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled)
                 emitMemoryRoutingSelection(
                     conversationId,
@@ -202,18 +195,17 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                     'gathered-results',
                     eventMeta,
                     undefined,
-                    formatGraphOnly(aggregator, candidates.graph),
                     'retrieval',
                     pipelineStats,
                 )
-                selection = rerankerEnabled ? null : await selectMemoryContext({
+                selection = !curator ? null : await selectMemoryContext({
                     conversationId,
                     gateway,
-                    providerId,
-                    model,
+                    curator,
                     query: primaryQuery,
                     recentMessages,
                     candidates,
+                    documentContext: options.curatorDocumentContext,
                     signal,
                 })
             }
@@ -221,22 +213,9 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             const selectedPermanent = selection
                 ? resolveSelectedMemories(candidates.permanent, selection.memoryIds)
                 : candidates.permanent.slice(0, MAX_SELECTED_MEMORIES)
-            const selectedGraph = selection
-                ? resolveSelectedGraph(candidates.graph, selection.graphEdgeIds)
-                : takeGraphEdges(candidates.graph, MAX_SELECTED_GRAPH_EDGES)
             const selectedMemory: AggregatedMemory = {
                 permanent: selection?.answerable === false ? [] : selectedPermanent,
-                graph: selection?.answerable === false ? undefined : selectedGraph,
             }
-
-            // Keep the visible context-gathering event in lockstep with the
-            // evidence formatted for the main model. The graph supplement is not
-            // part of `permanent`, so omitting it here makes injected context
-            // invisible to users (and incorrectly reports an empty selection for
-            // graph-only results).
-            const graphContext = selectedMemory.graph?.edges.length
-                ? aggregator.format({ permanent: [], graph: selectedMemory.graph })
-                : ''
 
             const selectionMethod = rerankerEnabled ? 'reranker' : selection ? 'llm' : 'ranked-fallback'
             emitMemoryRoutingSelection(
@@ -245,8 +224,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 selectedMemory.permanent,
                 'gathered-context',
                 eventMeta,
-                selectedMemory.permanent.length || graphContext ? undefined : 'none-relevant',
-                graphContext,
+                selectedMemory.permanent.length ? undefined : 'none-relevant',
                 selectionMethod,
                 pipelineStats,
             )
@@ -266,22 +244,11 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                     relevance: memoryMatch(chunk).score,
                     verificationStatus,
                 })),
-                ...(selectedMemory.graph?.edges || []).map((edge) => ({
-                    kind: 'graph-assertion' as const,
-                    sourceId: edge.id,
-                    documentId: edge.sourceDocumentId || edge.sourceChunk?.documentId,
-                    revision: edge.sourceContentHash,
-                    chunkIndex: edge.sourceChunkIndex ?? edge.sourceChunk?.chunkIndex,
-                    retrievalMethod: 'knowledge-graph',
-                    selectionMethod,
-                    relevance: edge.retrievalRelevance,
-                    verificationStatus,
-                })),
             ]
             return { content: formatted, evidence }
         },
         fallback: () => {
-            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed', undefined, 'routing-failed')
+            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed', 'routing-failed')
             return null
         },
     })
@@ -317,7 +284,8 @@ function buildMemoryPipelineStats(
         filteredCount,
         duplicateCount: Math.max(0, returnedCount - uniqueCount),
         weakCount: Math.max(0, uniqueCount - filteredCount),
-        relativeScoreThreshold: MIN_RELATIVE_MEMORY_SCORE,
+        // Zero means the tail was cut by rank, not by a relative score.
+        relativeScoreThreshold: rerankerEnabled ? MIN_RELATIVE_RERANKER_SCORE : 0,
         searchMatches: preRerankerMatches.map((memory) => {
             const visibleMatch = memoryMatch(memory)
             return {
@@ -325,86 +293,93 @@ function buildMemoryPipelineStats(
                 content: memory.text,
                 matchScore: visibleMatch.score,
                 scoreType: visibleMatch.scoreType,
-                matchedRepresentations: memory.matchedRepresentations,
-                matchedFacts: memory.matchedFacts,
             }
         }),
     }
-}
-
-function formatGraphOnly(aggregator: ReturnType<typeof getMemoryAggregator>, graph: KnowledgeGraphProjection | undefined): string {
-    return graph?.edges.length ? aggregator.format({ permanent: [], graph }) : ''
-}
-
-function qualifyFirstPersonGraphQuery(query: string): string {
-    const userName = getUserSettings().name.trim()
-    if (!userName || !/\b(my|me|mine|our|mein|meine|meiner|meinen|unser|unsere|mir|mich)\b/i.test(query)) return query
-    return `${query}\nCurrent user: ${userName}`
-}
-
-export function emitAutoMemoryRoutingSkipped(
-    _conversationId: string,
-    _reason: 'disabled' | 'empty-scope' | 'no-query' | 'not-required',
-    _eventMeta?: Record<string, unknown>,
-): void {
-    // Static or disabled memory selection is not auto-memory routing, so do
-    // not create a visible context-gathering step unless the router runs.
 }
 
 function shouldRouteMemory(userQuery?: string, opts: { enabled?: boolean } = {}): boolean {
     return opts.enabled === true && Boolean(userQuery?.trim())
 }
 
+interface MemoryCurator {
+    providerId?: string
+    model?: string
+    /** Set when the curation model is an OpenRouter decision model. */
+    decisionProvider?: OpenRouterProvider
+}
+
+/** The configured curation model, or the conversation model when none is set or its provider is gone. */
+async function resolveMemoryCurator(
+    gateway: LLMGateway,
+    config: Pick<MemoryRerankerConfig, 'curationProviderId' | 'curationModel'>,
+    conversation: { providerId?: string; model?: string },
+): Promise<MemoryCurator> {
+    if (!config.curationModel) return conversation
+    const provider = config.curationProviderId ? gateway.getProvider(config.curationProviderId) : undefined
+    if (config.curationProviderId && !provider) return conversation
+    const curator = { providerId: config.curationProviderId, model: config.curationModel }
+    try {
+        if (provider instanceof OpenRouterProvider && await provider.isDecisionModel(config.curationModel)) {
+            return { ...curator, decisionProvider: provider }
+        }
+    } catch (err) {
+        console.warn('[memory-router] Could not check whether the curation model is a decision model:', err)
+    }
+    return curator
+}
+
 async function selectMemoryContext(input: {
     conversationId: string
     gateway: LLMGateway
-    providerId?: string
-    model?: string
+    curator: MemoryCurator
     query: string
     recentMessages: ChatMessage[]
     candidates: AggregatedMemory
+    documentContext?: boolean
     signal?: AbortSignal
 }): Promise<MemoryContextSelection | null> {
-    if (!input.candidates.permanent.length && !input.candidates.graph?.edges.length) return null
+    if (!input.candidates.permanent.length) return null
+    const { providerId, model, decisionProvider } = input.curator
 
     try {
+        if (decisionProvider && model) return await decideMemoryContext({ ...input, provider: decisionProvider, model })
+
         const candidateIds = input.candidates.permanent.map((_, index) => memoryCandidateId(index))
-        const graphEdgeIds = (input.candidates.graph?.edges || []).map((_, index) => graphCandidateId(index))
         const request: Parameters<LLMGateway['complete']>[0] = {
             messages: [
                 {
                     role: 'system',
                     content: [
                         'You curate retrieved memory candidates before the main assistant run.',
-                        'Given the current request, recent conversation, text candidates, and source-grounded graph edges, call select_memory_context.',
+                        'Given the current request, recent conversation, and retrieved memory candidates, call select_memory_context.',
                         `Select at most ${MAX_SELECTED_MEMORIES} memory IDs.`,
-                        `Select at most ${MAX_SELECTED_GRAPH_EDGES} graph edge IDs.`,
                         'Evidence must directly support the requested fact or operation; topical similarity is insufficient.',
-                        'Treat the provided match score as a strong relevance signal. Prefer higher-scoring evidence when candidates support the same fact.',
+                        'Memory candidates are listed in retrieval rank order. Prefer earlier candidates when several support the same fact.',
+                        ...(input.documentContext ? [
+                            'Each candidate names its document. A chunk is about its document\'s subject even when the chunk text does not repeat that name.',
+                            'When candidates state conflicting facts, include the most recently updated one.',
+                        ] : []),
                         'A close friend does not entail best friend. A related project does not entail the requested project.',
                         'Set answerable=false and select nothing when the pool lacks direct evidence.',
                         'When answerable=false, provide one precise corrective query in the user request language that preserves names, relationship terms, identifiers, and constraints.',
-                        'Prefer graph edges only when their predicate directly answers the request, and keep their cited source evidence.',
                         'Do not answer the user. Do not include rationale. /no_think',
                     ].join('\n'),
                 },
                 {
                     role: 'user',
                     content: [
-                        recentConversationBlock(input.recentMessages, TURN_CHAR_LIMIT),
+                        recentConversationBlock(input.recentMessages, ROUTER_TURN_CHAR_LIMIT),
                         `Current request: ${input.query}`,
                         '',
                         'Memory candidates:',
-                        ...input.candidates.permanent.map((candidate, index) => formatMemoryCandidate(candidate, candidateIds[index])),
-                        '',
-                        'Graph candidates:',
-                        ...(input.candidates.graph?.edges || []).map((edge, index) => formatGraphCandidate(edge, graphEdgeIds[index])),
+                        ...input.candidates.permanent.map((candidate, index) => formatMemoryCandidate(candidate, candidateIds[index], input.documentContext)),
                     ].filter(Boolean).join('\n'),
                 },
             ],
-            model: input.model,
+            model,
             maxTokens: 1_500,
-            tools: [buildMemoryContextSelectionTool(candidateIds, graphEdgeIds)],
+            tools: [buildMemoryContextSelectionTool(candidateIds)],
             toolChoice: { type: 'function', name: MEMORY_CONTEXT_SELECTION_TOOL_NAME },
             thinkingEnabled: false,
             signal: input.signal,
@@ -412,13 +387,13 @@ async function selectMemoryContext(input: {
         return await selectRoutingCandidates({
             conversationId: input.conversationId,
             gateway: input.gateway,
-            providerId: input.providerId,
-            model: input.model,
+            providerId,
+            model,
             signal: input.signal,
             usageKind: 'memory-router',
             toolName: MEMORY_CONTEXT_SELECTION_TOOL_NAME,
             request,
-            parse: (raw) => parseMemoryContextSelection(raw, candidateIds, graphEdgeIds),
+            parse: (raw) => parseMemoryContextSelection(raw, candidateIds),
         })
     } catch (err) {
         if ((err as Error).name === 'AbortError' || input.signal?.aborted) throw err
@@ -427,19 +402,67 @@ async function selectMemoryContext(input: {
     }
 }
 
-function buildMemoryContextSelectionTool(candidateIds: string[], graphEdgeIds: string[]): ToolDefinition {
+/**
+ * Decision models cannot call the selection tool, so each candidate becomes one
+ * yes/no question answered in a single request. They cannot write a corrective
+ * query either, so an unanswerable pool simply selects nothing.
+ */
+async function decideMemoryContext(input: {
+    provider: OpenRouterProvider
+    model: string
+    query: string
+    recentMessages: ChatMessage[]
+    candidates: AggregatedMemory
+    documentContext?: boolean
+    signal?: AbortSignal
+}): Promise<MemoryContextSelection | null> {
+    const candidateIds = input.candidates.permanent.map((_, index) => memoryCandidateId(index))
+    const response = await input.provider.decide({
+        model: input.model,
+        state: {
+            recent_conversation: recentConversationBlock(input.recentMessages, ROUTER_TURN_CHAR_LIMIT) || undefined,
+            current_request: input.query,
+            memory_candidates: Object.fromEntries(input.candidates.permanent.map((candidate, index) => [
+                candidateIds[index],
+                formatMemoryCandidate(candidate, candidateIds[index], input.documentContext),
+            ])),
+        },
+        questions: Object.fromEntries(candidateIds.map((id) => [id, {
+            type: 'noul' as const,
+            instructions: `Does memory candidate ${id} directly support the fact or operation in current_request?`,
+            criteria: {
+                true: `${id} contains evidence that directly answers or enables the current request.`,
+                false: `${id} is only topically similar, about a related but different subject, or irrelevant. A close friend does not entail best friend; a related project does not entail the requested project.`,
+            },
+        }])),
+    }, input.signal)
+    input.signal?.throwIfAborted()
+    recordAuxiliaryModelUsage({
+        kind: 'memory-router',
+        provider: input.provider.config.type,
+        model: response.model || input.model,
+        inputTokens: response.usage?.input_tokens,
+        outputTokens: response.usage?.output_tokens,
+    })
+
+    const answers = response.answers || {}
+    if (!candidateIds.some((id) => typeof answers[id]?.noul === 'number')) return null
+    const memoryIds = candidateIds
+        .map((id, rank) => ({ id, rank, yes: answers[id]?.noul ?? 0 }))
+        .filter(({ yes }) => yes >= MIN_DECISION_PROBABILITY)
+        .sort((a, b) => b.yes - a.yes || a.rank - b.rank)
+        .slice(0, MAX_SELECTED_MEMORIES)
+        .map(({ id }) => id)
+    return { memoryIds, answerable: memoryIds.length > 0 }
+}
+
+function buildMemoryContextSelectionTool(candidateIds: string[]): ToolDefinition {
     const properties: Record<string, unknown> = {
         memoryIds: {
             type: 'array',
             description: 'Candidate IDs to include in context, ordered by usefulness.',
             items: { type: 'string', enum: candidateIds },
             maxItems: MAX_SELECTED_MEMORIES,
-        },
-        graphEdgeIds: {
-            type: 'array',
-            description: 'Graph edge candidate IDs to include as evidence.',
-            items: { type: 'string', enum: graphEdgeIds },
-            maxItems: MAX_SELECTED_GRAPH_EDGES,
         },
         answerable: {
             type: 'boolean',
@@ -458,27 +481,26 @@ function buildMemoryContextSelectionTool(candidateIds: string[], graphEdgeIds: s
             type: 'object',
             additionalProperties: false,
             properties,
-            required: ['memoryIds', 'graphEdgeIds', 'answerable'],
+            required: ['memoryIds', 'answerable'],
         },
         execute: async () => ({ success: true, output: 'ok' }),
     }
 }
 
-function parseMemoryContextSelection(raw: string, candidateIds: string[], graphCandidateIds: string[]): MemoryContextSelection | null {
+function parseMemoryContextSelection(raw: string, candidateIds: string[]): MemoryContextSelection | null {
     try {
-        const parsed = JSON.parse(raw) as { memoryIds?: unknown; graphEdgeIds?: unknown; answerable?: unknown; correctiveQuery?: unknown }
+        const parsed = JSON.parse(raw) as { memoryIds?: unknown; answerable?: unknown; correctiveQuery?: unknown }
         const memoryIds = parseCandidateIds(parsed.memoryIds, candidateIds, MAX_SELECTED_MEMORIES)
-        const graphEdgeIds = parseCandidateIds(parsed.graphEdgeIds ?? [], graphCandidateIds, MAX_SELECTED_GRAPH_EDGES)
-        if (!memoryIds || !graphEdgeIds) return null
+        if (!memoryIds) return null
 
         const answerable = typeof parsed.answerable === 'boolean'
             ? parsed.answerable
-            : memoryIds.length > 0 || graphEdgeIds.length > 0
+            : memoryIds.length > 0
         const correctiveQuery = typeof parsed.correctiveQuery === 'string'
             ? parsed.correctiveQuery.trim().slice(0, 500)
             : ''
 
-        return { memoryIds, graphEdgeIds, answerable, correctiveQuery: correctiveQuery || undefined }
+        return { memoryIds, answerable, correctiveQuery: correctiveQuery || undefined }
     } catch {
         return null
     }
@@ -489,55 +511,22 @@ function resolveSelectedMemories(candidates: RetrievedChunk[], memoryIds: string
     return memoryIds
         .map((id) => byId.get(id))
         .filter((candidate): candidate is RetrievedChunk => Boolean(candidate))
-        .sort((a, b) => memoryMatch(b).score - memoryMatch(a).score)
-}
-
-function resolveSelectedGraph(graph: KnowledgeGraphProjection | undefined, graphEdgeIds: string[]): KnowledgeGraphProjection | undefined {
-    if (!graph || !graphEdgeIds.length) return undefined
-    const byId = new Map(graph.edges.map((edge, index) => [graphCandidateId(index), edge]))
-    const selectedIds = new Set(graphEdgeIds.map((id) => byId.get(id)?.id).filter((id): id is string => Boolean(id)))
-    return filterGraphEdges(graph, selectedIds)
-}
-
-function takeGraphEdges(graph: KnowledgeGraphProjection | undefined, limit: number): KnowledgeGraphProjection | undefined {
-    if (!graph?.edges.length) return undefined
-    return filterGraphEdges(graph, new Set(graph.edges.slice(0, limit).map((edge) => edge.id)))
-}
-
-function filterGraphEdges(graph: KnowledgeGraphProjection, edgeIds: Set<string>): KnowledgeGraphProjection | undefined {
-    const edges = graph.edges.filter((edge) => edgeIds.has(edge.id))
-    if (!edges.length) return undefined
-    const nodeIds = new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId]))
-    return {
-        edges,
-        nodes: graph.nodes.filter((node) => nodeIds.has(node.id)),
-        seedNodes: graph.seedNodes.filter((node) => nodeIds.has(node.id)),
-    }
+        .sort((a, b) => candidates.indexOf(a) - candidates.indexOf(b))
 }
 
 function memoryCandidateId(index: number): string {
     return `m${index + 1}`
 }
 
-function graphCandidateId(index: number): string {
-    return `g${index + 1}`
-}
-
-function formatGraphCandidate(edge: KnowledgeAssertion, id: string): string {
-    const relation = edge.relation.replace(/_/g, ' ')
-    const source = edge.sourceId ? `source=${edge.sourceId}` : ''
-    const part = edge.sourceChunkIndex !== undefined ? `part=${edge.sourceChunkIndex + 1}` : ''
-    const relevance = edge.retrievalRelevance === undefined ? '' : `relevance=${edge.retrievalRelevance.toFixed(2)}`
-    return `- ${id} (${[source, part, relevance].filter(Boolean).join(', ')}): ${edge.fromName} -> ${relation} -> ${edge.toName}. ${edge.note || ''}`
-}
-
-function formatMemoryCandidate(candidate: RetrievedChunk, id: string): string {
-    const score = memoryMatch(candidate).score
+function formatMemoryCandidate(candidate: RetrievedChunk, id: string, documentContext = false): string {
     const metadata = [
         candidate.folderName ? `space=${candidate.folderName}` : '',
         candidate.sourceFile ? `source=${candidate.sourceFile}` : '',
         candidate.chunkIndex != null ? `part=${candidate.chunkIndex + 1}${candidate.totalChunks ? `/${candidate.totalChunks}` : ''}` : '',
-        typeof score === 'number' && Number.isFinite(score) ? `score=${score.toFixed(4)}` : '',
+        // A chunk from the middle of a note often never names its subject.
+        documentContext && candidate.documentTitle ? `document="${candidate.documentTitle}"` : '',
+        documentContext && candidate.sectionPath && candidate.sectionPath !== candidate.documentTitle ? `section="${candidate.sectionPath}"` : '',
+        documentContext && candidate.documentUpdatedAt ? `updated=${new Date(candidate.documentUpdatedAt).toISOString().slice(0, 10)}` : '',
     ].filter(Boolean).join(', ')
     const text = candidate.text.trim().slice(0, CANDIDATE_CHAR_LIMIT)
 
@@ -547,72 +536,53 @@ function formatMemoryCandidate(candidate: RetrievedChunk, id: string): string {
     ].join('\n')
 }
 
-function filterAutoMemoryCandidates(memory: AggregatedMemory): AggregatedMemory {
-    const permanent = filterWeakRelativeMatches(memory.permanent)
-    return { permanent, graph: memory.graph }
+/** Fused rank order is the only signal shared by dense and lexical hits; keep the top of it for curation. */
+function filterAutoMemoryCandidates(memory: AggregatedMemory, options: Pick<MemoryRetrievalOptions, 'curationPool'>): AggregatedMemory {
+    const permanent = hasRerankerScores(memory.permanent)
+        ? filterWeakRerankerMatches(memory.permanent)
+        : memory.permanent.slice(0, options.curationPool)
+    return { permanent }
 }
 
-/** Merge results from the original and expanded queries using the same match
- * score used for filtering, curation, context ordering, and UI display. */
+function hasRerankerScores(candidates: RetrievedChunk[]): boolean {
+    return candidates.length > 0 && candidates.every((candidate) => Number.isFinite(candidate.rerankerScore))
+}
+
+/** Merge the original and expanded queries into one ranked list. Reranker
+ * scores are comparable across queries; otherwise only each query's rank order
+ * is, because a lexical-only hit has no similarity score to compare. */
 function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
-    const ranked = new Map<string, RetrievedChunk>()
+    const ranked = new Map<string, { chunk: RetrievedChunk; rankScore: number }>()
     for (const result of results) {
-        result.permanent.forEach((chunk) => {
+        result.permanent.forEach((chunk, index) => {
             const key = chunk.id || [chunk.folderId, chunk.sourceFile, chunk.chunkIndex].join('\u0000')
+            const contribution = 1 / (RANK_FUSION_CONSTANT + index + 1)
             const existing = ranked.get(key)
             if (!existing) {
-                ranked.set(key, chunk)
+                ranked.set(key, { chunk, rankScore: contribution })
                 return
             }
-            const matchedRepresentations = Array.from(new Set([
-                ...(existing.matchedRepresentations || []),
-                ...(chunk.matchedRepresentations || []),
-            ]))
-            if (memoryMatch(chunk).score > memoryMatch(existing).score) ranked.set(key, { ...chunk, matchedRepresentations })
-            else existing.matchedRepresentations = matchedRepresentations
+            if ((chunk.rerankerScore ?? -Infinity) > (existing.chunk.rerankerScore ?? -Infinity)) existing.chunk = chunk
+            existing.rankScore += contribution
         })
     }
-    const permanent = sortMemoriesByMatch([...ranked.values()])
+    const entries = [...ranked.values()]
+    const byReranker = hasRerankerScores(entries.map(({ chunk }) => chunk))
+    const permanent = entries
+        .sort((a, b) => byReranker
+            ? b.chunk.rerankerScore! - a.chunk.rerankerScore!
+            : b.rankScore - a.rankScore)
+        .map(({ chunk }) => chunk)
 
-    const edgeMap = new Map<string, NonNullable<AggregatedMemory['graph']>['edges'][number]>()
-    const nodeMap = new Map<string, NonNullable<AggregatedMemory['graph']>['nodes'][number]>()
-    const seedMap = new Map<string, NonNullable<AggregatedMemory['graph']>['seedNodes'][number]>()
-    for (const graph of results.map((result) => result.graph).filter(Boolean)) {
-        for (const edge of graph!.edges) edgeMap.set(edge.id, edge)
-        for (const node of graph!.nodes) nodeMap.set(node.id, node)
-        for (const seed of graph!.seedNodes) seedMap.set(seed.id, seed)
-    }
-    const edges = [...edgeMap.values()]
-        .sort((a, b) => (b.retrievalRelevance || 0) - (a.retrievalRelevance || 0)
-            || b.importance - a.importance || b.lastSeenAt - a.lastSeenAt)
-        .slice(0, 8)
-    const includedNodeIds = new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId]))
-    const graph = edges.length > 0
-        ? {
-            seedNodes: [...seedMap.values()].filter((node) => includedNodeIds.has(node.id)),
-            nodes: [...nodeMap.values()].filter((node) => includedNodeIds.has(node.id)),
-            edges,
-        }
-        : undefined
-    return { permanent, graph }
+    return { permanent }
 }
 
-/**
- * Remove the weak tail relative to the best visible match. This deliberately
- * uses the exact score shown in the UI and supplied to LLM curation.
- */
-function filterWeakRelativeMatches(candidates: RetrievedChunk[]): RetrievedChunk[] {
-    const sorted = sortMemoriesByMatch(candidates)
-    if (sorted.length <= 1) return sorted
-    const scores = sorted.map((candidate) => memoryMatch(candidate).score)
-    const best = Math.max(...scores.filter((score) => Number.isFinite(score) && score > 0))
-    if (!Number.isFinite(best)) return sorted
-    const threshold = best * MIN_RELATIVE_MEMORY_SCORE
-    return sorted.filter((_, index) => Number.isFinite(scores[index]) && scores[index] >= threshold)
-}
-
-function sortMemoriesByMatch(candidates: RetrievedChunk[]): RetrievedChunk[] {
-    return [...candidates].sort((a, b) => memoryMatch(b).score - memoryMatch(a).score)
+/** Remove the weak tail relative to the best reranker score. Candidates arrive sorted. */
+function filterWeakRerankerMatches(candidates: RetrievedChunk[]): RetrievedChunk[] {
+    if (candidates.length <= 1) return candidates
+    const best = candidates[0].rerankerScore!
+    if (!(best > 0)) return candidates
+    return candidates.filter((candidate) => candidate.rerankerScore! >= best * MIN_RELATIVE_RERANKER_SCORE)
 }
 
 function memoryLabel(chunk: RetrievedChunk): string {
@@ -631,7 +601,7 @@ function emitMemoryRoutingStatus(conversationId: string, taskId: string, eventMe
         taskId,
         iteration: 0,
         status: 'routing-memory',
-        message: 'Selecting relevant memories...',
+        message: 'Preparing memory search...',
         ...eventMeta,
     })
 }
@@ -676,14 +646,13 @@ function emitMemoryRoutingSelection(
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
     emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
-    graphContext?: string,
     selectionMethod: 'retrieval' | 'reranker' | 'llm' | 'ranked-fallback' | 'routing-failed' = contextPhase === 'gathered-results' ? 'retrieval' : 'llm',
     pipelineStats?: MemoryPipelineStats,
 ): void {
-    const visiblePipelineStats = contextPhase === 'gathered-results' || (!memories.length && !graphContext)
+    const visiblePipelineStats = contextPhase === 'gathered-results' || !memories.length
         ? pipelineStats
         : undefined
-    const toolCalls: RoutingDecision['entries'] = sortMemoriesByMatch(memories).map((memory) => {
+    const toolCalls: RoutingDecision['entries'] = memories.map((memory) => {
         const visibleMatch = memoryMatch(memory)
         return {
             name: memoryLabel(memory),
@@ -697,28 +666,11 @@ function emitMemoryRoutingSelection(
                 content: memory.text,
                 matchScore: visibleMatch.score,
                 scoreType: visibleMatch.scoreType,
-                matchedRepresentations: memory.matchedRepresentations,
-                matchedBy: memory.matchedBy,
-                matchedFacts: memory.matchedFacts,
                 sourceChunkId: memory.sourceChunkId || memory.id,
                 pipelineStats: visiblePipelineStats,
             },
         }
     })
-
-    if (graphContext) {
-        toolCalls.push({
-            name: 'Knowledge Context',
-            details: {
-                type: 'memory',
-                memoryKind: 'knowledge',
-                selectionMethod,
-                contextPhase,
-                content: graphContext,
-                pipelineStats: visiblePipelineStats,
-            },
-        })
-    }
 
     emitRoutingDecision({
         conversationId,
@@ -740,9 +692,12 @@ function emitMemoryRoutingSelection(
     })
 }
 
+/** The score users can compare across candidates. Chunks found only by
+ * keyword search have no such score (a BM25 or fusion value is not a
+ * similarity), so they report how they were found instead. */
 function memoryMatch(memory: RetrievedChunk): {
-    score: number
-    scoreType: 'dense' | 'lexical' | 'fusion' | 'reranker' | 'entity-resolution' | undefined
+    score: number | undefined
+    scoreType: 'dense' | 'reranker' | 'keyword'
 } {
     if (typeof memory.rerankerScore === 'number' && Number.isFinite(memory.rerankerScore)) {
         return { score: normalizeMatchScore(memory.rerankerScore), scoreType: 'reranker' }
@@ -750,7 +705,7 @@ function memoryMatch(memory: RetrievedChunk): {
     if (typeof memory.denseScore === 'number' && Number.isFinite(memory.denseScore)) {
         return { score: normalizeMatchScore(memory.denseScore), scoreType: 'dense' }
     }
-    return { score: normalizeMatchScore(memory.score), scoreType: memory.scoreType }
+    return { score: undefined, scoreType: 'keyword' }
 }
 
 function normalizeMatchScore(value: number): number {

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { getDb } from '../db/database.js'
 
-export type AuxiliaryUsageKind = 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
+export type AuxiliaryUsageKind = 'embedding' | 'reranker' | 'task-context' | 'memory-router' | 'tool-router' | 'dreaming'
 
 export interface AuxiliaryModelUsageInput {
   kind: AuxiliaryUsageKind

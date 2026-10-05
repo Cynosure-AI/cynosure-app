@@ -9,6 +9,9 @@ export interface MemoryRerankerConfig {
   providerId?: string
   model: string
   candidateCount: number
+  /** Curates memory when reranking is off; unset falls back to the conversation model. */
+  curationProviderId?: string
+  curationModel: string
 }
 
 interface OpenRouterRerankResponse {
@@ -22,7 +25,8 @@ const SETTINGS_KEY = 'memoryReranker'
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
   model: '',
-  candidateCount: RERANKER_LIMITS.defaultCandidateCount
+  candidateCount: RERANKER_LIMITS.defaultCandidateCount,
+  curationModel: ''
 }
 
 function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): MemoryRerankerConfig {
@@ -33,7 +37,9 @@ function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): Mem
     enabled: !!config?.enabled,
     providerId: config?.providerId?.trim() || undefined,
     model: config?.model?.trim() || '',
-    candidateCount: Math.min(RERANKER_LIMITS.maxCandidateCount, Math.max(RERANKER_LIMITS.minCandidateCount, candidateCount))
+    candidateCount: Math.min(RERANKER_LIMITS.maxCandidateCount, Math.max(RERANKER_LIMITS.minCandidateCount, candidateCount)),
+    curationProviderId: config?.curationProviderId?.trim() || undefined,
+    curationModel: config?.curationModel?.trim() || ''
   }
 }
 

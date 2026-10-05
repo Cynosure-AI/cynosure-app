@@ -7,6 +7,7 @@ defineProps<{
   isLastUsed: boolean
   isTesting: boolean
   testStatus?: boolean
+  testError?: string
 }>()
 
 const emit = defineEmits<{
@@ -66,10 +67,18 @@ function getProviderIcon(type: string): string {
       <div class="text-sm text-ink-muted truncate">
         {{ provider.defaultModel }} · {{ provider.type }}
       </div>
+      <p
+        v-if="testStatus === false && testError"
+        class="mt-1 text-xs text-status-danger"
+        role="alert"
+      >
+        {{ testError }}
+      </p>
     </div>
 
     <div class="flex items-center gap-2">
       <button
+        type="button"
         :disabled="isTesting"
         class="px-2.5 py-1 text-xs rounded-md transition-colors"
         :class="
@@ -92,6 +101,7 @@ function getProviderIcon(type: string): string {
         }}
       </button>
       <button
+        type="button"
         class="px-2.5 py-1 text-xs bg-theme-700 hover:bg-theme-600 text-theme-300 rounded-md transition-colors"
         @click="emit('edit', provider)"
       >

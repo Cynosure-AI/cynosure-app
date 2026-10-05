@@ -77,7 +77,8 @@ export class RequestyProvider extends OpenRouterProvider {
             case 'embedding': return 'embedding'
             case 'transcription': return 'transcription'
             case 'video':
-            case 'reranker': return null
+            case 'reranker':
+            case 'decision': return null
             default: return 'chat'
         }
     }

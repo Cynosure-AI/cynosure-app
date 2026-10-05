@@ -1,19 +1,5 @@
 import type { WebClient } from '@slack/web-api'
-import type { SlackCtx } from './slack.types.js'
-
-export async function postOrUpdate(
-    client: WebClient,
-    channel: string,
-    ts: string | null,
-    text: string,
-    threadTs?: string
-): Promise<void> {
-    if (ts) {
-        await client.chat.update({ channel, ts, text }).catch(() => { })
-    } else {
-        await client.chat.postMessage({ channel, text, thread_ts: threadTs }).catch(() => { })
-    }
-}
+import type { SlackCtx } from './slack.channel.js'
 
 export async function sendLongSlackMessage(
     client: WebClient,

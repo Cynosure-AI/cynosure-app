@@ -39,8 +39,7 @@ const ModalStub = defineComponent({
 function file(fileName: string, modifiedAt: number) {
   return {
     fileName, extension: '.md', size: 10, modifiedAt, supported: true, textDirect: true,
-    status: 'indexed', chunkCount: 1, deepResearched: false, analysisStatus: 'not_analyzed',
-    analysisChunkLimit: 100, tags: [],
+    status: 'indexed', chunkCount: 1,
   }
 }
 

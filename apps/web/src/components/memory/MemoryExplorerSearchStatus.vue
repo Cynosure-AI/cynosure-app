@@ -24,7 +24,6 @@ const emit = defineEmits<{
 }>();
 
 function jobKindLabel(kind: MemoryIndexJob["kind"]): string {
-  if (kind === "deep-research") return "Deep Research";
   if (kind === "tool-embeddings") return "Tool indexing";
   return "Search indexing";
 }

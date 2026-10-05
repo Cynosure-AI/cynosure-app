@@ -270,14 +270,14 @@ function toggleExpand(index: number): void {
           >
             <div class="flex items-center rounded-lg bg-emerald-600 border border-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 overflow-hidden">
               <button
-                class="px-4 py-1.5 text-xs font-semibold text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
+                class="px-4 py-1.5 text-xs font-semibold text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
                 @click="approve"
               >
                 Allow
               </button>
               <span class="w-px h-4 bg-white/30 dark:bg-emerald-500/20 self-center shrink-0" />
               <button
-                class="px-1.5 py-1.5 text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus:outline-none"
+                class="px-1.5 py-1.5 text-white dark:text-emerald-400 hover:bg-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 transition-all focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
                 @click.stop="showApproveDropdown = !showApproveDropdown"
               >
                 <Icon

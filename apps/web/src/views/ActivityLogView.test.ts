@@ -54,7 +54,7 @@ test('a live Dream update immediately appears under Active Now and can be cancel
 test('memory and Dream change links open the changed document directly', async () => {
   mocks.list.mockResolvedValue({
     items: [{
-      id: 'memory-file:category:notes', kind: 'memory', title: 'Updated knowledge graph for notes.md',
+      id: 'memory-file:category:notes', kind: 'memory', title: 'Indexed memory file notes.md',
       description: 'Knowledge · 3 chunks', createdAt: Date.now(), agentId: null, agentName: null,
       agentIconUrl: null, conversationId: null, memoryFolderId: 'category', memoryFileName: 'notes.md',
     }],
@@ -99,4 +99,41 @@ test('completed Dream changes render a success summary and inline diff instead o
   expect(mocks.push).toHaveBeenCalledWith({
     path: '/memory-folders/documents', query: { folder: 'uncategorized', file: 'preferences.md' },
   })
+})
+
+const stubs = { Icon: true, HoverMenu: true, ModalDialog: true }
+
+test('channel conversations are requested by default and the empty timeline is not described as filtered', async () => {
+  const wrapper = mount(ActivityLogView, { global: { stubs } })
+  await flushPromises()
+  expect(mocks.list.mock.calls[0][0].types).toContain('channels')
+  expect(wrapper.text()).toContain('No activity yet.')
+  expect(wrapper.text()).not.toContain('for this filter')
+  wrapper.unmount()
+})
+
+test('a full filter selection saved before the Channels filter existed still selects everything', async () => {
+  sessionStorage.setItem('cy-activity-log-filters', JSON.stringify(['instance', 'artifact', 'chat', 'cron', 'dream', 'memory']))
+  const wrapper = mount(ActivityLogView, { global: { stubs } })
+  await flushPromises()
+  expect(mocks.list.mock.calls[0][0].types).toContain('channels')
+  wrapper.unmount()
+})
+
+test('a deliberate partial filter selection is kept and described as such when empty', async () => {
+  sessionStorage.setItem('cy-activity-log-filters', JSON.stringify(['cron']))
+  const wrapper = mount(ActivityLogView, { global: { stubs } })
+  await flushPromises()
+  expect(mocks.list.mock.calls[0][0].types).toEqual(['cron'])
+  expect(wrapper.text()).toContain('No activity of the selected types yet.')
+  wrapper.unmount()
+})
+
+test('clearing every filter explains how to bring the timeline back', async () => {
+  sessionStorage.setItem('cy-activity-log-filters', JSON.stringify([]))
+  const wrapper = mount(ActivityLogView, { global: { stubs } })
+  await flushPromises()
+  expect(mocks.list).not.toHaveBeenCalled()
+  expect(wrapper.text()).toContain('Select at least one activity type')
+  wrapper.unmount()
 })

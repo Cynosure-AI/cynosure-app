@@ -1,27 +1,19 @@
-import { applyAutoMemoryRoutingWithEvidence, emitAutoMemoryRoutingSkipped } from './auto-memory-routing.js'
+import { applyAutoMemoryRoutingWithEvidence } from './auto-memory-routing.js'
 import { isDefaultChatAgent, type ExecutionPreset } from '../execution-preset.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
 import type { MemoryFolderRef } from '../../memory/memory-folder-scope.js'
+import type { PrepareExecutionInput } from '../prepare-execution.js'
 import type { ContextEvidence } from '@shared/types'
 
-export type ExecutionMemoryFolderRef = MemoryFolderRef
-
-export interface ResolveMemoryContextInput {
-    preset: ExecutionPreset
-    conversationId: string
+export type ResolveMemoryContextInput = Pick<PrepareExecutionInput,
+    'preset' | 'conversationId' | 'autoMemory' | 'memoryFolderOverrides' | 'userQuery' | 'recentMessages' | 'eventMeta' | 'signal'> & {
     gateway: LLMGateway
+    /** Router provider and model used for memory curation. */
     providerId?: string
     model?: string
-    autoMemory?: boolean
-    memoryFolderOverrides?: ExecutionMemoryFolderRef[]
-    userQuery?: string
     /** Original request plus optional same-language retrieval expansions. */
     retrievalQueries?: string[]
-    recentMessages?: ChatMessage[]
-    /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
-    eventMeta?: Record<string, unknown>
-    signal?: AbortSignal
     /** Skip retrieval when task-context planning determined stored context cannot help. */
     suppressAutoMemory?: boolean
 }
@@ -35,14 +27,14 @@ export function isAutoMemoryEnabled(preset: ExecutionPreset, sessionEnabled?: bo
 export function isRuntimeMemoryEnabled(
     preset: ExecutionPreset,
     sessionEnabled: boolean | undefined,
-    memoryFolderOverrides: ExecutionMemoryFolderRef[] | undefined,
+    memoryFolderOverrides: MemoryFolderRef[] | undefined,
 ): boolean {
     if (hasExplicitEmptyMemoryScope(memoryFolderOverrides)) return false
     return Boolean(memoryFolderOverrides?.length) || isAutoMemoryEnabled(preset, sessionEnabled)
 }
 
 export function hasExplicitEmptyMemoryScope(
-    memoryFolderOverrides: ExecutionMemoryFolderRef[] | undefined,
+    memoryFolderOverrides: MemoryFolderRef[] | undefined,
 ): boolean {
     return Array.isArray(memoryFolderOverrides) && memoryFolderOverrides.length === 0
 }
@@ -69,16 +61,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         suppressAutoMemory,
     } = input
 
-    if (!isAutoMemoryEnabled(preset, autoMemory)) {
-        emitAutoMemoryRoutingSkipped(conversationId, 'disabled', eventMeta)
-        return { messages: [], evidence: [] }
-    }
-    if (hasExplicitEmptyMemoryScope(memoryFolderOverrides)) {
-        emitAutoMemoryRoutingSkipped(conversationId, 'empty-scope', eventMeta)
-        return { messages: [], evidence: [] }
-    }
-    if (suppressAutoMemory) {
-        emitAutoMemoryRoutingSkipped(conversationId, 'not-required', eventMeta)
+    if (!isAutoMemoryEnabled(preset, autoMemory) || hasExplicitEmptyMemoryScope(memoryFolderOverrides) || suppressAutoMemory) {
         return { messages: [], evidence: [] }
     }
 
@@ -113,8 +96,4 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
     }],
         evidence: memoryContext.evidence,
     } : { messages: [], evidence: [] }
-}
-
-export async function resolveMemorySystemMessages(input: ResolveMemoryContextInput): Promise<ChatMessage[]> {
-    return (await resolveMemoryContext(input)).messages
 }

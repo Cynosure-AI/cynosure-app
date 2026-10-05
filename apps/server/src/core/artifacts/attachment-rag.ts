@@ -15,10 +15,6 @@ import { nanoid } from 'nanoid'
 export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'
 const ATTACHMENT_ASSET_SPACE_ID = 'attachment-assets'
 
-export function conversationAttachmentSpaceId(conversationId: string): string {
-    return `conversation:${conversationId}`
-}
-
 export function buildAttachmentFilter(conversationId: string, attachmentIds?: string[]): string | undefined {
     const requested = attachmentIds !== undefined ? new Set(attachmentIds) : null
     const ids = listConversationFileAttachments(getDb(), conversationId)
@@ -112,12 +108,6 @@ async function ensureConversationAttachmentsIndexed(
     return indexed
 }
 
-export async function rebuildConversationAttachmentIndex(conversationId: string, attachmentIds?: string[]): Promise<number> {
-    const attachments = listConversationFileAttachments(getDb(), conversationId)
-    const indexed = await ensureConversationAttachmentsIndexed(conversationId, attachments, attachmentIds)
-    return indexed.reduce((total, attachment) => total + (attachment.chunkCount || 0), 0)
-}
-
 export async function dropConversationAttachmentIndex(): Promise<void> {
     await getRAGStore().deleteTable(CONVERSATION_ATTACHMENTS_TABLE)
 }
@@ -166,11 +156,6 @@ export async function getConversationAttachmentChunks(
 
 export async function countConversationAttachmentChunks(conversationId: string, attachmentId: string): Promise<number> {
     return getRAGStore().countBySource(CONVERSATION_ATTACHMENTS_TABLE, attachmentId, buildAttachmentFilter(conversationId))
-}
-
-export async function deleteConversationAttachmentIndex(conversationId: string): Promise<void> {
-    void conversationId
-    await collectOrphanedAttachmentAssets()
 }
 
 export async function deleteConversationAttachmentChunks(conversationId: string, attachmentIds: string[]): Promise<void> {
@@ -453,10 +438,6 @@ export const ATTACHMENT_SYSTEM_CONTEXT = [
 export interface AttachmentContextBundle {
     content: string
     evidence: ContextEvidence[]
-}
-
-export async function buildAttachmentContext(conversationId: string, query: string, db: Database): Promise<string | null> {
-    return (await buildAttachmentContextBundle(conversationId, query, db))?.content ?? null
 }
 
 export async function buildAttachmentContextBundle(conversationId: string, query: string, db: Database): Promise<AttachmentContextBundle | null> {

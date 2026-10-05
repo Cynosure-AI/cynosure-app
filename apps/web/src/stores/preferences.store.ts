@@ -5,7 +5,6 @@ import { syncPrefsToElectron } from '@/utils/electron-prefs'
 import { api } from '@/api/client'
 import {
     SK_THEME, SK_AUTO_EXPAND, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
-    SK_KNOWLEDGE_PROVIDER, SK_KNOWLEDGE_MODEL,
     SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
     SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
     SK_RECENT_CHAT_FILTER,
@@ -32,8 +31,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const quickResponses = useLocalStorage(SK_QUICK_RESPONSES, false)
     const titleProviderId = useLocalStorage(SK_TITLE_PROVIDER, '')
     const titleModel = useLocalStorage(SK_TITLE_MODEL, '')
-    const knowledgeProviderId = useLocalStorage(SK_KNOWLEDGE_PROVIDER, '')
-    const knowledgeModel = useLocalStorage(SK_KNOWLEDGE_MODEL, '')
     const compactProviderId = useLocalStorage(SK_COMPACT_PROVIDER, '')
     const compactModel = useLocalStorage(SK_COMPACT_MODEL, '')
     const sidebarCollapsed = ref(false)
@@ -69,7 +66,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, generateTitle, quickResponses, titleProviderId, titleModel, knowledgeProviderId, knowledgeModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit, recentChatFilter,
+        [theme, autoExpandSteps, generateTitle, quickResponses, titleProviderId, titleModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit, recentChatFilter,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
             voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
@@ -157,7 +154,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     return {
         userName, userAvatarUrl, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
-        theme, autoExpandSteps, generateTitle, quickResponses, titleProviderId, titleModel, knowledgeProviderId, knowledgeModel, compactProviderId, compactModel, sidebarCollapsed, recentChatFilter,
+        theme, autoExpandSteps, generateTitle, quickResponses, titleProviderId, titleModel, compactProviderId, compactModel, sidebarCollapsed, recentChatFilter,
         contextStrategy, inlineAttachmentTextLimit,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,

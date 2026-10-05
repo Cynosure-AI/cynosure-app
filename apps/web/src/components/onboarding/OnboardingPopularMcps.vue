@@ -5,8 +5,8 @@
         Add MCP Tools
       </h2>
       <p class="text-sm text-ink-muted mt-1">
-        Extend your agents with installable tools. Everything here is optional and can also be added later in
-        <strong class="text-ink-secondary">Settings → MCPs</strong>.
+        Extend your agents with installable tools. Everything here is optional and can also be added later from
+        <strong class="text-ink-secondary">MCP Servers</strong> in the workspace menu at the bottom of the sidebar.
       </p>
     </div>
 
@@ -163,7 +163,7 @@
         icon="lucide:info"
         class="w-3.5 h-3.5 mt-0.5 shrink-0"
       />
-      <span>The Filesystem MCP will have access to the directory you specify. You can update this in Settings → MCPs after installation.</span>
+      <span>The Filesystem MCP will have access to the directory you specify. You can change it later in MCP Servers.</span>
     </div>
   </div>
 </template>

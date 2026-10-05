@@ -6,11 +6,6 @@ import {
     makeMemoryDeleteTool,
     applyMemoryPatch,
     makeMemorySearchTool,
-    makeKnowledgeAssertTool,
-    makeKnowledgeDeleteTool,
-    makeKnowledgeSearchTool,
-    makeKnowledgeEntityMergeTool,
-    readableKnowledgeEntityId,
 } from './memory-tools.js'
 
 describe('memory mutation tool contracts', () => {
@@ -110,37 +105,12 @@ describe('memory mutation tool contracts', () => {
         expect('message' in result ? result.message : '').toContain('run memory_search again')
     })
 
-    test('exposes an explicit entity merge contract', () => {
-        const tool = makeKnowledgeEntityMergeTool({})
-        expect(tool.name).toBe('knowledge_entity_merge')
-        expect(tool.parameters).toMatchObject({
-            required: ['entityIds', 'mainName'],
-            additionalProperties: false,
-            properties: {
-                entityIds: { type: 'array', minItems: 1, maxItems: 20 },
-                mainName: { type: 'string' },
-            },
-        })
-        expect(tool.annotations?.destructiveHint).toBe(true)
-    })
-
-    test('formats stable, readable, lowercase tool-facing entity handles', () => {
-        const handle = readableKnowledgeEntityId('Andi Personalakte', 'n:aV61X33k')
-        expect(handle).toMatch(/^n:andi_personalakte#[a-f0-9]{8}$/)
-        expect(readableKnowledgeEntityId('Andi Personalakte', 'n:aV61X33k')).toBe(handle)
-        expect(readableKnowledgeEntityId('Andi Personalakte', 'n:different')).not.toBe(handle)
-    })
-
-    test('declares complete behavior annotations for every memory and relationship tool', () => {
+    test('declares complete behavior annotations for every memory tool', () => {
         const tools = [
             makeMemorySearchTool({}),
             makeMemoryCreateTool({}),
             makeMemoryPatchTool({}),
             makeMemoryDeleteTool({}),
-            makeKnowledgeSearchTool({}),
-            makeKnowledgeAssertTool({}),
-            makeKnowledgeDeleteTool({}),
-            makeKnowledgeEntityMergeTool({}),
         ]
         for (const tool of tools) {
             expect(tool.annotations, tool.name).toEqual(expect.objectContaining({

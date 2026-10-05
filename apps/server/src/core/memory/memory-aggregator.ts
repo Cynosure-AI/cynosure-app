@@ -2,12 +2,9 @@ import { getAgentMemory } from './agent-memory.js'
 import { getDb } from '../../db/database.js'
 import { buildMemoryFolderFilter, getAllMemoryFolders, getAssignedMemoryFolders } from './memory-folder-scope.js'
 import type { MemoryRetrievalStatusDetails, RetrievedChunk } from './parser.js'
-import type { KnowledgeGraphProjection } from './knowledge-types.js'
-import { getMemoryKnowledgeStore } from './memory-knowledge.js'
 
 export interface AggregatedMemory {
   permanent: RetrievedChunk[]
-  graph?: KnowledgeGraphProjection
 }
 
 /**
@@ -32,10 +29,6 @@ export class MemoryAggregator {
       agentId?: string
       folderIds?: string[]
       permanentTopK?: number
-      /** Add a small, source-grounded relationship supplement to RAG passages. */
-      includeGraph?: boolean
-      /** Query enriched only for graph entity/relation resolution. */
-      graphQuery?: string
       /** Optional live progress for automatic pre-turn memory retrieval. */
       onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void
     }
@@ -57,21 +50,21 @@ export class MemoryAggregator {
           // Explicit scopes are security boundaries. A stale or invalid ID
           // must never broaden or partially alter the requested scope.
           if (!hasExactMemoryFolderScope(uniqueSpaceIds, scopedSpaces)) {
-            return { permanent: [], graph: undefined }
+            return { permanent: [] }
           }
         }
       } catch { /* DB not ready */ }
     } else if (opts?.agentId) {
       scopedSpaces = getAssignedMemoryFolders(opts.agentId)
       if (scopedSpaces.length === 0) {
-        return { permanent: [], graph: undefined }
+        return { permanent: [] }
       }
     } else {
       scopedSpaces = getAllMemoryFolders()
     }
 
     if (Array.isArray(opts?.folderIds) && scopedSpaces.length === 0) {
-      return { permanent: [], graph: undefined }
+      return { permanent: [] }
     }
 
     if (scopedSpaces.length > 0) {
@@ -92,7 +85,7 @@ export class MemoryAggregator {
         return true
       })
 
-    let dedupedPermanent = dedup(permanent)
+    const dedupedPermanent = dedup(permanent)
 
     // Enrich chunks with totalChunks per source file
     const uniqueSourceKeys = [...new Set(
@@ -133,40 +126,12 @@ export class MemoryAggregator {
           chunk.documentId = ref?.documentId
           chunk.documentRef = ref?.documentRef
           chunk.revision = ref?.revision
+          chunk.documentUpdatedAt = ref?.updatedAt
         }
       }
     }
 
-    // Audited manual corrections/retractions supersede the exact old source
-    // claim. Do not inject the containing stale chunk beside its correction.
-    dedupedPermanent = getMemoryKnowledgeStore().filterManuallySupersededChunks(dedupedPermanent)
-
-    let graphWalk: KnowledgeGraphProjection | undefined
-    if (opts?.includeGraph === true && scopedSpaces.length > 0) {
-      try {
-        const graphQuery = opts.graphQuery?.trim() || query
-        const knowledge = getMemoryKnowledgeStore()
-        const scopedSpaceIds = scopedSpaces.map((space) => space.id)
-        const knowledgeResult = await knowledge.search(graphQuery, scopedSpaceIds, 8, {
-          // Natural-language turns often contain an exact first name among
-          // unrelated instruction words. Return every same-name identity for
-          // curation instead of letting a generic semantic neighbor become
-          // the graph seed.
-          allowAmbiguousExactMatches: true,
-        })
-        graphWalk = knowledgeResult.graph
-
-        // Graph candidates carry their own source-grounded contextual note. Do not
-        // inject their complete source chunks into the ordinary candidate
-        // pool before graph curation; that previously promoted rejected graph
-        // neighbors as if they were independently reranked document matches.
-
-      } catch (err) {
-        console.warn('[memory-aggregator] Knowledge enrichment failed; returning semantic memory only:', err)
-      }
-    }
-
-    return { permanent: dedupedPermanent, graph: graphWalk }
+    return { permanent: dedupedPermanent }
   }
 
   /**
@@ -206,10 +171,6 @@ export class MemoryAggregator {
           return `- ${parts.join(' ')}`
         }).join('\n')
       )
-    }
-
-    if (memory.graph && memory.graph.edges.length > 0) {
-      sections.push(getMemoryKnowledgeStore().formatWalk(memory.graph))
     }
 
     return sections.join('\n\n')

@@ -10,12 +10,12 @@ const exportModules = reactive({
   settings: true,
   channels: true,
   memory: true,
-  knowledge: true,
   conversations: true,
   usage: true
 })
 const exporting = ref(false)
 const exportError = ref('')
+const exportWarning = ref('')
 const summaryLoading = ref(true)
 const summary = ref<Record<string, { count: number; details?: Record<string, number> }>>({})
 
@@ -26,7 +26,6 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   settings: { label: 'Settings', icon: 'lucide:sliders-horizontal', description: 'Tool approvals, cron jobs, and app settings' },
   channels: { label: 'Channels', icon: 'lucide:radio', description: 'Channel configurations (Telegram, etc.)' },
   memory: { label: 'Memory Folders', icon: 'lucide:book-open', description: 'Memory folder definitions, agent assignments, and document content (re-embedded on import)' },
-  knowledge: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
   conversations: { label: 'Conversations & Artifacts', icon: 'lucide:message-square', description: 'Chat history, generated media, and uploaded files (only restores for agents present in the DB)' },
   usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and auxiliary model usage. Chat usage is exported with Conversations.' }
 }
@@ -48,8 +47,6 @@ function moduleCountLabel(key: string): string {
     case 'channels': return pluralize(module.count, 'Channel')
     case 'memory':
       return `${pluralize(details.spaces || 0, 'Memory Space')} · ${pluralize(details.documents || 0, 'Document')}`
-    case 'knowledge':
-      return `${pluralize(details.entities || 0, 'Entity', 'Entities')} · ${pluralize(details.relationships || 0, 'Relationship')}`
     case 'conversations':
       return `${pluralize(details.conversations || 0, 'Conversation')} · ${pluralize(details.messages || 0, 'Message')}`
     case 'usage':
@@ -77,8 +74,9 @@ async function doExport(): Promise<void> {
 
   exporting.value = true
   exportError.value = ''
+  exportWarning.value = ''
   try {
-    const blob = await api.backup.exportBackup(selected)
+    const { blob, warningCount } = await api.backup.exportBackup(selected)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -87,6 +85,9 @@ async function doExport(): Promise<void> {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    if (warningCount) {
+      exportWarning.value = `Backup created, but ${pluralize(warningCount, 'item')} could not be included because the files are missing from disk. See warnings in manifest.json for details.`
+    }
   } catch (e) {
     exportError.value = (e as Error).message
   } finally {
@@ -138,6 +139,12 @@ async function doExport(): Promise<void> {
       class="text-xs text-status-danger"
     >
       {{ exportError }}
+    </div>
+    <div
+      v-if="exportWarning"
+      class="text-xs text-status-warning"
+    >
+      {{ exportWarning }}
     </div>
 
     <button

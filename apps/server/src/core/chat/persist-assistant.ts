@@ -20,6 +20,8 @@ export interface AssistantTurnInput {
   startedAt?: number
   generatedMedia?: boolean
   isError?: boolean
+  /** The user stopped the turn while this partial reply was streaming. */
+  stopped?: boolean
 }
 
 /** One persistence and publication path for chat, video, and transcription turns. */
@@ -33,6 +35,7 @@ export function persistAssistantTurn(
   const message = {
     id, conversationId: input.conversationId, role: 'assistant', content: input.content,
     isError: input.isError || undefined,
+    stopped: input.stopped || undefined,
     thinking: input.thinking || undefined,
     imageDataUrls: input.images?.length ? input.images : undefined,
     videoDataUrls: input.videos?.length ? input.videos : undefined,
@@ -50,12 +53,12 @@ export function persistAssistantTurn(
     db.prepare(`
       INSERT INTO messages (
         id, conversation_id, role, content, content_blocks_json,
-        generated_media, is_error, memory_sources_json, agent_id, provider, model,
+        generated_media, is_error, stopped, memory_sources_json, agent_id, provider, model,
         prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.conversationId, 'assistant', input.content, messageContentJson(message),
-      input.generatedMedia ? 1 : 0, input.isError ? 1 : 0,
+      input.generatedMedia ? 1 : 0, input.isError ? 1 : 0, input.stopped ? 1 : 0,
       message.contextEvidence ? JSON.stringify(message.contextEvidence) : null,
       input.agentId || null, input.provider || null, input.model || null,
       input.promptTokens ?? null, input.completionTokens ?? null, input.contextTokens ?? null,

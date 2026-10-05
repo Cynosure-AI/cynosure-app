@@ -1,5 +1,5 @@
 import { getEventBus } from '../../telemetry/event-bus.js'
-import { recordAuxiliaryModelUsage } from '../../usage-metering.js'
+import { recordAuxiliaryModelUsage, type AuxiliaryUsageKind } from '../../usage-metering.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
 import type { ChatEventDraft } from '@shared/types'
@@ -14,6 +14,9 @@ export function messageContentForRouter(content: ChatMessage['content']): string
     const text = content.filter((part) => part.type === 'text').map((part) => part.text).join('\n').trim()
     return text || '[multipart content]'
 }
+
+/** Characters per earlier turn that every LLM routing call reads, so all routers see the same history. */
+export const ROUTER_TURN_CHAR_LIMIT = 500
 
 export function recentConversationBlock(messages: ChatMessage[], turnCharLimit: number, windowSize = 5): string {
     const recent = messages.filter(({ role }) => role === 'user' || role === 'assistant').slice(-windowSize)
@@ -42,22 +45,20 @@ export async function selectRoutingCandidates<T>(input: {
     providerId?: string
     model?: string
     signal?: AbortSignal
-    usageKind?: 'tool-router' | 'memory-router'
+    usageKind: Extract<AuxiliaryUsageKind, 'task-context' | 'tool-router' | 'memory-router'>
     toolName: string
     request: Parameters<LLMGateway['complete']>[0]
     parse: (raw: string) => T | null
 }): Promise<T | null> {
     const result = await input.gateway.complete(input.request, input.providerId)
     input.signal?.throwIfAborted()
-    if (input.usageKind) {
-        recordAuxiliaryModelUsage({
-            kind: input.usageKind,
-            provider: input.providerId || '',
-            model: result.model || input.model || '',
-            inputTokens: result.usage?.promptTokens,
-            outputTokens: result.usage?.completionTokens,
-        })
-    }
+    recordAuxiliaryModelUsage({
+        kind: input.usageKind,
+        provider: input.providerId || '',
+        model: result.model || input.model || '',
+        inputTokens: result.usage?.promptTokens,
+        outputTokens: result.usage?.completionTokens,
+    })
     const call = result.toolCalls?.find((item) => item.function.name === input.toolName)
     return call ? input.parse(call.function.arguments) : null
 }

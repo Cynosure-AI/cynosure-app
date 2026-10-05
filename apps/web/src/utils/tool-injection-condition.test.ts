@@ -4,7 +4,6 @@ import { toolInjectionCondition } from './tool-injection-condition'
 describe('toolInjectionCondition', () => {
     test.each([
         ['memory_search', 'builtin:memory', 'Memory enabled + folder available'],
-        ['knowledge_assert', 'builtin:memory', 'Memory enabled + folder available'],
         ['todo_update', 'builtin:utility', 'Thinking + execution tools'],
         ['attachment_read', 'builtin:utility', 'Tool-capable chat + files'],
         ['expand_available_toolset', 'builtin:utility', 'Auto-tool routing enabled'],

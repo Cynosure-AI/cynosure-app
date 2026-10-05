@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   getEmbeddingConfig: vi.fn(),
   getDreamConfig: vi.fn(),
   configureDream: vi.fn(),
+  probeEmbedding: vi.fn(),
+  configureEmbeddings: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -41,6 +43,8 @@ vi.mock('../../api/client', () => ({
       getDreamConfig: mocks.getDreamConfig,
       configureDream: mocks.configureDream,
       getEmbeddingConfig: mocks.getEmbeddingConfig,
+      probeEmbedding: mocks.probeEmbedding,
+      configureEmbeddings: mocks.configureEmbeddings,
       getDeepResearchConfig: vi.fn().mockResolvedValue({ providerId: '', model: '' }),
       getRerankerConfig: vi.fn().mockResolvedValue({
         enabled: false,
@@ -144,6 +148,34 @@ describe('Dream settings', () => {
     expect(wrapper.get('[role="alert"]').text()).toBe('Settings unavailable')
     expect(wrapper.findAll('button').find(button => button.text() === 'Save Dream Config')!.attributes('disabled')).toBeDefined()
     expect(mocks.configureDream).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+describe('Embedding model settings', () => {
+  beforeEach(() => {
+    mocks.getEmbeddingConfig.mockReset().mockResolvedValue({ providerId: 'provider-1', model: 'embed-small', dimensions: 768 })
+    mocks.getDreamConfig.mockReset().mockResolvedValue({ enabled: false, providerId: '', model: '' })
+    mocks.probeEmbedding.mockReset()
+    mocks.configureEmbeddings.mockReset()
+  })
+
+  test('an unreachable embedding model is reported and not saved', async () => {
+    mocks.probeEmbedding.mockRejectedValue(new Error('404 model not found'))
+    const wrapper = mount(MemorySettings, {
+      props: { visibleSections: ['embedding-model'] },
+      global: { plugins: [createPinia()], stubs: { ProviderModelSelect: true, Icon: true } },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('768 dimensions')
+
+    wrapper.getComponent(ProviderModelSelect).vm.$emit('change', { providerId: 'provider-1', model: 'embed-missing' })
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'Save changes')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('The embedding model did not respond: 404 model not found')
+    expect(mocks.configureEmbeddings).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

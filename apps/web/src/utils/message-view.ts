@@ -14,6 +14,7 @@ export function toDisplayMessage(item: MessageItem, sequence = item.sequence): D
     streamId: item.role === 'assistant' ? item.executionId : undefined,
     role: item.role,
     isError: item.isError,
+    stopped: item.stopped,
     content: text,
     thinking: item.content.flatMap((block) => block.type === 'reasoning' ? [block.text] : []).join('') || undefined,
     imageDataUrls: item.content.flatMap((block) => block.type === 'image' ? [block.url] : []),

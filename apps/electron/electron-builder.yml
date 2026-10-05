@@ -16,19 +16,27 @@ publish:
 files:
   - out/**/*
 
+# The app's own dependencies have no native modules, and the bundled server's
+# are N-API prebuilds (see scripts/prepare-server-deps.mjs) — nothing to rebuild.
+npmRebuild: false
+
 # Bundle the pre-built server and web alongside the app
 # Server node_modules comes from .server-deps/ (flat, no pnpm symlinks)
 extraResources:
   - from: ../server/dist
     to: server/dist
     filter: "**/*"
+  # @huggingface/transformers + ONNX runtime (~840 MB, mostly CUDA providers)
+  # are optional deps of @lancedb/lancedb, imported lazily only by its local
+  # embedding helper. The server computes embeddings via providers instead.
   - from: .server-deps/node_modules
     to: server/node_modules
     filter:
       - "**/*"
-      - "!**/tsx/**"
-      - "!**/@esbuild/**"
-      - "!**/esbuild/**"
+      - "!@huggingface/transformers/**"
+      - "!onnxruntime-node/**"
+      - "!onnxruntime-web/**"
+      - "!onnxruntime-common/**"
   - from: ../server/package.json
     to: server/package.json
   - from: ../web/dist

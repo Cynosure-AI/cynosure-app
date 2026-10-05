@@ -24,16 +24,19 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('execution_steps')
-        expect((db.prepare(`PRAGMA table_info(memory_knowledge_text_units)`).all() as Array<{ name: string }>).map((column) => column.name)).toContain('summary')
         expect((db.prepare(`PRAGMA table_info(agents)`).all() as Array<{ name: string }>).map((column) => column.name)).not.toContain('tags_json')
         expect((db.prepare(`PRAGMA table_info(staged_chat_attachments)`).all() as Array<{ name: string }>).map((column) => column.name))
             .toEqual(expect.arrayContaining(['client_id', 'status', 'progress_current', 'progress_total', 'error', 'updated_at']))
         expect((db.prepare(`PRAGMA table_info(memory_folders)`).all() as Array<{ name: string }>).map((column) => column.name))
             .toContain('auto_memory_excluded')
+        expect((db.prepare(`PRAGMA table_info(memory_file_index)`).all() as Array<{ name: string }>).map((column) => column.name))
+            .not.toContain('tags_json')
+        expect((db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>).map((column) => column.name))
+            .toContain('stopped')
         db.close()
     })
 
@@ -44,7 +47,7 @@ describe('schema migrations', () => {
         const now = Date.now()
         db.prepare('INSERT INTO agents (id, name, tools_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
             .run('agent', 'Agent', JSON.stringify(['builtin:notifications::notify_user']), now, now)
-        expect(applySchemaMigrations(db).applied).toEqual([15])
+        expect(applySchemaMigrations(db).applied).toEqual([15, 16, 17, 18, 19, 20])
         expect((db.prepare('SELECT tools_json FROM agents').get() as { tools_json: string }).tools_json)
             .toBe(JSON.stringify(['builtin:utility::notify_user']))
         db.close()
@@ -99,11 +102,20 @@ describe('schema migrations', () => {
         for (const expected of [
             'agents', 'conversations', 'messages', 'providers', 'settings',
             'memory_folders', 'memory_file_index', 'memory_documents',
-            'memory_knowledge_entities', 'memory_knowledge_assertions',
             'dream_progress', 'memory_index_jobs', 'subagent_sessions', 'chat_events',
         ]) {
             expect(names).toContain(expected)
         }
+        db.close()
+    })
+
+    test('removes the knowledge graph tables and analysis bookkeeping', () => {
+        const db = memoryDb()
+        applySchemaMigrations(db)
+
+        expect(tableNames(db).filter((name) => name.startsWith('memory_knowledge_'))).toEqual([])
+        const columns = (db.pragma('table_info(memory_file_index)') as Array<{ name: string }>).map((column) => column.name)
+        expect(columns).not.toContain('deep_researched_at')
         db.close()
     })
 
@@ -130,7 +142,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -142,7 +154,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
         db.close()
     })
 
@@ -167,7 +179,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
         expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
             .toContain('builtin:utility::notify_user')
         expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
@@ -193,7 +205,7 @@ describe('schema migrations', () => {
         db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('notify_user_in_app', 1)
         db.prepare('INSERT INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)')
             .run('chat', 'notify_user_in_app', 1)
-        expect(applySchemaMigrations(db).applied).toEqual([14, 15])
+        expect(applySchemaMigrations(db).applied).toEqual([14, 15, 16, 17, 18, 19, 20])
         const agent = db.prepare('SELECT tools_json FROM agents').get() as { tools_json: string }
         expect(JSON.parse(agent.tools_json)).toEqual(['builtin:utility::notify_user', 'builtin:utility::manage_mcp'])
         for (const table of ['conversations', 'cron_jobs']) {
@@ -220,7 +232,7 @@ describe('schema migrations', () => {
         db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('built_in_files__file_create_directory', 0)
         db.prepare('INSERT INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)').run('conversation-1', 'file_merge', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([13, 14, 15])
+        expect(applySchemaMigrations(db).applied).toEqual([13, 14, 15, 16, 17, 18, 19, 20])
         const agent = db.prepare('SELECT tools_json FROM agents WHERE id = ?').get('agent-1') as { tools_json: string }
         expect(JSON.parse(agent.tools_json)).toEqual([
             'builtin:files::directory_list', 'builtin:files::directory_create', 'builtin:files::directory_merge',
@@ -248,7 +260,7 @@ describe('schema migrations', () => {
         insert.run('archive-child', '2024', '/memory/Archive/2024', now)
         insert.run('ordinary', 'Projects', '/memory/Projects', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
         const rows = db.prepare('SELECT id, auto_memory_excluded FROM memory_folders ORDER BY id').all() as Array<{
             id: string
             auto_memory_excluded: number
@@ -279,6 +291,15 @@ describe('schema migrations', () => {
         const result = applySchemaMigrations(db, extended)
         expect(result).toMatchObject({ from: 3, to: 4, applied: [4] })
         expect(tableNames(db)).toContain('d')
+        db.close()
+    })
+
+    test('drops the per-agent tool and memory router columns', () => {
+        const db = memoryDb()
+        applySchemaMigrations(db)
+        const columns = (db.pragma('table_info(agents)') as Array<{ name: string }>).map(({ name }) => name)
+        expect(columns).toEqual(expect.arrayContaining(['auto_router_provider_id', 'auto_router_model']))
+        expect(columns.filter((name) => /^(tool|memory)_router_/.test(name))).toEqual([])
         db.close()
     })
 

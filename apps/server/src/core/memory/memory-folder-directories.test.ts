@@ -142,7 +142,7 @@ describe('memory folder directories', () => {
     const names = db.prepare('SELECT name FROM memory_folders WHERE is_uncategorized != 1 ORDER BY directory_path')
       .all() as { name: string }[]
     expect(names.map(row => row.name)).toEqual([
-      'Hobbies', 'Notes & Ideas', 'People', 'Personal', 'Travel', 'Work',
+      'Hobbies', 'Notes', 'Ideas', 'People', 'Personal', 'Travel', 'Work',
     ])
     expect(existsSync(join(memoryRoot, 'Personal'))).toBe(true)
     expect(existsSync(join(memoryRoot, 'Travel'))).toBe(true)

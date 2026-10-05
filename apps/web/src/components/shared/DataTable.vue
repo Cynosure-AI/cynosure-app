@@ -6,6 +6,8 @@ import { Icon } from '@iconify/vue'
 export interface Column<TItem = unknown> {
   key: string
   label: string
+  /** Accessible name for columns whose visible label is empty (icon-only columns). */
+  ariaLabel?: string
   /** Complete CSS grid track. Kept for fixed/fully custom column layouts. */
   width?: string  // e.g., '120px', 'minmax(0,1.75fr)'
   /** Minimum track size. When set, the column grows into otherwise unused space. */
@@ -248,6 +250,13 @@ function isSelected(id: string): boolean {
 
 function isSelectable(item: T): boolean {
   return props.rowSelectable ? props.rowSelectable(item) : true
+}
+
+/** Names the column and its sort state; aria-sort is only valid on table header cells. */
+function sortButtonLabel(col: Column<T>): string {
+  const name = col.label || col.ariaLabel || col.key
+  if (sortColumnKey.value !== col.key) return `Sort by ${name}`
+  return `${name}, sorted ${sortDirection.value === 'asc' ? 'ascending' : 'descending'}`
 }
 
 function toggleSort(column: Column<T>) {
@@ -543,7 +552,7 @@ defineExpose({ startEditing, closeEditor })
             v-if="col.sortable"
             type="button"
             class="inline-flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-theme-200"
-            :aria-sort="sortColumnKey === col.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+            :aria-label="sortButtonLabel(col)"
             @click="toggleSort(col)"
           >
             <span class="truncate">{{ col.label }}</span>

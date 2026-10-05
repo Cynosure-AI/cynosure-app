@@ -47,9 +47,9 @@ export const useProviderStore = defineStore('provider', () => {
     lastUsedProviderId.value = id
   }
 
-  async function testConnection(id: string): Promise<boolean> {
+  async function testConnection(id: string): Promise<{ success: boolean; error?: string }> {
     const result = await api.provider.test(id)
-    connectionStatus.value.set(id, result ? 'connected' : 'error')
+    connectionStatus.value.set(id, result.success ? 'connected' : 'error')
     return result
   }
 

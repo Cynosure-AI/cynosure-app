@@ -31,7 +31,7 @@ describe('chat run configuration', () => {
 
         expect(resolveChatRunFlags({ resolvedAgent: agent }).autoMemory).toBe(true)
         expect(resolveChatRunFlags({ resolvedAgent: agent, autoMemory: false }).autoMemory).toBe(false)
-        expect(resolveChatRunFlags({ resolvedAgent: null }).autoMemory).toBe(false)
+        expect(resolveChatRunFlags({ resolvedAgent: null }).autoMemory).toBe(true)
     })
 
     test('resolves unique, existing memory folders while preserving request order', () => {

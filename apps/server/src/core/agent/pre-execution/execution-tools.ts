@@ -1,42 +1,30 @@
-import { getBuiltInMemoryToolKeys, getBuiltInToolKey, hydrateBuiltInTools } from '../../tools/built-in-tools.js'
-import { applyAutoToolRouting, emitAutoToolRoutingSkipped } from './auto-tool-routing.js'
-import { isRuntimeMemoryEnabled, type ExecutionMemoryFolderRef } from './execution-memory.js'
+import { getBuiltInMemoryToolKeys, getBuiltInToolKey, hydrateBuiltInTools, makeSearchAvailableMcpToolsTool } from '../../tools/built-in-tools.js'
+import { applyAutoToolRouting } from './auto-tool-routing.js'
+import { isRuntimeMemoryEnabled } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
+import type { PrepareExecutionInput } from '../prepare-execution.js'
 import type { SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
-import type { ChatMessage, RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
+import type { RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 
-type BroadcastFn = (event: string, data: unknown) => void
-
-export interface ResolveExecutionToolsInput {
-    preset: ExecutionPreset
-    conversationId: string
-    broadcast: BroadcastFn
+export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
+    | 'preset' | 'conversationId' | 'broadcast' | 'userQuery' | 'recentMessages' | 'usedToolNames'
+    | 'preferredToolKeys' | 'routingToolKeys' | 'autoToolRouting' | 'autoMemory' | 'includeSubAgents'
+    | 'subAgentAssignments' | 'signal' | 'memoryFolderOverrides' | 'hydrationAgentId' | 'eventMeta'> & {
     toolRegistry: ToolRegistry
     gateway: LLMGateway
+    /** Router provider and model used for toolset selection. */
     resolvedProviderId: string
     resolvedModel: string
-    userQuery?: string
-    recentMessages?: ChatMessage[]
-    usedToolNames?: Set<string>
-    preferredToolKeys?: string[]
-    routingToolKeys?: string[]
-    autoToolRouting?: boolean
-    autoMemory?: boolean
-    includeSubAgents?: boolean
-    subAgentAssignments?: SubAgentAssignment[]
-    signal?: AbortSignal
-    memoryFolderOverrides?: ExecutionMemoryFolderRef[]
-    hydrationAgentId?: string
-    /** Extra metadata to merge into emitted EventBus events during pre-execution routing. */
-    eventMeta?: Record<string, unknown>
-    /** Bypass the external catalogue when intent routing says no external tool is needed. */
+    /** Skip routing when task-context planning says no tool is needed; pinned tools and tool search remain. */
     suppressAutoTools?: boolean
     /** Snapshot used when an agentless scheduling tool creates a durable job. */
     scheduleExecutionConfig?: ConversationExecutionConfig
+    /** Toolsets already chosen by task-context planning. */
+    plannedToolsetIds?: string[]
 }
 
 export interface ResolvedExecutionTools {
@@ -69,44 +57,44 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         eventMeta,
         suppressAutoTools = false,
         scheduleExecutionConfig,
+        plannedToolsetIds,
     } = input
 
-    const routingEnabled = !suppressAutoTools && isToolRoutingEnabled(preset, autoToolRouting)
-    const configuredToolKeys = preset.tools || []
-    const manageMcpToolKey = getBuiltInToolKey(MANAGE_MCP_TOOL_NAME)
-    const manageMcpEnabled = configuredToolKeys.includes(manageMcpToolKey)
-        || preferredToolKeys?.includes(manageMcpToolKey) === true
-    const toolKeys = routingEnabled
-        ? (routingToolKeys ?? toolRegistry.listRegisteredTools().map((tool) => tool.key))
-            .filter((key) => key !== manageMcpToolKey || manageMcpEnabled)
-        : configuredToolKeys
-
-    let tools: RegistryAwareToolDefinition[] = suppressAutoTools
-        ? filterToolsForExecutionPreset(preset, toolRegistry.resolveForExecution(preferredToolKeys ?? []))
-        : filterToolsForExecutionPreset(preset, toolRegistry.resolveForExecution(toolKeys))
-    const preferredToolNames = routingEnabled
-        ? filterToolsForExecutionPreset(preset, toolRegistry.resolveForExecution(preferredToolKeys ?? []))
-            .map((tool) => tool.name)
-        : []
-
-    if (routingEnabled) {
+    const autoRoutingEnabled = isToolRoutingEnabled(preset, autoToolRouting)
+    const candidateTools = autoRoutingEnabled
+        ? resolveRoutingCandidateTools({ preset, toolRegistry, preferredToolKeys, routingToolKeys })
+        : toolRegistry.resolveForExecution(preset.tools || [])
+    let tools: RegistryAwareToolDefinition[]
+    if (!autoRoutingEnabled) {
+        tools = candidateTools
+    } else if (suppressAutoTools) {
+        // Task-context planning judged that no tools are needed. Keep the pinned
+        // tools plus the discovery tool so a wrong judgement stays recoverable.
+        const fixedTools = toolRegistry.resolveForExecution(preferredToolKeys ?? [])
+        const searchTool = makeSearchAvailableMcpToolsTool({
+            allTools: candidateTools,
+            mcpMetadata: toolRegistry.getNamespaceMetadataForTools(candidateTools),
+            getLoadedToolNames: () => new Set(fixedTools.map((tool) => tool.name)),
+        })
+        tools = [...fixedTools, searchTool as RegistryAwareToolDefinition]
+    } else {
+        const preferredToolNames = toolRegistry.resolveForExecution(preferredToolKeys ?? []).map((tool) => tool.name)
         tools = await applyAutoToolRouting({
-            enabled: routingEnabled,
+            enabled: true,
             conversationId,
             userQuery,
             recentMessages,
             gateway,
             providerId: resolvedProviderId,
             model: resolvedModel,
-            tools,
-            mcpMetadata: toolRegistry.getNamespaceMetadataForTools(tools),
+            tools: candidateTools,
+            mcpMetadata: toolRegistry.getNamespaceMetadataForTools(candidateTools),
             preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
             usedToolNames,
+            plannedToolsetIds,
             eventMeta,
             signal,
         }) as RegistryAwareToolDefinition[]
-    } else {
-        emitAutoToolRoutingSkipped(conversationId, 'disabled', eventMeta)
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memoryFolderOverrides)) {
@@ -148,11 +136,20 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
     }
 }
 
-export function filterToolsForExecutionPreset<T extends Pick<RegistryAwareToolDefinition, 'name' | 'originalName' | 'namespaceId'>>(
-    _preset: ExecutionPreset,
-    tools: T[],
-): T[] {
-    return tools
+/** The catalogue automatic tool routing chooses from. manage_mcp stays out unless explicitly selected. */
+export function resolveRoutingCandidateTools(input: {
+    preset: ExecutionPreset
+    toolRegistry: ToolRegistry
+    preferredToolKeys?: string[]
+    routingToolKeys?: string[]
+}): RegistryAwareToolDefinition[] {
+    const { preset, toolRegistry, preferredToolKeys, routingToolKeys } = input
+    const manageMcpToolKey = getBuiltInToolKey(MANAGE_MCP_TOOL_NAME)
+    const manageMcpEnabled = (preset.tools || []).includes(manageMcpToolKey)
+        || preferredToolKeys?.includes(manageMcpToolKey) === true
+    const toolKeys = (routingToolKeys ?? toolRegistry.listRegisteredTools().map((tool) => tool.key))
+        .filter((key) => key !== manageMcpToolKey || manageMcpEnabled)
+    return toolRegistry.resolveForExecution(toolKeys)
 }
 
 function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareToolDefinition[] {
@@ -167,9 +164,5 @@ function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareT
 }
 
 export function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {
-    if (preset.disableToolRouting === true) return false
-    if (preset.toolRoutingEnabled === false) return false
-    if (sessionEnabled === true) return true
-    if (sessionEnabled === false) return false
-    return preset.autoToolRouting === true || preset.toolRoutingEnabled === true
+    return sessionEnabled ?? preset.autoToolRouting === true
 }

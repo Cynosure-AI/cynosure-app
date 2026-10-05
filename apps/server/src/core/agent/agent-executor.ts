@@ -212,9 +212,22 @@ export class AgentExecutor {
     private _scope: 'main' | 'subagent'
     private steeringRequested = false
     private modelAbortController: AbortController | null = null
+    /** Output of the model round currently streaming; cleared once the round completes. */
+    private roundInProgress: { content: string; thinking: string; images: string[] } | null = null
 
     /** The primary streamId (useful for callers that need it for cancel/error handling). */
     get streamId(): string { return this._streamId }
+
+    /**
+     * The visible output of the model round that was still streaming when the
+     * run stopped, so a cancelled turn can keep what the user already saw.
+     * Completed rounds are excluded: they are saved through the normal paths.
+     */
+    interruptedReply(): { content: string; thinking: string; images: string[] } | null {
+        const round = this.roundInProgress
+        if (!round || (!round.content.trim() && round.images.length === 0)) return null
+        return { content: round.content, thinking: round.thinking, images: [...round.images] }
+    }
 
     /** Interrupt only the current model request. In-flight tools keep the global signal. */
     requestSteering(): void {
@@ -729,17 +742,21 @@ export class AgentExecutor {
         let toolCalls: ToolCall[] | undefined
         let usage: Usage
         let completed = false
+        const round = { content: '', thinking: '', images }
+        this.roundInProgress = round
 
         try {
             for await (const chunk of stream) {
                 signal?.throwIfAborted()
                 if (chunk.content) {
                     content += chunk.content
+                    round.content = content
                     this.emitChat({ type: 'content-delta', streamId, scope: this._scope, block: { type: 'text', text: chunk.content } })
                     this.emit('step:content', { conversationId, content: chunk.content })
                 }
                 if (chunk.thinking) {
                     thinking += chunk.thinking
+                    round.thinking = thinking
                     this.emitChat({ type: 'content-delta', streamId, scope: this._scope, block: { type: 'reasoning', text: chunk.thinking } })
                     this.emit('step:thinking', { conversationId, thinking: chunk.thinking })
                 }
@@ -778,6 +795,7 @@ export class AgentExecutor {
             }
         }
 
+        this.roundInProgress = null
         return { content, thinking, images, toolCalls, usage }
     }
 

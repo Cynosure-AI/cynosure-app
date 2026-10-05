@@ -4,6 +4,64 @@ import { getGateway } from '../core/gateway/gateway.js'
 import type { LLMProviderConfig, ModelListType, TranscriptionRequest, VideoGenerationRequest } from '../core/gateway/providers/base.provider.js'
 import { nanoid } from 'nanoid'
 
+const PROVIDER_TYPES = new Set<LLMProviderConfig['type']>([
+  'openai', 'anthropic', 'google', 'lmstudio', 'grok', 'ollama', 'openrouter', 'requesty', 'groq', 'mistral'
+])
+/** Local servers run without authentication; every hosted provider needs a key. */
+const KEYLESS_PROVIDER_TYPES = new Set<LLMProviderConfig['type']>(['lmstudio', 'ollama'])
+const MODEL_LIST_TYPES = new Set<ModelListType>(['llm', 'embedding', 'image', 'video', 'transcription'])
+
+type ProviderConfigResult = { config: LLMProviderConfig } | { error: string }
+
+function optionalString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * Validate a provider config from a request body. `requireModel` is false for
+ * model previews, where the user has not picked a default model yet.
+ */
+export function parseProviderConfig(body: unknown, { requireModel = true } = {}): ProviderConfigResult {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Provider config must be an object.' }
+  const input = body as Record<string, unknown>
+  const type = input.type as LLMProviderConfig['type']
+  if (!PROVIDER_TYPES.has(type)) return { error: `Unknown provider type: ${String(input.type)}` }
+
+  const name = optionalString(input.name)
+  const defaultModel = optionalString(input.defaultModel)
+  const apiKey = optionalString(input.apiKey)
+  const baseUrl = optionalString(input.baseUrl)
+  if (requireModel && !name) return { error: 'Provider name is required.' }
+  if (requireModel && !defaultModel) return { error: 'Default model is required.' }
+  if (!KEYLESS_PROVIDER_TYPES.has(type) && !apiKey) return { error: 'An API key is required for this provider.' }
+  if (KEYLESS_PROVIDER_TYPES.has(type) && !baseUrl) return { error: 'A base URL is required for local providers.' }
+  if (baseUrl) {
+    try {
+      const protocol = new URL(baseUrl).protocol
+      if (protocol !== 'http:' && protocol !== 'https:') return { error: 'Base URL must start with http:// or https://.' }
+    } catch {
+      return { error: 'Base URL is not a valid URL.' }
+    }
+  }
+
+  return {
+    config: {
+      id: optionalString(input.id),
+      name,
+      type,
+      baseUrl,
+      apiKey: apiKey || undefined,
+      defaultModel,
+      availableModels: Array.isArray(input.availableModels)
+        ? input.availableModels.filter((model): model is string => typeof model === 'string')
+        : [],
+      supportsStreaming: input.supportsStreaming !== false,
+      supportsToolCalls: input.supportsToolCalls !== false,
+      supportsVision: input.supportsVision === true,
+    }
+  }
+}
+
 /** Load providers from DB into the gateway (called once at startup) */
 export function loadSavedProviders(): void {
   const gateway = getGateway()
@@ -58,25 +116,61 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
     })
   })
 
-  // POST /api/providers — add a provider
-  app.post<{ Body: LLMProviderConfig }>('/', async (req) => {
-    const config = req.body
-    const db = getDb()
-    const id = config.id || nanoid()
-    config.id = id
+  // POST /api/providers — add or update a provider
+  app.post<{ Body: LLMProviderConfig }>('/', async (req, reply) => {
+    const parsed = parseProviderConfig(req.body)
+    if ('error' in parsed) return reply.status(400).send({ error: parsed.error })
+    const config = parsed.config
+    config.id ||= nanoid()
 
-    // Store API key separately
-    const apiKeyPlain: string | null = config.apiKey || null
+    // Build the client first so an unusable config is rejected before it is stored.
+    try {
+      gateway.createProvider(config)
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message })
+    }
+
     const configForStorage = { ...config, apiKey: undefined }
     const now = Date.now()
-
-    db.prepare(
-      `INSERT OR REPLACE INTO providers (id, name, type, base_url, api_key_enc, default_model, config_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, config.name, config.type, config.baseUrl, apiKeyPlain, config.defaultModel, JSON.stringify(configForStorage), now, now)
+    // Upsert instead of INSERT OR REPLACE: replacing deletes the row, which
+    // would reset the creation order and the persisted default-provider flag.
+    getDb().prepare(
+      `INSERT INTO providers (id, name, type, base_url, api_key_enc, default_model, config_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         type = excluded.type,
+         base_url = excluded.base_url,
+         api_key_enc = excluded.api_key_enc,
+         default_model = excluded.default_model,
+         config_json = excluded.config_json,
+         updated_at = excluded.updated_at`
+    ).run(config.id, config.name, config.type, config.baseUrl, config.apiKey ?? null, config.defaultModel, JSON.stringify(configForStorage), now, now)
 
     gateway.registerProvider(config)
-    return { id }
+    return { id: config.id }
+  })
+
+  // POST /api/providers/models/preview — list models for a config that is not saved yet
+  app.post<{ Body: { config?: unknown; types?: unknown } }>('/models/preview', async (req, reply) => {
+    const parsed = parseProviderConfig(req.body?.config, { requireModel: false })
+    if ('error' in parsed) return reply.status(400).send({ error: parsed.error })
+    const requestedTypes = Array.isArray(req.body?.types) ? req.body.types : ['llm']
+    const types = requestedTypes.filter((type): type is ModelListType => MODEL_LIST_TYPES.has(type as ModelListType))
+    if (types.length === 0) return reply.status(400).send({ error: 'At least one valid model type is required.' })
+
+    let provider
+    try {
+      provider = gateway.createProvider({ ...parsed.config, id: parsed.config.id || 'model-preview' })
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message })
+    }
+    try {
+      const lists = await Promise.all(types.map((type) => provider.listModels(type)))
+      return { models: Array.from(new Set(lists.flat())).sort() }
+    } catch (err) {
+      return reply.status(502).send({ error: (err as Error).message || 'The provider did not return a model list.' })
+    }
   })
 
   // DELETE /api/providers/:id — remove a provider

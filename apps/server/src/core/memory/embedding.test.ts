@@ -72,3 +72,13 @@ describe('EmbeddingService', () => {
     await expect(active.embed('query')).rejects.toThrow(/Embedding provider returned model/)
   })
 })
+
+describe('query formatting for instruction-tuned embedding models', () => {
+  test('adds the Qwen3 retrieval instruction to queries only for instruction-tuned models', async () => {
+    const { formatEmbeddingQuery } = await import('./embedding.js')
+    expect(formatEmbeddingQuery('qwen/qwen3-embedding-8b', 'wer ist belinda?')).toMatch(/^Instruct: .+\nQuery: wer ist belinda\?$/)
+    expect(formatEmbeddingQuery('BAAI/bge-large-en-v1.5', 'who is belinda?')).toBe('Represent this sentence for searching relevant passages: who is belinda?')
+    expect(formatEmbeddingQuery('text-embedding-3-small', 'who is belinda?')).toBe('who is belinda?')
+    expect(formatEmbeddingQuery('BAAI/bge-m3', 'who is belinda?')).toBe('who is belinda?')
+  })
+})

@@ -1,0 +1,2378 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "id": "fx-mama-bday",
+   "type": "single",
+   "group": "fx-mama-bday",
+   "query": "Wann hat meine Mama Geburtstag?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "14. März 1961"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14. März 1961",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-mama-addr",
+   "type": "single",
+   "group": "fx-mama-addr",
+   "query": "Wo genau wohnt Mama?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Leoben, Kerpelystraße 12"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Leoben, Kerpelystraße 12",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-mama-ibu",
+   "type": "single",
+   "group": "fx-mama-ibu",
+   "query": "Welches Schmerzmittel verträgt Mama nicht?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Verträgt kein Ibuprofen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ibuprofen (Magen); sie nimmt Paracetamol",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-tob-band",
+   "type": "single",
+   "group": "fx-tob-band",
+   "query": "Wie heißt die Coverband von Tobias?",
+   "gold": [
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "Coverband namens \"Donaublech\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Donaublech",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-ida-allergy",
+   "type": "single",
+   "group": "fx-ida-allergy",
+   "query": "Wogegen ist Ida allergisch?",
+   "gold": [
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "Allergisch gegen Erdnüsse"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Erdnüsse",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-tob-gift",
+   "type": "single",
+   "group": "fx-tob-gift",
+   "query": "Was wünscht sich Tobias zum Geburtstag?",
+   "gold": [
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "guten Drehmomentschlüssel"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Einen guten Drehmomentschlüssel",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-jana-code",
+   "type": "single",
+   "group": "fx-jana-code",
+   "query": "Was ist unser Code für einen Abend ohne Beziehungsgespräche?",
+   "gold": [
+    {
+     "file": "Jana Koller - beste Freundin.md",
+     "quote": "\"Kaffee ohne Drama\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Kaffee ohne Drama",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-felix-job",
+   "type": "single",
+   "group": "fx-felix-job",
+   "query": "Was macht Felix beruflich?",
+   "gold": [
+    {
+     "file": "Jana Koller - beste Freundin.md",
+     "quote": "Tischler, eigene Werkstatt in Gösting"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Tischler mit eigener Werkstatt in Gösting",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-nik-praxis",
+   "type": "single",
+   "group": "fx-nik-praxis",
+   "query": "Wo hat Nikola seine Praxis?",
+   "gold": [
+    {
+     "file": "Nikola Petrović - Kletterpartner.md",
+     "quote": "in der Heinrichstraße, Graz-Geidorf"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Heinrichstraße, Graz-Geidorf",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-nik-open",
+   "type": "single",
+   "group": "fx-nik-open",
+   "query": "Ab wann hat Nikolas Praxis morgens offen?",
+   "gold": [
+    {
+     "file": "Nikola Petrović - Kletterpartner.md",
+     "quote": "er hat ab 7:30 offen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ab 7:30",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-sophie-dogs",
+   "type": "single",
+   "group": "fx-sophie-dogs",
+   "query": "Wie heißen Sophie Lindners Hunde?",
+   "gold": [
+    {
+     "file": "Sophie Lindner - UX Steirerwerk.md",
+     "quote": "zwei Windhunde, Juno und Pixel"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Juno und Pixel",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-sophia-cat",
+   "type": "single",
+   "group": "fx-sophia-cat",
+   "query": "Wie heißt die Katze meiner Nachbarin?",
+   "gold": [
+    {
+     "file": "Sophia Lindtner - Nachbarin.md",
+     "quote": "Mozart, ein grauer Kater"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Mozart",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-markus-call",
+   "type": "single",
+   "group": "fx-markus-call",
+   "query": "Wann ist der wöchentliche Status-Call mit Markus?",
+   "gold": [
+    {
+     "file": "Markus Hofer - Steirerwerk.md",
+     "quote": "Montag 9:00, 30 Minuten"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Montag 9:00, 30 Minuten",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-stw-budgetowner",
+   "type": "single",
+   "group": "fx-stw-budgetowner",
+   "query": "Über wen laufen bei Steirerwerk die Budgetfragen?",
+   "gold": [
+    {
+     "file": "Markus Hofer - Steirerwerk.md",
+     "quote": "über die Geschäftsführerin Renate Pölzl"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Über die Geschäftsführerin Renate Pölzl",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-david-cam",
+   "type": "single",
+   "group": "fx-david-cam",
+   "query": "Welche Kamera hat David noch von mir?",
+   "gold": [
+    {
+     "file": "David Moser - Ex.md",
+     "quote": "Spiegelreflexkamera (Nikon D7200)"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Die Nikon D7200",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fuchs-pzr",
+   "type": "single",
+   "group": "fx-fuchs-pzr",
+   "query": "Was kostet die Mundhygiene bei meiner Zahnärztin?",
+   "gold": [
+    {
+     "file": "Dr. Karin Fuchs - Zahnärztin.md",
+     "quote": "Mundhygiene halbjährlich, kostet 95 €"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "95 €",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-stw-budget",
+   "type": "single",
+   "group": "fx-stw-budget",
+   "query": "Wie hoch ist das Budget für den Steirerwerk-Relaunch?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "18.400 € (gedeckelt, 216 Stunden)"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "18.400 € (gedeckelt, 216 Stunden)",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-stw-lang",
+   "type": "single",
+   "group": "fx-stw-lang",
+   "query": "In welchen Sprachen wird der Steirerwerk-Shop angeboten?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Mehrsprachig: Deutsch, Englisch, Slowenisch"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Deutsch, Englisch, Slowenisch",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-stw-po",
+   "type": "single",
+   "group": "fx-stw-po",
+   "query": "Welche Bestellnummer muss auf die Steirerwerk-Rechnungen?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "PO-2026-0418"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "PO-2026-0418",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-aig-maint",
+   "type": "single",
+   "group": "fx-aig-maint",
+   "query": "Was kostet die Wartung der Aigner-Website im Monat?",
+   "gold": [
+    {
+     "file": "Praxis Dr. Aigner Website.md",
+     "quote": "45 € pro Monat (Updates, Backups"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "45 € pro Monat",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-aig-widget",
+   "type": "single",
+   "group": "fx-aig-widget",
+   "query": "Welches Terminbuchungs-Widget nutzt die Praxis Aigner?",
+   "gold": [
+    {
+     "file": "Praxis Dr. Aigner Website.md",
+     "quote": "Widget von \"MediBook\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "MediBook",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-bb-beta",
+   "type": "single",
+   "group": "fx-bb-beta",
+   "query": "How many beta testers does Bergbuch have?",
+   "gold": [
+    {
+     "file": "Bergbuch App.md",
+     "quote": "Closed beta with 212 testers"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "212",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-bb-pro",
+   "type": "single",
+   "group": "fx-bb-pro",
+   "query": "What would Bergbuch Pro cost?",
+   "gold": [
+    {
+     "file": "Bergbuch App.md",
+     "quote": "\"Bergbuch Pro\" for 2,99 € per month"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "2,99 € per month",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-box-weeks",
+   "type": "single",
+   "group": "fx-box-weeks",
+   "query": "Wie lange soll die Umsetzung des Boulderbox-Widgets dauern?",
+   "gold": [
+    {
+     "file": "Boulderbox Buchungs-Widget.md",
+     "quote": "Umsetzung in 6 Wochen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "6 Wochen",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-kond-ziel",
+   "type": "single",
+   "group": "fx-kond-ziel",
+   "query": "Welches Zahlungsziel gebe ich bei meinen Rechnungen?",
+   "gold": [
+    {
+     "file": "Freelance Konditionen.md",
+     "quote": "Zahlungsziel 14 Tage"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14 Tage",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-kond-weekend",
+   "type": "single",
+   "group": "fx-kond-weekend",
+   "query": "Was verrechne ich für Wochenendeinsätze?",
+   "gold": [
+    {
+     "file": "Freelance Konditionen.md",
+     "quote": "Wochenend- oder Notfalleinsätze: +50 %"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "+50 % Aufschlag",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-wohn-net",
+   "type": "single",
+   "group": "fx-wohn-net",
+   "query": "Wie schnell ist mein Internet und was kostet es?",
+   "gold": [
+    {
+     "file": "Wohnung Annenstraße.md",
+     "quote": "Magenta Kabel 300 Mbit, 39,90 € im Monat"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "300 Mbit, 39,90 € im Monat (Magenta Kabel)",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-wohn-muell",
+   "type": "single",
+   "group": "fx-wohn-muell",
+   "query": "Wann wird der Restmüll abgeholt?",
+   "gold": [
+    {
+     "file": "Wohnung Annenstraße.md",
+     "quote": "Restmüll: jeden zweiten Mittwoch"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Jeden zweiten Mittwoch",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-ges-blut",
+   "type": "single",
+   "group": "fx-ges-blut",
+   "query": "Welche Blutgruppe habe ich?",
+   "gold": [
+    {
+     "file": "Gesundheit.md",
+     "quote": "Blutgruppe: A positiv"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "A positiv",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-ges-fsme",
+   "type": "single",
+   "group": "fx-ges-fsme",
+   "query": "Wann muss ich FSME wieder auffrischen?",
+   "gold": [
+    {
+     "file": "Gesundheit.md",
+     "quote": "nächste Auffrischung 2030"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "2030",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-auto-reifen",
+   "type": "single",
+   "group": "fx-auto-reifen",
+   "query": "Wo sind meine Winterreifen eingelagert?",
+   "gold": [
+    {
+     "file": "Auto.md",
+     "quote": "eingelagert bei Reifen Kainz in Graz-Straßgang"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Bei Reifen Kainz in Graz-Straßgang",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-auto-pickerl",
+   "type": "single",
+   "group": "fx-auto-pickerl",
+   "query": "Wann ist das Pickerl fällig?",
+   "gold": [
+    {
+     "file": "Auto.md",
+     "quote": "fällig im März 2027"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "März 2027",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-kreta-hotel",
+   "type": "single",
+   "group": "fx-kreta-hotel",
+   "query": "Wie heißt die Unterkunft auf Kreta?",
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "Unterkunft \"Villa Thalassa\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Villa Thalassa",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-kreta-flight",
+   "type": "single",
+   "group": "fx-kreta-flight",
+   "query": "Um wie viel Uhr geht der Flug nach Kreta in Graz?",
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "Abflug 4.10. um 6:10 in Graz"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "6:10 am 4. Oktober",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-fin-etf",
+   "type": "single",
+   "group": "fx-fin-etf",
+   "query": "Wie viel spare ich monatlich in den ETF?",
+   "gold": [
+    {
+     "file": "Finanzen.md",
+     "quote": "200 € monatlich auf einen MSCI-World-ETF"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "200 € pro Monat (MSCI World, Flatex)",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-ziel-hm",
+   "type": "single",
+   "group": "fx-ziel-hm",
+   "query": "What was my half marathon time?",
+   "gold": [
+    {
+     "file": "Ziele 2026.md",
+     "quote": "Finished in 1:58:12 on 12 April 2026"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "1:58:12",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-kas-minze",
+   "type": "single",
+   "group": "fx-kas-minze",
+   "query": "Was ist das wichtigste Kraut in den Kasnudeln?",
+   "gold": [
+    {
+     "file": "Kärntner Kasnudeln.md",
+     "quote": "die Minze ist das Wichtigste"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Minze",
+   "folder": "05_Rezepte"
+  },
+  {
+   "id": "fx-zwe-oven",
+   "type": "single",
+   "group": "fx-zwe-oven",
+   "query": "Bei wie viel Grad backe ich den Zwetschkenfleck?",
+   "gold": [
+    {
+     "file": "Zwetschkenfleck (Mama).md",
+     "quote": "Bei 180 °C Umluft etwa 35 Minuten backen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "180 °C Umluft, etwa 35 Minuten",
+   "folder": "05_Rezepte"
+  },
+  {
+   "id": "fx-klet-karte",
+   "type": "single",
+   "group": "fx-klet-karte",
+   "query": "Was kostet meine Jahreskarte in der Boulderbox?",
+   "gold": [
+    {
+     "file": "Klettern.md",
+     "quote": "Jahreskarte bis Februar 2027, 690 €"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "690 €",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-home-ip",
+   "type": "single",
+   "group": "fx-home-ip",
+   "query": "Welche statische IP hat der Raspberry Pi?",
+   "gold": [
+    {
+     "file": "Homelab.md",
+     "quote": "192.168.1.20"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "192.168.1.20",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-back-time",
+   "type": "single",
+   "group": "fx-back-time",
+   "query": "Wann laufen die Backups?",
+   "gold": [
+    {
+     "file": "Backups.md",
+     "quote": "jede Nacht um 02:00 per systemd-Timer"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Jede Nacht um 02:00",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-back-test",
+   "type": "single",
+   "group": "fx-back-test",
+   "query": "Wann war der letzte Restore-Test?",
+   "gold": [
+    {
+     "file": "Backups.md",
+     "quote": "Letzter Restore-Test am 14. Juni 2026"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14. Juni 2026",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-ita-teacher",
+   "type": "single",
+   "group": "fx-ita-teacher",
+   "query": "Wer ist meine Italienisch-Kursleiterin?",
+   "gold": [
+    {
+     "file": "Italienisch lernen.md",
+     "quote": "Kursleiterin Signora Bianchi"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Signora Bianchi",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-lese-now",
+   "type": "single",
+   "group": "fx-lese-now",
+   "query": "Welches Buch lese ich gerade?",
+   "gold": [
+    {
+     "file": "Leseliste.md",
+     "quote": "\"The Ministry of Time\" by Kaliane Bradley"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "The Ministry of Time (Kaliane Bradley)",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-mama-bday-para",
+   "type": "paraphrase",
+   "group": "fx-mama-bday",
+   "query": "Wann muss ich meiner Mutter gratulieren?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "14. März 1961"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14. März 1961",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-mama-ibu-para",
+   "type": "paraphrase",
+   "group": "fx-mama-ibu",
+   "query": "Welches Medikament schlägt meiner Mutter auf den Magen?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Verträgt kein Ibuprofen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ibuprofen (Magen); sie nimmt Paracetamol",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-ida-allergy-para",
+   "type": "paraphrase",
+   "group": "fx-ida-allergy",
+   "query": "Worauf muss man beim Essen der Kleinen meines Bruders aufpassen?",
+   "gold": [
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "Allergisch gegen Erdnüsse"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Erdnüsse",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-nik-praxis-para",
+   "type": "paraphrase",
+   "group": "fx-nik-praxis",
+   "query": "In welchem Grazer Bezirk behandelt mich mein Kletterkumpel?",
+   "gold": [
+    {
+     "file": "Nikola Petrović - Kletterpartner.md",
+     "quote": "in der Heinrichstraße, Graz-Geidorf"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Heinrichstraße, Graz-Geidorf",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-sophia-cat-para",
+   "type": "paraphrase",
+   "group": "fx-sophia-cat",
+   "query": "Wie heißt das Haustier der Frau, die zwei Stockwerke unter mir wohnt?",
+   "gold": [
+    {
+     "file": "Sophia Lindtner - Nachbarin.md",
+     "quote": "Mozart, ein grauer Kater"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Mozart",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-stw-budgetowner-para",
+   "type": "paraphrase",
+   "group": "fx-stw-budgetowner",
+   "query": "Wer muss beim Outdoor-Ausrüster das Geld freigeben?",
+   "gold": [
+    {
+     "file": "Markus Hofer - Steirerwerk.md",
+     "quote": "über die Geschäftsführerin Renate Pölzl"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Über die Geschäftsführerin Renate Pölzl",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-stw-budget-para",
+   "type": "paraphrase",
+   "group": "fx-stw-budget",
+   "query": "Wie viel darf der Onlineshop für den Kapfenberger Kunden maximal kosten?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "18.400 € (gedeckelt, 216 Stunden)"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "18.400 € (gedeckelt, 216 Stunden)",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-aig-maint-para",
+   "type": "paraphrase",
+   "group": "fx-aig-maint",
+   "query": "Was verlange ich laufend für die Betreuung der Arztpraxis-Seite?",
+   "gold": [
+    {
+     "file": "Praxis Dr. Aigner Website.md",
+     "quote": "45 € pro Monat (Updates, Backups"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "45 € pro Monat",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-wohn-net-para",
+   "type": "paraphrase",
+   "group": "fx-wohn-net",
+   "query": "Was zahle ich jeden Monat für den Kabelanschluss?",
+   "gold": [
+    {
+     "file": "Wohnung Annenstraße.md",
+     "quote": "Magenta Kabel 300 Mbit, 39,90 € im Monat"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "300 Mbit, 39,90 € im Monat (Magenta Kabel)",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-auto-reifen-para",
+   "type": "paraphrase",
+   "group": "fx-auto-reifen",
+   "query": "Wo lagern meine Pneus für die kalte Jahreszeit?",
+   "gold": [
+    {
+     "file": "Auto.md",
+     "quote": "eingelagert bei Reifen Kainz in Graz-Straßgang"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Bei Reifen Kainz in Graz-Straßgang",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-kreta-hotel-para",
+   "type": "paraphrase",
+   "group": "fx-kreta-hotel",
+   "query": "Wo übernachten Jana und ich im Griechenland-Urlaub?",
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "Unterkunft \"Villa Thalassa\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Villa Thalassa",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-fin-etf-para",
+   "type": "paraphrase",
+   "group": "fx-fin-etf",
+   "query": "Wie viel fließt jeden Monat in meinen Indexfonds?",
+   "gold": [
+    {
+     "file": "Finanzen.md",
+     "quote": "200 € monatlich auf einen MSCI-World-ETF"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "200 € pro Monat (MSCI World, Flatex)",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-kas-minze-para",
+   "type": "paraphrase",
+   "group": "fx-kas-minze",
+   "query": "Ohne welches Kraut schmecken die Kärntner Teigtaschen nicht?",
+   "gold": [
+    {
+     "file": "Kärntner Kasnudeln.md",
+     "quote": "die Minze ist das Wichtigste"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Minze",
+   "folder": "05_Rezepte"
+  },
+  {
+   "id": "fx-home-ip-para",
+   "type": "paraphrase",
+   "group": "fx-home-ip",
+   "query": "Unter welcher Adresse im Heimnetz erreiche ich den kleinen Server?",
+   "gold": [
+    {
+     "file": "Homelab.md",
+     "quote": "192.168.1.20"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "192.168.1.20",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-back-time-para",
+   "type": "paraphrase",
+   "group": "fx-back-time",
+   "query": "Zu welcher Uhrzeit sichert der Pi die Daten nach Deutschland?",
+   "gold": [
+    {
+     "file": "Backups.md",
+     "quote": "jede Nacht um 02:00 per systemd-Timer"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Jede Nacht um 02:00",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-markus-call-para",
+   "type": "paraphrase",
+   "group": "fx-markus-call",
+   "query": "Wann telefoniere ich jede Woche mit meinem Auftraggeber aus Kapfenberg?",
+   "gold": [
+    {
+     "file": "Markus Hofer - Steirerwerk.md",
+     "quote": "Montag 9:00, 30 Minuten"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Montag 9:00, 30 Minuten",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-ges-blut-para",
+   "type": "paraphrase",
+   "group": "fx-ges-blut",
+   "query": "Was müsste ich bei einer Transfusion angeben?",
+   "gold": [
+    {
+     "file": "Gesundheit.md",
+     "quote": "Blutgruppe: A positiv"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "A positiv",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-ita-teacher-para",
+   "type": "paraphrase",
+   "group": "fx-ita-teacher",
+   "query": "Wer unterrichtet mich in der Sprache für den Ligurien-Urlaub?",
+   "gold": [
+    {
+     "file": "Italienisch lernen.md",
+     "quote": "Kursleiterin Signora Bianchi"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Signora Bianchi",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-jana-code-para",
+   "type": "paraphrase",
+   "group": "fx-jana-code",
+   "query": "Welcher Spruch heißt bei meiner besten Freundin und mir, dass es heute nicht um Männer geht?",
+   "gold": [
+    {
+     "file": "Jana Koller - beste Freundin.md",
+     "quote": "\"Kaffee ohne Drama\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Kaffee ohne Drama",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-auto-pickerl-para",
+   "type": "paraphrase",
+   "group": "fx-auto-pickerl",
+   "query": "Bis wann muss die jährliche Begutachtung für mein Auto erledigt sein?",
+   "gold": [
+    {
+     "file": "Auto.md",
+     "quote": "fällig im März 2027"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "März 2027",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-mama-bday-cross",
+   "type": "crosslang",
+   "group": "fx-mama-bday",
+   "query": "When is my mum's birthday?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "14. März 1961"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14. März 1961",
+   "language": "en",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-tob-band-cross",
+   "type": "crosslang",
+   "group": "fx-tob-band",
+   "query": "What's the name of my brother's cover band?",
+   "gold": [
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "Coverband namens \"Donaublech\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Donaublech",
+   "language": "en",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-felix-job-cross",
+   "type": "crosslang",
+   "group": "fx-felix-job",
+   "query": "What does Jana's partner do for a living?",
+   "gold": [
+    {
+     "file": "Jana Koller - beste Freundin.md",
+     "quote": "Tischler, eigene Werkstatt in Gösting"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Tischler mit eigener Werkstatt in Gösting",
+   "language": "en",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-sophie-dogs-cross",
+   "type": "crosslang",
+   "group": "fx-sophie-dogs",
+   "query": "What are Sophie Lindner's dogs called?",
+   "gold": [
+    {
+     "file": "Sophie Lindner - UX Steirerwerk.md",
+     "quote": "zwei Windhunde, Juno und Pixel"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Juno und Pixel",
+   "language": "en",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fuchs-pzr-cross",
+   "type": "crosslang",
+   "group": "fx-fuchs-pzr",
+   "query": "How much does a dental cleaning cost at my dentist?",
+   "gold": [
+    {
+     "file": "Dr. Karin Fuchs - Zahnärztin.md",
+     "quote": "Mundhygiene halbjährlich, kostet 95 €"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "95 €",
+   "language": "en",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-stw-lang-cross",
+   "type": "crosslang",
+   "group": "fx-stw-lang",
+   "query": "Which languages will the Steirerwerk shop support?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Mehrsprachig: Deutsch, Englisch, Slowenisch"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Deutsch, Englisch, Slowenisch",
+   "language": "en",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-aig-widget-cross",
+   "type": "crosslang",
+   "group": "fx-aig-widget",
+   "query": "Which booking widget does Dr. Aigner's practice use?",
+   "gold": [
+    {
+     "file": "Praxis Dr. Aigner Website.md",
+     "quote": "Widget von \"MediBook\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "MediBook",
+   "language": "en",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-kond-ziel-cross",
+   "type": "crosslang",
+   "group": "fx-kond-ziel",
+   "query": "What payment terms do I give my clients?",
+   "gold": [
+    {
+     "file": "Freelance Konditionen.md",
+     "quote": "Zahlungsziel 14 Tage"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14 Tage",
+   "language": "en",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-ges-fsme-cross",
+   "type": "crosslang",
+   "group": "fx-ges-fsme",
+   "query": "When is my next tick-borne encephalitis booster due?",
+   "gold": [
+    {
+     "file": "Gesundheit.md",
+     "quote": "nächste Auffrischung 2030"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "2030",
+   "language": "en",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-kreta-flight-cross",
+   "type": "crosslang",
+   "group": "fx-kreta-flight",
+   "query": "What time does my flight to Crete leave Graz?",
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "Abflug 4.10. um 6:10 in Graz"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "6:10 am 4. Oktober",
+   "language": "en",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-zwe-oven-cross",
+   "type": "crosslang",
+   "group": "fx-zwe-oven",
+   "query": "At what temperature do I bake the plum sheet cake?",
+   "gold": [
+    {
+     "file": "Zwetschkenfleck (Mama).md",
+     "quote": "Bei 180 °C Umluft etwa 35 Minuten backen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "180 °C Umluft, etwa 35 Minuten",
+   "language": "en",
+   "folder": "05_Rezepte"
+  },
+  {
+   "id": "fx-klet-karte-cross",
+   "type": "crosslang",
+   "group": "fx-klet-karte",
+   "query": "How much was my annual pass at the climbing gym?",
+   "gold": [
+    {
+     "file": "Klettern.md",
+     "quote": "Jahreskarte bis Februar 2027, 690 €"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "690 €",
+   "language": "en",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-back-test-cross",
+   "type": "crosslang",
+   "group": "fx-back-test",
+   "query": "When did I last test restoring the backups?",
+   "gold": [
+    {
+     "file": "Backups.md",
+     "quote": "Letzter Restore-Test am 14. Juni 2026"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14. Juni 2026",
+   "language": "en",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-home-ip-cross",
+   "type": "crosslang",
+   "group": "fx-home-ip",
+   "query": "What's the static IP of my Raspberry Pi?",
+   "gold": [
+    {
+     "file": "Homelab.md",
+     "quote": "192.168.1.20"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "192.168.1.20",
+   "language": "en",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-stw-budgetowner-cross",
+   "type": "crosslang",
+   "group": "fx-stw-budgetowner",
+   "query": "Who approves budget decisions at Steirerwerk?",
+   "gold": [
+    {
+     "file": "Markus Hofer - Steirerwerk.md",
+     "quote": "über die Geschäftsführerin Renate Pölzl"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Über die Geschäftsführerin Renate Pölzl",
+   "language": "en",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-bb-beta-cross",
+   "type": "crosslang",
+   "group": "fx-bb-beta",
+   "query": "Wie viele Beta-Tester hat Bergbuch?",
+   "gold": [
+    {
+     "file": "Bergbuch App.md",
+     "quote": "Closed beta with 212 testers"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "212",
+   "language": "de",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-bb-pro-cross",
+   "type": "crosslang",
+   "group": "fx-bb-pro",
+   "query": "Was soll Bergbuch Pro kosten?",
+   "gold": [
+    {
+     "file": "Bergbuch App.md",
+     "quote": "\"Bergbuch Pro\" for 2,99 € per month"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "2,99 € per month",
+   "language": "de",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-ziel-hm-cross",
+   "type": "crosslang",
+   "group": "fx-ziel-hm",
+   "query": "Welche Zeit bin ich beim Halbmarathon gelaufen?",
+   "gold": [
+    {
+     "file": "Ziele 2026.md",
+     "quote": "Finished in 1:58:12 on 12 April 2026"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "1:58:12",
+   "language": "de",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-lese-fav",
+   "type": "crosslang",
+   "group": "fx-lese-fav",
+   "query": "Welches Buch hat mir dieses Jahr am besten gefallen?",
+   "gold": [
+    {
+     "file": "Leseliste.md",
+     "quote": "(favourite this year)"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Tomorrow, and Tomorrow, and Tomorrow (Gabrielle Zevin)",
+   "language": "de",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-ziel-guitar",
+   "type": "crosslang",
+   "group": "fx-ziel-guitar",
+   "query": "Welches Vorhaben habe ich im Mai aufgegeben?",
+   "gold": [
+    {
+     "file": "Ziele 2026.md",
+     "quote": "Learning the guitar (dropped in May, no time)"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Gitarre lernen",
+   "language": "de",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-mama-op-meds",
+   "type": "multi",
+   "group": "fx-mama-op-meds",
+   "query": "Wann wird Mama am Knie operiert und welches Schmerzmittel verträgt sie nicht?",
+   "gold": [
+    {
+     "file": "2026-09-25 Log.md",
+     "quote": "12. November 2026 im LKH Leoben"
+    },
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Verträgt kein Ibuprofen"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "12. November 2026 im LKH Leoben; kein Ibuprofen",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-box-kickoff-kreta",
+   "type": "multi",
+   "group": "fx-box-kickoff-kreta",
+   "query": "Wann ist der Kick-off bei der Boulderbox und wann bin ich da schon aus Kreta zurück?",
+   "gold": [
+    {
+     "file": "2026-09-20 Log.md",
+     "quote": "Kick-off am 27. Oktober 2026"
+    },
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "4. bis 18. Oktober 2026"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Kick-off 27. Oktober 2026; Kreta endet am 18. Oktober",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-stw-referral-golive",
+   "type": "multi",
+   "group": "fx-stw-referral-golive",
+   "query": "Wer hat mich für den Steirerwerk-Auftrag empfohlen und wann ist dort Go-Live?",
+   "gold": [
+    {
+     "file": "Sophie Lindner - UX Steirerwerk.md",
+     "quote": "Sie hat mich für den Shop-Relaunch bei Steirerwerk empfohlen"
+    },
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "15. November 2026"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Sophie Lindner; Go-Live 15. November 2026",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-box-deposit-rule",
+   "type": "multi",
+   "group": "fx-box-deposit-rule",
+   "query": "Wie hoch ist die Anzahlung von der Boulderbox und auf welcher Regel beruht sie?",
+   "gold": [
+    {
+     "file": "2026-09-20 Log.md",
+     "quote": "Anzahlung 30 % (1.950 €)"
+    },
+    {
+     "file": "Freelance Konditionen.md",
+     "quote": "Ab 5.000 € Auftragswert: 30 % Anzahlung"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "1.950 € = 30 % Anzahlung, weil der Auftrag über 5.000 € liegt",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-tob-job-wife",
+   "type": "multi",
+   "group": "fx-tob-job-wife",
+   "query": "Wo arbeitet Tobias jetzt und wie heißt seine Frau?",
+   "gold": [
+    {
+     "file": "2026-07-15 Log.md",
+     "quote": "Fronius in Wels"
+    },
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "Mira Brandner (geb. Okafor)"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Fronius in Wels (seit 1. August 2026); Mira Brandner",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-box-payment-stack",
+   "type": "multi",
+   "group": "fx-box-payment-stack",
+   "query": "Welchen Zahlungsanbieter will Petra statt Stripe, und welches Backend hatte ich vorgeschlagen?",
+   "gold": [
+    {
+     "file": "2026-09-20 Log.md",
+     "quote": "Zahlung über SumUp"
+    },
+    {
+     "file": "Boulderbox Buchungs-Widget.md",
+     "quote": "Fastify-Backend"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "SumUp; Fastify-Backend",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-kreta-jana-return",
+   "type": "multi",
+   "group": "fx-kreta-jana-return",
+   "query": "Wann fliege ich nach Kreta und bis wann bleibt Jana?",
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "Abflug 4.10. um 6:10 in Graz"
+    },
+    {
+     "file": "2026-09-20 Log.md",
+     "quote": "Jana kann im Oktober doch nur bis zum 15. bleiben"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Abflug 4. Oktober; Jana bleibt nur bis zum 15.",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-gf-approval",
+   "type": "multi",
+   "group": "fx-gf-approval",
+   "query": "Was hat die Geschäftsführerin von Steirerwerk im September freigegeben?",
+   "gold": [
+    {
+     "file": "Markus Hofer - Steirerwerk.md",
+     "quote": "über die Geschäftsführerin Renate Pölzl"
+    },
+    {
+     "file": "2026-09-02 Log.md",
+     "quote": "Klarna wurde von Renate Pölzl freigegeben"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Klarna (Renate Pölzl ist die Geschäftsführerin)",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-sophia-plants-cat",
+   "type": "multi",
+   "group": "fx-sophia-plants-cat",
+   "query": "Wer gießt während der Kreta-Reise meine Pflanzen und welches Futter braucht deren Katze?",
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "Pflanzen gießt Sophia Lindtner"
+    },
+    {
+     "file": "Sophia Lindtner - Nachbarin.md",
+     "quote": "braucht Nierendiät-Futter"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Sophia Lindtner; Mozart braucht Nierendiät-Futter",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-graz-contacts",
+   "type": "aggregation",
+   "group": "fx-graz-contacts",
+   "query": "Welche meiner Kontakte wohnen in Graz?",
+   "gold": [
+    {
+     "file": "Jana Koller - beste Freundin.md",
+     "quote": "Graz-Lend, Volksgartenstraße"
+    },
+    {
+     "file": "Nikola Petrović - Kletterpartner.md",
+     "quote": "**Wohnort:** Graz-Geidorf"
+    },
+    {
+     "file": "Sophia Lindtner - Nachbarin.md",
+     "quote": "Annenstraße 41, Top 7"
+    },
+    {
+     "file": "Georg Weninger - Vermieter.md",
+     "quote": "Wohnt selbst in Graz-St. Peter"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Jana (Lend), Nikola (Geidorf), Sophia Lindtner (Annenstraße), Georg Weninger (St. Peter)",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-pets",
+   "type": "aggregation",
+   "group": "fx-pets",
+   "query": "Wer aus meinem Umfeld hat Haustiere?",
+   "gold": [
+    {
+     "file": "Sophie Lindner - UX Steirerwerk.md",
+     "quote": "zwei Windhunde, Juno und Pixel"
+    },
+    {
+     "file": "Sophia Lindtner - Nachbarin.md",
+     "quote": "Mozart, ein grauer Kater"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Sophie Lindner (Windhunde Juno und Pixel), Sophia Lindtner (Kater Mozart)",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-frontend-stacks",
+   "type": "aggregation",
+   "group": "fx-frontend-stacks",
+   "query": "Welche Frontend-Technologien setze ich in meinen Kundenprojekten ein?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Shopify Hydrogen, Sanity CMS, Vercel"
+    },
+    {
+     "file": "Praxis Dr. Aigner Website.md",
+     "quote": "Astro, Netlify, Decap CMS"
+    },
+    {
+     "file": "Boulderbox Buchungs-Widget.md",
+     "quote": "Vue 3 Widget"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Shopify Hydrogen (Steirerwerk), Astro (Praxis Aigner), Vue 3 (Boulderbox)",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-autumn-dates",
+   "type": "aggregation",
+   "group": "fx-autumn-dates",
+   "query": "Welche wichtigen Termine habe ich im Oktober und November 2026?",
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "4. bis 18. Oktober 2026"
+    },
+    {
+     "file": "2026-09-20 Log.md",
+     "quote": "Kick-off am 27. Oktober 2026"
+    },
+    {
+     "file": "2026-09-25 Log.md",
+     "quote": "12. November 2026 im LKH Leoben"
+    },
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "15. November 2026"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Kreta 4.–18.10., Boulderbox-Kick-off 27.10., Mamas Knie-OP 12.11., Steirerwerk-Go-Live 15.11.",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-health-people",
+   "type": "aggregation",
+   "group": "fx-health-people",
+   "query": "Wer aus meinem Umfeld arbeitet im Gesundheitsbereich?",
+   "gold": [
+    {
+     "file": "Jana Koller - beste Freundin.md",
+     "quote": "Pflegerin auf der Intensivstation"
+    },
+    {
+     "file": "Nikola Petrović - Kletterpartner.md",
+     "quote": "Physiotherapeut mit eigener Praxis"
+    },
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "Hebamme im Kepler Uniklinikum"
+    },
+    {
+     "file": "Dr. Karin Fuchs - Zahnärztin.md",
+     "quote": "Zahnarztpraxis Dr. Fuchs"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Jana (Intensivpflege), Nikola (Physiotherapeut), Mira (Hebamme), Dr. Karin Fuchs (Zahnärztin)",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-birthdays",
+   "type": "aggregation",
+   "group": "fx-birthdays",
+   "query": "Welche Geburtstage von Familie und Freunden kenne ich?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "14. März 1961"
+    },
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "2. Juli 1988"
+    },
+    {
+     "file": "Jana Koller - beste Freundin.md",
+     "quote": "23. September 1992"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Mama 14. März, Tobias 2. Juli, Jana 23. September",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-rate-now",
+   "type": "temporal",
+   "group": "fx-rate-now",
+   "query": "Wie hoch ist mein aktueller Stundensatz?",
+   "gold": [
+    {
+     "file": "2026-06-28 Log.md",
+     "quote": "Stundensatz ab 1. Juli 2026 auf 85 € netto erhöht"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "85 € netto (seit 1. Juli 2026; vorher 75 €)",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-rate-now-en",
+   "type": "temporal",
+   "group": "fx-rate-now-en",
+   "query": "What's my current hourly rate?",
+   "gold": [
+    {
+     "file": "2026-06-28 Log.md",
+     "quote": "Stundensatz ab 1. Juli 2026 auf 85 € netto erhöht"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "85 € net since 1 July 2026",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-rent-now",
+   "type": "temporal",
+   "group": "fx-rent-now",
+   "query": "Wie viel Miete zahle ich ab Oktober?",
+   "gold": [
+    {
+     "file": "2026-08-21 Log.md",
+     "quote": "Mieterhöhung auf 935 € warm ab 1. Oktober 2026"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "935 € warm",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-tob-employer",
+   "type": "temporal",
+   "group": "fx-tob-employer",
+   "query": "Bei welcher Firma arbeitet Tobias?",
+   "gold": [
+    {
+     "file": "2026-07-15 Log.md",
+     "quote": "Fronius in Wels"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Fronius in Wels (seit 1. August 2026, vorher voestalpine)",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-david-debt",
+   "type": "temporal",
+   "group": "fx-david-debt",
+   "query": "Schuldet mir David noch Geld?",
+   "gold": [
+    {
+     "file": "2026-08-03 Log.md",
+     "quote": "David hat die 300 € für den Lissabon-Flug überwiesen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Nein, er hat die 300 € am 3. August 2026 überwiesen",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-mama-op-date",
+   "type": "temporal",
+   "group": "fx-mama-op-date",
+   "query": "Wann hat Mama ihre Knie-OP?",
+   "gold": [
+    {
+     "file": "2026-09-25 Log.md",
+     "quote": "12. November 2026 im LKH Leoben"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "12. November 2026 im LKH Leoben",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-box-status",
+   "type": "temporal",
+   "group": "fx-box-status",
+   "query": "Hat die Boulderbox mein Angebot schon angenommen?",
+   "gold": [
+    {
+     "file": "2026-09-20 Log.md",
+     "quote": "Boulderbox hat das Angebot angenommen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ja, am 20. September 2026",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-games-where",
+   "type": "temporal",
+   "group": "fx-games-where",
+   "query": "Wo findet der Spieleabend inzwischen statt?",
+   "gold": [
+    {
+     "file": "Brettspiele.md",
+     "quote": "Seit September 2026 bei Jana und Felix"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Bei Jana und Felix (seit September 2026)",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-vat-2027",
+   "type": "temporal",
+   "group": "fx-vat-2027",
+   "query": "Bin ich 2027 noch Kleinunternehmerin?",
+   "gold": [
+    {
+     "file": "2026-08-21 Log.md",
+     "quote": "Umsatzsteuerpflicht ab 2027 bestätigt"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Nein, ab 2027 umsatzsteuerpflichtig (20 % USt)",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-klarna",
+   "type": "temporal",
+   "group": "fx-klarna",
+   "query": "Ist Klarna bei Steirerwerk schon freigegeben?",
+   "gold": [
+    {
+     "file": "2026-09-02 Log.md",
+     "quote": "Klarna wurde von Renate Pölzl freigegeben"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ja, von Renate Pölzl (Log 2. September 2026)",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-sophie-job",
+   "type": "disambiguation",
+   "group": "fx-sophie-job",
+   "query": "Was macht Sophie Lindner beruflich?",
+   "gold": [
+    {
+     "file": "Sophie Lindner - UX Steirerwerk.md",
+     "quote": "UX-Lead bei der Steirerwerk GmbH"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "UX-Lead bei der Steirerwerk GmbH",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-sophia-job",
+   "type": "disambiguation",
+   "group": "fx-sophia-job",
+   "query": "Was arbeitet Sophia Lindtner?",
+   "gold": [
+    {
+     "file": "Sophia Lindtner - Nachbarin.md",
+     "quote": "Bibliothekarin an der Uni Graz"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Bibliothekarin an der Uni Graz",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-which-sophie",
+   "type": "disambiguation",
+   "group": "fx-which-sophie",
+   "query": "Welche Sophie liefert die Designs für Steirerwerk?",
+   "gold": [
+    {
+     "file": "Sophie Lindner - UX Steirerwerk.md",
+     "quote": "Liefert die Figma-Designs für den Relaunch"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Sophie Lindner",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-gp",
+   "type": "disambiguation",
+   "group": "fx-gp",
+   "query": "Wer ist meine Hausärztin?",
+   "gold": [
+    {
+     "file": "Gesundheit.md",
+     "quote": "Hausärztin: Dr. Maria Kern, Graz-Lend"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Dr. Maria Kern in Graz-Lend",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-doctor-client",
+   "type": "disambiguation",
+   "group": "fx-doctor-client",
+   "query": "Welche Ärztin ist meine Kundin?",
+   "gold": [
+    {
+     "file": "Praxis Dr. Aigner Website.md",
+     "quote": "Dr. Elisabeth Aigner, Allgemeinmedizinerin in Gleisdorf"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Dr. Elisabeth Aigner, Allgemeinmedizinerin in Gleisdorf",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-noans-00",
+   "type": "noanswer",
+   "group": "fx-noans-00",
+   "query": "Wann hat Felix Geburtstag?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-01",
+   "type": "noanswer",
+   "group": "fx-noans-01",
+   "query": "Wie heißt Nikolas Freundin?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-02",
+   "type": "noanswer",
+   "group": "fx-noans-02",
+   "query": "Welche Schuhgröße habe ich?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-03",
+   "type": "noanswer",
+   "group": "fx-noans-03",
+   "query": "Wann hat Mira Geburtstag?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-04",
+   "type": "noanswer",
+   "group": "fx-noans-04",
+   "query": "Welche Telefonnummer hat Jana?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-05",
+   "type": "noanswer",
+   "group": "fx-noans-05",
+   "query": "Wie heißt Petra Steiners Stellvertreter in der Boulderbox?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-06",
+   "type": "noanswer",
+   "group": "fx-noans-06",
+   "query": "Welche Automarke fährt Tobias?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-07",
+   "type": "noanswer",
+   "group": "fx-noans-07",
+   "query": "Wie heißt der Hund von Sophia Lindtner?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-08",
+   "type": "noanswer",
+   "group": "fx-noans-08",
+   "query": "Welche Note hatte ich in der Matura in Mathe?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-09",
+   "type": "noanswer",
+   "group": "fx-noans-09",
+   "query": "Wie viel kostet das Mietauto auf Kreta?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-10",
+   "type": "noanswer",
+   "group": "fx-noans-10",
+   "query": "Wann hat Emil Geburtstag?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-11",
+   "type": "noanswer",
+   "group": "fx-noans-11",
+   "query": "Welche Hydrogen-Version verwenden wir bei Steirerwerk?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-12",
+   "type": "noanswer",
+   "group": "fx-noans-12",
+   "query": "Wie lautet unser WLAN-Passwort?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-13",
+   "type": "noanswer",
+   "group": "fx-noans-13",
+   "query": "What is David's new girlfriend's name?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-14",
+   "type": "noanswer",
+   "group": "fx-noans-14",
+   "query": "Which hotel did I stay at in Lisbon?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-15",
+   "type": "noanswer",
+   "group": "fx-noans-15",
+   "query": "Wie heißt die Assistentin von Renate Pölzl?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-16",
+   "type": "noanswer",
+   "group": "fx-noans-16",
+   "query": "Bei welcher Krankenkasse ist Mama versichert?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-17",
+   "type": "noanswer",
+   "group": "fx-noans-17",
+   "query": "Wann beginnt Idas Kindergartenjahr?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-18",
+   "type": "noanswer",
+   "group": "fx-noans-18",
+   "query": "Wie wird das Wetter morgen in Graz?",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-noans-19",
+   "type": "noanswer",
+   "group": "fx-noans-19",
+   "query": "Schreib mir ein kurzes Gedicht über den Herbst.",
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-stw-shipping",
+   "type": "single",
+   "group": "fx-stw-shipping",
+   "query": "Ab welchem Bestellwert ist der Versand im Steirerwerk-Shop gratis?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Versandkostenfrei ab 79 € Bestellwert"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ab 79 €",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-stw-shipping-para",
+   "type": "paraphrase",
+   "group": "fx-stw-shipping",
+   "query": "Ab wie viel Euro zahlen Kunden des Kapfenberger Shops kein Porto?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Versandkostenfrei ab 79 € Bestellwert"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ab 79 €",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-stw-lighthouse",
+   "type": "single",
+   "group": "fx-stw-lighthouse",
+   "query": "Welchen Lighthouse-Wert hat die Produktseite des Steirerwerk-Shops mobil?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Produktseite 84"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "84 (Startseite 91)",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-stw-rollback",
+   "type": "single",
+   "group": "fx-stw-rollback",
+   "query": "Wie lange kann man nach dem Steirerwerk-Go-Live noch auf den alten Shop zurück?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Ein Rollback auf den alten Shop ist bis 48 Stunden nach dem Go-Live möglich"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "48 Stunden",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-stw-articles",
+   "type": "single",
+   "group": "fx-stw-articles",
+   "query": "Wie viele der alten Ratgeberartikel werden beim Relaunch gestrichen?",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Davon werden 18 gestrichen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "18 von 64",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-mama-song",
+   "type": "single",
+   "group": "fx-mama-song",
+   "query": "Was ist Mamas Lieblingslied?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Ihr Lieblingslied ist \"Sierra Madre\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Sierra Madre",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-mama-song-cross",
+   "type": "crosslang",
+   "group": "fx-mama-song",
+   "query": "What's my mum's favourite song?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Ihr Lieblingslied ist \"Sierra Madre\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Sierra Madre",
+   "folder": "01_Kontakte",
+   "language": "en"
+  },
+  {
+   "id": "fx-mama-origin",
+   "type": "single",
+   "group": "fx-mama-origin",
+   "query": "Wo ist Mama aufgewachsen?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Sie ist in Trofaiach aufgewachsen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "In Trofaiach",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-mama-keys",
+   "type": "single",
+   "group": "fx-mama-keys",
+   "query": "Wer hat die Ersatzschlüssel für Mamas Wohnung?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Nachbarin Frau Hölzl im ersten Stock"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Die Nachbarin Frau Hölzl im ersten Stock",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-mama-praebichl",
+   "type": "single",
+   "group": "fx-mama-praebichl",
+   "query": "Wohin fährt Mama jedes Jahr an Papas Todestag?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "jedes Jahr am 9. Juni, seinem Todestag, auf den Präbichl"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Auf den Präbichl, am 9. Juni",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-gruene-hoelle",
+   "type": "temporal",
+   "group": "fx-gruene-hoelle",
+   "query": "Habe ich die Grüne Hölle schon geschafft?",
+   "gold": [
+    {
+     "file": "Klettern.md",
+     "quote": "Durchstieg der \"Grüne Hölle\" (7a)!"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ja, Durchstieg am 3. September 2026",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-sonnenuhr-last",
+   "type": "temporal",
+   "group": "fx-sonnenuhr-last",
+   "query": "Wie weit bin ich bei der Sonnenuhr zuletzt gekommen?",
+   "gold": [
+    {
+     "file": "Klettern.md",
+     "quote": "bis zum Ausstiegsüberhang"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Bis zum Ausstiegsüberhang (13. September 2026)",
+   "folder": "06_Hobbys"
+  },
+  {
+   "id": "fx-overview-mama",
+   "type": "overview",
+   "group": "fx-overview-mama",
+   "query": "Wer ist eigentlich Ingrid Brandner?",
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Pensionierte Mathematiklehrerin"
+    },
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Sie ist in Trofaiach aufgewachsen"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Meine Mutter in Leoben, pensionierte Mathematiklehrerin, geboren 14. März 1961, Knie-Arthrose; in Trofaiach aufgewachsen, Lieblingslied \"Sierra Madre\"",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-overview-steirerwerk",
+   "type": "overview",
+   "group": "fx-overview-steirerwerk",
+   "query": "Fass mir das Steirerwerk-Projekt zusammen.",
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Shopify Hydrogen, Sanity CMS, Vercel"
+    },
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Versandkostenfrei ab 79 € Bestellwert"
+    },
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Ein Rollback auf den alten Shop ist bis 48 Stunden nach dem Go-Live möglich"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Shop-Relaunch für Steirerwerk (Kapfenberg) mit Shopify Hydrogen/Sanity, Budget 18.400 €, Go-Live 15.11.2026; versandkostenfrei ab 79 €, Rollback 48 h nach Go-Live",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-overview-tobias",
+   "type": "overview",
+   "group": "fx-overview-tobias",
+   "query": "What do you know about my brother?",
+   "gold": [
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "älterer Bruder (4 Jahre älter)"
+    },
+    {
+     "file": "2026-07-15 Log.md",
+     "quote": "Fronius in Wels"
+    }
+   ],
+   "goldMode": "all",
+   "createdAt": 0,
+   "answer": "Tobias Brandner, 4 years older, Linz-Urfahr, married to Mira, kids Emil and Ida; now at Fronius in Wels",
+   "folder": "01_Kontakte"
+  }
+ ]
+}

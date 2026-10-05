@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
-import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
@@ -51,18 +50,6 @@ const emit = defineEmits<{
 const LARGE_CHUNK_WARNING_THRESHOLD = 100;
 const EXPLORER_VIEW_KEY = "cy-memory-explorer-view";
 
-/** Deep Research eligibility is decided by the limit the server attaches to
- * each file row, so the button can never be offered for a document the server
- * would reject. See api/limits.ts for the rationale. The served limits value is
- * only a fallback for a file row from an older server. */
-function analysisChunkLimit(file: MemoryFileStatus): number {
-  return file.analysisChunkLimit ?? RUNTIME_LIMITS.analysisChunkLimit;
-}
-
-function supportsAnalysis(file: MemoryFileStatus): boolean {
-  return file.status === "indexed" && (file.chunkCount || 0) <= analysisChunkLimit(file);
-}
-
 // --- State ---
 const files = ref<MemoryFileStatus[]>([]);
 const filesLoading = ref(false);
@@ -91,15 +78,6 @@ const highlightedFolderId = ref<string | null>(null);
 const dropTargetFolderId = ref<string | null>(null);
 const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
 const contextMenu = ref<ExplorerContextMenu | null>(null);
-const unsubscribeGraphReset = api.memory.onGraphReset(() => {
-  files.value = files.value.map((file) => ({
-    ...file,
-    deepResearched: false,
-    analysisStatus: "not_analyzed",
-    deepResearchedAt: undefined,
-  }));
-  void loadFiles();
-});
 const unsubscribeDreamUpdate = api.memory.onDreamUpdated(() => void loadFiles());
 const DREAM_INDICATOR_DURATION_MS = 24 * 60 * 60 * 1000;
 const dreamIndicatorNow = ref(Date.now());
@@ -334,9 +312,7 @@ watch(() => props.folderId, (folderId) => {
 
 const filteredFiles = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  const matching = q ? files.value.filter((f) =>
-    f.fileName.toLowerCase().includes(q) || (f.tags || []).some((tag) => tag.includes(q)),
-  ) : files.value;
+  const matching = q ? files.value.filter((f) => f.fileName.toLowerCase().includes(q)) : files.value;
   return [...matching].sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName));
 });
 
@@ -348,7 +324,6 @@ const documentRows = computed<ExplorerRow[]>(() => [
     folder,
     modifiedAt: folder.createdAt,
     chunkCount: folder.fileCount + (folder.descendantFileCount || 0),
-    deepResearched: false,
     status: "folder",
   })),
   ...filteredFiles.value.map((file): DocumentRow => ({
@@ -378,7 +353,6 @@ const columns: Column<ExplorerRow>[] = [
   { key: "name", label: "Name", minWidth: "220px", grow: 3, sortable: true, sortValue: (item) => item.name },
   { key: "modifiedAt", label: "Modified", minWidth: "104px", sortable: true, sortValue: (file) => file.modifiedAt },
   { key: "chunkCount", label: "Items / Chunks", minWidth: "90px", grow: 0, sortable: true, sortValue: (item) => item.kind !== "file" ? item.chunkCount : item.status === "indexed" ? (item.chunkCount || 0) : (item.estimatedChunkCount || 0) },
-  { key: "deepResearched", label: "Deep Research", minWidth: "190px", sortable: true, sortValue: (item) => item.kind === "file" && item.deepResearched },
   {
     key: "status",
     label: "Indexed",
@@ -437,13 +411,10 @@ const currentIndexLabel = computed(() => needsAttentionCount.value
   : "No files to index");
 const recursiveIndexLabel = computed(() =>
   `Index all ${recursiveNeedsAttentionCount.value} ${recursiveNeedsAttentionCount.value === 1 ? "file" : "files"} including subfolders`);
-const selectedDeepResearchFiles = computed(() =>
-  files.value.filter((f) => f.supported && supportsAnalysis(f) && selectedFiles.value.has(f.fileName)),
-);
 const selectedRememberedFiles = computed(() =>
   files.value.filter((f) =>
     f.supported &&
-    (f.status !== "not_indexed" || f.deepResearched) &&
+    f.status !== "not_indexed" &&
     selectedFiles.value.has(f.fileName),
   ),
 );
@@ -452,9 +423,6 @@ const canForgetSelected = computed(() =>
     selectedFolders.value.has(folder.id) &&
     (folder.indexedFileCount || 0) + (folder.descendantIndexedFileCount || 0) > 0,
   ),
-);
-const selectedDeepResearchIdleCount = computed(() =>
-  selectedDeepResearchFiles.value.filter((f) => !isJobActive("deep-research", f.fileName)).length,
 );
 const selectedSearchIndexFiles = computed(() =>
   files.value.filter((file) =>
@@ -487,10 +455,8 @@ const {
   upsertJob,
   loadJobs,
   reindexFile,
-  extractKnowledgeFromFile,
   reindexAll: reindexAllNow,
   reset: resetJobs,
-  deepResearchProgress,
   searchIndexProgress,
 } = useMemoryDocumentJobs({
   folderId: toRef(props, "folderId"),
@@ -596,19 +562,6 @@ async function reindexAllIncludingSubfolders(): Promise<void> {
       bulkQueueing.value = false;
     }
   });
-}
-
-async function deepResearchSelected(targetFile?: MemoryFileStatus): Promise<void> {
-  const groups = await resolveSelectedFileGroups(targetFile);
-  for (const [folderId, groupFiles] of groups) {
-    for (const file of groupFiles.filter((candidate) => supportsAnalysis(candidate))) {
-      if (folderId === props.folderId) {
-        if (!isJobActive("deep-research", file.fileName)) await extractKnowledgeFromFile(file.fileName);
-      } else {
-        await api.memoryFolders.startDeepResearchFile(folderId, file.fileName);
-      }
-    }
-  }
 }
 
 async function makeSearchableSelected(targetFile?: MemoryFileStatus): Promise<void> {
@@ -766,7 +719,7 @@ async function forgetSelectedMemories(targetFile?: MemoryFileStatus) {
   try {
     for (const [folderId, groupFiles] of groups) {
       const sourceFiles = groupFiles
-        .filter((file) => file.status !== "not_indexed" || file.deepResearched)
+        .filter((file) => file.status !== "not_indexed")
         .map((file) => file.fileName);
       if (sourceFiles.length) await api.memoryFolders.forgetMemories(folderId, sourceFiles);
     }
@@ -1016,7 +969,11 @@ function folderIndexSummary(folder: MemoryFolder): {
       ratio: total ? indexed / total : 0,
     };
   }
-  if (total > 0 && indexed >= total) {
+  if (total === 0) {
+    // Nothing to index yet; "Not Indexed" would suggest pending work.
+    return { label: "Empty", icon: "lucide:circle-dashed", colorClass: "text-ink-faint", ratio: 0 };
+  }
+  if (indexed >= total) {
     return { label: "Indexed", icon: "lucide:check-circle", colorClass: "text-status-green", ratio: 1 };
   }
   if (indexed > 0) {
@@ -1111,7 +1068,6 @@ onUnmounted(() => {
   if (globalSearchTimer !== null) window.clearTimeout(globalSearchTimer);
   if (pathCopiedTimer !== null) window.clearTimeout(pathCopiedTimer);
   window.clearInterval(dreamIndicatorTimer);
-  unsubscribeGraphReset();
   unsubscribeDreamUpdate();
   document.removeEventListener("mousedown", handleExplorerPointerDown);
   window.removeEventListener("keydown", handleExplorerKeydown);
@@ -1279,8 +1235,6 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :selected-folder-count="selectedFolders.size"
       :can-index="selectedSearchIndexFiles.length > 0"
       :index-idle-count="selectedSearchIndexIdleCount"
-      :can-research="selectedDeepResearchFiles.length > 0"
-      :research-idle-count="selectedDeepResearchIdleCount"
       :can-forget="canForgetSelected"
       :moving="moving"
       :forgetting="forgettingMemories"
@@ -1291,7 +1245,6 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @select-all="selectAll"
       @move="showMoveDialog = true"
       @index="makeSearchableSelected()"
-      @research="deepResearchSelected()"
       @forget="forgetSelectedMemories()"
       @remove="deleteSelectedFiles()"
       @clear-selection="clearSelection"
@@ -1328,7 +1281,6 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :format-file-size="formatFileSize"
       :is-job-active="isJobActive"
       :search-index-progress="searchIndexProgress"
-      :deep-research-progress="deepResearchProgress"
       @open-global-result="openGlobalResult"
       @open-folder="openFolder"
       @open-document="openEditorModal"
@@ -1351,7 +1303,6 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
     <MemoryExplorerContextMenu
       :menu="contextMenu"
       :space-count="spaces.length"
-      :supports-analysis="supportsAnalysis"
       @close="closeContextMenu"
       @open-folder="openFolder"
       @create-folder="emit('createFolder', $event)"
@@ -1361,7 +1312,6 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @open-document="openEditorModal($event.fileName)"
       @move-document="openContextMove"
       @index-document="makeSearchableSelected"
-      @research-document="deepResearchSelected"
       @forget-document="forgetSelectedMemories"
       @remove-document="deleteSelectedFiles"
     />

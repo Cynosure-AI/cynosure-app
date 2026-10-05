@@ -221,9 +221,14 @@ describe('ProviderModelSelect favorites', () => {
 
     await wrapper.setProps({ providerId: 'openrouter-1' })
     expect(wrapper.get('[role="combobox"]').text())
-      .toContain('OpenRouter (deepseek-v4-flash-0731)')
+      .toContain('deepseek-v4-flash-0731')
     expect(wrapper.get('[role="combobox"]').text())
       .not.toContain('deepseek/deepseek-v4-flash-0731')
+
+    expect(wrapper.get('[role="combobox"]').text()).not.toContain('OpenRouter')
+    const defaultTriggerLabel = wrapper.get('[role="combobox"]').text()
+    await wrapper.setProps({ modelValue: 'deepseek/deepseek-v4-flash-0731' })
+    expect(wrapper.get('[role="combobox"]').text()).toBe(defaultTriggerLabel)
 
     const providerDefault = wrapper.findAll('[role="option"]')
       .find((option) => option.text().includes('OpenRouter'))!

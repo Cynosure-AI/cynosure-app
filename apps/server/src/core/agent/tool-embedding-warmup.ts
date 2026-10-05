@@ -1,6 +1,7 @@
 import { getEventBus } from '../telemetry/event-bus.js'
 import { cancelMemoryIndexJob, startMemoryIndexJob, waitForMemoryIndexJob, type MemoryIndexJobSnapshot } from '../memory/memory-index-jobs.js'
 import { planToolEmbeddingWarmup } from './tool-router.js'
+import { hasEmbeddingService } from '../memory/embedding.js'
 
 /** Start after provider/registry initialization. Registry and model changes coalesce. */
 export function startToolEmbeddingWarmup(): () => Promise<void> {
@@ -18,6 +19,9 @@ export function startToolEmbeddingWarmup(): () => Promise<void> {
         timer = setTimeout(() => {
             timer = undefined
             if (stopped || jobId) return
+            // A fresh install has no embedding provider yet. Configuring one
+            // emits embedding:configured, which schedules the warmup again.
+            if (!hasEmbeddingService()) return
             try {
                 const plan = planToolEmbeddingWarmup()
                 if (!plan.count) {

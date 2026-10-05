@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onBeforeUnmount } from 'vue'
+import { computed, ref, reactive, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { api } from '../../api/client'
 import { Icon } from '@iconify/vue'
@@ -7,7 +7,9 @@ import { Icon } from '@iconify/vue'
 const importFile = ref<File | null>(null)
 const importing = ref(false)
 const importError = ref('')
-const importResults = ref<Record<string, { restored: number; errors: string[] }> | null>(null)
+const importResults = ref<Record<string, { restored: number; errors: string[]; warnings?: string[] }> | null>(null)
+const importHasErrors = computed(() => Object.values(importResults.value ?? {}).some(result => result.errors.length > 0))
+const importHasWarnings = computed(() => Object.values(importResults.value ?? {}).some(result => (result.warnings?.length ?? 0) > 0))
 const previewData = ref<{ version: number; createdAt: string; modules: Record<string, { count: number }> } | null>(null)
 const importModules = reactive<Record<string, boolean>>({})
 const previewing = ref(false)
@@ -22,7 +24,6 @@ const moduleLabels: Record<string, { label: string; icon: string; description: s
   settings: { label: 'Settings', icon: 'lucide:sliders-horizontal', description: 'Tool approvals, cron jobs, and app settings' },
   channels: { label: 'Channels', icon: 'lucide:radio', description: 'Channel configurations (Telegram, etc.)' },
   memory: { label: 'Memory Folders', icon: 'lucide:book-open', description: 'Memory folder definitions, agent assignments, and document content (re-embedded on import)' },
-  knowledge: { label: 'Knowledge Graph', icon: 'lucide:network', description: 'Extracted knowledge plus manual corrections, merges, and relationships' },
   conversations: { label: 'Conversations & Artifacts', icon: 'lucide:message-square', description: 'Chat history, generated media, and uploaded files (only restores for agents present in the DB)' },
   usage: { label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs and auxiliary model usage. Chat usage is restored with Conversations.' }
 }
@@ -72,7 +73,8 @@ async function doImport(): Promise<void> {
   try {
     const res = await api.backup.importBackup(importFile.value, selected)
     importResults.value = res.results
-    if (!Object.values(res.results).some(result => result.errors.length > 0)) {
+    // Keep warnings on screen; the Done button reloads once they have been read.
+    if (!importHasErrors.value && !importHasWarnings.value) {
       setTimeout(() => window.location.reload(), 1500)
     }
   } catch (e) {
@@ -80,6 +82,12 @@ async function doImport(): Promise<void> {
   } finally {
     importing.value = false
   }
+}
+
+function finishImport(): void {
+  const reload = importResults.value && !importHasErrors.value
+  clearImport()
+  if (reload) window.location.reload()
 }
 
 function clearImport(): void {
@@ -303,12 +311,12 @@ onBeforeUnmount(() => {
         <div class="space-y-3">
           <div class="flex items-center gap-2">
             <Icon
-              :icon="Object.values(importResults).some(result => result.errors.length > 0) ? 'lucide:alert-circle' : 'lucide:check-circle'"
+              :icon="importHasErrors || importHasWarnings ? 'lucide:alert-circle' : 'lucide:check-circle'"
               class="w-5 h-5"
-              :class="Object.values(importResults).some(result => result.errors.length > 0) ? 'text-status-warning' : 'text-status-green'"
+              :class="importHasErrors || importHasWarnings ? 'text-status-warning' : 'text-status-green'"
             />
             <span class="text-sm font-medium text-theme-200">
-              {{ Object.values(importResults).some(result => result.errors.length > 0) ? 'Restore completed with issues' : 'Restore Complete' }}
+              {{ importHasErrors ? 'Restore completed with issues' : importHasWarnings ? 'Restore completed with warnings' : 'Restore Complete' }}
             </span>
           </div>
 
@@ -326,7 +334,7 @@ onBeforeUnmount(() => {
               <span class="text-xs text-status-green ml-2">{{ res.restored }} restored</span>
             </div>
             <Icon
-              v-if="res.errors.length === 0"
+              v-if="res.errors.length === 0 && !res.warnings?.length"
               icon="lucide:check"
               class="w-4 h-4 text-status-green"
             />
@@ -352,12 +360,23 @@ onBeforeUnmount(() => {
                 {{ moduleLabels[key]?.label || key }}: {{ err }}
               </p>
             </div>
+            <div
+              v-if="res.warnings?.length"
+              class="text-xs text-status-warning space-y-1"
+            >
+              <p
+                v-for="(warning, i) in res.warnings"
+                :key="i"
+              >
+                {{ moduleLabels[key]?.label || key }}: {{ warning }}
+              </p>
+            </div>
           </template>
         </div>
 
         <button
           class="w-full px-4 py-2 bg-theme-700 hover:bg-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
-          @click="clearImport"
+          @click="finishImport"
         >
           Done
         </button>

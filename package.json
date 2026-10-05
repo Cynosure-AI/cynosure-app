@@ -1,23 +1,18 @@
 {
   "name": "cynosure",
-  "version": "2.2.1",
+  "version": "1.0.0",
   "packageManager": "pnpm@12.6.0",
   "private": true,
-  "pnpm": {
-    "overrides": {
-      "node-abi": "^4.35.0"
-    }
-  },
   "description": "Cynosure monorepo — server, web UI, and Electron desktop app",
   "scripts": {
     "dev:server": "pnpm --filter cynosure-server dev",
     "dev:web": "pnpm --filter cynosure-web dev",
     "dev:electron": "pnpm --filter cynosure-desktop dev",
     "dev": "concurrently --names server,web --prefix-colors blue,green \"pnpm dev:server\" \"pnpm dev:web\"",
-    "build:server": "pnpm run build:web && pnpm --filter cynosure-server build",
+    "build:server": "pnpm --filter cynosure-server build",
     "build:web": "pnpm --filter cynosure-web build",
     "build:electron": "pnpm --filter cynosure-desktop build",
-    "build": "pnpm run build:web && pnpm --filter cynosure-server build",
+    "build": "pnpm run build:web && pnpm run build:server",
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",
     "test": "pnpm test:unit && pnpm test:integration && pnpm test:web",

@@ -42,6 +42,20 @@ function installBrowserStorage(name: 'localStorage' | 'sessionStorage'): void {
 installBrowserStorage('localStorage')
 installBrowserStorage('sessionStorage')
 
+// Unit tests must never reach a real server. Happy DOM resolves relative API
+// URLs against http://localhost:3000, so an unmocked request would otherwise
+// hit whatever runs there (possibly a real Cynosure install). Tests that need
+// a response stub fetch themselves; anything else fails without a socket.
+function blockedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+  return Promise.reject(new TypeError(`Unmocked network request in a unit test: ${method} ${url}`))
+}
+Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: blockedFetch })
+if (window !== globalThis) {
+  Object.defineProperty(window, 'fetch', { configurable: true, writable: true, value: blockedFetch })
+}
+
 afterEach(() => {
   localStorage.clear()
   sessionStorage.clear()

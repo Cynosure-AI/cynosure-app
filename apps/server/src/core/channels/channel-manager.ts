@@ -1,7 +1,7 @@
 import type { ChannelConfig, ChannelProvider, ChannelStatus, ChannelType, ActiveChannelExecution } from './base.channel.js'
-import { TelegramChannel } from './telegram/index.js'
-import { DiscordChannel } from './discord/index.js'
-import { SlackChannel } from './slack/index.js'
+import { TelegramChannel } from './telegram/telegram.channel.js'
+import { DiscordChannel } from './discord/discord.channel.js'
+import { SlackChannel } from './slack/slack.channel.js'
 import { getDb } from '../../db/database.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -196,7 +196,7 @@ class ChannelManager {
                 return new DiscordChannel(
                     channel.id,
                     channel.agentId,
-                    channel.config as { botToken: string; allowedAgentIds?: string[] },
+                    channel.config as { botToken: string; allowedAgentIds?: string[]; allowedUserIds?: string[] },
                     this.broadcast
                 )
             case 'slack':

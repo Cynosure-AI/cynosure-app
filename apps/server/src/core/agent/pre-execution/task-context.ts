@@ -2,10 +2,11 @@ import { nanoid } from 'nanoid'
 import { getEventBus } from '../../telemetry/event-bus.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
-import { emitRoutingDecision, recentConversationBlock, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
+import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, ROUTER_TURN_CHAR_LIMIT, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
+import { formatToolsetCandidate, type ToolsetCandidate } from './auto-tool-routing.js'
+import { MCP_CANDIDATE_COUNT } from '../tool-router.js'
 
 const TASK_CONTEXT_TOOL_NAME = 'set_task_context'
-const TURN_CHAR_LIMIT = 500
 const MAX_ROUTER_QUERY_LENGTH = 2_000
 const MAX_MEMORY_EXPANSIONS = 2
 /** Headroom for tool-call arguments plus any reasoning tokens some models emit despite /no_think. */
@@ -15,6 +16,8 @@ export interface TaskContext {
     requiresTools: boolean
     requiresMemory: boolean
     toolSearchQuery?: string
+    /** Toolsets the tool router should search; absent when planning did not choose any. */
+    toolsetIds?: string[]
     memorySearchQueries: string[]
 }
 
@@ -29,6 +32,10 @@ export interface BuildTaskContextInput {
         tools: boolean
         memories: boolean
     }
+    /** Toolsets the planning call may choose from when tool routing is enabled. */
+    toolsets?: ToolsetCandidate[]
+    /** Lets the planner name the user when a request is about them. */
+    userName?: string
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
 }
@@ -37,6 +44,8 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
     const currentRequest = input.userQuery?.trim()
     if (!currentRequest || !hasEnabledMode(input.enabledModes)) return null
 
+    const toolsets = input.enabledModes.tools ? input.toolsets ?? [] : []
+    const toolsetIds = toolsets.map(({ id }) => id)
     const taskId = `auto_router_${nanoid()}`
     emitTaskContextStatus(input.conversationId, taskId, input.eventMeta)
 
@@ -58,6 +67,11 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                             'toolSearchQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
                             'Assess external tools and memory independently. It is valid for neither to be required.',
                             ...enabledRequirementInstructions(input.enabledModes),
+                            ...(toolsets.length ? [
+                                `When requiresTools=true, set toolsetIds to the namespace IDs whose capabilities the request needs, at most ${MCP_CANDIDATE_COUNT}.`,
+                                'Prefer the smallest sufficient set of toolsets.',
+                            ] : []),
+                            ...(input.enabledModes.memories ? memoryUserInstructions(input.userName) : []),
                             'Do not include disabled auto modes.',
                             'Do not add execution instructions.',
                             'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
@@ -68,15 +82,16 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                         content: [
                             `Enabled auto modes: ${enabledModeLabels(input.enabledModes).join(', ')}`,
                             '',
-                            recentConversationBlock(input.recentMessages || [], TURN_CHAR_LIMIT),
+                            recentConversationBlock(input.recentMessages || [], ROUTER_TURN_CHAR_LIMIT),
                             '',
                             `Current request: ${currentRequest}`,
+                            ...(toolsets.length ? ['', 'Available MCPs and toolsets:', ...toolsets.map(formatToolsetCandidate)] : []),
                         ].filter(Boolean).join('\n'),
                     },
                 ],
                 model: input.model,
                 maxTokens: TASK_CONTEXT_MAX_TOKENS,
-                tools: [buildTaskContextTool(input.enabledModes)],
+                tools: [buildTaskContextTool(input.enabledModes, toolsetIds)],
                 toolChoice: { type: 'function', name: TASK_CONTEXT_TOOL_NAME },
                 thinkingEnabled: false,
                 signal: input.signal,
@@ -87,9 +102,10 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                 providerId: input.providerId,
                 model: input.model,
                 signal: input.signal,
+                usageKind: 'task-context',
                 toolName: TASK_CONTEXT_TOOL_NAME,
                 request,
-                parse: (raw) => parseTaskContextArguments(raw, input.enabledModes, currentRequest),
+                parse: (raw) => parseTaskContextArguments(raw, input.enabledModes, currentRequest, toolsetIds),
             })
             emitTaskContextSelection(input.conversationId, taskId, parsed, input.eventMeta, parsed ? undefined : 'none-generated')
             return parsed
@@ -101,7 +117,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
     })
 }
 
-function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes']): ToolDefinition {
+function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'], toolsetIds: string[]): ToolDefinition {
     const properties: Record<string, unknown> = {}
     const required: string[] = []
     if (enabledModes.tools) {
@@ -113,6 +129,14 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
         properties.toolSearchQuery = {
             type: 'string',
             description: 'When tools are required, a compact semantic query optimized for selecting relevant tools and tool namespaces. Omit when requiresTools is false.',
+        }
+        if (toolsetIds.length) {
+            properties.toolsetIds = {
+                type: 'array',
+                description: 'When tools are required, the namespace IDs whose tools should be considered, ordered by usefulness. Omit when requiresTools is false.',
+                items: { type: 'string', enum: toolsetIds },
+                maxItems: MCP_CANDIDATE_COUNT,
+            }
         }
     }
     if (enabledModes.memories) {
@@ -147,10 +171,12 @@ function parseTaskContextArguments(
     raw: string,
     enabledModes: BuildTaskContextInput['enabledModes'],
     originalRequest: string,
+    toolsetIds: string[],
 ): TaskContext | null {
     try {
         const parsed = JSON.parse(raw) as {
             toolSearchQuery?: unknown
+            toolsetIds?: unknown
             memorySearchQueries?: unknown
             requiresTools?: unknown
             requiresMemory?: unknown
@@ -163,6 +189,10 @@ function parseTaskContextArguments(
         const toolSearchQuery = requiresTools && typeof parsed.toolSearchQuery === 'string'
             ? parsed.toolSearchQuery.trim().slice(0, MAX_ROUTER_QUERY_LENGTH)
             : ''
+        // An empty or invalid choice leaves the decision to the dedicated toolset selector.
+        const plannedToolsetIds = requiresTools && toolsetIds.length
+            ? parseCandidateIds(parsed.toolsetIds, toolsetIds, MCP_CANDIDATE_COUNT)
+            : null
         const memorySearchQueries = requiresMemory
             ? normalizeMemoryQueries(Array.isArray(parsed.memorySearchQueries) ? parsed.memorySearchQueries : [], originalRequest)
             : []
@@ -171,11 +201,18 @@ function parseTaskContextArguments(
             requiresTools,
             requiresMemory,
             toolSearchQuery: toolSearchQuery || undefined,
+            toolsetIds: plannedToolsetIds?.length ? plannedToolsetIds : undefined,
             memorySearchQueries,
         }
     } catch {
         return null
     }
+}
+
+function memoryUserInstructions(userName?: string): string[] {
+    const name = userName?.trim()
+    // Notes about the user are usually filed under their name, not "I"/"me".
+    return name ? [`The user is named ${JSON.stringify(name)}. When a memory request concerns the user themself, phrase one memory search query with that name.`] : []
 }
 
 function normalizeMemoryQueries(values: unknown[], originalRequest: string): string[] {
@@ -251,6 +288,7 @@ function emitTaskContextSelection(
                 requiresTools: context?.requiresTools,
                 requiresMemory: context?.requiresMemory,
                 toolSearchQuery: context?.toolSearchQuery,
+                toolsetIds: context?.toolsetIds,
                 memorySearchQueries: context?.memorySearchQueries,
                 emptyReason,
                 content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,

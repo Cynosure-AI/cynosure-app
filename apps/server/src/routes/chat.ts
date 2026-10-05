@@ -37,6 +37,7 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
+import { defaultAutoModes } from '../core/agent/execution-preset.js'
 import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
 import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
 import { executeImageModel, executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
@@ -149,7 +150,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         : data
       const type = event === 'chat:event' ? (data as ChatEventDraft).payload.type : null
       const terminalEvent = event.endsWith('-end') || event.endsWith('-error') || type === 'stream-end' || type === 'stream-error'
-      if (abortController.signal.aborted && !terminalEvent) return
+      // After Stop, live progress is muted, but saved transcript rows (such as
+      // the stopped partial reply) must still reach clients with their real IDs.
+      const savedTranscriptItem = type === 'transcript-item'
+      if (abortController.signal.aborted && !terminalEvent && !savedTranscriptItem) return
       broadcast(event, payload)
     }
     const emitChat = (payload: ChatEventPayload) => publishChatEvent(executionBroadcast, { conversationId, executionId, payload })
@@ -449,6 +453,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const tools: RegistryAwareToolDefinition[] = plannedTools
       let executionConfig: ConversationExecutionConfig | null = null
       let attemptedVideoOutput = false
+      let executor: AgentExecutor | undefined
+      let result: Awaited<ReturnType<AgentExecutor['run']>> | undefined
       try {
         messages = planned.messages
         const turnEvidence = [...preparedEvidence]
@@ -482,7 +488,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             ? reqThinkingEnabled
             : (resolvedAgent?.thinkingEnabled !== false),
           reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
-          autoToolRouting: reqAutoToolRouting === true,
+          autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : defaultAutoModes(resolvedAgent).autoToolRouting,
           autoMemory: effectiveRunFlags.autoMemory,
         })
         db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(
@@ -610,7 +616,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           })
         }
 
-        const executor = new AgentExecutor({
+        executor = new AgentExecutor({
           gateway,
           tools,
           conversationId,
@@ -637,10 +643,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           eventMeta: { executionId },
         })
 
-        const unregisterSteering = registerChatSteeringHandler(conversationId, () => executor.requestSteering())
-        let result
+        const activeExecutor = executor
+        const unregisterSteering = registerChatSteeringHandler(conversationId, () => activeExecutor.requestSteering())
         try {
-          result = await executor.run(messages)
+          result = await activeExecutor.run(messages)
         } finally {
           unregisterSteering()
         }
@@ -676,6 +682,20 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         if ((err as Error).name === 'AbortError' || abortController.signal.aborted) {
           if (planningRunId) {
             interruptPlanningRun(planningRunId, { error: 'Interrupted before completion.' })
+          }
+          // Keep what the user already saw. A run that finished just before the
+          // stop arrived keeps its whole reply; otherwise the round that was
+          // streaming is saved as a stopped reply, so the transcript (and the
+          // next turn's context) matches the screen.
+          const partial = result
+            ? { content: result.content, thinking: result.thinking, images: result.images }
+            : executor?.interruptedReply()
+          if (partial && (partial.content.trim() || partial.images.length)) {
+            persistAssistantTurn(db, executionBroadcast, {
+              conversationId, streamId, content: partial.content, thinking: partial.thinking,
+              images: partial.images, generatedMedia: partial.images.length > 0, agentId,
+              provider: responseProvider, model: responseModel, startedAt: now, stopped: !result,
+            })
           }
           getEventBus().emit('task:error', { conversationId, executionId, error: 'Cancelled' })
           emitChat({ type: 'stream-end', streamId, scope: 'main', cancelled: true })

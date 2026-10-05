@@ -150,12 +150,12 @@ async function saveAsNewAgent(): Promise<void> {
         v-if="hasActiveChat"
         type="button"
         role="menuitem"
-        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-theme-300 hover:bg-theme-800"
         @click="openSearch"
       >
         <Icon
           icon="lucide:search"
-          class="h-3.5 w-3.5 text-ink-muted"
+          class="h-4 w-4 text-ink-muted"
         />
         Search
       </button>
@@ -163,18 +163,18 @@ async function saveAsNewAgent(): Promise<void> {
         v-if="hasActiveChat"
         type="button"
         role="menuitem"
-        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-theme-300 hover:bg-theme-800"
         @click="togglePin"
       >
         <Icon
           :icon="activeConversationPinned ? 'lucide:pin-off' : 'lucide:pin'"
-          class="h-3.5 w-3.5 text-status-warning"
+          class="h-4 w-4 text-theme-300"
         />
         {{ activeConversationPinned ? 'Unpin Chat' : 'Pin Chat' }}
       </button>
       <p
         v-else
-        class="px-3 py-2 text-xs text-ink-faint"
+        class="px-3 py-2 text-sm text-ink-faint"
       >
         No chat selected
       </p>
@@ -201,44 +201,48 @@ async function saveAsNewAgent(): Promise<void> {
         type="button"
         role="menuitem"
         :title="'Apply Updated: ' + chatStore.agentOverrideFields.join(',')"
-        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-amber-300 hover:bg-theme-800"
+        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-amber-300 hover:bg-theme-800"
         @click="applyChanges"
       >
         <Icon
           icon="lucide:check"
-          class="h-3.5 w-3.5"
+          class="h-4 w-4"
         />
         Apply Changes
       </button>
+
+      <!-- Reset to Defaults — yellow -->
       <button
         v-if="hasCustomConfig"
         type="button"
         role="menuitem"
-        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-amber-300 hover:bg-theme-800"
         @click="resetConfig"
       >
         <Icon
           icon="lucide:rotate-ccw"
-          class="h-3.5 w-3.5 text-ink-muted"
+          class="h-4 w-4 text-amber-300"
         />
         Reset to Defaults
       </button>
+
+      <!-- Save as New Agent — white -->
       <button
         v-if="canShowSaveAction"
         type="button"
         role="menuitem"
-        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-theme-300 hover:bg-theme-800"
         @click="openSaveModal"
       >
         <Icon
           icon="lucide:bot"
-          class="h-3.5 w-3.5 text-accent-fg"
+          class="h-4 w-4 text-theme-100"
         />
         Save as New Agent
       </button>
       <p
         v-if="!hasAgentActions"
-        class="px-3 py-2 text-xs text-ink-faint"
+        class="px-3 py-2 text-sm text-ink-faint"
       >
         No agent changes
       </p>

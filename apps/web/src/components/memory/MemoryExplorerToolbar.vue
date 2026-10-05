@@ -16,8 +16,6 @@ defineProps<{
   selectedFolderCount: number;
   canIndex: boolean;
   indexIdleCount: number;
-  canResearch: boolean;
-  researchIdleCount: number;
   canForget: boolean;
   moving: boolean;
   forgetting: boolean;
@@ -32,7 +30,6 @@ const emit = defineEmits<{
   selectAll: [];
   move: [];
   index: [];
-  research: [];
   forget: [];
   remove: [];
   clearSelection: [];
@@ -155,19 +152,6 @@ const emit = defineEmits<{
           class="h-3.5 w-3.5"
           :class="{ 'animate-spin': selectedFolderCount === 0 && indexIdleCount === 0 }"
         /> Index files
-      </button>
-      <button
-        v-if="canResearch || selectedFolderCount > 0"
-        :disabled="selectedFolderCount === 0 && researchIdleCount === 0"
-        class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-status-success transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
-        title="Extract and classify facts from the selected searchable documents"
-        @click="emit('research')"
-      >
-        <Icon
-          :icon="selectedFolderCount === 0 && researchIdleCount === 0 ? 'lucide:loader-2' : 'lucide:network'"
-          class="h-3.5 w-3.5"
-          :class="{ 'animate-spin': selectedFolderCount === 0 && researchIdleCount === 0 }"
-        /> Deep Research
       </button>
       <button
         v-if="canForget"

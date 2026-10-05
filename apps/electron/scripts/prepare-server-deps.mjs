@@ -4,72 +4,28 @@
  *
  * pnpm workspaces use symlinks that point outside the package directory,
  * which breaks when electron-builder copies them into an AppImage / deb.
- * This script:
- *   1. Runs `npm install --production` in an isolated directory (flat deps)
- *   2. Runs `@electron/rebuild` to recompile native modules (better-sqlite3)
- *      against Electron's ABI so the app is fully self-contained — no system
- *      Node required on the end-user's machine.
+ * `pnpm deploy --prod` with a hoisted linker installs exactly the lockfile
+ * versions, with the workspace overrides applied, as a flat node_modules.
+ *
+ * No native rebuild for Electron is needed: the server's native modules
+ * (better-sqlite3, sharp, lancedb) all ship N-API prebuilds, which load in
+ * both system Node and Electron's runtime (ELECTRON_RUN_AS_NODE).
  */
 
-import { mkdirSync, copyFileSync, existsSync, rmSync, readFileSync, readdirSync } from 'fs'
+import { existsSync, rmSync } from 'fs'
 import { execSync } from 'child_process'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const serverDir = join(__dirname, '../../server')
-const targetDir = join(__dirname, '../.server-deps')
 const electronDir = join(__dirname, '..')
+const targetDir = join(electronDir, '.server-deps')
 
-// Resolve the Electron version from the installed package
-function getElectronVersion() {
-    // Walk up through node_modules to find electron's package.json
-    const candidates = [
-        join(electronDir, 'node_modules/electron/package.json'),
-        join(electronDir, '../../node_modules/electron/package.json'),
-    ]
-    // Also check pnpm .pnpm directory (cross-platform)
-    const rootNM = join(electronDir, '../../node_modules/.pnpm')
-    if (existsSync(rootNM)) {
-        try {
-            const entries = readdirSync(rootNM)
-                .filter(name => name.startsWith('electron@'))
-                .map(name => join(rootNM, name, 'node_modules/electron/package.json'))
-                .filter(p => existsSync(p))
-            candidates.push(...entries)
-        } catch { /* ignore */ }
-    }
-
-    for (const p of candidates) {
-        if (existsSync(p)) {
-            const pkg = JSON.parse(readFileSync(p, 'utf-8'))
-            if (pkg.version) return pkg.version
-        }
-    }
-    throw new Error('Could not determine Electron version')
-}
-
-const electronVersion = getElectronVersion()
-console.log(`[prepare-server-deps] Electron version: ${electronVersion}`)
-
-// Clean previous build
 if (existsSync(targetDir)) rmSync(targetDir, { recursive: true })
-mkdirSync(targetDir, { recursive: true })
 
-// Copy package.json so npm knows what to install
-copyFileSync(join(serverDir, 'package.json'), join(targetDir, 'package.json'))
-
-// Install production deps with npm — flat node_modules, no symlinks
-console.log('[prepare-server-deps] Installing production dependencies (npm) …')
-execSync('npm install --production', {
-    cwd: targetDir,
-    stdio: 'inherit',
-})
-
-// Rebuild native modules (better-sqlite3 etc.) for Electron's ABI
-console.log('[prepare-server-deps] Rebuilding native modules for Electron …')
+console.log('[prepare-server-deps] Deploying production dependencies (pnpm deploy) …')
 execSync(
-    `npx @electron/rebuild --force --module-dir "${targetDir}" --version ${electronVersion}`,
+    `pnpm --filter cynosure-server deploy --prod --config.node-linker=hoisted "${targetDir}"`,
     { cwd: electronDir, stdio: 'inherit' },
 )
 

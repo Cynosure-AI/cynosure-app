@@ -156,7 +156,7 @@ export interface ToolResult {
   audioDataUrls?: string[]
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription' | 'decision'
 
 export interface ModelPricing {
   /** Cost in $ per token. */

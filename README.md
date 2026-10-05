@@ -1,112 +1,89 @@
-# Cynosure
+<p align="center">
+  <img src="apps/web/src/assets/img/app-logo/cynosure-logo-text-red.png" alt="Cynosure" width="420" />
+</p>
 
-Open-source AI agent platform with tool use, memory, multi-provider LLM support, and messaging channel integrations. Run it in the browser or as a self-contained desktop app.
+<p align="center">
+  A personal AI workspace for conversations, capable agents, and lasting memory.
+</p>
 
-## Features
+<p align="center">
+  <a href="https://cynosure-ai.github.io">Project site</a>
+</p>
 
-- **Multi-provider LLM support** — OpenAI, Anthropic, Google Gemini, Groq, Grok, Ollama, LM Studio, OpenRouter, Requesty, Mistral
-- **Streaming chat** — Real-time token streaming with image/file attachments and voice input (local Whisper STT)
-- **Tool system** — Built-in tools + [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers, discoverable via a built-in registry browser
-- **Native file tools** — Browse, search, read, edit, move, archive, and delete local files in configured directories
-- **Agents** — Reusable AI presets with custom system prompts, model selection, tool access, and sub-agent orchestration
-- **Memory folders** — Hybrid RAG retrieval plus a source-grounded knowledge graph with manual corrections and portable backups
-- **Messaging channels** — Telegram, Discord, and Slack integrations so agents can respond remotely
-- **Triggers** — Cron jobs for automated, unattended agent execution
-- **Human-in-the-loop** — Granular approval gates for tool execution (per-tool, per-session, or always)
-- **Desktop app** — Electron wrapper that bundles the server and UI into a single self-contained package (AppImage, deb, exe)
-- **Backup & restore** — Export/import your entire configuration (agents, providers, memory, channels, etc.)
+---
 
-### Memory lifecycle
+Cynosure brings AI chat, configurable agents, tools, and personal knowledge together in one workspace. Choose the language model that suits a task, give an agent access to the tools and memory it needs, and keep the resulting work in a searchable conversation history.
 
-Memory source files are authoritative. Search vectors are rebuildable, while knowledge-graph backups also preserve manual corrections, entity merges, retractions, and manually created relationships. Restored documents keep their stable IDs but are marked for search re-indexing before normal chunk retrieval resumes.
+Run Cynosure as a web app on your own machine or package it as a desktop app. You connect your own model provider or local model; Cynosure is the interface and orchestration layer around them.
 
-Version 2.1 replaces the legacy entity-graph store. Existing legacy graph rows are intentionally removed during upgrade; re-run Deep Research from the source memory documents afterward.
+## What you can do
 
-PDF memory imports and file attachments use `unpdf` for positioned text extraction. Matching bookmark titles retain their heading hierarchy; short lines with larger fonts provide a heading fallback. Line breaks, paragraph gaps, and common bullet markers are preserved, while repeated headers, footers, and page numbers in page margins are removed. Heading inference is heuristic, and complex tables, columns, and visual formatting may need correction. Scanned PDFs require OCR before importing. Previously converted Markdown is unchanged; import the original PDF again to use the new converter.
+- **Chat with different models.** Connect providers such as OpenAI, Anthropic, Google Gemini, or local runtimes including Ollama and LM Studio. Stream responses and work with supported image, file, and audio inputs.
+- **Create agents for recurring work.** Set an agent's instructions, model, tools, and memory access. Use specialist sub-agents for delegated tasks.
+- **Give agents useful tools.** Combine built-in tools with Model Context Protocol (MCP) servers. Review or approve tool use with configurable human approval controls.
+- **Keep a searchable knowledge base.** Organize notes in memory folders and let agents retrieve relevant passages during a conversation. Markdown source files remain the source of truth; search indexes can be rebuilt.
+- **Connect conversations to your workflows.** Set up Telegram, Discord, or Slack channels, and schedule recurring or one-time agent tasks.
+- **Keep control of where it runs.** Run the web interface with the Cynosure server, or use the Electron desktop package. Configure provider credentials and integrations for your own setup.
 
-## Monorepo Structure
+## Run Cynosure
 
-```
-apps/
-  server/    — Fastify API server: agent execution, tools, memory, channels
-  web/       — Vue 3 SPA: chat UI, agent management, settings
-  electron/  — Electron wrapper: bundles server + web as a desktop app
-mcps/        — Built-in MCP tool servers (media converter, diagrams, weather, etc.)
-```
+Cynosure is designed to run on your computer or server. The project site is at [cynosure-ai.github.io](https://cynosure-ai.github.io); use the setup below to run the application from source.
 
-## Architecture notes
+### Requirements
 
-- [Agent, routing, sub-agent, and media chat flows](ARCHITECTURE.md)
+- Node.js 22 or newer
+- pnpm 12 (or enable pnpm through Corepack)
 
-## Prerequisites
-
-- **Node.js** ≥ 22 (required by `unpdf`)
-- **pnpm** — enabled via `corepack enable pnpm`
-
-## Getting Started
+### Start in development mode
 
 ```bash
-# Install all dependencies
+corepack enable pnpm
 pnpm install
-
-# Start server + web in parallel (dev mode)
 pnpm dev
 ```
 
-- **Server API** → http://localhost:3099
-- **Web UI** → http://localhost:5173
-- **API docs** (Swagger) → http://localhost:3099/docs
+Then open:
 
-### Individual Apps
+- Web app: <http://localhost:5173>
+- Server API: <http://localhost:3099>
+- API documentation: <http://localhost:3099/docs>
 
-```bash
-pnpm dev:server     # Server only
-pnpm dev:web        # Web UI only
-pnpm dev:electron   # Electron app (starts web + electron)
-```
+Add a model provider in the app's settings to start chatting. Provider availability and required credentials depend on the models and services you choose.
 
-> **Electron dev note:** The Electron app spawns the server from its compiled output.
-> Build the server first before running electron in dev mode:
->
-> ```bash
-> pnpm build:server
-> pnpm dev:electron
-> ```
+## Desktop app
 
-### Native file access
-
-Native file and directory tools are listed under **Built-In: Files** in agent and chat tool selection. The allowlist starts empty and is managed in **Settings → File Access**. Folders added there are accessible recursively. When a tool targets another folder, Cynosure asks whether to add it to the allowlist; denial stops that tool call. The desktop app offers a folder picker. Call `file_info` without a path to see the active roots. Relative paths resolve from the server working directory. Read-only tools follow Cynosure's read-only approval default; changing files uses the normal tool approval flow.
-
-The tools are `file_info`, `directory_list`, `file_search`, `file_read`, `file_write`, `file_edit`, `directory_create`, `file_move`, `directory_merge`, `file_archive`, and `file_delete`. `file_edit` previews changes unless `dryRun: false` is supplied. `file_read` supports text, media, thumbnails, and image collages.
-
-### Native shell access
-
-Select **Built-In: Shell** to give an agent the `shell_execute` tool. Commands use the regular tool approval flow, including one-time, session, and saved approvals. The working directory defaults to the server working directory; `cwd` can select another directory. Shell access is independent of **Settings → File Access**. Commands stop after 120 seconds by default (`timeoutSeconds` can raise this to 600) or 128 KiB of output.
-
-## Building
+The Electron app packages the web interface and server together. Build a package for your platform with:
 
 ```bash
-pnpm build          # Build web + server; the server serves the built UI at /
-pnpm --filter cynosure-server start
-
-# Standalone server after build
-# Web UI/API/docs are available from the same origin:
-# http://localhost:3099, http://localhost:3099/api, http://localhost:3099/docs
-
-# Electron desktop app
 pnpm package:linux
 pnpm package:win
 pnpm package:mac
 ```
 
-> **Electron packaging** runs a prepare script (`scripts/prepare-server-deps.mjs`) that
-> resolves a flat copy of the server's native dependencies and rebuilds them against
-> Electron's Node ABI. This makes the desktop app fully self-contained — no system
-> Node.js installation is required.
+## For contributors
 
-> **After packaging** the native modules in the workspace may be built against Electron's
-> ABI. To switch back to development, run:
->
-> ```bash
-> cd apps/server && npm run rebuild:native
-> ```
+This repository is a pnpm monorepo:
+
+```text
+apps/
+  server/    Fastify API, agent execution, tools, memory, and integrations
+  web/       Vue 3 application
+  electron/  Desktop application wrapper
+shared/      Shared code
+```
+
+Useful commands:
+
+```bash
+pnpm dev:server     # Run only the API server
+pnpm dev:web        # Run only the web app
+pnpm build          # Build web app and server
+pnpm lint           # Lint workspace packages
+pnpm test           # Run unit, integration, and web tests
+```
+
+For implementation details, see [Architecture notes](ARCHITECTURE.md). For notable changes, see the [changelog](CHANGELOG.md).
+
+## License
+
+See [LICENSE.md](LICENSE.md).

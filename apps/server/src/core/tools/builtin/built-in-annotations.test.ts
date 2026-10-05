@@ -1,4 +1,8 @@
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { closeDb } from '../../../db/database.js'
 import { makeAttachmentTools } from '../../artifacts/attachment-rag.js'
 import { makePlanningTools } from './planning-tools.js'
 import { makeNotificationTool } from './notification.js'
@@ -6,6 +10,20 @@ import { makeSearchAvailableMcpToolsTool } from './expand-available-toolset.js'
 import { makeManageMcpTool } from './manage-mcp.js'
 
 describe('internal tool behavior annotations', () => {
+    let dataDir = ''
+
+    // The notification tool lists channels from the database.
+    beforeEach(() => {
+        dataDir = mkdtempSync(join(tmpdir(), 'cynosure-annotations-'))
+        process.env.CYNOSURE_DATA_DIR = dataDir
+    })
+
+    afterEach(() => {
+        closeDb()
+        delete process.env.CYNOSURE_DATA_DIR
+        rmSync(dataDir, { recursive: true, force: true })
+    })
+
     test('exposes the simple planning tool contract', () => {
         const [tool] = makePlanningTools('run')
 

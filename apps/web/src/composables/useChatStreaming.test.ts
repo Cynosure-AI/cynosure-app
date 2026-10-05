@@ -289,6 +289,38 @@ describe('persisted streaming message identities', () => {
     expect(messages.value[0].toolCallIds).toEqual(['call-1'])
   })
 
+  test('keeps a tool-only first round separate from the final reply', () => {
+    const { messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'stream' }
+    streaming.handleStreamStart({ ...event, sequence: 10 })
+    // The first round only calls tools, so its saved message has no text.
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-round', conversationId: 'conversation', sequence: 11, role: 'assistant', content: '', toolCallIds: ['call-1'], createdAt: 1 } })
+    streaming.handleStreamReset({ ...event, sequence: 13 })
+    streaming.handleStreamChunk({ ...event, content: 'Answer' })
+    streaming.handleStreamEnd(event)
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-final', conversationId: 'conversation', sequence: 15, role: 'assistant', content: 'Answer', createdAt: 2 } })
+
+    expect(messages.value.map(m => m.id)).toEqual(['saved-round', 'saved-final'])
+    expect(messages.value.map(m => m.content)).toEqual(['', 'Answer'])
+    expect(messages.value[0].toolCallIds).toEqual(['call-1'])
+    expect(messages.value.filter(m => m.content === 'Answer')).toHaveLength(1)
+  })
+
+  test('marks a stopped reply and joins its saved copy to the same bubble', () => {
+    const { messages, streaming } = setup()
+    const event = { conversationId: 'conversation', streamId: 'stream' }
+    streaming.handleStreamStart({ ...event, sequence: 10 })
+    streaming.handleStreamChunk({ ...event, content: 'Partial answ' })
+    streaming.handleStreamEnd({ ...event, cancelled: true })
+
+    expect(messages.value).toHaveLength(1)
+    expect(messages.value[0]).toMatchObject({ content: 'Partial answ', stopped: true, isStreaming: false })
+
+    streaming.handleNewMessage({ ...event, message: { id: 'saved-stopped', conversationId: 'conversation', sequence: 12, role: 'assistant', content: 'Partial answ', stopped: true, createdAt: 2 } })
+
+    expect(messages.value.map(m => [m.id, m.stopped])).toEqual([['saved-stopped', true]])
+  })
+
   test('assigns the saved ID to a completed sub-agent reply', () => {
     const { messages, streaming } = setup()
     const event = { conversationId: 'conversation', streamId: 'sub-stream', agentId: 'sub-agent' }

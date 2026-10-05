@@ -54,17 +54,6 @@ describe('ToolSelector requirements', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[['builtin::schedule_create']]])
   })
 
-  test('keeps automatic knowledge search disabled even without an active memory scope', async () => {
-    useAgentStore().availableTools = [tool('builtin:memory::knowledge_search', 'knowledge_search')]
-    const wrapper = mount(ToolSelector, { props: { modelValue: [], automaticToolStates: { knowledge_search: { active: false, criteria: 'memory folder selected' } } } })
-    await wrapper.get('section button').trigger('click')
-    const checkbox = wrapper.get('input[type="checkbox"]')
-    expect(checkbox.attributes('disabled')).toBeDefined()
-    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
-    await wrapper.setProps({ automaticToolStates: { knowledge_search: { active: true, criteria: 'memory folder selected' } } })
-    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
-  })
-
   test.each(['memory_create', 'memory_patch', 'memory_delete'])('automatically enables %s with a memory folder', async (name) => {
     const store = useAgentStore()
     store.availableTools = [tool(`builtin:memory::${name}`, name)]
@@ -82,30 +71,6 @@ describe('ToolSelector requirements', () => {
 
     await wrapper.setProps({ automaticToolStates: memoryAutomaticToolStates(false) })
     expect((checkbox.element as HTMLInputElement).checked).toBe(false)
-  })
-
-  test.each([
-    'knowledge_assert', 'knowledge_delete',
-    'knowledge_entity_merge',
-  ])('allows manual %s selection alongside automatic knowledge tools', async (name) => {
-    const store = useAgentStore()
-    const mergeKey = `builtin:memory::${name}`
-    store.availableTools = [tool(mergeKey, name)]
-    const wrapper = mount(ToolSelector, {
-      props: {
-        modelValue: [],
-        automaticToolStates: {
-          knowledge_search: { active: true, criteria: 'memory folder selected' },
-        },
-      },
-    })
-
-    await wrapper.get('section button').trigger('click')
-    const checkbox = wrapper.get('input[type="checkbox"]')
-    expect(checkbox.attributes('disabled')).toBeUndefined()
-    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
-    await checkbox.setValue(true)
-    expect(wrapper.emitted('update:modelValue')).toEqual([[[mergeKey]]])
   })
 })
 

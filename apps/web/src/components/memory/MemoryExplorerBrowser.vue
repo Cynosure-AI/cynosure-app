@@ -30,9 +30,8 @@ defineProps<{
   statusLabel: (status: MemoryFileStatus["status"]) => string;
   folderIndexSummary: (folder: MemoryFolder) => { label: string; icon: string; colorClass: string; ratio: number };
   formatFileSize: (bytes: number) => string;
-  isJobActive: (kind: "reindex" | "deep-research", fileName: string) => boolean;
+  isJobActive: (kind: "reindex", fileName: string) => boolean;
   searchIndexProgress: (fileName: string) => string;
-  deepResearchProgress: (fileName: string) => string;
 }>();
 
 const page = defineModel<number>("page", { required: true });
@@ -262,15 +261,6 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         />
         {{ isJobActive('reindex', file.fileName) ? searchIndexProgress(file.fileName) : statusLabel(file.status) }}
       </span>
-      <span
-        v-if="isJobActive('deep-research', file.fileName)"
-        class="mt-1 inline-flex items-center gap-1 text-xs text-status-success sm:text-sm"
-      >
-        <Icon
-          icon="lucide:loader-2"
-          class="h-3 w-3 animate-spin"
-        /> {{ deepResearchProgress(file.fileName) }}
-      </span>
     </div>
   </div>
 
@@ -325,9 +315,7 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
               {{ item.folder.fileCount }} direct · {{ item.folder.descendantFileCount || 0 }} nested
             </template>
             <template v-else>
-              {{ formatFileSize(item.size) }}<template v-if="item.tags.length">
-                · {{ item.tags.slice(0, 4).join(', ') }}
-              </template>
+              {{ formatFileSize(item.size) }}
             </template>
           </div>
         </div>
@@ -343,27 +331,6 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         <template v-else-if="item.estimatedChunkCount !== undefined">~{{ item.estimatedChunkCount }}</template>
         <template v-else>—</template>
       </span>
-    </template>
-    <template #col-deepResearched="{ item }">
-      <span
-        v-if="item.kind !== 'file'"
-        class="text-xs text-ink-faint"
-      >Recursive</span>
-      <span
-        v-else-if="isJobActive('deep-research', item.fileName)"
-        class="inline-flex items-center gap-1.5 text-xs text-status-success"
-      ><Icon
-        icon="lucide:loader-2"
-        class="h-3.5 w-3.5 animate-spin"
-      /> {{ deepResearchProgress(item.fileName) }}</span>
-      <span
-        v-else
-        class="inline-flex items-center gap-1.5 text-xs"
-        :class="item.deepResearched ? 'text-status-green' : 'text-ink-muted'"
-      ><Icon
-        :icon="item.deepResearched ? 'lucide:check-circle' : 'lucide:circle-dashed'"
-        class="h-3.5 w-3.5"
-      /> {{ item.deepResearched ? 'Researched' : 'Not researched' }}</span>
     </template>
     <template #col-status="{ item }">
       <span

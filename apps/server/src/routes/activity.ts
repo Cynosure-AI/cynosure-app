@@ -588,10 +588,10 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
 
         const memoryRows = db.prepare(
-            `SELECT mfi.category_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, mfi.deep_researched_at, ms.name AS category_name
+            `SELECT mfi.category_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, ms.name AS category_name
              FROM memory_file_index mfi
              LEFT JOIN memory_folders ms ON ms.id = mfi.category_id
-             ORDER BY MAX(mfi.last_indexed_at, mfi.deep_researched_at, mfi.created_at) DESC
+             ORDER BY MAX(mfi.last_indexed_at, mfi.created_at) DESC
              LIMIT ?`
         ).all(queryLimit) as {
             category_id: string
@@ -599,18 +599,16 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             chunk_count: number
             created_at: number
             last_indexed_at: number
-            deep_researched_at: number
             category_name: string | null
         }[]
 
         for (const row of memoryRows) {
-            const createdAt = Math.max(row.last_indexed_at || 0, row.deep_researched_at || 0, row.created_at || 0)
+            const createdAt = Math.max(row.last_indexed_at || 0, row.created_at || 0)
             if (!createdAt) continue
-            const deepResearched = row.deep_researched_at && row.deep_researched_at >= row.last_indexed_at
             items.push({
                 id: `memory-file:${row.category_id}:${row.file_name}:${createdAt}`,
                 kind: 'memory',
-                title: deepResearched ? `Updated knowledge graph for ${row.file_name}` : `Indexed memory file ${row.file_name}`,
+                title: `Indexed memory file ${row.file_name}`,
                 description: `${row.category_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
                 createdAt,
                 agentId: null,

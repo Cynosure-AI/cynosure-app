@@ -343,6 +343,7 @@ function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, 
     latencyMs: msg.latencyMs,
     isStreaming: msg.isStreaming,
     isError: msg.isError,
+    stopped: msg.stopped,
   }
 }
 

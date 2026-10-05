@@ -1,8 +1,8 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
-  DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse,
-  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryKnowledgeStats, MemoryDocumentAnalysis, MemoryDocumentKnowledgePreview, KnowledgeSourceChunk, RuntimeLimits,
-  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ChannelDefinition, ChannelType, KnowledgeGraph, KnowledgeGraphSuggestionsResponse,
+  DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse, MemoryRerankerConfig,
+  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryDocumentChunks, RuntimeLimits,
+  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ChannelDefinition, ChannelType,
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
@@ -45,7 +45,10 @@ export const api = {
     remove: (id: string) => del<void>(`/api/providers/${encodeURIComponent(id)}`),
     setLastUsed: (id: string) => put<void>('/api/providers/active', { id }),
     getLastUsed: () => get<{ id: string }>('/api/providers/active').then((r) => r.id),
-    test: (id: string) => post<{ success: boolean }>(`/api/providers/${encodeURIComponent(id)}/test`).then((r) => r.success),
+    test: (id: string) => post<{ success: boolean; error?: string }>(`/api/providers/${encodeURIComponent(id)}/test`),
+    /** List the models of a provider config that has not been saved yet. */
+    previewModels: (config: Pick<LLMProviderConfig, 'type' | 'baseUrl' | 'apiKey'>, types: ModelListType[]) =>
+      post<{ models: string[] }>('/api/providers/models/preview', { config, types }).then((r) => r.models),
     listModels: (id: string, type?: ModelListType) => {
       const params = type ? `?type=${type}` : ''
       return get<string[]>(`/api/providers/${encodeURIComponent(id)}/models${params}`)
@@ -239,8 +242,6 @@ export const api = {
   },
 
   memory: {
-    startKnowledgeHousekeeping: () =>
-      post<{ jobId: string; conversationId: string }>('/api/memory/knowledge/housekeeping'),
     getLimits: () => get<RuntimeLimits>('/api/memory/limits'),
     getDreamConfig: () => get<DreamConfig>('/api/memory/dream/config'),
     configureDream: (config: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
@@ -268,58 +269,16 @@ export const api = {
     }) => post<{ success: boolean; vectorsDropped: boolean; reembedded: boolean; reembeddedCount: number; dimensions: number }>('/api/memory/embeddings/configure', opts),
     getEmbeddingConfig: () =>
       get<{ providerId?: string; baseUrl?: string; model: string; dimensions: number }>('/api/memory/embeddings/config'),
-    getDeepResearchConfig: () =>
-      get<{ providerId?: string; model?: string }>('/api/memory/deep-research/config'),
-    configureDeepResearch: (opts: { providerId?: string; model?: string }) =>
-      post<{ success: boolean; providerId?: string; model?: string }>('/api/memory/deep-research/configure', opts),
     dropVectors: () =>
       post<{ success: boolean }>('/api/memory/embeddings/drop', {}),
     probeEmbedding: (opts: { providerId?: string; model: string }) =>
       post<{ dimensions: number }>('/api/memory/embeddings/probe', opts),
     getRerankerConfig: () =>
-      get<{ enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/config'),
-    configureReranker: (opts: { enabled: boolean; providerId?: string; model: string; candidateCount: number }) =>
-      post<{ success: boolean; enabled: boolean; providerId?: string; model: string; candidateCount: number }>('/api/memory/reranker/configure', opts),
-    getGraph: (query?: string, limit?: number, view?: 'relationships' | 'visual', nodeIds?: string[], minImportance?: number | null, folderIds?: string[]) => {
-      const params = new URLSearchParams()
-      if (query) params.set('query', query)
-      if (nodeIds?.length) params.set('nodeIds', nodeIds.join(','))
-      if (limit) params.set('limit', String(limit))
-      if (view) params.set('view', view)
-      if (minImportance !== undefined && minImportance !== null) params.set('minImportance', String(minImportance))
-      if (folderIds) params.set('folderIds', folderIds.length ? folderIds.join(',') : '__none__')
-      const qs = params.toString()
-      return get<KnowledgeGraph>(`/api/memory/knowledge/graph${qs ? `?${qs}` : ''}`)
-    },
-    getGraphSuggestions: (query: string, limit?: number, folderIds?: string[]) => {
-      const params = new URLSearchParams()
-      params.set('query', query)
-      if (limit) params.set('limit', String(limit))
-      if (folderIds) params.set('folderIds', folderIds.length ? folderIds.join(',') : '__none__')
-      return get<KnowledgeGraphSuggestionsResponse>(`/api/memory/knowledge/graph/suggestions?${params.toString()}`)
-    },
-    updateGraphNode: (id: string, data: { name?: string; type?: KnowledgeGraph['nodes'][number]['type']; aliases?: string[]; importance?: number }) =>
-      patch<KnowledgeGraph['nodes'][number]>(`/api/memory/knowledge/graph/nodes/${encodeURIComponent(id)}`, data),
-    deleteGraphNode: (id: string) =>
-      del<{ success: boolean }>(`/api/memory/knowledge/graph/nodes/${encodeURIComponent(id)}`),
-    deleteGraphNodes: (ids: string[]) =>
-      post<{ success: boolean; deleted: number }>('/api/memory/knowledge/graph/nodes/delete', { ids }),
-    updateGraphEdge: (id: string, data: { relation?: string; note?: string; importance?: number }) =>
-      patch<KnowledgeGraph['edges'][number]>(`/api/memory/knowledge/graph/edges/${encodeURIComponent(id)}`, data),
-    deleteGraphEdge: (id: string) =>
-      del<{ success: boolean; orphanedNodeIds: string[] }>(`/api/memory/knowledge/graph/edges/${encodeURIComponent(id)}`),
-    deleteGraphEdges: (ids: string[]) =>
-      post<{ success: boolean; deleted: number }>('/api/memory/knowledge/graph/edges/delete', { ids }),
-    clearGraph: () =>
-      del<{ success: boolean; nodesDeleted: number; edgesDeleted: number }>('/api/memory/knowledge/graph'),
-    getKnowledgeStats: () =>
-      get<MemoryKnowledgeStats>('/api/memory/knowledge/stats'),
-    getKnowledgeSourceChunk: (textUnitId: string) =>
-      get<KnowledgeSourceChunk>(`/api/memory/knowledge/chunks/${encodeURIComponent(textUnitId)}`),
+      get<MemoryRerankerConfig>('/api/memory/reranker/config'),
+    configureReranker: (opts: MemoryRerankerConfig) =>
+      post<{ success: boolean } & MemoryRerankerConfig>('/api/memory/reranker/configure', opts),
     onReembedProgress: (cb: (data: { current: number; total: number; status: string }) => void) =>
       onWsEvent('memory:reembed-progress', cb as WsHandler),
-    onGraphReset: (cb: (data: { resetAt: number }) => void) =>
-      onWsEvent('memory:knowledge-reset', cb as WsHandler)
   },
 
   memoryFolders: {
@@ -344,21 +303,12 @@ export const api = {
       if (opts?.semantic) params.set('semantic', 'true')
       return get<MemoryFileSearchResult[]>(`/api/memory-folders/file-search?${params.toString()}`)
     },
-    getDocumentKnowledgePreview: (folderId: string, fileName: string) =>
-      get<MemoryDocumentKnowledgePreview>(
-        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/knowledge-preview`
-      ),
-    getDocumentAnalysis: (folderId: string, fileName: string) =>
-      get<MemoryDocumentAnalysis>(
-        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/analysis`
+    getDocumentChunks: (folderId: string, fileName: string) =>
+      get<MemoryDocumentChunks>(
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/chunks`
       ),
     listJobs: (folderId: string) =>
       get<MemoryIndexJob[]>(`/api/memory-folders/${memoryFolderPathId(folderId)}/jobs`),
-    rebuildKnowledge: (folderId: string) =>
-      post<{ success: boolean; scheduled: number; jobs: MemoryIndexJob[]; skipped: Array<{ fileName: string; reason: string }> }>(
-        `/api/memory-folders/${memoryFolderPathId(folderId)}/knowledge/rebuild`,
-        {}
-      ),
     getJob: (jobId: string) =>
       get<MemoryIndexJob>(`/api/memory-folders/jobs/${encodeURIComponent(jobId)}`),
     cancelJob: (jobId: string) =>
@@ -379,16 +329,6 @@ export const api = {
     startReindexFile: (folderId: string, fileName: string) =>
       post<MemoryIndexJob<{ success: boolean; chunksStored: number; fileName: string }>>(
         `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/reindex-job`,
-        {}
-      ),
-    extractKnowledgeFromFile: (folderId: string, fileName: string) =>
-      post<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>(
-        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/deep-research`,
-        {}
-      ),
-    startDeepResearchFile: (folderId: string, fileName: string) =>
-      post<MemoryIndexJob<{ success: boolean; fileName: string; insertedOrUpdated: number; deleted: number; deepResearchedAt: number; tags: string[] }>>(
-        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/deep-research-job`,
         {}
       ),
     deleteFile: (folderId: string, fileName: string) =>
@@ -438,7 +378,7 @@ export const api = {
         `/api/memory-folders/${memoryFolderPathId(folderId)}/delete-documents`, { sourceFiles }
       ),
     forgetMemories: (folderId: string, sourceFiles: string[]) =>
-      post<{ success: boolean; filesReset: number; chunksDeleted: number; graphEdgesDeleted: number }>(
+      post<{ success: boolean; filesReset: number; chunksDeleted: number }>(
         `/api/memory-folders/${memoryFolderPathId(folderId)}/drop-indexes`, { sourceFiles }
       ),
     moveDocuments: (folderId: string, sourceFiles: string[], targetFolderId: string) =>
@@ -536,13 +476,16 @@ export const api = {
   backup: {
     getSummary: () =>
       get<{ modules: Record<string, { count: number; details?: Record<string, number> }> }>('/api/backup/summary'),
-    exportBackup: async (modules: string[]): Promise<Blob> => {
+    exportBackup: async (modules: string[]): Promise<{ blob: Blob; warningCount: number }> => {
       const params = new URLSearchParams({ modules: modules.join(',') })
       const res = await fetch(`${BASE_URL}/api/backup/export?${params}`)
-      if (!res.ok) throw new Error(`Export failed: ${res.statusText}`)
-      return res.blob()
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { message?: string; error?: string } | null
+        throw new Error(`Export failed: ${body?.message || body?.error || res.statusText}`)
+      }
+      return { blob: await res.blob(), warningCount: Number(res.headers.get('X-Backup-Warning-Count')) || 0 }
     },
-    importBackup: async (file: File, modules?: string[]): Promise<{ success: boolean; results: Record<string, { restored: number; errors: string[] }> }> => {
+    importBackup: async (file: File, modules?: string[]): Promise<{ success: boolean; results: Record<string, { restored: number; errors: string[]; warnings?: string[] }> }> => {
       const form = new FormData()
       form.append('file', file)
       if (modules) form.append('modules', modules.join(','))

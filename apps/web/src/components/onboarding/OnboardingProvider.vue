@@ -26,7 +26,7 @@
           <img
             v-if="providerLogos[provider.type]"
             :src="providerLogos[provider.type].dark"
-            :alt="provider.type"
+            alt=""
             class="w-full h-full object-contain"
           >
           <span
@@ -47,21 +47,33 @@
           <span class="text-xs text-ink-muted">Added</span>
         </div>
         <button
-          class="p-1.5 text-ink-faint hover:text-status-danger transition-colors"
-          @click="providerStore.removeProvider(provider.id)"
+          type="button"
+          class="rounded-md p-1.5 text-ink-faint transition-colors hover:text-status-danger disabled:opacity-50"
+          :aria-label="`Remove ${provider.name}`"
+          :disabled="removingId === provider.id"
+          @click="removeProvider(provider.id)"
         >
           <Icon
-            icon="lucide:x"
+            :icon="removingId === provider.id ? 'lucide:loader-2' : 'lucide:x'"
             class="w-3.5 h-3.5"
+            :class="{ 'animate-spin': removingId === provider.id }"
           />
         </button>
       </div>
+      <p
+        v-if="removeError"
+        class="text-xs text-status-danger"
+        role="alert"
+      >
+        {{ removeError }}
+      </p>
     </div>
 
     <!-- Success notice after adding a provider -->
     <div
       v-if="lastAddedProvider"
       class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5 space-y-3"
+      role="status"
     >
       <div class="flex items-start gap-3">
         <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
@@ -72,15 +84,16 @@
         </div>
         <div class="flex-1">
           <p class="text-sm font-semibold text-emerald-300">
-            Provider added successfully!
+            Provider added
           </p>
           <p class="text-xs text-ink-secondary mt-0.5">
-            <span class="text-theme-200 font-medium">{{ lastAddedProvider }}</span> is ready to use.
-            You can add more providers or continue to the next step.
+            <span class="text-theme-200 font-medium">{{ lastAddedProvider }}</span> has been saved.
+            You can add another provider or continue to the next step.
           </p>
         </div>
       </div>
       <button
+        type="button"
         class="flex items-center gap-1.5 px-3 py-2 bg-theme-700 hover:bg-theme-600 text-theme-300 text-sm rounded-lg transition-colors"
         @click="lastAddedProvider = null"
       >
@@ -95,331 +108,74 @@
     <!-- Add provider form -->
     <div
       v-else
-      class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4"
+      class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5"
     >
-      <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-theme-200">
-          {{ providerStore.providers.length ? 'Add Another Provider' : 'Add Your First Provider' }}
-        </h3>
-        <div class="flex items-center gap-2">
-          <img
-            v-if="providerLogos[form.type]"
-            :src="providerLogos[form.type].dark"
-            :alt="form.type"
-            class="w-6 h-6 object-contain"
-          >
-        </div>
-      </div>
-
-      <!-- Provider type -->
-      <div>
-        <label class="block text-xs font-medium text-ink-secondary mb-1.5">Provider Type</label>
-        <select
-          v-model="form.type"
-          class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
-          @change="onTypeChange"
-        >
-          <option
-            v-for="opt in providerOptions"
-            :key="opt.value"
-            :value="opt.value"
-          >
-            {{ opt.label }}
-          </option>
-        </select>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <!-- Name -->
-        <div>
-          <label class="block text-xs font-medium text-ink-secondary mb-1.5">Display Name</label>
-          <input
-            v-model="form.name"
-            type="text"
-            placeholder="e.g. My OpenAI"
-            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-          >
-        </div>
-
-        <!-- Base URL (local providers) -->
-        <div v-if="hasEditableBaseUrl">
-          <label class="block text-xs font-medium text-ink-secondary mb-1.5">Base URL</label>
-          <input
-            v-model="form.baseUrl"
-            type="text"
-            :placeholder="defaultBaseUrls[form.type]"
-            class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-          >
-        </div>
-
-        <!-- API Key (cloud providers) -->
-        <div v-else>
-          <label class="block text-xs font-medium text-ink-secondary mb-1.5">API Key</label>
-          <div class="relative">
-            <input
-              v-model="form.apiKey"
-              :type="showApiKey ? 'text' : 'password'"
-              placeholder="sk-..."
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-            >
-            <button
-              type="button"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-theme-300 transition-colors"
-              @click="showApiKey = !showApiKey"
-            >
-              <Icon
-                :icon="showApiKey ? 'lucide:eye-off' : 'lucide:eye'"
-                class="w-4 h-4"
-              />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Model -->
-      <div>
-        <label class="block text-xs font-medium text-ink-secondary mb-1.5">Default Model</label>
-        <div class="flex gap-2">
-          <div class="relative flex-1">
-            <input
-              v-if="!fetchedModels.length"
-              v-model="form.defaultModel"
-              type="text"
-              :placeholder="defaultModels[form.type] || 'Enter model name'"
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-            >
-            <select
-              v-else
-              v-model="form.defaultModel"
-              class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
-            >
-              <option
-                v-for="m in fetchedModels"
-                :key="m"
-                :value="m"
-              >
-                {{ m }}
-              </option>
-            </select>
-          </div>
-          <button
-            class="px-3 py-2 bg-theme-700 hover:bg-theme-600 text-theme-300 text-sm rounded-lg transition-colors shrink-0 flex items-center gap-1.5 disabled:opacity-50"
-            :disabled="loadingModels || (!form.apiKey && !hasEditableBaseUrl)"
-            @click="fetchModels"
-          >
-            <Icon
-              :icon="loadingModels ? 'lucide:loader-2' : 'lucide:refresh-cw'"
-              class="w-3.5 h-3.5"
-              :class="{ 'animate-spin': loadingModels }"
-            />
-            {{ loadingModels ? 'Loading…' : 'Fetch' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Error -->
-      <p
-        v-if="error"
-        class="text-xs text-status-danger"
-      >
-        {{ error }}
-      </p>
-
-      <!-- Add button -->
-      <button
-        class="w-full px-4 py-2.5 accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-accent-on text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-        :disabled="!canAdd || saving"
-        @click="addProvider"
-      >
-        <Icon
-          v-if="saving"
-          icon="lucide:loader-2"
-          class="w-4 h-4 animate-spin"
-        />
-        <Icon
-          v-else
-          icon="lucide:plus"
-          class="w-4 h-4"
-        />
-        {{ saving ? 'Adding…' : 'Add Provider' }}
-      </button>
-    </div>
-    <!-- /v-else add form -->
-
-    <!-- Validation note -->
-    <p
-      v-if="!providerStore.providers.length"
-      class="text-xs text-status-warning/80 mt-3 flex items-center gap-1.5"
-    >
-      <Icon
-        icon="lucide:info"
-        class="w-3.5 h-3.5 shrink-0"
+      <h3 class="mb-4 text-sm font-semibold text-theme-200">
+        {{ providerStore.providers.length ? 'Add Another Provider' : 'Add Your First Provider' }}
+      </h3>
+      <ProviderForm
+        :key="formSession"
+        submit-label="Add Provider"
+        :saving="saving"
+        :error="error"
+        @submit="addProvider"
       />
-      At least one provider is required to continue.
-    </p>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { useProviderLogos } from '../../composables/useProviderLogos'
-import type { LLMProviderConfig, ModelListType } from '../../api/types'
+import ProviderForm, { type ProviderDraft } from '../settings/ProviderForm.vue'
+import { providerSupportsVision } from '../../utils/provider-defaults'
 
 const providerStore = useProviderStore()
 const { providerLogos } = useProviderLogos()
 
-type ProviderType = LLMProviderConfig['type']
-const responseModelTypes: ModelListType[] = ['llm', 'image', 'video', 'transcription']
-
-const showApiKey = ref(false)
-const fetchedModels = ref<string[]>([])
-const loadingModels = ref(false)
 const saving = ref(false)
 const error = ref('')
 const lastAddedProvider = ref<string | null>(null)
+const formSession = ref(0)
+const removingId = ref<string | null>(null)
+const removeError = ref('')
 
-const form = reactive<{
-  name: string
-  type: ProviderType
-  baseUrl: string
-  apiKey: string
-  defaultModel: string
-}>({
-  name: 'OpenAI',
-  type: 'openai',
-  baseUrl: 'https://api.openai.com/v1',
-  apiKey: '',
-  defaultModel: 'gpt-4o',
-})
-
-const defaultBaseUrls: Record<ProviderType, string> = {
-  openai: 'https://api.openai.com/v1',
-  anthropic: 'https://api.anthropic.com',
-  google: '',
-  lmstudio: 'http://localhost:1234/v1',
-  grok: 'https://api.x.ai/v1',
-  ollama: 'http://localhost:11434/v1',
-  openrouter: 'https://openrouter.ai/api/v1',
-  requesty: 'https://router.requesty.ai/v1',
-  groq: 'https://api.groq.com/openai/v1',
-  mistral: 'https://api.mistral.ai/v1',
-}
-
-const defaultModels: Record<ProviderType, string> = {
-  openai: 'gpt-4o',
-  anthropic: 'claude-sonnet-4-20250514',
-  google: 'gemini-2.0-flash',
-  lmstudio: '',
-  grok: 'grok-3-mini',
-  ollama: '',
-  openrouter: 'openai/gpt-4o',
-  requesty: 'openai/gpt-4o',
-  groq: 'llama-3.3-70b-versatile',
-  mistral: 'mistral-large-latest',
-}
-
-const localProviders = new Set<ProviderType>(['lmstudio', 'ollama'])
-const hasEditableBaseUrl = computed(() => localProviders.has(form.type))
-
-const providerOptions: { value: ProviderType; label: string }[] = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google Gemini' },
-  { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'requesty', label: 'Requesty' },
-  { value: 'groq', label: 'Groq' },
-  { value: 'mistral', label: 'Mistral' },
-  { value: 'grok', label: 'Grok (xAI)' },
-  { value: 'ollama', label: 'Ollama (local)' },
-  { value: 'lmstudio', label: 'LM Studio (local)' },
-]
-
-function onTypeChange() {
-  form.baseUrl = defaultBaseUrls[form.type]
-  form.defaultModel = defaultModels[form.type] || ''
-  form.name = form.type.charAt(0).toUpperCase() + form.type.slice(1)
-  if (form.type === 'google') form.name = 'Google Gemini'
-  if (form.type === 'lmstudio') form.name = 'LM Studio'
-  if (form.type === 'openrouter') form.name = 'OpenRouter'
-  if (form.type === 'requesty') form.name = 'Requesty'
-  fetchedModels.value = []
-  error.value = ''
-}
-
-const canAdd = computed(() => {
-  if (!form.name || !form.defaultModel) return false
-  if (hasEditableBaseUrl.value) return Boolean(form.baseUrl)
-  return true // API key not strictly required to add
-})
-
-async function fetchModels() {
-  const needsKey = !localProviders.has(form.type)
-  if (needsKey && !form.apiKey) return
-
-  const tempId = '__onboarding_temp_fetch__'
-  const config: LLMProviderConfig = {
-    id: tempId,
-    name: 'temp',
-    type: form.type,
-    baseUrl: hasEditableBaseUrl.value ? (form.baseUrl || defaultBaseUrls[form.type]) : defaultBaseUrls[form.type],
-    apiKey: form.apiKey || undefined,
-    defaultModel: form.defaultModel || 'temp',
-    availableModels: [],
-    supportsStreaming: true,
-    supportsToolCalls: true,
-    supportsVision: false,
-  }
-
-  loadingModels.value = true
-  error.value = ''
-  try {
-    await providerStore.addProvider(config)
-    fetchedModels.value = await listResponseModels(tempId)
-  } catch {
-    fetchedModels.value = []
-  } finally {
-    try { await providerStore.removeProvider(tempId) } catch { /* ignore */ }
-    loadingModels.value = false
-  }
-}
-
-async function listResponseModels(providerId: string): Promise<string[]> {
-  const results = await Promise.all(
-    responseModelTypes.map((type) => providerStore.listModels(providerId, type))
-  )
-  return Array.from(new Set(results.flat())).sort()
-}
-
-async function addProvider() {
-  if (!canAdd.value) return
+async function addProvider(draft: ProviderDraft) {
   saving.value = true
   error.value = ''
   try {
-    const config: LLMProviderConfig = {
+    await providerStore.addProvider({
       id: '',
-      name: form.name,
-      type: form.type,
-      baseUrl: hasEditableBaseUrl.value ? (form.baseUrl || defaultBaseUrls[form.type]) : defaultBaseUrls[form.type],
-      apiKey: form.apiKey || undefined,
-      defaultModel: form.defaultModel,
+      name: draft.name,
+      type: draft.type,
+      baseUrl: draft.baseUrl,
+      apiKey: draft.apiKey || undefined,
+      defaultModel: draft.defaultModel,
       availableModels: [],
       supportsStreaming: true,
       supportsToolCalls: true,
-      supportsVision: ['openai', 'google', 'grok', 'ollama', 'lmstudio', 'openrouter', 'requesty', 'groq', 'mistral'].includes(form.type),
-    }
-    await providerStore.addProvider(config)
-    lastAddedProvider.value = form.name
-    // Reset form for potential next addition
-    form.apiKey = ''
-    form.name = ''
-    form.defaultModel = ''
-    fetchedModels.value = []
+      supportsVision: providerSupportsVision(draft.type),
+    })
+    lastAddedProvider.value = draft.name
+    formSession.value += 1
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to add provider'
   } finally {
     saving.value = false
+  }
+}
+
+async function removeProvider(id: string) {
+  removingId.value = id
+  removeError.value = ''
+  try {
+    await providerStore.removeProvider(id)
+  } catch (e) {
+    removeError.value = e instanceof Error ? e.message : 'Failed to remove provider'
+  } finally {
+    removingId.value = null
   }
 }
 </script>

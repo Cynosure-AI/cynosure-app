@@ -309,7 +309,7 @@ onUnmounted(() => {
             <input
               v-model="searchQuery"
               type="search"
-              :placeholder="activePanel === 'uploads' ? 'Search uploads or conversations' : 'Search files, agents, or conversations'"
+              :placeholder="activePanel === 'uploads' ? 'Search uploads or chats' : 'Search files, agents, or chats'"
               class="h-10 w-full rounded-xl border border-theme-700 bg-theme-950/70 pl-9 pr-9 text-sm text-theme-200 outline-none transition placeholder:text-ink-faint focus:border-accent-500/60 focus:ring-2 focus:ring-accent-500/10"
             >
             <button

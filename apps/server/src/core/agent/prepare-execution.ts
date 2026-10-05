@@ -10,7 +10,8 @@
 import { getGateway } from '../gateway/gateway.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { resolveProviderAndModel, resolveTaskContextRouter } from './pre-execution/execution-resolvers.js'
-import { resolveExecutionTools, isToolRoutingEnabled } from './pre-execution/execution-tools.js'
+import { resolveExecutionTools, resolveRoutingCandidateTools, isToolRoutingEnabled } from './pre-execution/execution-tools.js'
+import { buildToolsetCandidates } from './pre-execution/auto-tool-routing.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemoryContext, isAutoMemoryEnabled, hasExplicitEmptyMemoryScope } from './pre-execution/execution-memory.js'
 import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
@@ -105,8 +106,6 @@ export interface PreparedExecution {
     model: string
     /** Prepared model context plus the exact evidence that produced it. */
     contextBundle: ContextBundle
-    /** Compatibility alias for contextBundle.messages. */
-    systemMessages: ChatMessage[]
     /** Whether sub-agent delegation tools were added */
     hasSubAgents: boolean
 }
@@ -126,7 +125,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
     const {
         preset,
         conversationId,
-        broadcast,
         providerOverride,
         modelOverride,
         systemPromptOverride,
@@ -172,6 +170,15 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         requestRouterProviderId: input.autoRouterProviderId,
         requestRouterModel: input.autoRouterModel,
     })
+    // The planning call also picks toolsets, which saves a separate selector call before tool routing.
+    const routingCandidateTools = autoModes.tools
+        ? resolveRoutingCandidateTools({
+            preset,
+            toolRegistry,
+            preferredToolKeys: input.preferredToolKeys,
+            routingToolKeys: input.routingToolKeys,
+        })
+        : []
     const taskContext = await buildTaskContext({
         conversationId,
         gateway,
@@ -180,6 +187,11 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         userQuery: input.userQuery,
         recentMessages: input.recentMessages,
         enabledModes: autoModes,
+        userName: getUserSettings().name,
+        toolsets: buildToolsetCandidates(
+            routingCandidateTools,
+            toolRegistry.getNamespaceMetadataForTools(routingCandidateTools),
+        ),
         eventMeta: input.eventMeta,
         signal: input.signal,
     })
@@ -189,9 +201,7 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         ...(taskContext?.memorySearchQueries || []),
     ])
     // Query rewriting complements recent conversational context; it does not
-    // replace it. Follow-ups and pronouns still need the original turns.
-    const routingMessages = input.recentMessages
-
+    // replace it, so both routers still receive input.recentMessages.
     const attachmentPreparation = input.inlineAttachmentTextLimit !== undefined
         ? ensureOversizedAttachmentsIndexed({
             conversationId,
@@ -202,41 +212,21 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     // Tool selection and memory retrieval share the prepared queries and run concurrently.
     const [toolLayer, memoryContext] = await Promise.all([resolveExecutionTools({
-        preset,
-        conversationId,
-        broadcast,
+        ...input,
         toolRegistry,
         gateway,
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
         userQuery: toolRoutingQuery,
         suppressAutoTools: taskContext?.requiresTools === false,
-        recentMessages: routingMessages,
-        usedToolNames: input.usedToolNames,
-        preferredToolKeys: input.preferredToolKeys,
-        routingToolKeys: input.routingToolKeys,
-        autoToolRouting: input.autoToolRouting,
-        autoMemory: input.autoMemory,
-        includeSubAgents: input.includeSubAgents,
-        subAgentAssignments: input.subAgentAssignments,
-        signal: input.signal,
-        memoryFolderOverrides,
-        hydrationAgentId: input.hydrationAgentId,
-        eventMeta: input.eventMeta,
+        plannedToolsetIds: taskContext?.toolsetIds,
         scheduleExecutionConfig,
     }), resolveMemoryContext({
-        preset,
-        conversationId,
+        ...input,
         gateway,
         providerId: taskContextRouter.providerId,
         model: taskContextRouter.model,
-        autoMemory: input.autoMemory,
-        memoryFolderOverrides,
-        userQuery: input.userQuery,
         retrievalQueries: memoryRoutingQueries,
-        recentMessages: routingMessages,
-        eventMeta: input.eventMeta,
-        signal: input.signal,
         suppressAutoMemory: taskContext?.requiresMemory === false,
     }), attachmentPreparation])
 
@@ -269,7 +259,6 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
         providerId: providerModel.providerId,
         model: providerModel.model,
         contextBundle: { messages: systemMessages, evidence: memoryContext.evidence },
-        systemMessages,
         hasSubAgents: toolLayer.hasSubAgents,
     }
 }

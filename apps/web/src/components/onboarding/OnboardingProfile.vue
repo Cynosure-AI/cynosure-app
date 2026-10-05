@@ -16,7 +16,7 @@ const prefs = usePreferencesStore()
       </div>
 
       <h2 class="text-2xl font-bold text-theme-100">
-        How should Cyno call you?
+        What should Cyno call you?
       </h2>
       <p class="mt-2 text-sm leading-relaxed text-ink-muted">
         Add the name you’d like Cyno and your agents to use when speaking with you.
@@ -54,7 +54,7 @@ const prefs = usePreferencesStore()
           icon="lucide:info"
           class="mt-0.5 h-3.5 w-3.5 shrink-0"
         />
-        Profile images can be added later from Settings → Appearance.
+        Profile images can be added later from Settings → General.
       </p>
     </div>
   </div>

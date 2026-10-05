@@ -20,6 +20,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { closeDb, getDb } from './db/database.js'
 import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
 import { getRAGStore } from './core/memory/rag.js'
+import { removeLegacyMemoryAnalysis } from './core/memory/legacy-analysis-cleanup.js'
 import { getEventBus } from './core/telemetry/event-bus.js'
 import type { ToolBehaviorAnnotations } from './core/gateway/providers/base.provider.js'
 
@@ -45,6 +46,7 @@ import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat, startToolRegistryUpdates } from './ws.js'
 import { executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
+import { pauseAllChatQueuesOnStartup } from './core/chat/message-queue.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
 import { loadEmbeddingServiceFromDb } from './core/memory/embedding.js'
 import { startToolEmbeddingWarmup } from './core/agent/tool-embedding-warmup.js'
@@ -545,7 +547,12 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   loadEmbeddingServiceFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
+  removeLegacyMemoryAnalysis().catch((err) => console.warn('[memory] Legacy analysis cleanup failed; will retry on next start:', err))
   registerBuiltInTools()
+
+  // No execution survives a restart, so leftover queue items would sit as
+  // 'pending' with nothing to drain them. Pause them so the UI offers Resume.
+  pauseAllChatQueuesOnStartup()
 
   // Start filesystem watchers for all existing memory folders
   startMemoryFolderWatchers()

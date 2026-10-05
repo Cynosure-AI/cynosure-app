@@ -11,7 +11,6 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import { existsSync } from 'fs'
 import { basename, resolve } from 'path'
 import { getAgentMemory } from './agent-memory.js'
-import { deleteMemoryKnowledgeSource } from './memory-deep-research.js'
 
 const activeWatchers = new Map<string, FSWatcher>()
 const MOVE_GRACE_MS = 2_000
@@ -37,7 +36,6 @@ function pendingDeleteKey(folderId: string, fileName: string): string {
 
 async function deleteIndexedFile(folderId: string, fileName: string): Promise<void> {
     await getAgentMemory().deleteSourceFile(fileName, folderId)
-    deleteMemoryKnowledgeSource(folderId, fileName)
 }
 
 function scheduleDelete(folderId: string, fileName: string): void {
@@ -74,6 +72,10 @@ async function tryRemapAddedFile(folderId: string, directoryPath: string, fileNa
  */
 export function watchMemoryFolder(folderId: string, directoryPath: string): void {
     stopWatchingMemoryFolder(folderId)
+
+    // Offline tools (e.g. memory:eval) open data-dir snapshots whose startup
+    // diff would purge index entries; they must never react to the filesystem.
+    if (process.env.CYNOSURE_DISABLE_MEMORY_WATCHERS === '1') return
 
     if (!existsSync(directoryPath)) {
         console.warn(`[memory-watcher] not watching missing folder for space ${folderId}: ${directoryPath}`)

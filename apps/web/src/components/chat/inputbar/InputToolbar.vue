@@ -346,7 +346,7 @@ async function toggleMic(): Promise<void> {
       placement="above"
     >
       <button
-        class="p-1.5 text-ink-faint rounded-lg shrink-0 cursor-not-allowed focus:outline-none"
+        class="p-1.5 text-ink-faint rounded-lg shrink-0 cursor-not-allowed"
         title="Voice input"
         disabled
         aria-label="Voice input (requires model download)"
@@ -372,7 +372,7 @@ async function toggleMic(): Promise<void> {
       class="relative flex items-center shrink-0"
     >
       <button
-        class="relative p-1.5 rounded-lg transition-all duration-300 shrink-0 focus:outline-none"
+        class="relative p-1.5 rounded-lg transition-all duration-300 shrink-0"
         :class="
           whisperStatus === 'recording'
             ? 'bg-red-600 text-white hover:bg-red-500 animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]'

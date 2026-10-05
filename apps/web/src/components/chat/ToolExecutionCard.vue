@@ -30,7 +30,7 @@ type ToolCall = { id?: string; name: string; arguments: string }
 type ToolResult = { toolCallId?: string; name: string; success?: boolean; output: string; error?: string; images?: string[] }
 type StatusMeta = { label: string; icon: string; color: string }
 type ResultOutcomeMeta = { label: string; icon: string; color: string }
-type ContextSectionKind = 'tool' | 'memory' | 'entity'
+type ContextSectionKind = 'tool' | 'memory'
 type ContextRowState = 'selected' | 'candidate'
 type ToolExecution = { call: ToolCall | null; result?: ToolResult }
 type ContextRow = ToolExecution & { state: ContextRowState }
@@ -52,7 +52,7 @@ type ContextExecutionSection = {
   rows: ContextRow[]
   isLoading: boolean
   timestamp: number
-  tone: 'cyan' | 'green' | 'violet'
+  tone: 'cyan' | 'green'
 }
 
 const props = defineProps<{
@@ -140,10 +140,6 @@ function isMemoryCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {
   return argType(call) === 'memory'
 }
 
-function isKnowledgeGraphCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {
-  return isMemoryCall(call) && parseArgs(call?.arguments)?.memoryKind === 'knowledge'
-}
-
 function isTaskContextCall(call?: Pick<ToolCall, 'arguments'> | null): boolean {
   const type = argType(call)
   return type === 'task-context' || type === 'auto-router'
@@ -171,15 +167,14 @@ function contextSectionKind(status: string): ContextSectionKind | null {
   return null
 }
 
-function contextCallKind(call: ToolCall, status: string): ContextSectionKind | null {
-  if (isKnowledgeGraphCall(call)) return 'entity'
+function contextCallKind(_call: ToolCall, status: string): ContextSectionKind | null {
   return contextSectionKind(status)
 }
 
 function memoryFileName(call?: ToolCall | null): string | null {
   if (!call || !isMemoryCall(call)) return null
   const parsed = parseArgs(call.arguments)
-  return visibleText(parsed?.sourceFile) ?? (parsed?.memoryKind === 'knowledge' ? call.name : null)
+  return visibleText(parsed?.sourceFile)
 }
 
 function scoreForCall(call?: ToolCall | null): string | null {
@@ -269,33 +264,12 @@ function mergeContextSections(sections: ContextSection[]): MergedContextSection[
   sections.forEach((section, index) => {
     if (consumed.has(index)) return
 
-    let finalIndex = sections.findIndex((candidate, candidateIndex) =>
+    const finalIndex = sections.findIndex((candidate, candidateIndex) =>
       candidateIndex > index &&
       !consumed.has(candidateIndex) &&
       candidate.kind === section.kind &&
       candidate.phase === 'gathered-context',
     )
-
-    // Memory chunks and graph relationships are emitted by one curation
-    // pass. If one channel selects nothing, use the other channel's terminal
-    // event so rejected candidates still appear as rejected under their own
-    // heading instead of looking like an unfinished retrieval pass.
-    if (section.phase === 'gathered-results' && finalIndex === -1 && (section.kind === 'memory' || section.kind === 'entity')) {
-      finalIndex = sections.findIndex((candidate, candidateIndex) =>
-        candidateIndex > index &&
-        (candidate.kind === 'memory' || candidate.kind === 'entity') &&
-        candidate.phase === 'gathered-context',
-      )
-      if (finalIndex !== -1 && sections[finalIndex].kind !== section.kind) {
-        merged.push({
-          ...section,
-          phase: 'gathered-context',
-          rows: section.executions.map((execution) => ({ ...execution, state: 'candidate' as const })),
-        })
-        consumed.add(index)
-        return
-      }
-    }
 
     if (section.phase === 'gathered-results' && finalIndex !== -1) {
       const finalSection = sections[finalIndex]
@@ -327,7 +301,7 @@ function mergeContextSections(sections: ContextSection[]): MergedContextSection[
 function contextSectionTitle(section: Pick<ContextSection, 'status' | 'phase' | 'kind'>): string {
   const channel = section.kind === 'tool'
     ? 'Tools'
-    : section.kind === 'memory' ? 'Memory chunks' : section.kind === 'entity' ? 'Entity relationships' : ''
+    : section.kind === 'memory' ? 'Memory chunks' : ''
 
   if (section.phase === 'gathered-results') {
     return channel ? `Gathered ${channel} results` : 'Gathered Results'
@@ -348,29 +322,21 @@ function isCuratedContext(section: Pick<ContextSection, 'status' | 'phase'>): bo
 }
 
 function contextSectionIcon(section: ContextSection): string {
-  if (section.kind === 'entity') return 'lucide:network'
   if (isCuratedContext(section)) return section.kind === 'memory' ? 'lucide:database' : 'lucide:package-check'
   return section.kind === 'memory' ? 'lucide:brain-circuit' : 'lucide:database'
 }
 
 function contextSectionClass(section: ContextSection): string {
-  if (section.kind === 'entity') {
-    return isCuratedContext(section)
-      ? 'border-violet-400/30 bg-violet-500/5 dark:border-violet-500/25 dark:bg-violet-500/5'
-      : 'border-indigo-400/25 bg-indigo-500/5 dark:border-indigo-500/20 dark:bg-indigo-500/5'
-  }
   return isCuratedContext(section)
     ? 'border-teal-400/30 bg-teal-500/5 dark:border-teal-500/25 dark:bg-teal-500/5'
     : 'border-sky-400/25 bg-sky-500/5 dark:border-sky-500/20 dark:bg-sky-500/5'
 }
 
 function contextSectionIconClass(section: ContextSection): string {
-  if (section.kind === 'entity') return 'text-status-violet dark:text-violet-300'
   return isCuratedContext(section) ? 'text-cyan-600 dark:text-cyan-300' : 'text-cyan-500 dark:text-cyan-400'
 }
 
 function contextSectionOrder(section: Pick<ContextSection, 'kind'>): number {
-  if (section.kind === 'entity') return 0
   if (section.kind === 'tool') return 1
   if (section.kind === 'memory') return 2
   return 3
@@ -387,7 +353,6 @@ function toolCallIcon(call?: ToolCall | null): string {
   if (isAttachmentIndexCall(call)) return 'lucide:paperclip'
   if (isTaskContextCall(call)) return 'lucide:compass'
   if (isSubAgentSpawnCall(call.name)) return 'lucide:bot'
-  if (isKnowledgeGraphCall(call)) return 'lucide:network'
   if (isMemoryCall(call)) return 'lucide:database'
   return 'lucide:terminal'
 }
@@ -396,7 +361,6 @@ function toolCallIconClass(call?: ToolCall | null): string {
   if (!call) return 'text-ink-muted'
   if (isAttachmentIndexCall(call)) return 'text-sky-600 dark:text-sky-300'
   if (isTaskContextCall(call)) return 'text-cyan-600 dark:text-cyan-300'
-  if (isKnowledgeGraphCall(call)) return 'text-status-violet dark:text-violet-300'
   if (isBuiltInTool(call.name)) return 'text-purple-500 dark:text-purple-300'
   return isSubAgentSpawnCall(call.name) ? 'text-status-indigo' : 'text-accent-fg'
 }
@@ -610,7 +574,6 @@ const headerToolNames = computed(() => {
     return [...new Set(orderedFinalSections.flatMap((section) => {
       const selectedRows = section.rows.filter((row) => row.state !== 'candidate')
       if (!selectedRows.length) return []
-      if (section.kind === 'entity') return ['Entity relationships']
       if (section.kind === 'memory') {
         return ['Memory chunks', ...selectedRows
           .map((row) => memoryFileName(row.call))
@@ -659,7 +622,7 @@ const contextExecutionSections = computed<ContextExecutionSection[]>(() => {
       rows: section.rows,
       isLoading: props.isActive && index === mergedContextSections.value.length - 1 && section.phase === 'gathered-results',
       timestamp: section.timestamp,
-      tone: section.kind === 'entity' ? 'violet' : 'green',
+      tone: 'green',
     }))
 })
 

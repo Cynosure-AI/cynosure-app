@@ -273,6 +273,7 @@ export const BASELINE_SCHEMA = `
     sort_order INTEGER NOT NULL DEFAULT 0,
     tags_json TEXT NOT NULL DEFAULT '[]',
     favorite INTEGER NOT NULL DEFAULT 0,
+    -- Legacy column retained for backup compatibility; cron jobs own their prompts.
     cron_prompt TEXT NOT NULL DEFAULT '',
     icon_data BLOB,
     icon_mime TEXT,

@@ -88,6 +88,25 @@ interface OpenRouterImageEndpoint {
     pricing?: OpenRouterImagePricingLine[]
 }
 
+/** A yes/no Decisions question; the answer is the probability of yes. */
+export interface DecisionsNoulQuestion {
+    type: 'noul'
+    instructions: string
+    criteria?: { true: string; false: string }
+}
+
+export interface DecisionsRequest {
+    model: string
+    state: string | Record<string, unknown> | unknown[]
+    questions: Record<string, DecisionsNoulQuestion>
+}
+
+export interface DecisionsResponse {
+    model?: string
+    answers?: Record<string, { type?: string; noul?: number } | undefined>
+    usage?: { input_tokens?: number; output_tokens?: number; cost?: number }
+}
+
 /**
  * OpenRouter provider — uses the OpenAI-compatible Chat Completions API
  * at https://openrouter.ai/api/v1.
@@ -190,6 +209,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             case 'image': return 'image'
             case 'video': return 'video'
             case 'reranker': return 'rerank'
+            case 'decision': return 'decisions'
             case 'transcription': return 'transcription'
             default: return 'text'
         }
@@ -1054,6 +1074,27 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return (Array.isArray(data.data) ? data.data : [])
             .map((model) => this.toModelListItem(model))
             .sort((a, b) => a.id.localeCompare(b.id))
+    }
+
+    /** Decision models answer typed questions via the Decisions API and cannot chat. */
+    async isDecisionModel(modelId: string): Promise<boolean> {
+        const model = (await this.fetchModels()).find((item) => item.id === modelId)
+        return this.getOutputModalities(model).includes('decisions')
+    }
+
+    /** Ask a decision model typed questions about `state` (POST /api/alpha/decisions). */
+    async decide(request: DecisionsRequest, signal?: AbortSignal): Promise<DecisionsResponse> {
+        // The Decisions API lives beside, not under, the versioned /v1 API root.
+        const apiRoot = this.config.baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '')
+        return await this.requestOpenRouter<DecisionsResponse>(`${apiRoot}/alpha/decisions`, {
+            method: 'POST',
+            headers: {
+                'HTTP-Referer': 'https://github.com/andreasjhagen/Cynosure',
+                'X-OpenRouter-Title': 'Cynosure'
+            },
+            body: JSON.stringify(request),
+            signal
+        })
     }
 
     async listVideoModels(): Promise<VideoGenerationModelInfo[]> {

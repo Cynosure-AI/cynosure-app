@@ -42,7 +42,7 @@ const dlgSaving = ref(false)
 const dlgTesting = ref(false)
 const dlgTestResult = ref<{ success: boolean; username?: string; error?: string } | null>(null)
 const dlgAllowedAgentIds = ref<string[]>([])
-const dlgAllowedTelegramUserIds = ref('')
+const dlgAllowedUserIds = ref('')
 const addDraftBaseline = ref('')
 const addSaveStatus = ref<SettingsPersistenceState>('idle')
 const showAddDiscardConfirm = ref(false)
@@ -59,7 +59,7 @@ const serializedAddDraft = computed(() => JSON.stringify({
   appToken: dlgAppToken.value,
   enabled: dlgEnabled.value,
   allowedAgentIds: dlgAllowedAgentIds.value,
-  allowedTelegramUserIds: dlgAllowedTelegramUserIds.value,
+  allowedUserIds: dlgAllowedUserIds.value,
 }))
 const addDraftDirty = computed(() => showAddDialog.value && serializedAddDraft.value !== addDraftBaseline.value)
 const hasManualChanges = computed(() => addDraftDirty.value || detailDirty.value)
@@ -70,14 +70,14 @@ const agentOptions = computed<MultiSelectOption[]>(() =>
   allAgents.value.map(a => ({ value: a.id, label: a.name }))
 )
 
-function parseTelegramUserIds(value: string): string[] {
+function parseUserIds(value: string): string[] {
   return [...new Set(value.split(/[\s,]+/).map(id => id.trim()).filter(id => /^\d+$/.test(id) && id !== '0'))]
 }
 
 const canSaveChannel = computed(() => {
   if (!dlgAgentId.value || !dlgBotToken.value.trim() || dlgSaving.value) return false
   if (dlgType.value === 'slack' && !dlgAppToken.value.trim()) return false
-  if (dlgType.value === 'telegram' && parseTelegramUserIds(dlgAllowedTelegramUserIds.value).length === 0) return false
+  if ((dlgType.value === 'telegram' || dlgType.value === 'discord') && parseUserIds(dlgAllowedUserIds.value).length === 0) return false
   return true
 })
 
@@ -131,7 +131,7 @@ function resetDialog() {
   dlgEnabled.value = true
   dlgTestResult.value = null
   dlgAllowedAgentIds.value = []
-  dlgAllowedTelegramUserIds.value = ''
+  dlgAllowedUserIds.value = ''
 }
 
 async function openAddDialog() {
@@ -160,8 +160,8 @@ function buildConfig(): Record<string, unknown> {
   if (dlgType.value === 'telegram' || dlgType.value === 'discord') {
     config.botToken = dlgBotToken.value.trim()
   }
-  if (dlgType.value === 'telegram') {
-    config.allowedUserIds = parseTelegramUserIds(dlgAllowedTelegramUserIds.value)
+  if (dlgType.value === 'telegram' || dlgType.value === 'discord') {
+    config.allowedUserIds = parseUserIds(dlgAllowedUserIds.value)
   }
   if (dlgType.value === 'slack') {
     config.botToken = dlgBotToken.value.trim()
@@ -590,7 +590,7 @@ onUnmounted(() => {
               Allowed Telegram User IDs
             </label>
             <input
-              v-model="dlgAllowedTelegramUserIds"
+              v-model="dlgAllowedUserIds"
               type="text"
               inputmode="numeric"
               placeholder="e.g. 123456789"
@@ -620,6 +620,20 @@ onUnmounted(() => {
 
           <!-- Discord-specific config -->
           <template v-if="dlgType === 'discord'">
+            <label class="block text-sm text-ink-secondary mb-1">
+              Allowed Discord User IDs
+            </label>
+            <input
+              v-model="dlgAllowedUserIds"
+              type="text"
+              inputmode="numeric"
+              placeholder="e.g. 123456789012345678"
+              class="w-full px-3 py-2 mb-1 bg-theme-800 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500 font-mono"
+            >
+            <p class="text-[11px] text-ink-faint mb-4">
+              Required. Only these Discord user IDs can message the bot or approve tools, in servers and DMs. Copy an ID with Developer Mode enabled.
+            </p>
+
             <label class="block text-sm text-ink-secondary mb-1">
               Bot Token
             </label>

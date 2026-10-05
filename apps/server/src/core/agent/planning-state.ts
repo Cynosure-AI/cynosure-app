@@ -26,19 +26,6 @@ export interface PlanningState {
   completedAt?: number
 }
 
-export type TodoUpdateParams =
-  | { tasks: Array<{ title: string; status?: PlanningTaskStatus; note?: string }>; objective?: string }
-  | {
-      op: 'set'
-      objective?: string
-      tasks: Array<{ title: string; status?: PlanningTaskStatus; note?: string }>
-    }
-  | { op: 'add'; title: string; status?: PlanningTaskStatus; note?: string; afterTaskId?: string }
-  | { op: 'update'; taskId: string; title?: string; status?: PlanningTaskStatus; note?: string }
-  | { op: 'completed'; taskId: string }
-  | { op: 'remove'; taskId: string }
-  | { op: 'clear' }
-
 interface TaskRow {
   id: string
   conversation_id: string
@@ -215,59 +202,26 @@ export function interruptPlanningRun(
 }
 
 export function applyTodoUpdate(runId: string, params: unknown): { success: boolean; output: string } {
-  if (!params || typeof params !== 'object' || Array.isArray(params)) {
-    return { success: false, output: '`tasks` must be an array.' }
-  }
-  const payload = params as {
-    op?: string
+  const payload = (params && typeof params === 'object' && !Array.isArray(params) ? params : {}) as {
     objective?: string
     tasks?: Array<{ title?: string; status?: string; note?: string }>
-    taskId?: string
-    afterTaskId?: string
-    title?: string
-    status?: string
-    note?: string
   }
+  if (!Array.isArray(payload.tasks)) return { success: false, output: '`tasks` must be an array.' }
   const current = getPlanningState(runId)
   if (!current) return { success: false, output: 'Planning run not found.' }
-
-  // Current tool calls send the complete list without an operation. Accept
-  // legacy operation calls from older transcripts as well.
-  if (payload.op === undefined) {
-    if (!Array.isArray(payload.tasks)) return { success: false, output: '`tasks` must be an array.' }
-    return payload.tasks.length === 0 ? clearTodoList(current) : setTodoList(current, payload)
-  }
-
-  switch (payload.op) {
-    case 'set':
-      return setTodoList(current, payload)
-    case 'add':
-      return addTodoItem(current, payload)
-    case 'update':
-      return updateTodoItem(current, payload)
-    case 'completed':
-      return completeTodoItem(current, payload)
-    case 'remove':
-      return removeTodoItem(current, payload)
-    case 'clear':
-      return clearTodoList(current)
-    default:
-      return { success: false, output: 'Invalid or missing `op`. Use set, add, update, completed, remove, or clear.' }
-  }
+  return payload.tasks.length === 0 ? clearTodoList(current) : setTodoList(current, payload.tasks, payload.objective)
 }
 
 function setTodoList(
   current: PlanningState,
-  payload: { objective?: string; tasks?: Array<{ title?: string; status?: string; note?: string }> },
+  tasks: Array<{ title?: string; status?: string; note?: string }>,
+  objective: string | undefined,
 ): { success: boolean; output: string } {
-  if (!Array.isArray(payload.tasks) || payload.tasks.length === 0) {
-    return { success: false, output: '`set` requires at least one task. Use `clear` to remove the list.' }
-  }
-  const invalidStatus = payload.tasks.find((task) => task.status !== undefined && !isTaskStatus(task.status))
-  if (invalidStatus) return invalidTaskStatus(invalidStatus.status)
+  const invalidStatus = tasks.find((task) => task.status !== undefined && !isTaskStatus(task.status))
+  if (invalidStatus) return { success: false, output: `Invalid task status ${JSON.stringify(invalidStatus.status)}.` }
 
   const now = Date.now()
-  const items = payload.tasks
+  const items = tasks
     .slice(0, MAX_TASKS)
     .map((task, index) => ({
       id: formatTaskId(index),
@@ -283,7 +237,7 @@ function setTodoList(
 
   const state: PlanningState = {
     ...current,
-    objective: cleanObjective(payload.objective || current.objective),
+    objective: cleanObjective(objective || current.objective),
     items: normalizedItems,
     currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
     updatedAt: now,
@@ -291,120 +245,6 @@ function setTodoList(
   persistState(state)
   emitState(state)
   return { success: true, output: JSON.stringify({ action: 'set', runId: current.runId, tasks: normalizedItems.map(({ id, title, status }) => ({ id, title, status })) }) }
-}
-
-function addTodoItem(
-  current: PlanningState,
-  payload: { title?: string; status?: string; note?: string; afterTaskId?: string },
-): { success: boolean; output: string } {
-  const title = cleanTaskTitle(payload.title)
-  if (!title) return { success: false, output: '`add` requires a non-empty `title`.' }
-  if (payload.status !== undefined && !isTaskStatus(payload.status)) return invalidTaskStatus(payload.status)
-  if (current.items.length >= MAX_TASKS) return { success: false, output: `Planning list is limited to ${MAX_TASKS} tasks.` }
-
-  let insertionIndex = current.items.length
-  if (payload.afterTaskId !== undefined) {
-    const afterIndex = findTaskIndexById(current.items, payload.afterTaskId)
-    if (afterIndex === -1) return taskNotFound(payload.afterTaskId)
-    insertionIndex = afterIndex + 1
-  }
-
-  const now = Date.now()
-  const added: PlanningTaskItem = {
-    id: formatTaskId(insertionIndex),
-    title,
-    status: normalizeTaskStatus(payload.status),
-    note: cleanNote(payload.note),
-    updatedAt: now,
-  }
-  const items = [...current.items]
-  items.splice(insertionIndex, 0, added)
-  const normalizedItems = ensureActiveTask(items, now)
-  const renumberedItems = renumberTaskIds(normalizedItems)
-  const state: PlanningState = {
-    ...current,
-    items: renumberedItems,
-    currentTaskId: renumberedItems.find((item) => item.status === 'in_progress')?.id,
-    updatedAt: now,
-  }
-  persistState(state)
-  emitState(state)
-  return { success: true, output: JSON.stringify({ action: 'added', task: renumberedItems[insertionIndex] }) }
-}
-
-function updateTodoItem(
-  current: PlanningState,
-  payload: { taskId?: string; title?: string; status?: string; note?: string },
-  action: 'updated' | 'completed' = 'updated',
-): { success: boolean; output: string } {
-  if (!payload.taskId) return { success: false, output: '`update` requires `taskId`.' }
-  const idx = findTaskIndexById(current.items, payload.taskId)
-  if (idx === -1) return taskNotFound(payload.taskId)
-  if (payload.title === undefined && payload.status === undefined && payload.note === undefined) {
-    return { success: false, output: '`update` requires at least one of `title`, `status`, or `note`.' }
-  }
-  if (payload.status !== undefined && !isTaskStatus(payload.status)) return invalidTaskStatus(payload.status)
-  if (payload.title !== undefined && !cleanTaskTitle(payload.title)) {
-    return { success: false, output: '`title` must not be empty.' }
-  }
-
-  const now = Date.now()
-  const status = payload.status === undefined ? current.items[idx].status : normalizeTaskStatus(payload.status)
-  const items = current.items.map((item, itemIdx) => {
-    if (itemIdx !== idx) {
-      return status === 'in_progress' && item.status === 'in_progress'
-        ? { ...item, status: 'pending' as const, updatedAt: now }
-        : item
-    }
-    return {
-      ...item,
-      title: payload.title === undefined ? item.title : cleanTaskTitle(payload.title) || item.title,
-      status,
-      note: payload.note === undefined ? item.note : cleanNote(payload.note),
-      updatedAt: now,
-    }
-  })
-
-  const normalizedItems = advanceActiveTask(items, idx, status, now)
-  const state: PlanningState = {
-    ...current,
-    items: normalizedItems,
-    currentTaskId: normalizedItems.find((item) => item.status === 'in_progress')?.id,
-    updatedAt: now,
-  }
-  persistState(state)
-  emitState(state)
-  return { success: true, output: JSON.stringify({ action, task: normalizedItems[idx] }) }
-}
-
-function completeTodoItem(
-  current: PlanningState,
-  payload: { taskId?: string },
-): { success: boolean; output: string } {
-  if (!payload.taskId) return { success: false, output: '`completed` requires `taskId`.' }
-  return updateTodoItem(current, { taskId: payload.taskId, status: 'completed' }, 'completed')
-}
-
-function removeTodoItem(
-  current: PlanningState,
-  payload: { taskId?: string },
-): { success: boolean; output: string } {
-  if (!payload.taskId) return { success: false, output: '`remove` requires `taskId`.' }
-  const idx = findTaskIndexById(current.items, payload.taskId)
-  if (idx === -1) return taskNotFound(payload.taskId)
-
-  const now = Date.now()
-  const removed = current.items[idx]
-  const items = ensureActiveTask(renumberTaskIds(current.items.filter((_, index) => index !== idx)), now)
-  const state: PlanningState = {
-    ...current,
-    items,
-    currentTaskId: items.find((item) => item.status === 'in_progress')?.id,
-    updatedAt: now,
-  }
-  persistState(state)
-  emitState(state)
-  return { success: true, output: JSON.stringify({ action: 'removed', task: removed }) }
 }
 
 function clearTodoList(current: PlanningState): { success: boolean; output: string } {
@@ -534,23 +374,6 @@ function ensureActiveTask(items: PlanningTaskItem[], now: number): PlanningTaskI
   ))
 }
 
-function advanceActiveTask(
-  items: PlanningTaskItem[],
-  updatedIndex: number,
-  status: PlanningTaskStatus,
-  now: number,
-): PlanningTaskItem[] {
-  if (status === 'in_progress') return items
-  if (status !== 'completed' && status !== 'blocked' && status !== 'cancelled') return items
-  if (items.some((item) => item.status === 'in_progress')) return items
-
-  const nextPending = items.findIndex((item, index) => index > updatedIndex && item.status === 'pending')
-  if (nextPending === -1) return items
-  return items.map((item, index) => (
-    index === nextPending ? { ...item, status: 'in_progress', updatedAt: now } : item
-  ))
-}
-
 function reconcileItemsForClose(
   items: PlanningTaskItem[],
   status: Exclude<PlanningRunStatus, 'running'>,
@@ -592,21 +415,8 @@ function noteActiveItem(items: PlanningTaskItem[], note: string, now: number): P
   ))
 }
 
-function findTaskIndexById(items: PlanningTaskItem[], taskId: string): number {
-  const normalized = normalizeTaskId(taskId)
-  return items.findIndex((item) => normalized !== undefined && normalizeTaskId(item.id) === normalized)
-}
-
 function isTaskStatus(status: string): status is PlanningTaskStatus {
   return status === 'pending' || status === 'in_progress' || status === 'completed' || status === 'blocked' || status === 'cancelled'
-}
-
-function invalidTaskStatus(status: string | undefined): { success: false; output: string } {
-  return { success: false, output: `Invalid task status ${JSON.stringify(status)}.` }
-}
-
-function taskNotFound(taskId: string): { success: false; output: string } {
-  return { success: false, output: `No task matches taskId ${JSON.stringify(taskId)}.` }
 }
 
 function renumberTaskIds(items: PlanningTaskItem[]): PlanningTaskItem[] {
@@ -614,16 +424,6 @@ function renumberTaskIds(items: PlanningTaskItem[]): PlanningTaskItem[] {
     ...item,
     id: formatTaskId(index),
   }))
-}
-
-function normalizeTaskId(taskId: string | undefined): string | undefined {
-  const raw = String(taskId || '').trim()
-  if (!raw) return undefined
-  const numeric = Number(raw)
-  if (Number.isInteger(numeric) && numeric > 0 && numeric <= MAX_TASKS) {
-    return formatTaskId(numeric - 1)
-  }
-  return raw
 }
 
 function formatTaskId(index: number): string {

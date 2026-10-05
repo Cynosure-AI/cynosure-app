@@ -99,6 +99,12 @@ export class EmbeddingService {
     return (await this.embedBatch([text], signal))[0]
   }
 
+  /** Embed a search query. Instruction-tuned models get their retrieval
+   * instruction; documents are always embedded without one (see embed). */
+  async embedQuery(text: string, opts: { instruct?: boolean; signal?: AbortSignal } = {}): Promise<EmbeddingResult> {
+    return this.embed(opts.instruct === false ? text : formatEmbeddingQuery(this.profile.model, text), opts.signal)
+  }
+
   async embedBatch(texts: string[], signal?: AbortSignal): Promise<EmbeddingResult[]> {
     if (!texts.length) return []
     signal?.throwIfAborted()
@@ -133,6 +139,11 @@ export async function probeEmbeddingDimensions(config: EmbeddingConfig, signal?:
 
 let activeService: EmbeddingService | null = null
 let unavailableReason: string | null = null
+
+/** Whether memory embeddings are configured and usable right now. */
+export function hasEmbeddingService(): boolean {
+  return activeService !== null
+}
 
 export function getEmbeddingService(): EmbeddingService {
   if (!activeService) throw new Error(unavailableReason || 'Configure an embedding provider before indexing or searching memory')
@@ -172,4 +183,21 @@ export function loadEmbeddingServiceFromDb(): void {
     console.warn('[Embedding] Saved configuration is unavailable:', unavailableReason)
   }
   getEventBus().emit('embedding:configured')
+}
+
+const RETRIEVAL_TASK = 'Given a question or request, retrieve personal notes that help answer it'
+
+/**
+ * Query-side formatting for instruction-tuned embedding models. Only families
+ * whose documents are embedded without a prefix are listed, so stored vectors
+ * stay valid. Other models (e.g. OpenAI text-embedding-3, multilingual BGE-M3)
+ * are not instruction-tuned and receive the plain query.
+ */
+export function formatEmbeddingQuery(model: string, query: string): string {
+  const id = model.toLowerCase()
+  // Qwen3-Embedding and GTE-Qwen expect "Instruct: <task>\nQuery: <query>"; English instructions work across languages.
+  if (/qwen3-embedding|gte-qwen/.test(id)) return `Instruct: ${RETRIEVAL_TASK}\nQuery: ${query}`
+  // BGE v1.5 English/Chinese models use a fixed retrieval prefix (BGE-M3 needs none).
+  if (/bge-(small|base|large)-(en|zh)/.test(id)) return `Represent this sentence for searching relevant passages: ${query}`
+  return query
 }

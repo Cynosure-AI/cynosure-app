@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import { closeDb, getDb } from '../../db/database.js'
-import { cancelAllMemoryIndexJobs, cancelMemoryIndexJob, discardMemoryIndexJob, dismissMemoryIndexJobFailures, getMemoryIndexJob, latestResumableMemoryIndexJob, listMemoryIndexJobs, startMemoryIndexJob } from './memory-index-jobs.js'
+import { cancelAllMemoryIndexJobs, cancelMemoryIndexJob, discardMemoryIndexJob, dismissMemoryIndexJobFailures, getMemoryIndexJob, listMemoryIndexJobs, startMemoryIndexJob } from './memory-index-jobs.js'
 
 let dataDir: string
 
@@ -36,7 +36,7 @@ describe('durable memory index jobs', () => {
 
     test('persists progress updates while a job is running', async () => {
         const started = startMemoryIndexJob({
-            kind: 'deep-research',
+            kind: 'reindex',
             folderId: 'default',
             fileName: 'progress.md',
             run: async (_signal, reportProgress) => {
@@ -59,7 +59,7 @@ describe('durable memory index jobs', () => {
     test('records the first failure without retrying', async () => {
         const run = vi.fn(async () => { throw new Error('provider failure') })
         const started = startMemoryIndexJob({
-            kind: 'deep-research',
+            kind: 'reindex',
             folderId: 'default',
             fileName: 'failure.md',
             run,
@@ -73,71 +73,24 @@ describe('durable memory index jobs', () => {
         expect(getMemoryIndexJob(started.id)).toMatchObject({ attempt: 1, maxAttempts: 1, error: 'provider failure' })
     })
 
-    test('retains and explicitly discards a cancelled extraction checkpoint', async () => {
+    test('discards a cancelled job explicitly', async () => {
         const started = startMemoryIndexJob({
-            kind: 'deep-research',
+            kind: 'reindex',
             folderId: 'default',
-            fileName: 'resumable.md',
-            run: async (signal, reportProgress) => {
-                reportProgress(4, 7, { contentHash: 'same-revision', completedChunkIndexes: [0, 1, 2, 3] })
-                await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))
-                return { indexed: true }
-            },
-        })
-        await vi.waitFor(() => expect(getMemoryIndexJob(started.id)?.progressCurrent).toBe(4))
-
-        cancelMemoryIndexJob(started.id)
-        await vi.waitFor(() => expect(getMemoryIndexJob(started.id)?.status).toBe('cancelled'))
-        const checkpoint = latestResumableMemoryIndexJob('default', 'resumable.md')
-        expect(checkpoint).toMatchObject({
-            id: started.id,
-            progressCurrent: 4,
-            progressTotal: 7,
-            result: { resumeCheckpoint: { contentHash: 'same-revision', completedChunkIndexes: [0, 1, 2, 3] } },
-        })
-
-        // Recover checkpoints hidden by resume jobs created before checkpoint
-        // handoff was made atomic.
-        const emptyResume = startMemoryIndexJob({
-            kind: 'deep-research', folderId: 'default', fileName: 'resumable.md',
+            fileName: 'discarded.md',
             run: async (signal) => new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
         })
-        cancelMemoryIndexJob(emptyResume.id)
-        await vi.waitFor(() => expect(getMemoryIndexJob(emptyResume.id)?.status).toBe('cancelled'))
-        expect(latestResumableMemoryIndexJob('default', 'resumable.md')?.id).toBe(started.id)
+        cancelMemoryIndexJob(started.id)
+        await vi.waitFor(() => expect(getMemoryIndexJob(started.id)?.status).toBe('cancelled'))
 
-        const resumed = startMemoryIndexJob({
-            kind: 'deep-research',
-            folderId: 'default',
-            fileName: 'resumable.md',
-            resume: {
-                current: checkpoint!.progressCurrent!,
-                total: checkpoint!.progressTotal!,
-                checkpoint: (checkpoint!.result as { resumeCheckpoint: unknown }).resumeCheckpoint,
-            },
-            run: async (signal) => new Promise<void>((resolve) => {
-                signal.addEventListener('abort', () => resolve(), { once: true })
-            }),
-        })
-        expect(getMemoryIndexJob(resumed.id)).toMatchObject({
-            progressCurrent: 4,
-            progressTotal: 7,
-            result: checkpoint!.result,
-        })
-
-        cancelMemoryIndexJob(resumed.id)
-        await vi.waitFor(() => expect(getMemoryIndexJob(resumed.id)?.status).toBe('cancelled'))
-        expect(latestResumableMemoryIndexJob('default', 'resumable.md')?.id).toBe(resumed.id)
-
-        expect(discardMemoryIndexJob(resumed.id)).toBe(true)
+        expect(discardMemoryIndexJob(started.id)).toBe(true)
         expect(getMemoryIndexJob(started.id)).toBeUndefined()
-        expect(getMemoryIndexJob(resumed.id)).toBeUndefined()
-        expect(latestResumableMemoryIndexJob('default', 'resumable.md')).toBeUndefined()
+        expect(getDb().prepare('SELECT id FROM memory_index_jobs WHERE id = ?').get(started.id)).toBeUndefined()
     })
 
-    test('dismisses failed jobs durably without touching active or resumable work', async () => {
+    test('dismisses failed jobs durably without touching active work', async () => {
         const failed = startMemoryIndexJob({
-            kind: 'deep-research',
+            kind: 'reindex',
             folderId: 'dismiss-space',
             fileName: 'failed.md',
             run: async () => { throw new Error('lance schema mismatch') },

@@ -20,6 +20,9 @@ vi.mock('../agents/agent-store.js', () => ({
         internalName: 'worker',
         name: 'Worker',
         description: 'Does bounded work',
+        tools: ['builtin:utility::read'],
+        subAgents: [],
+        autoToolRouting: true,
         autoMemory: false,
         autoApproveTools: true,
         thinkingEnabled: true,
@@ -35,6 +38,9 @@ vi.mock('../gateway/gateway.js', () => ({
         getLastUsedProvider: () => ({ config: { id: 'provider' } }),
         modelSupportsToolCalls: vi.fn().mockResolvedValue(true),
     }),
+}))
+vi.mock('../tools/tool-registry.js', () => ({
+    getToolRegistry: () => ({ listRegisteredTools: () => [] }),
 }))
 vi.mock('../memory/memory-folder-scope.js', () => ({
     getAssignedMemoryFolders: () => [],
@@ -77,7 +83,7 @@ describe('sub-agent execution', () => {
             providerId: 'provider',
             model: 'model',
             tools: [],
-            systemMessages: [],
+            contextBundle: { messages: [], evidence: [] },
         })
     })
 
@@ -250,6 +256,15 @@ describe('sub-agent execution', () => {
 
         await continueTool.execute({ invocationId: 'invocation', instructions: 'Follow up' })
 
+        expect(mocks.prepareAgentExecution).toHaveBeenCalledWith(expect.objectContaining({
+            userQuery: 'Follow up',
+            recentMessages: [
+                { role: 'user', content: 'Original private task' },
+                { role: 'assistant', content: 'Original private answer' },
+            ],
+            autoToolRouting: true,
+            preferredToolKeys: ['builtin:utility::read'],
+        }))
         expect(mocks.executorMessages).toEqual([
             { role: 'user', content: 'Original private task' },
             { role: 'assistant', content: 'Original private answer' },

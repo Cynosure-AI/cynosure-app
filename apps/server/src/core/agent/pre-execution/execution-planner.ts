@@ -1,6 +1,5 @@
 import { prepareAgentExecution } from '../prepare-execution.js'
-import { snapshotChatExecutionPreset } from '../execution-preset.js'
-import { toExecutionPlanInput } from './execution-input.js'
+import { defaultAutoModes, snapshotChatExecutionPreset } from '../execution-preset.js'
 import { getBuiltInMemoryToolKeys, getBuiltInToolKey, isBuiltInMemoryToolKey } from '../../tools/built-in-tools.js'
 import {
     buildPlanningStateContext,
@@ -14,7 +13,7 @@ import {
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
 import { DIRECT_TOOL_SELECTION_LIMIT } from '../../runtime-limits.js'
-import type { ExecutionPlanInput, ExecutionRequest } from './execution-input.js'
+import type { ExecutionRequest } from './execution-input.js'
 import type { ContextEvidence } from '@shared/types'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
 
@@ -39,10 +38,6 @@ export interface ExecutionToolPolicy {
 }
 
 export async function planExecution(request: ExecutionRequest): Promise<PlannedExecution> {
-    return planExecutionInput(toExecutionPlanInput(request))
-}
-
-async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExecution> {
     const {
         resolvedAgent,
         conversationId,
@@ -52,30 +47,30 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         toolRegistry,
         messages,
         userText,
+        eventMeta,
+    } = request
+    const run = request.run ?? {}
+    const {
         providerOverride,
         modelOverride,
         systemPrompt,
         systemPromptSuffix,
         requestedSubAgents,
         memoryFolderOverrides,
-        autoToolRouting,
-        autoMemory,
         autoRouterProviderId,
         autoRouterModel,
         hasExplicitToolAllowlist = false,
         usedToolNames,
         thinkingEnabled,
         reasoningEffort,
-        eventMeta,
         inlineAttachmentTextLimit,
-    } = input
-    const selectedToolKeys = stripAutomaticallyManagedMemoryToolKeys(input.selectedToolKeys ?? [])
-    const hasRequestToolSelection = input.selectedToolKeys !== undefined
+    } = run
+    const autoToolRouting = run.autoToolRouting ?? defaultAutoModes(resolvedAgent).autoToolRouting
+    const autoMemory = run.autoMemory ?? defaultAutoModes(resolvedAgent).autoMemory
+    const selectedToolKeys = stripAutomaticallyManagedMemoryToolKeys(run.selectedToolKeys ?? [])
+    const hasRequestToolSelection = run.selectedToolKeys !== undefined
 
-    const allRegisteredToolKeys = toolRegistry.listRegisteredTools()
-        .map((tool) => tool.key)
-        .filter((key) => !isBuiltInMemoryToolKey(key))
-        .filter((key) => key !== getBuiltInToolKey('manage_mcp'))
+    const allRegisteredToolKeys = listRoutableToolKeys(toolRegistry)
     const agentToolKeys = stripAutomaticallyManagedMemoryToolKeys(resolvedAgent?.tools ?? [])
     const toolPolicy = resolveExecutionToolPolicy({
         selectedToolKeys,
@@ -83,7 +78,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         agentToolKeys,
         allRegisteredToolKeys,
         hasExplicitToolAllowlist,
-        autoToolRouting: autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false,
+        autoToolRouting,
         hasResolvedAgent: Boolean(resolvedAgent),
     })
 
@@ -91,7 +86,7 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
     const preset = snapshotChatExecutionPreset(resolvedAgent, {
         tools: toolPolicy.configuredTools,
         subAgents: effectiveSubAgents,
-        autoToolRouting: autoToolRouting ?? resolvedAgent?.autoToolRouting ?? false,
+        autoToolRouting,
         autoMemory,
         autoRouterProviderId,
         autoRouterModel,
@@ -153,6 +148,14 @@ async function planExecutionInput(input: ExecutionPlanInput): Promise<PlannedExe
         chatAgentName: resolvedAgent?.name,
         chatAgentIconUrl: resolvedAgent?.iconUrl || null,
     }
+}
+
+/** Registry keys an agent may receive implicitly; memory and MCP management are opted into separately. */
+export function listRoutableToolKeys(toolRegistry: ExecutionRequest['toolRegistry']): string[] {
+    return toolRegistry.listRegisteredTools()
+        .map((tool) => tool.key)
+        .filter((key) => !isBuiltInMemoryToolKey(key))
+        .filter((key) => key !== getBuiltInToolKey('manage_mcp'))
 }
 
 export function stripAutomaticallyManagedMemoryToolKeys(toolKeys: string[]): string[] {

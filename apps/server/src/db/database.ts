@@ -7,6 +7,9 @@ import { applySchemaMigrations } from './migrations.js'
 let db: Database.Database | null = null
 
 function getDbPath(): string {
+  if (process.env.VITEST && !process.env.CYNOSURE_DATA_DIR) {
+    throw new Error('Tests must set CYNOSURE_DATA_DIR; refusing to open the real database.')
+  }
   const dbDir = join(getAppDataDir(), 'sqlite')
   mkdirSync(dbDir, { recursive: true })
   return join(dbDir, 'cynosure.db')

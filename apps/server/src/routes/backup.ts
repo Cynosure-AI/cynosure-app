@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import type Database from 'better-sqlite3'
 import type { ContentBlock } from '@shared/types'
 import multipart from '@fastify/multipart'
 import archiver from 'archiver'
@@ -27,14 +28,7 @@ import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-schedu
 import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import { DEFAULT_PERMANENT_MEMORY_TABLE, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
-import { getMemoryKnowledgeStore } from '../core/memory/memory-knowledge.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
-import {
-    createMemoryKnowledgeBackup,
-    memoryKnowledgeBackupCount,
-    restoreMemoryKnowledgeBackup,
-    type MemoryKnowledgeBackup,
-} from '../core/memory/memory-knowledge-backup.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -45,7 +39,6 @@ type ResetModule =
     | 'settings'
     | 'channels'
     | 'memory'
-    | 'knowledge'
     | 'conversations'
     | 'notifications'
     | 'usage'
@@ -58,12 +51,13 @@ const RESET_MODULES: ResetModule[] = [
     'settings',
     'channels',
     'memory',
-    'knowledge',
     'conversations',
     'notifications',
     'usage',
     'vectors'
 ]
+
+const BACKUP_MODULES = ['agents', 'providers', 'mcp', 'settings', 'channels', 'memory', 'conversations', 'usage']
 
 interface ManifestModule {
     count: number
@@ -77,6 +71,16 @@ interface BackupManifest {
     version: 1
     createdAt: string
     modules: Record<string, ManifestModule>
+    /** Non-fatal problems found while exporting, e.g. attachment files missing from disk. */
+    warnings?: string[]
+    /** Attachment assets left out because their files were missing; restore reports these as warnings, not errors. */
+    skippedAttachmentAssetIds?: string[]
+}
+
+interface ModuleResult {
+    restored: number
+    errors: string[]
+    warnings?: string[]
 }
 
 interface MemoryFileBackup {
@@ -85,26 +89,225 @@ interface MemoryFileBackup {
     archiveName: string
 }
 
-interface MemoryFileIdentityBackup {
-    document_id: string
-    document_ref: string
-    category_id: string
-    file_name: string
-    dreamed_at?: number
-    created_at: number
+type Row = Record<string, unknown>
+
+interface RestoreContext {
+    agentIds: Set<string>
+    conversationIds: Set<string>
+    messageIds: Set<string>
 }
 
-type MemoryDocumentBackup = Record<string, string | number | null>
+/**
+ * A table archived as `<module>/<table>.json`. Columns come from the live
+ * schema on export, and restore keeps only the archived fields that are still
+ * columns, so schema changes need no edits here.
+ */
+interface BackupTable {
+    table: string
+    file?: string
+    /** Columns that are neither exported nor restored. */
+    omit?: string[]
+    orderBy?: string
+    /** Supporting tables are not counted in the module total. */
+    counted?: false
+    /** Adjust an archived row before insert, or return null to skip it. */
+    prepare?: (row: Row, ctx: RestoreContext) => Row | null
+    /** Runs for each row after it was inserted. */
+    restored?: (row: Row, ctx: RestoreContext) => void
+}
 
-interface MemoryFolderBackupRow extends Record<string, unknown> {
-    id?: unknown
-    name?: unknown
-    directory_path?: unknown
-    folderPath?: unknown
-    is_uncategorized?: unknown
-    sort_order?: unknown
-    auto_memory_excluded?: unknown
-    created_at?: unknown
+const inRestoredConversation = (row: Row, ctx: RestoreContext): Row | null =>
+    ctx.conversationIds.has(String(row.conversation_id)) ? row : null
+
+/**
+ * Tables backed up generically, in restore order. Providers, settings, tool
+ * approvals, memory and attachment files have their own formats and are
+ * handled by the export and import routes directly.
+ */
+const BACKUP_TABLES: Record<string, BackupTable[]> = {
+    agents: [{
+        table: 'agents',
+        file: 'agents/_db_agents.json',
+        // Icons are archived separately as data URLs.
+        omit: ['icon_data'],
+        // Older backups named the internal name `codename`.
+        prepare: (row) => ({ ...row, internal_name: row.internal_name ?? row.codename }),
+    }],
+    mcp: [{
+        table: 'mcp_servers',
+        file: 'mcp/servers.json',
+        prepare: (row) => ({ ...row, original_name: row.original_name || row.name }),
+    }],
+    settings: [{
+        table: 'cron_jobs',
+        prepare: (job) => {
+            if (job.id) unscheduleCronJob(String(job.id))
+            return {
+                ...job,
+                notification_mode: job.notification_mode === 'conditional' ? 'conditional' : 'always',
+                last_run_at: typeof job.last_run_at === 'number' ? job.last_run_at : Date.now(),
+            }
+        },
+        restored: (job) => {
+            if ((job.enabled ?? 1) === 1 && job.id) scheduleCronJob(String(job.id))
+        },
+    }],
+    channels: [{ table: 'channels' }],
+    conversations: [
+        {
+            table: 'conversations',
+            // Only restore conversations for agents present in the DB, including freshly restored ones.
+            prepare: (row, ctx) => (row.agent_id && !ctx.agentIds.has(String(row.agent_id)) ? null : row),
+            restored: (row, ctx) => {
+                ctx.conversationIds.add(String(row.id))
+                getDb().prepare('DELETE FROM chat_events WHERE conversation_id = ?').run(row.id)
+            },
+        },
+        {
+            table: 'messages',
+            counted: false,
+            prepare: inRestoredConversation,
+            restored: (row, ctx) => {
+                ctx.messageIds.add(String(row.id))
+                // Restored history must not become new Dreaming Mode work.
+                getDb().prepare('DELETE FROM dream_message_events WHERE message_id = ?').run(row.id)
+            },
+        },
+        // Canonical replay history. Sequences are reassigned locally, keeping the archived order.
+        { table: 'chat_events', orderBy: 'sequence', omit: ['sequence'], counted: false, prepare: inRestoredConversation },
+        { table: 'subagent_sessions', counted: false, prepare: inRestoredConversation },
+        {
+            table: 'message_attachments',
+            counted: false,
+            prepare: (row, ctx) => (ctx.messageIds.has(String(row.message_id)) ? { ...row, asset_id: row.asset_id || row.id } : null),
+        },
+        {
+            table: 'tasks',
+            counted: false,
+            prepare: (row, ctx) => (!row.conversation_id || ctx.conversationIds.has(String(row.conversation_id)) ? row : null),
+        },
+    ],
+    usage: [{ table: 'execution_logs' }, { table: 'auxiliary_model_usage' }],
+}
+
+const archiveFile = (module: string, spec: BackupTable): string => spec.file ?? `${module}/${spec.table}.json`
+
+// File index bookkeeping is rebuilt when the restored files are re-indexed.
+const MEMORY_INDEX_STATE = ['content_hash', 'chunk_count', 'last_indexed_at']
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Generic table copy
+// ────────────────────────────────────────────────────────────────────────────
+
+interface ColumnInfo {
+    name: string
+    notnull: number
+    dflt_value: string | null
+    pk: number
+}
+
+function tableColumns(table: string): ColumnInfo[] {
+    return getDb().pragma(`table_info(${table})`) as ColumnInfo[]
+}
+
+function exportRows(table: string, options: { omit?: string[]; where?: string; orderBy?: string } = {}): Row[] {
+    const columns = tableColumns(table).map((column) => column.name)
+    const selected = columns.filter((name) => !options.omit?.includes(name))
+    const orderBy = options.orderBy ?? (columns.includes('created_at') ? 'created_at' : '')
+    return getDb().prepare(`
+        SELECT ${selected.join(', ')} FROM ${table}
+        ${options.where ? `WHERE ${options.where}` : ''}
+        ${orderBy ? `ORDER BY ${orderBy}` : ''}
+    `).all() as Row[]
+}
+
+/**
+ * INSERT OR REPLACE archived rows into a table. Fields that are no longer
+ * columns are dropped, missing or null values fall back to the column
+ * default, and missing timestamps are set to now.
+ */
+function insertRows(table: string, rows: Row[], omit: string[] = []): { restored: Row[]; errors: string[] } {
+    const db = getDb()
+    const columns = tableColumns(table).filter((column) => !omit.includes(column.name))
+    const keyColumn = columns.find((column) => column.pk === 1)?.name
+    const statements = new Map<string, Database.Statement>()
+    const restored: Row[] = []
+    const errors: string[] = []
+    const now = Date.now()
+
+    db.transaction(() => {
+        for (const row of rows) {
+            const names: string[] = []
+            const values: unknown[] = []
+            for (const column of columns) {
+                let value = row[column.name]
+                if (typeof value === 'boolean') value = value ? 1 : 0
+                if (value === undefined || (value === null && column.notnull)) {
+                    if (column.notnull && column.dflt_value === null && (column.name === 'created_at' || column.name === 'updated_at')) {
+                        value = now
+                    } else {
+                        continue
+                    }
+                }
+                names.push(column.name)
+                values.push(value)
+            }
+
+            const key = names.join(',')
+            let statement = statements.get(key)
+            if (!statement) {
+                statement = db.prepare(`INSERT OR REPLACE INTO ${table} (${key}) VALUES (${names.map(() => '?').join(', ')})`)
+                statements.set(key, statement)
+            }
+            try {
+                statement.run(...values)
+                restored.push(row)
+            } catch (e) {
+                errors.push(`${table} ${keyColumn ? String(row[keyColumn] ?? '') : ''}: ${(e as Error).message}`)
+            }
+        }
+    })()
+
+    return { restored, errors }
+}
+
+function readArchiveJson<T>(zip: AdmZip, name: string): T | null {
+    const entry = zip.getEntry(name)
+    return entry ? JSON.parse(entry.getData().toString('utf-8')) as T : null
+}
+
+function addResult(res: ModuleResult, { restored, errors }: { restored: Row[]; errors: string[] }): void {
+    res.restored += restored.length
+    res.errors.push(...errors)
+}
+
+/** Export every generic table of a module and return the rows by table. */
+function exportTables(archive: archiver.Archiver, module: string, manifest: BackupManifest): Record<string, Row[]> {
+    const exported: Record<string, Row[]> = {}
+    let count = 0
+    for (const spec of BACKUP_TABLES[module] ?? []) {
+        const rows = exportRows(spec.table, spec)
+        archive.append(JSON.stringify(rows, null, 2), { name: archiveFile(module, spec) })
+        exported[spec.table] = rows
+        if (spec.counted !== false) count += rows.length
+    }
+    manifest.modules[module] = { count }
+    return exported
+}
+
+/** Restore every generic table of a module that is present in the archive. */
+function restoreTables(zip: AdmZip, module: string, ctx: RestoreContext, res: ModuleResult): void {
+    for (const spec of BACKUP_TABLES[module] ?? []) {
+        const archived = readArchiveJson<Row[]>(zip, archiveFile(module, spec))
+        if (!archived) continue
+        const rows = spec.prepare
+            ? archived.map((row) => spec.prepare!(row, ctx)).filter((row): row is Row => row !== null)
+            : archived
+        const result = insertRows(spec.table, rows, spec.omit)
+        for (const row of result.restored) spec.restored?.(row, ctx)
+        if (spec.counted !== false) res.restored += result.restored.length
+        res.errors.push(...result.errors)
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -122,11 +325,6 @@ function getProviderRows(): LLMProviderConfig[] {
         if (row.api_key_enc) config.apiKey = row.api_key_enc
         return config
     })
-}
-
-function getMcpRows(): unknown[] {
-    const db = getDb()
-    return db.prepare('SELECT * FROM mcp_servers ORDER BY created_at').all()
 }
 
 function getSettingsRows(): Record<string, unknown> {
@@ -156,23 +354,7 @@ function getToolApprovalRows(): { toolName: string; autoApprove: boolean }[] {
     ).map((r) => ({ toolName: r.tool_name, autoApprove: r.auto_approve === 1 }))
 }
 
-function getCronJobRows(): unknown[] {
-    const db = getDb()
-    return db.prepare('SELECT * FROM cron_jobs ORDER BY created_at').all()
-}
-
-function getChannelRows(): unknown[] {
-    const db = getDb()
-    return db.prepare('SELECT * FROM channels ORDER BY created_at').all()
-}
-
-function getMemoryKnowledgeBackup(zip: AdmZip): MemoryKnowledgeBackup | null {
-    const entry = zip.getEntry('knowledge/knowledge.json')
-    if (!entry) return null
-    return JSON.parse(entry.getData().toString('utf-8')) as MemoryKnowledgeBackup
-}
-
-function relativePathFromBackupCategory(category: MemoryFolderBackupRow): string {
+function relativePathFromBackupCategory(category: Row): string {
     if (typeof category.folderPath !== 'string') throw new Error('Memory folder path is missing from backup.')
     return validateRelativePath(category.folderPath)
 }
@@ -197,7 +379,6 @@ async function resetVectorIndexes(): Promise<void> {
 async function resetMemoryFolders(db = getDb()): Promise<void> {
     await stopAllMemoryFolderWatchers()
     await resetVectorIndexes()
-    await getMemoryKnowledgeStore().reset()
     db.prepare('DELETE FROM memory_document_revisions').run()
     db.prepare('DELETE FROM memory_documents').run()
     db.prepare('DELETE FROM agent_memory_folders').run()
@@ -210,10 +391,6 @@ async function resetMemoryFolders(db = getDb()): Promise<void> {
 
     ensureDefaultMemoryFolder(db)
     watchMemoryFolder('uncategorized', getDefaultMemoryFolderDir())
-}
-
-async function resetKnowledge(): Promise<void> {
-    await getMemoryKnowledgeStore().reset()
 }
 
 async function resetConversations(db = getDb()): Promise<void> {
@@ -312,7 +489,6 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     await run('usage', () => resetUsage(db))
     await run('memory', () => resetMemoryFolders(db))
     await run('vectors', resetVectorIndexes)
-    await run('knowledge', resetKnowledge)
     await run('settings', () => resetSettings(db))
     await run('channels', () => resetChannels(db))
     await run('agents', () => resetAgents(db))
@@ -334,6 +510,278 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     }
 
     return results
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Restore helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+async function restoreMemory(zip: AdmZip, res: ModuleResult): Promise<void> {
+    const db = getDb()
+    await stopAllMemoryFolderWatchers()
+
+    // Reset LanceDB to avoid stale index references from previous state
+    const ragStore = getRAGStore()
+    await ragStore.close()
+    const lanceDir = join(getAppDataDir(), 'lancedb')
+    if (existsSync(lanceDir)) {
+        rmSync(lanceDir, { recursive: true, force: true })
+    }
+    await ragStore.initialize()
+
+    db.prepare('DELETE FROM memory_file_index').run()
+    db.prepare('DELETE FROM memory_document_revisions').run()
+    db.prepare('DELETE FROM memory_documents').run()
+    db.prepare('DELETE FROM agent_memory_folders').run()
+    db.prepare('DELETE FROM memory_folders').run()
+
+    const memoryRoot = getMemoryFoldersRootDir()
+    if (existsSync(memoryRoot)) {
+        rmSync(memoryRoot, { recursive: true, force: true })
+    }
+    ensureFolder(memoryRoot)
+
+    // Restore current category and document state. Historical revisions
+    // in older backups are intentionally ignored.
+    const metadata = readArchiveJson<{
+        categories: Row[]
+        assignments: Row[]
+        fileIndex?: Row[]
+        documents?: Row[]
+    }>(zip, 'memory/categories.json')
+    if (!metadata) throw new Error('Backup does not contain categorized memory metadata.')
+
+    const folderIdMap = new Map<string, string>()
+    const mapFolder = (id: unknown): string => folderIdMap.get(String(id || '')) || String(id || '')
+    const folders: Row[] = []
+    for (const folder of metadata.categories) {
+        const importedId = String(folder.id || '')
+        if (!importedId) continue
+        const isUncategorized = folder.is_uncategorized === 1 || folder.is_uncategorized === true || importedId === 'uncategorized'
+        const id = isUncategorized ? 'uncategorized' : importedId
+        folderIdMap.set(importedId, id)
+        const directoryPath = isUncategorized ? getDefaultMemoryFolderDir() : directoryPathForRelative(relativePathFromBackupCategory(folder))
+        ensureFolder(directoryPath)
+        folders.push({ ...folder, id, directory_path: directoryPath, is_uncategorized: isUncategorized ? 1 : 0 })
+    }
+    res.errors.push(...insertRows('memory_folders', folders).errors)
+    ensureDefaultMemoryFolder(db)
+    res.errors.push(...insertRows('agent_memory_folders', metadata.assignments.map((row) => ({ ...row, category_id: mapFolder(row.category_id) }))).errors)
+    res.errors.push(...insertRows('memory_file_index', (metadata.fileIndex ?? []).map((row) => ({ ...row, category_id: mapFolder(row.category_id) })), MEMORY_INDEX_STATE).errors)
+    res.errors.push(...insertRows('memory_documents', (metadata.documents ?? [])
+        .filter((row) => row.status !== 'deleted')
+        .map((row) => ({ ...row, category_id: mapFolder(row.category_id) }))).errors)
+
+    // Restore source files only. Files are the source of truth for
+    // file-backed memory; vectors should be rebuilt on the target
+    // machine by re-indexing with its local embedding configuration.
+    const { files } = readArchiveJson<{ files: MemoryFileBackup[] }>(zip, 'memory/files.json') ?? { files: [] }
+    for (const file of files || []) {
+        try {
+            const safeFileName = basename(file.fileName)
+            if (!file.folderId || !safeFileName || safeFileName !== file.fileName) {
+                throw new Error('Invalid memory file name')
+            }
+            const targetFolderId = mapFolder(file.folderId)
+
+            const category = db.prepare('SELECT directory_path FROM memory_folders WHERE id = ?')
+                .get(targetFolderId) as { directory_path: string } | undefined
+            if (!category?.directory_path) throw new Error(`Memory folder "${targetFolderId}" not found`)
+
+            const entry = zip.getEntry(file.archiveName)
+            if (!entry || entry.isDirectory) throw new Error('File content missing from backup')
+
+            ensureFolder(category.directory_path)
+            writeFileSync(join(category.directory_path, safeFileName), entry.getData())
+            res.restored++
+        } catch (e) {
+            res.errors.push(`File "${file.fileName}": ${(e as Error).message}`)
+        }
+    }
+
+    const restoredCategories = db.prepare('SELECT id, directory_path FROM memory_folders WHERE directory_path != ?').all('') as {
+        id: string
+        directory_path: string
+    }[]
+    for (const category of restoredCategories) {
+        watchMemoryFolder(category.id, category.directory_path)
+    }
+}
+
+function restoreArtifactFiles(zip: AdmZip, conversationIds: Set<string>, res: ModuleResult): void {
+    const artifactsBaseDir = join(getAppDataDir(), 'artifacts', 'conversations')
+    for (const entry of zip.getEntries()) {
+        // Match entries like: conversations/artifacts/{convId}/{relative/path/to/file}
+        const match = entry.entryName.match(/^conversations\/artifacts\/([^/]+)\/(.+)$/)
+        if (!match || entry.isDirectory || !conversationIds.has(match[1])) continue
+        try {
+            const targetPath = join(artifactsBaseDir, match[1], match[2])
+            mkdirSync(dirname(targetPath), { recursive: true })
+            writeFileSync(targetPath, entry.getData())
+        } catch (e) {
+            res.errors.push(`Artifact file ${entry.entryName}: ${(e as Error).message}`)
+        }
+    }
+}
+
+/**
+ * Re-home absolute media URLs to this installation's data directory.
+ * Backup archives retain filenames, while the old absolute prefix may
+ * belong to another OS, user account, or CYNOSURE_DATA_DIR.
+ */
+function rehomeMediaUrls(conversationIds: Set<string>): void {
+    const db = getDb()
+    const ids = Array.from(conversationIds)
+    const placeholders = ids.map(() => '?').join(',') || "''"
+    const artifactsBaseDir = join(getAppDataDir(), 'artifacts', 'conversations')
+    const rehomeMediaUrl = (url: string, conversationId: string, kind?: string): string => {
+        const oldPath = extractFilePathFromFileUrl(url)
+        if (!oldPath) return url
+        const directory = kind === 'image' ? 'images' : kind === 'video' ? 'videos' : kind === 'audio' ? 'audio'
+            : /[\\/]images[\\/]/.test(oldPath) ? 'images' : /[\\/]videos[\\/]/.test(oldPath) ? 'videos'
+                : /[\\/]audio[\\/]/.test(oldPath) ? 'audio' : null
+        if (!directory) return url
+        const targetPath = join(artifactsBaseDir, conversationId, directory, basename(oldPath))
+        return existsSync(targetPath) ? toFileUrl(targetPath) : url
+    }
+    const rehomeBlocks = (json: string | null, conversationId: string): string | null => {
+        if (!json) return null
+        try {
+            const blocks = JSON.parse(json) as ContentBlock[]
+            return JSON.stringify(blocks.map((block) => {
+                if (block.type !== 'image' && block.type !== 'video' && block.type !== 'audio') return block
+                const url = rehomeMediaUrl(block.url, conversationId, block.type)
+                return { ...block, artifactId: url, url }
+            }))
+        } catch {
+            return json
+        }
+    }
+    const rehomeEventValue = (value: unknown, conversationId: string): unknown => {
+        if (Array.isArray(value)) return value.map(item => rehomeEventValue(item, conversationId))
+        if (value && typeof value === 'object') {
+            const mapped: Record<string, unknown> = {}
+            for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+                mapped[key] = key === 'url' && typeof item === 'string'
+                    ? rehomeMediaUrl(item, conversationId)
+                    : rehomeEventValue(item, conversationId)
+            }
+            if (typeof mapped.url === 'string' && typeof mapped.artifactId === 'string') mapped.artifactId = mapped.url
+            return mapped
+        }
+        return value
+    }
+
+    const messages = db.prepare(`SELECT id, conversation_id, content_blocks_json FROM messages WHERE conversation_id IN (${placeholders})`)
+        .all(...ids) as { id: string; conversation_id: string; content_blocks_json: string | null }[]
+    const updateMessage = db.prepare('UPDATE messages SET content_blocks_json = ? WHERE id = ?')
+    for (const row of messages) {
+        updateMessage.run(rehomeBlocks(row.content_blocks_json, row.conversation_id), row.id)
+    }
+    const events = db.prepare(`SELECT sequence, conversation_id, event_json FROM chat_events WHERE conversation_id IN (${placeholders})`)
+        .all(...ids) as Array<{ sequence: number; conversation_id: string; event_json: string }>
+    const updateEvent = db.prepare('UPDATE chat_events SET event_json = ? WHERE sequence = ?')
+    for (const row of events) {
+        updateEvent.run(JSON.stringify(rehomeEventValue(JSON.parse(row.event_json), row.conversation_id)), row.sequence)
+    }
+}
+
+/** Restore attachment asset files, re-home their paths, and rebuild conversation-scoped vectors. */
+async function restoreAttachments(
+    zip: AdmZip,
+    conversationIds: Set<string>,
+    skippedAssetIds: Set<string>,
+    res: ModuleResult,
+): Promise<void> {
+    const db = getDb()
+    const ids = Array.from(conversationIds)
+    const placeholders = ids.map(() => '?').join(',') || "''"
+    const appDataDir = getAppDataDir()
+    const artifactsBaseDir = join(appDataDir, 'artifacts', 'conversations')
+    const archivedAssets = readArchiveJson<Row[]>(zip, 'conversations/attachment_assets.json') ?? []
+    const importedAssetIds = new Set(
+        (db.prepare(`SELECT DISTINCT asset_id FROM message_attachments WHERE conversation_id IN (${placeholders})`)
+            .all(...ids) as Array<{ asset_id: string | null }>)
+            .map(row => row.asset_id).filter((id): id is string => Boolean(id))
+    )
+    for (const asset of archivedAssets) {
+        const id = asset.id
+        if (typeof id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(id) || !importedAssetIds.has(id)) continue
+        const original = zip.getEntry(`conversations/attachment-assets/${id}/original`)
+        const text = zip.getEntry(`conversations/attachment-assets/${id}/text`)
+        if (!original || !text) {
+            res.errors.push(`Attachment asset ${id}: missing file in backup`)
+            continue
+        }
+        const assetDir = join(appDataDir, 'artifacts', 'attachment-assets')
+        mkdirSync(assetDir, { recursive: true })
+        const originalPath = join(assetDir, basename(String(asset.original_path || id)))
+        const textPath = join(assetDir, basename(String(asset.text_path || `${id}.parsed.md`)))
+        writeFileSync(originalPath, original.getData())
+        writeFileSync(textPath, text.getData())
+        res.errors.push(...insertRows('attachment_assets', [{ ...asset, original_path: originalPath, text_path: textPath }]).errors)
+        db.prepare(`UPDATE message_attachments SET original_path = ?, text_path = ? WHERE asset_id = ? AND conversation_id IN (${placeholders})`)
+            .run(originalPath, textPath, id, ...ids)
+    }
+
+    const rows = db.prepare(`
+        SELECT id, asset_id, conversation_id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
+        FROM message_attachments
+        WHERE conversation_id IN (${placeholders}) AND kind = 'file'
+    `).all(...ids) as {
+        id: string
+        asset_id: string | null
+        conversation_id: string
+        name: string
+        original_path: string | null
+        text_path: string | null
+        size_bytes: number | null
+        text_bytes: number | null
+        chunk_count: number | null
+    }[]
+
+    for (const row of rows) {
+        if (!row.original_path || !row.text_path) continue
+        const restoredAsset = archivedAssets.some(asset => asset.id === row.asset_id)
+        const originalPath = restoredAsset ? row.original_path : join(artifactsBaseDir, row.conversation_id, 'files', basename(row.original_path))
+        const textPath = restoredAsset ? row.text_path : join(artifactsBaseDir, row.conversation_id, 'files', basename(row.text_path))
+        if (!existsSync(originalPath) || !existsSync(textPath)) {
+            if (row.asset_id && skippedAssetIds.has(row.asset_id)) {
+                (res.warnings ??= []).push(`Attachment "${row.name}" was not restored: its file was already missing when the backup was created`)
+            } else {
+                res.errors.push(`Attachment ${row.id}: missing file in backup`)
+            }
+            continue
+        }
+        const attachment: FileAttachmentArtifact = {
+            id: row.id,
+            assetId: row.asset_id || row.id,
+            name: row.name,
+            originalPath,
+            textPath,
+            sizeBytes: row.size_bytes ?? 0,
+            textBytes: row.text_bytes ?? 0,
+            chunkCount: row.chunk_count ?? undefined,
+        }
+        const chunkCount = await indexConversationAttachment(row.conversation_id, attachment)
+        const metadataJson = JSON.stringify({ ...attachment, chunkCount })
+        res.errors.push(...insertRows('attachment_assets', [{
+            id: attachment.assetId,
+            name: row.name,
+            original_path: originalPath,
+            text_path: textPath,
+            size_bytes: attachment.sizeBytes,
+            text_bytes: attachment.textBytes,
+            chunk_count: chunkCount,
+            metadata_json: metadataJson,
+            created_at: Date.now(),
+        }]).errors)
+        db.prepare(`
+            UPDATE message_attachments
+            SET original_path = ?, text_path = ?, chunk_count = ?, metadata_json = ?
+            WHERE id = ?
+        `).run(originalPath, textPath, chunkCount, metadataJson, row.id)
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -364,10 +812,6 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const tasks = count('tasks')
         const executionLogs = count('execution_logs')
         const auxiliaryModelUsage = count('auxiliary_model_usage')
-        const knowledgeEntities = count('memory_knowledge_entities')
-        const knowledgeRelationships = count('memory_knowledge_assertions')
-        const knowledgeEvidence = count('memory_knowledge_assertion_evidence')
-        const knowledgeRows = knowledgeEntities + knowledgeRelationships + knowledgeEvidence
 
         const modules: Record<string, BackupSummaryModule> = {
             agents: { count: count('agents') },
@@ -382,14 +826,6 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 count: memoryDocuments,
                 details: { categories: memoryFolders.length, documents: memoryDocuments }
             },
-            knowledge: {
-                count: knowledgeRows,
-                details: {
-                    entities: knowledgeEntities,
-                    relationships: knowledgeRelationships,
-                    evidence: knowledgeEvidence,
-                }
-            },
             conversations: {
                 count: conversations,
                 details: { conversations, messages, attachments, tasks }
@@ -403,13 +839,15 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         return { modules }
     })
 
+
     // ── GET /api/backup/export?modules=agents,providers,mcp,settings ────────
     app.get<{ Querystring: { modules?: string } }>(
         '/export',
         async (req, reply) => {
-            const requested = (req.query.modules || 'agents,providers,mcp,settings,channels,memory,knowledge,conversations,usage')
+            const requested = (req.query.modules || BACKUP_MODULES.join(','))
                 .split(',')
                 .map((m) => m.trim())
+                .filter((m) => BACKUP_MODULES.includes(m))
 
             const manifest: BackupManifest = {
                 version: 1,
@@ -417,6 +855,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 modules: {}
             }
 
+            const warnings: string[] = []
+            const skippedAttachmentAssetIds: string[] = []
             const archive = archiver('zip', { zlib: { level: 5 } })
             const chunks: Buffer[] = []
 
@@ -426,87 +866,41 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                 archive.on('error', reject)
             })
 
-            // --- Agents ---
-            if (requested.includes('agents')) {
+            for (const module of requested) {
+                const exported = exportTables(archive, module, manifest)
                 const db = getDb()
-                const agentRows = db.prepare(
-                    `SELECT id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
-                     category, sub_agents_json, auto_approve_tools, thinking_enabled,
-                     max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
-                     auto_memory, memory_router_provider_id, memory_router_model,
-                     auto_router_provider_id, auto_router_model,
-                     sort_order, favorite, cron_prompt, icon_mime, created_at, updated_at
-                     FROM agents ORDER BY created_at`
-                ).all() as Record<string, unknown>[]
 
-                // Export icon BLOBs as base64 data URLs alongside the rows
-                const agentIcons: Record<string, string> = {}
-                const iconRows = db.prepare('SELECT id, icon_data, icon_mime FROM agents WHERE icon_data IS NOT NULL').all() as {
-                    id: string; icon_data: Buffer; icon_mime: string
-                }[]
-                for (const row of iconRows) {
-                    agentIcons[row.id] = `data:${row.icon_mime};base64,${row.icon_data.toString('base64')}`
+                if (module === 'agents') {
+                    // Export icon BLOBs as base64 data URLs alongside the rows
+                    const agentIcons: Record<string, string> = {}
+                    const iconRows = db.prepare('SELECT id, icon_data, icon_mime FROM agents WHERE icon_data IS NOT NULL').all() as {
+                        id: string; icon_data: Buffer; icon_mime: string
+                    }[]
+                    for (const row of iconRows) {
+                        agentIcons[row.id] = `data:${row.icon_mime};base64,${row.icon_data.toString('base64')}`
+                    }
+                    if (iconRows.length > 0) {
+                        archive.append(JSON.stringify(agentIcons, null, 2), { name: 'agents/_db_agent_icons.json' })
+                    }
                 }
 
-                archive.append(JSON.stringify(agentRows, null, 2), { name: 'agents/_db_agents.json' })
-                if (Object.keys(agentIcons).length > 0) {
-                    archive.append(JSON.stringify(agentIcons, null, 2), { name: 'agents/_db_agent_icons.json' })
+                if (module === 'providers') {
+                    const providers = getProviderRows()
+                    archive.append(JSON.stringify(providers, null, 2), { name: 'providers/providers.json' })
+                    manifest.modules.providers.count = providers.length
                 }
-                manifest.modules.agents = { count: agentRows.length }
-            }
 
-            // --- Providers ---
-            if (requested.includes('providers')) {
-                const providers = getProviderRows()
-                archive.append(JSON.stringify(providers, null, 2), {
-                    name: 'providers/providers.json'
-                })
-                manifest.modules.providers = { count: providers.length }
-            }
-
-            // --- MCP ---
-            if (requested.includes('mcp')) {
-                const servers = getMcpRows()
-                archive.append(JSON.stringify(servers, null, 2), {
-                    name: 'mcp/servers.json'
-                })
-                manifest.modules.mcp = { count: servers.length }
-            }
-
-            // --- Settings (settings, tool approvals, cron jobs) ---
-            if (requested.includes('settings')) {
-                const settings = getSettingsRows()
-                const approvals = getToolApprovalRows()
-                const cronJobs = getCronJobRows()
-                archive.append(JSON.stringify(settings, null, 2), {
-                    name: 'settings/settings.json'
-                })
-                archive.append(JSON.stringify(approvals, null, 2), {
-                    name: 'settings/tool_approvals.json'
-                })
-                archive.append(JSON.stringify(cronJobs, null, 2), {
-                    name: 'settings/cron_jobs.json'
-                })
-                manifest.modules.settings = {
-                    count:
-                        Object.keys(settings).length + approvals.length + cronJobs.length
+                if (module === 'settings') {
+                    const settings = getSettingsRows()
+                    const approvals = getToolApprovalRows()
+                    archive.append(JSON.stringify(settings, null, 2), { name: 'settings/settings.json' })
+                    archive.append(JSON.stringify(approvals, null, 2), { name: 'settings/tool_approvals.json' })
+                    manifest.modules.settings.count += Object.keys(settings).length + approvals.length
                 }
-            }
 
-            // --- Channels ---
-            if (requested.includes('channels')) {
-                const channels = getChannelRows()
-                archive.append(JSON.stringify(channels, null, 2), {
-                    name: 'channels/channels.json'
-                })
-                manifest.modules.channels = { count: channels.length }
-            }
-
-            // --- Categorized, revisional memory ---
-            if (requested.includes('memory')) {
-                const db = getDb()
-                const categories: MemoryFolderBackupRow[] = (db.prepare('SELECT * FROM memory_folders ORDER BY created_at').all() as MemoryFolderBackupRow[])
-                    .map((category) => {
+                // --- Categorized, revisional memory ---
+                if (module === 'memory') {
+                    const categories = exportRows('memory_folders').map((category): Row => {
                         const directoryPath = typeof category.directory_path === 'string' ? category.directory_path : ''
                         const isUncategorized = category.is_uncategorized === 1 || category.is_uncategorized === true
                         return {
@@ -514,90 +908,60 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                             folderPath: isUncategorized || !directoryPath ? '' : portableRelativePathForFolder(directoryPath),
                         }
                     })
-                const assignments = db.prepare('SELECT * FROM agent_memory_folders').all()
-                const fileIndex = db.prepare(`
-                    SELECT document_id, document_ref, category_id, file_name, dreamed_at, created_at
-                    FROM memory_file_index ORDER BY created_at
-                `).all() as MemoryFileIdentityBackup[]
-                const documents = db.prepare("SELECT * FROM memory_documents WHERE status = 'active' ORDER BY created_at").all() as MemoryDocumentBackup[]
-                const files: MemoryFileBackup[] = []
+                    const assignments = exportRows('agent_memory_folders')
+                    const fileIndex = exportRows('memory_file_index', { omit: MEMORY_INDEX_STATE })
+                    const documents = exportRows('memory_documents', { where: "status = 'active'" })
+                    const files: MemoryFileBackup[] = []
 
-                for (const category of categories) {
-                    const folderId = String(category.id || '')
-                    const directoryPath = typeof category.directory_path === 'string' ? category.directory_path : ''
-                    if (!folderId || !directoryPath) continue
+                    for (const category of categories) {
+                        const folderId = String(category.id || '')
+                        const directoryPath = typeof category.directory_path === 'string' ? category.directory_path : ''
+                        if (!folderId || !directoryPath) continue
 
-                    for (const file of listFilesInFolder(directoryPath).filter(f => f.supported)) {
-                        const archiveName = `memory/files/${encodeURIComponent(folderId)}/${encodeURIComponent(file.fileName)}`
-                        archive.file(file.filePath, { name: archiveName })
-                        files.push({ folderId, fileName: file.fileName, archiveName })
+                        for (const file of listFilesInFolder(directoryPath).filter(f => f.supported)) {
+                            const archiveName = `memory/files/${encodeURIComponent(folderId)}/${encodeURIComponent(file.fileName)}`
+                            archive.file(file.filePath, { name: archiveName })
+                            files.push({ folderId, fileName: file.fileName, archiveName })
+                        }
                     }
+
+                    archive.append(JSON.stringify({ categories, assignments, fileIndex, documents }, null, 2), { name: 'memory/categories.json' })
+                    archive.append(JSON.stringify({ files }, null, 2), { name: 'memory/files.json' })
+                    manifest.modules.memory.count = files.length
                 }
 
-                archive.append(JSON.stringify({ categories, assignments, fileIndex, documents }, null, 2), { name: 'memory/categories.json' })
-                archive.append(JSON.stringify({ files }, null, 2), { name: 'memory/files.json' })
-                manifest.modules.memory = { count: files.length }
-            }
-
-            // --- Governed knowledge state ---
-            if (requested.includes('knowledge')) {
-                const knowledge = createMemoryKnowledgeBackup()
-                archive.append(JSON.stringify(knowledge), { name: 'knowledge/knowledge.json' })
-                manifest.modules.knowledge = { count: memoryKnowledgeBackupCount(knowledge) }
-            }
-            // --- Conversations (agent-linked chat history) ---
-            if (requested.includes('conversations')) {
-                const db = getDb()
-                const conversations = db.prepare('SELECT * FROM conversations ORDER BY created_at').all()
-                const messages = db.prepare('SELECT * FROM messages ORDER BY created_at').all()
-                const chatEvents = db.prepare('SELECT * FROM chat_events ORDER BY sequence').all()
-                const subagentSessions = db.prepare('SELECT * FROM subagent_sessions ORDER BY created_at').all()
-                const messageAttachments = db.prepare('SELECT * FROM message_attachments ORDER BY created_at').all()
-                const attachmentAssets = db.prepare(`
-                    SELECT DISTINCT a.* FROM attachment_assets a
-                    JOIN message_attachments ma ON ma.asset_id = a.id
-                    ORDER BY a.created_at
-                `).all() as Array<{ id: string; original_path: string; text_path: string }>
-                const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at').all()
-
-                archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations/conversations.json' })
-                archive.append(JSON.stringify(messages, null, 2), { name: 'conversations/messages.json' })
-                archive.append(JSON.stringify(chatEvents, null, 2), { name: 'conversations/chat_events.json' })
-                archive.append(JSON.stringify(subagentSessions, null, 2), { name: 'conversations/subagent_sessions.json' })
-                archive.append(JSON.stringify(messageAttachments, null, 2), { name: 'conversations/message_attachments.json' })
-                archive.append(JSON.stringify(attachmentAssets, null, 2), { name: 'conversations/attachment_assets.json' })
-                archive.append(JSON.stringify(tasks, null, 2), { name: 'conversations/tasks.json' })
-
-                for (const asset of attachmentAssets) {
-                    if (!existsSync(asset.original_path) || !existsSync(asset.text_path)) {
-                        throw new Error(`Attachment asset ${asset.id} is missing a file; backup cannot preserve it`)
+                if (module === 'conversations') {
+                    const attachmentAssets = db.prepare(`
+                        SELECT DISTINCT a.* FROM attachment_assets a
+                        JOIN message_attachments ma ON ma.asset_id = a.id
+                        ORDER BY a.created_at
+                    `).all() as Array<{ id: string; original_path: string; text_path: string }>
+                    // Assets whose files are gone from disk are already broken locally; skip them instead of failing the whole export.
+                    const preservedAssets = attachmentAssets.filter((asset) => {
+                        if (asset.original_path && asset.text_path && existsSync(asset.original_path) && existsSync(asset.text_path)) return true
+                        warnings.push(`Attachment asset ${asset.id} is missing its file on disk and was skipped`)
+                        skippedAttachmentAssetIds.push(asset.id)
+                        return false
+                    })
+                    archive.append(JSON.stringify(preservedAssets, null, 2), { name: 'conversations/attachment_assets.json' })
+                    for (const asset of preservedAssets) {
+                        archive.file(asset.original_path, { name: `conversations/attachment-assets/${asset.id}/original` })
+                        archive.file(asset.text_path, { name: `conversations/attachment-assets/${asset.id}/text` })
                     }
-                    archive.file(asset.original_path, { name: `conversations/attachment-assets/${asset.id}/original` })
-                    archive.file(asset.text_path, { name: `conversations/attachment-assets/${asset.id}/text` })
-                }
 
-                // Export artifact files for each conversation
-                const conversationIds = (conversations as Record<string, unknown>[]).map(c => c.id as string)
-                for (const convId of conversationIds) {
-                    const artifactDir = getConversationArtifactsDir(convId)
-                    if (existsSync(artifactDir)) {
-                        // Add the entire artifacts directory for this conversation
-                        archive.directory(artifactDir, `conversations/artifacts/${convId}`)
+                    for (const { id } of exported.conversations) {
+                        const artifactDir = getConversationArtifactsDir(String(id))
+                        if (existsSync(artifactDir)) {
+                            archive.directory(artifactDir, `conversations/artifacts/${id}`)
+                        }
                     }
                 }
-
-                manifest.modules.conversations = { count: conversations.length }
             }
 
-            // --- Usage statistics (execution trace data) ---
-            if (requested.includes('usage')) {
-                const db = getDb()
-                const executionLogs = db.prepare('SELECT * FROM execution_logs ORDER BY created_at').all()
-                const auxiliaryModelUsage = db.prepare('SELECT * FROM auxiliary_model_usage ORDER BY created_at').all()
-
-                archive.append(JSON.stringify(executionLogs, null, 2), { name: 'usage/execution_logs.json' })
-                archive.append(JSON.stringify(auxiliaryModelUsage, null, 2), { name: 'usage/auxiliary_model_usage.json' })
-                manifest.modules.usage = { count: executionLogs.length + auxiliaryModelUsage.length }
+            if (warnings.length) {
+                manifest.warnings = warnings
+                if (skippedAttachmentAssetIds.length) manifest.skippedAttachmentAssetIds = skippedAttachmentAssetIds
+                req.log.warn({ warnings }, 'Backup export completed with skipped items')
             }
 
             // Write manifest
@@ -617,6 +981,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
                     'Content-Disposition',
                     `attachment; filename="${filename}"`
                 )
+                .header('X-Backup-Warning-Count', String(warnings.length))
+                .header('Access-Control-Expose-Headers', 'X-Backup-Warning-Count')
                 .send(buffer)
         }
     )
@@ -632,14 +998,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const zip = new AdmZip(buf)
 
         // Parse manifest
-        const manifestEntry = zip.getEntry('manifest.json')
-        if (!manifestEntry) {
+        const manifest = readArchiveJson<BackupManifest>(zip, 'manifest.json')
+        if (!manifest) {
             return reply.status(400).send({ error: 'Invalid backup: missing manifest.json' })
         }
-        const manifest = JSON.parse(
-            manifestEntry.getData().toString('utf-8')
-        ) as BackupManifest
-        const knowledgeBackup = getMemoryKnowledgeBackup(zip)
 
         // Determine which modules to restore (from form field or restore all available)
         const modulesField = data.fields?.modules
@@ -653,9 +1015,10 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             : Object.keys(manifest.modules)
 
         const db = getDb()
-        const results: Record<string, { restored: number; errors: string[] }> = {}
+        const results: Record<string, ModuleResult> = {}
         const restoreModules = requestedModules.filter((module) =>
-            Boolean(manifest.modules[module]) && (module !== 'knowledge' || Boolean(knowledgeBackup))
+            // Backups made while the knowledge graph existed may list it; it is no longer restored.
+            Boolean(manifest.modules[module]) && module !== 'knowledge'
         )
         let restoreIndex = 0
         const emitRestoreProgress = (module: string, status: 'started' | 'completed' | 'failed', errors: string[] = []) => {
@@ -667,899 +1030,100 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             broadcast('backup:restore-progress', { module, status, current, total, errors })
             if (status !== 'started') restoreIndex++
         }
-
-        // --- Restore Agents ---
-        if (requestedModules.includes('agents') && manifest.modules.agents) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('agents', 'started')
+        const restore = async (module: string, action: (res: ModuleResult) => void | Promise<void>) => {
+            if (!restoreModules.includes(module)) return
+            const res: ModuleResult = { restored: 0, errors: [] }
+            emitRestoreProgress(module, 'started')
             try {
-                // Restore DB rows
-                const dbEntry = zip.getEntry('agents/_db_agents.json')
-                if (dbEntry) {
-                    const agentRows = JSON.parse(
-                        dbEntry.getData().toString('utf-8')
-                    ) as Record<string, unknown>[]
-
-                    // Load icon data URLs if present
-                    let agentIcons: Record<string, string> = {}
-                    const iconsEntry = zip.getEntry('agents/_db_agent_icons.json')
-                    if (iconsEntry) {
-                        agentIcons = JSON.parse(iconsEntry.getData().toString('utf-8'))
-                    }
-
-                    for (const row of agentRows) {
-                        try {
-                            // Parse icon data URL if available
-                            let iconData: Buffer | null = null
-                            let iconMime: string | null = (row.icon_mime as string) || null
-                            const iconDataUrl = agentIcons[row.id as string]
-                            if (iconDataUrl) {
-                                const match = iconDataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/)
-                                if (match) {
-                                    iconMime = match[1]
-                                    iconData = Buffer.from(match[2], 'base64')
-                                }
-                            }
-
-                            db.prepare(
-                                `INSERT OR REPLACE INTO agents (id, name, description, provider_id, model, system_prompt, tools_json,
-                                   icon_url, internal_name, category, sub_agents_json, auto_approve_tools,
-                                 thinking_enabled, max_context_tokens, auto_tool_routing, tool_router_provider_id, tool_router_model,
-                                 auto_memory, memory_router_provider_id, memory_router_model,
-                                 auto_router_provider_id, auto_router_model,
-                                 sort_order, favorite, cron_prompt, icon_data, icon_mime,
-                                 created_at, updated_at)
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                row.id,
-                                row.name || '',
-                                row.description || '',
-                                row.provider_id || null,
-                                row.model || '',
-                                row.system_prompt || '',
-                                row.tools_json || '[]',
-                                row.icon_url || null,
-                                row.internal_name || row.codename || '',
-                                row.category || '',
-                                row.sub_agents_json || '[]',
-                                row.auto_approve_tools ?? 0,
-                                row.thinking_enabled ?? 1,
-                                row.max_context_tokens ?? null,
-                                row.auto_tool_routing ?? 0,
-                                row.tool_router_provider_id || '',
-                                row.tool_router_model || '',
-                                row.auto_memory ?? 0,
-                                row.memory_router_provider_id || '',
-                                row.memory_router_model || '',
-                                row.auto_router_provider_id || '',
-                                row.auto_router_model || '',
-                                row.sort_order ?? 0,
-                                row.favorite ?? 0,
-                                row.cron_prompt || '',
-                                iconData,
-                                iconMime,
-                                row.created_at || Date.now(),
-                                row.updated_at || Date.now()
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Agent DB row ${row.id}: ${(e as Error).message}`)
-                        }
-                    }
-                }
+                await action(res)
             } catch (e) {
                 res.errors.push((e as Error).message)
             }
-            results.agents = res
-            emitRestoreProgress('agents', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
+            results[module] = res
+            emitRestoreProgress(module, res.errors.length > 0 ? 'failed' : 'completed', res.errors)
         }
+        const ctx: RestoreContext = { agentIds: new Set(), conversationIds: new Set(), messageIds: new Set() }
 
-        // --- Restore Providers ---
-        if (requestedModules.includes('providers') && manifest.modules.providers) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('providers', 'started')
-            try {
-                const entry = zip.getEntry('providers/providers.json')
-                if (entry) {
-                    const providers = JSON.parse(
-                        entry.getData().toString('utf-8')
-                    ) as LLMProviderConfig[]
-                    const now = Date.now()
-                    for (const config of providers) {
-                        try {
-                            const apiKeyPlain = config.apiKey || null
-                            const configForStorage = { ...config, apiKey: undefined }
-                            db.prepare(
-                                `INSERT OR REPLACE INTO providers (id, name, type, base_url, api_key_enc, default_model, config_json, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                config.id,
-                                config.name,
-                                config.type,
-                                config.baseUrl,
-                                apiKeyPlain,
-                                config.defaultModel,
-                                JSON.stringify(configForStorage),
-                                now,
-                                now
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(
-                                `Provider ${config.name}: ${(e as Error).message}`
-                            )
-                        }
-                    }
-                    // Reload gateway providers
-                    const gateway = getGateway()
-                    for (const [id] of gateway.getAllProviders()) {
-                        gateway.removeProvider(id)
-                    }
-                    loadSavedProviders()
-                }
-            } catch (e) {
-                res.errors.push((e as Error).message)
+        await restore('agents', (res) => {
+            restoreTables(zip, 'agents', ctx, res)
+            const icons = readArchiveJson<Record<string, string>>(zip, 'agents/_db_agent_icons.json') ?? {}
+            const setIcon = db.prepare('UPDATE agents SET icon_data = ?, icon_mime = ? WHERE id = ?')
+            for (const [id, dataUrl] of Object.entries(icons)) {
+                const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/)
+                if (match) setIcon.run(Buffer.from(match[2], 'base64'), match[1], id)
             }
-            results.providers = res
-            emitRestoreProgress('providers', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
+        })
 
-        // --- Restore MCP ---
-        if (requestedModules.includes('mcp') && manifest.modules.mcp) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('mcp', 'started')
-            try {
-                const entry = zip.getEntry('mcp/servers.json')
-                if (entry) {
-                    const servers = JSON.parse(
-                        entry.getData().toString('utf-8')
-                    ) as Record<string, unknown>[]
-                    for (const srv of servers) {
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO mcp_servers (id, name, original_name, custom_name, command, args_json, env_json, enabled, icon_url, origin, description, env_hints_json, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                srv.id,
-                                srv.name,
-                                srv.original_name || srv.name,
-                                srv.custom_name || null,
-                                srv.command,
-                                srv.args_json || '[]',
-                                srv.env_json || '{}',
-                                srv.enabled ?? 1,
-                                srv.icon_url || null,
-                                srv.origin || null,
-                                srv.description || '',
-                                srv.env_hints_json || null,
-                                srv.created_at || Date.now(),
-                                srv.updated_at || Date.now()
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(
-                                `MCP ${srv.name}: ${(e as Error).message}`
-                            )
-                        }
-                    }
-                    // Reload MCP servers
-                    await loadSavedMcpServers()
-                }
-            } catch (e) {
-                res.errors.push((e as Error).message)
+        await restore('providers', (res) => {
+            const providers = readArchiveJson<LLMProviderConfig[]>(zip, 'providers/providers.json')
+            if (!providers) return
+            const now = Date.now()
+            addResult(res, insertRows('providers', providers.map((config) => ({
+                id: config.id,
+                name: config.name,
+                type: config.type,
+                base_url: config.baseUrl,
+                api_key_enc: config.apiKey || null,
+                default_model: config.defaultModel,
+                config_json: JSON.stringify({ ...config, apiKey: undefined }),
+                created_at: now,
+                updated_at: now,
+            }))))
+            // Reload gateway providers
+            const gateway = getGateway()
+            for (const [id] of gateway.getAllProviders()) {
+                gateway.removeProvider(id)
             }
-            results.mcp = res
-            emitRestoreProgress('mcp', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
+            loadSavedProviders()
+        })
 
-        // --- Restore Settings ---
-        if (requestedModules.includes('settings') && manifest.modules.settings) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('settings', 'started')
+        await restore('mcp', async (res) => {
+            restoreTables(zip, 'mcp', ctx, res)
+            await loadSavedMcpServers()
+        })
+
+        await restore('settings', (res) => {
             try {
-                // Settings key/values
-                const settingsEntry = zip.getEntry('settings/settings.json')
-                if (settingsEntry) {
-                    const settings = JSON.parse(
-                        settingsEntry.getData().toString('utf-8')
-                    ) as Record<string, unknown>
-                    for (const [key, value] of Object.entries(settings)) {
-                        db.prepare(
-                            "INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)"
-                        ).run(key, JSON.stringify(value))
-                        res.restored++
-                    }
-                }
-
-                // Tool approvals
-                const approvalsEntry = zip.getEntry('settings/tool_approvals.json')
-                if (approvalsEntry) {
-                    const approvals = JSON.parse(
-                        approvalsEntry.getData().toString('utf-8')
-                    ) as { toolName: string; autoApprove: boolean }[]
-                    for (const ta of approvals) {
-                        db.prepare(
-                            'INSERT OR REPLACE INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)'
-                        ).run(ta.toolName, ta.autoApprove ? 1 : 0)
-                        res.restored++
-                    }
-                }
-
-                // Cron jobs
-                const cronEntry = zip.getEntry('settings/cron_jobs.json')
-                if (cronEntry) {
-                    const jobs = JSON.parse(
-                        cronEntry.getData().toString('utf-8')
-                    ) as Record<string, unknown>[]
-                    for (const job of jobs) {
-                        try {
-                            if (job.id) unscheduleCronJob(String(job.id))
-                            const now = Date.now()
-                            db.prepare(
-                                `INSERT OR REPLACE INTO cron_jobs
-                                    (id, name, agent_id, schedule, prompt, enabled, one_off, model_override,
-                                     provider_override, output_channel_id, output_target, notification_mode,
-                                     notification_condition, execution_config_json, created_at, updated_at, last_run_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                job.id,
-                                job.name || '',
-                                job.agent_id,
-                                job.schedule,
-                                job.prompt || '',
-                                job.enabled ?? 1,
-                                job.one_off ?? 0,
-                                job.model_override || '',
-                                job.provider_override || '',
-                                job.output_channel_id || '',
-                                job.output_target || '',
-                                job.notification_mode === 'conditional' ? 'conditional' : 'always',
-                                job.notification_condition || '',
-                                job.execution_config_json || '{}',
-                                job.created_at || now,
-                                job.updated_at || now,
-                                typeof job.last_run_at === 'number' ? job.last_run_at : now
-                            )
-                            if ((job.enabled ?? 1) === 1 && job.id) scheduleCronJob(String(job.id))
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Cron job: ${(e as Error).message}`)
-                        }
-                    }
-                }
-            } catch (e) {
-                res.errors.push((e as Error).message)
+                const settings = readArchiveJson<Record<string, unknown>>(zip, 'settings/settings.json') ?? {}
+                addResult(res, insertRows('settings', Object.entries(settings).map(([key, value]) => ({ key, value_json: JSON.stringify(value) }))))
+                const approvals = readArchiveJson<{ toolName: string; autoApprove: boolean }[]>(zip, 'settings/tool_approvals.json') ?? []
+                addResult(res, insertRows('tool_approvals', approvals.map((approval) => ({ tool_name: approval.toolName, auto_approve: approval.autoApprove }))))
+                restoreTables(zip, 'settings', ctx, res)
+            } finally {
+                // Reload the embedding provider from freshly restored settings.
+                loadEmbeddingServiceFromDb()
             }
-            results.settings = res
+        })
 
-            // Reload the embedding provider from freshly restored settings.
-            loadEmbeddingServiceFromDb()
-            emitRestoreProgress('settings', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
+        await restore('channels', async (res) => {
+            restoreTables(zip, 'channels', ctx, res)
+            // Reload channel manager to pick up restored channels
+            await getChannelManager().loadAll()
+        })
 
-        // --- Restore Channels ---
-        if (requestedModules.includes('channels') && manifest.modules.channels) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('channels', 'started')
+        await restore('memory', (res) => restoreMemory(zip, res))
+
+        await restore('conversations', async (res) => {
+            for (const { id } of db.prepare('SELECT id FROM agents').all() as { id: string }[]) ctx.agentIds.add(id)
+            restoreTables(zip, 'conversations', ctx, res)
             try {
-                const entry = zip.getEntry('channels/channels.json')
-                if (entry) {
-                    const channels = JSON.parse(
-                        entry.getData().toString('utf-8')
-                    ) as Record<string, unknown>[]
-                    for (const ch of channels) {
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO channels (id, name, type, agent_id, config_json, enabled, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                ch.id,
-                                ch.name,
-                                ch.type,
-                                ch.agent_id,
-                                ch.config_json || '{}',
-                                ch.enabled ?? 1,
-                                ch.created_at || Date.now(),
-                                ch.updated_at || Date.now()
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(
-                                `Channel ${ch.name}: ${(e as Error).message}`
-                            )
-                        }
-                    }
-                    // Reload channel manager to pick up restored channels
-                    await getChannelManager().loadAll()
-                }
+                restoreArtifactFiles(zip, ctx.conversationIds, res)
             } catch (e) {
-                res.errors.push((e as Error).message)
+                res.errors.push(`Artifact restoration: ${(e as Error).message}`)
             }
-            results.channels = res
-            emitRestoreProgress('channels', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
-
-        // --- Restore categorized, revisional memory ---
-        if (requestedModules.includes('memory') && manifest.modules.memory) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('memory', 'started')
             try {
-                await stopAllMemoryFolderWatchers()
-
-                // Memory replacement must not leave facts from the previous
-                // workspace addressable under reused category IDs such as default.
-                await getMemoryKnowledgeStore().reset()
-
-                // Reset LanceDB to avoid stale index references from previous state
-                const ragStore = getRAGStore()
-                await ragStore.close()
-                const lanceDir = join(getAppDataDir(), 'lancedb')
-                if (existsSync(lanceDir)) {
-                    rmSync(lanceDir, { recursive: true, force: true })
-                }
-                await ragStore.initialize()
-
-                db.prepare('DELETE FROM memory_file_index').run()
-                db.prepare('DELETE FROM memory_document_revisions').run()
-                db.prepare('DELETE FROM memory_documents').run()
-                db.prepare('DELETE FROM agent_memory_folders').run()
-                db.prepare('DELETE FROM memory_folders').run()
-
-                const memoryRoot = getMemoryFoldersRootDir()
-                if (existsSync(memoryRoot)) {
-                    rmSync(memoryRoot, { recursive: true, force: true })
-                }
-                ensureFolder(memoryRoot)
-
-                // Restore current category and document state. Historical revisions
-                // in older backups are intentionally ignored.
-                const categoriesEntry = zip.getEntry('memory/categories.json')
-                const folderIdMap = new Map<string, string>()
-                if (categoriesEntry) {
-                    const { categories, assignments, fileIndex, documents } = JSON.parse(categoriesEntry.getData().toString('utf-8')) as {
-                        categories: MemoryFolderBackupRow[]
-                        assignments: Record<string, unknown>[]
-                        fileIndex?: MemoryFileIdentityBackup[]
-                        documents?: MemoryDocumentBackup[]
-                    }
-                    for (const sp of categories) {
-                        const importedId = String(sp.id || '')
-                        if (!importedId) continue
-                        const isUncategorized = sp.is_uncategorized === 1 || sp.is_uncategorized === true || importedId === 'uncategorized'
-                        const id = isUncategorized ? 'uncategorized' : importedId
-                        folderIdMap.set(importedId, id)
-                        const directoryPath = id === 'uncategorized' ? getDefaultMemoryFolderDir() : directoryPathForRelative(relativePathFromBackupCategory(sp))
-                        ensureFolder(directoryPath)
-                        db.prepare(`
-                            INSERT OR REPLACE INTO memory_folders
-                                (id, name, description, directory_path, sort_order, is_uncategorized, auto_memory_excluded, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        `).run(
-                            id,
-                            sp.name || '',
-                            sp.description || '',
-                            directoryPath,
-                            sp.sort_order ?? 0,
-                            id === 'uncategorized' ? 1 : 0,
-                            sp.auto_memory_excluded === 1 || sp.auto_memory_excluded === true ? 1 : 0,
-                            sp.created_at || Date.now()
-                        )
-                    }
-                    ensureDefaultMemoryFolder(db)
-                    for (const asg of assignments) {
-                        const mappedFolderId = folderIdMap.get(String(asg.category_id || '')) || asg.category_id
-                        db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
-                            .run(asg.agent_id, mappedFolderId)
-                    }
-                    for (const file of fileIndex || []) {
-                        const mappedFolderId = folderIdMap.get(file.category_id) || file.category_id
-                        db.prepare(`
-                            INSERT OR REPLACE INTO memory_file_index
-                                (document_id, document_ref, category_id, file_name, content_hash,
-                                 chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json, created_at)
-                            VALUES (?, ?, ?, ?, '', 0, 0, 0, ?, '[]', ?)
-                        `).run(file.document_id, file.document_ref, mappedFolderId, file.file_name, file.dreamed_at || 0, file.created_at || Date.now())
-                    }
-                    for (const document of documents || []) {
-                        if (document.status === 'deleted') continue
-                        const folderId = folderIdMap.get(String(document.category_id || '')) || String(document.category_id || '')
-                        db.prepare(`INSERT OR REPLACE INTO memory_documents
-                            (document_id, document_ref, category_id, file_name, current_hash, status, indexing_status, created_at, updated_at, deleted_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                            .run(document.document_id, document.document_ref, folderId, document.file_name,
-                                document.current_hash || '', document.status || 'active', document.indexing_status || 'pending', document.created_at || Date.now(),
-                                document.updated_at || Date.now(), document.deleted_at || null)
-                    }
-                } else {
-                    throw new Error('Backup does not contain categorized memory metadata.')
-                }
-
-                // Restore source files only. Files are the source of truth for
-                // file-backed memory; vectors should be rebuilt on the target
-                // machine by re-indexing with its local embedding configuration.
-                const filesEntry = zip.getEntry('memory/files.json')
-                if (filesEntry) {
-                    const { files } = JSON.parse(filesEntry.getData().toString('utf-8')) as { files: MemoryFileBackup[] }
-                    for (const file of files || []) {
-                        try {
-                            const safeFileName = basename(file.fileName)
-                            if (!file.folderId || !safeFileName || safeFileName !== file.fileName) {
-                                throw new Error('Invalid memory file name')
-                            }
-                            const targetFolderId = folderIdMap.get(file.folderId) || file.folderId
-
-                            const category = db.prepare('SELECT directory_path FROM memory_folders WHERE id = ?')
-                                .get(targetFolderId) as { directory_path: string } | undefined
-                            if (!category?.directory_path) throw new Error(`Memory folder "${targetFolderId}" not found`)
-
-                            const entry = zip.getEntry(file.archiveName)
-                            if (!entry || entry.isDirectory) throw new Error('File content missing from backup')
-
-                            ensureFolder(category.directory_path)
-                            writeFileSync(join(category.directory_path, safeFileName), entry.getData())
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`File "${file.fileName}": ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                const restoredCategories = db.prepare('SELECT id, directory_path FROM memory_folders WHERE directory_path != ?').all('') as {
-                    id: string
-                    directory_path: string
-                }[]
-                for (const category of restoredCategories) {
-                    watchMemoryFolder(category.id, category.directory_path)
-                }
+                rehomeMediaUrls(ctx.conversationIds)
             } catch (e) {
-                res.errors.push((e as Error).message)
+                res.errors.push(`Artifact path migration: ${(e as Error).message}`)
             }
-            results.memory = res
-            emitRestoreProgress('memory', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
-
-        // --- Restore governed knowledge, including manual corrections ---
-        if (requestedModules.includes('knowledge') && manifest.modules.knowledge && knowledgeBackup) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('knowledge', 'started')
             try {
-                const restored = await restoreMemoryKnowledgeBackup(knowledgeBackup, db)
-                res.restored = restored.restored
-                if (restored.projectionError) {
-                    res.errors.push(`Knowledge search projection: ${restored.projectionError}`)
-                }
+                await restoreAttachments(zip, ctx.conversationIds, new Set(manifest.skippedAttachmentAssetIds ?? []), res)
             } catch (e) {
-                res.errors.push((e as Error).message)
+                res.errors.push(`Attachment reindex: ${(e as Error).message}`)
             }
-            results.knowledge = res
-            emitRestoreProgress('knowledge', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
+        })
 
-        // --- Restore Conversations (only for agents present in DB) ---
-        if (requestedModules.includes('conversations') && manifest.modules.conversations) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('conversations', 'started')
-            try {
-                // Get the set of agent IDs that exist in the DB (including freshly imported ones)
-                const existingAgentIds = new Set(
-                    (db.prepare('SELECT id FROM agents').all() as { id: string }[]).map(a => a.id)
-                )
-
-                // Conversations
-                const convEntry = zip.getEntry('conversations/conversations.json')
-                const importedConversationIds = new Set<string>()
-                if (convEntry) {
-                    const conversations = JSON.parse(convEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const c of conversations) {
-                        // Only restore conversations for agents that exist in the DB
-                        if (c.agent_id && !existingAgentIds.has(c.agent_id as string)) continue
-                        try {
-                            db.prepare(
-                                'INSERT OR REPLACE INTO conversations (id, title, agent_id, ma_workspace_id, origin, pinned, last_context_tokens, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-                            ).run(
-                                c.id,
-                                c.title || '',
-                                c.agent_id || null,
-                                c.ma_workspace_id || null,
-                                c.origin || 'chat',
-                                c.pinned ?? 0,
-                                c.last_context_tokens ?? null,
-                                c.execution_config_json || '{}',
-                                c.metadata_json || '{}',
-                                c.created_at || Date.now(),
-                                c.updated_at || Date.now()
-                            )
-                            importedConversationIds.add(c.id as string)
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Conversation: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Messages (only for imported conversations)
-                const importedMessageIds = new Set<string>()
-                const msgEntry = zip.getEntry('conversations/messages.json')
-                if (msgEntry) {
-                    const messages = JSON.parse(msgEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const m of messages) {
-                        if (!importedConversationIds.has(m.conversation_id as string)) continue
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO messages (
-                                    id, conversation_id, role, content, tool_calls_json, tool_call_id,
-                                    provider, model, prompt_tokens, completion_tokens, context_tokens,
-                                    latency_ms, agent_id, ma_codename,
-                                    ma_agent_name, ma_invocation_id, generated_media, is_error, memory_sources_json,
-                                    content_blocks_json, created_at
-                                 )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                m.id, m.conversation_id, m.role, m.content,
-                                m.tool_calls_json || null, m.tool_call_id || null,
-                                m.provider || null, m.model || null,
-                                m.prompt_tokens ?? null, m.completion_tokens ?? null,
-                                m.context_tokens ?? null,
-                                m.latency_ms ?? null, m.agent_id || null,
-                                m.ma_codename || null, m.ma_agent_name || null, m.ma_invocation_id || null,
-                                m.generated_media ?? 0, m.is_error ?? 0, m.memory_sources_json || null,
-                                m.content_blocks_json || null,
-                                m.created_at || Date.now()
-                            )
-                            importedMessageIds.add(m.id as string)
-                            // Restored history must not become new Dreaming Mode work.
-                            db.prepare('DELETE FROM dream_message_events WHERE message_id = ?').run(m.id)
-                        } catch (e) {
-                            res.errors.push(`Message: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Canonical replay history; old archives without this file still restore messages.
-                const chatEventsEntry = zip.getEntry('conversations/chat_events.json')
-                if (chatEventsEntry) {
-                    const events = JSON.parse(chatEventsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    const clearEvents = db.prepare('DELETE FROM chat_events WHERE conversation_id = ?')
-                    for (const conversationId of importedConversationIds) clearEvents.run(conversationId)
-                    const insertEvent = db.prepare(`
-                        INSERT INTO chat_events (conversation_id, execution_id, event_json, created_at)
-                        VALUES (?, ?, ?, ?)
-                    `)
-                    for (const event of events) {
-                        if (!importedConversationIds.has(event.conversation_id as string)) continue
-                        try {
-                            insertEvent.run(event.conversation_id, event.execution_id, event.event_json, event.created_at)
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Chat event: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Durable sub-agent sessions (only for imported conversations)
-                const subagentSessionsEntry = zip.getEntry('conversations/subagent_sessions.json')
-                if (subagentSessionsEntry) {
-                    const sessions = JSON.parse(subagentSessionsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const session of sessions) {
-                        if (!importedConversationIds.has(session.conversation_id as string)) continue
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO subagent_sessions (
-                                    invocation_id, conversation_id, agent_id, history_json, created_at, updated_at
-                                 ) VALUES (?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                session.invocation_id, session.conversation_id, session.agent_id,
-                                session.history_json || '[]', session.created_at || Date.now(), session.updated_at || Date.now()
-                            )
-                        } catch (e) {
-                            res.errors.push(`Sub-agent session: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Message attachments (only for imported messages)
-                const attachmentsEntry = zip.getEntry('conversations/message_attachments.json')
-                if (attachmentsEntry) {
-                    const attachments = JSON.parse(attachmentsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const a of attachments) {
-                        if (!importedMessageIds.has(a.message_id as string)) continue
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO message_attachments (
-                                    id, message_id, conversation_id, kind, name, original_path, text_path,
-                                    size_bytes, text_bytes, chunk_count, metadata_json, created_at, asset_id
-                                 )
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                a.id, a.message_id, a.conversation_id, a.kind || 'file', a.name || '',
-                                a.original_path || null, a.text_path || null,
-                                a.size_bytes ?? null, a.text_bytes ?? null, a.chunk_count ?? null,
-                                a.metadata_json || null, a.created_at || Date.now(), a.asset_id || a.id
-                            )
-                        } catch (e) {
-                            res.errors.push(`Message attachment: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Tasks (only for imported conversations)
-                const tasksEntry = zip.getEntry('conversations/tasks.json')
-                if (tasksEntry) {
-                    const tasks = JSON.parse(tasksEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const t of tasks) {
-                        if (t.conversation_id && !importedConversationIds.has(t.conversation_id as string)) continue
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO tasks (id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                t.id, t.conversation_id || null, t.status || 'completed',
-                                t.definition_json || '{}', t.result_json || null,
-                                t.iterations ?? 0, t.created_at || Date.now(),
-                                t.updated_at || t.created_at || Date.now(),
-                                t.completed_at || null
-                            )
-                        } catch (e) {
-                            res.errors.push(`Task: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Restore artifact files for imported conversations
-                try {
-                    const appDataDir = getAppDataDir()
-                    const artifactsBaseDir = join(appDataDir, 'artifacts', 'conversations')
-
-                    // Get all entries in the zip
-                    const allEntries = zip.getEntries()
-                    for (const entry of allEntries) {
-                        // Match entries like: conversations/artifacts/{convId}/{relative/path/to/file}
-                        const match = entry.entryName.match(/^conversations\/artifacts\/([^/]+)\/(.+)$/)
-                        if (!match) continue
-
-                        const convId = match[1]
-                        const relPath = match[2]
-
-                        // Only restore artifacts for conversations we're importing
-                        if (!importedConversationIds.has(convId)) continue
-
-                        // Skip directories, only restore files
-                        if (entry.isDirectory) continue
-
-                        try {
-                            const targetPath = join(artifactsBaseDir, convId, relPath)
-                            mkdirSync(dirname(targetPath), { recursive: true })
-                            writeFileSync(targetPath, entry.getData())
-                        } catch (e) {
-                            res.errors.push(`Artifact file ${entry.entryName}: ${(e as Error).message}`)
-                        }
-                    }
-                } catch (e) {
-                    res.errors.push(`Artifact restoration: ${(e as Error).message}`)
-                }
-
-                // Re-home absolute media URLs to this installation's data directory.
-                // Backup archives retain filenames, while the old absolute prefix may
-                // belong to another OS, user account, or CYNOSURE_DATA_DIR.
-                try {
-                    const artifactsBaseDir = join(getAppDataDir(), 'artifacts', 'conversations')
-                    const placeholders = Array.from(importedConversationIds).map(() => '?').join(',') || "''"
-                    const rows = db.prepare(`
-                        SELECT id, conversation_id, content_blocks_json
-                        FROM messages
-                        WHERE conversation_id IN (${placeholders})
-                    `).all(...Array.from(importedConversationIds)) as {
-                        id: string
-                        conversation_id: string
-                        content_blocks_json: string | null
-                    }[]
-                    const rehomeMediaUrl = (url: string, conversationId: string, kind?: string): string => {
-                        const oldPath = extractFilePathFromFileUrl(url)
-                        if (!oldPath) return url
-                        const directory = kind === 'image' ? 'images' : kind === 'video' ? 'videos' : kind === 'audio' ? 'audio'
-                            : /[\\/]images[\\/]/.test(oldPath) ? 'images' : /[\\/]videos[\\/]/.test(oldPath) ? 'videos'
-                                : /[\\/]audio[\\/]/.test(oldPath) ? 'audio' : null
-                        if (!directory) return url
-                        const targetPath = join(artifactsBaseDir, conversationId, directory, basename(oldPath))
-                        return existsSync(targetPath) ? toFileUrl(targetPath) : url
-                    }
-                    const rehome = (json: string | null, conversationId: string): string | null => {
-                        if (!json) return null
-                        try {
-                            const blocks = JSON.parse(json) as ContentBlock[]
-                            return JSON.stringify(blocks.map((block) => {
-                                if (block.type !== 'image' && block.type !== 'video' && block.type !== 'audio') return block
-                                const url = rehomeMediaUrl(block.url, conversationId, block.type)
-                                return { ...block, artifactId: url, url }
-                            }))
-                        } catch {
-                            return json
-                        }
-                    }
-                    const update = db.prepare(`
-                        UPDATE messages
-                        SET content_blocks_json = ?
-                        WHERE id = ?
-                    `)
-                    for (const row of rows) {
-                        update.run(
-                            rehome(row.content_blocks_json, row.conversation_id),
-                            row.id,
-                        )
-                    }
-                    const eventRows = db.prepare(`SELECT sequence, conversation_id, event_json FROM chat_events WHERE conversation_id IN (${placeholders})`)
-                        .all(...Array.from(importedConversationIds)) as Array<{ sequence: number; conversation_id: string; event_json: string }>
-                    const rehomeEventValue = (value: unknown, conversationId: string): unknown => {
-                        if (Array.isArray(value)) return value.map(item => rehomeEventValue(item, conversationId))
-                        if (value && typeof value === 'object') {
-                            const object = value as Record<string, unknown>
-                            const mapped: Record<string, unknown> = {}
-                            for (const [key, item] of Object.entries(object)) {
-                                mapped[key] = key === 'url' && typeof item === 'string'
-                                    ? rehomeMediaUrl(item, conversationId)
-                                    : rehomeEventValue(item, conversationId)
-                            }
-                            if (typeof mapped.url === 'string' && typeof mapped.artifactId === 'string') mapped.artifactId = mapped.url
-                            return mapped
-                        }
-                        return value
-                    }
-                    const updateEvent = db.prepare('UPDATE chat_events SET event_json = ? WHERE sequence = ?')
-                    for (const row of eventRows) {
-                        updateEvent.run(JSON.stringify(rehomeEventValue(JSON.parse(row.event_json), row.conversation_id)), row.sequence)
-                    }
-                } catch (e) {
-                    res.errors.push(`Artifact path migration: ${(e as Error).message}`)
-                }
-
-                // Re-home restored attachment artifact paths and rebuild conversation-scoped vectors.
-                try {
-                    const appDataDir = getAppDataDir()
-                    const artifactsBaseDir = join(appDataDir, 'artifacts', 'conversations')
-                    const assetEntry = zip.getEntry('conversations/attachment_assets.json')
-                    const archivedAssets = assetEntry
-                        ? JSON.parse(assetEntry.getData().toString('utf-8')) as Array<Record<string, unknown>>
-                        : []
-                    const importedAssetIds = new Set(
-                        (db.prepare(`SELECT DISTINCT asset_id FROM message_attachments WHERE conversation_id IN (${Array.from(importedConversationIds).map(() => '?').join(',') || "''"})`)
-                            .all(...Array.from(importedConversationIds)) as Array<{ asset_id: string | null }>)
-                            .map(row => row.asset_id).filter((id): id is string => Boolean(id))
-                    )
-                    for (const asset of archivedAssets) {
-                        const id = asset.id
-                        if (typeof id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(id) || !importedAssetIds.has(id)) continue
-                        const original = zip.getEntry(`conversations/attachment-assets/${id}/original`)
-                        const text = zip.getEntry(`conversations/attachment-assets/${id}/text`)
-                        if (!original || !text) {
-                            res.errors.push(`Attachment asset ${id}: missing file in backup`)
-                            continue
-                        }
-                        const assetDir = join(appDataDir, 'artifacts', 'attachment-assets')
-                        mkdirSync(assetDir, { recursive: true })
-                        const originalPath = join(assetDir, basename(String(asset.original_path || id)))
-                        const textPath = join(assetDir, basename(String(asset.text_path || `${id}.parsed.md`)))
-                        writeFileSync(originalPath, original.getData())
-                        writeFileSync(textPath, text.getData())
-                        db.prepare(`INSERT OR REPLACE INTO attachment_assets
-                            (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                        ).run(id, asset.name || '', originalPath, textPath, asset.size_bytes ?? 0,
-                            asset.text_bytes ?? 0, asset.chunk_count ?? null, asset.metadata_json || null, asset.created_at || Date.now())
-                        db.prepare(`UPDATE message_attachments SET original_path = ?, text_path = ? WHERE asset_id = ? AND conversation_id IN (${Array.from(importedConversationIds).map(() => '?').join(',') || "''"})`)
-                            .run(originalPath, textPath, id, ...Array.from(importedConversationIds))
-                    }
-                    const rows = db.prepare(`
-                        SELECT id, asset_id, conversation_id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
-                        FROM message_attachments
-                        WHERE conversation_id IN (${Array.from(importedConversationIds).map(() => '?').join(',') || "''"})
-                          AND kind = 'file'
-                    `).all(...Array.from(importedConversationIds)) as {
-                        id: string
-                        asset_id: string | null
-                        conversation_id: string
-                        name: string
-                        original_path: string | null
-                        text_path: string | null
-                        size_bytes: number | null
-                        text_bytes: number | null
-                        chunk_count: number | null
-                    }[]
-
-                    for (const row of rows) {
-                        if (!row.original_path || !row.text_path) continue
-                        const restoredAsset = archivedAssets.some(asset => asset.id === row.asset_id)
-                        const originalPath = restoredAsset ? row.original_path : join(artifactsBaseDir, row.conversation_id, 'files', basename(row.original_path))
-                        const textPath = restoredAsset ? row.text_path : join(artifactsBaseDir, row.conversation_id, 'files', basename(row.text_path))
-                        if (!existsSync(originalPath) || !existsSync(textPath)) {
-                            res.errors.push(`Attachment ${row.id}: missing file in backup`)
-                            continue
-                        }
-                        const attachment: FileAttachmentArtifact = {
-                            id: row.id,
-                            assetId: row.asset_id || row.id,
-                            name: row.name,
-                            originalPath,
-                            textPath,
-                            sizeBytes: row.size_bytes ?? 0,
-                            textBytes: row.text_bytes ?? 0,
-                            chunkCount: row.chunk_count ?? undefined,
-                        }
-                        const chunkCount = await indexConversationAttachment(row.conversation_id, attachment)
-                        db.prepare(`INSERT OR REPLACE INTO attachment_assets
-                            (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                        ).run(row.asset_id || row.id, row.name, originalPath, textPath, row.size_bytes ?? 0, row.text_bytes ?? 0,
-                            chunkCount, JSON.stringify({ ...attachment, chunkCount }), Date.now())
-                        db.prepare(`
-                            UPDATE message_attachments
-                            SET original_path = ?, text_path = ?, chunk_count = ?, metadata_json = ?
-                            WHERE id = ?
-                        `).run(originalPath, textPath, chunkCount, JSON.stringify({ ...attachment, chunkCount }), row.id)
-                    }
-                } catch (e) {
-                    res.errors.push(`Attachment reindex: ${(e as Error).message}`)
-                }
-            } catch (e) {
-                res.errors.push((e as Error).message)
-            }
-            results.conversations = res
-            emitRestoreProgress('conversations', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
-
-        // --- Restore Usage statistics (execution trace data) ---
-        if (requestedModules.includes('usage') && manifest.modules.usage) {
-            const res = { restored: 0, errors: [] as string[] }
-            emitRestoreProgress('usage', 'started')
-            try {
-                // Execution logs
-                const logsEntry = zip.getEntry('usage/execution_logs.json')
-                if (logsEntry) {
-                    const logs = JSON.parse(logsEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const log of logs) {
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO execution_logs (id, task_id, conversation_id, iteration, event_type, data_json, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?)`
-                            ).run(log.id, log.task_id, log.conversation_id, log.iteration ?? 0, log.event_type, log.data_json, log.created_at || Date.now())
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Execution log: ${(e as Error).message}`)
-                        }
-                    }
-                }
-
-                // Auxiliary model usage (embeddings, reranking, dreaming, etc.)
-                const auxiliaryUsageEntry = zip.getEntry('usage/auxiliary_model_usage.json')
-                if (auxiliaryUsageEntry) {
-                    const auxiliaryUsage = JSON.parse(auxiliaryUsageEntry.getData().toString('utf-8')) as Record<string, unknown>[]
-                    for (const usage of auxiliaryUsage) {
-                        try {
-                            db.prepare(
-                                `INSERT OR REPLACE INTO auxiliary_model_usage
-                                 (id, kind, provider, model, input_tokens, output_tokens, request_count, created_at)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-                            ).run(
-                                usage.id,
-                                usage.kind,
-                                usage.provider || '',
-                                usage.model || '',
-                                usage.input_tokens ?? 0,
-                                usage.output_tokens ?? 0,
-                                usage.request_count ?? 1,
-                                usage.created_at || Date.now(),
-                            )
-                            res.restored++
-                        } catch (e) {
-                            res.errors.push(`Auxiliary model usage: ${(e as Error).message}`)
-                        }
-                    }
-                }
-            } catch (e) {
-                res.errors.push((e as Error).message)
-            }
-            results.usage = res
-            emitRestoreProgress('usage', res.errors.length > 0 ? 'failed' : 'completed', res.errors)
-        }
+        await restore('usage', (res) => restoreTables(zip, 'usage', ctx, res))
 
         return { success: true, results }
     })
@@ -1583,8 +1147,8 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             manifestEntry.getData().toString('utf-8')
         ) as BackupManifest
 
-        // Advertise Knowledge only when its versioned payload is present.
-        if (!getMemoryKnowledgeBackup(zip)) delete manifest.modules.knowledge
+        // The knowledge graph module was removed; older backups may still list it.
+        delete manifest.modules.knowledge
 
         return manifest
     })

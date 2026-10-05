@@ -42,6 +42,7 @@ jobs:
           path: |
             apps/electron/release/*.AppImage
             apps/electron/release/*.deb
+            apps/electron/release/latest-linux.yml
           if-no-files-found: error
           retention-days: 1 # Automatically deletes after 24 hours
 
@@ -72,8 +73,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          # Only the installer — exclude .blockmap (auto-update delta files)
-          path: apps/electron/release/*.exe
+          # Installer plus electron-updater metadata; .blockmap delta files are skipped,
+          # so updates fall back to a full download.
+          path: |
+            apps/electron/release/*.exe
+            apps/electron/release/latest.yml
           if-no-files-found: error
           retention-days: 1 # Automatically deletes after 24 hours
 

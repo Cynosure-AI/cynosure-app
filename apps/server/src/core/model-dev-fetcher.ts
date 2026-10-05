@@ -95,16 +95,8 @@ export function getModelCost(provider: string, model: string): ModelCost | null 
     return getModelMetadata(provider, model)?.cost ?? null
 }
 
-export function getModelContextLength(provider: string, model: string): number | null {
-    return getModelMetadata(provider, model)?.contextLength ?? null
-}
-
 export function getModelOutputModalities(provider: string, model: string): string[] | null {
     return getModelMetadata(provider, model)?.outputModalities ?? null
-}
-
-export function getModelInputModalities(provider: string, model: string): string[] | null {
-    return getModelMetadata(provider, model)?.inputModalities ?? null
 }
 
 export function getModelMetadata(provider: string, model: string): ModelMetadata | null {

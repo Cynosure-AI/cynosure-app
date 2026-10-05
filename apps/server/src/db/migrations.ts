@@ -37,10 +37,14 @@ const MIGRATIONS: SchemaMigration[] = [
     {
         version: 2,
         description: 'Add per-chunk memory analysis summaries',
-        up: (db) => db.exec(`
-            ALTER TABLE memory_knowledge_text_units
-            ADD COLUMN summary TEXT NOT NULL DEFAULT ''
-        `),
+        up: (db) => {
+            // The table is dropped again in v18; re-applied histories may no longer have it.
+            if (!tableExists(db, 'memory_knowledge_text_units')) return
+            db.exec(`
+                ALTER TABLE memory_knowledge_text_units
+                ADD COLUMN summary TEXT NOT NULL DEFAULT ''
+            `)
+        },
     },
     {
         version: 3,
@@ -326,6 +330,97 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 16,
+        description: 'Drop unverified quote and confidence fields from knowledge evidence',
+        up: (db) => {
+            // Evidence links an assertion to its source text unit. The quote,
+            // span, extractor confidence, trust, entailment and verification
+            // columns were never populated with real values. SQLite cannot drop
+            // columns that take part in a UNIQUE constraint, so rebuild the table.
+            const columns = new Set((db.pragma('table_info(memory_knowledge_assertion_evidence)') as Array<{ name: string }>).map((column) => column.name))
+            if (!columns.has('quote_verified')) return
+            db.exec(`
+                CREATE TABLE memory_knowledge_assertion_evidence_next (
+                    id TEXT PRIMARY KEY,
+                    assertion_id TEXT NOT NULL REFERENCES memory_knowledge_assertions(id) ON DELETE CASCADE,
+                    run_id TEXT NOT NULL REFERENCES memory_knowledge_index_runs(id) ON DELETE CASCADE,
+                    text_unit_id TEXT NOT NULL REFERENCES memory_knowledge_text_units(id) ON DELETE CASCADE,
+                    entity_resolution_confidence REAL NOT NULL DEFAULT 0,
+                    note TEXT NOT NULL DEFAULT '',
+                    pipeline_version TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE(assertion_id, run_id, text_unit_id)
+                );
+                INSERT OR IGNORE INTO memory_knowledge_assertion_evidence_next
+                    (id, assertion_id, run_id, text_unit_id, entity_resolution_confidence, note, pipeline_version, created_at)
+                SELECT id, assertion_id, run_id, text_unit_id, entity_resolution_confidence, note, pipeline_version, created_at
+                FROM memory_knowledge_assertion_evidence
+                ORDER BY created_at;
+                DROP TABLE memory_knowledge_assertion_evidence;
+                ALTER TABLE memory_knowledge_assertion_evidence_next RENAME TO memory_knowledge_assertion_evidence;
+                CREATE INDEX IF NOT EXISTS idx_mkae_assertion ON memory_knowledge_assertion_evidence(assertion_id);
+                CREATE INDEX IF NOT EXISTS idx_mkae_run ON memory_knowledge_assertion_evidence(run_id);
+                CREATE INDEX IF NOT EXISTS idx_mkae_text_unit ON memory_knowledge_assertion_evidence(text_unit_id);
+            `)
+        },
+    },
+    {
+        version: 17,
+        description: 'Remove document-level memory tags',
+        up: (db) => {
+            // Per-chunk keywords in memory_knowledge_text_units remain; they feed retrieval.
+            const columns = db.pragma('table_info(memory_file_index)') as Array<{ name: string }>
+            if (columns.some((column) => column.name === 'tags_json')) {
+                db.exec('ALTER TABLE memory_file_index DROP COLUMN tags_json')
+            }
+        },
+    },
+    {
+        version: 18,
+        description: 'Remove the knowledge graph and deep memory analysis',
+        up: (db) => {
+            // Drop referencing tables before the tables they point to.
+            let remaining = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'memory\\_knowledge\\_%' ESCAPE '\\'")
+                .all() as Array<{ name: string }>).map(({ name }) => name)
+            while (remaining.length) {
+                const referenced = new Set(remaining.flatMap((name) => (db.pragma(`foreign_key_list("${name.replace(/"/g, '""')}")`) as Array<{ table: string }>)
+                    .map((key) => key.table)
+                    .filter((table) => table !== name)))
+                const leaves = remaining.filter((name) => !referenced.has(name))
+                if (!leaves.length) throw new Error('Knowledge tables have circular references')
+                for (const name of leaves) db.exec(`DROP TABLE "${name.replace(/"/g, '""')}"`)
+                remaining = remaining.filter((name) => !leaves.includes(name))
+            }
+
+            const columns = db.pragma('table_info(memory_file_index)') as Array<{ name: string }>
+            if (columns.some((column) => column.name === 'deep_researched_at')) {
+                db.exec('ALTER TABLE memory_file_index DROP COLUMN deep_researched_at')
+            }
+            db.prepare("DELETE FROM memory_index_jobs WHERE kind = 'deep-research'").run()
+            db.prepare("DELETE FROM settings WHERE key IN ('memoryDeepResearch', 'memoryEntityExtraction', 'memoryKnowledgeProjectionVersion')").run()
+        },
+    },
+    {
+        version: 19,
+        description: 'Mark assistant replies that were stopped before they finished',
+        up: (db) => {
+            const columns = db.pragma('table_info(messages)') as Array<{ name: string }>
+            if (!columns.some((column) => column.name === 'stopped')) {
+                db.exec('ALTER TABLE messages ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0')
+            }
+        },
+    },
+    {
+        version: 20,
+        description: 'Remove the per-agent tool and memory router model columns replaced by auto_router_*',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(agents)') as Array<{ name: string }>).map(({ name }) => name))
+            for (const column of ['tool_router_provider_id', 'tool_router_model', 'memory_router_provider_id', 'memory_router_model']) {
+                if (columns.has(column)) db.exec(`ALTER TABLE agents DROP COLUMN ${column}`)
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */
@@ -381,6 +476,10 @@ export function applySchemaMigrations(
     }
 
     return { from, to: getUserVersion(db), applied }
+}
+
+function tableExists(db: Database.Database, name: string): boolean {
+    return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name))
 }
 
 function hasUserObjects(db: Database.Database): boolean {

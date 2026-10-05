@@ -192,7 +192,6 @@ export function useChatMessages(
             createdAt: Date.now()
         })
 
-        agentStore.clearExecutionState()
         agentStore.prepareConversationExecution(conversationId)
 
         streaming.streamingContent.value = ''

@@ -4,6 +4,7 @@ import type { ToolRegistry } from '../tools/tool-registry.js'
 import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { folderPathForDirectory } from '../memory/memory-folder-directories.js'
 import { expandMemoryFolderScope, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
+import { defaultAutoModes } from '../agent/execution-preset.js'
 
 export interface ToolSelectionConfig {
     selectedToolKeys: string[]
@@ -60,7 +61,7 @@ export function resolveChatRunFlags(input: {
     return {
         autoMemory: autoMemory !== undefined
             ? autoMemory === true
-            : (resolvedAgent?.autoMemory === true),
+            : defaultAutoModes(resolvedAgent).autoMemory,
     }
 }
 
@@ -112,8 +113,7 @@ export function buildInitialExecutionConfig(input: {
         providerId: agent?.providerId ?? '',
         thinkingEnabled: agent?.thinkingEnabled !== false,
         reasoningEffort: agent?.reasoningEffort ?? 'medium',
-        autoToolRouting: agent?.autoToolRouting === true,
-        autoMemory: agent?.autoMemory === true,
+        ...defaultAutoModes(agent),
     }
 }
 

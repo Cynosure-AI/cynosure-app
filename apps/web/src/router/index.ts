@@ -73,11 +73,12 @@ const router = createRouter({
       redirect: '/memory-folders/documents'
     },
     {
-      path: '/memory-folders/relationships',
+      // The knowledge graph views were removed; keep old links working.
+      path: '/memory-folders/:section(relationships|visual-graph)',
       redirect: '/memory-folders/documents'
     },
     {
-      path: '/memory-folders/:section(documents|visual-graph)',
+      path: '/memory-folders/:section(documents)',
       name: 'memory-folders',
       component: () => import('@/views/MemoryView.vue')
     },

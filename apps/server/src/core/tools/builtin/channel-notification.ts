@@ -1,6 +1,6 @@
 import type { ChannelConfig, ChannelType } from '../../channels/base.channel.js'
 import { getChannelManager } from '../../channels/channel-manager.js'
-import { normalizeTelegramUserIds } from '../../channels/telegram/telegram.security.js'
+import { normalizeTelegramUserIds } from '../../channels/telegram/telegram.channel.js'
 import { resolveChannelTarget } from '../../triggers/channel-target-resolver.js'
 
 /** Configured channels that are currently capable of delivering a notification. */

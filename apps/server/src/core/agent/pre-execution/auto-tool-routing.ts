@@ -5,7 +5,7 @@ import { MCP_CANDIDATE_COUNT, routeTools, routeToolsLexically, shouldRouteTools,
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
-import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
+import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, ROUTER_TURN_CHAR_LIMIT, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
 
 const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
 const TOOLSET_DESCRIPTION_CHAR_LIMIT = 1_200
@@ -24,12 +24,14 @@ export interface ApplyAutoToolRoutingInput {
     /** Explicitly selected tool names that must be included after routing. */
     preferredToolNames?: Set<string>
     usedToolNames?: Set<string>
+    /** Toolsets already chosen by task-context planning; skips the separate toolset selector call. */
+    plannedToolsetIds?: string[]
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
 }
 
-interface ToolsetCandidate {
+export interface ToolsetCandidate {
     id: string
     label: string
     description: string
@@ -52,6 +54,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         mcpMetadata,
         preferredToolNames,
         usedToolNames,
+        plannedToolsetIds,
         eventMeta,
         signal,
     } = input
@@ -60,14 +63,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
     // Discovery must see the complete configured catalogue. Behavior hints
     // control approval at execution time; using them as a visibility filter
     // makes valid write/destructive capabilities impossible to discover.
-    if (!shouldRouteTools(tools, userQuery, { enabled })) {
-        emitAutoToolRoutingSkipped(
-            conversationId,
-            !tools.length ? 'no-tools' : !userQuery?.trim() ? 'no-query' : 'disabled',
-            eventMeta,
-        )
-        return tools
-    }
+    if (!shouldRouteTools(tools, userQuery, { enabled })) return tools
 
     const taskId = `router_${nanoid()}`
     return runRoutingPhase({
@@ -75,7 +71,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         label: 'tool-router',
         run: async () => {
             emitToolRoutingStatus(conversationId, taskId, 'routing-tools', 'Selecting required MCPs and toolsets...', eventMeta)
-            const selectedNamespaceIds = await selectToolsets({
+            const selectedNamespaceIds = plannedToolsetIds ? new Set(plannedToolsetIds) : await selectToolsets({
                 conversationId,
                 gateway,
                 providerId,
@@ -164,15 +160,6 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
     })
 }
 
-export function emitAutoToolRoutingSkipped(
-    _conversationId: string,
-    _reason: 'disabled' | 'no-query' | 'no-tools',
-    _eventMeta?: Record<string, unknown>,
-): void {
-    // Static or disabled tool selection is not a routing step, so keep the
-    // pre-execution timeline quiet unless the auto-router actually runs.
-}
-
 async function selectToolsets(input: {
     conversationId: string
     gateway: LLMGateway
@@ -204,7 +191,7 @@ async function selectToolsets(input: {
             {
                 role: 'user',
                 content: [
-                    recentConversationBlock(input.recentMessages, 200),
+                    recentConversationBlock(input.recentMessages, ROUTER_TURN_CHAR_LIMIT),
                     `Current request: ${input.userQuery}`,
                     '',
                     'Available MCPs and toolsets:',
@@ -293,7 +280,7 @@ function toolNamespaceId(tool: RegistryAwareToolDefinition): string {
     return tool.namespaceId || 'local'
 }
 
-function buildToolsetCandidates(tools: RegistryAwareToolDefinition[], metadata: ToolNamespaceMetadata[]): ToolsetCandidate[] {
+export function buildToolsetCandidates(tools: RegistryAwareToolDefinition[], metadata: ToolNamespaceMetadata[]): ToolsetCandidate[] {
     const metadataById = new Map(metadata.map((item) => [item.id, item]))
     const grouped = new Map<string, RegistryAwareToolDefinition[]>()
     for (const tool of tools) {
@@ -314,7 +301,7 @@ function buildToolsetCandidates(tools: RegistryAwareToolDefinition[], metadata: 
     })
 }
 
-function formatToolsetCandidate(candidate: ToolsetCandidate): string {
+export function formatToolsetCandidate(candidate: ToolsetCandidate): string {
     return `- ${candidate.id}: ${candidate.label}\n${candidate.description}`
 }
 

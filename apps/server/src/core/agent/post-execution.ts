@@ -249,7 +249,7 @@ const TITLE_TIMEOUT_MS = 15_000
 const TITLE_MAX_TOKENS = 512
 
 export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
-    const { conversationId, userMessage, assistantResponse, broadcast, providerId, model } = opts
+    const { conversationId, userMessage, broadcast, providerId, model } = opts
     const gateway = getGateway()
     const db = getDb()
 
@@ -267,7 +267,7 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
         const titleTarget = resolveTitleTarget(gateway, providerId, model)
 
         const result = await gateway.complete({
-            messages: buildTitleMessages(userMessage, assistantResponse),
+            messages: buildTitleMessages(userMessage),
             model: titleTarget.model,
             signal: withTimeout(signal, TITLE_TIMEOUT_MS),
             maxTokens: TITLE_MAX_TOKENS,
@@ -298,7 +298,7 @@ function withTimeout(signal: AbortSignal, ms: number): AbortSignal {
     return timeoutSignal
 }
 
-function buildTitleMessages(userMessage: string, assistantResponse: string) {
+function buildTitleMessages(userMessage: string) {
     return [
         {
             role: 'system' as const,

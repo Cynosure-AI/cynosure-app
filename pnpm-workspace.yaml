@@ -11,4 +11,4 @@ allowBuilds:
   vue-demi: true
 overrides:
   # officeparser makes OCR mandatory; replace that unused runtime with a tiny disabled module.
-  "officeparser>tesseract.js": link:./vendor/tesseract-disabled
+  "officeparser>tesseract.js": file:./vendor/tesseract-disabled

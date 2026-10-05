@@ -14,7 +14,7 @@ interface ModelUsage {
 }
 
 interface AuxiliaryModelUsage extends ModelUsage {
-    kind: 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
+    kind: 'embedding' | 'reranker' | 'deep-research' | 'task-context' | 'memory-router' | 'tool-router' | 'dreaming'
 }
 
 interface ToolUsage {
@@ -203,7 +203,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             GROUP BY kind, provider, model
             ORDER BY request_count DESC
         `).all(sinceMs) as {
-            kind: 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
+            kind: 'embedding' | 'reranker' | 'deep-research' | 'task-context' | 'memory-router' | 'tool-router' | 'dreaming'
             provider: string
             model: string
             request_count: number
@@ -423,7 +423,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             return (sum ?? 0) + m.estimatedCost
         }, null)
         const autoRoutingEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {
-            if (!['memory-router', 'tool-router'].includes(m.kind) || m.estimatedCost === null) return sum
+            if (!['task-context', 'memory-router', 'tool-router'].includes(m.kind) || m.estimatedCost === null) return sum
             return (sum ?? 0) + m.estimatedCost
         }, null)
         const dreamingEstimatedCost = auxiliaryUsageWithCost.reduce<number | null>((sum, m) => {

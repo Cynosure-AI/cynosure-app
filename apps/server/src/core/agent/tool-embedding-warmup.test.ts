@@ -9,10 +9,12 @@ import { cancelMemoryIndexJob, listMemoryIndexJobs } from '../memory/memory-inde
 
 const embedding = vi.hoisted(() => ({
     model: 'test-model',
+    available: true,
     embedBatch: vi.fn(),
     embed: vi.fn(),
 }))
 vi.mock('../memory/embedding.js', () => ({
+    hasEmbeddingService: () => embedding.available,
     getEmbeddingService: () => ({
         profile: { fingerprint: `test:${embedding.model}` },
         getConfig: () => ({ providerId: 'test-provider' }),
@@ -45,6 +47,7 @@ beforeEach(() => {
     getDb().prepare('DELETE FROM tool_router_embeddings').run()
     getDb().prepare('DELETE FROM tool_router_tool_embeddings').run()
     embedding.model = 'test-model'
+    embedding.available = true
     embedding.embedBatch.mockReset().mockImplementation(async (texts: string[]) => texts.map(vector))
     embedding.embed.mockReset().mockImplementation(async () => vector())
 })
@@ -67,6 +70,25 @@ async function waitForWarmCache() {
 }
 
 describe('background tool embeddings', () => {
+    test('waits quietly for an embedding provider, then warms once one is configured', async () => {
+        embedding.available = false
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        stop = startToolEmbeddingWarmup()
+        register()
+        await vi.advanceTimersByTimeAsync(1_000)
+
+        expect(embedding.embedBatch).not.toHaveBeenCalled()
+        expect(listMemoryIndexJobs().filter((job) => job.kind === 'tool-embeddings' && job.status !== 'completed' && job.status !== 'cancelled')).toEqual([])
+        expect(warn).not.toHaveBeenCalled()
+
+        embedding.available = true
+        getEventBus().emit('embedding:configured')
+        await vi.advanceTimersByTimeAsync(1_000)
+        await waitForWarmCache()
+        expect(embedding.embedBatch).toHaveBeenCalledTimes(1)
+        warn.mockRestore()
+    })
+
     test('coalesces registry changes, reports progress, and skips unchanged embeddings', async () => {
         stop = startToolEmbeddingWarmup()
         register()

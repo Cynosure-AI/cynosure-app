@@ -7,9 +7,6 @@ import { getMemoryParser, type RetrievedChunk } from '../../memory/parser.js'
 import { buildMemoryFolderFilter as buildScopeFilter, getDefaultMemoryFolder, getMemoryFolderDirectoryPath, type MemoryFolderRef } from '../../memory/memory-folder-scope.js'
 import { ensureMemoryFolderPath, folderPathForDirectory } from '../../memory/memory-folder-directories.js'
 import { readTextFile, writeTextFile, fileExists, resolveUniqueFileName, deleteFile } from '../../memory/memory-file-manager.js'
-import type { KnowledgeAssertion, KnowledgeEntity, KnowledgeEntityType } from '../../memory/knowledge-types.js'
-import { getMemoryKnowledgeStore } from '../../memory/memory-knowledge.js'
-import { deleteMemoryKnowledgeSource } from '../../memory/memory-deep-research.js'
 import { cancelMemoryIndexJobsForFile } from '../../memory/memory-index-jobs.js'
 import {
     parseMemoryDocumentRef,
@@ -66,19 +63,8 @@ export const MEMORY_TOOL_NAMES = [
     ...MEMORY_WRITE_TOOL_NAMES,
 ] as const
 
-export const KNOWLEDGE_TOOL_NAMES = [
-    'knowledge_search',
-    'knowledge_assert',
-    'knowledge_delete',
-    'knowledge_entity_merge',
-] as const
-export const KNOWLEDGE_READ_TOOL_NAMES = ['knowledge_search'] as const
-
 export type MemoryReadToolName = (typeof MEMORY_READ_TOOL_NAMES)[number]
-export type MemoryWriteToolName = (typeof MEMORY_WRITE_TOOL_NAMES)[number]
 export type MemoryToolName = (typeof MEMORY_TOOL_NAMES)[number]
-export type KnowledgeToolName = (typeof KNOWLEDGE_TOOL_NAMES)[number]
-export type KnowledgeReadToolName = (typeof KNOWLEDGE_READ_TOOL_NAMES)[number]
 
 export function isMemoryToolName(toolName: string): toolName is MemoryToolName {
     return (MEMORY_TOOL_NAMES as readonly string[]).includes(toolName)
@@ -86,14 +72,6 @@ export function isMemoryToolName(toolName: string): toolName is MemoryToolName {
 
 export function isMemoryReadToolName(toolName: string): toolName is MemoryReadToolName {
     return (MEMORY_READ_TOOL_NAMES as readonly string[]).includes(toolName)
-}
-
-export function isKnowledgeToolName(toolName: string): toolName is KnowledgeToolName {
-    return (KNOWLEDGE_TOOL_NAMES as readonly string[]).includes(toolName)
-}
-
-export function isKnowledgeReadToolName(toolName: string): toolName is KnowledgeReadToolName {
-    return (KNOWLEDGE_READ_TOOL_NAMES as readonly string[]).includes(toolName)
 }
 
 export interface MemoryToolOptions {
@@ -109,151 +87,9 @@ export interface MemoryToolOptions {
     onDocumentMutated?: (documentId: string) => void
 }
 
-const ENTITY_TYPES = ['person', 'place', 'organization', 'project', 'event', 'date', 'technology', 'product', 'artifact', 'concept', 'other'] as const
-const KNOWLEDGE_SHORT_ID_LENGTH = 8
-const IMPORTANCE_LABELS = ['temporary', 'minor', 'useful', 'core'] as const
-type ImportanceLabel = (typeof IMPORTANCE_LABELS)[number]
-const IMPORTANCE_MAP: Record<ImportanceLabel, 0 | 1 | 2 | 3> = {
-    temporary: 0,
-    minor: 1,
-    useful: 2,
-    core: 3,
-}
-
-function shortKnowledgeGraphId(prefix: 'n' | 'e', id: string): string {
-    return `${prefix}:${id.slice(0, KNOWLEDGE_SHORT_ID_LENGTH)}`
-}
-
-function knowledgeHandleSuffix(id: string): string {
-    return createHash('sha256').update(id).digest('hex').slice(0, KNOWLEDGE_SHORT_ID_LENGTH)
-}
-
-function knowledgeHandleSlug(name: string): string {
-    return name
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .slice(0, 48) || 'entity'
-}
-
-export function readableKnowledgeEntityId(name: string, id: string): string {
-    return `n:${knowledgeHandleSlug(name)}#${knowledgeHandleSuffix(id)}`
-}
-
-function resolveKnowledgeAssertionId(value: string): { id: string } | { error: string } {
-    const trimmed = value.trim()
-    const shortId = trimmed.startsWith('e:') ? trimmed.slice(2) : trimmed
-    if (!trimmed.startsWith('e:') || shortId.length === 0) return { id: trimmed }
-    const rows = getDb().prepare(`SELECT id FROM memory_knowledge_assertions WHERE id LIKE ? AND status IN ('active', 'disputed') ORDER BY updated_at DESC LIMIT 2`).all(`${shortId}%`) as { id: string }[]
-    if (rows.length === 1) return { id: rows[0].id }
-    if (rows.length > 1) {
-        return { error: `Multiple knowledge edges match id prefix ${trimmed}. Use knowledge_search to get the full id, then retry.` }
-    }
-    return { id: trimmed }
-}
-
-function resolveKnowledgeEntityIds(values: unknown, folderIds: string[]): { ids: string[] } | { error: string } {
-    if (!Array.isArray(values)) return { error: 'entityIds must be an array containing at least one entity ID.' }
-    const requested = Array.from(new Set(values
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter(Boolean)))
-        .slice(0, 20)
-    if (requested.length < 1) return { error: 'Provide at least one entity ID to merge.' }
-    if (folderIds.length === 0) return { error: 'No memory folder is selected for knowledge access.' }
-    const scopePlaceholders = folderIds.map(() => '?').join(', ')
-    const ids: string[] = []
-    let readableHandleRows: Array<{ id: string }> | undefined
-    for (const requestedId of requested) {
-        const isShort = requestedId.startsWith('n:')
-        const candidate = isShort ? requestedId.slice(2) : requestedId
-        if (!candidate) return { error: `Invalid entity ID "${requestedId}".` }
-        const readableSuffix = isShort && candidate.includes('#') ? candidate.slice(candidate.lastIndexOf('#') + 1) : ''
-        if (readableSuffix && !readableHandleRows) {
-            readableHandleRows = getDb().prepare(`
-                SELECT id FROM memory_knowledge_entities
-                WHERE status = 'active' AND namespace_id IN (${scopePlaceholders})
-                ORDER BY updated_at DESC
-              `).all(...folderIds) as Array<{ id: string }>
-        }
-        const rows = readableSuffix
-            ? readableHandleRows!.filter((row) => knowledgeHandleSuffix(row.id) === readableSuffix)
-            : isShort
-                ? getDb().prepare(`
-                SELECT id FROM memory_knowledge_entities
-                WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id LIKE ?
-                ORDER BY updated_at DESC LIMIT 2
-              `).all(...folderIds, `${candidate}%`) as Array<{ id: string }>
-                : getDb().prepare(`
-                SELECT id FROM memory_knowledge_entities
-                WHERE status = 'active' AND namespace_id IN (${scopePlaceholders}) AND id = ?
-                LIMIT 1
-              `).all(...folderIds, candidate) as Array<{ id: string }>
-        if (rows.length === 0) return { error: `No active entity matched ID ${requestedId}. Use knowledge_search to refresh the IDs.` }
-        if (rows.length > 1) return { error: `Multiple entities match ID ${requestedId}. Use knowledge_search to refresh the IDs and retry.` }
-        ids.push(rows[0].id)
-    }
-    const unique = Array.from(new Set(ids))
-    return unique.length >= 1 ? { ids: unique } : { error: 'The supplied IDs did not resolve to an active entity.' }
-}
-
-function formatKnowledgeEntity(node: KnowledgeEntity): string {
-    const aliases = node.aliases.length ? ` aliases=${node.aliases.join(', ')}` : ''
-    const importanceLabel = IMPORTANCE_LABELS[node.importance] ?? 'minor'
-    return `- [${importanceLabel}] ${node.name} (${node.type}, id=${readableKnowledgeEntityId(node.name, node.id)}, mentions=${node.mentionCount}${aliases})`
-}
-
-function formatKnowledgeAssertion(edge: KnowledgeAssertion): string {
-    const importanceLabel = IMPORTANCE_LABELS[edge.importance] ?? 'minor'
-    const note = edge.note ? ` Note: ${edge.note}` : ''
-    const part = edge.sourceChunkIndex !== undefined ? `, part=${edge.sourceChunkIndex + 1}` : ''
-    const sourceDocument = edge.sourceDocumentId
-        ? getDb().prepare('SELECT file_name FROM memory_file_index WHERE document_id = ?').get(edge.sourceDocumentId) as { file_name: string } | undefined
-        : undefined
-    const source = sourceDocument ? ` Source chunk: ${sourceDocument.file_name}${part}.` : ''
-    const relevance = edge.retrievalRelevance === undefined ? '' : `, relevance=${edge.retrievalRelevance.toFixed(2)}`
-    return `- [${importanceLabel}] ${edge.fromName} --${edge.relation}--> ${edge.toName} (id=${shortKnowledgeGraphId('e', edge.id)}${relevance}, mentions=${edge.mentionCount}).${note}${source}`
-}
-
-function normalizeKnowledgeEntityType(value: unknown): KnowledgeEntityType {
-    return typeof value === 'string' && (ENTITY_TYPES as readonly string[]).includes(value)
-        ? value as KnowledgeEntityType
-        : 'other'
-}
-
-function cleanAliases(value: unknown): string[] {
-    if (!Array.isArray(value)) return []
-    return value
-        .filter((alias): alias is string => typeof alias === 'string')
-        .map((alias) => alias.replace(/\s+/g, ' ').trim())
-        .filter(Boolean)
-        .slice(0, 8)
-}
-
-function cleanRelationName(value: unknown): string {
-    if (typeof value !== 'string') return ''
-    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64)
-}
-
-function cleanEntityName(value: unknown): string {
-    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, 120) : ''
-}
-
 function clampToolNumber(value: unknown, fallback: number, min: number, max: number): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
     return Math.max(min, Math.min(max, value))
-}
-
-function toImportanceValue(value: unknown): 0 | 1 | 2 | 3 {
-    if (typeof value === 'string' && (IMPORTANCE_LABELS as readonly string[]).includes(value)) {
-        return IMPORTANCE_MAP[value as ImportanceLabel]
-    }
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return Math.round(clampToolNumber(value, 1, 0, 3)) as 0 | 1 | 2 | 3
-    }
-    return 1
 }
 
 function cleanToolString(value: unknown): string {
@@ -268,18 +104,6 @@ function pickToolString(params: unknown, keys: string[]): string {
         if (value) return value
     }
     return ''
-}
-
-function toEntityInput(value: unknown): { name: string; type: KnowledgeEntityType; aliases: string[] } | { error: string } {
-    if (!value || typeof value !== 'object') return { error: 'Expected entity objects with name, type, and optional aliases.' }
-    const obj = value as { name?: unknown; type?: unknown; aliases?: unknown }
-    const name = cleanEntityName(obj.name)
-    if (name.length < 2) return { error: 'Entity names must be at least 2 characters long.' }
-    return {
-        name,
-        type: normalizeKnowledgeEntityType(obj.type),
-        aliases: cleanAliases(obj.aliases),
-    }
 }
 
 function getKnownMemoryFolders(): MemoryFolderRef[] {
@@ -669,321 +493,6 @@ export function makeMemorySearchTool(opts: MemoryToolOptions): ToolDefinition {
 }
 
 /**
- * Create a `knowledge_search` tool that lets the LLM inspect known
- * relationships and their connected entities.
- */
-function resolveKnowledgeSpace(
-    assignedFolders: MemoryFolderRef[],
-    folder?: string,
-): MemoryFolderRef | { error: string } {
-    if (assignedFolders.length === 0) {
-        return { error: 'No memory folder is selected for knowledge access.' }
-    }
-    if (folder?.trim()) {
-        const match = findSpaceByIdOrName(assignedFolders, folder.trim())
-        return match || { error: `Memory folder "${folder.trim()}" is not in the selected knowledge scope.` }
-    }
-    if (assignedFolders.length === 1) return assignedFolders[0]
-    return { error: `Multiple memory folders are selected. Specify the target using the "folder" parameter.\n${formatFolders(assignedFolders)}` }
-}
-
-export function makeKnowledgeSearchTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const assignedFolders = opts.assignedFolders || []
-    const folderIds = assignedFolders.map((folder) => folder.id)
-    return {
-        name: 'knowledge_search',
-        execution: { readOnly: true },
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        description:
-            'Search and inspect source-grounded relationships derived from memory documents, plus explicitly approved manual assertions. ' +
-            'Use this to look up known people, organizations, projects, technologies, concepts, or relationships. ' +
-            'Provide a query to find matching entities and walk nearby relationships, or omit query to list recent graph entries.',
-        parameters: {
-            type: 'object',
-            properties: {
-                query: { type: 'string', description: 'Entity name, alias, or natural-language phrase to search for.' },
-                depth: { type: 'number', description: 'Relationship walk depth from matched entities (default: 1 for focused query searches, max: 3).' },
-                limit: { type: 'number', description: 'Maximum number of focused relationships to return (default: 12, max: 80).' },
-            },
-        },
-        timeout: 15_000,
-        execute: async (params: unknown) => {
-            if (folderIds.length === 0) {
-                return { success: false, output: 'No memory folder is selected for knowledge access.' }
-            }
-            const query = pickToolString(params, ['query', 'entity', 'name', 'search_query', 'searchQuery'])
-            const { depth, limit } = (params || {}) as { depth?: number; limit?: number }
-            const knowledge = getMemoryKnowledgeStore()
-            const cappedLimit = Math.floor(clampToolNumber(limit, 12, 1, 80))
-
-            if (query) {
-                const walkDepth = Math.floor(clampToolNumber(depth, 1, 1, 3))
-                const result = await knowledge.search(query, folderIds, cappedLimit, { depth: walkDepth })
-                const walk = result.graph
-                if (!walk || (walk.nodes.length === 0 && walk.edges.length === 0)) {
-                    return { success: false, output: `No knowledge nodes matched "${query}".` }
-                }
-
-                const nodeLines = walk.nodes.slice(0, cappedLimit).map(formatKnowledgeEntity)
-                const edgeLines = walk.edges.slice(0, cappedLimit).map(formatKnowledgeAssertion)
-                const sections = [
-                    `Matched ${walk.seedNodes.length} seed node${walk.seedNodes.length !== 1 ? 's' : ''}; focused ${walkDepth} hop${walkDepth !== 1 ? 's' : ''}.`,
-                    nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
-                    edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : 'No relationships connected to the matched nodes.',
-                ].filter(Boolean)
-                return { success: true, output: sections.join('\n\n') }
-            }
-
-            const snapshot = knowledge.browseGraph({ limit: cappedLimit, folderIds })
-            if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
-                return { success: false, output: 'No knowledge entries are available in the selected memory folders.' }
-            }
-
-            const nodeLines = snapshot.nodes.map(formatKnowledgeEntity)
-            const edgeLines = snapshot.edges.map(formatKnowledgeAssertion)
-            return {
-                success: true,
-                output: [
-                    `Recent knowledge entries (limit ${cappedLimit}):`,
-                    nodeLines.length ? `Nodes:\n${nodeLines.join('\n')}` : '',
-                    edgeLines.length ? `Relationships:\n${edgeLines.join('\n')}` : '',
-                ].filter(Boolean).join('\n\n'),
-            }
-        },
-    }
-}
-
-/**
- * Create a `knowledge_assert` tool that lets the LLM actively record
- * or correct a relationship in the knowledge.
- */
-export function makeKnowledgeAssertTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const assignedFolders = opts.assignedFolders || []
-    return {
-        name: 'knowledge_assert',
-        execution: { readOnly: false },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description:
-            'Assert or update a durable relationship in the knowledge, or correct an entity alias list. ' +
-            'To replace aliases, provide only entityId and aliases (an empty array clears non-canonical aliases). Use IDs from knowledge_search. This changes aliases only; it does not undo a merge of entities or relationships. ' +
-            'Use this for stable facts the user explicitly wants remembered as connected entities. ' +
-            'This creates missing entities, merges repeated relationships, and may replace older functional relationships such as works_at or lives_in.',
-        parameters: {
-            type: 'object',
-            properties: {
-                entityId: { type: 'string', description: 'Full or readable entity ID from knowledge_search for alias correction. Use with aliases instead of from/relation/to.' },
-                aliases: { type: 'array', items: { type: 'string' }, description: 'Complete replacement alias list for entityId. Omitted aliases are removed; [] clears aliases. The canonical name remains searchable.' },
-                from: {
-                    type: 'object',
-                    description: 'Source entity.',
-                    properties: {
-                        name: { type: 'string', description: 'Entity name.' },
-                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
-                        aliases: { type: 'array', items: { type: 'string' }, description: 'Optional aliases for the entity.' },
-                    },
-                    required: ['name'],
-                },
-                relation: { type: 'string', description: 'Concise snake_case relationship name, e.g. works_at, uses, owns, depends_on.' },
-                to: {
-                    type: 'object',
-                    description: 'Target entity.',
-                    properties: {
-                        name: { type: 'string', description: 'Entity name.' },
-                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
-                        aliases: { type: 'array', items: { type: 'string' }, description: 'Optional aliases for the entity.' },
-                    },
-                    required: ['name'],
-                },
-                importance: { type: 'string', enum: IMPORTANCE_LABELS, description: 'Importance: temporary, minor, useful (durable fact), or core.' },
-                note: { type: 'string', description: 'Short contextual note explaining the relationship.' },
-                folder: { type: 'string', description: 'Target memory folder name or ID. Required when multiple memory folders are selected.' },
-            },
-            anyOf: [{ required: ['from', 'relation', 'to'] }, { required: ['entityId', 'aliases'] }],
-        },
-        timeout: 15_000,
-        execute: async (params: unknown) => {
-            const { from, relation, to, importance, note, folder, entityId, aliases } = (params || {}) as {
-                entityId?: unknown; aliases?: unknown; from?: unknown; relation?: unknown; to?: unknown; importance?: unknown; note?: unknown; folder?: string
-            }
-            if (entityId !== undefined || aliases !== undefined) {
-                if (typeof entityId !== 'string' || !entityId.trim()) return { success: false, output: 'entityId is required for alias correction.' }
-                if (!Array.isArray(aliases) || !aliases.every((alias) => typeof alias === 'string' && alias.trim())) {
-                    return { success: false, output: 'aliases must be an array of non-empty strings; use [] to clear aliases.' }
-                }
-                if (from !== undefined || relation !== undefined || to !== undefined) return { success: false, output: 'Use entityId and aliases separately from relationship assertions.' }
-                const resolved = resolveKnowledgeEntityIds([entityId], assignedFolders.map((folder) => folder.id))
-                if ('error' in resolved) return { success: false, output: resolved.error }
-                const entity = getMemoryKnowledgeStore().updateEntity(resolved.ids[0], { aliases, replaceAliases: true })
-                if (!entity) return { success: false, output: 'Entity not found.' }
-                return { success: true, output: `Aliases updated for ${entity.name} (${readableKnowledgeEntityId(entity.name, entity.id)}): ${entity.aliases.join(', ') || 'none'}.` }
-            }
-            const targetSpace = resolveKnowledgeSpace(assignedFolders, folder)
-            if ('error' in targetSpace) return { success: false, output: targetSpace.error }
-            const fromEntity = toEntityInput(from)
-            if ('error' in fromEntity) return { success: false, output: `Invalid from entity: ${fromEntity.error}` }
-            const toEntity = toEntityInput(to)
-            if ('error' in toEntity) return { success: false, output: `Invalid to entity: ${toEntity.error}` }
-            const rel = cleanRelationName(relation)
-            if (!rel) return { success: false, output: 'Relationship name is required.' }
-            if (fromEntity.name.toLowerCase() === toEntity.name.toLowerCase()) {
-                return { success: false, output: 'Cannot create a relationship from an entity to itself.' }
-            }
-
-            const edge = getMemoryKnowledgeStore().assertRelationship({
-                folderId: targetSpace.id,
-                from: fromEntity,
-                relation: rel,
-                to: toEntity,
-                importance: toImportanceValue(importance),
-                note: typeof note === 'string' ? note.replace(/\s+/g, ' ').trim().slice(0, 600) : '',
-            })
-
-            if (!edge) return { success: false, output: 'No relationship was created.' }
-            return { success: true, output: `Relationship asserted:\n${formatKnowledgeAssertion(edge)}` }
-        },
-    }
-}
-
-/** Merge duplicate graph entities into an existing canonical owner or the first supplied entity ID. */
-export function makeKnowledgeEntityMergeTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const folderIds = (opts.assignedFolders || []).map((folder) => folder.id)
-    return {
-        name: 'knowledge_entity_merge',
-        description:
-            'Manually repair confirmed duplicate knowledge entities. Routine entity resolution happens during memory indexing; use this only for exceptional repairs, not uncertain candidate matches. Provide entity IDs returned by knowledge_search and a new canonical mainName. ' +
-            'Entities may come from different selected memory folders. If mainName already belongs to an active entity anywhere in scope, that entity automatically remains stable; otherwise the first supplied ID remains stable. ' +
-            'All other entities are redirected into it, and their former names and aliases become normalized aliases. ' +
-            'Relationships, mentions, and resolution records are rewired; duplicate relationships are consolidated.',
-        parameters: {
-            type: 'object',
-            properties: {
-                entityIds: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    minItems: 1,
-                    maxItems: 20,
-                    description: 'One or more full or readable node IDs (n:entity_name#xxxxxxxx) from knowledge_search. One ID is sufficient when mainName already belongs to another active entity.',
-                },
-                mainName: { type: 'string', description: 'New canonical display name for the merged entity.' },
-            },
-            required: ['entityIds', 'mainName'],
-            additionalProperties: false,
-        },
-        execution: { readOnly: false },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-        timeout: 30_000,
-        execute: async (params: unknown) => {
-            const { entityIds, mainName } = (params || {}) as { entityIds?: unknown; mainName?: unknown }
-            const resolved = resolveKnowledgeEntityIds(entityIds, folderIds)
-            if ('error' in resolved) return { success: false, output: resolved.error }
-            const canonicalName = cleanEntityName(mainName)
-            if (!canonicalName) return { success: false, output: 'mainName is required.' }
-            try {
-                const result = await getMemoryKnowledgeStore().mergeEntities({
-                    entityIds: resolved.ids,
-                    canonicalName,
-                    folderIds,
-                })
-                const aliases = result.entity.aliases.length ? result.entity.aliases.join(', ') : 'none'
-                return {
-                    success: true,
-                    output: [
-                        `Merged ${result.mergedEntityIds.length + 1} entities into ${result.entity.name} (${readableKnowledgeEntityId(result.entity.name, result.entity.id)}).`,
-                        `Aliases: ${aliases}.`,
-                        `Consolidated ${result.consolidatedAssertions} duplicate relationship${result.consolidatedAssertions === 1 ? '' : 's'}; retired ${result.retiredSelfRelationships} self-relationship${result.retiredSelfRelationships === 1 ? '' : 's'}.`,
-                    ].join('\n'),
-                }
-            } catch (error) {
-                const code = error instanceof Error ? error.message : ''
-                const messages: Record<string, string> = {
-                    ENTITY_MERGE_REQUIRES_MULTIPLE: 'Provide at least two distinct entities, either as IDs or as one ID plus an existing mainName owner.',
-                    ENTITY_MERGE_INVALID_NAME: 'mainName is not valid.',
-                    ENTITY_MERGE_ENTITY_NOT_FOUND: 'One or more entities no longer exist or were already merged. Search again and retry.',
-                    ENTITY_MERGE_OUT_OF_SCOPE: 'One or more entities are outside the selected memory folder scope.',
-                }
-                return { success: false, output: messages[code] || `Entity merge failed: ${code || 'unknown error'}` }
-            }
-        },
-    }
-}
-
-/**
- * Create a `knowledge_delete` tool that lets the LLM remove an
- * incorrect relationship by ID or by exact relationship triple.
- */
-export function makeKnowledgeDeleteTool(opts: MemoryToolOptions = {}): ToolDefinition {
-    const assignedFolders = opts.assignedFolders || []
-    const folderIds = assignedFolders.map((folder) => folder.id)
-    return {
-        name: 'knowledge_delete',
-        execution: { readOnly: false },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-        description:
-            'Delete an incorrect relationship from the knowledge. ' +
-            'Prefer edgeId from knowledge_search. If edgeId is unknown, provide from, relation, and to to delete an exact relationship triple.',
-        parameters: {
-            type: 'object',
-            properties: {
-                edgeId: { type: 'string', description: 'Relationship edge ID to delete. The short e:xxxxxxxx ID from knowledge_search is accepted.' },
-                from: {
-                    type: 'object',
-                    description: 'Source entity for exact triple deletion when edgeId is not available.',
-                    properties: {
-                        name: { type: 'string', description: 'Entity name.' },
-                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
-                    },
-                },
-                relation: { type: 'string', description: 'Relationship name for exact triple deletion.' },
-                to: {
-                    type: 'object',
-                    description: 'Target entity for exact triple deletion when edgeId is not available.',
-                    properties: {
-                        name: { type: 'string', description: 'Entity name.' },
-                        type: { type: 'string', enum: ENTITY_TYPES, description: 'Entity type.' },
-                    },
-                },
-            },
-        },
-        timeout: 15_000,
-        execute: async (params: unknown) => {
-            if (folderIds.length === 0) {
-                return { success: false, output: 'No memory folder is selected for knowledge access.' }
-            }
-            const { edgeId, from, relation, to } = (params || {}) as {
-                edgeId?: string; from?: unknown; relation?: unknown; to?: unknown
-            }
-            const knowledge = getMemoryKnowledgeStore()
-
-            if (edgeId?.trim()) {
-                const resolvedEdgeId = resolveKnowledgeAssertionId(edgeId)
-                if ('error' in resolvedEdgeId) return { success: false, output: resolvedEdgeId.error }
-                const result = knowledge.deleteEdge(resolvedEdgeId.id, folderIds)
-                return result.edgeDeleted
-                    ? { success: true, output: formatKnowledgeDeleteOutput(`Deleted knowledge edge ${edgeId.trim()}.`, result.orphanedNodeIds.length) }
-                    : { success: false, output: `No relationship found with id ${edgeId.trim()}.` }
-            }
-
-            const fromEntity = toEntityInput(from)
-            if ('error' in fromEntity) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
-            const toEntity = toEntityInput(to)
-            if ('error' in toEntity) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
-            const rel = cleanRelationName(relation)
-            if (!rel) return { success: false, output: 'Provide edgeId, or a valid from/relation/to triple to delete.' }
-
-            const result = knowledge.deleteMatchingEdge(fromEntity.name, rel, toEntity.name, folderIds)
-            return result.edgeDeleted
-                ? { success: true, output: formatKnowledgeDeleteOutput('Deleted 1 matching knowledge edge.', result.orphanedNodeIds.length) }
-                : { success: false, output: 'No matching knowledge edge was found.' }
-        },
-    }
-}
-
-function formatKnowledgeDeleteOutput(message: string, orphanedNodeCount: number): string {
-    if (orphanedNodeCount === 0) return message
-    return `${message} Removed ${orphanedNodeCount} orphaned entit${orphanedNodeCount === 1 ? 'y' : 'ies'}.`
-}
-
-/**
  * Create a `memory_create` tool that lets the LLM store new memory entries.
  * Writes a Markdown file to the target folder and indexes it.
  */
@@ -1324,7 +833,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
 
 /**
  * Create a `memory_delete` tool that archives a canonical memory file and
- * removes all of its derived retrieval and knowledge indexes.
+ * removes its derived retrieval index.
  */
 export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
     const { assignedFolders = [] } = opts
@@ -1333,7 +842,7 @@ export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
         name: 'memory_delete',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Delete an entire canonical memory file. The source is archived in the memory folder trash, and its retrieval and source-derived knowledge indexes are removed. Use the fileRef returned by memory_search. Use memory_patch instead when only part of a file is obsolete.',
+        description: 'Delete an entire canonical memory file. The source is archived in the memory folder trash, and its retrieval index is removed. Use the fileRef returned by memory_search. Use memory_patch instead when only part of a file is obsolete.',
         parameters: {
             type: 'object',
             additionalProperties: false,
@@ -1365,7 +874,6 @@ export function makeMemoryDeleteTool(opts: MemoryToolOptions): ToolDefinition {
                 signal?.throwIfAborted()
                 cancelMemoryIndexJobsForFile(resolved.folderId, resolved.fileName)
                 await getAgentMemory().deleteSourceFile(resolved.fileName, resolved.folderId)
-                deleteMemoryKnowledgeSource(resolved.folderId, resolved.fileName)
                 opts.onDocumentMutated?.(resolved.documentId)
                 const result = {
                     status: 'deleted' as const,

@@ -235,6 +235,26 @@ describe('automatic tool routing', () => {
         expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).selectionMethod)).toEqual(['automatic', 'automatic'])
     })
 
+    test('uses toolsets chosen by task-context planning without a separate selector call', async () => {
+        const tools = [
+            namespacedTool('browser_snapshot', 'mcp:browser', 'Browser MCP'),
+            namespacedTool('mail_send', 'mcp:mail', 'Mail MCP'),
+        ]
+        const gateway = { complete: vi.fn() } as unknown as LLMGateway
+
+        const result = await applyAutoToolRouting({
+            enabled: true,
+            conversationId: 'conversation-planned-toolsets',
+            userQuery: 'inspect the browser',
+            gateway,
+            tools,
+            plannedToolsetIds: ['mcp:browser'],
+        })
+
+        expect(gateway.complete).not.toHaveBeenCalled()
+        expect(result.map(({ name }) => name)).toEqual(['browser_snapshot', 'expand_available_toolset'])
+    })
+
     test('ranks only larger selected toolsets when small and large toolsets are selected together', async () => {
         const small = [namespacedTool('small_a', 'mcp:small', 'Small'), namespacedTool('small_b', 'mcp:small', 'Small')]
         const large = Array.from({ length: 10 }, (_, index) => namespacedTool(`large_${index}`, 'mcp:large', 'Large'))

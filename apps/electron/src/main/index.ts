@@ -164,19 +164,18 @@ function getAppDataDir(): string {
 }
 
 // ── Node binary resolution ─────────────────────────────────────────────────────
-// Native modules in the bundled server are rebuilt for Electron's ABI at
-// package time (via @electron/rebuild). This makes the app fully self-contained
-// — no system Node is required on the end-user's machine.
+// Native modules in the bundled server are N-API prebuilds, which load in
+// Electron's runtime as-is. This makes the app fully self-contained — no
+// system Node is required on the end-user's machine.
 // We use Electron's own binary with ELECTRON_RUN_AS_NODE=1.
 
 function resolveNodeBinary(): { bin: string; useElectronAsNode: boolean } {
     if (is.dev) {
-        // In dev, native modules are compiled against the system Node
+        // In dev, run the TypeScript source with the system Node (tsx loader)
         return { bin: 'node', useElectronAsNode: false }
     }
 
     // Production: use Electron's own binary as a Node runtime.
-    // Native modules have been rebuilt for Electron's ABI during packaging.
     console.log('[electron] Using Electron binary with ELECTRON_RUN_AS_NODE')
     return { bin: process.execPath, useElectronAsNode: true }
 }

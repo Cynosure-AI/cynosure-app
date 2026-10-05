@@ -1,6 +1,6 @@
 {
     "name": "cynosure-desktop",
-    "version": "2.2.1",
+    "version": "1.0.0",
     "description": "Cynosure - local AI agent with tools, memories, and reasoning capabilities",
     "author": {
         "name": "Andreas Hagen",
@@ -11,14 +11,14 @@
     "desktopName": "com.cynosure.desktop",
     "main": "./out/main/index.js",
     "scripts": {
-        "postinstall": "electron-builder install-app-deps",
-        "dev": "concurrently -k -n web,electron -c blue,green \"cd ../web && pnpm dev\" \"wait-on http://localhost:5173 && electron-vite dev\"",
+        "postinstall": "install-electron",
+        "dev": "concurrently -k -n web,electron -c blue,green \"pnpm --filter cynosure-web dev\" \"wait-on http://localhost:5173 && electron-vite dev\"",
         "build": "electron-vite build",
-        "prebuild:deps": "pnpm --filter cynosure-web build && pnpm --filter cynosure-server build",
-        "package": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --config electron-builder.yml",
-        "package:linux": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --linux --config electron-builder.yml",
-        "package:win": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --win --config electron-builder.yml",
-        "package:mac": "pnpm run prebuild:deps && pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --mac --config electron-builder.yml",
+        "build:deps": "pnpm --filter cynosure-web build && pnpm --filter cynosure-server build",
+        "package": "pnpm run build:deps && pnpm run package:skip-deps",
+        "package:linux": "pnpm run build:deps && pnpm run package:skip-deps --linux",
+        "package:win": "pnpm run build:deps && pnpm run package:skip-deps --win",
+        "package:mac": "pnpm run build:deps && pnpm run package:skip-deps --mac",
         "package:skip-deps": "pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --config electron-builder.yml"
     },
     "dependencies": {
@@ -28,11 +28,9 @@
     },
     "devDependencies": {
         "@electron-toolkit/tsconfig": "^2.0.0",
-        "@electron/rebuild": "^4.0.0",
         "concurrently": "^9.2.1",
         "electron": "^44.4.2",
         "electron-builder": "^26.15.3",
-        "electron-builder-squirrel-windows": "^26.15.3",
         "electron-vite": "^5.0.0",
         "typescript": "^5.7.0",
         "wait-on": "^9.0.4"

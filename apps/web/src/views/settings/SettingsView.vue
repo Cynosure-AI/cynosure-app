@@ -40,6 +40,7 @@ const router = useRouter()
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const settingsPanelRef = ref<HTMLElement | null>(null)
+const contentScrollRef = ref<HTMLElement | null>(null)
 const mobileDetailOpen = ref(false)
 const dirtySources = ref<Record<string, boolean>>({})
 const showDiscardConfirm = ref(false)
@@ -67,7 +68,7 @@ const categories: SettingsCategory[] = [
   {
     id: 'memory',
     label: 'Memory',
-    description: 'Tune embeddings, Deep Research, reranking, and vector storage.',
+    description: 'Tune embeddings, reranking, and vector storage.',
     icon: 'lucide:database',
     component: MemorySettings
   },
@@ -201,13 +202,6 @@ const sections: SettingsSection[] = [
     terms: ['dream', 'dreaming', 'background', 'learn', 'remember', 'conversations']
   },
   {
-    id: 'deep-research',
-    categoryId: 'memory',
-    label: 'Deep Research Model',
-    description: 'Provider and model used when Deep Research creates grounded knowledge and relationships.',
-    terms: ['knowledge graph', 'Deep Research', 'Deep Research', 'relationships', 'relation extraction', 'knowledge graph', 'document indexing']
-  },
-  {
     id: 'context-strategy',
     categoryId: 'chat',
     label: 'Context Strategy',
@@ -317,7 +311,7 @@ const sections: SettingsSection[] = [
     categoryId: 'reset-data',
     label: 'Reset Data',
     description: 'Permanently delete selected data areas or return Cynosure to a clean state.',
-    terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'clear data', 'partial reset', 'memory reset', 'knowledge', 'clear knowledge', 'relationships', 'entities', 'clear vector database', 'vector indexes', 'vectors', 'delete embeddings', 'drop vectors']
+    terms: ['reset', 'factory reset', 'wipe', 'delete all', 'clean state', 'start over', 'clear data', 'partial reset', 'memory reset', 'clear vector database', 'vector indexes', 'vectors', 'delete embeddings', 'drop vectors']
   },
   {
     id: 'about',
@@ -408,6 +402,9 @@ const matchCountByCategory = computed(() => {
   return counts
 })
 
+// Read before the watcher below fills in the default category.
+const openedWithCategory = typeof route.query.category === 'string'
+
 watch(activeCategoryId, (category) => {
   if (route.query.category === category) return
   router.replace({ query: { ...route.query, category } })
@@ -416,8 +413,11 @@ watch(activeCategoryId, (category) => {
 onMounted(() => {
   document.addEventListener('keydown', onGlobalKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
-  if (typeof route.query.category === 'string') {
-    scrollToCategory(activeCategoryId.value)
+  if (openedWithCategory) {
+    // A link to a specific category opens it directly on narrow screens
+    // instead of stopping at the category list.
+    mobileDetailOpen.value = true
+    void showCategoryFromTop()
   }
 })
 
@@ -438,13 +438,16 @@ function selectCategory(category: SettingsCategoryId): void {
         search: undefined
       }
     })
-    scrollToCategory(category)
+    void showCategoryFromTop()
   })
 }
 
-async function scrollToCategory(category: SettingsCategoryId): Promise<void> {
+// Outside search only one category is rendered, directly below the sticky
+// search bar. Scrolling the section into view would tuck its heading under
+// that bar, so the content pane is returned to its top instead.
+async function showCategoryFromTop(): Promise<void> {
   await nextTick()
-  document.getElementById(`settings-${category}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  contentScrollRef.value?.scrollTo({ top: 0 })
 }
 
 function clearSearch(): void {
@@ -610,7 +613,7 @@ function scoreSection(section: SettingsSection, query: string): number {
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
-        class="relative h-full max-h-[80vh] w-full max-w-7xl overflow-hidden rounded-2xl border border-theme-700 bg-theme-950 shadow-2xl"
+        class="relative h-full w-full sm:max-h-[80vh] max-w-7xl overflow-hidden rounded-2xl border border-theme-700 bg-theme-950 shadow-2xl"
       >
         <ResponsiveSectionLayout
           :detail-open="mobileDetailOpen"
@@ -678,7 +681,10 @@ function scoreSection(section: SettingsSection, query: string): number {
             </nav>
           </template>
 
-          <main class="h-full min-w-0 overflow-y-auto">
+          <main
+            ref="contentScrollRef"
+            class="h-full min-w-0 overflow-y-auto"
+          >
             <!-- Settings search bar -->
             <div class="z-10 border-b border-theme-800/60 bg-theme-950/95 backdrop-blur-sm px-4 py-3 sm:sticky sm:top-0 sm:px-6 lg:px-8">
               <div class="mx-auto flex max-w-5xl items-start gap-2">
@@ -760,7 +766,6 @@ function scoreSection(section: SettingsSection, query: string): number {
                   v-for="{ category, visibleSectionIds } in visibleCategoryGroups"
                   :id="`settings-${category.id}`"
                   :key="category.id"
-                  class="scroll-mt-4"
                 >
                   <div class="mb-5 flex items-start gap-3">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-theme-900 text-ink-secondary ring-1 ring-theme-800">

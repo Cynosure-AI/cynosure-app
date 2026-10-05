@@ -1,15 +1,38 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useNotificationStore } from "../stores/notification.store";
 import { useAgentDefinitionsStore } from "../stores/agent-definitions.store";
 import { useChatStore } from "../stores/chat.store";
 import { Icon } from "@iconify/vue";
+import ModalDialog from "../components/shared/ModalDialog.vue";
 
 const router = useRouter();
 const notificationStore = useNotificationStore();
 const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
+
+const showClearConfirm = ref(false);
+const clearing = ref(false);
+const clearError = ref("");
+
+function openClearConfirm(): void {
+  clearError.value = "";
+  showClearConfirm.value = true;
+}
+
+async function clearAll(): Promise<void> {
+  clearing.value = true;
+  clearError.value = "";
+  try {
+    await notificationStore.removeAll();
+    showClearConfirm.value = false;
+  } catch (error) {
+    clearError.value = `Notifications were not cleared: ${error instanceof Error ? error.message : "unknown error"}`;
+  } finally {
+    clearing.value = false;
+  }
+}
 
 onMounted(() => {
   if (!notificationStore.loaded) {
@@ -102,216 +125,198 @@ function priorityClass(priority: string): string {
 </script>
 
 <template>
-  <div class="notifications-view">
-    <!-- Header -->
-    <header class="view-header">
-      <div class="header-left">
-        <h1 class="view-title">
-          Notifications
-        </h1>
-        <span class="view-subtitle">
-          {{ notificationStore.notifications.length }} total
-        </span>
-      </div>
-      <div class="header-actions">
-        <button
-          v-if="notificationStore.unreadCount > 0"
-          class="btn btn-ghost btn-sm"
-          @click="notificationStore.markAllRead()"
-        >
-          <Icon
-            icon="lucide:check-check"
-            class="w-4 h-4"
-          />
-          Mark all read
-        </button>
-        <button
-          v-if="notificationStore.notifications.length > 0"
-          class="btn btn-ghost btn-sm text-ink-muted hover:text-status-danger"
-          @click="notificationStore.removeAll()"
-        >
-          <Icon
-            icon="lucide:trash-2"
-            class="w-4 h-4"
-          />
-          Clear notifications
-        </button>
-      </div>
-    </header>
-
-    <!-- Empty state -->
-    <div
-      v-if="notificationStore.notifications.length === 0"
-      class="empty-state"
-    >
-      <Icon
-        icon="lucide:bell-off"
-        class="empty-icon"
-      />
-      <p class="empty-title">
-        All caught up!
-      </p>
-      <p class="empty-desc">
-        No notifications to show right now.
-      </p>
-    </div>
-
-    <!-- Notification Grid (grouped by day) -->
-    <div
-      v-for="group in groupedNotifications()"
-      :key="group.label"
-      class="notification-group"
-    >
-      <div class="group-header">
-        <span class="group-label">{{ group.label }}</span>
-        <span class="group-count">{{ group.items.length }}</span>
-      </div>
-      <div class="notification-grid">
+  <div class="h-full overflow-y-auto">
+    <header class="z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
+        <div>
+          <h1 class="text-2xl font-bold text-theme-100">
+            Notifications
+          </h1>
+          <p class="mt-1 text-sm leading-relaxed text-ink-muted">
+            Messages from your agents and scheduled jobs.
+            <span v-if="notificationStore.notifications.length">
+              {{ notificationStore.notifications.length }} total{{ notificationStore.unreadCount ? `, ${notificationStore.unreadCount} unread` : "" }}.
+            </span>
+          </p>
+        </div>
         <div
-          v-for="n in group.items"
-          :key="n.id"
-          class="notification-card"
-          :class="[priorityClass(n.priority), { unread: !n.read }]"
-          role="button"
-          tabindex="0"
-          @click="openNotification(n)"
-          @keydown.enter.prevent="openNotification(n)"
-          @keydown.space.prevent="openNotification(n)"
+          v-if="notificationStore.notifications.length > 0"
+          class="flex gap-2"
         >
-          <div class="card-left">
-            <div class="priority-icon">
-              <Icon
-                :icon="priorityIcon(n.priority)"
-                class="w-4 h-4"
-              />
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="card-header">
-              <span class="card-title">{{ n.title }}</span>
-              <span
-                v-if="!n.read"
-                class="unread-dot"
-              />
-            </div>
-            <p class="card-desc">
-              {{ n.body }}
-            </p>
-            <div class="card-meta">
-              <span class="meta-agent">
-                <Icon
-                  icon="lucide:bot"
-                  class="w-3 h-3"
-                />
-                {{ agentDefs.get(n.agentId)?.name || "Agent" }}
-              </span>
-              <span class="meta-time">
-                <Icon
-                  icon="lucide:clock"
-                  class="w-3 h-3"
-                />
-                {{ formatTime(notificationTime(n)) }}
-              </span>
-              <span
-                v-if="n.conversationId"
-                class="meta-conversation"
-              >
-                <Icon
-                  icon="lucide:message-square"
-                  class="w-3 h-3"
-                />
-                Open chat
-              </span>
-            </div>
-          </div>
           <button
+            v-if="notificationStore.unreadCount > 0"
             type="button"
-            class="card-dismiss"
-            title="Dismiss"
-            :aria-label="`Dismiss ${n.title}`"
-            @click.stop="notificationStore.remove(n.id)"
+            class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-ink-secondary transition hover:border-theme-700 hover:bg-theme-800 hover:text-theme-100 sm:flex-none"
+            @click="notificationStore.markAllRead()"
           >
             <Icon
-              icon="lucide:x"
-              class="w-3.5 h-3.5"
+              icon="lucide:check-check"
+              class="h-4 w-4"
             />
+            Mark all read
+          </button>
+          <button
+            type="button"
+            class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-theme-800 bg-theme-900/80 px-3 py-2 text-[13px] text-ink-secondary transition hover:border-red-400/35 hover:bg-red-400/10 hover:text-red-300 sm:flex-none"
+            @click="openClearConfirm"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-4 w-4"
+            />
+            Clear all
           </button>
         </div>
       </div>
+    </header>
+
+    <div class="notifications-view mx-auto max-w-7xl px-4 py-6 pb-12 sm:px-6 lg:px-8">
+      <!-- Empty state -->
+      <div
+        v-if="notificationStore.notifications.length === 0"
+        class="empty-state"
+      >
+        <Icon
+          icon="lucide:bell-off"
+          class="empty-icon"
+        />
+        <p class="empty-title">
+          All caught up!
+        </p>
+        <p class="empty-desc">
+          No notifications to show right now.
+        </p>
+      </div>
+
+      <!-- Notification Grid (grouped by day) -->
+      <div
+        v-for="group in groupedNotifications()"
+        :key="group.label"
+        class="notification-group"
+      >
+        <div class="group-header">
+          <span class="group-label">{{ group.label }}</span>
+          <span class="group-count">{{ group.items.length }}</span>
+        </div>
+        <div class="notification-grid">
+          <div
+            v-for="n in group.items"
+            :key="n.id"
+            class="notification-card"
+            :class="[priorityClass(n.priority), { unread: !n.read }]"
+            role="button"
+            tabindex="0"
+            @click="openNotification(n)"
+            @keydown.enter.prevent="openNotification(n)"
+            @keydown.space.prevent="openNotification(n)"
+          >
+            <div class="card-left">
+              <div class="priority-icon">
+                <Icon
+                  :icon="priorityIcon(n.priority)"
+                  class="w-4 h-4"
+                />
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-header">
+                <span class="card-title">{{ n.title }}</span>
+                <span
+                  v-if="!n.read"
+                  class="unread-dot"
+                />
+              </div>
+              <p class="card-desc">
+                {{ n.body }}
+              </p>
+              <div class="card-meta">
+                <span class="meta-agent">
+                  <Icon
+                    icon="lucide:bot"
+                    class="w-3 h-3"
+                  />
+                  {{ agentDefs.get(n.agentId)?.name || "Agent" }}
+                </span>
+                <span class="meta-time">
+                  <Icon
+                    icon="lucide:clock"
+                    class="w-3 h-3"
+                  />
+                  {{ formatTime(notificationTime(n)) }}
+                </span>
+                <span
+                  v-if="n.conversationId"
+                  class="meta-conversation"
+                >
+                  <Icon
+                    icon="lucide:message-square"
+                    class="w-3 h-3"
+                  />
+                  Open chat
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="card-dismiss"
+              title="Dismiss"
+              :aria-label="`Dismiss ${n.title}`"
+              @click.stop="notificationStore.remove(n.id)"
+            >
+              <Icon
+                icon="lucide:x"
+                class="w-3.5 h-3.5"
+              />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <ModalDialog
+      :show="showClearConfirm"
+      title="Clear all notifications?"
+      icon="lucide:trash-2"
+      icon-color="red"
+      @close="showClearConfirm = false"
+    >
+      <p class="text-sm leading-relaxed text-ink-secondary">
+        All {{ notificationStore.notifications.length }} notifications will be deleted. This cannot be undone.
+      </p>
+      <p
+        v-if="clearError"
+        class="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs text-status-danger"
+        role="alert"
+      >
+        {{ clearError }}
+      </p>
+      <template #actions>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500 disabled:cursor-wait disabled:opacity-60"
+          :disabled="clearing"
+          @click="clearAll"
+        >
+          {{ clearing ? "Clearing…" : "Clear notifications" }}
+        </button>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+          :disabled="clearing"
+          @click="showClearConfirm = false"
+        >
+          Cancel
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>
 
 <style scoped>
 .notifications-view {
-  height: 100%;
   display: flex;
   flex-direction: column;
-  max-width: 80rem;
-  margin-inline: auto;
-  padding: 1.5rem 2rem;
   width: 100%;
-  overflow-y: auto;
-}
-
-/* ── Header ── */
-.view-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.5rem;
-  flex-shrink: 0;
-}
-
-.header-left {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-}
-
-.view-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-theme-100, #f4f4f5);
-  margin: 0;
-}
-
-.view-subtitle {
-  font-size: 0.8125rem;
-  color: var(--color-theme-500, #71717a);
-}
-
-.header-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 150ms ease;
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--color-theme-400, #a1a1aa);
-  padding: 0.375rem 0.75rem;
-}
-
-.btn-ghost:hover {
-  background: var(--color-theme-800, #27272a);
-  color: var(--color-theme-200, #e4e4e7);
-}
-
-.btn-sm {
-  padding: 0.375rem 0.625rem;
-  font-size: 0.75rem;
 }
 
 /* ── Empty state ── */
@@ -542,16 +547,6 @@ function priorityClass(priority: string): string {
 
 /* ── Responsive ── */
 @media (max-width: 640px) {
-  .notifications-view {
-    padding: 1rem;
-  }
-
-  .view-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-
   .notification-grid {
     grid-template-columns: 1fr;
   }

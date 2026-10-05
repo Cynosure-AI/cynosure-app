@@ -1,3 +1,4 @@
+import { DEFAULT_MEMORY_RETRIEVAL_OPTIONS } from '../../memory/retrieval-options.js'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
@@ -15,58 +16,96 @@ const memoryMocks = vi.hoisted(() => ({
     aggregate: vi.fn(),
     format: vi.fn(),
 }))
-const rerankerConfigMock = vi.hoisted(() => ({ enabled: false }))
+const rerankerConfigMock = vi.hoisted(() => ({ enabled: false, curationProviderId: undefined as string | undefined, curationModel: '' }))
 
 vi.mock('../../memory/memory-aggregator.js', () => ({
     getMemoryAggregator: () => memoryMocks,
 }))
 vi.mock('../../memory/reranker.js', () => ({
-    getMemoryReranker: () => ({ getConfig: () => ({ enabled: rerankerConfigMock.enabled }) }),
+    getMemoryReranker: () => ({ getConfig: () => ({ ...rerankerConfigMock }) }),
 }))
 
 import { applyAutoMemoryRouting } from './auto-memory-routing.js'
+import { OpenRouterProvider } from '../../gateway/providers/openrouter.provider.js'
 
 describe('automatic memory routing visibility', () => {
     afterEach(() => {
         getEventBus().removeAllListeners()
         vi.clearAllMocks()
         rerankerConfigMock.enabled = false
+        rerankerConfigMock.curationProviderId = undefined
+        rerankerConfigMock.curationModel = ''
     })
 
-    test('emits graph-only evidence as gathered context', async () => {
-        const graphContext = '## Knowledge Context\n- [core] Cynosure -> uses -> entity memory.'
-        memoryMocks.aggregate.mockResolvedValue({
-            permanent: [],
-            graph: { seedNodes: [], nodes: [], edges: [{ id: 'edge-1' }] },
-        })
-        memoryMocks.format.mockReturnValue(graphContext)
+    const curationCandidate = (id: string) => ({
+        id,
+        text: `${id} content`,
+        source: 'memory',
+        sourceFile: `${id}.md`,
+        score: 0.02,
+        denseScore: 0.8,
+        scoreType: 'fusion' as const,
+    })
 
-        const events: Array<Record<string, unknown>> = []
-        captureRoutingEvents(events)
+    test('curates with the configured curation model instead of the conversation model', async () => {
+        rerankerConfigMock.curationProviderId = 'curation-provider'
+        rerankerConfigMock.curationModel = 'curation-model'
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [curationCandidate('a')] })
+        memoryMocks.format.mockReturnValue('formatted memory')
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{ function: { name: 'select_memory_context', arguments: JSON.stringify({ memoryIds: ['m1'], answerable: true }) } }],
+        })
+        const gateway = {
+            complete,
+            getProvider: (id: string) => id === 'curation-provider' ? { config: { type: 'openai' } } : undefined,
+        } as unknown as LLMGateway
+
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-curation',
+            userQuery: 'How do we deploy?',
+            gateway,
+            providerId: 'chat-provider',
+            model: 'chat-model',
+        })
+
+        expect(complete).toHaveBeenCalledWith(expect.objectContaining({ model: 'curation-model' }), 'curation-provider')
+    })
+
+    test('curates with an OpenRouter decision model through one yes/no question per candidate', async () => {
+        const decide = vi.fn().mockResolvedValue({
+            answers: { m1: { type: 'noul', noul: 0.2 }, m2: { type: 'noul', noul: 0.9 } },
+            usage: { input_tokens: 100, output_tokens: 4 },
+        })
+        const provider = Object.assign(Object.create(OpenRouterProvider.prototype), {
+            config: { type: 'openrouter' },
+            isDecisionModel: vi.fn().mockResolvedValue(true),
+            decide,
+        })
+        rerankerConfigMock.curationProviderId = 'openrouter'
+        rerankerConfigMock.curationModel = 'typesafe/jev-1.13'
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [curationCandidate('weak'), curationCandidate('strong')] })
+        memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => memory.permanent.map(({ id }) => id).join(','))
+        const complete = vi.fn()
+        const gateway = { complete, getProvider: () => provider } as unknown as LLMGateway
 
         const result = await applyAutoMemoryRouting({
             enabled: true,
-            conversationId: 'conversation-1',
-            userQuery: 'How is entity memory used?',
-            gateway: {} as LLMGateway,
+            conversationId: 'conversation-decision',
+            userQuery: 'How do we deploy?',
+            gateway,
         })
 
-        expect(result).toBe(graphContext)
-        const finalEvent = events.at(-1)
-        expect(finalEvent?.toolCalls).toEqual([{
-            name: 'Knowledge Context',
-            arguments: JSON.stringify({
-                type: 'memory',
-                memoryKind: 'knowledge',
-                selectionMethod: 'ranked-fallback',
-                contextPhase: 'gathered-context',
-                content: graphContext,
-            }),
-        }])
+        expect(complete).not.toHaveBeenCalled()
+        expect(decide).toHaveBeenCalledWith(expect.objectContaining({
+            model: 'typesafe/jev-1.13',
+            questions: { m1: expect.objectContaining({ type: 'noul' }), m2: expect.objectContaining({ type: 'noul' }) },
+        }), undefined)
+        expect(result).toBe('strong')
     })
 
     test('uses the default result count for each retrieval query', async () => {
-        memoryMocks.aggregate.mockResolvedValue({ permanent: [], graph: undefined })
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [] })
 
         await applyAutoMemoryRouting({
             enabled: true,
@@ -75,9 +114,10 @@ describe('automatic memory routing visibility', () => {
             gateway: {} as LLMGateway,
         })
 
+        // Each query contributes enough candidates to fill the curation pool.
         expect(memoryMocks.aggregate).toHaveBeenCalledWith(
             expect.any(String),
-            expect.objectContaining({ permanentTopK: 10 }),
+            expect.objectContaining({ permanentTopK: Math.max(10, DEFAULT_MEMORY_RETRIEVAL_OPTIONS.curationPool - 2) }),
         )
     })
 
@@ -94,7 +134,7 @@ describe('automatic memory routing visibility', () => {
             fusionScore: 0.02,
             scoreType: 'fusion' as const,
         }
-        memoryMocks.aggregate.mockResolvedValue({ permanent: [candidate], graph: undefined })
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [candidate] })
         memoryMocks.format.mockReturnValue('formatted memory')
         const gateway = {
             complete: vi.fn().mockResolvedValue({
@@ -144,11 +184,9 @@ describe('automatic memory routing visibility', () => {
         memoryMocks.aggregate
             .mockResolvedValueOnce({
                 permanent: [candidate('medium', 0.6, 0.95), candidate('weak', 0.4, 0.99)],
-                graph: undefined,
             })
             .mockResolvedValueOnce({
                 permanent: [candidate('best', 0.8, 0.3), candidate('medium', 0.55, 0.95)],
-                graph: undefined,
             })
         memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => (
             memory.permanent.map(({ id }) => id).join(',')
@@ -194,7 +232,6 @@ describe('automatic memory routing visibility', () => {
             opts.onStatus?.('reranking', { candidateCount: 12, resultCount: 2 })
             return {
                 permanent: [candidate('first', .95), candidate('second', .82)],
-                graph: undefined,
             }
         })
         memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => memory.permanent.map(({ id }) => id).join(','))
@@ -227,8 +264,52 @@ describe('automatic memory routing visibility', () => {
         expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).selectionMethod)).toEqual(['reranker', 'reranker'])
     })
 
+    test('passes lexical-only matches to curation instead of dropping them for lacking a similarity score', async () => {
+        const dense = { id: 'dense', text: 'Generic deployment notes.', source: 'memory', sourceFile: 'a.md', chunkIndex: 0, score: 0.0164, denseScore: 0.48, scoreType: 'fusion' as const }
+        const exactId = { id: 'exact', text: 'Ticket CYN-4821 was fixed by Alex.', source: 'memory', sourceFile: 'b.md', chunkIndex: 0, score: 0.0164, lexicalScore: 9.2, scoreType: 'fusion' as const }
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [dense, exactId] })
+        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
+            name: 'select_memory_context',
+            arguments: JSON.stringify({ memoryIds: ['m2'], answerable: true }),
+        } }] })
+
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-lexical',
+            userQuery: 'Who fixed CYN-4821?',
+            gateway: { complete } as unknown as LLMGateway,
+        })
+
+        const prompt = String(complete.mock.calls[0][0].messages[1].content)
+        expect(prompt).toContain('- m2 (source=b.md, part=1):\nTicket CYN-4821 was fixed by Alex.')
+        expect(prompt).not.toContain('score=')
+    })
+
+    test('ranks chunks found by several queries above single-query matches', async () => {
+        const chunk = (id: string, denseScore: number) => ({ id, text: id, source: 'memory', sourceFile: `${id}.md`, chunkIndex: 0, score: 0.01, denseScore, scoreType: 'fusion' as const })
+        memoryMocks.aggregate
+            .mockResolvedValueOnce({ permanent: [chunk('only-first', 0.9), chunk('shared', 0.5)] })
+            .mockResolvedValueOnce({ permanent: [chunk('shared', 0.5), chunk('only-second', 0.8)] })
+        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
+            name: 'select_memory_context',
+            arguments: JSON.stringify({ memoryIds: [], answerable: true }),
+        } }] })
+
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-rank-fusion',
+            userQuery: 'deployment',
+            retrievalQueries: ['deployment', 'release process'],
+            gateway: { complete } as unknown as LLMGateway,
+        })
+
+        const prompt = String(complete.mock.calls[0][0].messages[1].content)
+        const order = ['shared', 'only-first', 'only-second'].map((id) => prompt.indexOf(`source=${id}.md`))
+        expect(order).toEqual([...order].sort((a, b) => a - b))
+    })
+
     test('always searches the original request before complementary expansions', async () => {
-        memoryMocks.aggregate.mockResolvedValue({ permanent: [], graph: undefined })
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [] })
 
         await applyAutoMemoryRouting({
             enabled: true,
@@ -242,47 +323,6 @@ describe('automatic memory routing visibility', () => {
             'Was weißt du über meine beste Freundin?',
             'Informationen über enge persönliche Beziehungen',
         ])
-    })
-
-    test('curates graph edges together with chunks instead of injecting the whole walk', async () => {
-        const edge = (id: string, relation: string) => ({
-            id,
-            fromNodeId: `${id}-from`,
-            toNodeId: `${id}-to`,
-            fromName: id === 'best' ? 'Caroline' : 'Andi',
-            toName: id === 'best' ? 'Andi' : 'Salzburg',
-            relation,
-            importance: 3,
-            confidence: 0.95,
-            evidence: `${relation} evidence`,
-            sourceKind: 'memory',
-            sourceId: `memory:persons:${id}.md`,
-            mentionCount: 1,
-            firstSeenAt: 1,
-            lastSeenAt: 1,
-        })
-        memoryMocks.aggregate.mockResolvedValue({
-            permanent: [],
-            graph: { seedNodes: [], nodes: [], edges: [edge('best', 'best_friend_of'), edge('city', 'lives_in')] },
-        })
-        memoryMocks.format.mockImplementation((memory: { graph?: { edges: Array<{ id: string }> } }) => (
-            memory.graph?.edges.map(({ id }) => id).join(',') || ''
-        ))
-        const gateway = {
-            complete: vi.fn().mockResolvedValue({
-                toolCalls: [{ function: {
-                    name: 'select_memory_context',
-                    arguments: JSON.stringify({ memoryIds: [], graphEdgeIds: ['g1'], answerable: true }),
-                } }],
-            }),
-        } as unknown as LLMGateway
-
-        await expect(applyAutoMemoryRouting({
-            enabled: true,
-            conversationId: 'conversation-5',
-            userQuery: 'Who is explicitly the best friend?',
-            gateway,
-        })).resolves.toBe('best')
     })
 
     test('runs one corrective retrieval when candidates do not directly answer the request', async () => {
@@ -300,7 +340,6 @@ describe('automatic memory routing visibility', () => {
             permanent: query.includes('Caroline')
                 ? [chunk('caroline', 'Caroline is explicitly Andi’s best friend.')]
                 : [chunk('sandra', 'Sandra is a close friend of Andi.')],
-            graph: undefined,
         }))
         memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => (
             memory.permanent.map(({ id }) => id).join(',')
@@ -310,13 +349,13 @@ describe('automatic memory routing visibility', () => {
                 .mockResolvedValueOnce({ toolCalls: [{ function: {
                     name: 'select_memory_context',
                     arguments: JSON.stringify({
-                        memoryIds: [], graphEdgeIds: [], answerable: false,
+                        memoryIds: [], answerable: false,
                         correctiveQuery: 'Caroline beste Freundin BFF',
                     }),
                 } }] })
                 .mockResolvedValueOnce({ toolCalls: [{ function: {
                     name: 'select_memory_context',
-                    arguments: JSON.stringify({ memoryIds: ['m2'], graphEdgeIds: [], answerable: true }),
+                    arguments: JSON.stringify({ memoryIds: ['m2'], answerable: true }),
                 } }] }),
         } as unknown as LLMGateway
 

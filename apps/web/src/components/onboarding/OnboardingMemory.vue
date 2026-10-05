@@ -12,7 +12,10 @@
 
     <div class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4 mb-4">
       <div>
-        <label class="block text-sm font-medium text-theme-300 mb-1.5">
+        <label
+          for="onboarding-embedding-provider"
+          class="block text-sm font-medium text-theme-300 mb-1.5"
+        >
           Memory embedding provider
         </label>
         <p class="text-xs text-ink-muted mb-3">
@@ -20,11 +23,12 @@
           when they expose embedding models.
         </p>
         <select
+          id="onboarding-embedding-provider"
           v-model="embProviderId"
           class="w-full bg-theme-900 border border-theme-600 text-theme-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
         >
           <option value="">
-            Select a provider…
+            Set up memory later
           </option>
           <option
             v-for="provider in providerStore.providers"
@@ -101,23 +105,24 @@
         </p>
       </div>
 
-      <button
-        class="flex items-center gap-2 px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-accent-on text-sm font-medium rounded-lg transition-colors"
-        :disabled="!embProviderId || !embModel || savingEmb || resolvingModel"
-        @click="saveEmbeddings"
+      <p
+        v-if="saveError"
+        class="rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs text-status-danger"
+        role="alert"
       >
-        <Icon
-          :icon="savingEmb ? 'lucide:loader-2' : embSaved ? 'lucide:check' : 'lucide:save'"
-          class="w-4 h-4"
-          :class="{ 'animate-spin': savingEmb }"
-        />
-        {{ savingEmb ? 'Configuring…' : embSaved ? 'Memory configured!' : 'Configure Memory' }}
-      </button>
+        {{ saveError }}
+      </p>
+      <p
+        v-else-if="!embProviderId"
+        class="text-xs text-ink-muted"
+      >
+        Memory search stays off until an embedding model is configured. You can set it up later in Settings → Memory.
+      </p>
     </div>
 
     <Transition name="fade">
       <div
-        v-if="embSaved || embConfigured"
+        v-if="embConfigured"
         class="flex items-start gap-3 bg-accent-500/10 border border-accent-500/30 rounded-xl px-4 py-3.5"
       >
         <Icon
@@ -138,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
@@ -155,11 +160,21 @@ const availableModels = ref<string[]>([])
 const recommendedModel = ref('')
 const embDimensions = ref(0)
 const savingEmb = ref(false)
-const embSaved = ref(false)
+const saveError = ref('')
 const embConfigured = ref(false)
 const loadingInitialConfig = ref(true)
 const resolvingModel = ref(false)
 let modelRequest = 0
+
+const emit = defineEmits<{ 'state-change': [state: { pending: boolean; busy: boolean }] }>()
+
+/** A provider and model are chosen but not saved yet; Continue saves them. */
+const pending = computed(() => Boolean(embProviderId.value && embModel.value && !embConfigured.value))
+watch(
+  () => ({ pending: pending.value, busy: resolvingModel.value || savingEmb.value || loadingInitialConfig.value }),
+  (state) => emit('state-change', state),
+  { immediate: true }
+)
 
 onMounted(async () => {
   await providerStore.loadProviders()
@@ -185,7 +200,7 @@ watch(embProviderId, (id) => {
   availableModels.value = []
   recommendedModel.value = ''
   embConfigured.value = false
-  embSaved.value = false
+  saveError.value = ''
   void resolveEmbeddingModel(id)
 })
 
@@ -225,7 +240,7 @@ async function resolveEmbeddingModel(providerId: string, preferredModel = '') {
 function onEmbeddingModelChange() {
   embDimensions.value = 0
   embConfigured.value = false
-  embSaved.value = false
+  saveError.value = ''
 }
 
 function applyDefaultEmbeddingConfig() {
@@ -236,25 +251,28 @@ function applyDefaultEmbeddingConfig() {
   void resolveEmbeddingModel(providerId)
 }
 
-async function saveEmbeddings() {
-  if (!embProviderId.value || !embModel.value) return
+/** Save the chosen embedding model. Returns false when the step should not advance. */
+async function save(): Promise<boolean> {
+  if (!pending.value) return true
   savingEmb.value = true
-  embSaved.value = false
+  saveError.value = ''
   try {
     const res = await api.memory.configureEmbeddings({
       providerId: embProviderId.value,
       model: embModel.value,
     })
     embDimensions.value = res.dimensions
-    embSaved.value = true
     embConfigured.value = true
-    setTimeout(() => { embSaved.value = false }, 3000)
-  } catch {
-    // Settings remains optional during onboarding.
+    return true
+  } catch (error) {
+    saveError.value = `Memory could not be configured: ${error instanceof Error ? error.message : 'unknown error'}. Choose another model, or select "Set up memory later".`
+    return false
   } finally {
     savingEmb.value = false
   }
 }
+
+defineExpose({ save })
 </script>
 
 <style scoped>

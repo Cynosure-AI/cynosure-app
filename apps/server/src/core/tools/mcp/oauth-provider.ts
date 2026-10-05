@@ -33,7 +33,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
     }
 
     constructor(
-        private serverUrl: string,
+        serverUrl: string,
         private _redirectUrl: string,
         private onRedirect: (url: string) => void
     ) {

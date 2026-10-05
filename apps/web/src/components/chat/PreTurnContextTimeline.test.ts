@@ -100,25 +100,6 @@ describe('PreTurnContextTimeline', () => {
     expect(tooltip?.textContent).toContain(fullContent)
   })
 
-  test('distinguishes document memories from knowledge-graph context in the final outcome', () => {
-    const wrapper = mount(PreTurnContextTimeline, {
-      props: {
-        steps: [{
-          iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 100,
-          toolCalls: [
-            { name: 'profile.md', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'profile.md' }) },
-            { name: 'Knowledge Context', arguments: JSON.stringify({ type: 'memory', memoryKind: 'knowledge', contextPhase: 'gathered-context', selectionMethod: 'reranker' }) },
-          ],
-        }],
-        isActive: false,
-      },
-      global,
-    })
-
-    expect(wrapper.get('[role="status"]').text()).toBe('Selected top 1 memory + knowledge context')
-    expect(wrapper.get('.count-chip').text()).toBe('1 memory + graph')
-  })
-
   test('expands pre-reranker search matches but keeps the final selection row collapsed', async () => {
     const pipelineStats = {
       queryCount: 1, searchCandidateCount: 3, rerankerInputCount: 3, rerankerOutputCount: 2,

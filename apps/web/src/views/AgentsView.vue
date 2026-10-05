@@ -15,6 +15,7 @@ import ModalDialog from '../components/shared/ModalDialog.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
 import type { Column } from '../components/shared/DataTable.vue'
 import type { AgentDefinition } from '../api/types'
+import { NEW_AGENT_BEHAVIOR } from '../utils/agent-defaults'
 
 const agentDefs = useAgentDefinitionsStore()
 const agentStore = useAgentStore()
@@ -73,7 +74,7 @@ const tableAgents = computed(() => [...agentDefs.agents].sort(defaultAgentSort))
 const hasAnyAgents = computed(() => agentDefs.agents.length > 0)
 const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || stateFilter.value !== 'all')
 const agentColumns: Column<AgentDefinition>[] = [
-  { key: 'favorite', label: '', width: '36px', sortable: true, sortValue: agent => agent.favorite },
+  { key: 'favorite', label: '', ariaLabel: 'Favorite', width: '36px', sortable: true, sortValue: agent => agent.favorite },
   { key: 'name', label: 'Name', width: 'minmax(240px, 1.45fr)', sortable: true, sortValue: agent => agent.name },
   { key: 'model', label: 'Model / Provider', width: 'minmax(200px, 0.85fr)', sortable: true, editable: true, sortValue: agent => `${getModelDisplayName(agent)}\u0000${getProviderName(agent)}` },
   { key: 'info', label: 'Info', width: '130px' },
@@ -138,8 +139,8 @@ async function createAgent(): Promise<void> {
   const agent = await agentDefs.create({
     name: newName.value.trim(), internalName: '', description: newDescription.value.trim(), category: '',
     favorite: false, iconUrl: null, providerId: providerStore.lastUsedProviderId || '',
-    model: providerStore.lastUsedProvider?.defaultModel || '', systemPrompt: '', cronPrompt: '', tools: [],
-    autoApproveTools: false, autoToolRouting: false, autoMemory: true, dreamingEnabled: true, generateTitle: true,
+    model: providerStore.lastUsedProvider?.defaultModel || '', systemPrompt: '', tools: [],
+    ...NEW_AGENT_BEHAVIOR,
   })
   showCreateDialog.value = false
   newName.value = ''

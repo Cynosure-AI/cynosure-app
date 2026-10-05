@@ -28,7 +28,7 @@ const isElectron = typeof electron?.quitApp === 'function'
 const setupLinks = [
   { path: '/settings', label: 'Settings', icon: 'lucide:settings' },
   { path: '/settings/mcp', label: 'MCP Servers', icon: 'lucide:plug' },
-  { path: '/tools-policy', label: 'Tools Policy', icon: 'lucide:shield-check' },
+  { path: '/tools-policy', label: 'Tools', icon: 'lucide:shield-check' },
 ]
 
 function updatePosition() {

@@ -48,12 +48,15 @@ const filterOptions: { value: ActivityKind; label: string; icon: string }[] = [
   { value: "instance", label: "Active", icon: "lucide:square-activity" },
   { value: "artifact", label: "Generated files", icon: "lucide:file-output" },
   { value: "chat", label: "Chats", icon: "lucide:message-circle" },
+  { value: "channels", label: "Channels", icon: "lucide:radio" },
   { value: "cron", label: "Cron", icon: "lucide:clock" },
   { value: "dream", label: "Dream", icon: "lucide:moon-star" },
   { value: "memory", label: "Memory", icon: "lucide:database" },
 ];
 
 const defaultSelectedKinds: ActivityKind[] = filterOptions.map((option) => option.value);
+// The full selection saved while the Channels filter was missing; it still means "everything".
+const previousDefaultKinds: ActivityKind[] = ["instance", "artifact", "chat", "cron", "dream", "memory"];
 const selectableKinds = new Set<ActivityKind>(filterOptions.map((option) => option.value));
 const selectedKinds = ref<ActivityKind[]>(readSelectedKinds());
 
@@ -63,10 +66,12 @@ function readSelectedKinds(): ActivityKind[] {
     const parsed = raw ? JSON.parse(raw) : null;
     if (!Array.isArray(parsed)) return [...defaultSelectedKinds];
 
-    const validKinds = parsed.filter((value): value is ActivityKind =>
+    const validKinds = [...new Set(parsed.filter((value): value is ActivityKind =>
       typeof value === "string" && selectableKinds.has(value as ActivityKind),
-    );
-    return [...new Set(validKinds)];
+    ))];
+    const isPreviousDefault = validKinds.length === previousDefaultKinds.length
+      && previousDefaultKinds.every((kind) => validKinds.includes(kind));
+    return isPreviousDefault ? [...defaultSelectedKinds] : validKinds;
   } catch {
     return [...defaultSelectedKinds];
   }
@@ -122,16 +127,12 @@ function instanceActivityItem(instance: AgentInstance): ActivityItem {
 }
 
 function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
-  const knowledgeJob = job.kind === "deep-research";
   const toolJob = job.kind === "tool-embeddings";
-  const batchProgress = knowledgeJob && job.progressCurrent && job.progressTotal
-    ? ` (batch ${job.progressCurrent}/${job.progressTotal})`
-    : "";
   return {
     id: `live-memory:${job.id}`,
     kind: "memory",
-    title: toolJob ? "Indexing tool capabilities" : `${knowledgeJob ? `Running Deep Research${batchProgress} from` : "Search-indexing"} ${job.fileName}`,
-    description: toolJob ? `${job.progressCurrent ?? 0}/${job.progressTotal ?? 0} embeddings` : knowledgeJob && batchProgress ? `Deep Research batch ${job.progressCurrent} of ${job.progressTotal}` : job.fileName,
+    title: toolJob ? "Indexing tool capabilities" : `Search-indexing ${job.fileName}`,
+    description: toolJob ? `${job.progressCurrent ?? 0}/${job.progressTotal ?? 0} embeddings` : job.fileName,
     createdAt: job.createdAt,
     agentId: null,
     agentName: null,
@@ -139,7 +140,7 @@ function memoryJobActivityItem(job: MemoryIndexJob): ActivityItem {
     conversationId: null,
     status: job.status,
     sourceId: job.id,
-    sourceLabel: toolJob ? "Tool indexing" : knowledgeJob ? "Deep Research" : "Search indexing",
+    sourceLabel: toolJob ? "Tool indexing" : "Search indexing",
     memoryFolderId: toolJob ? undefined : job.folderId,
     memoryFileName: toolJob ? undefined : job.fileName,
   };
@@ -475,6 +476,13 @@ function isActiveWork(item: ActivityItem): boolean {
   return isActiveInstance(item) || isActiveMemoryJob(item);
 }
 
+const emptyStateMessage = computed(() => {
+  if (searchQuery.value.trim()) return "No activity matches your search.";
+  if (selectedKinds.value.length === 0) return "Select at least one activity type to see the timeline.";
+  if (allKindsSelected.value) return "No activity yet. Chats, scheduled runs, and indexing will appear here as they happen.";
+  return "No activity of the selected types yet.";
+});
+
 const knownActiveWorkCount = computed(() => activeInstances.value.length + memoryJobsStore.activeJobs.length + items.value.filter(isActiveDream).length);
 
 function openStopAllConfirm(): void {
@@ -606,14 +614,17 @@ watch(searchQuery, () => {
             Activity Log
           </h1>
           <p class="mt-1 max-w-3xl text-sm leading-relaxed text-ink-muted">
-            Active work and a timeline of completed chats, cron runs, memory indexing, generated files, channels, and notifications.
+            Running work and a timeline of chats, channel conversations, cron runs, memory indexing, dreams, and generated files.
           </p>
         </div>
         <div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
           <div class="flex gap-2">
             <button
               type="button"
-              class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-red-400/35 bg-red-400/10 px-3 py-2 text-[13px] font-semibold text-red-300 transition hover:border-red-300/55 hover:bg-red-400/20 hover:text-red-200 disabled:cursor-wait disabled:opacity-60 sm:flex-none"
+              class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[13px] transition disabled:cursor-wait disabled:opacity-60 sm:flex-none"
+              :class="knownActiveWorkCount > 0
+                ? 'border-red-400/35 bg-red-400/10 font-semibold text-red-300 hover:border-red-300/55 hover:bg-red-400/20 hover:text-red-200'
+                : 'border-theme-800 bg-theme-900/80 text-ink-secondary hover:border-red-400/35 hover:bg-red-400/10 hover:text-red-300'"
               :disabled="stoppingAll"
               @click="openStopAllConfirm"
             >
@@ -791,7 +802,7 @@ watch(searchQuery, () => {
           icon="lucide:inbox"
           class="w-9 h-9 text-ink-faint"
         />
-        <p>{{ searchQuery.trim() ? "No activity matches your search." : "No activity for this filter yet." }}</p>
+        <p>{{ emptyStateMessage }}</p>
       </div>
 
       <div
@@ -1065,7 +1076,7 @@ watch(searchQuery, () => {
   >
     <p class="text-sm leading-6 text-theme-300">
       This cancels all work currently running on the server, including chats, cron runs, channel agents,
-      search indexing and Deep Research, vector re-embedding, and auxiliary chat actions.
+      search indexing, vector re-embedding, and auxiliary chat actions.
     </p>
     <p class="mt-3 text-xs leading-5 text-ink-muted">
       {{ knownActiveWorkCount > 0 ? `${knownActiveWorkCount} active operation${knownActiveWorkCount === 1 ? '' : 's'} currently visible.` : 'The server will also check for background work not currently visible in this view.' }}

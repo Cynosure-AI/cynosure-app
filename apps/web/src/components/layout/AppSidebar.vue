@@ -509,9 +509,9 @@ const chatRoute = computed(() =>
         >
           <HoverTooltip
             v-for="item in [
-              { to: '/cron', icon: 'lucide:calendar-clock', label: 'Schedule' },
+              { to: '/cron', icon: 'lucide:calendar-clock', label: 'Scheduled Jobs' },
               { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
-              { to: '/memory-folders', icon: 'lucide:database', label: 'Memories' },
+              { to: '/memory-folders', icon: 'lucide:database', label: 'Memory' },
               { to: '/library', icon: 'lucide:library', label: 'Library' },
             ]"
             :key="item.to"

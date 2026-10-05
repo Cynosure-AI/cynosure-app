@@ -22,7 +22,7 @@ describe('agent runtime hard-stop latch', () => {
       agentId: null,
       state: 'running',
     })
-    expect(store.activeConversationIsExecuting).toBe(true)
+    expect(store.isExecuting).toBe(true)
 
     store.stopConversationExecution('conversation', ['old-execution'])
     store.handleExecutionUpdate({
@@ -40,14 +40,14 @@ describe('agent runtime hard-stop latch', () => {
       state: 'running',
     })
 
-    expect(store.activeConversationIsExecuting).toBe(false)
+    expect(store.isExecuting).toBe(false)
     expect(store.executionSteps).toEqual([])
 
     store.prepareConversationExecution('conversation')
-    expect(store.activeConversationIsExecuting).toBe(true)
+    expect(store.isExecuting).toBe(true)
 
     store.reconcileStoppedExecution('conversation', ['old-execution'])
-    expect(store.activeConversationIsExecuting).toBe(true)
+    expect(store.isExecuting).toBe(true)
 
     // A duplicated terminal event from the old request cannot kill the new,
     // user-authorized generation while it is waiting on the conversation lock.
@@ -57,7 +57,7 @@ describe('agent runtime hard-stop latch', () => {
       agentId: null,
       state: 'stopped',
     })
-    expect(store.activeConversationIsExecuting).toBe(true)
+    expect(store.isExecuting).toBe(true)
 
     store.handleChatExecutionState({
       executionId: 'new-execution',
@@ -71,7 +71,7 @@ describe('agent runtime hard-stop latch', () => {
       agentId: null,
       state: 'finished',
     })
-    expect(store.activeConversationIsExecuting).toBe(false)
+    expect(store.isExecuting).toBe(false)
   })
 
   test('replayed step events deduplicate and tool updates patch the matching round', () => {

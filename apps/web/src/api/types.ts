@@ -15,7 +15,7 @@ export interface LLMProviderConfig {
     supportsVision: boolean
 }
 
-export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription'
+export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription' | 'decision'
 
 export interface ModelPricing {
     prompt?: number
@@ -233,7 +233,6 @@ export interface AgentDefinition {
     providerId: string
     model: string
     systemPrompt: string
-    cronPrompt: string
     tools: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools: boolean
@@ -382,13 +381,7 @@ export interface MemoryFileStatus {
     /** Approximate count based on file size and the active chunking settings. */
     estimatedChunkCount?: number
     lastIndexedAt?: number
-    deepResearched: boolean
-    analysisStatus: 'not_analyzed' | 'current' | 'needs_refresh'
-    /** Server-enforced maximum chunk count for Deep Research eligibility. */
-    analysisChunkLimit: number
-    deepResearchedAt?: number
     dreamedAt?: number
-    tags: string[]
 }
 
 export type { RuntimeLimits } from '@shared/runtime-limits'
@@ -397,7 +390,7 @@ export interface MemoryFileSearchResult extends MemoryFileStatus {
     folderId: string
     folderName: string
     folderPath: string
-    matchedFields: Array<'fileName' | 'folder' | 'tags' | 'summary' | 'content'>
+    matchedFields: Array<'fileName' | 'folder' | 'content'>
     /** Best cosine similarity among the document's matching chunks (0–1). */
     similarity?: number
 }
@@ -426,43 +419,17 @@ export interface RecentMemoryChange extends MemoryRevisionSummary {
     segments: MemoryDiffSegment[]
 }
 
-export interface MemoryDocumentKnowledgePreview {
-    items: Array<{
-        kind: 'relationship' | 'entity'
-        label: string
-    }>
-    total: number
-}
-
-export interface MemoryDocumentAnalysis {
-    status: 'not_analyzed' | 'searchable' | 'current' | 'needs_refresh' | 'too_large'
-    chunkCount?: number
-    maxChunks?: number
-    pipelineVersion?: string
-    promptVersion?: string
+/** The indexed chunks of one document, for the editor's chunk-boundary view. */
+export interface MemoryDocumentChunks {
     chunks: Array<{
         chunkIndex: number
         text: string
-        sectionPath: string
-        summary: string
-        tags: string[]
     }>
-    items: Array<{
-        kind: 'relationship' | 'entity'
-        label: string
-        chunkIndex: number
-        importance?: number
-        relation: string
-        entity: string
-        subject?: string
-        reasoning: string
-    }>
-    itemTotal: number
 }
 
 export interface MemoryIndexJob<T = unknown> {
     id: string
-    kind: 'reindex' | 'deep-research' | 'tool-embeddings'
+    kind: 'reindex' | 'tool-embeddings'
     folderId: string
     fileName: string
     status: 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
@@ -475,97 +442,6 @@ export interface MemoryIndexJob<T = unknown> {
     progressTotal?: number
     result?: T
     error?: string
-}
-
-export interface MemoryKnowledgeStats {
-    pipelineVersion: string
-    active_runs: number
-    active_text_units: number
-    entities: number
-    active_mentions: number
-    active_assertions: number
-    disputed_assertions: number
-    verified_evidence: number
-    unmanaged_predicates: number
-    indexed_documents: number
-    covered_documents: number
-    projection_ready_runs: number
-    projection_error_runs: number
-    ambiguous_mentions: number
-}
-
-export interface KnowledgeGraphNode {
-    id: string
-    name: string
-    normalizedName: string
-    type: 'person' | 'place' | 'organization' | 'project' | 'event' | 'date' | 'technology' | 'product' | 'artifact' | 'concept' | 'other'
-    aliases: string[]
-    importance: 0 | 1 | 2 | 3
-    mentionCount: number
-    sourceCount: number
-    origins?: KnowledgeGraphEvidence[]
-    firstSeenAt: number
-    lastSeenAt: number
-}
-
-export type KnowledgeGraphNodeType = KnowledgeGraphNode['type']
-
-export interface KnowledgeSourceChunk {
-    textUnitId: string
-    href: string
-    documentId: string
-    fileName: string
-    chunkIndex: number
-    documentTitle: string
-    sectionPath: string
-    text: string
-    notes: string[]
-}
-
-export interface KnowledgeGraphEvidence {
-    sourceKind: string
-    sourceId: string
-    label: string
-    count: number
-    lastSeenAt: number
-    chunks: KnowledgeSourceChunk[]
-}
-
-export interface KnowledgeGraphEdge {
-    id: string
-    fromNodeId: string
-    toNodeId: string
-    fromName: string
-    toName: string
-    relation: string
-    importance: 0 | 1 | 2 | 3
-    assertionStatus?: 'active' | 'superseded' | 'disputed' | 'retracted' | 'retired' | 'staging'
-    note?: string
-    sourceKind: string
-    sourceId: string
-    sourceDocumentId?: string
-    sourceContentHash?: string
-    sourceChunkIndex?: number
-    sourceChunk?: KnowledgeSourceChunk
-    sourceIds?: string[]
-    mentionCount: number
-    firstSeenAt: number
-    lastSeenAt: number
-}
-
-export interface KnowledgeGraph {
-    stats: {
-        nodeCount: number
-        edgeCount: number
-        recentEdgeCount: number
-    }
-    seedNodes: KnowledgeGraphNode[]
-    nodes: KnowledgeGraphNode[]
-    edges: KnowledgeGraphEdge[]
-}
-
-export interface KnowledgeGraphSuggestionsResponse {
-    suggestions: KnowledgeGraphNode[]
 }
 
 // ── Instances / Cron / Channels ──────────────────────────────────────────────
@@ -688,7 +564,7 @@ export interface MetricsSummary {
         estimatedCost: number | null
     }[]
     auxiliaryModelUsage: {
-        kind: 'embedding' | 'reranker' | 'deep-research' | 'memory-router' | 'tool-router' | 'dreaming'
+        kind: 'embedding' | 'reranker' | 'deep-research' | 'task-context' | 'memory-router' | 'tool-router' | 'dreaming'
         provider: string
         model: string
         requestCount: number
@@ -718,6 +594,16 @@ export interface MetricsSummary {
         origin: string
         count: number
     }[]
+}
+
+export interface MemoryRerankerConfig {
+    enabled: boolean
+    providerId?: string
+    model: string
+    candidateCount: number
+    /** Curates memory when reranking is off; empty uses the conversation model. */
+    curationProviderId?: string
+    curationModel: string
 }
 
 export interface DreamConfig {

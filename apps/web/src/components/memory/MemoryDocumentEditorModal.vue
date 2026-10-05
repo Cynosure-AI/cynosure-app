@@ -11,10 +11,9 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import { api } from "../../api/client";
-import type { MemoryDiffSegment, MemoryDocumentAnalysis, MemoryRevisionSummary } from "../../api/types";
+import type { MemoryDiffSegment, MemoryDocumentChunks, MemoryRevisionSummary } from "../../api/types";
 import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 import MemoryChunkMarkers from "./MemoryChunkMarkers.vue";
-import HoverTooltip from "../shared/HoverTooltip.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
@@ -79,13 +78,10 @@ const selectedRevisionId = ref("");
 const revisionDiff = ref<MemoryDiffSegment[]>([]);
 const historyLoading = ref(false);
 const editorDirty = ref(false);
-const analysis = ref<MemoryDocumentAnalysis | null>(null);
-const analysisLoading = ref(false);
-const analysisError = ref("");
-const analysisExpanded = ref(false);
+const chunks = ref<MemoryDocumentChunks["chunks"]>([]);
 let contentLoadSequence = 0;
 let historyLoadSequence = 0;
-let analysisLoadSequence = 0;
+let chunksLoadSequence = 0;
 
 const editor = useEditor({
   extensions: [
@@ -186,23 +182,16 @@ async function loadContent() {
   }
 }
 
-async function loadAnalysis() {
+/** Chunk boundaries of the indexed revision; unindexed documents show none. */
+async function loadChunks() {
   if (!props.show || !props.folderId || !props.sourceFile) return;
-  const sequence = ++analysisLoadSequence;
-  analysisLoading.value = true;
-  analysisError.value = "";
-  analysis.value = null;
-  analysisExpanded.value = false;
+  const sequence = ++chunksLoadSequence;
+  chunks.value = [];
   try {
-    const result = await api.memoryFolders.getDocumentAnalysis(props.folderId, props.sourceFile);
-    if (sequence === analysisLoadSequence) {
-      analysis.value = result;
-      analysisExpanded.value = result.items.length > 0 && !showHistory.value;
-    }
-  } catch (err) {
-    if (sequence === analysisLoadSequence) analysisError.value = (err as Error).message || "Failed to load analysis";
-  } finally {
-    if (sequence === analysisLoadSequence) analysisLoading.value = false;
+    const result = await api.memoryFolders.getDocumentChunks(props.folderId, props.sourceFile);
+    if (sequence === chunksLoadSequence) chunks.value = result.chunks;
+  } catch {
+    // Markers are a reading aid; the document stays editable without them.
   }
 }
 
@@ -250,20 +239,8 @@ async function toggleHistory() {
     historyLoading.value = false;
     return;
   }
-  analysisExpanded.value = false;
   showHistory.value = true;
   await loadHistory();
-}
-
-function toggleFacts() {
-  if (showHistory.value) {
-    showHistory.value = false;
-    ++historyLoadSequence;
-    historyLoading.value = false;
-    analysisExpanded.value = true;
-    return;
-  }
-  analysisExpanded.value = !analysisExpanded.value;
 }
 
 async function restoreSelectedRevision() {
@@ -341,7 +318,7 @@ watch(
   () => [props.show, props.folderId, props.sourceFile, editor.value] as const,
   () => {
     if (props.show) {
-      void loadContent().then(() => loadAnalysis());
+      void loadContent().then(() => loadChunks());
     }
   },
   { immediate: true },
@@ -376,7 +353,7 @@ onBeforeUnmount(() => {
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
         <button
-          class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-ink-secondary transition hover:bg-theme-800 hover:text-theme-100"
+          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-ink-secondary transition hover:bg-theme-800 hover:text-theme-100"
           :class="{ 'bg-accent-500/15 text-accent-fg': showHistory }"
           :disabled="!documentRef || loading"
           title="Revision history"
@@ -387,19 +364,6 @@ onBeforeUnmount(() => {
             class="h-4 w-4"
           />
           History
-        </button>
-        <button
-          class="mr-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-ink-secondary transition hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40"
-          :class="{ 'bg-accent-500/15 text-accent-fg': analysisExpanded }"
-          :disabled="analysisLoading"
-          title="Extracted facts and entities"
-          @click="toggleFacts"
-        >
-          <Icon
-            icon="lucide:list-tree"
-            class="h-4 w-4"
-          />
-          Facts
         </button>
         <button
           v-for="button in [
@@ -507,123 +471,6 @@ onBeforeUnmount(() => {
           />
           Loading…
         </div>
-        <aside
-          class="absolute inset-0 z-20 min-h-0 flex-col border-r border-theme-800 bg-theme-950 lg:static lg:w-80 lg:shrink-0"
-          :class="analysisExpanded ? 'flex' : 'hidden'"
-          aria-label="Document analysis"
-        >
-          <div class="flex min-h-0 flex-1 flex-col">
-            <div class="flex shrink-0 items-center justify-between px-3 py-2">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">Extracted knowledge</span>
-              <button
-                class="p-1 text-ink-muted hover:text-theme-200"
-                title="Close facts"
-                @click="analysisExpanded = false"
-              >
-                <Icon
-                  icon="lucide:x"
-                  class="h-4 w-4"
-                />
-              </button>
-            </div>
-            <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-              <div
-                v-if="analysisLoading"
-                class="flex items-center gap-2 py-4 text-xs text-ink-muted"
-              >
-                <Icon
-                  icon="lucide:loader-2"
-                  class="h-3.5 w-3.5 animate-spin"
-                /> Loading analysis…
-              </div>
-              <div
-                v-else-if="analysisError"
-                class="py-3 text-xs text-status-danger"
-              >
-                {{ analysisError }}
-              </div>
-              <div
-                v-else-if="analysis?.status === 'not_analyzed'"
-                class="py-3 text-xs leading-5 text-ink-muted"
-              >
-                Run Extract facts to generate durable facts and entities.
-              </div>
-              <div
-                v-else-if="analysis?.status === 'too_large'"
-                class="py-3 text-xs leading-5 text-ink-muted"
-              >
-                Analysis supports up to {{ analysis.maxChunks }} chunks. This document has {{ analysis.chunkCount }}.
-              </div>
-              <template v-else>
-                <div
-                  v-if="analysis?.status === 'needs_refresh'"
-                  class="mb-3 rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-300"
-                >
-                  This analysis is from an older document or analysis version. Run Extract facts to refresh it.
-                </div>
-                <div
-                  v-if="analysis?.items.length"
-                  class="space-y-1.5"
-                >
-                  <HoverTooltip
-                    v-for="(item, index) in analysis.items"
-                    :key="`${item.kind}-${item.chunkIndex}-${index}`"
-                    placement="mouse"
-                    :max-width="420"
-                    :disabled="!item.reasoning"
-                    block
-                  >
-                    <div class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-xs leading-4 text-theme-300 hover:bg-theme-900/70">
-                      <Icon
-                        :icon="item.kind === 'relationship' ? 'lucide:git-branch' : 'lucide:circle-dot'"
-                        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-muted"
-                      />
-                      <span
-                        v-if="item.kind === 'relationship' && item.relation && item.entity"
-                        class="min-w-0"
-                      >
-                        <span class="font-medium text-theme-200">{{ item.subject || 'Unknown subject' }}</span>
-                        <span class="mx-1.5 text-ink-faint">·</span>
-                        <span class="font-mono text-accent-fg">{{ item.relation }}</span>
-                        <span class="mx-1.5 text-ink-faint">→</span>
-                        <span>{{ item.entity }}</span>
-                      </span>
-                      <span
-                        v-else-if="item.kind === 'entity' && item.entity"
-                        class="min-w-0"
-                      >
-                        <span class="text-ink-muted">Mentioned entity</span>
-                        <span class="mx-1.5 text-ink-faint">·</span>
-                        <span>{{ item.entity }}</span>
-                      </span>
-                      <span v-else>{{ item.label }}</span>
-                    </div>
-                    <template #content>
-                      <div
-                        class="min-w-64 text-[12px] leading-5 text-theme-200"
-                        :aria-label="`Reasoning for ${item.label}`"
-                      >
-                        <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-accent-fg">
-                          Why this was extracted
-                        </div>
-                        <p>{{ item.reasoning }}</p>
-                        <div class="mt-2 text-[10px] text-ink-muted">
-                          <span v-if="item.subject">Subject: {{ item.subject }} · </span>Chunk {{ item.chunkIndex + 1 }}
-                        </div>
-                      </div>
-                    </template>
-                  </HoverTooltip>
-                </div>
-                <div
-                  v-else
-                  class="py-3 text-xs text-ink-muted"
-                >
-                  No durable facts or entities were extracted.
-                </div>
-              </template>
-            </div>
-          </div>
-        </aside>
         <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <div class="relative min-h-full">
             <EditorContent
@@ -631,10 +478,9 @@ onBeforeUnmount(() => {
               class="memory-editor-shell"
             />
             <MemoryChunkMarkers
-              v-if="analysis?.status === 'searchable' || analysis?.status === 'current' || analysis?.status === 'needs_refresh'"
+              v-if="chunks.length"
               :editor="editor"
-              :chunks="analysis.chunks"
-              :show-details="analysis.status !== 'searchable'"
+              :chunks="chunks"
             />
           </div>
         </div>

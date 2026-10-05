@@ -317,7 +317,8 @@ const DEFAULT_MEMORY_FOLDER_PATHS = [
     'People',
     'Work',
     'Hobbies',
-    'Notes & Ideas',
+    'Notes',
+    'Ideas',
     'Travel',
 ] as const
 
@@ -326,7 +327,8 @@ const DEFAULT_MEMORY_FOLDER_DESCRIPTIONS: Record<string, string> = {
     'People': 'Contacts, friends, and family — who they are and what matters to them',
     'Work': 'Career, projects, and professional knowledge',
     'Hobbies': 'Interests, games, sports, and creative pursuits',
-    'Notes & Ideas': 'Scratch thoughts, references, and things worth remembering',
+    'Notes': 'Scratch thoughts, references, and things worth remembering',
+    'Ideas': 'Innovative concepts and creative solutions',
     'Travel': 'Trips, places visited, and travel wishlist',
 }
 

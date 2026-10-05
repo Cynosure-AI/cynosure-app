@@ -55,6 +55,8 @@ export interface DisplayMessage {
   createdAt: number
   isStreaming?: boolean
   isError?: boolean
+  /** The user stopped this reply before the model finished it. */
+  stopped?: boolean
   streamId?: string
   /** Set when this message is a compact event marker */
   compactEventData?: { summary: string; compactedMessageCount: number; model: string; createdAt: number }
@@ -248,7 +250,6 @@ export const useChatStore = defineStore('chat', () => {
     queuedMessages.value = []
     queuePaused.value = false
     agentStore.setActiveViewConversation(conv.id)
-    agentStore.clearExecution()
     return conv.id
   }
 
@@ -528,8 +529,6 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId.value = null
     messages.value = []
     agentStore.setActiveViewConversation(null)
-    agentStore.clearExecutionState()
-    agentStore.clearPlanningState()
     resetStreaming()
   }
 

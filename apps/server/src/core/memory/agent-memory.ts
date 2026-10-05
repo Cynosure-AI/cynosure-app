@@ -4,9 +4,6 @@ import { getDb } from '../../db/database.js'
 import { buildMemoryFolderFilter, getMemoryFolderDirectoryPath } from './memory-folder-scope.js'
 import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import {
-    moveMemoryKnowledgeSource,
-} from './memory-deep-research.js'
-import {
     writeTextFile,
     readTextFile,
     computeFileHash,
@@ -37,6 +34,8 @@ export interface MemoryDocumentReference {
     revision: string
     revisionNumber: number
     chunkCount: number
+    /** When the document's current revision was written. */
+    updatedAt?: number
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -73,10 +72,6 @@ export function upsertMemoryFileIndex(
                     WHEN memory_file_index.document_ref = '' THEN excluded.document_ref
                     ELSE memory_file_index.document_ref
                 END,
-                deep_researched_at = CASE
-                    WHEN memory_file_index.content_hash = excluded.content_hash THEN memory_file_index.deep_researched_at
-                    ELSE 0
-                END,
                 content_hash = excluded.content_hash,
                 chunk_count = excluded.chunk_count,
                 last_indexed_at = excluded.last_indexed_at
@@ -101,19 +96,8 @@ interface FileIndexMoveCandidate {
     contentHash: string
     chunkCount: number
     lastIndexedAt: number
-    deepResearchedAt: number
     dreamedAt: number
-    tags: string[]
     createdAt: number
-}
-
-function parseDocumentTags(value: unknown): string[] {
-    try {
-        const parsed = JSON.parse(typeof value === 'string' ? value : '[]') as unknown
-        return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === 'string') : []
-    } catch {
-        return []
-    }
 }
 
 /**
@@ -252,9 +236,10 @@ export class AgentMemory {
     getDocumentReference(folderId: string, fileName: string): MemoryDocumentReference | undefined {
         try {
             const row = getDb().prepare(`
-                SELECT document_id, document_ref, category_id, file_name, content_hash, chunk_count
-                FROM memory_file_index
-                WHERE category_id = ? AND file_name = ?
+                SELECT mfi.document_id, mfi.document_ref, mfi.category_id, mfi.file_name, mfi.content_hash, mfi.chunk_count, md.updated_at
+                FROM memory_file_index mfi
+                LEFT JOIN memory_documents md ON md.document_id = mfi.document_id
+                WHERE mfi.category_id = ? AND mfi.file_name = ?
             `).get(folderId, fileName) as {
                 document_id: string
                 document_ref: string
@@ -262,6 +247,7 @@ export class AgentMemory {
                 file_name: string
                 content_hash: string
                 chunk_count: number
+                updated_at: number | null
             } | undefined
             return row ? {
                 documentId: row.document_id,
@@ -271,6 +257,7 @@ export class AgentMemory {
                 revision: row.content_hash,
                 revisionNumber: getCurrentMemoryRevisionNumber(row.document_id) ?? 1,
                 chunkCount: row.chunk_count,
+                updatedAt: row.updated_at ?? undefined,
             } : undefined
         } catch {
             return undefined
@@ -399,7 +386,7 @@ export class AgentMemory {
 
         const db = getDb()
         const candidates = db.prepare(`
-            SELECT document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json, created_at
+            SELECT document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, dreamed_at, created_at
             FROM memory_file_index
             WHERE content_hash = ?
               AND NOT (category_id = ? AND file_name = ?)
@@ -412,9 +399,7 @@ export class AgentMemory {
             content_hash: string
             chunk_count: number
             last_indexed_at: number
-            deep_researched_at: number
             dreamed_at: number
-            tags_json: string
             created_at: number
         }[]
 
@@ -427,9 +412,7 @@ export class AgentMemory {
                 contentHash: row.content_hash,
                 chunkCount: row.chunk_count,
                 lastIndexedAt: row.last_indexed_at,
-                deepResearchedAt: row.deep_researched_at || 0,
                 dreamedAt: row.dreamed_at || 0,
-                tags: parseDocumentTags(row.tags_json),
                 createdAt: row.created_at,
             }))
             .find((row) => {
@@ -461,8 +444,8 @@ export class AgentMemory {
                 .run(candidate.folderId, candidate.fileName)
             db.prepare(`
                 INSERT OR REPLACE INTO memory_file_index
-                    (document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (document_id, document_ref, category_id, file_name, content_hash, chunk_count, last_indexed_at, dreamed_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 candidate.documentId,
                 candidate.documentRef,
@@ -471,9 +454,7 @@ export class AgentMemory {
                 candidate.contentHash,
                 candidate.chunkCount,
                 candidate.lastIndexedAt,
-                candidate.deepResearchedAt,
                 candidate.dreamedAt,
-                JSON.stringify(candidate.tags),
                 candidate.createdAt || Date.now(),
             )
         })
@@ -481,7 +462,6 @@ export class AgentMemory {
 
         updateMemoryDocumentLocation(candidate.documentId, targetFolderId, targetFileName)
 
-        moveMemoryKnowledgeSource(candidate.folderId, candidate.fileName, targetFolderId, targetFileName)
         cancelMemoryIndexJobsForFile(candidate.folderId, candidate.fileName)
         return { remapped: true, fromSpaceId: candidate.folderId, fromFileName: candidate.fileName }
     }
@@ -567,15 +547,15 @@ export class AgentMemory {
     // File index read helpers
     // -----------------------------------------------------------------------
 
-    getFileIndex(folderId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; deepResearchedAt: number; dreamedAt: number; tags: string[] }> {
+    getFileIndex(folderId: string): Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; dreamedAt: number }> {
         try {
             const db = getDb()
             const rows = db
-                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, deep_researched_at, dreamed_at, tags_json FROM memory_file_index WHERE category_id = ?')
-                .all(folderId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; deep_researched_at: number; dreamed_at: number; tags_json: string }[]
-            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; deepResearchedAt: number; dreamedAt: number; tags: string[] }>()
+                .prepare('SELECT file_name, content_hash, chunk_count, last_indexed_at, dreamed_at FROM memory_file_index WHERE category_id = ?')
+                .all(folderId) as { file_name: string; content_hash: string; chunk_count: number; last_indexed_at: number; dreamed_at: number }[]
+            const map = new Map<string, { contentHash: string; chunkCount: number; lastIndexedAt: number; dreamedAt: number }>()
             for (const row of rows) {
-                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, deepResearchedAt: row.deep_researched_at || 0, dreamedAt: row.dreamed_at || 0, tags: parseDocumentTags(row.tags_json) })
+                map.set(row.file_name, { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, dreamedAt: row.dreamed_at || 0 })
             }
             return map
         } catch {
@@ -583,14 +563,14 @@ export class AgentMemory {
         }
     }
 
-    getFileIndexEntry(folderId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number; deepResearchedAt: number; tags: string[] } | undefined {
+    getFileIndexEntry(folderId: string, fileName: string): { contentHash: string; chunkCount: number; lastIndexedAt: number } | undefined {
         try {
             const db = getDb()
             const row = db
-                .prepare('SELECT content_hash, chunk_count, last_indexed_at, deep_researched_at, tags_json FROM memory_file_index WHERE category_id = ? AND file_name = ?')
-                .get(folderId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number; deep_researched_at: number; tags_json: string } | undefined
+                .prepare('SELECT content_hash, chunk_count, last_indexed_at FROM memory_file_index WHERE category_id = ? AND file_name = ?')
+                .get(folderId, fileName) as { content_hash: string; chunk_count: number; last_indexed_at: number } | undefined
             if (!row) return undefined
-            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at, deepResearchedAt: row.deep_researched_at || 0, tags: parseDocumentTags(row.tags_json) }
+            return { contentHash: row.content_hash, chunkCount: row.chunk_count, lastIndexedAt: row.last_indexed_at }
         } catch {
             return undefined
         }

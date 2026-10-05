@@ -13,8 +13,6 @@ type Detail = {
   scoreValue?: number
   namespaceId?: string
   namespaceLabel?: string
-  memoryKind?: string
-  matchedRepresentations?: string[]
   empty?: boolean
 }
 type PipelineItem = {
@@ -42,9 +40,8 @@ type MemoryPipelineStats = {
   searchMatches?: Array<{
     name: string
     content: string
-    matchScore: number
+    matchScore?: number
     scoreType?: string
-    matchedRepresentations?: string[]
   }>
 }
 type ContextCard = {
@@ -64,9 +61,9 @@ const expandedSteps = reactive(new Set<string>())
 
 const STATUS: Record<string, { channel: Channel; label: string; summary: string; icon: string }> = {
   'routing-memory': { channel: 'memory', label: 'Preparing memory retrieval', summary: 'Building the memory search', icon: 'lucide:brain-circuit' },
-  'searching-memory': { channel: 'memory', label: 'Searching memory representations', summary: 'Searching raw chunks plus available summaries, keywords, and facts', icon: 'lucide:search' },
+  'searching-memory': { channel: 'memory', label: 'Searching memory', summary: 'Semantic and keyword search over memory chunks, including their document titles and section headings', icon: 'lucide:search' },
   'reranking-memory': { channel: 'memory', label: 'Reranking memory matches', summary: 'Reranker relevance scoring', icon: 'lucide:arrow-down-wide-narrow' },
-  'filtering-memory': { channel: 'memory', label: 'Fusing memory matches', summary: 'Deduplicates matches found by multiple queries, then removes matches scoring below 65% of the strongest match', icon: 'lucide:list-filter' },
+  'filtering-memory': { channel: 'memory', label: 'Fusing memory matches', summary: 'Deduplicates matches found by multiple queries, then drops the weakest', icon: 'lucide:list-filter' },
   'selecting-memory': { channel: 'memory', label: 'Selecting reranked memories', summary: 'Using the highest-ranked evidence', icon: 'lucide:badge-check' },
   'curating-memory': { channel: 'memory', label: 'AI curating memory evidence', summary: 'Final relevance verification', icon: 'lucide:list-checks' },
   'routing-tools': { channel: 'tools', label: 'Selecting MCPs and toolsets', summary: 'Choosing capability groups', icon: 'lucide:boxes' },
@@ -113,7 +110,7 @@ function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label:
   if (status === 'searching-memory') {
     return {
       label: `Hybrid search found ${plural(stats.searchCandidateCount, 'candidate')}`,
-      summary: `Raw chunks and analyzed summary, keyword, and fact views across ${plural(stats.queryCount, 'query', 'queries')}`,
+      summary: `Semantic and keyword search across ${plural(stats.queryCount, 'query', 'queries')}`,
     }
   }
   if (status === 'reranking-memory' && stats.rerankerInputCount > 0) {
@@ -124,43 +121,58 @@ function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label:
   }
   if (status === 'filtering-memory') {
     const threshold = Math.round(stats.relativeScoreThreshold * 100)
+    // A zero threshold means the tail was cut by fused rank rather than by score.
+    const dropped = threshold > 0
+      ? `dropped for scoring below ${threshold}% of the strongest match`
+      : 'dropped as lower-ranked matches'
     return {
-      label: `Fused ${stats.returnedCount} matches into ${plural(stats.uniqueCount, 'unique match', 'unique matches')}, kept ${stats.filteredCount}`,
-      summary: `${plural(stats.duplicateCount, 'match', 'matches')} appeared in multiple queries and were deduplicated; ${plural(stats.weakCount, 'more result', 'more results')} dropped for scoring below ${threshold}% of the strongest match`,
+      label: `Fused ${plural(stats.returnedCount, 'match', 'matches')} into ${plural(stats.uniqueCount, 'unique match', 'unique matches')}, kept ${stats.filteredCount}`,
+      summary: `${plural(stats.duplicateCount, 'match', 'matches')} appeared in multiple queries and were deduplicated; ${plural(stats.weakCount, 'more result', 'more results')} ${dropped}`,
     }
   }
   return undefined
 }
 
 function details(calls: ToolCall[]): Detail[] {
-  return calls.map((call) => {
+  return sortByScoreWhenComparable(calls.map((call) => {
     const parsed = args(call)
     const value = normalizedScore(parsed.routerScore ?? parsed.rerankerScore ?? parsed.matchScore)
     return {
       name: stringValue(parsed.sourceFile) || call.name,
       content: stringValue(parsed.content),
-      score: value === undefined ? undefined : `${Math.round(value * 100)}%`,
+      score: scoreLabel(value, stringValue(parsed.scoreType)),
       scoreValue: value,
       namespaceId: stringValue(parsed.namespaceId),
       namespaceLabel: stringValue(parsed.namespaceLabel),
-      memoryKind: stringValue(parsed.memoryKind),
-      matchedRepresentations: stringValues(parsed.matchedRepresentations),
       empty: Boolean(stringValue(parsed.emptyReason)),
     }
-  }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
+  }))
 }
 
 function searchMatchDetails(stats?: MemoryPipelineStats): Detail[] {
-  return (stats?.searchMatches || []).slice(0, 10).map((match) => {
+  return sortByScoreWhenComparable((stats?.searchMatches || []).slice(0, 10).map((match) => {
     const score = normalizedScore(match.matchScore)
     return {
       name: match.name,
       content: match.content,
-      score: score === undefined ? undefined : `${Math.round(score * 100)}%`,
+      score: scoreLabel(score, match.scoreType),
       scoreValue: score,
-      matchedRepresentations: stringValues(match.matchedRepresentations),
     }
-  }).sort((a, b) => (b.scoreValue ?? -1) - (a.scoreValue ?? -1))
+  }))
+}
+
+/** Keyword-only hits have no similarity score; say how they were found. */
+function scoreLabel(value: number | undefined, scoreType?: string): string | undefined {
+  if (value !== undefined) return `${Math.round(value * 100)}%`
+  if (scoreType === 'keyword') return 'keyword match'
+  return undefined
+}
+
+/** Sorting by score is only meaningful when every item has one; otherwise
+ * keep the pipeline's fused rank order. */
+function sortByScoreWhenComparable(items: Detail[]): Detail[] {
+  if (items.some((item) => item.scoreValue === undefined)) return items
+  return [...items].sort((a, b) => b.scoreValue! - a.scoreValue!)
 }
 
 function selectionLabel(channel: Channel, calls: ToolCall[], final: boolean): string {
@@ -169,12 +181,9 @@ function selectionLabel(channel: Channel, calls: ToolCall[], final: boolean): st
     if (!visible.length) return final ? 'No memories selected' : 'No memory matches found'
     if (!final) return `Found ${plural(visible.length, 'memory match', 'memory matches')}`
     const method = stringValue(args(visible[0]).selectionMethod)
-    const memoryCount = visible.filter((call) => stringValue(args(call).memoryKind) !== 'knowledge').length
-    const hasKnowledge = visible.some((call) => stringValue(args(call).memoryKind) === 'knowledge')
-    const selected = method === 'reranker'
-      ? `Selected top ${plural(memoryCount, 'memory', 'memories')}`
-      : `Selected ${plural(memoryCount, 'memory item')}`
-    return hasKnowledge ? `${selected} + knowledge context` : selected
+    return method === 'reranker'
+      ? `Selected top ${plural(visible.length, 'memory', 'memories')}`
+      : `Selected ${plural(visible.length, 'memory item')}`
   }
   const toolsets = calls.every((call) => args(call).type === 'toolset-router')
   if (toolsets) return visible.length
@@ -189,9 +198,7 @@ function plural(count: number, singular: string, pluralValue = `${singular}s`): 
 
 function selectedCountLabel(card: ContextCard): string {
   if (card.channel !== 'memory') return plural(card.selected.length, 'MCP/toolset', 'MCPs/toolsets')
-  const memoryCount = card.selected.filter((item) => item.memoryKind !== 'knowledge').length
-  const hasKnowledge = card.selected.some((item) => item.memoryKind === 'knowledge')
-  return `${plural(memoryCount, 'memory', 'memories')}${hasKnowledge ? ' + graph' : ''}`
+  return plural(card.selected.length, 'memory', 'memories')
 }
 
 const cards = computed<ContextCard[]>(() => {
@@ -346,7 +353,7 @@ function formatTimestamp(timestamp: number): string {
     v-if="cards.length"
     class="px-4 py-1.5"
   >
-    <div class="ml-3 flex flex-col max-w-[50%] gap-2 md:ml-12">
+    <div class="ml-3 flex max-w-full flex-col gap-2 md:ml-12 md:max-w-[50%]">
       <article
         v-for="card in cards"
         :key="card.channel"
@@ -365,7 +372,7 @@ function formatTimestamp(timestamp: number): string {
             />
           </span>
           <span class="min-w-0 flex-1">
-            <span class="block text-[12px] font-semibold text-theme-200">{{ card.title }}</span>
+            <span class="block truncate text-[12px] font-semibold text-theme-200">{{ card.title }}</span>
             <span
               class="block truncate text-[11px] text-ink-secondary"
               role="status"
@@ -375,7 +382,7 @@ function formatTimestamp(timestamp: number): string {
           </span>
           <span
             v-if="card.selected.length"
-            class="count-chip"
+            class="count-chip shrink-0 whitespace-nowrap"
           >{{ selectedCountLabel(card) }}</span>
           <Icon
             icon="lucide:chevron-down"
@@ -450,10 +457,6 @@ function formatTimestamp(timestamp: number): string {
                     v-if="detail.score"
                     class="ml-2 context-score-text"
                   >{{ detail.score }}</span>
-                  <span
-                    v-if="detail.matchedRepresentations?.length"
-                    class="ml-2 text-ink-muted"
-                  >via {{ detail.matchedRepresentations.join(' + ') }}</span>
                   <p
                     v-if="detail.content && item.key.includes('searching-memory')"
                     class="mt-0.5 line-clamp-2 leading-relaxed text-ink-muted"
@@ -489,12 +492,6 @@ function formatTimestamp(timestamp: number): string {
                     v-if="memory.score"
                     class="score-chip"
                   >{{ memory.score }}</span>
-                </div>
-                <div
-                  v-if="memory.matchedRepresentations?.length"
-                  class="mt-1 text-[9px] text-ink-muted"
-                >
-                  Matched via {{ memory.matchedRepresentations.join(' + ') }}
                 </div>
                 <p
                   v-if="memory.content"

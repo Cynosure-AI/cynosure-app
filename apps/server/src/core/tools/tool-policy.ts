@@ -1,6 +1,6 @@
 import { isPlanningToolName } from './builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
-import { isMemoryReadToolName, isKnowledgeReadToolName } from './builtin/memory-tools.js'
+import { isMemoryReadToolName } from './builtin/memory-tools.js'
 import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
 import type { ToolBehaviorAnnotations } from '../gateway/providers/base.provider.js'
 
@@ -20,7 +20,6 @@ export function isInternalTool(toolName: string): boolean {
     isSubAgentDelegationTool(toolName) ||
     isPlanningToolName(toolName) ||
     isMemoryReadToolName(toolName) ||
-    isKnowledgeReadToolName(toolName) ||
     isAttachmentToolName(toolName)
   )
 }

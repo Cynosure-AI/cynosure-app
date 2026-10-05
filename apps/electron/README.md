@@ -21,44 +21,41 @@ electron/
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+ and pnpm
 - `server/` and `web/` directories as siblings (the existing workspace layout)
 
 ## Development
 
-During development, the Electron app loads the live Vite dev server — no rebuilding needed for server/web changes (HMR works normally).
+During development, Electron spawns the server from TypeScript source (via `tsx`, using the system Node) and loads the live Vite dev server. No build is needed beforehand.
 
 ```bash
-# Terminal 1: Start server in dev mode
-cd ../server && npm run dev
-
-# Terminal 2: Start web dev server
-cd ../web && npm run dev
-
-# Terminal 3: Start Electron
-cd ../electron && npm install && npm run dev
+# From the repo root (starts the web dev server + Electron, which spawns the server)
+pnpm dev:electron
 ```
 
-Electron will open a window pointing to `http://localhost:5173` with DevTools attached.
-You do **not** need to rebuild server or web during development.
+Electron will open a window pointing to `http://localhost:5173`. Web changes hot-reload; restart Electron to pick up server changes. Don't run `pnpm dev` at the same time, since that would start a second server.
 
 ## Production Build
 
-The `package` commands automatically rebuild server and web before packaging:
+The `package` commands build web and server first, then package:
 
 ```bash
-npm run package          # Build everything + package for current OS
-npm run package:linux    # AppImage + .deb
-npm run package:mac      # .dmg
-npm run package:win      # NSIS installer
+pnpm package          # Build everything + package for current OS
+pnpm package:linux    # AppImage + .deb
+pnpm package:mac      # .dmg
+pnpm package:win      # NSIS installer
 ```
 
-This runs `prebuild:deps` → builds electron main/preload → packages the app.
+Each runs `build:deps` (web + server) → `package:skip-deps`, which builds the Electron main/preload, runs `scripts/prepare-server-deps.mjs`, and calls electron-builder.
 
-If you've already built server and web separately and just want to re-package:
+The prepare script `pnpm deploy`s the server's production dependencies into a flat `.server-deps/`. The server's native modules (better-sqlite3, sharp, LanceDB) are N-API prebuilds that load in Electron's runtime as-is, so there is no native rebuild step.
+
+The Electron binary itself is downloaded by this package's `postinstall` (`install-electron`). Since Electron 44 the `electron` package no longer does that on install, and electron-vite doesn't trigger the lazy download.
+
+If you've already built server and web and just want to re-package:
 
 ```bash
-npm run package:skip-deps
+pnpm package:skip-deps
 ```
 
 ## Desktop Updates

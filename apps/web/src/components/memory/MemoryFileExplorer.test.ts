@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../api/client', () => ({
   api: {
     memory: {
-      onGraphReset: () => () => undefined,
       onDreamUpdated: () => () => undefined,
     },
     memoryFolders: {
@@ -43,7 +42,7 @@ const EditorStub = defineComponent({
 const StatusColumnTableStub = {
   name: 'DataTable',
   props: { items: { type: Array, default: () => [] } },
-  template: '<div><div v-for="item in items" :key="item.id"><slot name="col-deepResearched" :item="item" /><slot name="col-status" :item="item" /></div></div>',
+  template: '<div><div v-for="item in items" :key="item.id"><slot name="col-status" :item="item" /></div></div>',
 }
 
 function mountList(focusFile?: string) {
@@ -75,7 +74,6 @@ describe('MemoryFileExplorer navigation and search', () => {
     mocks.listFiles.mockResolvedValue([{
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
-      deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
     }])
     mocks.listJobs.mockResolvedValue([])
     mocks.searchFiles.mockResolvedValue([])
@@ -152,7 +150,6 @@ describe('MemoryFileExplorer navigation and search', () => {
     mocks.listFiles.mockResolvedValue([{
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'not_indexed', estimatedChunkCount: 101,
-      deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
     }])
     const wrapper = mountList()
     await flushPromises()
@@ -175,7 +172,6 @@ describe('MemoryFileExplorer navigation and search', () => {
     mocks.listFiles.mockResolvedValue([{
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'not_indexed', estimatedChunkCount: 100,
-      deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
     }])
     const wrapper = mountList()
     await flushPromises()
@@ -191,7 +187,6 @@ describe('MemoryFileExplorer navigation and search', () => {
     const files = ['one.md', 'two.md'].map((fileName) => ({
       fileName, extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'not_indexed', estimatedChunkCount: 1,
-      deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
     }))
     mocks.listFiles.mockResolvedValue(files)
     const jobs = files.map((file, index) => ({
@@ -274,7 +269,7 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
     expect(wrapper.text()).not.toContain('1 selected')
     const settings = [...document.body.querySelectorAll('[data-memory-context-menu] button')]
-      .find((button) => button.textContent?.includes('Folder settings')) as HTMLButtonElement
+      .find((button) => button.textContent?.includes('Rename Folder')) as HTMLButtonElement
     settings.click()
     await flushPromises()
     expect(wrapper.emitted('editFolder')).toEqual([[child]])
@@ -325,18 +320,19 @@ describe('MemoryFileExplorer navigation and search', () => {
       spaces: [wrapper.props('spaces')[0], { ...folder, indexedFileCount: 0, descendantIndexedFileCount: 0 }],
     })
     expect(wrapper.text()).toContain('Not Indexed')
+
+    await wrapper.setProps({
+      spaces: [wrapper.props('spaces')[0], { ...folder, fileCount: 0, descendantFileCount: 0, indexedFileCount: 0, descendantIndexedFileCount: 0 }],
+    })
+    expect(wrapper.text()).toContain('Empty')
+    expect(wrapper.text()).not.toContain('Not Indexed')
   })
 
-  test('shows live indexing and Deep Research progress on document rows', async () => {
+  test('shows live indexing progress on document rows', async () => {
     mocks.listJobs.mockResolvedValue([
       {
         id: 'index-job', kind: 'reindex', folderId: 'category', fileName: 'notes.md',
         status: 'running', createdAt: 1, updatedAt: 2, attempt: 1, maxAttempts: 1,
-      },
-      {
-        id: 'research-job', kind: 'deep-research', folderId: 'category', fileName: 'notes.md',
-        status: 'running', progressCurrent: 4, progressTotal: 31,
-        createdAt: 1, updatedAt: 2, attempt: 1, maxAttempts: 1,
       },
     ])
     const wrapper = mount(MemoryFileExplorer, {
@@ -358,9 +354,8 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Indexing…')
-    expect(wrapper.text()).toContain('Analysing (4 / 31)')
     const spinners = wrapper.findAll('icon-stub[icon="lucide:loader-2"]')
-    expect(spinners).toHaveLength(2)
+    expect(spinners).toHaveLength(1)
     expect(spinners.every((spinner) => spinner.classes().includes('animate-spin'))).toBe(true)
     wrapper.unmount()
   })
@@ -433,14 +428,12 @@ describe('MemoryFileExplorer navigation and search', () => {
       {
         fileName: 'recent.md', extension: '.md', size: 12, modifiedAt: 2,
         supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
-        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100,
-        tags: [], dreamedAt: Date.now() - 23 * 60 * 60 * 1000,
+        dreamedAt: Date.now() - 23 * 60 * 60 * 1000,
       },
       {
         fileName: 'old.md', extension: '.md', size: 12, modifiedAt: 1,
         supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
-        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100,
-        tags: [], dreamedAt: Date.now() - 25 * 60 * 60 * 1000,
+        dreamedAt: Date.now() - 25 * 60 * 60 * 1000,
       },
     ])
     const wrapper = mountList()
@@ -484,12 +477,10 @@ describe('MemoryFileExplorer navigation and search', () => {
       {
         fileName: 'bravo.md', extension: '.md', size: 12, modifiedAt: 1,
         supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
-        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
       },
       {
         fileName: 'alpha.md', extension: '.md', size: 12, modifiedAt: 2,
         supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
-        deepResearched: false, analysisStatus: 'not_analyzed', analysisChunkLimit: 100, tags: [],
       },
     ])
     const wrapper = mountList()
@@ -519,12 +510,10 @@ describe('MemoryFileExplorer navigation and search', () => {
     const currentFile = {
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'indexed' as const, chunkCount: 1,
-      deepResearched: false, analysisStatus: 'not_analyzed' as const, analysisChunkLimit: 100, tags: [],
     }
     const nestedFile = {
       fileName: 'nested.md', extension: '.md', size: 12, modifiedAt: 2,
       supported: true, textDirect: true, status: 'not_indexed' as const, estimatedChunkCount: 1,
-      deepResearched: false, analysisStatus: 'not_analyzed' as const, analysisChunkLimit: 100, tags: [],
     }
     mocks.listFiles.mockImplementation((folderId: string) => Promise.resolve(folderId === 'child' ? [nestedFile] : [currentFile]))
     const child = {
@@ -565,7 +554,6 @@ describe('MemoryFileExplorer navigation and search', () => {
     const indexedFile = {
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'indexed' as const, chunkCount: 1,
-      deepResearched: false, analysisStatus: 'not_analyzed' as const, analysisChunkLimit: 100, tags: [],
     }
     const nestedFile = {
       ...indexedFile, fileName: 'nested.md', status: 'not_indexed' as const,
@@ -610,7 +598,6 @@ describe('MemoryFileExplorer navigation and search', () => {
     const indexedFile = {
       fileName: 'indexed.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'indexed' as const, chunkCount: 1,
-      deepResearched: false, analysisStatus: 'not_analyzed' as const, tags: [],
     }
     const pendingFiles = ['first.md', 'second.md'].map((fileName) => ({
       ...indexedFile, fileName, status: 'not_indexed' as const, chunkCount: 0,

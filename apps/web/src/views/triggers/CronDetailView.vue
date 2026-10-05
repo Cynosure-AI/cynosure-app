@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { api } from "../../api/client";
 import type {
   AgentDefinition,
@@ -23,6 +23,7 @@ import {
   type CronFrequency,
 } from "../../utils/cron-helpers";
 import ToggleSwitch from "@/components/shared/ToggleSwitch.vue";
+import ModalDialog from "@/components/shared/ModalDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -33,6 +34,11 @@ const allChannels = ref<ChannelDefinition[]>([]);
 const loading = ref(true);
 const saving = ref(false);
 const saveMessage = ref("");
+const saveError = ref("");
+const loadError = ref("");
+const showDiscardConfirm = ref(false);
+let pendingLeave: string | null = null;
+let allowLeave = false;
 const promptTextarea = ref<HTMLTextAreaElement | null>(null);
 
 function resizePrompt() {
@@ -85,6 +91,21 @@ const dlgParts = computed(() => ({
   customExpr: dlgCustomExpr.value,
 }));
 const dlgGeneratedExpr = computed(() => buildCronExpr(dlgParts.value));
+
+/** Everything Save sends, so unsaved edits can be detected and protected. */
+const editableSnapshot = computed(() => JSON.stringify({
+  name: cronName.value.trim(),
+  agentId: cronAgentId.value,
+  schedule: dlgGeneratedExpr.value.trim(),
+  prompt: cronPrompt.value,
+  enabled: cronEnabled.value,
+  oneOff: cronOneOff.value,
+  outputChannelId: cronOutputChannelId.value,
+  notificationMode: cronNotificationMode.value,
+  notificationCondition: cronNotificationCondition.value,
+}));
+const savedSnapshot = ref("");
+const isDirty = computed(() => Boolean(job.value) && editableSnapshot.value !== savedSnapshot.value);
 const dlgHumanReadable = computed(() => cronToHuman(dlgParts.value));
 const selectedFrequencyOption = computed(() =>
   FREQUENCY_OPTIONS.find((opt) => opt.value === dlgFrequency.value) || FREQUENCY_OPTIONS[0]
@@ -101,10 +122,13 @@ const stateMeta = computed(() => {
       spin: true,
     };
   }
-  if (cronEnabled.value) {
+  const enabledChange = job.value && cronEnabled.value !== job.value.enabled
+    ? cronEnabled.value ? " It will be enabled when you save." : " It will be paused when you save."
+    : "";
+  if (job.value?.enabled) {
     return {
       label: "Scheduled",
-      description: "This job is enabled and will run on schedule.",
+      description: `This job is enabled and will run on schedule.${enabledChange}`,
       icon: "lucide:calendar-check",
       color: "text-status-info",
       bg: "bg-sky-500/10",
@@ -114,7 +138,7 @@ const stateMeta = computed(() => {
   }
   return {
     label: "Paused",
-    description: "This job is disabled and will not run automatically.",
+    description: `This job is disabled and will not run automatically.${enabledChange}`,
     icon: "lucide:pause-circle",
     color: "text-ink-muted",
     bg: "bg-theme-800",
@@ -141,10 +165,12 @@ function populateFields(j: CronJob) {
   dlgWeekday.value = p.weekday;
   dlgMonthDay.value = p.monthDay;
   dlgCustomExpr.value = p.customExpr;
+  savedSnapshot.value = editableSnapshot.value;
 }
 
 async function loadJob() {
   loading.value = true;
+  loadError.value = "";
   try {
     const [jobs, agents, channels] = await Promise.all([
       api.cronJobs.list(),
@@ -160,6 +186,8 @@ async function loadJob() {
     }
     job.value = found;
     populateFields(found);
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : "The scheduled job could not be loaded.";
   } finally {
     loading.value = false;
   }
@@ -171,6 +199,8 @@ async function save() {
   if (!expr.trim()) return;
 
   saving.value = true;
+  saveError.value = "";
+  saveMessage.value = "";
   try {
     await api.cronJobs.update(jobId.value, {
       name: cronName.value.trim(),
@@ -188,10 +218,38 @@ async function save() {
 
     const jobs = await api.cronJobs.list();
     const found = jobs.find((j) => j.id === jobId.value);
-    if (found) job.value = found;
+    if (found) {
+      job.value = found;
+      populateFields(found);
+    } else {
+      savedSnapshot.value = editableSnapshot.value;
+    }
+  } catch (error) {
+    saveError.value = `Changes were not saved: ${error instanceof Error ? error.message : "unknown error"}`;
   } finally {
     saving.value = false;
   }
+}
+
+onBeforeRouteLeave((to) => {
+  if (allowLeave || !isDirty.value) return true;
+  pendingLeave = to.fullPath;
+  showDiscardConfirm.value = true;
+  return false;
+});
+
+function keepEditing() {
+  pendingLeave = null;
+  showDiscardConfirm.value = false;
+}
+
+function discardAndLeave() {
+  const target = pendingLeave;
+  showDiscardConfirm.value = false;
+  pendingLeave = null;
+  if (!target) return;
+  allowLeave = true;
+  void router.push(target);
 }
 
 onMounted(loadJob);
@@ -229,14 +287,18 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               />
             </div>
             <span
-              v-if="saveMessage"
+              v-if="saveMessage && !isDirty"
               class="text-sm text-status-green"
               role="status"
             >{{ saveMessage }}</span>
+            <span
+              v-else-if="isDirty"
+              class="text-sm text-status-warning"
+            >Unsaved changes</span>
             <button
               type="button"
-              class="rounded-lg accent-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500 disabled:opacity-50"
-              :disabled="saving || !dlgGeneratedExpr.trim()"
+              class="rounded-lg accent-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-ink-muted"
+              :disabled="saving || !isDirty || !dlgGeneratedExpr.trim()"
               @click="save"
             >
               {{ saving ? "Saving…" : "Save Changes" }}
@@ -266,7 +328,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           </button>
           <div class="min-w-0">
             <h1 class="break-words text-2xl font-bold leading-tight text-theme-100">
-              {{ cronName || "Unnamed cron job" }}
+              {{ cronName || "Unnamed scheduled job" }}
             </h1>
             <div
               class="flex mt-1 items-center gap-2 text-xs"
@@ -283,6 +345,14 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           </div>
         </div>
 
+
+        <p
+          v-if="saveError"
+          class="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-sm text-status-danger"
+          role="alert"
+        >
+          {{ saveError }}
+        </p>
 
         <dl class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
           <div class="flex items-center gap-1">
@@ -305,6 +375,22 @@ watch(cronPrompt, resizePrompt, { immediate: true });
         class="py-12 text-center text-ink-secondary"
       >
         Loading…
+      </div>
+      <div
+        v-else-if="loadError"
+        class="mx-auto max-w-md rounded-xl border border-red-400/25 bg-red-400/10 px-5 py-8 text-center"
+        role="alert"
+      >
+        <p class="text-sm text-status-danger">
+          {{ loadError }}
+        </p>
+        <button
+          type="button"
+          class="mt-4 rounded-lg bg-theme-800 px-4 py-2 text-sm text-theme-200 transition-colors hover:bg-theme-700"
+          @click="loadJob"
+        >
+          Try again
+        </button>
       </div>
       <div
         v-else-if="job"
@@ -717,16 +803,16 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 class="w-4 h-4 text-ink-secondary"
               />
               <h3 class="text-sm font-medium text-theme-200">
-                Cron Prompt
+                Instructions
               </h3>
             </div>
             <p class="text-xs text-ink-muted leading-relaxed mb-4">
-              Describe what the agent should do on each cron trigger — API calls, file checks, data processing, etc.
+              What the agent should do on each run, such as checking a source, processing data, or writing a summary.
             </p>
             <textarea
               ref="promptTextarea"
               v-model="cronPrompt"
-              placeholder="Describe what the agent should do on each cron trigger…"
+              placeholder="Describe what the agent should do on each run…"
               class="w-full bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent-500 resize-vertical overflow-hidden"
               style="min-height: 5rem"
               @input="resizePrompt"
@@ -735,5 +821,33 @@ watch(cronPrompt, resizePrompt, { immediate: true });
         </div>
       </div>
     </main>
+
+    <ModalDialog
+      :show="showDiscardConfirm"
+      title="Discard unsaved changes?"
+      icon="lucide:triangle-alert"
+      icon-color="amber"
+      @close="keepEditing"
+    >
+      <p class="text-sm leading-relaxed text-ink-secondary">
+        This scheduled job has changes that have not been saved.
+      </p>
+      <template #actions>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500"
+          @click="discardAndLeave"
+        >
+          Discard changes
+        </button>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+          @click="keepEditing"
+        >
+          Keep editing
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>

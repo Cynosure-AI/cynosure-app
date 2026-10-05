@@ -65,6 +65,75 @@ describe('AgentExecutor cancellation', () => {
   })
 })
 
+describe('AgentExecutor interrupted replies', () => {
+  function streamingExecutor(rounds: Array<(signal?: AbortSignal) => AsyncIterable<StreamChunk>>) {
+    let round = 0
+    const controller = new AbortController()
+    const streamComplete = vi.fn((request: { signal?: AbortSignal }) => rounds[round++](request.signal))
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [{
+        name: 'lookup', description: 'looks up', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+        execute: async () => ({ success: true, output: 'found' }),
+      }],
+      conversationId: 'conversation-1',
+      broadcast: vi.fn(),
+      model: 'test-model',
+      signal: controller.signal,
+      saveMessages: false,
+      emitEvents: false,
+    })
+    return { executor, controller }
+  }
+
+  function untilAborted(signal?: AbortSignal): Promise<never> {
+    return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }))
+  }
+
+  test('keeps the text that was streaming when the run is stopped', async () => {
+    let streamed: (() => void) | undefined
+    const textStreamed = new Promise<void>((resolve) => { streamed = resolve })
+    const { executor, controller } = streamingExecutor([
+      async function* (signal) {
+        yield { content: 'Partial ', done: false }
+        yield { content: 'answer', thinking: 'reasoning', done: false }
+        streamed?.()
+        await untilAborted(signal)
+      },
+    ])
+
+    const run = executor.run([{ role: 'user', content: 'start' }])
+    await textStreamed
+    controller.abort()
+
+    await expect(run).rejects.toMatchObject({ name: 'AbortError' })
+    expect(executor.interruptedReply()).toEqual({ content: 'Partial answer', thinking: 'reasoning', images: [] })
+  })
+
+  test('does not report an earlier completed round as interrupted', async () => {
+    let toolRoundDone: (() => void) | undefined
+    const secondRoundStarted = new Promise<void>((resolve) => { toolRoundDone = resolve })
+    const { executor, controller } = streamingExecutor([
+      async function* () {
+        yield { content: 'Let me check.', done: false }
+        yield { toolCalls: [{ id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } }], done: true }
+      },
+      async function* (signal) {
+        toolRoundDone?.()
+        await untilAborted(signal)
+      },
+    ])
+
+    const run = executor.run([{ role: 'user', content: 'start' }])
+    await secondRoundStarted
+    controller.abort()
+
+    await expect(run).rejects.toMatchObject({ name: 'AbortError' })
+    // The first round's text was saved with its tool call; the second round produced nothing yet.
+    expect(executor.interruptedReply()).toBeNull()
+  })
+})
+
 describe('AgentExecutor tool result normalization', () => {
   test('sends a failed tool error to the model when output is empty', async () => {
     let round = 0

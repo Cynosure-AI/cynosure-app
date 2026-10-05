@@ -133,7 +133,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
             // Resolve icon: a local icon.png sitting next to the server entry
             // wins over remote URLs, since remote icons can 404 or be blocked
             // by CORS / offline mode, while the on-disk one is always reachable.
-            const localIcon = findMcpIcon(row.command, row.args_json)
+            const localIcon = findMcpIcon(row.args_json)
             const iconUrl = localIcon
                 ? `/api/mcp/servers/${row.id}/icon`
                 : (row.icon_url
@@ -141,7 +141,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
                     || null)
 
             // Resolve env hints: local server.json > stored DB hints
-            const liveHints = findEnvHints(row.command, row.args_json)
+            const liveHints = findEnvHints(row.args_json)
             const storedHints = row.env_hints_json ? JSON.parse(row.env_hints_json) as McpEnvHint[] : null
 
             // Sync live hints back to DB so npx packages stay up-to-date
@@ -207,7 +207,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         // Always prefer a local icon file over the stored remote URL — the
         // local file is always reachable, the remote one may 404 or be
         // blocked by CORS / offline mode.
-        const localIcon = findMcpIcon(row.command, row.args_json)
+        const localIcon = findMcpIcon(row.args_json)
         if (localIcon) {
             const data = readFileSync(localIcon.path)
             return reply.header('Content-Type', localIcon.mime).header('Cache-Control', 'public, max-age=3600').send(data)

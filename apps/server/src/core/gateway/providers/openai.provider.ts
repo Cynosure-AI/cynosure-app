@@ -162,7 +162,6 @@ export class OpenAIProvider extends BaseLLMProvider {
 
   /** Build the tools array for the Responses API (function tools + image_generation where supported) */
   private formatToolsForResponses(
-    model: string,
     supportsImageGeneration: boolean,
     tools?: import('./base.provider.js').ToolDefinition[]
   ): unknown[] | undefined {
@@ -198,7 +197,7 @@ export class OpenAIProvider extends BaseLLMProvider {
     }
     if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
-    const tools = this.formatToolsForResponses(model, supportsImageGeneration, request.tools)
+    const tools = this.formatToolsForResponses(supportsImageGeneration, request.tools)
     if (tools) params.tools = tools
     if (request.toolChoice) {
       params.tool_choice = {
@@ -287,7 +286,7 @@ export class OpenAIProvider extends BaseLLMProvider {
     }
     if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
-    const tools = this.formatToolsForResponses(model, supportsImageGeneration, request.tools)
+    const tools = this.formatToolsForResponses(supportsImageGeneration, request.tools)
     if (tools) params.tools = tools
     if (request.toolChoice) {
       params.tool_choice = {

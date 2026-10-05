@@ -6,7 +6,7 @@ import MemoryDocumentEditorModal from './MemoryDocumentEditorModal.vue'
 const mocks = vi.hoisted(() => ({
   getFileContent: vi.fn(),
   updateFileContent: vi.fn(),
-  getDocumentAnalysis: vi.fn(),
+  getDocumentChunks: vi.fn(),
   listRevisions: vi.fn(),
   setContent: vi.fn(),
   clearContent: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock('../../api/client', () => ({
   api: {
     memoryFolders: {
       getFileContent: mocks.getFileContent,
-      getDocumentAnalysis: mocks.getDocumentAnalysis,
+      getDocumentChunks: mocks.getDocumentChunks,
       updateFileContent: mocks.updateFileContent,
       renameFile: vi.fn(), listRevisions: mocks.listRevisions, getRevision: vi.fn(),
       getRevisionDiff: vi.fn(), restoreRevision: vi.fn(),
@@ -54,7 +54,7 @@ describe('MemoryDocumentEditorModal', () => {
     })
     mocks.setContent.mockReset()
     mocks.clearContent.mockReset()
-    mocks.getDocumentAnalysis.mockReset().mockResolvedValue({ status: 'not_analyzed', chunks: [], items: [], itemTotal: 0 })
+    mocks.getDocumentChunks.mockReset().mockResolvedValue({ chunks: [] })
     mocks.listRevisions.mockReset().mockResolvedValue([])
   })
 
@@ -78,69 +78,15 @@ describe('MemoryDocumentEditorModal', () => {
     expect((wrapper.get('input[aria-label="Document name"]').element as HTMLInputElement).value).toBe('large')
     expect(wrapper.text()).not.toContain('large.md')
     expect(wrapper.find('textarea[aria-label="Large memory document content"]').exists()).toBe(false)
-    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).not.toContain('bg-accent-500/15')
-    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('hidden')
   })
 
-  test('renders ordered summaries, tags, and extracted knowledge in the analysis rail', async () => {
-    mocks.getFileContent.mockResolvedValue({ content: '# Memory\nText', revision: 'current', documentRef: 'memory#ref' })
-    mocks.getDocumentAnalysis.mockResolvedValue({
-      status: 'current',
-      chunks: [
-        { chunkIndex: 0, text: 'First chunk', sectionPath: 'First', summary: 'The first summary.', tags: ['alpha'] },
-        { chunkIndex: 1, text: 'Second chunk', sectionPath: 'Second', summary: 'The second summary.', tags: ['beta'] },
-      ],
-      items: [{
-        kind: 'relationship', label: 'Atlas -> uses -> TypeScript', relation: 'uses', entity: 'TypeScript', subject: 'Atlas',
-        reasoning: 'The document explicitly says Atlas uses TypeScript.', chunkIndex: 1, importance: 2,
-      }],
-      itemTotal: 1,
-    })
-    const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
-      global: {
-        plugins: [createPinia()],
-        stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
-      },
-    })
-    await flushPromises()
-    await vi.waitFor(() => expect(mocks.getDocumentAnalysis).toHaveBeenCalledOnce())
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('uses')
-    expect(wrapper.text()).toContain('TypeScript')
-    expect(wrapper.text()).toContain('Atlas')
-    expect(wrapper.get('[title="Extracted facts and entities"]').text()).toContain('Facts')
-    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).toContain('bg-accent-500/15')
-    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('flex')
-    expect(wrapper.text()).not.toContain('The first summary.')
-    const firstChunk = wrapper.get('[aria-label="Chunk 1 start"]')
-    firstChunk.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
-    await flushPromises()
-    expect(document.body.querySelector('[aria-label="Summary for chunk 1"]')?.textContent).toContain('The first summary.')
-    const boundary = wrapper.get('[aria-label="Chunk 2 boundary"]')
-    boundary.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
-    await flushPromises()
-    expect(document.body.querySelector('[aria-label="Summary for chunk 2"]')?.textContent).toContain('The second summary.')
-    expect(document.body.querySelector('[aria-label="Summary for chunk 2"]')?.textContent).toContain('beta')
-
-    const knowledge = wrapper.get('[aria-label="Document analysis"] span.font-mono')
-    knowledge.element.closest('div.flex')?.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
-    await flushPromises()
-    expect(document.body.querySelector('[aria-label="Reasoning for Atlas -> uses -> TypeScript"]')?.textContent)
-      .toContain('The document explicitly says Atlas uses TypeScript.')
-  })
-
-  test('renders chunk markers without hover details when the document is only searchable', async () => {
+  test('marks the indexed chunk boundaries in the editor', async () => {
     mocks.getFileContent.mockResolvedValue({ content: '# Memory\nFirst chunk\n\nSecond chunk', revision: 'current', documentRef: 'memory#ref' })
-    mocks.getDocumentAnalysis.mockResolvedValue({
-      status: 'searchable',
+    mocks.getDocumentChunks.mockResolvedValue({
       chunks: [
-        { chunkIndex: 0, text: 'First chunk', sectionPath: '', summary: '', tags: [] },
-        { chunkIndex: 1, text: 'Second chunk', sectionPath: '', summary: '', tags: [] },
+        { chunkIndex: 0, text: 'First chunk' },
+        { chunkIndex: 1, text: 'Second chunk' },
       ],
-      items: [],
-      itemTotal: 0,
     })
     const wrapper = mount(MemoryDocumentEditorModal, {
       props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
@@ -150,17 +96,14 @@ describe('MemoryDocumentEditorModal', () => {
       },
     })
     await flushPromises()
-    await vi.waitFor(() => expect(mocks.getDocumentAnalysis).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(mocks.getDocumentChunks).toHaveBeenCalledWith('category', 'memory.md'))
     await flushPromises()
 
     expect(wrapper.get('[aria-label="Chunk 1 start"]').text()).toContain('Chunk 1')
-    const marker = wrapper.get('[aria-label="Chunk 1 start"]')
-    marker.element.parentElement?.dispatchEvent(new MouseEvent('mouseenter', { clientX: 100, clientY: 100 }))
-    await flushPromises()
-    expect(document.body.querySelector('[aria-label="Summary for chunk 1"]')).toBeNull()
+    expect(wrapper.get('[aria-label="Chunk 2 boundary"]').text()).toContain('Chunk 2')
   })
 
-  test('switches History and Facts as mutually exclusive toggle views', async () => {
+  test('toggles the revision history view', async () => {
     mocks.getFileContent.mockResolvedValue({ content: '# Memory\nText', revision: 'current', documentRef: 'memory#ref' })
     const wrapper = mount(MemoryDocumentEditorModal, {
       props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
@@ -176,14 +119,8 @@ describe('MemoryDocumentEditorModal', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(false)
 
-    await wrapper.get('[title="Extracted facts and entities"]').trigger('click')
+    await wrapper.get('[title="Revision history"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(true)
-    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).toContain('bg-accent-500/15')
-    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('flex')
-
-    await wrapper.get('[title="Extracted facts and entities"]').trigger('click')
-    expect(wrapper.get('[title="Extracted facts and entities"]').classes()).not.toContain('bg-accent-500/15')
-    expect(wrapper.get('[aria-label="Document analysis"]').classes()).toContain('hidden')
   })
 })

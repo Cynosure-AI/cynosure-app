@@ -107,10 +107,14 @@ body,
   height: 100%;
 }
 
-/* A consistent keyboard focus treatment across native and custom controls. */
-:where(button, a, input, textarea, select, [role="button"], [role="tab"], [role="option"]):focus-visible {
-  outline: 2px solid var(--color-accent-400);
-  outline-offset: 2px;
+/* A consistent keyboard focus treatment across native and custom controls.
+   Kept in the base layer so a control's own utilities (focus:outline-none plus
+   a ring, for example) replace it; unlayered CSS would override every utility. */
+@layer base {
+  :where(button, a, input, textarea, select, [role="button"], [role="tab"], [role="option"]):focus-visible {
+    outline: 2px solid var(--color-accent-400);
+    outline-offset: 2px;
+  }
 }
 
 :where(button, input, textarea, select):disabled,

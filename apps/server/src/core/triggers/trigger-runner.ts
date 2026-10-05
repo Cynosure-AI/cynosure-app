@@ -4,6 +4,7 @@ import { getGateway } from '../gateway/gateway.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS, type AgentExecutorResult } from '../agent/agent-executor.js'
 import { planExecution } from '../agent/pre-execution/execution-planner.js'
+import { defaultAutoModes } from '../agent/execution-preset.js'
 import { closePlanningRun } from '../agent/planning-state.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
@@ -107,8 +108,8 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
                 selectedToolKeys: executionConfig?.allowedTools,
                 hasExplicitToolAllowlist: executionConfig ? executionConfig.autoToolRouting !== true : undefined,
                 memoryFolderOverrides: memoryFolders,
-                autoToolRouting: executionConfig?.autoToolRouting ?? (agent?.autoToolRouting === true),
-                autoMemory: executionConfig?.autoMemory ?? (agent?.autoMemory === true),
+                autoToolRouting: executionConfig?.autoToolRouting ?? defaultAutoModes(agent).autoToolRouting,
+                autoMemory: executionConfig?.autoMemory ?? defaultAutoModes(agent).autoMemory,
                 autoRouterProviderId: executionConfig?.autoRouterProviderId,
                 autoRouterModel: executionConfig?.autoRouterModel,
                 thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
@@ -128,8 +129,8 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             responseProvider: planned.responseProvider,
             thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
             reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
-            autoToolRouting: executionConfig?.autoToolRouting ?? (agent?.autoToolRouting === true),
-            autoMemory: executionConfig?.autoMemory ?? (agent?.autoMemory === true),
+            autoToolRouting: executionConfig?.autoToolRouting ?? defaultAutoModes(agent).autoToolRouting,
+            autoMemory: executionConfig?.autoMemory ?? defaultAutoModes(agent).autoMemory,
         })
         db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(persistedExecutionConfig), conversationId)
 

@@ -8,13 +8,19 @@ const { applyAutoToolRouting } = vi.hoisted(() => ({
 
 vi.mock('./auto-tool-routing.js', () => ({
     applyAutoToolRouting,
-    emitAutoToolRoutingSkipped: vi.fn(),
 }))
 
 vi.mock('../../tools/built-in-tools.js', () => ({
     getBuiltInMemoryToolKeys: () => [],
     getBuiltInToolKey: (name: string) => `builtin:utility::${name}`,
     hydrateBuiltInTools: (tools: RegistryAwareToolDefinition[]) => tools,
+    makeSearchAvailableMcpToolsTool: () => ({
+        name: 'expand_available_toolset',
+        description: 'search',
+        parameters: {},
+        timeout: 1_000,
+        execute: async () => ({ success: true, output: '' }),
+    }),
 }))
 
 vi.mock('../sub-agent-tools.js', () => ({
@@ -120,13 +126,25 @@ describe('resolveExecutionTools selection', () => {
 
     test('keeps configured Free Chat sub-agents when automatic external tools are suppressed', async () => {
         const result = await resolveExecutionTools(input({
-            preset: preset({ subAgents: [{ agentId: 'agent-2' }] }),
+            preset: preset({ subAgents: [{ agentId: 'agent-2' }], autoToolRouting: true }),
             includeSubAgents: true,
             suppressAutoTools: true,
         }))
 
         expect(result.hasSubAgents).toBe(true)
         expect(result.effectiveSubAgents).toEqual([{ agentId: 'agent-2' }])
-        expect(result.tools.map(({ name }) => name)).toEqual(['spawn_subagent', 'continue_subagent'])
+        expect(result.tools.map(({ name }) => name)).toEqual(['expand_available_toolset', 'spawn_subagent', 'continue_subagent'])
+    })
+
+    test('keeps pinned tools and tool search when task-context planning says no tools are needed', async () => {
+        const result = await resolveExecutionTools(input({
+            preset: preset({ autoToolRouting: true }),
+            autoToolRouting: true,
+            preferredToolKeys: [readKey],
+            suppressAutoTools: true,
+        }))
+
+        expect(applyAutoToolRouting).not.toHaveBeenCalled()
+        expect(result.tools.map(({ name }) => name)).toEqual(['read', 'expand_available_toolset'])
     })
 })

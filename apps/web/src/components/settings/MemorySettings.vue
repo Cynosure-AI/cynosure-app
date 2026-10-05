@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
-import { usePreferencesStore } from '../../stores/preferences.store'
 import { api } from '../../api/client'
 import { RUNTIME_LIMITS } from '@shared/runtime-limits'
 import { Icon } from '@iconify/vue'
@@ -17,7 +16,6 @@ import {
 } from '../../utils/embedding-defaults'
 
 const providerStore = useProviderStore()
-const prefs = usePreferencesStore()
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -76,12 +74,14 @@ async function saveDream() {
 // Embedding state
 const embProviderId = ref('')
 const embModel = ref('')
-const embDimensions = ref(1536)
+// Known only once a model is configured or probed; 0 hides the label.
+const embDimensions = ref(0)
 const embModelRefreshKey = ref(0)
 
 const embSaving = ref(false)
 const savedEmbedding = ref({ providerId: '', model: '' })
 const embStatus = ref<SettingsPersistenceState>('idle')
+const embError = ref('')
 const embProbing = ref(false)
 const loadingEmbeddingConfig = ref(true)
 
@@ -90,15 +90,19 @@ const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
 const rerankModel = ref('')
 const rerankCandidateCount = ref(RUNTIME_LIMITS.reranker.defaultCandidateCount)
+// Curation model used instead of the reranker when reranking is off; empty = conversation model
+const curationProviderId = ref('')
+const curationModel = ref('')
 const rerankSaving = ref(false)
-const savedReranker = ref({ enabled: false, providerId: '', model: '', candidateCount: RUNTIME_LIMITS.reranker.defaultCandidateCount })
+const savedReranker = ref({
+  enabled: false,
+  providerId: '',
+  model: '',
+  candidateCount: RUNTIME_LIMITS.reranker.defaultCandidateCount,
+  curationProviderId: '',
+  curationModel: '',
+})
 const rerankStatus = ref<SettingsPersistenceState>('idle')
-
-// Deep Research state
-const deepResearchProviderId = ref('')
-const deepResearchModel = ref('')
-const deepResearchSaving = ref(false)
-const deepResearchStatus = ref<SettingsPersistenceState>('idle')
 
 const embDirty = computed(() =>
   embProviderId.value !== savedEmbedding.value.providerId || embModel.value !== savedEmbedding.value.model
@@ -107,7 +111,9 @@ const rerankDirty = computed(() =>
   rerankEnabled.value !== savedReranker.value.enabled ||
   rerankProviderId.value !== savedReranker.value.providerId ||
   rerankModel.value !== savedReranker.value.model ||
-  rerankCandidateCount.value !== savedReranker.value.candidateCount
+  rerankCandidateCount.value !== savedReranker.value.candidateCount ||
+  curationProviderId.value !== savedReranker.value.curationProviderId ||
+  curationModel.value !== savedReranker.value.curationModel
 )
 const dreamDirty = computed(() => dreamLoaded.value && (
   dreamEnabled.value !== savedDream.value.enabled ||
@@ -159,7 +165,6 @@ onMounted(async () => {
   await providerStore.loadProviders()
   await loadDreamConfig()
   await loadEmbeddingConfig()
-  await loadDeepResearchConfig()
   await loadRerankerConfig()
 })
 
@@ -192,11 +197,15 @@ async function loadRerankerConfig() {
     rerankProviderId.value = config.providerId || openRouterProviders.value[0]?.id || ''
     rerankModel.value = config.model
     rerankCandidateCount.value = config.candidateCount
+    curationProviderId.value = config.curationProviderId || ''
+    curationModel.value = config.curationModel || ''
     savedReranker.value = {
       enabled: config.enabled,
       providerId: config.providerId || rerankProviderId.value,
       model: config.model,
       candidateCount: config.candidateCount,
+      curationProviderId: curationProviderId.value,
+      curationModel: curationModel.value,
     }
   } catch {
     rerankProviderId.value = openRouterProviders.value[0]?.id || ''
@@ -205,57 +214,10 @@ async function loadRerankerConfig() {
       providerId: rerankProviderId.value,
       model: rerankModel.value,
       candidateCount: rerankCandidateCount.value,
+      curationProviderId: curationProviderId.value,
+      curationModel: curationModel.value,
     }
   }
-}
-
-async function loadDeepResearchConfig() {
-  try {
-    const config = await api.memory.getDeepResearchConfig()
-    deepResearchProviderId.value = config.providerId || ''
-    deepResearchModel.value = config.model || ''
-
-    if (!deepResearchProviderId.value && !deepResearchModel.value && (prefs.knowledgeProviderId || prefs.knowledgeModel)) {
-      await saveDeepResearchSelection({
-        providerId: prefs.knowledgeProviderId,
-        model: prefs.knowledgeModel,
-      })
-    }
-  } catch {
-    deepResearchProviderId.value = prefs.knowledgeProviderId || ''
-    deepResearchModel.value = prefs.knowledgeModel || ''
-  }
-}
-
-async function saveDeepResearchSelection(selection: { providerId: string; model: string }) {
-  const previous = {
-    providerId: deepResearchProviderId.value,
-    model: deepResearchModel.value,
-  }
-  deepResearchProviderId.value = selection.providerId
-  deepResearchModel.value = selection.model
-  prefs.knowledgeProviderId = selection.providerId
-  prefs.knowledgeModel = selection.model
-  deepResearchSaving.value = true
-  deepResearchStatus.value = 'saving'
-  try {
-    const res = await api.memory.configureDeepResearch({
-      providerId: selection.providerId || undefined,
-      model: selection.model || undefined,
-    })
-    deepResearchProviderId.value = res.providerId || ''
-    deepResearchModel.value = res.model || ''
-    prefs.knowledgeProviderId = deepResearchProviderId.value
-    prefs.knowledgeModel = deepResearchModel.value
-    deepResearchStatus.value = 'saved'
-  } catch {
-    deepResearchProviderId.value = previous.providerId
-    deepResearchModel.value = previous.model
-    prefs.knowledgeProviderId = previous.providerId
-    prefs.knowledgeModel = previous.model
-    deepResearchStatus.value = 'error'
-  }
-  deepResearchSaving.value = false
 }
 
 async function saveReranker() {
@@ -266,17 +228,23 @@ async function saveReranker() {
       enabled: rerankEnabled.value,
       providerId: rerankProviderId.value || undefined,
       model: rerankModel.value,
-      candidateCount: rerankCandidateCount.value
+      candidateCount: rerankCandidateCount.value,
+      curationProviderId: curationProviderId.value || undefined,
+      curationModel: curationModel.value,
     })
     rerankEnabled.value = res.enabled
     rerankProviderId.value = res.providerId || rerankProviderId.value
     rerankModel.value = res.model
     rerankCandidateCount.value = res.candidateCount
+    curationProviderId.value = res.curationProviderId || ''
+    curationModel.value = res.curationModel || ''
     savedReranker.value = {
       enabled: res.enabled,
       providerId: res.providerId || rerankProviderId.value,
       model: res.model,
       candidateCount: res.candidateCount,
+      curationProviderId: curationProviderId.value,
+      curationModel: curationModel.value,
     }
     rerankStatus.value = 'saved'
   } catch {
@@ -288,6 +256,11 @@ async function saveReranker() {
 function updateRerankerSelection(selection: { providerId: string; model: string }) {
   rerankProviderId.value = selection.providerId
   rerankModel.value = selection.model
+}
+
+function updateCurationSelection(selection: { providerId: string; model: string }) {
+  curationProviderId.value = selection.providerId
+  curationModel.value = selection.model
 }
 
 function updateEmbeddingSelection(selection: { providerId: string; model: string }) {
@@ -310,8 +283,9 @@ function applyDefaultEmbeddingConfig() {
   embDimensions.value = 0
 }
 
-async function probeDimensions() {
-  if (!embModel.value) return
+/** Ask the model for its vector size. Returns false when the model could not be reached. */
+async function probeDimensions(): Promise<boolean> {
+  if (!embModel.value) return false
   embProbing.value = true
   try {
     const res = await api.memory.probeEmbedding({
@@ -319,12 +293,20 @@ async function probeDimensions() {
       model: embModel.value
     })
     embDimensions.value = res.dimensions
-  } catch { /* probe failed */ }
-  embProbing.value = false
+    return true
+  } catch (error) {
+    embError.value = `The embedding model did not respond: ${error instanceof Error ? error.message : 'unknown error'}`
+    embStatus.value = 'error'
+    return false
+  } finally {
+    embProbing.value = false
+  }
 }
 
 async function saveEmbeddings() {
-  await probeDimensions()
+  embError.value = ''
+  // Saving an unreachable model would leave memory unable to index or search.
+  if (!await probeDimensions()) return
   // Check if model changed — warn about vector drop
   try {
     const current = await api.memory.getEmbeddingConfig()
@@ -352,8 +334,10 @@ async function doSaveEmbeddings(reembed: boolean) {
     embDimensions.value = res.dimensions
     savedEmbedding.value = { providerId: embProviderId.value, model: embModel.value }
     embStatus.value = 'saved'
-  } catch {
+    embError.value = ''
+  } catch (error) {
     embStatus.value = 'error'
+    embError.value = `Embedding settings were not saved: ${error instanceof Error ? error.message : 'unknown error'}`
   }
   embSaving.value = false
   showDropConfirm.value = false
@@ -455,6 +439,13 @@ function cancelDrop() {
         </div>
       </div>
 
+      <p
+        v-if="embError"
+        class="rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs text-status-danger"
+        role="alert"
+      >
+        {{ embError }}
+      </p>
       <div class="flex items-center justify-between gap-3">
         <SettingsPersistenceStatus
           mode="manual"
@@ -502,7 +493,10 @@ function cancelDrop() {
         />
       </div>
 
-      <div class="space-y-3">
+      <div
+        v-if="rerankEnabled"
+        class="space-y-3"
+      >
         <div>
           <label class="block text-xs text-ink-secondary mb-1">OpenRouter Provider / Model</label>
           <ProviderModelSelect
@@ -526,8 +520,12 @@ function cancelDrop() {
         </div>
 
         <div>
-          <label class="block text-xs text-ink-secondary mb-1">Candidate Pool</label>
+          <label
+            for="reranker-candidate-pool"
+            class="block text-xs text-ink-secondary mb-1"
+          >Candidate Pool</label>
           <input
+            id="reranker-candidate-pool"
             v-model.number="rerankCandidateCount"
             type="number"
             :min="RUNTIME_LIMITS.reranker.minCandidateCount"
@@ -539,6 +537,27 @@ function cancelDrop() {
             Candidates fetched before reranking. Larger pools can improve relevance but increase reranking cost.
           </p>
         </div>
+      </div>
+
+      <div v-else>
+        <label class="block text-xs text-ink-secondary mb-1">Curation Model</label>
+        <ProviderModelSelect
+          :provider-id="curationProviderId"
+          :model-value="curationModel"
+          :providers="providerStore.providers"
+          :model-types="['llm', 'decision']"
+          :include-provider-default="false"
+          include-default
+          default-label="Use conversation model"
+          placeholder="Use conversation model"
+          dropdown-width="min-w-full"
+          max-height="max-h-72"
+          @change="updateCurationSelection"
+        />
+        <p class="text-xs text-ink-muted mt-1">
+          Without a reranker, this model reviews the retrieved candidates and picks the memories to inject.
+          OpenRouter decision models are listed too: they judge each candidate directly and are fast and cheap, but cannot suggest a retry query.
+        </p>
       </div>
 
       <div class="flex items-center justify-between gap-3">
@@ -558,64 +577,9 @@ function cancelDrop() {
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showAnySection(['deep-research', 'dream-mode'])"
+      v-if="showSection('dream-mode')"
       label="Building Knowledge"
     />
-
-    <!-- Deep Research Model -->
-    <BaseCard
-      v-if="showSection('deep-research')"
-      class="p-5 space-y-4 bg-knowledge-card"
-    >
-      <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center shrink-0">
-          <Icon
-            icon="lucide:network"
-            class="w-5 h-5 text-ink-secondary"
-          />
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-theme-200">
-            Deep Research Model
-          </h3>
-          <p class="text-xs text-ink-muted mt-0.5">
-            Provider and model used when documents undergo Deep Research into facts for the local knowledge graph.
-          </p>
-        </div>
-      </div>
-
-      <div
-        class="pt-1 border-t border-theme-700"
-        :class="{ 'opacity-60': deepResearchSaving }"
-        :inert="deepResearchSaving || undefined"
-        :aria-busy="deepResearchSaving"
-      >
-        <div class="flex items-center justify-between gap-3 mb-1.5">
-          <label class="block text-xs text-ink-secondary">Provider / Model</label>
-        </div>
-        <ProviderModelSelect
-          :provider-id="deepResearchProviderId"
-          :model-value="deepResearchModel"
-          :providers="providerStore.providers"
-          include-default
-          default-label="Use active provider default"
-          placeholder="Use active provider default"
-          @change="saveDeepResearchSelection"
-        />
-        <p class="mt-2 text-[11px] leading-relaxed text-ink-muted">
-          This setting is used for Deep Research. Leaving it on the default uses the server's active provider and that provider's default model.
-        </p>
-      </div>
-      <div
-        v-if="deepResearchStatus === 'saving' || deepResearchStatus === 'error'"
-        class="flex justify-end"
-      >
-        <SettingsPersistenceStatus
-          mode="auto"
-          :state="deepResearchStatus"
-        />
-      </div>
-    </BaseCard>
 
     <!-- Dream Mode -->
     <BaseCard

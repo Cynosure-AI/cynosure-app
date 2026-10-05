@@ -150,6 +150,7 @@ function pricingTooltip(model: ModelListItem): string | undefined {
 
 function pricingTagVariant(model: ModelListItem): SelectOption['tagVariant'] {
   const output = (model.outputModalities || []).map((item) => item.toLowerCase());
+  if (output.includes('decisions')) return 'rose';
   if (output.includes('transcription')) return 'blue';
   if (output.includes('video')) return 'amber';
   if (output.includes('image')) return 'green';
@@ -444,7 +445,7 @@ const selectedTriggerLabel = computed(() => {
   if (props.providerId && props.includeProviderDefault) {
     const provider = props.providers.find((item) => item.id === props.providerId);
     if (provider) {
-      return `${provider.name}${provider.defaultModel ? ` (${shortModelLabel(provider.defaultModel)})` : ""}`;
+      return provider.defaultModel ? shortModelLabel(provider.defaultModel) : provider.name;
     }
   }
 

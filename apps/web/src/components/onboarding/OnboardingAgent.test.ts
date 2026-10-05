@@ -43,7 +43,7 @@ describe('OnboardingAgent', () => {
     expect(definitions.create).not.toHaveBeenCalled()
   })
 
-  test('creates an agent without creating a dedicated memory folder', async () => {
+  test('creates an agent with the same behavior defaults as the Agents page and the default memory folders', async () => {
     const definitions = useAgentDefinitionsStore()
     definitions.create = vi.fn().mockResolvedValue({ id: 'agent-1' } as AgentDefinition)
     const wrapper = mountStep()
@@ -55,8 +55,10 @@ describe('OnboardingAgent', () => {
       name: 'Research Assistant',
       internalName: 'research_assistant',
       description: 'Finds reliable sources.',
-      autoMemory: false,
-      memoryFolders: [],
+      autoToolRouting: true,
+      autoMemory: true,
+      dreamingEnabled: true,
     }))
+    expect(vi.mocked(definitions.create).mock.calls[0][0]).not.toHaveProperty('memoryFolders')
   })
 })

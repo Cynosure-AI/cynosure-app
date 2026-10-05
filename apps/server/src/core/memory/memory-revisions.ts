@@ -110,11 +110,6 @@ export function updateMemoryDocumentLocation(documentId: string, folderId: strin
     .run(folderId, fileName, Date.now(), documentId)
 }
 
-export function setMemoryDocumentIndexingStatus(documentId: string, status: 'pending' | 'indexed' | 'error'): void {
-  getDb().prepare('UPDATE memory_documents SET indexing_status = ?, updated_at = ? WHERE document_id = ?')
-    .run(status, Date.now(), documentId)
-}
-
 export function markMemoryDocumentDeleted(documentId: string): void {
   getDb().prepare("UPDATE memory_documents SET status = 'deleted', deleted_at = ?, updated_at = ? WHERE document_id = ?")
     .run(Date.now(), Date.now(), documentId)
@@ -141,7 +136,6 @@ export function purgeDeletedMemoryDocuments(): number {
     if (!documentIds.length) return 0
     const ids = documentIds.map(row => row.document_id)
     const placeholders = ids.map(() => '?').join(', ')
-    db.prepare(`DELETE FROM memory_knowledge_index_runs WHERE document_id IN (${placeholders})`).run(...ids)
     db.prepare(`DELETE FROM memory_file_index WHERE document_id IN (${placeholders})`).run(...ids)
     return db.prepare(`DELETE FROM memory_documents WHERE document_id IN (${placeholders})`).run(...ids).changes
   })()
@@ -154,7 +148,6 @@ export function purgeDeletedMemoryDocument(documentRef: string): boolean {
     const row = db.prepare("SELECT document_id FROM memory_documents WHERE document_ref = ? AND status = 'deleted'")
       .get(documentRef) as { document_id: string } | undefined
     if (!row) return false
-    db.prepare('DELETE FROM memory_knowledge_index_runs WHERE document_id = ?').run(row.document_id)
     db.prepare('DELETE FROM memory_file_index WHERE document_id = ?').run(row.document_id)
     return db.prepare('DELETE FROM memory_documents WHERE document_id = ?').run(row.document_id).changes === 1
   })()

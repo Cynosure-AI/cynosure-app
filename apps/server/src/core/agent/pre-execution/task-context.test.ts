@@ -163,4 +163,44 @@ describe('task context cancellation', () => {
             userQuery: 'Send this', enabledModes: { tools: true, memories: false },
         })).resolves.toBeNull()
     })
+
+    test('lets the planning call choose toolsets and ignores unknown or empty choices', async () => {
+        const toolsets = [
+            { id: 'mcp:browser', label: 'Browser MCP', description: 'Browse pages' },
+            { id: 'mcp:mail', label: 'Mail MCP', description: 'Send mail' },
+        ]
+        const respond = (toolsetIds: unknown) => vi.fn().mockResolvedValue({
+            toolCalls: [{ function: { name: 'set_task_context', arguments: JSON.stringify({ requiresTools: true, toolsetIds }) } }],
+        })
+        const run = (complete: ReturnType<typeof respond>) => buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'Email me the page title', enabledModes: { tools: true, memories: false }, toolsets,
+        })
+
+        const complete = respond(['mcp:mail', 'mcp:browser'])
+        await expect(run(complete)).resolves.toMatchObject({ toolsetIds: ['mcp:mail', 'mcp:browser'] })
+        const request = complete.mock.calls[0][0]
+        expect(request.tools?.[0].parameters.properties.toolsetIds).toMatchObject({
+            items: { enum: ['mcp:browser', 'mcp:mail'] },
+        })
+        expect(request.messages[1].content).toContain('- mcp:mail: Mail MCP')
+
+        await expect(run(respond(['mcp:unknown']))).resolves.toMatchObject({ requiresTools: true, toolsetIds: undefined })
+        await expect(run(respond([]))).resolves.toMatchObject({ requiresTools: true, toolsetIds: undefined })
+    })
+
+    test('names the user so first-person memory requests can be searched by name', async () => {
+        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
+            name: 'set_task_context',
+            arguments: JSON.stringify({ requiresMemory: true, memorySearchQueries: ['Ada Lovelace employer history'] }),
+        } }] })
+
+        const result = await buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'Where did I work before?', enabledModes: { tools: false, memories: true }, userName: 'Ada Lovelace',
+        })
+
+        expect(result?.memorySearchQueries).toEqual(['Ada Lovelace employer history'])
+        expect(complete.mock.calls[0][0].messages[0].content).toContain('The user is named "Ada Lovelace"')
+    })
 })

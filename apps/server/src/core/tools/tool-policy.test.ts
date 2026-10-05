@@ -2,13 +2,9 @@ import { describe, expect, test } from 'vitest'
 import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from './tool-policy.js'
 
 describe('tool approval policy', () => {
-    test('auto-approves memory and graph reads, but not writes', () => {
+    test('auto-approves memory reads, but not writes', () => {
         expect(isSystemAutoApprovedTool('memory_search')).toBe(true)
-        expect(isSystemAutoApprovedTool('knowledge_search')).toBe(true)
         expect(isSystemAutoApprovedTool('memory_patch')).toBe(false)
-        expect(isSystemAutoApprovedTool('knowledge_assert')).toBe(false)
-        expect(isSystemAutoApprovedTool('knowledge_delete')).toBe(false)
-        expect(isSystemAutoApprovedTool('knowledge_entity_merge')).toBe(false)
     })
 
     test('uses safe MCP read-only hints as an auto-approval default', () => {

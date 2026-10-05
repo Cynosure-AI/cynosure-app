@@ -11,7 +11,6 @@ import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import type { FileArtifactLink } from '../../utils/file-artifacts'
 
-const markdownRef = ref<HTMLElement | null>(null)
 
 const props = defineProps<{
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -34,6 +33,8 @@ const props = defineProps<{
   latencyMs?: number
   isStreaming?: boolean
   isError?: boolean
+  /** The user stopped this reply before it finished. */
+  stopped?: boolean
   forkDisabled?: boolean
   /** Render a normal message without mutation actions (for derived transcript entries). */
   readonly?: boolean
@@ -418,7 +419,6 @@ const imageGridClass = computed(() => {
       <!-- Assistant message: rendered markdown -->
       <div
         v-else-if="!isUser && content"
-        ref="markdownRef"
         class="msg-markdown prose dark:prose-invert prose-sm max-w-none"
         @click="handleMarkdownClick"
         v-html="renderedContent"
@@ -501,9 +501,20 @@ const imageGridClass = computed(() => {
 
       <!-- Message metadata (assistant) -->
       <div
-        v-if="!isUser && !isStreaming && (model || promptTokens)"
-        class="mt-2 pt-1.5 border-t border-theme-700/50 flex items-center gap-3 text-xs text-ink-muted"
+        v-if="!isUser && !isStreaming && (model || promptTokens || stopped)"
+        class="mt-2 pt-1.5 border-t border-theme-700/50 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted"
       >
+        <span
+          v-if="stopped"
+          class="inline-flex items-center gap-1 text-status-warning"
+          title="You stopped this reply before it finished."
+        >
+          <Icon
+            icon="lucide:circle-stop"
+            class="h-3.5 w-3.5"
+          />
+          Stopped
+        </span>
         <span v-if="model">{{ model }}</span>
         <span
           v-if="contextTokens || promptTokens || completionTokens"

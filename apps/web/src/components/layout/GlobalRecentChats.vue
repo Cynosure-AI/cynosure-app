@@ -360,7 +360,7 @@ onBeforeUnmount(() => {
         @contextmenu.prevent="openContextMenu(conversation.id, $event)"
         @keydown.enter.self.prevent="selectConversation(conversation)"
       >
-        <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-ink-muted">
+        <span class="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-ink-muted">
           <img
             v-if="conversation.agentId && agentDefs.get(conversation.agentId)?.iconUrl"
             :src="agentDefs.get(conversation.agentId)?.iconUrl || ''"

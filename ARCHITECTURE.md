@@ -24,17 +24,17 @@ flowchart TD
 
 Memory routing runs during pre-execution when auto memory is enabled and there is a text query. An explicit empty memory-folder selection suppresses retrieval; otherwise the selected/assigned folder scope and the agent identity constrain memory search. Free Chat has no agent-specific memory identity.
 
-The router combines the current request with a short recent-conversation context and any planned query expansions. It retrieves memory and source-grounded knowledge-graph candidates, fuses and filters results, then selects context. Depending on configuration, selection uses the memory reranker or a small LLM curation call. The curation step can reject weakly related evidence and request one bounded corrective retrieval. If curation is unavailable, ranked results are used as fallback. Selected evidence is inserted into the main model context as marked, untrusted retrieved context, with provenance attached for the UI. If the router fails, the turn continues without injected memory.
+The router combines the current request with a short recent-conversation context and any planned query expansions. It retrieves memory chunks by hybrid search (dense embeddings plus BM25, fused by reciprocal rank), fuses the results of all queries, filters weak or duplicate matches, then selects context. Queries to instruction-tuned embedding models (Qwen3-Embedding, GTE-Qwen, BGE v1.5) carry the model's retrieval instruction; documents are embedded without one. LLM curation sees up to 20 candidates, each with its document title, section and last change, so a chunk from the middle of a note is still attributed to the note's subject. These knobs live in `retrieval-options.ts`, with each default backed by a `memory:eval` run. Depending on configuration, selection uses the memory reranker or a small LLM curation call. The curation step can reject weakly related evidence and request one bounded corrective retrieval. If curation is unavailable, ranked results are used as fallback. Selected evidence is inserted into the main model context as marked, untrusted retrieved context, with provenance attached for the UI. If the router fails, the turn continues without injected memory.
 
 ```mermaid
 flowchart TD
   A[Current user request] --> B[Check auto-memory flag, query, and folder scope]
   B --> C[Build retrieval queries from request, recent turns, and expansions]
-  C --> D[Search scoped memory chunks and graph; rerank retrieval results when enabled]
+  C --> D[Hybrid search of scoped memory chunks; rerank results when enabled]
   D --> E[Fuse candidates and filter weak or duplicate matches]
   E --> F{Memory reranker enabled?}
-  F -->|Yes| G[Use top-ranked memory and graph candidates]
-  F -->|No| H[LLM curates chunks and graph edges]
+  F -->|Yes| G[Use top-ranked memory candidates]
+  F -->|No| H[LLM curates chunks]
   H --> I{Evidence sufficient or correction available?}
   I -->|No, one bounded retry| J[Run corrective retrieval]
   J --> D
@@ -90,36 +90,36 @@ Thus image/video generation and dedicated transcription are specialized branches
 
 ## What a memory document contains
 
-The saved Markdown file is the source of truth. A memory folder (the UI's category/scope) organizes the document and limits which agents or chats can retrieve it. Indexing produces chunk-level metadata and derived search structures. Deep-research extraction can also build a source-grounded knowledge graph; those extracted records keep links back to the supporting chunk so they can be checked against the Markdown.
+The saved Markdown file is the source of truth. A memory folder (the UI's category/scope) organizes the document and limits which agents or chats can retrieve it. Indexing splits the document into chunks and keeps, per chunk, the original text, its source position, and a search text that prefixes the chunk with its document title and section path. That search text is embedded and BM25-indexed, so every chunk carries its document context; retrieval returns the original chunk as evidence. Embeddings and the lexical index are rebuildable; the Markdown and its revision history remain authoritative.
 
 ```mermaid
 flowchart TD
   A[Memory folder / category] --> B[Authoritative Markdown document]
   B --> C[Document identity, revision, and content hash]
   B --> D[Split into indexed text chunks]
-  D --> E[Chunk text with title, section path, and source position]
-  D --> F[Chunk tags / keywords]
-  E --> G[Contextual description using title and one chunk on either side]
-  D --> G
-  D --> H[Derived search representations]
-  H --> H1[Contextual description prepended to original chunk text]
-  G --> H1
-  H --> H2[Keyword projections]
-  H --> H3[Extracted fact projections]
-  H1 --> I[Embeddings and lexical search index]
-  H2 --> I
-  H3 --> I
-  D --> J[Deep-research extraction, when run]
-  J --> K[Entity mentions and canonical entities]
-  J --> L[Fact assertions / relationships]
-  K --> M[Evidence links to source chunk]
-  L --> M
-  M --> N[Quotes, source spans, confidence, and validity/status metadata]
+  D --> E[Chunk text with source position]
+  D --> F[Search text: document title + section path + chunk]
+  F --> G[Dense embedding]
+  F --> H[BM25 lexical index]
 ```
 
-The document-level file index can also hold aggregate tags and indexing timestamps/status. Deep research generates a contextual description of roughly 50–100 tokens for each chunk using the document title, the target chunk, and the immediately preceding and following chunks when available. Neighbors come from the canonical document chunks, including when analysis resumes with only some chunks remaining. Neighboring chunks supply context for the description; facts, mentions, and tags are extracted only from the target chunk. The existing summary field stores this description. It is prepended to the original chunk text for both embeddings and BM25 indexing; retrieval still returns the original source text as evidence. Keyword and fact projections remain additional retrieval channels. Descriptions are reused only within the same document revision and analysis version, so document edits regenerate context even for unchanged chunks. Existing documents receive contextual retrieval when analysis runs again; re-embedding alone preserves their current search text.
+A knowledge graph with LLM-extracted entities, facts and per-chunk summaries existed until schema v18. `memory:eval` showed no measurable gain from it over hybrid retrieval with reranking or LLM curation, so it was removed; v18 drops its tables, and a one-time startup cleanup restores plain chunk search text in older indexes.
 
-Entity mentions and fact/relationship assertions are optional extracted knowledge, not edits to the Markdown; their evidence records point back to a supporting chunk and preserve a quote/span. Search projections and embeddings are rebuildable indexes, while the Markdown and its revision history remain authoritative. Each analysis request includes at most three chunks plus the title and instructions, so source input tokens grow linearly with the number of chunks.
+## Evaluating memory
+
+`pnpm --filter cynosure-server memory:eval` measures the auto-memory pipeline on a frozen dataset kept in `<data dir>/evals/memory/` (it contains personal memory text, so it stays out of the repository). Cases are synthetic questions generated from real chunks (direct, paraphrased, other-language, two-chunk, and verified no-answer questions) plus labelled real turns. Gold evidence is stored as a verbatim quote and file, so cases stay valid after re-chunking.
+
+`run` copies the data dir into a temporary snapshot per condition and runs the real `applyAutoMemoryRoutingWithEvidence` there, with folder watchers disabled. Conditions select reranker or LLM-curation selection, optionally run the task-context planner as production does (its output is cached per case), and override retrieval options. Snapshots of older installs get the same one-time analysis cleanup the server runs on startup. Reranker conditions are billed per rerank request, so the report counts and prices them separately. Each run records retrieval metrics from the curator's candidate pool, an LLM judge's verdict on whether the injected context supports the reference answer, the no-answer injection rate, fallbacks, latency, and model cost. The report includes paired sign tests against the first condition and a diff against the previous run; differences of a few cases are within curator/judge noise.
+
+`--dataset fixture` runs the same pipeline against a committed fictional corpus (`apps/server/tests/memory-eval/`). The corpus is indexed into a cached install under the eval directory with the local embedding model. It covers relation chains, aggregation, superseded values and near-identical names, so it can be shared and runs without anyone's personal memory.
+
+## Messaging channels
+
+Telegram, Discord, and Slack share one agent-turn pipeline; the platform folders only translate between the platform SDK and it. A channel class implements `ChannelProvider` (`base.channel.ts`) and holds a `ChannelSessionState` keyed by the platform's conversation address, the "target": a Discord or Slack channel id, or a Telegram chat id. Per target it tracks the agent override, the last used agent, the turn lock, buffered media, and the reverse map from conversation to target.
+
+For each inbound message the platform builds a `ChannelTransport`, which says how to reply, send, edit, send long text, send images, and show typing, with the platform's message length limits. It passes the transport to `receiveChannelMessage` (`channel-turn.ts`). That function runs commands immediately, holds media sent without text until the next text message, and otherwise runs one turn per target at a time. A turn creates or reuses the target's conversation, plans and executes the agent, and streams previews by editing messages. Tool status lines and HITL prompts go out in order through the turn's send queue. The final reply is split across messages when needed, the turn is persisted, and a title is generated for new conversations. Chat commands (`kill`, `stop`, `new`, `start`, switching agent by name) live in `channel-commands.ts`; platforms only supply bold syntax and the switch-back hint. HITL routing and resolution are shared too (`subscribeChannelHITL`, `resolveChannelHITL`), while the approval buttons themselves are platform-specific.
+
+Adding a channel means adding its folder with a `ChannelProvider` class, a transport, a command style, and HITL buttons, then registering the class in `channel-manager.ts` and extending `ChannelType`.
 
 ## Code landmarks
 
@@ -127,6 +127,8 @@ Entity mentions and fact/relationship assertions are optional extracted knowledg
 - UI overrides/restoration and send payload: `apps/web/src/composables/useChatAgentConfig.ts`, `apps/web/src/composables/useChatMessages.ts`
 - Per-turn snapshot/planning: `apps/server/src/core/agent/execution-preset.ts`, `apps/server/src/core/agent/pre-execution/execution-planner.ts`
 - Memory/tool routing: `apps/server/src/core/agent/pre-execution/auto-memory-routing.ts`, `apps/server/src/core/agent/pre-execution/auto-tool-routing.ts`, `apps/server/src/core/agent/tool-router.ts`
-- Memory document and knowledge graph: `apps/server/src/core/memory/rag.ts`, `apps/server/src/core/memory/deep-research-extractor.ts`, `apps/server/src/core/memory/memory-knowledge.ts`, `apps/server/src/db/schema.ts`
+- Memory documents and retrieval: `apps/server/src/core/memory/parser.ts`, `apps/server/src/core/memory/rag.ts`, `apps/server/src/core/memory/memory-aggregator.ts`, `apps/server/src/db/schema.ts`
+- Memory evaluation: `apps/server/src/scripts/memory-eval/cli.ts`, `apps/server/src/scripts/memory-eval/worker.ts`, `apps/server/src/core/memory/retrieval-evaluation.ts`
 - Subagent spawn/continue: `apps/server/src/core/agent/sub-agent-tools.ts`
 - Media dispatch and execution: `apps/server/src/routes/chat.ts`, `apps/server/src/core/chat/media-execution.ts`, `apps/web/src/composables/useWhisper.ts`
+- Messaging channels: `apps/server/src/core/channels/channel-turn.ts`, `apps/server/src/core/channels/channel-session.ts`, `apps/server/src/core/channels/channel-commands.ts`, `apps/server/src/core/channels/channel-manager.ts`

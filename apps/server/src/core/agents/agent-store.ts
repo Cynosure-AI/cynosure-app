@@ -37,7 +37,6 @@ export interface AgentData extends AgentConfig {
     id: string
     iconUrl: string | null
     systemPrompt: string
-    cronPrompt: string
 }
 
 export type CreateAgentInput = {
@@ -49,7 +48,6 @@ export type CreateAgentInput = {
     providerId?: string
     model?: string
     systemPrompt?: string
-    cronPrompt?: string
     tools?: string[]
     subAgents?: SubAgentAssignment[]
     autoApproveTools?: boolean
@@ -146,12 +144,8 @@ interface AgentRow {
     sub_agents_json: string
     auto_approve_tools: number
     auto_tool_routing: number
-    tool_router_provider_id: string
-    tool_router_model: string
     auto_memory: number
     dreaming_enabled: number
-    memory_router_provider_id: string
-    memory_router_model: string
     auto_router_provider_id: string
     auto_router_model: string
     thinking_enabled: number
@@ -159,7 +153,6 @@ interface AgentRow {
     max_context_tokens: number | null
     sort_order: number
     favorite: number
-    cron_prompt: string
     icon_data: Buffer | null
     icon_mime: string | null
     created_at: number
@@ -188,7 +181,6 @@ function rowToAgentData(row: AgentRow): AgentData {
         providerId: row.provider_id || '',
         model: row.model || '',
         systemPrompt: row.system_prompt || '',
-        cronPrompt: row.cron_prompt || '',
         tools: JSON.parse(row.tools_json || '[]'),
         subAgents: JSON.parse(row.sub_agents_json || '[]'),
         autoApproveTools: row.auto_approve_tools === 1,
@@ -249,10 +241,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
-            auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, dreaming_enabled, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
-            sort_order, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            auto_tool_routing, auto_memory, dreaming_enabled, auto_router_provider_id, auto_router_model,
+            sort_order, favorite, icon_data, icon_mime, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -270,17 +261,12 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.reasoningEffort || 'medium',
         typeof input.maxContextTokens === 'number' ? input.maxContextTokens : null,
         input.autoToolRouting === true ? 1 : 0,
-        '',
-        '',
         input.autoMemory === true ? 1 : 0,
         input.dreamingEnabled !== false ? 1 : 0,
-        '',
-        '',
         input.autoRouterProviderId || '__agent_provider__',
         input.autoRouterModel || '__agent_model__',
         typeof input.sortOrder === 'number' ? input.sortOrder : 0,
         input.favorite === true ? 1 : 0,
-        input.cronPrompt || '',
         iconData,
         iconMime,
         now,
@@ -306,7 +292,6 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     const updatedProviderId = input.providerId !== undefined ? (input.providerId || null) : existing.provider_id
     const updatedModel = input.model ?? existing.model
     const updatedSystemPrompt = input.systemPrompt !== undefined ? input.systemPrompt : existing.system_prompt
-    const updatedCronPrompt = input.cronPrompt !== undefined ? (input.cronPrompt || '') : existing.cron_prompt
     const updatedTools = input.tools !== undefined ? normalizeAgentTools(input.tools) : JSON.parse(existing.tools_json || '[]')
     const updatedSubAgents = input.subAgents !== undefined
         ? normalizeSubAgents(input.subAgents, id)
@@ -344,9 +329,9 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
     db.prepare(
         `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
          internal_name = ?, category = ?, sub_agents_json = ?, auto_approve_tools = ?,
-            thinking_enabled = ?, reasoning_effort = ?, max_context_tokens = ?, auto_tool_routing = ?, tool_router_provider_id = ?, tool_router_model = ?,
-            auto_memory = ?, dreaming_enabled = ?, memory_router_provider_id = ?, memory_router_model = ?,
-            auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, favorite = ?, cron_prompt = ?,
+            thinking_enabled = ?, reasoning_effort = ?, max_context_tokens = ?, auto_tool_routing = ?,
+            auto_memory = ?, dreaming_enabled = ?,
+            auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, favorite = ?,
          icon_data = ?, icon_mime = ?, updated_at = ?
          WHERE id = ?`
     ).run(
@@ -364,17 +349,12 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedReasoningEffort,
         updatedMaxContextTokens,
         updatedAutoToolRouting ? 1 : 0,
-        existing.tool_router_provider_id || '',
-        existing.tool_router_model || '',
         updatedAutoMemory ? 1 : 0,
         updatedDreamingEnabled ? 1 : 0,
-        existing.memory_router_provider_id || '',
-        existing.memory_router_model || '',
         updatedAutoRouterProviderId,
         updatedAutoRouterModel,
         updatedSortOrder,
         updatedFavorite ? 1 : 0,
-        updatedCronPrompt,
         iconData,
         iconMime,
         now,
@@ -421,10 +401,9 @@ export function duplicateAgent(id: string): AgentData | null {
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
-            auto_tool_routing, tool_router_provider_id, tool_router_model,
-            auto_memory, dreaming_enabled, memory_router_provider_id, memory_router_model, auto_router_provider_id, auto_router_model,
-            sort_order, favorite, cron_prompt, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            auto_tool_routing, auto_memory, dreaming_enabled, auto_router_provider_id, auto_router_model,
+            sort_order, favorite, icon_data, icon_mime, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -442,17 +421,12 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.reasoning_effort,
         existing.max_context_tokens,
         existing.auto_tool_routing,
-        existing.tool_router_provider_id,
-        existing.tool_router_model,
         existing.auto_memory,
         existing.dreaming_enabled,
-        existing.memory_router_provider_id,
-        existing.memory_router_model,
         existing.auto_router_provider_id || '__agent_provider__',
         existing.auto_router_model || '__agent_model__',
         existing.sort_order,
         existing.favorite,
-        existing.cron_prompt,
         existing.icon_data,
         existing.icon_mime,
         now,

@@ -1,16 +1,35 @@
-import { TELEGRAM_API, type TelegramCtx } from './telegram.types.js'
-import { formatTelegramMessage } from './telegram.format.js'
+import type { TelegramCtx, TelegramUpdate } from './telegram.channel.js'
+import { formatTelegramHtml } from './telegram.format.js'
 
-export async function sendMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {
-    const res = await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendMessage`, {
+export const TELEGRAM_API = 'https://api.telegram.org'
+
+interface TelegramResponse<T = unknown> {
+    ok: boolean
+    description?: string
+    result?: T
+}
+
+async function callTelegram<T>(ctx: TelegramCtx, method: string, body: Record<string, unknown>): Promise<TelegramResponse<T>> {
+    const res = await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/${method}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: formatTelegramMessage(text), parse_mode: 'MarkdownV2' })
+        body: JSON.stringify(body)
     })
-    const data = await res.json().catch(() => null) as { ok?: boolean; description?: string } | null
-    if (!res.ok || data?.ok === false) {
-        throw new Error(data?.description || `Telegram API error: ${res.status} ${res.statusText}`)
-    }
+    const data = await res.json().catch(() => null) as TelegramResponse<T> | null
+    return data ?? { ok: false, description: `Telegram API error: ${res.status} ${res.statusText}` }
+}
+
+/** Send Markdown as Telegram HTML; if Telegram rejects the markup (or it pushes the text past the length limit), resend the original text unformatted. */
+async function callWithFormattedText<T>(ctx: TelegramCtx, method: string, body: Record<string, unknown>, text: string): Promise<TelegramResponse<T>> {
+    const data = await callTelegram<T>(ctx, method, { ...body, text: formatTelegramHtml(text), parse_mode: 'HTML' })
+    if (data.ok || !/can't parse entities|message is too long/i.test(data.description ?? '')) return data
+    console.warn(`[Telegram] Formatting rejected, sending plain text: ${data.description}`)
+    return callTelegram<T>(ctx, method, { ...body, text })
+}
+
+export async function sendMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {
+    const data = await callWithFormattedText(ctx, 'sendMessage', { chat_id: chatId }, text)
+    if (!data.ok) throw new Error(data.description || 'Telegram API error')
 }
 
 export async function sendLongMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {
@@ -37,46 +56,23 @@ export async function sendLongMessage(ctx: TelegramCtx, chatId: number, text: st
     }
 }
 
-export async function sendMessageReturningId(ctx: TelegramCtx, chatId: number, text: string): Promise<number | null> {
+export async function sendMessageReturningId(
+    ctx: TelegramCtx,
+    chatId: number,
+    text: string,
+    extra: Record<string, unknown> = {}
+): Promise<number | null> {
     try {
-        const res = await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: formatTelegramMessage(text), parse_mode: 'MarkdownV2' })
-        })
-        const data = await res.json() as { ok: boolean; result?: { message_id: number } }
+        const data = await callWithFormattedText<{ message_id: number }>(ctx, 'sendMessage', { ...extra, chat_id: chatId }, text)
         return data.ok ? data.result?.message_id ?? null : null
     } catch {
         return null
     }
 }
 
-export async function sendReply(ctx: TelegramCtx, chatId: number, replyToMsgId: number, text: string): Promise<void> {
-    await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            chat_id: chatId,
-            text: formatTelegramMessage(text),
-            reply_to_message_id: replyToMsgId,
-            parse_mode: 'MarkdownV2'
-        })
-    }).catch(() => { })
-}
-
 export async function editMessage(ctx: TelegramCtx, chatId: number, messageId: number, text: string): Promise<boolean> {
     try {
-        const res = await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/editMessageText`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: chatId,
-                message_id: messageId,
-                text: formatTelegramMessage(text),
-                parse_mode: 'MarkdownV2'
-            })
-        })
-        const data = await res.json() as { ok: boolean }
+        const data = await callWithFormattedText(ctx, 'editMessageText', { chat_id: chatId, message_id: messageId }, text)
         return data.ok
     } catch {
         return false
@@ -145,4 +141,38 @@ export async function downloadTelegramFile(ctx: TelegramCtx, fileId: string): Pr
     const mimeType = mimeMap[ext] || 'application/octet-stream'
     const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`
     return { dataUrl, mimeType }
+}
+
+/** Extract image and audio attachments from a Telegram message, downloading them as data URLs. */
+export async function extractAttachments(ctx: TelegramCtx, msg: NonNullable<TelegramUpdate['message']>): Promise<{ imageDataUrls: string[]; audioDataUrls: string[] }> {
+    const imageDataUrls: string[] = []
+    const audioDataUrls: string[] = []
+
+    // Photos — Telegram sends multiple sizes, pick the largest
+    if (msg.photo?.length) {
+        const largest = msg.photo[msg.photo.length - 1]
+        const { dataUrl } = await downloadTelegramFile(ctx, largest.file_id)
+        imageDataUrls.push(dataUrl)
+    }
+
+    // Documents — treat images as image attachments
+    if (msg.document) {
+        const mime = msg.document.mime_type || ''
+        if (mime.startsWith('image/')) {
+            const { dataUrl } = await downloadTelegramFile(ctx, msg.document.file_id)
+            imageDataUrls.push(dataUrl)
+        }
+    }
+
+    // Audio / voice messages
+    if (msg.audio) {
+        const { dataUrl } = await downloadTelegramFile(ctx, msg.audio.file_id)
+        audioDataUrls.push(dataUrl)
+    }
+    if (msg.voice) {
+        const { dataUrl } = await downloadTelegramFile(ctx, msg.voice.file_id)
+        audioDataUrls.push(dataUrl)
+    }
+
+    return { imageDataUrls, audioDataUrls }
 }

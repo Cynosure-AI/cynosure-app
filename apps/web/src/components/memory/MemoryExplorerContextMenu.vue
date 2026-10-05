@@ -6,7 +6,6 @@ import type { ExplorerContextMenu } from "./memory-file-explorer-types";
 defineProps<{
   menu: ExplorerContextMenu | null;
   spaceCount: number;
-  supportsAnalysis: (file: MemoryFileStatus) => boolean;
 }>();
 
 const emit = defineEmits<{
@@ -19,7 +18,6 @@ const emit = defineEmits<{
   openDocument: [file: MemoryFileStatus];
   moveDocument: [file: MemoryFileStatus];
   indexDocument: [file: MemoryFileStatus];
-  researchDocument: [file: MemoryFileStatus];
   forgetDocument: [file: MemoryFileStatus];
   removeDocument: [file: MemoryFileStatus];
 }>();
@@ -67,9 +65,9 @@ const emit = defineEmits<{
           @click="emit('editFolder', menu.folder); emit('close')"
         >
           <Icon
-            icon="lucide:settings-2"
+            icon="lucide:folder-pen"
             class="h-3.5 w-3.5"
-          /> Folder settings
+          /> Rename Folder
         </button>
         <button
           type="button"
@@ -137,19 +135,7 @@ const emit = defineEmits<{
           /> Index files
         </button>
         <button
-          v-if="menu.file.supported && supportsAnalysis(menu.file)"
-          type="button"
-          class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-emerald-300 hover:bg-emerald-500/10"
-          role="menuitem"
-          @click="emit('researchDocument', menu.file); emit('close')"
-        >
-          <Icon
-            icon="lucide:network"
-            class="h-3.5 w-3.5"
-          /> Deep Research
-        </button>
-        <button
-          v-if="menu.file.supported && (menu.file.status !== 'not_indexed' || menu.file.deepResearched)"
+          v-if="menu.file.supported && menu.file.status !== 'not_indexed'"
           type="button"
           class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-orange-300 hover:bg-orange-500/10"
           role="menuitem"

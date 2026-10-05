@@ -28,7 +28,10 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: 'pnpm --filter cynosure-web exec vite --host 127.0.0.1 --port 5183',
+      // Run Vite directly: a pnpm wrapper exits on teardown and leaves Vite
+      // running, which keeps the port busy and stalls Playwright's shutdown.
+      command: 'node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5183 --strictPort',
+      cwd: 'apps/web',
       url: 'http://127.0.0.1:5183',
       env: {
         CYNOSURE_API_PROXY_TARGET: 'http://127.0.0.1:3199',

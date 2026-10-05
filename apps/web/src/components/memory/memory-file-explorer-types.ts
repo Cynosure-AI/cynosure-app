@@ -14,7 +14,6 @@ export type FolderRow = {
   folder: MemoryFolder;
   modifiedAt: number;
   chunkCount?: number;
-  deepResearched: false;
   status: "folder";
 };
 

@@ -4,16 +4,14 @@ import type { LLMGateway } from '../../gateway/gateway.js'
 const routingMocks = vi.hoisted(() => ({
     apply: vi.fn(),
     applyWithEvidence: vi.fn(),
-    skipped: vi.fn(),
 }))
 
 vi.mock('./auto-memory-routing.js', () => ({
     applyAutoMemoryRouting: routingMocks.apply,
     applyAutoMemoryRoutingWithEvidence: routingMocks.applyWithEvidence,
-    emitAutoMemoryRoutingSkipped: routingMocks.skipped,
 }))
 
-import { resolveMemoryContext, resolveMemorySystemMessages } from './execution-memory.js'
+import { resolveMemoryContext } from './execution-memory.js'
 
 describe('retrieved memory context messages', () => {
     afterEach(() => {
@@ -26,7 +24,7 @@ describe('retrieved memory context messages', () => {
             evidence: [],
         })
 
-        const messages = await resolveMemorySystemMessages({
+        const { messages } = await resolveMemoryContext({
             preset: {
                 id: 'agent-1',
                 tools: [],
@@ -68,6 +66,5 @@ describe('retrieved memory context messages', () => {
 
         expect(result).toEqual({ messages: [], evidence: [] })
         expect(routingMocks.applyWithEvidence).not.toHaveBeenCalled()
-        expect(routingMocks.skipped).toHaveBeenCalledWith('conversation-1', 'not-required', undefined)
     })
 })

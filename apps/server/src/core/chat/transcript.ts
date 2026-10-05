@@ -7,6 +7,7 @@ export interface MessageFields {
   role?: string
   content: string
   isError?: boolean
+  stopped?: boolean
   createdAt?: number
   thinking?: string
   imageDataUrls?: string[]
@@ -70,6 +71,7 @@ export function messageToTranscriptItem(message: MessageFields, executionId?: st
     type: 'message', id: message.id,
     role: message.role === 'user' || message.role === 'assistant' || message.role === 'system' || message.role === 'tool' ? message.role : 'assistant',
     isError: message.isError,
+    stopped: message.stopped,
     content: message.contentBlocks || messageContentBlocks(message),
     createdAt: message.createdAt ?? Date.now(),
     executionId,

@@ -1,11 +1,211 @@
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
+import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import type { TelegramConfig, TelegramUpdate, PendingHITL, BroadcastFn } from './telegram.types.js'
-import { TELEGRAM_API } from './telegram.types.js'
-import { registerBotCommands } from './telegram.commands.js'
-import { handleMessage, handleCallbackQuery, subscribeToHITL } from './telegram.messaging.js'
-import { sendLongMessage } from './telegram.api.js'
-import { isTelegramUserAllowed, normalizeTelegramUserIds } from './telegram.security.js'
+import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
+import {
+    TELEGRAM_API,
+    answerCallbackQuery,
+    editMessage,
+    extractAttachments,
+    sendChatAction,
+    sendLongMessage,
+    sendMessage,
+    sendMessageReturningId,
+    sendPhoto,
+} from './telegram.api.js'
+
+export interface TelegramConfig {
+    botToken: string
+    allowedAgentIds?: string[]
+    /** Numeric Telegram user IDs permitted to use this bot. Empty means deny all. */
+    allowedUserIds?: Array<string | number>
+}
+
+export interface TelegramUpdate {
+    update_id: number
+    message?: {
+        message_id: number
+        from?: { id: number; first_name: string; last_name?: string; username?: string }
+        chat: { id: number; type: string; title?: string; first_name?: string }
+        date: number
+        text?: string
+        caption?: string
+        photo?: { file_id: string; file_unique_id: string; width: number; height: number; file_size?: number }[]
+        document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number }
+        audio?: { file_id: string; file_name?: string; mime_type?: string; duration: number; file_size?: number }
+        voice?: { file_id: string; mime_type?: string; duration: number; file_size?: number }
+        video?: { file_id: string; file_name?: string; mime_type?: string; duration: number; width: number; height: number; file_size?: number }
+        video_note?: { file_id: string; duration: number; length: number; file_size?: number }
+    }
+    callback_query?: {
+        id: string
+        from: { id: number; first_name: string }
+        message?: { message_id: number; chat: { id: number; type?: string } }
+        data?: string
+    }
+}
+
+export interface PendingHITL {
+    conversationId: string
+    chatId: number
+    userId: number
+    messageId: number
+    resolve: (result: { approved: boolean; reason?: string }) => void
+}
+
+/** Telegram state; targets are numeric private-chat ids. */
+export interface TelegramCtx extends ChannelSessionState<number> {
+    botToken: string
+    allowedUserIds: ReadonlySet<string>
+    pendingHITL: Map<string, PendingHITL>
+    /** Telegram user behind each conversation; HITL prompts are only answerable by them. */
+    conversationToUser: Map<string, number>
+}
+
+/** Normalize Telegram user IDs from persisted, user-supplied channel config. */
+export function normalizeTelegramUserIds(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+
+    const ids = value
+        .map((id) => typeof id === 'number' ? String(id) : typeof id === 'string' ? id.trim() : '')
+        .filter((id) => /^\d+$/.test(id) && id !== '0')
+
+    return Array.from(new Set(ids))
+}
+
+export function isTelegramUserAllowed(allowedUserIds: ReadonlySet<string>, userId: number | undefined): boolean {
+    return userId !== undefined && allowedUserIds.has(String(userId))
+}
+
+const TELEGRAM_COMMAND_STYLE: ChannelCommandStyle = {
+    bold: (text) => `**${text}**`,
+    switchBackHint: 'Use /start to switch back to the default agent.',
+}
+
+/** Register Telegram bot commands from the agent list for slash-command autocompletion. */
+export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
+    const commands: { command: string; description: string }[] = [
+        { command: 'start', description: 'Start a fresh conversation with the default agent' },
+        { command: 'stop', description: 'Cancel the currently running execution' },
+        { command: 'kill', description: 'Stop all running executions' },
+        { command: 'new', description: 'Start a fresh conversation with the last used agent' }
+    ]
+    for (const agent of getAvailableAgents(ctx)) {
+        const cmd = agentCommandName(agent.internalName).slice(0, 32)
+        if (cmd) {
+            commands.push({ command: cmd, description: `Switch to ${agent.name}` })
+        }
+    }
+    await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/setMyCommands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commands })
+    }).catch(() => { })
+}
+
+/** Handle slash commands. Returns true if the message was a command and was handled. */
+export async function handleCommand(ctx: TelegramCtx, chatId: number, text: string): Promise<boolean> {
+    return handleChannelCommand(ctx, chatId, text, (reply) => sendMessage(ctx, chatId, reply), TELEGRAM_COMMAND_STYLE)
+}
+
+function createTransport(ctx: TelegramCtx, chatId: number): ChannelTransport<number> {
+    return {
+        logTag: '[Telegram]',
+        previewLimit: 4000,
+        messageLimit: 4000,
+        bold: (text) => `**${text}**`,
+        reply: (text) => sendMessageReturningId(ctx, chatId, text),
+        send: (text) => sendMessageReturningId(ctx, chatId, text),
+        edit: async (messageId, text) => { await editMessage(ctx, chatId, messageId, text) },
+        sendLong: (text) => sendLongMessage(ctx, chatId, text).catch(e =>
+            console.warn('[Telegram] Failed to send message:', (e as Error).message)),
+        sendImages: async (images, replyTo) => {
+            for (const { dataUrl } of images) {
+                await sendPhoto(ctx, chatId, dataUrl, replyTo ?? undefined).catch(e =>
+                    console.warn('[Telegram] Failed to send image:', (e as Error).message))
+            }
+        },
+        sendTyping: () => sendChatAction(ctx, chatId, 'typing').catch(() => { }),
+        typingIntervalMs: 4000,
+    }
+}
+
+export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): Promise<void> {
+    const msg = update.message!
+    if (msg.chat.type !== 'private' || !isTelegramUserAllowed(ctx.allowedUserIds, msg.from?.id)) return
+    const chatId = msg.chat.id
+    const userId = msg.from!.id
+    const text = msg.text || msg.caption || ''
+
+    await receiveChannelMessage(ctx, {
+        target: chatId,
+        text,
+        senderName: msg.from?.first_name || 'User',
+        hasMedia: !!(msg.photo || msg.document || msg.audio || msg.voice || msg.video || msg.video_note),
+        extractMedia: () => extractAttachments(ctx, msg),
+        handleCommand: text.startsWith('/') ? () => handleCommand(ctx, chatId, text) : undefined,
+        transport: createTransport(ctx, chatId),
+        onConversation: (conversationId) => ctx.conversationToUser.set(conversationId, userId),
+    })
+}
+
+/** Forward HITL approval requests to Telegram as inline buttons. Returns unsub function. */
+export function subscribeToHITL(ctx: TelegramCtx): () => void {
+    return subscribeChannelHITL(ctx, async (request, chatId, toolNames) => {
+        const userId = ctx.conversationToUser.get(request.conversationId)
+        if (userId === undefined || !isTelegramUserAllowed(ctx.allowedUserIds, userId)) return
+
+        const messageId = await sendMessageReturningId(
+            ctx,
+            chatId,
+            `🔐 **Tool approval required**\n\nThe agent wants to use: ${toolNames}\n\nApprove or deny?`,
+            {
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: '✅ Approve', callback_data: `hitl:${request.taskId}:approve` },
+                        { text: '❌ Deny', callback_data: `hitl:${request.taskId}:deny` }
+                    ]]
+                }
+            }
+        )
+        if (messageId !== null) {
+            ctx.pendingHITL.set(request.taskId, {
+                conversationId: request.conversationId,
+                chatId,
+                userId,
+                messageId,
+                resolve: request.resolve,
+            })
+        }
+    })
+}
+
+/** Handle a Telegram callback query (inline button press). */
+export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<TelegramUpdate['callback_query']>): Promise<void> {
+    const action = query.data ? parseHITLActionId(query.data) : null
+    if (!isTelegramUserAllowed(ctx.allowedUserIds, query.from.id) || !action) {
+        await answerCallbackQuery(ctx, query.id)
+        return
+    }
+
+    const pending = ctx.pendingHITL.get(action.taskId)
+    if (!pending) {
+        await answerCallbackQuery(ctx, query.id, 'This approval has already been handled.')
+        return
+    }
+    if (pending.userId !== query.from.id || pending.chatId !== query.message?.chat.id) {
+        await answerCallbackQuery(ctx, query.id, 'This approval is not assigned to you.')
+        return
+    }
+
+    ctx.pendingHITL.delete(action.taskId)
+    resolveChannelHITL(ctx.broadcast, pending, action.taskId, action.approved, 'Telegram')
+
+    const statusText = action.approved ? '✅ **Approved** — proceeding...' : '❌ **Denied** — the agent will try a different approach.'
+    await editMessage(ctx, pending.chatId, pending.messageId, statusText)
+    await answerCallbackQuery(ctx, query.id, action.approved ? 'Approved!' : 'Denied.')
+}
 
 export class TelegramChannel implements ChannelProvider {
     botToken: string
@@ -14,15 +214,16 @@ export class TelegramChannel implements ChannelProvider {
     broadcast: BroadcastFn
     allowedAgentIds: string[]
     allowedUserIds: ReadonlySet<string>
+    readonly channelType = 'telegram'
     activeExecutions = new Map<string, ActiveChannelExecutionEntry>()
-    chatAgentOverride = new Map<number, string>()
-    chatLastUsedAgent = new Map<number, string>()
+    agentOverride = new Map<number, string>()
+    lastUsedAgent = new Map<number, string>()
     pendingHITL = new Map<string, PendingHITL>()
-    conversationToChat = new Map<string, number>()
+    conversationTargets = new Map<string, number>()
     conversationToUser = new Map<string, number>()
-    chatLocks = new Map<number, Promise<void>>()
-    conversationSendQueue = new Map<string, (fn: () => Promise<void>) => void>()
-    pendingAttachments = new Map<number, { imageDataUrls: string[]; audioDataUrls: string[] }>()
+    targetLocks = new Map<number, Promise<void>>()
+    conversationSendQueue = new Map<string, ConversationSendFn>()
+    pendingAttachments = new Map<number, ChannelMedia>()
 
     private polling = false
     private pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -82,9 +283,9 @@ export class TelegramChannel implements ChannelProvider {
             this.abortController = null
         }
         cancelChannelExecutionsWhere(this.activeExecutions, () => true)
-        this.conversationToChat.clear()
+        this.conversationTargets.clear()
         this.conversationToUser.clear()
-        this.chatLocks.clear()
+        this.targetLocks.clear()
     }
 
     status(): ChannelStatus {

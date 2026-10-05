@@ -19,6 +19,8 @@ export interface MessageItem {
   id: string
   role: ChatRole
   isError?: boolean
+  /** The reply was stopped by the user before the model finished it. */
+  stopped?: boolean
   content: ContentBlock[]
   createdAt: number
   executionId?: string
@@ -131,7 +133,7 @@ export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' |
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
-export type ContextEvidenceKind = 'memory-chunk' | 'graph-assertion' | 'attachment-chunk'
+export type ContextEvidenceKind = 'memory-chunk' | 'attachment-chunk'
 export type ContextVerificationStatus = 'verified' | 'ranked-fallback'
 
 export interface ContextEvidence {
@@ -261,12 +263,6 @@ export interface ConversationExecutionConfig {
   autoRouterModel?: string
 }
 
-export interface ConversationMetadata {
-  channelKey?: string
-  archived?: number | boolean | string
-  titleGenerated?: boolean | number
-}
-
 export interface ConversationDto {
   id: string
   title: string
@@ -275,19 +271,6 @@ export interface ConversationDto {
   origin: string
   createdAt: number
   updatedAt: number
-}
-
-export interface ConversationListItemDto {
-  id: string
-  title: string
-  agent_id: string | null
-  ma_workspace_id: string | null
-  origin: string
-  pinned: number
-  last_read_at: number | null
-  created_at: number
-  updated_at: number
-  last_user_message: string | null
 }
 
 export interface ConversationMessagesResponse {

@@ -26,10 +26,6 @@ const automaticToolStates = computed(() => ({
     criteria: 'thinking mode and visible execution tools',
   },
   ...memoryAutomaticToolStates(hasMemoryScope.value),
-  knowledge_search: {
-    active: hasMemoryScope.value,
-    criteria: 'memory folder selected',
-  },
   attachment_search: {
     active: false,
     criteria: 'large indexed attachment available during chat',

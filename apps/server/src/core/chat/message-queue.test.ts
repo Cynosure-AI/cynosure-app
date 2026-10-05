@@ -24,6 +24,7 @@ import {
   enqueueChatMessage,
   getChatQueueState,
   markQueuedMessagePromoted,
+  pauseAllChatQueuesOnStartup,
   promoteQueuedMessageToSteering,
   registerChatSteeringHandler,
   runNextQueuedMessage,
@@ -97,5 +98,16 @@ describe('persistent chat queue', () => {
 
     expect(executed).toEqual(['first', 'second'])
     expect(getChatQueueState('conversation').items).toEqual([])
+  })
+
+  test('pauses items left pending by a restart so they are offered for resume', async () => {
+    await enqueueChatMessage('conversation', request('first'))
+    state.db!.prepare("UPDATE queued_chat_messages SET status = 'pending'").run()
+    expect(getChatQueueState('conversation').paused).toBe(false)
+
+    pauseAllChatQueuesOnStartup()
+
+    expect(getChatQueueState('conversation').paused).toBe(true)
+    expect(getChatQueueState('conversation').items.map(item => item.content)).toEqual(['first'])
   })
 })

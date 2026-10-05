@@ -30,6 +30,15 @@ const cronName = ref('')
 const cronAgentId = ref('')
 const cronPrompt = ref('')
 const cronSaving = ref(false)
+/** Why creating the job in the dialog failed. */
+const createError = ref('')
+/** Why the last list action (toggle, run, duplicate, delete) failed. */
+const actionError = ref('')
+const deletingJob = ref(false)
+
+function errorText(action: string, error: unknown): string {
+  return `${action}: ${error instanceof Error ? error.message : 'unknown error'}`
+}
 
 // Schedule builder refs
 const dlgFrequency = ref<CronFrequency>('daily')
@@ -73,8 +82,15 @@ function resetDlg() {
 }
 
 async function openAddCronDialog() {
-  allAgents.value = await api.agents.list()
+  actionError.value = ''
+  try {
+    allAgents.value = await api.agents.list()
+  } catch (error) {
+    actionError.value = errorText('Agents could not be loaded', error)
+    return
+  }
   resetDlg()
+  createError.value = ''
   showAddCron.value = true
 }
 
@@ -82,6 +98,7 @@ async function saveCronJob() {
   const expr = dlgGeneratedExpr.value
   if (!expr.trim() || !cronAgentId.value) return
   cronSaving.value = true
+  createError.value = ''
   try {
     const created = await api.cronJobs.create({
       name: cronName.value.trim(),
@@ -92,13 +109,21 @@ async function saveCronJob() {
     })
     showAddCron.value = false
     router.push(`/cron/${encodeURIComponent(created.id)}`)
+  } catch (error) {
+    createError.value = errorText('The job was not created', error)
   } finally {
     cronSaving.value = false
   }
 }
 
 async function toggleCronJob(jobId: string, enabled: boolean) {
-  await api.cronJobs.update(jobId, { enabled })
+  actionError.value = ''
+  try {
+    await api.cronJobs.update(jobId, { enabled })
+  } catch (error) {
+    actionError.value = errorText(enabled ? 'The job could not be enabled' : 'The job could not be paused', error)
+  }
+  // Reload either way so the switch reflects the saved state.
   await loadSchedules()
 }
 
@@ -111,9 +136,12 @@ const duplicatingNow = ref(new Set<string>())
 
 async function runJobNow(jobId: string) {
   runningNow.value = new Set([...runningNow.value, jobId])
+  actionError.value = ''
   try {
     await api.cronJobs.runNow(jobId)
     await loadSchedules()
+  } catch (error) {
+    actionError.value = errorText('The job could not be started', error)
   } finally {
     runningNow.value.delete(jobId)
     runningNow.value = new Set(runningNow.value)
@@ -122,6 +150,7 @@ async function runJobNow(jobId: string) {
 
 async function duplicateCronJob(job: CronJob) {
   duplicatingNow.value = new Set([...duplicatingNow.value, job.id])
+  actionError.value = ''
   try {
     const created = await api.cronJobs.create({
       name: `${job.name || job.agentName} Copy`,
@@ -137,6 +166,8 @@ async function duplicateCronJob(job: CronJob) {
     })
     await loadSchedules()
     router.push(`/cron/${encodeURIComponent(created.id)}`)
+  } catch (error) {
+    actionError.value = errorText('The job could not be duplicated', error)
   } finally {
     duplicatingNow.value.delete(job.id)
     duplicatingNow.value = new Set(duplicatingNow.value)
@@ -145,16 +176,25 @@ async function duplicateCronJob(job: CronJob) {
 
 function confirmDeleteCron(job: CronJob) {
   pendingDeleteId.value = job.id
-  pendingDeleteName.value = job.agentName
+  pendingDeleteName.value = job.name.trim() || `${job.agentName} job`
+  actionError.value = ''
   showDeleteConfirm.value = true
 }
 
 async function deleteCronJobConfirmed() {
-  if (!pendingDeleteId.value) return
-  await api.cronJobs.delete(pendingDeleteId.value)
-  showDeleteConfirm.value = false
-  pendingDeleteId.value = null
-  await loadSchedules()
+  if (!pendingDeleteId.value || deletingJob.value) return
+  deletingJob.value = true
+  try {
+    await api.cronJobs.delete(pendingDeleteId.value)
+    showDeleteConfirm.value = false
+    pendingDeleteId.value = null
+    await loadSchedules()
+  } catch (error) {
+    showDeleteConfirm.value = false
+    actionError.value = errorText('The job could not be deleted', error)
+  } finally {
+    deletingJob.value = false
+  }
 }
 
 function matchesCronFilter(job: CronJob, q: string): boolean {
@@ -234,7 +274,7 @@ onUnmounted(() => {
             Scheduled Jobs
           </h1>
           <p class="mt-1 text-sm leading-relaxed text-ink-muted">
-            Cron jobs running on recurring schedules
+            Run agents automatically on a recurring schedule
           </p>
         </div>
         <div class="flex w-full min-w-0 items-center gap-2 sm:w-auto">
@@ -259,13 +299,31 @@ onUnmounted(() => {
               icon="lucide:plus"
               class="h-4 w-4"
             />
-            Add Cron Job
+            New Scheduled Job
           </button>
         </div>
       </div>
     </header>
 
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <p
+        v-if="actionError"
+        class="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-sm text-status-danger"
+        role="alert"
+      >
+        <span>{{ actionError }}</span>
+        <button
+          type="button"
+          class="shrink-0 rounded p-0.5 text-status-danger/80 hover:text-status-danger"
+          aria-label="Dismiss error"
+          @click="actionError = ''"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-4 w-4"
+          />
+        </button>
+      </p>
       <!-- Loading -->
       <BaseCard
         v-if="loading"
@@ -292,10 +350,10 @@ onUnmounted(() => {
             />
           </div>
           <h3 class="text-lg font-medium text-theme-200 mb-2">
-            No cron jobs
+            No scheduled jobs
           </h3>
           <p class="text-sm text-ink-muted max-w-md mx-auto mb-4">
-            Create a cron job to run an agent on a recurring schedule.
+            Create a scheduled job to run an agent automatically.
           </p>
           <button
             class="inline-flex items-center gap-2 px-4 py-2 rounded-lg accent-action bg-accent-600 hover:bg-accent-500 text-sm font-medium text-accent-on transition-colors"
@@ -305,7 +363,7 @@ onUnmounted(() => {
               icon="lucide:plus"
               class="w-4 h-4"
             />
-            Add Cron Job
+            New Scheduled Job
           </button>
         </BaseCard>
 
@@ -319,7 +377,7 @@ onUnmounted(() => {
           initial-sort-direction="desc"
           :initial-sort-once="true"
           :row-clickable="true"
-          :empty-message="cronFilter.trim() ? 'No jobs match the current filter' : 'No cron jobs'"
+          :empty-message="cronFilter.trim() ? 'No jobs match the current filter' : 'No scheduled jobs'"
           @row-click="openCronJob"
         >
           <template #col-agent="{ item: job }">
@@ -430,7 +488,7 @@ onUnmounted(() => {
               </button>
               <button
                 class="p-1.5 rounded-lg text-ink-secondary hover:text-status-info hover:bg-sky-500/10 transition-colors disabled:opacity-40"
-                title="Duplicate Cron Job"
+                title="Duplicate scheduled job"
                 :disabled="duplicatingNow.has(job.id)"
                 @click.stop="duplicateCronJob(job)"
               >
@@ -460,7 +518,7 @@ onUnmounted(() => {
                 :label="job.enabled ? `Pause ${job.name}` : `Enable ${job.name}`"
                 size="sm"
                 color="emerald"
-                :title="job.enabled ? 'Pause cron job' : 'Enable cron job'"
+                :title="job.enabled ? 'Pause scheduled job' : 'Enable scheduled job'"
                 @update:model-value="toggleCronJob(job.id, !job.enabled)"
                 @click.stop
               />
@@ -479,7 +537,7 @@ onUnmounted(() => {
       >
         <div class="w-full max-w-lg bg-theme-900 border border-theme-800 rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold text-theme-100 mb-4">
-            New Cron Job
+            New Scheduled Job
           </h2>
 
           <div class="space-y-4">
@@ -713,15 +771,34 @@ onUnmounted(() => {
 
             <!-- Prompt -->
             <div>
-              <label class="block text-sm text-ink-secondary mb-1">Prompt (optional)</label>
+              <label
+                for="new-scheduled-job-instructions"
+                class="block text-sm text-ink-secondary mb-1"
+              >Instructions <span class="text-ink-faint">(optional)</span></label>
               <textarea
+                id="new-scheduled-job-instructions"
                 v-model="cronPrompt"
                 rows="3"
-                placeholder="Describe what the agent should do on each cron trigger…"
+                placeholder="Describe what the agent should do on each run…"
+                aria-describedby="new-scheduled-job-instructions-hint"
                 class="w-full bg-theme-800 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none"
               />
+              <p
+                id="new-scheduled-job-instructions-hint"
+                class="mt-1 text-xs text-ink-muted"
+              >
+                Without instructions, the agent follows its own system prompt.
+              </p>
             </div>
           </div>
+
+          <p
+            v-if="createError"
+            class="mt-4 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-sm text-status-danger"
+            role="alert"
+          >
+            {{ createError }}
+          </p>
 
           <!-- Actions -->
           <div class="flex justify-end gap-3 mt-6">
@@ -746,22 +823,23 @@ onUnmounted(() => {
     <!-- Delete Confirmation -->
     <ModalDialog
       :show="showDeleteConfirm"
-      title="Delete Cron Job"
+      title="Delete scheduled job?"
       icon="lucide:trash-2"
       icon-color="red"
       @close="showDeleteConfirm = false"
     >
       <p class="text-ink-secondary leading-relaxed">
-        Are you sure you want to delete the cron job for
-        <strong class="text-theme-200">{{ pendingDeleteName }}</strong>?
-        This will clear the schedule and disable the job.
+        <strong class="text-theme-200">{{ pendingDeleteName }}</strong> will be deleted permanently and will no longer run.
+        Conversations from earlier runs are kept.
       </p>
       <template #actions>
         <button
-          class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-sm font-medium text-white transition-colors"
+          type="button"
+          class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-sm font-medium text-white transition-colors disabled:cursor-wait disabled:opacity-60"
+          :disabled="deletingJob"
           @click="deleteCronJobConfirmed()"
         >
-          Delete
+          {{ deletingJob ? 'Deleting…' : 'Delete' }}
         </button>
         <button
           class="px-4 py-2 text-sm text-ink-secondary hover:text-theme-200 transition-colors"

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Icon } from '@iconify/vue'
 import type { ReasoningEffort } from '@shared/types'
 import { useChatStore } from '../../../stores/chat.store'
 import HoverMenu from '../../shared/HoverMenu.vue'

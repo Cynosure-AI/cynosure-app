@@ -1,8 +1,9 @@
 import * as lancedb from '@lancedb/lancedb'
 import { join } from 'path'
 import { getAppDataDir } from '../data-dir.js'
-import { lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
+import { andLanceDbFilters, lanceDbEqFilter, lanceDbInFilter } from './lancedb-filter.js'
 import { getEmbeddingService } from './embedding.js'
+import { chunkSearchText } from './chunk-search-text.js'
 
 type RRFReranker = lancedb.rerankers.RRFReranker
 
@@ -41,9 +42,9 @@ export interface VectorDocument {
   contentHash?: string
   embeddingModel?: string
   embeddingProfileFingerprint?: string
-  /** Search-only view of an authoritative source chunk. */
-  representationType?: 'raw' | 'summary' | 'keywords' | 'fact'
-  /** ID of the raw chunk returned as evidence for every representation. */
+  /** Always 'raw' for new rows; older indexes also held analysis projections
+   * ('summary' | 'keywords' | 'fact'), which retrieval skips and cleanup removes. */
+  representationType?: string
   sourceChunkId?: string
   sourceStart?: number
   sourceEnd?: number
@@ -69,15 +70,8 @@ export interface SearchResult {
   documentTitle?: string
   sectionPath?: string
   contentHash?: string
-  representationType?: 'raw' | 'summary' | 'keywords' | 'fact'
+  representationType?: string
   sourceChunkId?: string
-  /** Search text for the matched projection. Internal retrieval provenance;
-   * the authoritative `text` remains the raw source chunk. */
-  matchedSearchText?: string
-  /** All representation kinds that independently surfaced this chunk. */
-  matchedRepresentations?: Array<'raw' | 'summary' | 'keywords' | 'fact'>
-  /** Exact generated fact projections that led retrieval to this chunk. */
-  matchedFacts?: string[]
   sourceStart?: number
   sourceEnd?: number
 }
@@ -98,29 +92,14 @@ export interface RAGOptimizeResult {
   error?: string
 }
 
-const SEARCH_KEYWORDS_MARKER = '\n\uE000'
-
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError')
 }
 
-/** Attach derived keywords to the lexical search surface without changing the
- * text that was embedded for semantic retrieval. Reapplying replaces the old
- * keyword block, and an empty list restores the original search text. */
-export function withSearchKeywords(searchText: string, keywords: string[]): string {
-  return withSearchAnalysis(searchText, '', keywords)
-}
-
-/** Add derived analysis to the retrieval surface while keeping the source text
- * and its stable metadata separate for evidence display. */
-export function withSearchAnalysis(searchText: string, summary: string, keywords: string[]): string {
-  const markerIndex = searchText.indexOf(SEARCH_KEYWORDS_MARKER)
-  const base = markerIndex >= 0 ? searchText.slice(0, markerIndex) : searchText
-  const analysis = [
-    summary.trim() ? `Summary: ${summary.trim()}` : '',
-    keywords.length ? `Keywords: ${keywords.join(' · ')}` : '',
-  ].filter(Boolean).join('\n')
-  return analysis ? `${base}${SEARCH_KEYWORDS_MARKER}${analysis}` : base
+/** Only raw source chunks are searchable. Older indexes may still contain
+ * analysis projection rows until {@link RAGStore.removeLegacyAnalysis} runs. */
+function onlyRawChunks(filter: string | undefined, fieldNames: Set<string>): string | undefined {
+  return andLanceDbFilters(filter ? `(${filter})` : undefined, fieldNames.has('representationType') ? "representationType = 'raw'" : undefined)
 }
 
 // ---------------------------------------------------------------------------
@@ -502,7 +481,8 @@ export class RAGStore {
       .select(cols)
       .limit(topK)
 
-    if (filter) query = query.where(filter)
+    const where = onlyRawChunks(filter, fieldNames)
+    if (where) query = query.where(where)
 
     const results = await query.toArray()
 
@@ -521,11 +501,10 @@ export class RAGStore {
         documentTitle: (r.documentTitle as string | undefined) || undefined,
         sectionPath: (r.sectionPath as string | undefined) || undefined,
         contentHash: (r.contentHash as string | undefined) || undefined,
-        representationType: (r.representationType as SearchResult['representationType']) || 'raw',
+        representationType: (r.representationType as string | undefined) || 'raw',
         sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
         sourceStart: typeof r.sourceStart === 'number' && r.sourceStart >= 0 ? r.sourceStart : undefined,
         sourceEnd: typeof r.sourceEnd === 'number' && r.sourceEnd >= 0 ? r.sourceEnd : undefined,
-        matchedSearchText: (r.searchText as string | undefined) || undefined,
         createdAt: r.createdAt as number
       }))
 
@@ -556,7 +535,8 @@ export class RAGStore {
       let query = table.search(queryText, 'fts', 'searchText')
         .select(cols)
         .limit(topK)
-      if (filter) query = query.where(filter)
+      const where = onlyRawChunks(filter, fieldNames)
+      if (where) query = query.where(where)
       const results = await query.toArray()
 
       return results
@@ -578,12 +558,11 @@ export class RAGStore {
             documentTitle: (r.documentTitle as string | undefined) || undefined,
             sectionPath: (r.sectionPath as string | undefined) || undefined,
             contentHash: (r.contentHash as string | undefined) || undefined,
-            representationType: (r.representationType as SearchResult['representationType']) || 'raw',
+            representationType: (r.representationType as string | undefined) || 'raw',
             sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
             sourceStart: typeof r.sourceStart === 'number' && r.sourceStart >= 0 ? r.sourceStart : undefined,
             sourceEnd: typeof r.sourceEnd === 'number' && r.sourceEnd >= 0 ? r.sourceEnd : undefined,
-            matchedSearchText: (r.searchText as string | undefined) || undefined,
-            createdAt: r.createdAt as number
+                createdAt: r.createdAt as number
           }
         })
     } catch (err) {
@@ -653,12 +632,11 @@ export class RAGStore {
             documentTitle: (r.documentTitle as string | undefined) || undefined,
             sectionPath: (r.sectionPath as string | undefined) || undefined,
             contentHash: (r.contentHash as string | undefined) || undefined,
-            representationType: (r.representationType as SearchResult['representationType']) || 'raw',
+            representationType: (r.representationType as string | undefined) || 'raw',
             sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
             sourceStart: typeof r.sourceStart === 'number' && r.sourceStart >= 0 ? r.sourceStart : undefined,
             sourceEnd: typeof r.sourceEnd === 'number' && r.sourceEnd >= 0 ? r.sourceEnd : undefined,
-            matchedSearchText: (r.searchText as string | undefined) || undefined,
-            createdAt: r.createdAt as number
+                createdAt: r.createdAt as number
           }
         })
     } catch (err) {
@@ -801,7 +779,7 @@ export class RAGStore {
           contentHash: (r.contentHash as string | undefined) || undefined,
           embeddingModel: (r.embeddingModel as string | undefined) || undefined,
           embeddingProfileFingerprint: (r.embeddingProfileFingerprint as string | undefined) || undefined,
-          representationType: (r.representationType as VectorDocument['representationType']) || 'raw',
+          representationType: (r.representationType as string | undefined) || 'raw',
           sourceChunkId: (r.sourceChunkId as string | undefined) || (r.id as string),
         }))
     } catch (err) {
@@ -964,115 +942,49 @@ export class RAGStore {
     }
   }
 
-  /** Prepend chunk-specific document context to the raw retrieval surface for
-   * both embeddings and BM25. Original text remains authoritative evidence.
-   * Keywords and facts remain additional search-only representations. */
-  async updateChunkSearchAnalysis(
-    tableName: string,
-    filter: string,
-    chunks: Map<number, { contentHash: string; keywords: string[]; summary: string; facts?: string[] }>,
-    signal?: AbortSignal,
-  ): Promise<number> {
-    if (!this.db || !filter || chunks.size === 0) return 0
+  /**
+   * Remove what deep analysis left in an index: projection rows (summary,
+   * keyword, fact) and analysis text folded into raw rows' search text.
+   * Affected raw rows get their plain chunk search text back and are
+   * re-embedded, so dense and lexical retrieval see exactly what indexing
+   * writes today. Idempotent; returns how many rows changed.
+   */
+  async removeLegacyAnalysis(tableName: string, signal?: AbortSignal): Promise<{ projectionsRemoved: number; chunksRestored: number }> {
     const table = await this.openExistingTable(tableName)
-    if (!table) return 0
-    const rows = await table.query()
-      .select(['id', 'text', 'searchText', 'source', 'sourceFile', 'chunkIndex', 'folderId', 'createdAt', 'documentTitle', 'sectionPath', 'contentHash', 'sourceStart', 'sourceEnd'])
-      .where(`(${filter}) AND representationType = 'raw'`)
-      .toArray()
-    const pending: Array<Omit<VectorDocument, 'vector' | 'embeddingModel'> & { id: string; searchText: string }> = []
-    const analyzedIds: string[] = []
-    for (const row of rows) {
-      throwIfAborted(signal)
-      if (row.id === '__seed__' || row.chunkIndex == null) continue
-      const analyzed = chunks.get(Number(row.chunkIndex))
-      if (!analyzed || String(row.contentHash || '') !== analyzed.contentHash) continue
-      analyzedIds.push(String(row.id))
-      // Reconstruct the base so repeated analysis replaces prior context.
-      const rawSearchText = [
-        analyzed.summary.trim(),
-        row.documentTitle ? `Document: ${row.documentTitle}` : '',
-        row.sectionPath && row.sectionPath !== row.documentTitle ? `Section: ${row.sectionPath}` : '',
-        String(row.text || ''),
-      ].filter(Boolean).join('\n')
-      const common = {
-        text: String(row.text || ''), source: String(row.source || ''), sourceFile: String(row.sourceFile || ''),
-        chunkIndex: Number(row.chunkIndex), folderId: String(row.folderId || ''), createdAt: Number(row.createdAt || Date.now()),
-        documentTitle: String(row.documentTitle || ''), sectionPath: String(row.sectionPath || ''),
-        contentHash: String(row.contentHash || ''), sourceChunkId: String(row.id),
-        sourceStart: Number(row.sourceStart ?? -1), sourceEnd: Number(row.sourceEnd ?? -1),
-      }
-      if (String(row.searchText || '') !== rawSearchText) {
-        pending.push({ ...common, id: String(row.id), searchText: rawSearchText, representationType: 'raw' })
-      }
-      if (analyzed.keywords.length) pending.push({
-        ...common, id: `${row.id}:keywords`, searchText: analyzed.keywords.join(' · '), representationType: 'keywords',
-      })
-      for (const [factIndex, fact] of (analyzed.facts || []).map((value) => value.trim()).filter(Boolean).entries()) {
-        pending.push({ ...common, id: `${row.id}:fact:${factIndex}`, searchText: fact, representationType: 'fact' })
-      }
-    }
-    if (!analyzedIds.length) return 0
-    const embedder = getEmbeddingService()
-    await this.assertProfile(table, embedder.profile.fingerprint)
-    const embeddings = await embedder.embedBatch(pending.map((item) => item.searchText))
-    throwIfAborted(signal)
-    await table.delete(`(${filter}) AND representationType != 'raw' AND ${lanceDbInFilter('sourceChunkId', analyzedIds)}`)
-    const projections: VectorDocument[] = []
-    let updated = 0
-    for (let index = 0; index < pending.length; index++) {
-      throwIfAborted(signal)
-      if (pending[index].representationType === 'raw') {
-        await table.update({
-          where: lanceDbEqFilter('id', pending[index].id), values: {
-            searchText: pending[index].searchText, vector: embeddings[index].vector, embeddingModel: embeddings[index].model,
-            embeddingProfileFingerprint: embeddings[index].profileFingerprint,
-          }
-        })
-      } else {
-        projections.push({ ...pending[index], vector: embeddings[index].vector, embeddingModel: embeddings[index].model,
-          embeddingProfileFingerprint: embeddings[index].profileFingerprint })
-      }
-      updated++
-    }
-    if (projections.length) await this.addDocuments(tableName, projections, embeddings[0].dimensions)
-    this.markFtsIndexStale(tableName)
-    this.scheduleFtsRebuild(tableName)
-    return updated
-  }
+    if (!table) return { projectionsRemoved: 0, chunksRestored: 0 }
+    const fieldNames = await this.getFieldNames(table, tableName)
+    if (!fieldNames.has('representationType')) return { projectionsRemoved: 0, chunksRestored: 0 }
 
-  /** Compatibility wrapper for callers that only have keywords. */
-  async updateChunkSearchKeywords(
-    tableName: string,
-    filter: string,
-    chunks: Map<number, { contentHash: string; keywords: string[] }>,
-  ): Promise<number> {
-    if (!this.db || !filter || chunks.size === 0) return 0
-    const table = await this.openExistingTable(tableName)
-    if (!table) return 0
-    const rows = await table.query()
-      .select(['id', 'text', 'searchText', 'chunkIndex', 'contentHash'])
-      .where(filter)
-      .toArray()
-    let updated = 0
-    for (const row of rows) {
-      if (row.id === '__seed__' || row.chunkIndex == null) continue
-      const analyzed = chunks.get(Number(row.chunkIndex))
-      if (!analyzed || String(row.contentHash || '') !== analyzed.contentHash) continue
-      const currentSearchText = String(row.searchText || row.text || '')
-      const nextSearchText = withSearchKeywords(currentSearchText, analyzed.keywords)
-      if (nextSearchText === currentSearchText) continue
-      await table.update({
-        where: lanceDbEqFilter('id', String(row.id)),
-        values: { searchText: nextSearchText },
-      })
-      updated++
+    const projectionsRemoved = await table.countRows("representationType != 'raw'")
+    if (projectionsRemoved) await table.delete("representationType != 'raw'")
+
+    const rows = await table.query().where("representationType = 'raw'").toArray()
+    const stale = rows
+      .filter((row) => row.id !== '__seed__')
+      .map((row) => ({ row, searchText: chunkSearchText({ text: String(row.text || ''), documentTitle: row.documentTitle, sectionPath: row.sectionPath }) }))
+      .filter(({ row, searchText }) => String(row.searchText || '') !== searchText)
+    const embedder = getEmbeddingService()
+    for (let offset = 0; offset < stale.length; offset += 64) {
+      throwIfAborted(signal)
+      const batch = stale.slice(offset, offset + 64)
+      const embeddings = await embedder.embedBatch(batch.map(({ searchText }) => searchText), signal)
+      // Rewrite whole rows: update() serialises vectors as SQL literals, which
+      // fails when an element happens to be integral.
+      const rewritten = batch.map(({ row, searchText }, index) => ({
+        ...row,
+        searchText,
+        vector: embeddings[index].vector,
+        embeddingModel: embeddings[index].model,
+        embeddingProfileFingerprint: embeddings[index].profileFingerprint,
+      }))
+      await table.delete(lanceDbInFilter('id', batch.map(({ row }) => String(row.id)))!)
+      await table.add(rewritten)
     }
-    if (updated > 0) {
+    if (projectionsRemoved || stale.length) {
       this.markFtsIndexStale(tableName)
-      this.scheduleFtsRebuild(tableName)
+      await this.rebuildFtsIndex(tableName)
     }
-    return updated
+    return { projectionsRemoved, chunksRestored: stale.length }
   }
 }
 

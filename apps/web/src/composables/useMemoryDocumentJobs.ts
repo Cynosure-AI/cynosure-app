@@ -27,15 +27,6 @@ export function useMemoryDocumentJobs(options: {
     return Boolean(activeJob(kind, fileName));
   }
 
-  function resumableJob(fileName: string): MemoryIndexJob | undefined {
-    const latest = jobs.value
-      .filter((job) => job.kind === "deep-research" && job.fileName === fileName)
-      .sort((a, b) => b.createdAt - a.createdAt)[0];
-    return latest?.status === "cancelled" && (latest.progressCurrent || 0) > 0 && latest.progressCurrent! < (latest.progressTotal || 0)
-      ? latest
-      : undefined;
-  }
-
   /** Terminal jobs that ended in a failure the user has not dismissed yet. */
   const failedJobs = computed(() =>
     jobs.value.filter((job) => job.status === "error" || job.status === "dead_letter"),
@@ -106,25 +97,15 @@ export function useMemoryDocumentJobs(options: {
     pollTimer = null;
   }
 
-  async function startFileJob(kind: "reindex" | "deep-research", fileName: string): Promise<MemoryIndexJob | undefined> {
+  async function reindexFile(fileName: string): Promise<MemoryIndexJob | undefined> {
     try {
-      const job = kind === "reindex"
-        ? await api.memoryFolders.startReindexFile(options.folderId.value, fileName)
-        : await api.memoryFolders.startDeepResearchFile(options.folderId.value, fileName);
+      const job = await api.memoryFolders.startReindexFile(options.folderId.value, fileName);
       upsertJob(job);
       return job;
     } catch {
       // The next authoritative refresh exposes failures without inventing a
       // second client-side job state machine.
     }
-  }
-
-  async function reindexFile(fileName: string): Promise<MemoryIndexJob | undefined> {
-    return startFileJob("reindex", fileName);
-  }
-
-  async function extractKnowledgeFromFile(fileName: string): Promise<void> {
-    await startFileJob("deep-research", fileName);
   }
 
   async function reindexAll(): Promise<MemoryIndexJob[]> {
@@ -166,14 +147,6 @@ export function useMemoryDocumentJobs(options: {
     handledTerminalJobIds.value = new Set();
   }
 
-  function deepResearchProgress(fileName: string): string {
-    const job = activeJob("deep-research", fileName);
-    if (job && typeof job.progressCurrent === "number" && typeof job.progressTotal === "number" && job.progressTotal > 0) {
-      return `Analysing (${job.progressCurrent} / ${job.progressTotal})`;
-    }
-    return "Analysing…";
-  }
-
   function searchIndexProgress(_fileName: string): string {
     return "Indexing…";
   }
@@ -186,19 +159,16 @@ export function useMemoryDocumentJobs(options: {
     activeJob,
     isJobActive,
     isJobRunning: isJobActive,
-    resumableJob,
     failedJobs,
     dismissFailure,
     dismissAllFailures,
     upsertJob,
     loadJobs,
     reindexFile,
-    extractKnowledgeFromFile,
     reindexAll,
     cancelJob,
     discardJob,
     reset,
-    deepResearchProgress,
     searchIndexProgress,
   };
 }

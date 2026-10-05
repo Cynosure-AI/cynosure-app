@@ -6,7 +6,6 @@ import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
-import { stopAllActiveExecutions } from '../core/activity/stop-all.js'
 
 type InstanceType = 'chat' | 'multi-agent' | 'cron' | 'channel'
 
@@ -103,17 +102,6 @@ export function listActiveInstances(): ActiveInstance[] {
     }
 
     return instances
-}
-
-export interface StopAllInstanceResult {
-    chats: number
-    cronRuns: number
-    channelRuns: number
-}
-
-/** Cancel current agent work while leaving cron schedules and channel connections enabled. */
-export function stopAllActiveInstances(): StopAllInstanceResult {
-    return stopAllActiveExecutions()
 }
 
 export async function registerInstanceRoutes(app: FastifyInstance): Promise<void> {

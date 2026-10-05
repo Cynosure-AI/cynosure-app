@@ -61,7 +61,7 @@ const maxToolCalls = computed(() => {
 const memoryModelUsage = computed(() => metrics.value?.auxiliaryModelUsage
   .filter(item => ['embedding', 'reranker', 'deep-research'].includes(item.kind)) ?? [])
 const autoRoutingUsage = computed(() => metrics.value?.auxiliaryModelUsage
-  .filter(item => item.kind === 'memory-router' || item.kind === 'tool-router') ?? [])
+  .filter(item => item.kind === 'task-context' || item.kind === 'memory-router' || item.kind === 'tool-router') ?? [])
 const maxMemoryRequests = computed(() => Math.max(1, ...memoryModelUsage.value.map(item => item.requestCount)))
 const maxAutoRoutingRequests = computed(() => Math.max(1, ...autoRoutingUsage.value.map(item => item.requestCount)))
 
@@ -69,6 +69,7 @@ function auxiliaryKindLabel(kind: MetricsSummary['auxiliaryModelUsage'][number][
   if (kind === 'embedding') return 'Embedding'
   if (kind === 'reranker') return 'Reranker'
   if (kind === 'deep-research') return 'Deep Research'
+  if (kind === 'task-context') return 'Task context'
   if (kind === 'memory-router') return 'Memory routing'
   if (kind === 'tool-router') return 'Tool routing'
   return 'Dreaming'
@@ -83,13 +84,22 @@ function formatCost(cost: number | null): string {
 
 const showResetModal = ref(false)
 const resetting = ref(false)
+const resetError = ref('')
+
+function openResetModal(): void {
+  resetError.value = ''
+  showResetModal.value = true
+}
 
 async function confirmReset(): Promise<void> {
   resetting.value = true
+  resetError.value = ''
   try {
     await api.metrics.reset()
     showResetModal.value = false
     await loadMetrics()
+  } catch (error) {
+    resetError.value = `Usage data was not reset: ${error instanceof Error ? error.message : 'unknown error'}`
   } finally {
     resetting.value = false
   }
@@ -119,7 +129,7 @@ async function confirmReset(): Promise<void> {
       <button
         class="flex items-center gap-1.5 px-2.5 py-1 text-xs text-ink-muted hover:text-status-danger border border-transparent hover:border-red-500/30 hover:bg-red-500/10 rounded-md transition-colors"
         title="Reset usage metrics"
-        @click="showResetModal = true"
+        @click="openResetModal"
       >
         <Icon
           icon="lucide:rotate-ccw"
@@ -140,6 +150,13 @@ async function confirmReset(): Promise<void> {
   >
     <p class="text-sm text-ink-secondary">
       This will clear all recorded usage data up to this point. New metrics will be tracked from now on. Your chat history is not affected.
+    </p>
+    <p
+      v-if="resetError"
+      class="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs text-status-danger"
+      role="alert"
+    >
+      {{ resetError }}
     </p>
     <template #actions>
       <button

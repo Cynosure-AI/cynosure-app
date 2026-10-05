@@ -9,6 +9,8 @@ import type { ChatMessage, ContentPart, ToolDefinition, ToolResult } from '../ga
 import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { AgentExecutor } from './agent-executor.js'
 import { prepareAgentExecution } from './prepare-execution.js'
+import { listRoutableToolKeys, resolveExecutionToolPolicy, stripAutomaticallyManagedMemoryToolKeys } from './pre-execution/execution-planner.js'
+import { getToolRegistry } from '../tools/tool-registry.js'
 
 /** Maximum execution time for delegated work before the sub-agent is aborted. */
 const SUB_AGENT_EXECUTION_TIMEOUT_MS = 300_000 // 5 minutes
@@ -203,13 +205,28 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             maInvocationId: invocationId,
         }
 
+        const toolPolicy = resolveExecutionToolPolicy({
+            selectedToolKeys: [],
+            hasRequestToolSelection: false,
+            agentToolKeys: stripAutomaticallyManagedMemoryToolKeys(agentData.tools),
+            allRegisteredToolKeys: listRoutableToolKeys(getToolRegistry()),
+            hasExplicitToolAllowlist: false,
+            autoToolRouting: agentData.autoToolRouting === true,
+            hasResolvedAgent: true,
+        })
+
         const prepared = await prepareAgentExecution({
-            preset: agentData,
+            preset: { ...agentData, tools: toolPolicy.configuredTools },
             conversationId,
             broadcast,
             systemPromptSuffix: '\nYou are a sub-agent continuing a private delegated session. Complete the latest task and report your results clearly.',
             includeSubAgents: false,
+            autoToolRouting: toolPolicy.autoToolRouting,
+            preferredToolKeys: toolPolicy.fixedToolKeys,
+            routingToolKeys: toolPolicy.routingToolKeys,
             userQuery: latestUserMessage ? messageText(latestUserMessage) : '',
+            // Follow-ups such as "now do the same for Y" need the private session transcript to route.
+            recentMessages: history.slice(0, -1),
             autoMemory: agentData.autoMemory === true,
             memoryFolderOverrides: getAssignedMemoryFolders(agentData.id),
             eventMeta,
@@ -244,7 +261,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
         })
 
         try {
-            const result = await executor.run([...prepared.systemMessages, ...history])
+            const result = await executor.run([...prepared.contextBundle.messages, ...history])
             subAgentSignal.throwIfAborted()
 
             if (result.content || result.images.length) {

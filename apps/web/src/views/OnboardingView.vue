@@ -38,7 +38,9 @@
             <!-- Step circle -->
             <button
               class="flex flex-col items-center gap-1 group disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="advancing"
+              :disabled="advancing || !canReachStep(step.globalIndex)"
+              :aria-current="currentStep === step.globalIndex ? 'step' : undefined"
+              :title="canReachStep(step.globalIndex) ? undefined : 'Add a provider first'"
               @click="jumpToStep(step.globalIndex)"
             >
               <div
@@ -127,7 +129,11 @@
           <OnboardingProvider v-else-if="currentStep === STEP_PROVIDER" />
 
           <!-- Memory -->
-          <OnboardingMemory v-else-if="currentStep === STEP_MEMORY" />
+          <OnboardingMemory
+            v-else-if="currentStep === STEP_MEMORY"
+            ref="memoryStepRef"
+            @state-change="memoryStepState = $event"
+          />
 
           <!-- MCP tools -->
           <OnboardingPopularMcps v-else-if="currentStep === STEP_MCPS" />
@@ -217,6 +223,14 @@
           </span>
 
           <span
+            v-if="stepError"
+            class="max-w-xs text-right text-xs text-status-danger"
+            role="alert"
+          >
+            {{ stepError }}
+          </span>
+
+          <span
             v-if="serverReady && currentStep === STEP_AGENT && agentDraftState.hasDraft && !agentDraftState.valid"
             class="text-xs text-status-warning/80 hidden sm:block"
           >
@@ -281,6 +295,10 @@ interface OnboardingAgentHandle {
   createAgent: () => Promise<boolean>
 }
 
+interface OnboardingMemoryHandle {
+  save: () => Promise<boolean>
+}
+
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const providerStore = useProviderStore()
@@ -304,6 +322,10 @@ const serverReady = ref(false)
 const advancing = ref(false)
 const agentStepRef = ref<OnboardingAgentHandle | null>(null)
 const agentDraftState = ref({ hasDraft: false, valid: true })
+const memoryStepRef = ref<OnboardingMemoryHandle | null>(null)
+const memoryStepState = ref({ pending: false, busy: false })
+/** Why the last attempt to leave the current step failed. */
+const stepError = ref('')
 let readinessPoll: ReturnType<typeof setInterval> | null = null
 
 const transitionName = computed(() =>
@@ -343,6 +365,9 @@ const canContinue = computed(() => {
   if (currentStep.value === STEP_PROVIDER) {
     return providerStore.providers.length > 0
   }
+  if (currentStep.value === STEP_MEMORY) {
+    return !memoryStepState.value.busy
+  }
   if (currentStep.value === STEP_AGENT) {
     return agentDraftState.value.valid
   }
@@ -350,7 +375,8 @@ const canContinue = computed(() => {
 })
 
 const nextButtonLabel = computed(() => {
-  if (advancing.value) return currentStep.value === STEP_PROFILE ? 'Saving…' : 'Creating…'
+  if (advancing.value) return currentStep.value === STEP_AGENT ? 'Creating…' : 'Saving…'
+  if (currentStep.value === STEP_MEMORY && memoryStepState.value.pending) return 'Save & continue'
   if (currentStep.value === STEP_AGENT) {
     return agentDraftState.value.hasDraft ? 'Create agent' : 'Skip for now'
   }
@@ -358,20 +384,37 @@ const nextButtonLabel = computed(() => {
 })
 
 // ── Navigation actions ─────────────────────────────────────────────
-async function goNext() {
-  if (!canContinue.value || advancing.value) return
-  if (currentStep.value >= STEP_DONE) return
-
+/** Persist the current step's input before leaving it. Returns false to stay. */
+async function saveCurrentStep(): Promise<boolean> {
+  stepError.value = ''
   if (currentStep.value === STEP_PROFILE) {
     advancing.value = true
     try {
       await prefs.saveUserName()
-    } catch {
+    } catch (error) {
+      stepError.value = `Your name could not be saved: ${error instanceof Error ? error.message : 'unknown error'}`
+      return false
+    } finally {
       advancing.value = false
-      return
     }
-    advancing.value = false
   }
+  if (currentStep.value === STEP_MEMORY && memoryStepState.value.pending) {
+    advancing.value = true
+    try {
+      // The step shows its own error message.
+      return await memoryStepRef.value?.save() ?? true
+    } finally {
+      advancing.value = false
+    }
+  }
+  return true
+}
+
+async function goNext() {
+  if (!canContinue.value || advancing.value) return
+  if (currentStep.value >= STEP_DONE) return
+
+  if (!await saveCurrentStep()) return
 
   if (currentStep.value === STEP_AGENT && agentDraftState.value.hasDraft) {
     advancing.value = true
@@ -389,23 +432,21 @@ async function goNext() {
 
 function goBack() {
   if (advancing.value || currentStep.value <= STEP_WELCOME) return
+  stepError.value = ''
   direction.value = 'backward'
   currentStep.value--
 }
 
-async function jumpToStep(index: number) {
-  if (advancing.value || index === currentStep.value) return
+/** Steps after the provider step need a provider, whichever way the user gets there. */
+function canReachStep(index: number): boolean {
+  return index <= STEP_PROVIDER || providerStore.providers.length > 0
+}
 
-  if (currentStep.value === STEP_PROFILE) {
-    advancing.value = true
-    try {
-      await prefs.saveUserName()
-    } catch {
-      advancing.value = false
-      return
-    }
-    advancing.value = false
-  }
+async function jumpToStep(index: number) {
+  if (advancing.value || index === currentStep.value || !canReachStep(index)) return
+  // Moving forward saves like Continue; going back to review keeps unsaved input only on this step.
+  if (index > currentStep.value && !await saveCurrentStep()) return
+  if (index < currentStep.value && currentStep.value === STEP_PROFILE && !await saveCurrentStep()) return
 
   direction.value = index > currentStep.value ? 'forward' : 'backward'
   currentStep.value = index

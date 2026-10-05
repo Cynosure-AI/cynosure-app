@@ -246,11 +246,6 @@ export function getActiveCronRuns(): ActiveCronRun[] {
     return Array.from(activeCronRuns.values())
 }
 
-/** Return all scheduled job IDs (in-memory). */
-export function getScheduledJobIds(): string[] {
-    return Array.from(scheduledInfo.keys())
-}
-
 // ─── Run a cron job ────────────────────────────────────────
 
 /** Run one cron turn for a specific job */
@@ -283,7 +278,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
     const userContent = job.prompt
         ? `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}.\n\n${job.prompt}`
         : `Scheduled cron job due at ${scheduledDate.toISOString()} and started at ${now.toISOString()}. Execute your scheduled task as described in your instructions.`
-    const titleSource = job.prompt.trim() || agent?.cronPrompt.trim() || 'Execute scheduled task'
+    const titleSource = job.prompt.trim() || 'Execute scheduled task'
 
     try {
         const { conversationId, result } = await runTriggerExecution({
@@ -450,15 +445,6 @@ export function unscheduleCronJob(jobId: string): void {
         existing.stop()
         tasks.delete(jobId)
         scheduledInfo.delete(jobId)
-    }
-}
-
-/** Unschedule all cron jobs for a specific agent (e.g. when agent is deleted) */
-export function unscheduleAllForAgent(agentId: string): void {
-    for (const [jobId, info] of scheduledInfo) {
-        if (info.agentId === agentId) {
-            unscheduleCronJob(jobId)
-        }
     }
 }
 

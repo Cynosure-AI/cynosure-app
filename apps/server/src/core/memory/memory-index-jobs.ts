@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 
-export type MemoryIndexJobKind = 'reindex' | 'deep-research' | 'tool-embeddings'
+export type MemoryIndexJobKind = 'reindex' | 'tool-embeddings'
 export type MemoryIndexJobStatus = 'queued' | 'running' | 'retrying' | 'completed' | 'cancelled' | 'error' | 'dead_letter'
 
 export interface MemoryIndexJobSnapshot<T = unknown> {
@@ -25,7 +25,7 @@ export interface MemoryIndexJobSnapshot<T = unknown> {
 interface MemoryIndexJob<T = unknown> extends MemoryIndexJobSnapshot<T> {
     controller: AbortController
     promise: Promise<void>
-    run: (signal: AbortSignal, reportProgress: (current: number, total: number, checkpoint?: unknown) => void) => Promise<T>
+    run: (signal: AbortSignal, reportProgress: (current: number, total: number) => void) => Promise<T>
 }
 
 const jobs = new Map<string, MemoryIndexJob>()
@@ -55,7 +55,6 @@ async function runRecoveredJob(
     folderId: string,
     fileName: string,
     signal: AbortSignal,
-    reportProgress: (current: number, total: number, checkpoint?: unknown) => void,
 ): Promise<unknown> {
     const space = getDb().prepare('SELECT directory_path FROM memory_folders WHERE id = ?').get(folderId) as { directory_path: string } | undefined
     if (!space?.directory_path) throw new Error('Memory folder is no longer available')
@@ -64,14 +63,8 @@ async function runRecoveredJob(
         const result = await getAgentMemory().reindexFile(space.directory_path, fileName, folderId, { signal })
         return { success: true, chunksStored: result.chunkCount, fileName: result.fileName }
     }
-    const { deepResearchMemoryFile } = await import('./memory-deep-research.js')
-    return {
-        success: true,
-        ...(await deepResearchMemoryFile({
-            directoryPath: space.directory_path, folderId, fileName, replaceExisting: true, signal,
-            onDeepResearchProgress: (current, total) => reportProgress(current, total),
-        })),
-    }
+    // Tool warmup is rescheduled from the live registry instead of being resumed.
+    throw new Error(`Interrupted ${kind} job cannot be resumed`)
 }
 
 function persistJob(job: MemoryIndexJobSnapshot): void {
@@ -136,7 +129,7 @@ function ensurePersistedJobsLoaded(): void {
             nextAttemptAt: undefined,
             error: interrupted ? 'Interrupted by server restart' : saved.error,
             controller, promise: Promise.resolve(),
-            run: (signal, reportProgress) => runRecoveredJob(saved.kind, saved.folderId, saved.fileName, signal, reportProgress),
+            run: (signal) => runRecoveredJob(saved.kind, saved.folderId, saved.fileName, signal),
         }
         jobs.set(job.id, job)
         if (interrupted) persistJob(job)
@@ -159,8 +152,7 @@ export function startMemoryIndexJob<T>(opts: {
     folderId: string
     fileName: string
     replaceExisting?: boolean
-    resume?: { current: number; total: number; checkpoint: unknown }
-    run: (signal: AbortSignal, reportProgress: (current: number, total: number, checkpoint?: unknown) => void) => Promise<T>
+    run: (signal: AbortSignal, reportProgress: (current: number, total: number) => void) => Promise<T>
 }): MemoryIndexJobSnapshot<T> {
     ensurePersistedJobsLoaded()
     pruneJobs()
@@ -180,9 +172,6 @@ export function startMemoryIndexJob<T>(opts: {
         id: nanoid(), kind: opts.kind, folderId: opts.folderId, fileName: opts.fileName,
         status: 'queued', createdAt: now, updatedAt: now, attempt: 0,
         maxAttempts: DEFAULT_MAX_ATTEMPTS,
-        progressCurrent: opts.resume?.current,
-        progressTotal: opts.resume?.total,
-        result: opts.resume ? { resumeCheckpoint: opts.resume.checkpoint } as T : undefined,
         controller: new AbortController(), promise: Promise.resolve(), run: opts.run,
     }
     jobs.set(job.id, job)
@@ -222,11 +211,10 @@ function startQueuedJob<T>(job: MemoryIndexJob<T>): void {
     job.updatedAt = Date.now()
     emitJobUpdated(job)
 
-    const reportProgress = (current: number, total: number, checkpoint?: unknown): void => {
+    const reportProgress = (current: number, total: number): void => {
         if (job.status !== 'running' || job.controller.signal.aborted) return
         job.progressCurrent = Math.max(0, Math.floor(current))
         job.progressTotal = Math.max(job.progressCurrent, Math.floor(total))
-        if (checkpoint !== undefined) job.result = { resumeCheckpoint: checkpoint } as T
         job.updatedAt = Date.now()
         emitJobUpdated(job)
     }
@@ -261,19 +249,6 @@ export function cancelMemoryIndexJobsForFile(folderId: string, fileName: string)
     pruneJobs()
     for (const job of jobs.values()) {
         if (!isActive(job) || job.folderId !== folderId || job.fileName !== fileName) continue
-        job.controller.abort()
-        job.status = 'cancelled'
-        job.updatedAt = Date.now()
-        emitJobUpdated(job)
-    }
-    processMemoryIndexQueue()
-}
-
-export function cancelMemoryIndexJobsByKind(kind: MemoryIndexJobKind): void {
-    ensurePersistedJobsLoaded()
-    pruneJobs()
-    for (const job of jobs.values()) {
-        if (!isActive(job) || job.kind !== kind) continue
         job.controller.abort()
         job.status = 'cancelled'
         job.updatedAt = Date.now()
@@ -330,18 +305,6 @@ export function cancelMemoryIndexJob(id: string): MemoryIndexJobSnapshot | undef
     return snapshot(job)
 }
 
-export function latestResumableMemoryIndexJob(folderId: string, fileName: string): MemoryIndexJobSnapshot | undefined {
-    ensurePersistedJobsLoaded()
-    const matching = Array.from(jobs.values())
-        .filter((job) => job.kind === 'deep-research' && job.folderId === folderId && job.fileName === fileName)
-        .sort((a, b) => b.createdAt - a.createdAt)
-    if (matching[0]?.status !== 'cancelled') return undefined
-    const resumable = matching.find((job) => job.status === 'cancelled'
-        && (job.progressCurrent || 0) > 0
-        && job.progressCurrent! < (job.progressTotal || 0))
-    return resumable ? snapshot(resumable) : undefined
-}
-
 export function discardMemoryIndexJob(id: string): boolean {
     ensurePersistedJobsLoaded()
     const job = jobs.get(id)
@@ -365,7 +328,7 @@ export function discardMemoryIndexJob(id: string): boolean {
 
 /** Permanently remove failed jobs so an acknowledged failure does not
  * reappear after a reload. Only terminal failures are eligible; active work
- * and resumable cancelled checkpoints are left untouched. */
+ * is left untouched. */
 export function dismissMemoryIndexJobFailures(folderId?: string): number {
     ensurePersistedJobsLoaded()
     pruneJobs()
