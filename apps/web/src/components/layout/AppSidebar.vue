@@ -236,57 +236,17 @@ const chatRoute = computed(() =>
     :class="sidebarCollapsed ? 'w-72 md:w-16 sidebar-collapsed' : 'w-72'"
   >
     <!-- Brand -->
-    <div class="brand-area pl-3 pr-2 py-3 mt-2 mb-2 flex items-center gap-3 shrink-0">
-      <div class="brand-logo-glitch-wrap">
-        <div
-          class="brand-logo-glitch"
-          aria-label="Cynosure"
+    <div class="brand-area pl-3 pr-2 py-3 mt-2 mb-2 flex justify-between gap-2 shrink-0">
+      <div class="flex items-center gap-2 ">
+        <img
+          :src="logoIconUrl"
+          alt=""  
+          class="w-8 h-8 object-contain hidden"
         >
-          <div class="brand-logo-layer brand-logo-base">
-            <img
-              :src="logoIconUrl"
-              alt=""
-              class="brand-logo-icon w-10 h-10 object-contain"
-            >
-            <img
-              :src="logoTextUrl"
-              alt="Cynosure"
-              class="brand-logo-text h-10 w-auto max-w-36 object-contain flex-1"
-            >
-          </div>
-
-          <div
-            class="brand-logo-layer brand-logo-copy brand-logo-copy-a"
-            aria-hidden="true"
-          >
-            <img
-              :src="logoIconUrl"
-              alt=""
-              class="brand-logo-icon w-10 h-10 object-contain"
-            >
-            <img
-              :src="logoTextUrl"
-              alt=""
-              class="brand-logo-text h-10 w-auto max-w-36 object-contain flex-1"
-            >
-          </div>
-
-          <div
-            class="brand-logo-layer brand-logo-copy brand-logo-copy-b"
-            aria-hidden="true"
-          >
-            <img
-              :src="logoIconUrl"
-              alt=""
-              class="brand-logo-icon w-8 h-8 object-contain"
-            >
-            <img
-              :src="logoTextUrl"
-              alt=""
-              class="brand-logo-text h-8 w-auto max-w-36 object-contain flex-1"
-            >
-          </div>
-        </div>
+        <span
+          class="logo-text uppercase ml-3 text-accent-500"
+          :class="sidebarCollapsed ? 'hidden' : 'block'"
+        >Cynosure</span>
       </div>
 
       <!-- Header actions -->
@@ -700,6 +660,13 @@ const chatRoute = computed(() =>
 </template>
 
 <style scoped>
+.logo-text{
+    letter-spacing: 0.22em;
+    font-size: 15px;
+    font-weight: 700;
+    gap: 12px;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -762,9 +729,6 @@ const chatRoute = computed(() =>
   color: var(--color-theme-300, #d4d4d8);
 }
 
-.brand-logo-icon {
-  display: none;
-}
 
 .collapsed-hitl-indicator {
   display: none;
@@ -885,10 +849,7 @@ const chatRoute = computed(() =>
   min-width: 0;
 }
 
-.brand-logo-base {
-  position: relative;
-  z-index: 2;
-}
+
 
 .brand-logo-copy {
   position: absolute;

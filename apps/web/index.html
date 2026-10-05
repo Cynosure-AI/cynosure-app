@@ -2,31 +2,33 @@
 <html>
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cynosure</title>
-    <script>
-      // Apply theme before Vue mounts to prevent flash of unstyled content.
-      // Keep this list in sync with ThemeId in preferences.store.ts.
-      try {
-        const storedTheme = localStorage.getItem('cy-theme')
-        const supportedThemes = new Set(['dark', 'light', 'virtualboy', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome'])
-        const theme = supportedThemes.has(storedTheme) ? storedTheme : 'crimson'
-        if (theme !== storedTheme) localStorage.setItem('cy-theme', theme)
-        document.documentElement.dataset.theme = theme
-      } catch (_) {
-        document.documentElement.dataset.theme = 'crimson'
-      }
-    </script>
-    <link rel="icon" type="image/x-icon" href="./favicon.ico">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Oxanium:wght@200..800&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cynosure</title>
+  <script>
+    // Apply theme before Vue mounts to prevent flash of unstyled content.
+    // Keep this list in sync with ThemeId in preferences.store.ts.
+    try {
+      const storedTheme = localStorage.getItem('cy-theme')
+      const supportedThemes = new Set(['dark', 'light', 'virtualboy', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome'])
+      const theme = supportedThemes.has(storedTheme) ? storedTheme : 'crimson'
+      if (theme !== storedTheme) localStorage.setItem('cy-theme', theme)
+      document.documentElement.dataset.theme = theme
+    } catch (_) {
+      document.documentElement.dataset.theme = 'crimson'
+    }
+  </script>
+  <link rel="icon" type="image/x-icon" href="./favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400..700&family=Oxanium:wght@200..800&family=Rajdhani:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
 </head>
 
 <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
 </body>
 
 </html>
