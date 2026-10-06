@@ -14,6 +14,24 @@ import {
 } from './base.provider.js'
 import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
+interface ResponsesUsage {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  input_tokens_details?: { cached_tokens?: number }
+}
+
+/** Responses API usage; input_tokens already includes cached tokens. */
+function toCompletionUsage(usage: ResponsesUsage | undefined): CompletionResponse['usage'] {
+  const cacheReadTokens = usage?.input_tokens_details?.cached_tokens ?? 0
+  return {
+    promptTokens: usage?.input_tokens || 0,
+    completionTokens: usage?.output_tokens || 0,
+    totalTokens: usage?.total_tokens || 0,
+    ...(cacheReadTokens ? { cacheReadTokens } : {}),
+  }
+}
+
 export class OpenAIProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
   protected client: OpenAI
@@ -223,7 +241,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       model: string
       error?: { message?: string } | null
       incomplete_details?: { reason?: string } | null
-      usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
+      usage?: ResponsesUsage
     }>
 
     const response = await (this.client.responses.create as ResponsesCreate)(params, {
@@ -262,11 +280,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       thinking: thinking || undefined,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       images: images.length > 0 ? images : undefined,
-      usage: {
-        promptTokens: response.usage?.input_tokens || 0,
-        completionTokens: response.usage?.output_tokens || 0,
-        totalTokens: response.usage?.total_tokens || 0
-      },
+      usage: toCompletionUsage(response.usage),
       model: response.model || request.model || this.config.defaultModel,
       provider: this.config.id,
       latencyMs: Date.now() - start
@@ -309,7 +323,7 @@ export class OpenAIProvider extends BaseLLMProvider {
         item?: { type: string; call_id?: string; name?: string; arguments?: string; result?: string | null; id?: string }
         response?: {
           status?: 'completed' | 'failed' | 'in_progress' | 'cancelled' | 'queued' | 'incomplete'
-          usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
+          usage?: ResponsesUsage
           error?: { message?: string }
           incomplete_details?: { reason?: string } | null
         }
@@ -415,13 +429,7 @@ export class OpenAIProvider extends BaseLLMProvider {
           yield {
             done: true,
             toolCalls: completedToolCalls.length > 0 ? completedToolCalls : undefined,
-            usage: usage
-              ? {
-                promptTokens: usage.input_tokens,
-                completionTokens: usage.output_tokens,
-                totalTokens: usage.total_tokens
-              }
-              : undefined
+            usage: usage ? toCompletionUsage(usage) : undefined
           }
           break
         }

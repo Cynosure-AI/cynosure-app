@@ -34,6 +34,7 @@ vi.mock('../sub-agent-tools.js', () => ({
 }))
 
 import { resolveExecutionTools } from './execution-tools.js'
+import { resetStickyToolsets } from './conversation-toolset.js'
 
 const manageMcpKey = 'builtin:utility::manage_mcp'
 const readKey = 'builtin:utility::read'
@@ -97,6 +98,7 @@ function input(overrides: Record<string, unknown> = {}) {
 describe('resolveExecutionTools selection', () => {
     beforeEach(() => {
         applyAutoToolRouting.mockClear()
+        resetStickyToolsets()
     })
 
     test('keeps manage_mcp out of automatic routing until it is explicitly selected', async () => {
@@ -108,6 +110,7 @@ describe('resolveExecutionTools selection', () => {
 
         const enabled = await resolveExecutionTools(input({
             preset: preset({ autoToolRouting: true }),
+            conversationId: 'conversation-2',
             autoToolRouting: true,
             preferredToolKeys: [manageMcpKey],
         }))
@@ -146,5 +149,17 @@ describe('resolveExecutionTools selection', () => {
 
         expect(applyAutoToolRouting).not.toHaveBeenCalled()
         expect(result.tools.map(({ name }) => name)).toEqual(['read', 'expand_available_toolset'])
+    })
+
+    test('keeps earlier routed tools in place across turns of one conversation', async () => {
+        applyAutoToolRouting.mockImplementationOnce(async ({ tools }) => tools.filter(({ name }) => name === 'write'))
+        applyAutoToolRouting.mockImplementationOnce(async ({ tools }) => tools.filter(({ name }) => name === 'read'))
+        const routed = () => resolveExecutionTools(input({
+            preset: preset({ autoToolRouting: true }),
+            autoToolRouting: true,
+        }))
+
+        expect((await routed()).tools.map(({ name }) => name)).toEqual(['write'])
+        expect((await routed()).tools.map(({ name }) => name)).toEqual(['write', 'read'])
     })
 })

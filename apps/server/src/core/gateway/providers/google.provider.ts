@@ -19,6 +19,22 @@ import {
 } from './base.provider.js'
 import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
+/** Gemini usage; promptTokenCount already includes cachedContentTokenCount. */
+function toCompletionUsage(usage: {
+  promptTokenCount?: number
+  candidatesTokenCount?: number
+  totalTokenCount?: number
+  cachedContentTokenCount?: number
+} | undefined): CompletionResponse['usage'] {
+  const cacheReadTokens = usage?.cachedContentTokenCount ?? 0
+  return {
+    promptTokens: usage?.promptTokenCount || 0,
+    completionTokens: usage?.candidatesTokenCount || 0,
+    totalTokens: usage?.totalTokenCount || 0,
+    ...(cacheReadTokens ? { cacheReadTokens } : {}),
+  }
+}
+
 export class GoogleProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
   private client: GoogleGenAI
@@ -227,11 +243,7 @@ export class GoogleProvider extends BaseLLMProvider {
       content,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       images: images.length > 0 ? images : undefined,
-      usage: {
-        promptTokens: usage?.promptTokenCount || 0,
-        completionTokens: usage?.candidatesTokenCount || 0,
-        totalTokens: usage?.totalTokenCount || 0
-      },
+      usage: toCompletionUsage(usage),
       model,
       provider: this.config.id,
       latencyMs: Date.now() - start
@@ -305,11 +317,7 @@ export class GoogleProvider extends BaseLLMProvider {
       }
 
       if (chunk.usageMetadata) {
-        lastUsage = {
-          promptTokens: chunk.usageMetadata.promptTokenCount || 0,
-          completionTokens: chunk.usageMetadata.candidatesTokenCount || 0,
-          totalTokens: chunk.usageMetadata.totalTokenCount || 0
-        }
+        lastUsage = toCompletionUsage(chunk.usageMetadata)
       }
     }
 

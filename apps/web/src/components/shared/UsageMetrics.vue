@@ -62,6 +62,10 @@ const memoryModelUsage = computed(() => metrics.value?.auxiliaryModelUsage
   .filter(item => ['embedding', 'reranker', 'deep-research'].includes(item.kind)) ?? [])
 const autoRoutingUsage = computed(() => metrics.value?.auxiliaryModelUsage
   .filter(item => item.kind === 'task-context' || item.kind === 'memory-router' || item.kind === 'tool-router') ?? [])
+const cacheHitPercent = computed(() => {
+  const totals = metrics.value?.totals
+  return totals?.promptTokens ? Math.round((totals.cacheReadTokens / totals.promptTokens) * 100) : 0
+})
 const maxMemoryRequests = computed(() => Math.max(1, ...memoryModelUsage.value.map(item => item.requestCount)))
 const maxAutoRoutingRequests = computed(() => Math.max(1, ...autoRoutingUsage.value.map(item => item.requestCount)))
 
@@ -257,6 +261,12 @@ async function confirmReset(): Promise<void> {
           </div>
           <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Prompt (input)</span><span class="text-theme-300">{{ metrics.totals.promptTokens.toLocaleString() }}</span>
+          </div>
+          <div class="flex justify-between text-ink-secondary mb-0.5 pl-2">
+            <span>Cache reads</span><span class="text-theme-300">{{ metrics.totals.cacheReadTokens.toLocaleString() }} ({{ cacheHitPercent }}%)</span>
+          </div>
+          <div class="flex justify-between text-ink-secondary mb-0.5 pl-2">
+            <span>Cache writes</span><span class="text-theme-300">{{ metrics.totals.cacheWriteTokens.toLocaleString() }}</span>
           </div>
           <div class="flex justify-between text-ink-secondary mb-0.5">
             <span>Completion (output)</span><span class="text-theme-300">{{ metrics.totals.completionTokens.toLocaleString() }}</span>

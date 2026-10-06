@@ -43,6 +43,8 @@ interface MetricsSummary {
         messages: number
         promptTokens: number
         completionTokens: number
+        cacheReadTokens: number
+        cacheWriteTokens: number
         totalTokens: number
         avgLatencyMs: number
         estimatedCost: number | null
@@ -112,6 +114,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 COUNT(*) as messages,
                 COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
                 COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+                COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
+                COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
                 COALESCE(AVG(CASE WHEN latency_ms > 0 THEN latency_ms END), 0) as avg_latency
             FROM messages
             WHERE created_at >= ?
@@ -120,6 +124,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             messages: number
             prompt_tokens: number
             completion_tokens: number
+            cache_read_tokens: number
+            cache_write_tokens: number
             avg_latency: number
         }
 
@@ -156,7 +162,9 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 COALESCE(model, 'unknown') as model,
                 model IS NOT NULL as has_model,
                 COALESCE(prompt_tokens, 0) as prompt_tokens,
-                COALESCE(completion_tokens, 0) as completion_tokens
+                COALESCE(completion_tokens, 0) as completion_tokens,
+                COALESCE(cache_read_tokens, 0) as cache_read_tokens,
+                COALESCE(cache_write_tokens, 0) as cache_write_tokens
             FROM messages
             WHERE role = 'assistant' AND created_at >= ?
             ORDER BY created_at ASC
@@ -167,6 +175,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             has_model: number
             prompt_tokens: number
             completion_tokens: number
+            cache_read_tokens: number
+            cache_write_tokens: number
         }[]
         const nativeGatewayCosts = new Map<string, ModelCost | null>()
         const gateway = getGateway()
@@ -192,7 +202,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 ? nativeGatewayCosts.get(key)
                 : getModelCost(providerType, row.model)
             const cost = pricing
-                ? estimateTokenCost(pricing, row.prompt_tokens, row.completion_tokens)
+                ? estimateTokenCost(pricing, row)
                 : null
 
             if (cost !== null) {
@@ -415,6 +425,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
                 messages: totals.messages,
                 promptTokens: totals.prompt_tokens,
                 completionTokens: totals.completion_tokens,
+                cacheReadTokens: totals.cache_read_tokens,
+                cacheWriteTokens: totals.cache_write_tokens,
                 totalTokens: totals.prompt_tokens + totals.completion_tokens,
                 avgLatencyMs: Math.round(totals.avg_latency),
                 estimatedCost: totalEstimatedCost,
@@ -440,13 +452,27 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
     })
 }
 
-function estimateTokenCost(pricing: ModelCost, promptTokens: number, completionTokens: number): number {
+function estimateTokenCost(pricing: ModelCost, usage: {
+    prompt_tokens: number
+    completion_tokens: number
+    cache_read_tokens: number
+    cache_write_tokens: number
+}): number {
     const tier = [...(pricing.tiers ?? [])]
-        .filter((candidate) => candidate.minInputTokens != null && promptTokens >= candidate.minInputTokens)
+        .filter((candidate) => candidate.minInputTokens != null && usage.prompt_tokens >= candidate.minInputTokens)
         .sort((a, b) => (b.minInputTokens ?? 0) - (a.minInputTokens ?? 0))[0]
     const input = tier?.input ?? pricing.input
     const output = tier?.output ?? pricing.output
-    return (promptTokens * input + completionTokens * output) / 1_000_000
+    // prompt_tokens includes cached tokens; bill them at cache rates when the model publishes those.
+    const cacheRead = tier?.cacheRead ?? pricing.cacheRead ?? input
+    const cacheWrite = tier?.cacheWrite ?? pricing.cacheWrite ?? input
+    const uncachedInput = Math.max(0, usage.prompt_tokens - usage.cache_read_tokens - usage.cache_write_tokens)
+    return (
+        uncachedInput * input
+        + usage.cache_read_tokens * cacheRead
+        + usage.cache_write_tokens * cacheWrite
+        + usage.completion_tokens * output
+    ) / 1_000_000
 }
 
 function modelCostFromPricing(pricing: ModelPricing | undefined): ModelCost | null {
@@ -460,6 +486,8 @@ function modelCostFromPricing(pricing: ModelPricing | undefined): ModelCost | nu
     return {
         input: (pricing.prompt ?? 0) * 1_000_000,
         output: (pricing.completion ?? 0) * 1_000_000,
+        ...(pricing.inputCacheRead != null ? { cacheRead: pricing.inputCacheRead * 1_000_000 } : {}),
+        ...(pricing.inputCacheWrite != null ? { cacheWrite: pricing.inputCacheWrite * 1_000_000 } : {}),
         ...(pricing.tiers?.length ? {
             tiers: pricing.tiers.flatMap((tier) =>
                 tier.prompt == null && tier.completion == null
@@ -467,6 +495,8 @@ function modelCostFromPricing(pricing: ModelPricing | undefined): ModelCost | nu
                     : [{
                         input: (tier.prompt ?? pricing.prompt ?? 0) * 1_000_000,
                         output: (tier.completion ?? pricing.completion ?? 0) * 1_000_000,
+                        ...(tier.inputCacheRead != null ? { cacheRead: tier.inputCacheRead * 1_000_000 } : {}),
+                        ...(tier.inputCacheWrite != null ? { cacheWrite: tier.inputCacheWrite * 1_000_000 } : {}),
                         ...(tier.minPromptTokens != null ? { minInputTokens: tier.minPromptTokens } : {})
                     }]
             )

@@ -35,7 +35,7 @@ import {
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
-import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsSystemHint, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
+import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsHint, insertTurnLocalContext, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { defaultAutoModes } from '../core/agent/execution-preset.js'
 import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
@@ -466,14 +466,18 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           tools.push(...makeAttachmentTools(conversationId))
         }
         const attachmentContext = await buildAttachmentContextBundle(conversationId, normalizedContent, db)
-        messages = appendHiddenSystemContext(messages, attachmentContext?.content ?? null)
         if (attachmentContext?.evidence.length) turnEvidence.push(...attachmentContext.evidence)
         abortController.signal.throwIfAborted()
         if (attachmentContext) {
           messages = appendHiddenSystemContext(messages, ATTACHMENT_SYSTEM_CONTEXT)
           messages = insertTurnLocalUntrustedContext(messages, attachmentContext.content, 'retrieved-attachment')
         }
-        messages = appendHiddenSystemContext(messages, buildRecentImageArtifactsSystemHint(filteredRows))
+        const recentImagesHint = buildRecentImageArtifactsHint(filteredRows)
+        if (recentImagesHint) {
+          messages = insertTurnLocalContext(messages, [{
+            role: 'user', content: recentImagesHint, metadata: { contextKind: 'recent-image-artifacts' },
+          }])
+        }
 
         // Persist the full session config with RESOLVED model/provider so it can
         // be restored correctly when navigating back to this conversation.
@@ -663,6 +667,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           images: result.images, generatedMedia: result.images.length > 0,
           contextEvidence: turnEvidence, agentId, provider: responseProvider, model: responseModel,
           promptTokens: result.usage?.promptTokens, completionTokens: result.usage?.completionTokens,
+          cacheReadTokens: result.usage?.cacheReadTokens, cacheWriteTokens: result.usage?.cacheWriteTokens,
           contextTokens: result.contextTokens, startedAt: result.usage ? now : undefined,
         })
 

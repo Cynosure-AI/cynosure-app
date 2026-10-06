@@ -3,7 +3,7 @@ import { COMPACT_EVENT_PREFIX } from '../agent/context-compactor.js'
 import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-rag.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
-import type { ChatMessage, ContentPart, ToolCall } from '../gateway/providers/base.provider.js'
+import { isTurnLocalContextMessage, type ChatMessage, type ContentPart, type ToolCall } from '../gateway/providers/base.provider.js'
 import type { ContentBlock } from '@shared/types'
 import { contentBlocksToProviderContent } from './transcript.js'
 
@@ -25,7 +25,7 @@ export interface BuiltChatHistory {
     messages: ChatMessage[]
 }
 
-export function buildRecentImageArtifactsSystemHint(rows: ChatHistoryRow[], limit = 5): string | null {
+export function buildRecentImageArtifactsHint(rows: ChatHistoryRow[], limit = 5): string | null {
     const artifacts: { path: string; url: string }[] = []
     const seen = new Set<string>()
 
@@ -155,26 +155,42 @@ export function insertTurnLocalUntrustedContext(
     contextKind: string,
 ): ChatMessage[] {
     if (!context) return messages
-    const contextMessage: ChatMessage = {
+    return insertTurnLocalContext(messages, [{
         role: 'user',
         content: context,
         metadata: { contextKind, untrusted: true },
-    }
+    }])
+}
 
+/**
+ * Place per-turn context directly before the active user message. The system
+ * prompt and earlier history then stay byte-identical between turns, which is
+ * what provider prompt caches match on.
+ */
+export function insertTurnLocalContext(messages: ChatMessage[], contextMessages: ChatMessage[]): ChatMessage[] {
+    if (!contextMessages.length) return messages
     let activeUserIndex = -1
     for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') {
+        if (messages[i].role === 'user' && !isTurnLocalContextMessage(messages[i])) {
             activeUserIndex = i
             break
         }
     }
 
-    if (activeUserIndex === -1) return [...messages, contextMessage]
+    if (activeUserIndex === -1) return [...messages, ...contextMessages]
     return [
         ...messages.slice(0, activeUserIndex),
-        contextMessage,
+        ...contextMessages,
         ...messages.slice(activeUserIndex),
     ]
+}
+
+/** Lead with the bundle's system messages and slot its turn-local messages in before the active request. */
+export function assembleExecutionMessages(contextMessages: ChatMessage[], history: ChatMessage[]): ChatMessage[] {
+    return insertTurnLocalContext(
+        [...contextMessages.filter((message) => message.role === 'system'), ...history],
+        contextMessages.filter((message) => message.role !== 'system'),
+    )
 }
 
 export function buildConversationHistory(input: {

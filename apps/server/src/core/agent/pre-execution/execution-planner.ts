@@ -14,6 +14,7 @@ import {
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
 import { DIRECT_TOOL_SELECTION_LIMIT } from '../../runtime-limits.js'
 import type { ExecutionRequest } from './execution-input.js'
+import { assembleExecutionMessages } from '../../chat/message-history.js'
 import type { ContextEvidence } from '@shared/types'
 import type { ChatMessage, ToolDefinition } from '../../gateway/providers/base.provider.js'
 
@@ -138,7 +139,7 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
 
     return {
         tools: planning.tools,
-        messages: [...planning.systemMessages, ...messages],
+        messages: assembleExecutionMessages(planning.contextMessages, messages),
         providerId: prepared.providerId,
         responseProvider,
         responseModel: prepared.model,
@@ -201,29 +202,34 @@ function applyPlanningIfToolCapable(
     conversationId: string,
     objective: string,
     tools: ToolDefinition[],
-    systemMessages: ChatMessage[],
+    contextMessages: ChatMessage[],
     thinkingEnabled: boolean,
-): { tools: ToolDefinition[]; systemMessages: ChatMessage[]; runId?: string } {
+): { tools: ToolDefinition[]; contextMessages: ChatMessage[]; runId?: string } {
     if (!thinkingEnabled) {
-        return { tools, systemMessages }
+        return { tools, contextMessages }
     }
 
     const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name))
     if (!hasVisibleExecutionTool) {
-        return { tools, systemMessages }
+        return { tools, contextMessages }
     }
 
     const previousPlanning = getLatestPlanningState(conversationId)
     const planning = resumeOrCreatePlanningRun(conversationId, objective)
     const planningContext = buildPlanningTurnContext(planning, previousPlanning)
-    const mergedSystemMessages = appendSystemContext(
-        appendSystemContext(systemMessages, PLANNING_SYSTEM_PROMPT),
-        planningContext,
-    )
+    // The instructions are static and belong in the system prompt; the todo
+    // list changes between turns, so it travels as turn-local context.
+    const withInstructions = appendSystemContext(contextMessages, PLANNING_SYSTEM_PROMPT)
 
     return {
         tools: [...tools, ...makePlanningTools(planning.runId)],
-        systemMessages: mergedSystemMessages,
+        contextMessages: planningContext
+            ? [...withInstructions, {
+                role: 'user',
+                content: `[Planning state]\n${planningContext}\n[/Planning state]`,
+                metadata: { contextKind: 'planning-state' },
+            }]
+            : withInstructions,
         runId: planning.runId,
     }
 }

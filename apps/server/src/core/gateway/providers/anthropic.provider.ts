@@ -9,8 +9,64 @@ import {
   type ChatMessage,
   type ContentPart,
   type ModelInfo,
-  type ModelListType
+  type ModelListType,
+  isTurnLocalContextMessage
 } from './base.provider.js'
+
+interface AnthropicInputUsage {
+  input_tokens: number
+  cache_read_input_tokens?: number | null
+  cache_creation_input_tokens?: number | null
+}
+
+/** Anthropic reports cached input separately; promptTokens counts the full input like other providers. */
+function toCompletionUsage(usage: AnthropicInputUsage, outputTokens: number): CompletionResponse['usage'] {
+  const cacheReadTokens = usage.cache_read_input_tokens ?? 0
+  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0
+  const promptTokens = usage.input_tokens + cacheReadTokens + cacheWriteTokens
+  return {
+    promptTokens,
+    completionTokens: outputTokens,
+    totalTokens: promptTokens + outputTokens,
+    ...(cacheReadTokens ? { cacheReadTokens } : {}),
+    ...(cacheWriteTokens ? { cacheWriteTokens } : {}),
+  }
+}
+
+const EPHEMERAL_CACHE: Anthropic.CacheControlEphemeral = { type: 'ephemeral' }
+
+/**
+ * Anthropic caches only at explicit breakpoints. Mark the end of the system
+ * prompt (which covers the tools too), the last message before turn-local
+ * context, and the final message, so tool rounds and the next turn reuse the
+ * earlier prefix.
+ */
+function applyPromptCacheBreakpoints(params: Anthropic.MessageCreateParams, stableEnd: number): void {
+  if (typeof params.system === 'string' && params.system) {
+    params.system = [{ type: 'text', text: params.system, cache_control: EPHEMERAL_CACHE }]
+  } else if (params.tools?.length) {
+    const last = params.tools.length - 1
+    params.tools[last] = { ...params.tools[last], cache_control: EPHEMERAL_CACHE }
+  }
+  for (const index of new Set([stableEnd, params.messages.length - 1])) {
+    if (index >= 0) params.messages[index] = withCacheBreakpoint(params.messages[index])
+  }
+}
+
+function withCacheBreakpoint(message: Anthropic.MessageParam): Anthropic.MessageParam {
+  const blocks: Anthropic.ContentBlockParam[] = typeof message.content === 'string'
+    ? (message.content ? [{ type: 'text', text: message.content }] : [])
+    : message.content
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i]
+    if (block.type === 'thinking' || block.type === 'redacted_thinking') continue
+    if (block.type === 'text' && !block.text) continue
+    const content = [...blocks]
+    content[i] = { ...block, cache_control: EPHEMERAL_CACHE }
+    return { ...message, content }
+  }
+  return message
+}
 
 export class AnthropicProvider extends BaseLLMProvider {
   readonly config: LLMProviderConfig
@@ -28,11 +84,18 @@ export class AnthropicProvider extends BaseLLMProvider {
 
   private formatMessages(
     messages: ChatMessage[]
-  ): { system?: string; messages: Anthropic.MessageParam[] } {
+  ): { system?: string; messages: Anthropic.MessageParam[]; stableEnd: number } {
     let system: string | undefined
     const formatted: Anthropic.MessageParam[] = []
+    // Index of the last message before per-turn context; -1 when there is none.
+    let stableEnd = -1
+    let seenTurnLocal = false
 
     for (const msg of messages) {
+      if (!seenTurnLocal && isTurnLocalContextMessage(msg)) {
+        seenTurnLocal = true
+        stableEnd = formatted.length - 1
+      }
       if (msg.role === 'system') {
         system = typeof msg.content === 'string' ? msg.content : this.getTextContent(msg.content)
         continue
@@ -143,7 +206,7 @@ export class AnthropicProvider extends BaseLLMProvider {
       }
     }
 
-    return { system, messages: formatted }
+    return { system, messages: formatted, stableEnd }
   }
 
   private assertCompleteStopReason(reason: Anthropic.Messages.StopReason | null): void {
@@ -163,7 +226,7 @@ export class AnthropicProvider extends BaseLLMProvider {
 
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
     const start = Date.now()
-    const { system, messages } = this.formatMessages(request.messages)
+    const { system, messages, stableEnd } = this.formatMessages(request.messages)
 
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model: request.model || this.config.defaultModel,
@@ -182,6 +245,7 @@ export class AnthropicProvider extends BaseLLMProvider {
         name: request.toolChoice.name
       }
     }
+    applyPromptCacheBreakpoints(params, stableEnd)
 
     const response = await this.client.messages.create(params)
     this.assertCompleteStopReason(response.stop_reason)
@@ -211,11 +275,7 @@ export class AnthropicProvider extends BaseLLMProvider {
       content,
       thinking: thinking || undefined,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      usage: {
-        promptTokens: response.usage.input_tokens,
-        completionTokens: response.usage.output_tokens,
-        totalTokens: response.usage.input_tokens + response.usage.output_tokens
-      },
+      usage: toCompletionUsage(response.usage, response.usage.output_tokens),
       model: response.model,
       provider: this.config.id,
       latencyMs: Date.now() - start
@@ -225,7 +285,7 @@ export class AnthropicProvider extends BaseLLMProvider {
   async *streamComplete(
     request: CompletionRequest
   ): AsyncIterable<StreamChunk> {
-    const { system, messages } = this.formatMessages(request.messages)
+    const { system, messages, stableEnd } = this.formatMessages(request.messages)
 
     const params: Anthropic.MessageCreateParamsStreaming = {
       model: request.model || this.config.defaultModel,
@@ -244,6 +304,7 @@ export class AnthropicProvider extends BaseLLMProvider {
         name: request.toolChoice.name
       }
     }
+    applyPromptCacheBreakpoints(params, stableEnd)
 
     const stream = this.client.messages.stream(params)
     const toolCallBuffers = new Map<
@@ -251,13 +312,13 @@ export class AnthropicProvider extends BaseLLMProvider {
       { id: string; name: string; args: string }
     >()
 
-    let inputTokens = 0
+    let inputUsage: AnthropicInputUsage = { input_tokens: 0 }
     let outputTokens = 0
     let stopReason: Anthropic.Messages.StopReason | null = null
 
     for await (const event of stream) {
       if (event.type === 'message_start') {
-        inputTokens = event.message.usage.input_tokens
+        inputUsage = event.message.usage
       }
 
       if (event.type === 'content_block_start') {
@@ -303,11 +364,7 @@ export class AnthropicProvider extends BaseLLMProvider {
         yield {
           done: true,
           toolCalls,
-          usage: {
-            promptTokens: inputTokens,
-            completionTokens: outputTokens,
-            totalTokens: inputTokens + outputTokens
-          }
+          usage: toCompletionUsage(inputUsage, outputTokens)
         }
       }
     }

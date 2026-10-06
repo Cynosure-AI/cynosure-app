@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { IncompleteModelResponseError, type LLMProviderConfig, type StreamChunk } from './base.provider.js'
+import { IncompleteModelResponseError, type ChatMessage, type LLMProviderConfig, type StreamChunk } from './base.provider.js'
 import { OpenRouterProvider } from './openrouter.provider.js'
 
 const config: LLMProviderConfig = {
@@ -252,4 +252,76 @@ describe('OpenRouter completion termination', () => {
         })
         expect(create.mock.calls[0][0]).not.toHaveProperty('audio')
     })
+
+    test('reports prompt-cache reads and writes from usage details', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })))
+        const provider = new OpenRouterProvider(config)
+        mockChatStream(provider, [
+            { choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }], usage: null },
+            { choices: [], usage: {
+                prompt_tokens: 100, completion_tokens: 5, total_tokens: 105,
+                prompt_tokens_details: { cached_tokens: 80, cache_write_tokens: 15 },
+            } },
+        ])
+
+        const chunks = await collectStream(provider)
+
+        expect(chunks.at(-1)?.usage).toEqual({
+            promptTokens: 100, completionTokens: 5, totalTokens: 105, cacheReadTokens: 80, cacheWriteTokens: 15,
+        })
+    })
 })
+
+describe('OpenRouter prompt caching for Anthropic models', () => {
+    async function requestParams(model: string, messages: ChatMessage[]): Promise<Record<string, unknown>> {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })))
+        const provider = new OpenRouterProvider(config)
+        const create = vi.fn().mockResolvedValue((async function* () {
+            yield { choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }], usage: null }
+        })())
+        ;(provider as unknown as { client: { chat: { completions: { create: typeof create } } } }).client = {
+            chat: { completions: { create } }
+        }
+        for await (const _chunk of provider.streamComplete({ model, messages })) { /* consume stream */ }
+        return create.mock.calls[0][0]
+    }
+
+    const cached = (text: string) => [{ type: 'text', text, cache_control: { type: 'ephemeral' } }]
+
+    test('uses top-level caching when there is no turn-local context', async () => {
+        const params = await requestParams('anthropic/claude-sonnet-4.5', [
+            { role: 'system', content: 'sys' },
+            { role: 'user', content: 'hello' },
+        ])
+        expect(params.cache_control).toEqual({ type: 'ephemeral' })
+        expect(params.messages).toEqual([{ role: 'system', content: 'sys' }, { role: 'user', content: 'hello' }])
+    })
+
+    test('marks the system prompt and the requests around turn-local context explicitly', async () => {
+        const params = await requestParams('anthropic/claude-sonnet-4.5', [
+            { role: 'system', content: 'sys' },
+            { role: 'user', content: 'earlier' },
+            { role: 'assistant', content: 'answer' },
+            { role: 'user', content: 'memory', metadata: { contextKind: 'retrieved-memory' } },
+            { role: 'user', content: 'now' },
+        ])
+        expect(params).not.toHaveProperty('cache_control')
+        expect(params.messages).toEqual([
+            { role: 'system', content: cached('sys') },
+            { role: 'user', content: cached('earlier') },
+            { role: 'assistant', content: 'answer' },
+            { role: 'user', content: 'memory' },
+            { role: 'user', content: cached('now') },
+        ])
+    })
+
+    test('leaves other models untouched', async () => {
+        const params = await requestParams('openai/gpt-5', [
+            { role: 'user', content: 'memory', metadata: { contextKind: 'retrieved-memory' } },
+            { role: 'user', content: 'now' },
+        ])
+        expect(params).not.toHaveProperty('cache_control')
+        expect(params.messages).toEqual([{ role: 'user', content: 'memory' }, { role: 'user', content: 'now' }])
+    })
+})
+

@@ -1,5 +1,6 @@
 import { getBuiltInMemoryToolKeys, getBuiltInToolKey, hydrateBuiltInTools, makeSearchAvailableMcpToolsTool } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting } from './auto-tool-routing.js'
+import { stabilizeRoutedTools } from './conversation-toolset.js'
 import { isRuntimeMemoryEnabled } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { PrepareExecutionInput } from '../prepare-execution.js'
@@ -76,10 +77,14 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             mcpMetadata: toolRegistry.getNamespaceMetadataForTools(candidateTools),
             getLoadedToolNames: () => new Set(fixedTools.map((tool) => tool.name)),
         })
-        tools = [...fixedTools, searchTool as RegistryAwareToolDefinition]
+        tools = stabilizeRoutedTools(
+            stickyToolsetKey(conversationId, preset),
+            [...fixedTools, searchTool as RegistryAwareToolDefinition],
+            candidateTools,
+        )
     } else {
         const preferredToolNames = toolRegistry.resolveForExecution(preferredToolKeys ?? []).map((tool) => tool.name)
-        tools = await applyAutoToolRouting({
+        const routedTools = await applyAutoToolRouting({
             enabled: true,
             conversationId,
             userQuery,
@@ -95,6 +100,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             eventMeta,
             signal,
         }) as RegistryAwareToolDefinition[]
+        tools = stabilizeRoutedTools(stickyToolsetKey(conversationId, preset), routedTools, candidateTools)
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memoryFolderOverrides)) {
@@ -161,6 +167,11 @@ function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareT
         result.push(tool)
     }
     return result
+}
+
+/** Sub-agents share the conversation id but route their own tool lists. */
+function stickyToolsetKey(conversationId: string, preset: ExecutionPreset): string {
+    return `${conversationId}\u0000${preset.id}`
 }
 
 export function isToolRoutingEnabled(preset: ExecutionPreset, sessionEnabled?: boolean): boolean {

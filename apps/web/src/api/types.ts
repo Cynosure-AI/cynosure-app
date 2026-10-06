@@ -547,6 +547,10 @@ export interface MetricsSummary {
         messages: number
         promptTokens: number
         completionTokens: number
+        /** Input tokens served from provider prompt caches (subset of promptTokens). */
+        cacheReadTokens: number
+        /** Input tokens written to provider prompt caches (subset of promptTokens). */
+        cacheWriteTokens: number
         totalTokens: number
         avgLatencyMs: number
         estimatedCost: number | null
