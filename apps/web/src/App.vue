@@ -11,11 +11,13 @@ import { wsConnected } from './api/http'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import ModalDialog from './components/shared/ModalDialog.vue'
 import NotificationToastHost from './components/notifications/NotificationToastHost.vue'
+import CommandPalette from './components/layout/CommandPalette.vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
 import { useSidebar } from './composables/useSidebar'
 import { useChatEvents } from './composables/useChatEvents'
+import { isCommandPaletteShortcut, useCommandPalette } from './composables/useCommandPalette'
 
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
@@ -30,6 +32,17 @@ const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
 const router = useRouter()
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
+const { toggle: toggleCommandPalette, close: closeCommandPalette } = useCommandPalette()
+
+function onGlobalKeydown(event: KeyboardEvent): void {
+  if (!isCommandPaletteShortcut(event) || isOnboardingRoute.value) return
+  event.preventDefault()
+  toggleCommandPalette()
+}
+
+watch(isOnboardingRoute, (onboarding) => {
+  if (onboarding) closeCommandPalette()
+})
 
 type ElectronDesktopApi = {
   onNewChatRequested?: (listener: () => void) => () => void
@@ -109,6 +122,8 @@ function isExecutionUpdatePayload(data: unknown): data is { event: string; data:
 
 onMounted(async () => {
   loadAllStores()
+  document.addEventListener('keydown', onGlobalKeydown)
+  cleanups.push(() => document.removeEventListener('keydown', onGlobalKeydown))
   cleanups.push(useChatEvents())
 
   if (electron?.onNewChatRequested) {
@@ -223,6 +238,7 @@ onUnmounted(() => {
 
     <!-- MCP Auth Requests Modal -->
     <NotificationToastHost />
+    <CommandPalette v-if="!isOnboardingRoute" />
 
     <ModalDialog
       :show="mcpAuthRequests.length > 0"
