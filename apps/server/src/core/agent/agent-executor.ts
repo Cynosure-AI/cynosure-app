@@ -10,7 +10,7 @@ import {
     type ContextStrategy,
 } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import { IncompleteModelResponseError, type ChatMessage, type ToolCall, type ToolDefinition, type RegistryAwareToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
+import { IncompleteModelResponseError, type ChatMessage, type CompletionResponse, type ToolCall, type ToolDefinition, type RegistryAwareToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
 import type { ChatEventPayload, ReasoningEffort } from '@shared/types'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
 import {
@@ -117,7 +117,7 @@ export interface AgentExecutorResult {
     /** Final text response from the LLM */
     content: string
     /** Token usage from the last LLM call */
-    usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+    usage?: CompletionResponse['usage']
     /** Total tokens from the last LLM round (accurate context window usage) */
     contextTokens?: number
     /** Number of tool-calling rounds executed */
@@ -161,10 +161,14 @@ type Usage = AgentExecutorResult['usage']
 function accumulateUsage(prev: Usage, next: Usage): Usage {
     if (!next) return prev
     if (!prev) return next
+    const cacheReadTokens = (prev.cacheReadTokens ?? 0) + (next.cacheReadTokens ?? 0)
+    const cacheWriteTokens = (prev.cacheWriteTokens ?? 0) + (next.cacheWriteTokens ?? 0)
     return {
         promptTokens: prev.promptTokens + next.promptTokens,
         completionTokens: prev.completionTokens + next.completionTokens,
         totalTokens: prev.totalTokens + next.totalTokens,
+        ...(cacheReadTokens ? { cacheReadTokens } : {}),
+        ...(cacheWriteTokens ? { cacheWriteTokens } : {}),
     }
 }
 

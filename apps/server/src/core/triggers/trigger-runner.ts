@@ -167,6 +167,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             content: result.content, thinking: result.thinking, images: result.images,
             provider: planned.providerId, model: planned.responseModel,
             promptTokens: result.usage?.promptTokens, completionTokens: result.usage?.completionTokens,
+            cacheReadTokens: result.usage?.cacheReadTokens, cacheWriteTokens: result.usage?.cacheWriteTokens,
             contextTokens: result.contextTokens, startedAt: startMs,
         })
 

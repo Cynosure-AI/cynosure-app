@@ -22,8 +22,9 @@ import {
     appendHiddenSystemContext,
     attachPreviousGeneratedImageToActiveUser,
     buildConversationHistory,
-    buildRecentImageArtifactsSystemHint,
+    buildRecentImageArtifactsHint,
     insertTurnLocalUntrustedContext,
+    assembleExecutionMessages,
     type ChatHistoryRow,
 } from './message-history.js'
 
@@ -111,7 +112,7 @@ describe('conversation history construction', () => {
     })
 
     test('describes recent unique generated images newest first', () => {
-        const hint = buildRecentImageArtifactsSystemHint([
+        const hint = buildRecentImageArtifactsHint([
             row({ role: 'assistant', content_blocks_json: imageBlocks('file:///older.png', 'file:///shared.png') }),
             row({ role: 'assistant', content_blocks_json: '{broken' }),
             row({ role: 'assistant', content_blocks_json: imageBlocks('file:///shared.png', 'file:///latest.png') }),
@@ -120,7 +121,7 @@ describe('conversation history construction', () => {
         expect(hint).toContain('latest generated image: path=/latest.png')
         expect(hint).toContain('generated image 2: path=/shared.png')
         expect(hint).not.toContain('/older.png')
-        expect(buildRecentImageArtifactsSystemHint([row({ role: 'user' })])).toBeNull()
+        expect(buildRecentImageArtifactsHint([row({ role: 'user' })])).toBeNull()
     })
 
     test('attaches the preceding assistant generated image to a follow-up user turn', () => {
@@ -232,6 +233,24 @@ describe('conversation history construction', () => {
         expect(result[0].content).toBe('trusted instructions')
         expect(result.at(-1)?.content).toBe('current request')
         expect(insertTurnLocalUntrustedContext(messages, null, 'retrieved-attachment')).toBe(messages)
+    })
+
+    test('keeps the system prompt and earlier history ahead of all turn-local context', () => {
+        const memory = { role: 'user' as const, content: 'memory', metadata: { contextKind: 'retrieved-memory' } }
+        const plan = { role: 'user' as const, content: 'plan', metadata: { contextKind: 'planning-state' } }
+        const history = [
+            { role: 'user' as const, content: 'earlier request' },
+            { role: 'assistant' as const, content: 'earlier response' },
+            { role: 'user' as const, content: 'current request' },
+        ]
+
+        const assembled = assembleExecutionMessages([{ role: 'system', content: 'sys' }, memory, plan], history)
+        expect(assembled).toEqual([{ role: 'system', content: 'sys' }, history[0], history[1], memory, plan, history[2]])
+
+        const attachment = insertTurnLocalUntrustedContext(assembled, 'excerpt', 'retrieved-attachment')
+        expect(attachment.map(({ content }) => content)).toEqual([
+            'sys', 'earlier request', 'earlier response', 'memory', 'plan', 'excerpt', 'current request',
+        ])
     })
 
     test('appends hidden context to the last system message or creates one', () => {

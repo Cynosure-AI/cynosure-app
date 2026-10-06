@@ -238,8 +238,8 @@ export function persistChannelAssistantMessage(input: {
     const id = nanoid()
     const now = Date.now()
     db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, generated_media, agent_id, provider, model, prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, generated_media, agent_id, provider, model, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens, context_tokens, latency_ms, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.conversationId,
@@ -253,6 +253,8 @@ export function persistChannelAssistantMessage(input: {
         input.planned.responseModel,
         input.result.usage?.promptTokens ?? null,
         input.result.usage?.completionTokens ?? null,
+        input.result.usage?.cacheReadTokens ?? null,
+        input.result.usage?.cacheWriteTokens ?? null,
         input.result.contextTokens ?? null,
         input.result.usage ? now - input.startedAt : null,
         now,

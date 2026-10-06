@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import {
     BaseLLMProvider,
+    isTurnLocalContextMessage,
     IncompleteModelResponseError,
     type LLMProviderConfig,
     type CompletionRequest,
@@ -114,6 +115,32 @@ export interface DecisionsResponse {
  * OpenRouter routes requests to hundreds of models from various providers
  * (OpenAI, Anthropic, Google, Meta, etc.) through a single endpoint.
  */
+/** Chat Completions usage, including the cache details OpenAI-compatible gateways report. */
+function toCompletionUsage(usage: OpenAI.Completions.CompletionUsage | null | undefined): CompletionResponse['usage'] {
+    const details = usage?.prompt_tokens_details as { cached_tokens?: number; cache_write_tokens?: number } | undefined
+    const cacheReadTokens = details?.cached_tokens ?? 0
+    const cacheWriteTokens = details?.cache_write_tokens ?? 0
+    return {
+        promptTokens: usage?.prompt_tokens || 0,
+        completionTokens: usage?.completion_tokens || 0,
+        totalTokens: usage?.total_tokens || 0,
+        ...(cacheReadTokens ? { cacheReadTokens } : {}),
+        ...(cacheWriteTokens ? { cacheWriteTokens } : {}),
+    }
+}
+
+function cachedTextPart(text: string): { type: 'text'; text: string; cache_control: { type: 'ephemeral' } } {
+    return { type: 'text', text, cache_control: { type: 'ephemeral' } }
+}
+
+/** Last index before `end` matching the predicate, or -1. */
+function lastIndexWhere(messages: ChatMessage[], predicate: (message: ChatMessage) => boolean, end: number): number {
+    for (let i = end - 1; i >= 0; i--) {
+        if (predicate(messages[i])) return i
+    }
+    return -1
+}
+
 export class OpenRouterProvider extends BaseLLMProvider {
     readonly config: LLMProviderConfig
     protected client: OpenAI
@@ -480,6 +507,30 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return undefined
     }
 
+    /**
+     * Anthropic models cache only when asked. Without turn-local context the
+     * top-level cache_control (a breakpoint on the last block) covers tool
+     * rounds and the next turn. Turn-local context is not replayed on the next
+     * turn, so then mark the system prompt, the last user message before that
+     * context, and the active request instead. OpenRouter documents both forms
+     * but not combining them, nor breakpoints on assistant or tool messages.
+     */
+    private planPromptCache(messages: ChatMessage[], model: string): { topLevel: boolean; breakpoints: Set<number> } {
+        const breakpoints = new Set<number>()
+        if (this.config.type !== 'openrouter' || !model.startsWith('anthropic/')) return { topLevel: false, breakpoints }
+        const firstTurnLocal = messages.findIndex(isTurnLocalContextMessage)
+        if (firstTurnLocal === -1) return { topLevel: true, breakpoints }
+
+        const isRequest = (message: ChatMessage) => message.role === 'user' && !isTurnLocalContextMessage(message)
+        const systemIndex = lastIndexWhere(messages, (message) => message.role === 'system', messages.length)
+        const stableRequest = lastIndexWhere(messages, isRequest, firstTurnLocal)
+        const activeRequest = lastIndexWhere(messages, isRequest, messages.length)
+        for (const index of [systemIndex, stableRequest, activeRequest]) {
+            if (index >= 0) breakpoints.add(index)
+        }
+        return { topLevel: false, breakpoints }
+    }
+
     protected addReasoningParams(
         params: Record<string, unknown>,
         request: CompletionRequest
@@ -591,16 +642,16 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     /** Convert internal messages to OpenAI Chat Completions format */
     private formatMessages(
-        messages: ChatMessage[]
+        messages: ChatMessage[],
+        cacheBreakpoints: ReadonlySet<number> = new Set()
     ): OpenAI.Chat.ChatCompletionMessageParam[] {
-        return messages.flatMap((msg): OpenAI.Chat.ChatCompletionMessageParam[] => {
+        return messages.flatMap((msg, index): OpenAI.Chat.ChatCompletionMessageParam[] => {
+            const cacheBreakpoint = cacheBreakpoints.has(index)
             if (msg.role === 'system') {
+                const text = typeof msg.content === 'string' ? msg.content : this.getTextContent(msg.content)
                 return [{
                     role: 'system' as const,
-                    content:
-                        typeof msg.content === 'string'
-                            ? msg.content
-                            : this.getTextContent(msg.content)
+                    content: cacheBreakpoint ? [cachedTextPart(text)] as OpenAI.Chat.ChatCompletionContentPartText[] : text
                 }]
             }
 
@@ -659,7 +710,12 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
             // user message
             if (typeof msg.content === 'string') {
-                return [{ role: 'user' as const, content: msg.content }]
+                return [{
+                    role: 'user' as const,
+                    content: cacheBreakpoint && msg.content
+                        ? [cachedTextPart(msg.content)] as OpenAI.Chat.ChatCompletionContentPartText[]
+                        : msg.content
+                }]
             }
 
             // multimodal user message
@@ -678,6 +734,10 @@ export class OpenRouterProvider extends BaseLLMProvider {
                 const url = (part as { type: 'audio_url'; audio_url: { url: string } }).audio_url.url
                 return this.audioInputPart(url) || { type: 'text' as const, text: `[Audio: ${url}]` }
             })
+            const lastTextIndex = parts.map((part) => part.type).lastIndexOf('text')
+            if (cacheBreakpoint && lastTextIndex >= 0) {
+                parts[lastTextIndex] = cachedTextPart((parts[lastTextIndex] as { text: string }).text)
+            }
             return [{
                 role: 'user' as const,
                 content: parts as unknown as OpenAI.Chat.ChatCompletionContentPart[]
@@ -687,8 +747,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     async complete(request: CompletionRequest): Promise<CompletionResponse> {
         const start = Date.now()
-        const messages = this.formatMessages(request.messages)
         const model = request.model || this.config.defaultModel
+        const cachePlan = this.planPromptCache(request.messages, model)
+        const messages = this.formatMessages(request.messages, cachePlan.breakpoints)
 
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> = {
             model,
@@ -703,6 +764,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             imageParams.modalities = imageModalities
         }
         this.addReasoningParams(params, request)
+        if (cachePlan.topLevel) params.cache_control = { type: 'ephemeral' }
 
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
@@ -781,11 +843,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
             thinking: combinedThinking || undefined,
             toolCalls: toolCalls?.length ? toolCalls : undefined,
             images: images.length ? images : undefined,
-            usage: {
-                promptTokens: response.usage?.prompt_tokens || 0,
-                completionTokens: response.usage?.completion_tokens || 0,
-                totalTokens: response.usage?.total_tokens || 0
-            },
+            usage: toCompletionUsage(response.usage),
             model: response.model || request.model || this.config.defaultModel,
             provider: this.config.id,
             latencyMs: Date.now() - start
@@ -795,8 +853,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
     async *streamComplete(
         request: CompletionRequest
     ): AsyncIterable<StreamChunk> {
-        const messages = this.formatMessages(request.messages)
         const model = request.model || this.config.defaultModel
+        const cachePlan = this.planPromptCache(request.messages, model)
+        const messages = this.formatMessages(request.messages, cachePlan.breakpoints)
 
         const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown> = {
             model,
@@ -813,6 +872,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         }
 
         this.addReasoningParams(params, request)
+        if (cachePlan.topLevel) params.cache_control = { type: 'ephemeral' }
 
         if (request.tools?.length) {
             params.tools = this.formatToolsForProvider(request.tools) as unknown as OpenAI.Chat.ChatCompletionTool[]
@@ -973,11 +1033,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
             // Capture usage from any chunk (may arrive on finish chunk or a separate subsequent one)
             if (chunk.usage) {
-                finishedUsage = {
-                    promptTokens: chunk.usage.prompt_tokens,
-                    completionTokens: chunk.usage.completion_tokens,
-                    totalTokens: chunk.usage.total_tokens
-                }
+                finishedUsage = toCompletionUsage(chunk.usage)
             }
 
             // Check for finish

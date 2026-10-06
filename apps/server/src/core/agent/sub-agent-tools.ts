@@ -4,6 +4,7 @@ import { getAgent, type SubAgentAssignment } from '../agents/agent-store.js'
 import { readFileAttachmentText } from '../artifacts/file-artifacts.js'
 import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
+import { assembleExecutionMessages } from '../chat/message-history.js'
 import { getGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
@@ -261,7 +262,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
         })
 
         try {
-            const result = await executor.run([...prepared.contextBundle.messages, ...history])
+            const result = await executor.run(assembleExecutionMessages(prepared.contextBundle.messages, history))
             subAgentSignal.throwIfAborted()
 
             if (result.content || result.images.length) {
@@ -273,8 +274,9 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     `INSERT INTO messages (
                         id, conversation_id, role, content, content_blocks_json, generated_media, agent_id,
                         ma_codename, ma_agent_name, ma_invocation_id,
-                        provider, model, prompt_tokens, completion_tokens, context_tokens, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                        provider, model, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens,
+                        context_tokens, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 ).run(
                     messageId, conversationId, 'assistant', result.content,
                     messageContentJson({ id: messageId, content: result.content, thinking: result.thinking, imageDataUrls: result.images }),
@@ -283,6 +285,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                     result.provider || prepared.providerId || null,
                     result.model || prepared.model || null,
                     result.usage?.promptTokens ?? null, result.usage?.completionTokens ?? null,
+                    result.usage?.cacheReadTokens ?? null, result.usage?.cacheWriteTokens ?? null,
                     result.contextTokens ?? null, createdAt
                 )
                 publishChatEvent(broadcast, {

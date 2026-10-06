@@ -432,6 +432,16 @@ const MIGRATIONS: SchemaMigration[] = [
                 WHERE json_extract(event_json, '$.type') = 'tool-calls';
         `),
     },
+    {
+        version: 22,
+        description: 'Record prompt-cache reads and writes per assistant message',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(messages)') as Array<{ name: string }>).map((column) => column.name))
+            for (const name of ['cache_read_tokens', 'cache_write_tokens']) {
+                if (!columns.has(name)) db.exec(`ALTER TABLE messages ADD COLUMN ${name} INTEGER`)
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

@@ -16,6 +16,8 @@ export interface AssistantTurnInput {
   model?: string | null
   promptTokens?: number | null
   completionTokens?: number | null
+  cacheReadTokens?: number | null
+  cacheWriteTokens?: number | null
   contextTokens?: number | null
   startedAt?: number
   generatedMedia?: boolean
@@ -54,14 +56,15 @@ export function persistAssistantTurn(
       INSERT INTO messages (
         id, conversation_id, role, content, content_blocks_json,
         generated_media, is_error, stopped, memory_sources_json, agent_id, provider, model,
-        prompt_tokens, completion_tokens, context_tokens, latency_ms, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens, context_tokens, latency_ms, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.conversationId, 'assistant', input.content, messageContentJson(message),
       input.generatedMedia ? 1 : 0, input.isError ? 1 : 0, input.stopped ? 1 : 0,
       message.contextEvidence ? JSON.stringify(message.contextEvidence) : null,
       input.agentId || null, input.provider || null, input.model || null,
-      input.promptTokens ?? null, input.completionTokens ?? null, input.contextTokens ?? null,
+      input.promptTokens ?? null, input.completionTokens ?? null,
+      input.cacheReadTokens ?? null, input.cacheWriteTokens ?? null, input.contextTokens ?? null,
       message.latencyMs ?? null, createdAt,
     )
     db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(createdAt, input.conversationId)
