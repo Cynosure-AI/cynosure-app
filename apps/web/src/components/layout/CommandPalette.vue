@@ -345,7 +345,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
           class="command-palette flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-theme-800 bg-theme-900 shadow-2xl"
         >
           <!-- Search input -->
-          <div class="flex items-center gap-3 border-b border-theme-800 px-4">
+          <div class="flex shrink-0 items-center gap-3 border-b border-theme-800 px-4">
             <Icon
               icon="lucide:search"
               class="h-4.5 w-4.5 shrink-0 text-ink-muted"
@@ -376,7 +376,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
           </div>
 
           <!-- Scope chips -->
-          <div class="flex gap-1 overflow-x-auto border-b border-theme-800/60 px-3 py-2">
+          <div class="flex shrink-0 gap-1 overflow-x-auto overflow-y-hidden border-b border-theme-800/60 px-3 py-2">
             <button
               v-for="entry in SCOPES"
               :key="entry.id"
@@ -485,7 +485,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
           </div>
 
           <!-- Footer hints -->
-          <div class="hidden items-center gap-4 border-t border-theme-800 px-4 py-2 text-[11px] text-ink-faint sm:flex">
+          <div class="hidden shrink-0 items-center gap-4 border-t border-theme-800 px-4 py-2 text-[11px] text-ink-faint sm:flex">
             <span class="flex items-center gap-1"><kbd class="palette-kbd">↑</kbd><kbd class="palette-kbd">↓</kbd> navigate</span>
             <span class="flex items-center gap-1"><kbd class="palette-kbd">↵</kbd> open</span>
             <span class="flex items-center gap-1"><kbd class="palette-kbd">Tab</kbd> filter</span>
