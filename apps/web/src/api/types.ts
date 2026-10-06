@@ -618,3 +618,12 @@ export interface DreamConfig {
     enabledAt: number
     startSequence: number
 }
+
+/** Reported by /api/health when the server is up but could not start normally. */
+export interface ServerStartupError {
+    code: 'database_version_mismatch' | 'database_open_failed'
+    message: string
+    databasePath?: string
+    databaseVersion?: number
+    supportedVersion?: number
+}

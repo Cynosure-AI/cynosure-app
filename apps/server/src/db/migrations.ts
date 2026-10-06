@@ -451,6 +451,16 @@ export function getUserVersion(db: Database.Database): number {
     return db.pragma('user_version', { simple: true }) as number
 }
 
+/** Raised when the database was written by a newer build than this one. */
+export class DatabaseVersionError extends Error {
+    constructor(readonly databaseVersion: number, readonly supportedVersion: number) {
+        super(
+            `Database schema version ${databaseVersion} was written by a newer version of Cynosure (this build supports ${supportedVersion}). Update the app to open it.`,
+        )
+        this.name = 'DatabaseVersionError'
+    }
+}
+
 export interface MigrationResult {
     from: number
     to: number
@@ -469,11 +479,7 @@ export function applySchemaMigrations(
 ): MigrationResult {
     const target = migrations[migrations.length - 1]?.version ?? 0
     const from = getUserVersion(db)
-    if (from > target) {
-        throw new Error(
-            `Database schema version ${from} was written by a newer version of Cynosure (this build supports ${target}). Update the app to open it.`,
-        )
-    }
+    if (from > target) throw new DatabaseVersionError(from, target)
 
     // v1 is the new authoritative baseline. Pre-versioning databases are not
     // compatible with it, so rebuild their schema instead of stamping a

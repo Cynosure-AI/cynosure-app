@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { BASELINE_SCHEMA } from './schema.js'
 import {
+    DatabaseVersionError,
     SCHEMA_VERSION,
     applySchemaMigrations,
     getUserVersion,
@@ -132,6 +133,12 @@ describe('schema migrations', () => {
         db.pragma(`user_version = ${SCHEMA_VERSION + 1}`)
 
         expect(() => applySchemaMigrations(db)).toThrow(/newer version of Cynosure/)
+        expect(() => applySchemaMigrations(db)).toThrow(expect.objectContaining({
+            databaseVersion: SCHEMA_VERSION + 1,
+            supportedVersion: SCHEMA_VERSION,
+        }))
+        expect(() => applySchemaMigrations(db)).toThrow(DatabaseVersionError)
+        expect(getUserVersion(db)).toBe(SCHEMA_VERSION + 1)
         db.close()
     })
 

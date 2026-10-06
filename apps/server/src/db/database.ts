@@ -6,7 +6,7 @@ import { applySchemaMigrations } from './migrations.js'
 
 let db: Database.Database | null = null
 
-function getDbPath(): string {
+export function getDbPath(): string {
   if (process.env.VITEST && !process.env.CYNOSURE_DATA_DIR) {
     throw new Error('Tests must set CYNOSURE_DATA_DIR; refusing to open the real database.')
   }
@@ -17,15 +17,22 @@ function getDbPath(): string {
 
 export function getDb(): Database.Database {
   if (!db) {
-    db = new Database(getDbPath())
-    db.pragma('journal_mode = WAL')
-    db.pragma('foreign_keys = ON')
-    applySchemaMigrations(db)
-    ensureDefaultMemoryFolder(db)
-    // All pending HITL are void after a server restart — the executor promises are gone.
-    db.prepare('DELETE FROM pending_hitl').run()
-    // Queued chat messages survive restarts, but never resume work unexpectedly.
-    db.prepare("UPDATE queued_chat_messages SET status = 'paused'").run()
+    const opened = new Database(getDbPath())
+    try {
+      opened.pragma('journal_mode = WAL')
+      opened.pragma('foreign_keys = ON')
+      applySchemaMigrations(opened)
+      ensureDefaultMemoryFolder(opened)
+      // All pending HITL are void after a server restart — the executor promises are gone.
+      opened.prepare('DELETE FROM pending_hitl').run()
+      // Queued chat messages survive restarts, but never resume work unexpectedly.
+      opened.prepare("UPDATE queued_chat_messages SET status = 'paused'").run()
+    } catch (error) {
+      // Never hand out a handle whose schema was not brought up to date.
+      opened.close()
+      throw error
+    }
+    db = opened
   }
   return db
 }

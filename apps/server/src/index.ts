@@ -17,7 +17,8 @@ import { createServer } from 'net'
 import type { WebSocket } from 'ws'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-import { closeDb, getDb } from './db/database.js'
+import { closeDb, getDb, getDbPath } from './db/database.js'
+import { DatabaseVersionError } from './db/migrations.js'
 import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
 import { getRAGStore } from './core/memory/rag.js'
 import { removeLegacyMemoryAnalysis } from './core/memory/legacy-analysis-cleanup.js'
@@ -91,6 +92,15 @@ interface StartServerOptions {
 
 interface RunningServer {
   close: () => Promise<void>
+}
+
+/** Why the server could not start normally; reported through /api/health so the UI can explain it. */
+interface StartupError {
+  code: 'database_version_mismatch' | 'database_open_failed'
+  message: string
+  databasePath?: string
+  databaseVersion?: number
+  supportedVersion?: number
 }
 
 async function assertPortAvailable(port: number, host: string): Promise<void> {
@@ -223,12 +233,12 @@ function formatListenAddress(host: string | undefined, port: number): string {
   return host ? `http://${host}:${port}` : `http://localhost:${port}`
 }
 
-function getServerInfo(startedAt: string): Record<string, unknown> {
+function getServerInfo(startedAt: string, startupError?: StartupError): Record<string, unknown> {
   return {
     name: APP_NAME,
     version: APP_VERSION,
-    status: 'ok',
-    description: 'Cynosure server is running.',
+    status: startupError ? 'error' : 'ok',
+    description: startupError ? `Cynosure server failed to start: ${startupError.message}` : 'Cynosure server is running.',
     timestamp: new Date().toISOString(),
     startedAt,
     uptimeSeconds: Math.floor(process.uptime()),
@@ -272,13 +282,13 @@ function shouldServeSpa(request: FastifyRequest): boolean {
   return accept.includes('text/html') || accept.includes('*/*')
 }
 
-async function registerWebUi(app: FastifyInstance, startedAt: string): Promise<void> {
+async function registerWebUi(app: FastifyInstance, startedAt: string, startupError?: StartupError): Promise<void> {
   const webDist = resolveWebDist()
 
-  app.get('/api', async () => getServerInfo(startedAt))
+  app.get('/api', async () => getServerInfo(startedAt, startupError))
 
   if (!webDist) {
-    app.get('/', async () => getServerInfo(startedAt))
+    app.get('/', async () => getServerInfo(startedAt, startupError))
     app.log.warn('Web UI dist not found. Build cynosure-web or set CYNOSURE_WEB_DIST to serve the UI at /.')
     return
   }
@@ -310,6 +320,62 @@ function startMemoryFolderWatchers(): void {
   syncMemoryFoldersFromFolders(db)
 }
 
+function describeStartupError(error: unknown): StartupError {
+  let databasePath: string | undefined
+  try {
+    databasePath = getDbPath()
+  } catch {
+    // The path itself may be what failed; report the error without it.
+  }
+
+  if (error instanceof DatabaseVersionError) {
+    return {
+      code: 'database_version_mismatch',
+      message: error.message,
+      databasePath,
+      databaseVersion: error.databaseVersion,
+      supportedVersion: error.supportedVersion
+    }
+  }
+  return {
+    code: 'database_open_failed',
+    message: error instanceof Error ? error.message : String(error),
+    databasePath
+  }
+}
+
+/**
+ * Serve only the web UI and a failing health check. Exiting would leave the
+ * UI waiting on a server that never comes up, with no hint as to why.
+ */
+async function startStartupErrorServer(
+  options: StartServerOptions,
+  listenHost: string,
+  startupError: StartupError
+): Promise<RunningServer> {
+  const startedAt = new Date().toISOString()
+  const app = Fastify()
+  await app.register(fastifyCors)
+
+  app.get('/api/health', async (_request, reply) => {
+    return reply.status(503).send({
+      status: 'error',
+      name: APP_NAME,
+      version: APP_VERSION,
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime()),
+      startupError
+    })
+  })
+
+  await registerWebUi(app, startedAt, startupError)
+  await app.listen({ port: options.port, host: listenHost })
+
+  console.error(`Cynosure server failed to start (${startupError.code}); serving the error on ${formatListenAddress(options.host, options.port)}`)
+
+  return { close: () => app.close() }
+}
+
 async function startServer(options: StartServerOptions): Promise<RunningServer> {
   if (options.dataDir) {
     process.env.CYNOSURE_DATA_DIR = options.dataDir
@@ -319,6 +385,15 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   // Fail before opening the database, starting watchers, or spawning configured
   // MCP/channel processes when this server can never acquire its listen port.
   await assertPortAvailable(options.port, listenHost)
+
+  // Open the database before anything depends on it, so a database that cannot
+  // be used (e.g. one written by a newer build) is reported instead of crashing.
+  try {
+    getDb()
+  } catch (error) {
+    console.error('Failed to open the database:', error)
+    return startStartupErrorServer(options, listenHost, describeStartupError(error))
+  }
 
   const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })

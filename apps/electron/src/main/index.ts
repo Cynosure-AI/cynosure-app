@@ -272,6 +272,13 @@ function startServer(): Promise<void> {
                     clearInterval(pollInterval)
                     console.log('[electron] Server is ready')
                     resolve()
+                } else if (res.status === 503 && !resolved) {
+                    // The server is up but could not start normally; the web UI shows why.
+                    const body = await res.json().catch(() => null) as { startupError?: { message?: string } } | null
+                    if (!body?.startupError || resolved) return
+                    resolved = true
+                    clearInterval(pollInterval)
+                    reject(new Error(body.startupError.message || 'Server reported a startup error'))
                 }
             } catch {
                 // not ready yet

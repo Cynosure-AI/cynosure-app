@@ -12,12 +12,14 @@ import AppSidebar from './components/layout/AppSidebar.vue'
 import ModalDialog from './components/shared/ModalDialog.vue'
 import NotificationToastHost from './components/notifications/NotificationToastHost.vue'
 import CommandPalette from './components/layout/CommandPalette.vue'
+import ServerStartupErrorScreen from './components/status/ServerStartupErrorScreen.vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
 import { useSidebar } from './composables/useSidebar'
 import { useChatEvents } from './composables/useChatEvents'
 import { isCommandPaletteShortcut, useCommandPalette } from './composables/useCommandPalette'
+import { useServerStartupError } from './composables/useServerStartupError'
 
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
@@ -33,6 +35,7 @@ const route = useRoute()
 const router = useRouter()
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
 const { toggle: toggleCommandPalette, close: closeCommandPalette } = useCommandPalette()
+const { startupError, serverVersion } = useServerStartupError()
 
 function onGlobalKeydown(event: KeyboardEvent): void {
   if (!isCommandPaletteShortcut(event) || isOnboardingRoute.value) return
@@ -170,7 +173,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app-shell flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-fg">
+  <ServerStartupErrorScreen
+    v-if="startupError"
+    :error="startupError"
+    :server-version="serverVersion"
+  />
+  <div
+    v-else
+    class="app-shell flex h-screen bg-theme-950 text-theme-100 antialiased selection:bg-accent-500/30 selection:text-accent-fg"
+  >
     <!-- Mobile sidebar backdrop -->
     <Transition
       v-if="!isOnboardingRoute"
