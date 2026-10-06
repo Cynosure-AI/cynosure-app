@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '../../../api/client'
 import { Icon } from '@iconify/vue'
 import DataTable from '../../shared/DataTable.vue'
@@ -27,6 +28,12 @@ function serverTools(server: McpServerInfo) {
 const showAddForm = ref(false)
 const editingId = ref<string | null>(null)
 const installedFilter = ref('')
+const route = useRoute()
+
+// The global search palette links here with ?filter=<server name>.
+watch(() => route?.query.filter, (filter) => {
+  if (typeof filter === 'string') installedFilter.value = filter
+}, { immediate: true })
 const brokenIconUrlById = reactive<Record<string, string>>({})
 
 function hasUsableIcon(server: McpServerInfo): boolean {

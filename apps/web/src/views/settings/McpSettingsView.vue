@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import McpSettings from '../../components/settings/mcp/McpSettings.vue'
 import TabBar, { type TabDef } from '../../components/shared/TabBar.vue'
 import { useMcpServers } from '../../composables/useMcpServers'
@@ -25,6 +25,11 @@ const sections = [
 const { servers } = useMcpServers()
 const route = useRoute()
 const activePanel = ref<McpPanel>(route.query.panel === 'browse' ? 'browse' : 'installed')
+
+// Links from the global search target an installed server.
+watch(() => route.query.filter, (filter) => {
+  if (typeof filter === 'string') activePanel.value = 'installed'
+})
 const activeSection = computed(() => sections.find((section) => section.id === activePanel.value) || sections[0])
 const tabs = computed<TabDef<McpPanel>[]>(() => sections.map((section) => ({
   value: section.id,

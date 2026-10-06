@@ -15,6 +15,7 @@ import type { ActivityItem, AgentInstance } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import { useSidebar } from "../../composables/useSidebar";
 import { useAppBranding } from "../../composables/useAppBranding";
+import { commandPaletteShortcutLabel, useCommandPalette } from "../../composables/useCommandPalette";
 import WorkspacePopover from "../status/WorkspacePopover.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
 import GlobalRecentChats from "./GlobalRecentChats.vue";
@@ -30,6 +31,7 @@ const preferencesStore = usePreferencesStore();
 const { recentChatFilter } = storeToRefs(preferencesStore);
 const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
 const { logoIconUrl, logoTextUrl } = useAppBranding();
+const { open: openCommandPalette } = useCommandPalette();
 
 const showStatusPopover = ref(false);
 const statusButtonRef = ref<HTMLElement | null>(null);
@@ -444,6 +446,30 @@ const chatRoute = computed(() =>
         </RouterLink>
         <template #content>
           Chat
+        </template>
+      </HoverTooltip>
+
+      <!-- Global search -->
+      <HoverTooltip
+        placement="right"
+        block
+        :disabled="!sidebarCollapsed"
+      >
+        <button
+          type="button"
+          class="nav-item"
+          aria-haspopup="dialog"
+          @click="closeSidebar(); openCommandPalette()"
+        >
+          <Icon
+            icon="lucide:search"
+            class="w-4.5 h-4.5"
+          />
+          <span>Search</span>
+          <kbd class="ml-auto hidden rounded md:inline-flex border border-theme-700 bg-theme-800/70 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">{{ commandPaletteShortcutLabel }}</kbd>
+        </button>
+        <template #content>
+          Search ({{ commandPaletteShortcutLabel }})
         </template>
       </HoverTooltip>
 
