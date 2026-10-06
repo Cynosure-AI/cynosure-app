@@ -71,6 +71,19 @@ function cynosureMcp(
 }
 
 export const recommendedServers: RegistryServerEntry[] = [
+    {
+        server: {
+            name: 'exa',
+            title: 'Exa Search',
+            description: 'Search the web and find code examples and research with Exa.',
+            version: 'latest',
+            websiteUrl: 'https://exa.ai/mcp',
+            repository: { url: 'https://github.com/exa-labs/exa-mcp-server', source: 'github' },
+            icons: [{ src: 'https://exa.ai/favicon.ico', mimeType: 'image/x-icon' }],
+            isRemote: true,
+            remotes: [{ type: 'streamable-http', url: 'https://mcp.exa.ai/mcp' }],
+        },
+    },
     npmServer(
         '@katomato65/time-mcp',
         'Time MCP',
@@ -308,7 +321,11 @@ export const recommendedServers: RegistryServerEntry[] = [
         'chrome-devtools-mcp',
         'Chrome DevTools',
         'Control and inspect Chrome tabs for browser automation, screenshots, console output, and page debugging.',
-        { packageIdentifier: 'chrome-devtools-mcp@latest' },
+        {
+            packageIdentifier: 'chrome-devtools-mcp@latest',
+            repository: { url: 'https://github.com/ChromeDevTools/chrome-devtools-mcp', source: 'github' },
+            icons: [{ src: 'https://www.google.com/chrome/static/images/chrome-logo.svg', mimeType: 'image/svg+xml' }],
+        },
     ),
     {
         server: {

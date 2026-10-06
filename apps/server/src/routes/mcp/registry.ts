@@ -8,14 +8,15 @@ type RegistryServerEntry = {
 
 const CYNOSURE_NPM_NAMESPACE = '@cynosure'
 
-function isCynosureServer(entry: RegistryServerEntry): boolean {
+function isRecommendedServer(entry: RegistryServerEntry): boolean {
     const name = String(entry.server.name || '')
     // The currently published packages use the @cynosure-mcp scope. Keep the
-    // prefix check compatible with a future @cynosure/ scope migration while
-    // excluding every unrelated namespace from the curated storefront.
+    // prefix check compatible with a future @cynosure/ scope migration.
     return name === CYNOSURE_NPM_NAMESPACE
         || name.startsWith(`${CYNOSURE_NPM_NAMESPACE}/`)
         || name.startsWith(`${CYNOSURE_NPM_NAMESPACE}-mcp/`)
+        || name === 'exa'
+        || name === 'chrome-devtools-mcp'
 }
 
 export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<void> {
@@ -31,9 +32,9 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
         try {
             if (registrySource === 'recommended') {
                 const query = search?.trim().toLowerCase()
-                const cynosureServers = recommendedServers.filter(isCynosureServer)
+                const curatedServers = recommendedServers.filter(isRecommendedServer)
                 const servers = query
-                    ? cynosureServers.filter((entry) => {
+                    ? curatedServers.filter((entry) => {
                         const server = entry.server
                         return [
                             server.name,
@@ -44,7 +45,7 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
                                 : []),
                         ].some((value) => String(value || '').toLowerCase().includes(query))
                     })
-                    : cynosureServers
+                    : curatedServers
 
                 return { servers, metadata: { count: servers.length } }
             }

@@ -87,7 +87,7 @@ describe('MCP registry pagination', () => {
         }
     })
 
-    test('only exposes Cynosure packages in the recommended storefront', async () => {
+    test('exposes Cynosure packages, Exa and Chrome DevTools in the recommended storefront', async () => {
         const app = Fastify()
         await app.register(registerMcpRegistryRoutes, { prefix: '/api/mcp' })
         try {
@@ -100,8 +100,16 @@ describe('MCP registry pagination', () => {
             const body = response.json()
             expect(body.servers.length).toBeGreaterThan(0)
             expect(body.metadata.count).toBe(body.servers.length)
-            expect(body.servers.every((entry: { server: { name: string } }) => entry.server.name.startsWith('@cynosure'))).toBe(true)
+            expect(body.servers.every((entry: { server: { name: string } }) =>
+                entry.server.name.startsWith('@cynosure') || ['exa', 'chrome-devtools-mcp'].includes(entry.server.name))).toBe(true)
+            expect(body.servers).toEqual(expect.arrayContaining([
+                expect.objectContaining({ server: expect.objectContaining({ name: 'exa', remotes: [{ type: 'streamable-http', url: 'https://mcp.exa.ai/mcp' }] }) }),
+                expect.objectContaining({ server: expect.objectContaining({ name: 'chrome-devtools-mcp' }) }),
+            ]))
             expect(body.servers.some((entry: { server: { name: string } }) => entry.server.name === '@toolsdk.ai/tavily-mcp')).toBe(false)
+
+            const search = await app.inject({ method: 'GET', url: '/api/mcp/registry?registry=recommended&search=exa' })
+            expect(search.json().servers.map((entry: { server: { name: string } }) => entry.server.name)).toContain('exa')
         } finally {
             await app.close()
         }

@@ -43,7 +43,15 @@
             class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
             :class="mcp.iconBg"
           >
+            <img
+              v-if="mcp.iconUrl && !failedIcons[mcp.id]"
+              :src="mcp.iconUrl"
+              alt=""
+              class="w-8 h-8 object-contain"
+              @error="failedIcons[mcp.id] = true"
+            >
             <Icon
+              v-else
               :icon="mcp.icon"
               class="w-5 h-5"
               :class="mcp.iconColor"
@@ -185,6 +193,7 @@ const envValues = reactive<Record<string, string>>({})
 const filesystemExpanded = ref(false)
 const registryLoading = ref(false)
 const registryError = ref('')
+const failedIcons = reactive<Record<string, boolean>>({})
 
 interface EnvVar {
   name: string
@@ -201,11 +210,13 @@ interface McpOption {
   description: string
   packageId: string
   icon: string
+  iconUrl?: string
   iconBg: string
   iconColor: string
   badge?: string
   badgeClass?: string
   command: string
+  origin: string
   args: string[]
   argEnvNames: Set<string>
   envVars?: EnvVar[]
@@ -217,6 +228,7 @@ const mcpOptions = ref<McpOption[]>([])
 const iconByName: Record<string, Pick<McpOption, 'icon' | 'iconBg' | 'iconColor'>> = {
   time: { icon: 'lucide:clock', iconBg: 'bg-cyan-500/10', iconColor: 'text-cyan-400' },
   tavily: { icon: 'lucide:search', iconBg: 'bg-emerald-500/10', iconColor: 'text-status-success' },
+  exa: { icon: 'lucide:search', iconBg: 'bg-blue-500/10', iconColor: 'text-status-info' },
   weather: { icon: 'lucide:cloud-sun', iconBg: 'bg-sky-500/10', iconColor: 'text-status-info' },
   chrome: { icon: 'lucide:globe', iconBg: 'bg-amber-500/10', iconColor: 'text-status-warning' },
   computer: { icon: 'lucide:monitor', iconBg: 'bg-violet-500/10', iconColor: 'text-status-violet' },
@@ -250,6 +262,31 @@ function getBadge(pkgType: string): Pick<McpOption, 'badge' | 'badgeClass'> {
 
 function getInstallOption(entry: McpRegistryServer): McpOption | null {
   const srv = entry.server
+  const remote = srv.remotes?.find(r => /^https?:\/\//.test(r.url) && (r.type === 'streamable-http' || r.type === 'http'))
+  if (remote) {
+    const headerEnvName = (name: string) => `MCP_HEADER_${name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'VALUE'}`
+    return {
+      id: slugify(srv.name),
+      name: getDisplayName(srv),
+      description: srv.description || 'Recommended MCP server.',
+      packageId: remote.url,
+      ...getIcon(srv),
+      iconUrl: srv.icons?.[0]?.src,
+      badge: 'Remote',
+      badgeClass: 'bg-accent-500/20 text-accent-fg',
+      command: 'remote',
+      origin: 'recommended:remote',
+      args: ['--transport', 'streamable-http', '--url', remote.url,
+        ...(remote.headers || []).map(h => `--header-env=${h.name}=${headerEnvName(h.name)}`)],
+      argEnvNames: new Set(),
+      envVars: (remote.headers || []).map(h => ({
+        name: headerEnvName(h.name), label: h.name,
+        placeholder: h.description || h.name, required: h.isRequired,
+        secret: h.isSecret, description: h.description,
+      })),
+      installId: remote.url,
+    }
+  }
   const pkg = srv.packages?.find(p => p.transport?.type === 'stdio' || p.registryType === 'smithery')
   if (!pkg) return null
 
@@ -269,8 +306,10 @@ function getInstallOption(entry: McpRegistryServer): McpOption | null {
     description: srv.description || 'Recommended MCP server.',
     packageId: pkgType === 'smithery' ? `${pkg.identifier} (Smithery)` : pkg.identifier,
     ...getIcon(srv),
+    iconUrl: srv.icons?.[0]?.src,
     ...getBadge(pkgType),
     command,
+    origin: pkgType === 'smithery' ? 'smithery.ai' : pkgType,
     args,
     argEnvNames,
     envVars: (pkg.environmentVariables || []).map(v => ({
@@ -359,7 +398,8 @@ async function doInstall(mcp: McpOption, env: Record<string, string>, argsOverri
       command: mcp.command,
       args: argsOverride ?? mcp.args,
       env: Object.keys(env).length ? env : undefined,
-      origin: mcp.badge?.toLowerCase() === 'smithery' ? 'smithery.ai' : 'npm',
+      origin: mcp.origin,
+      icon_url: mcp.iconUrl,
       description: mcp.description,
       env_hints: mcp.envVars?.length ? mcp.envVars.map(v => ({
         name: v.name,
