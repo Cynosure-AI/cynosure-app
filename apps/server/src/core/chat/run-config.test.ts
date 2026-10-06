@@ -1,5 +1,8 @@
 import Database from 'better-sqlite3'
-import { describe, expect, test } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
 import {
@@ -12,6 +15,18 @@ import {
 } from './run-config.js'
 
 describe('chat run configuration', () => {
+    let directory = ''
+
+    beforeEach(() => {
+        directory = mkdtempSync(join(tmpdir(), 'cynosure-run-config-'))
+        vi.stubEnv('CYNOSURE_DATA_DIR', directory)
+    })
+
+    afterEach(() => {
+        vi.unstubAllEnvs()
+        rmSync(directory, { recursive: true, force: true })
+    })
+
     test('deduplicates valid explicit tools and distinguishes manual from automatic routing', () => {
         const registry = { hasKey: (key: string) => key !== 'unknown' } as ToolRegistry
 

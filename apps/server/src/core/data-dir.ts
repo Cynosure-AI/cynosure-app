@@ -12,10 +12,18 @@ export const CYNOSURE_DATA_DIR_NAME = 'cynosure'
  *    - Linux:   ~/.config/cynosure
  *    - macOS:   ~/Library/Application Support/cynosure
  *    - Windows: %APPDATA%/cynosure
+ *
+ * Under Vitest the platform fallback is refused: every path (SQLite, memories,
+ * artifacts, logs) derives from here, so a test without its own data dir would
+ * otherwise read and write the user's real installation.
  */
 export function getDataDir(): string {
     if (process.env.CYNOSURE_DATA_DIR) {
         return process.env.CYNOSURE_DATA_DIR
+    }
+
+    if (process.env.VITEST) {
+        throw new Error('Tests must set CYNOSURE_DATA_DIR; refusing to use the real data directory.')
     }
 
     const home = homedir()
