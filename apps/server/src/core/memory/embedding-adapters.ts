@@ -36,10 +36,10 @@ export function createEmbeddingAdapter(connection: EmbeddingConnection): Embeddi
 
   const defaultHeaders: Record<string, string> = {}
   if (connection.providerType === 'openrouter') {
-    defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
+    defaultHeaders['HTTP-Referer'] = 'https://cynosure-ai.github.io'
     defaultHeaders['X-OpenRouter-Title'] = 'Cynosure Embedder'
   } else if (connection.providerType === 'requesty') {
-    defaultHeaders['HTTP-Referer'] = 'https://github.com/andreasjhagen/Cynosure'
+    defaultHeaders['HTTP-Referer'] = 'https://cynosure-ai.github.io'
     defaultHeaders['X-Title'] = 'Cynosure Embedder'
   }
   const client = new OpenAI({ baseURL: connection.baseUrl, apiKey: connection.apiKey, defaultHeaders })

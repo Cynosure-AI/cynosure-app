@@ -7,11 +7,13 @@ directories:
   output: release
 
 # electron-builder writes app-update.yml into the packaged app and generates
-# latest.yml/latest-linux.yml beside the installers. The generic provider is
-# hosted manually; upload the metadata and artifacts together.
+# latest.yml/latest-linux.yml beside the installers. The release workflow
+# (.github/workflows/build-release.yml) attaches the metadata and installers to
+# a GitHub release; electron-builder itself never publishes (--publish never).
 publish:
-  provider: generic
-  url: https://cometcms.banjocomet.com/media/cynosure/
+  provider: github
+  owner: Cynosure-AI
+  repo: cynosure-app
 
 files:
   - out/**/*
@@ -62,5 +64,8 @@ win:
   icon: build/icon.ico
 
 nsis:
+  # No spaces: GitHub renames uploaded assets with spaces, which would break the
+  # filenames referenced by latest.yml.
+  artifactName: ${productName}-Setup-${version}.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true

@@ -5,9 +5,9 @@
     "author": {
         "name": "Andreas Hagen",
         "email": "andreas.hagen@outlook.com",
-        "url": "https://github.com/andreasjhagen/Cynosure"
+        "url": "https://github.com/Cynosure-AI/cynosure-app"
     },
-    "homepage": "https://github.com/andreasjhagen/Cynosure",
+    "homepage": "https://github.com/Cynosure-AI/cynosure-app",
     "desktopName": "com.cynosure.desktop",
     "main": "./out/main/index.js",
     "scripts": {
@@ -19,7 +19,7 @@
         "package:linux": "pnpm run build:deps && pnpm run package:skip-deps --linux",
         "package:win": "pnpm run build:deps && pnpm run package:skip-deps --win",
         "package:mac": "pnpm run build:deps && pnpm run package:skip-deps --mac",
-        "package:skip-deps": "pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --config electron-builder.yml"
+        "package:skip-deps": "pnpm run build && node scripts/prepare-server-deps.mjs && electron-builder --config electron-builder.yml --publish never"
     },
     "dependencies": {
         "@electron-toolkit/utils": "^4.0.0",

@@ -1,7 +1,10 @@
 import { app, BrowserWindow, ipcMain, net } from 'electron'
 import electronUpdater, { type ProgressInfo, type UpdateInfo } from 'electron-updater'
 
-const DEFAULT_UPDATE_URL = 'https://cometcms.banjocomet.com/media/cynosure/'
+// Releases are published on GitHub. CYNOSURE_UPDATE_URL can point at a self-hosted
+// generic feed (a directory holding latest*.yml, installers, and CHANGELOG.md) instead.
+const GITHUB_OWNER = 'Cynosure-AI'
+const GITHUB_REPO = 'cynosure-app'
 
 export type UpdateStatus =
     | 'unavailable'
@@ -32,7 +35,7 @@ let state: UpdateState = {
     message: app.isPackaged ? undefined : 'Updates are available in packaged desktop builds.'
 }
 let initialized = false
-let updateFeedUrl = DEFAULT_UPDATE_URL
+let genericFeedUrl: string | undefined
 
 function publishState(patch: Partial<UpdateState>): void {
     state = { ...state, ...patch }
@@ -57,7 +60,7 @@ function updateProgress(progress: ProgressInfo): void {
 
 function errorMessage(error: Error): string {
     const message = error.message.trim()
-    if (/Cannot find latest(?:-linux|-mac)?\.yml|404 Not Found/i.test(message)) {
+    if (/Cannot find latest(?:-linux|-mac)?\.yml|No published versions on GitHub|Unable to find latest version on GitHub|404 Not Found/i.test(message)) {
         return 'Update information is not available on the server yet.'
     }
     if (/ENOTFOUND|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED/i.test(message)) {
@@ -66,12 +69,25 @@ function errorMessage(error: Error): string {
     return message || 'The update server could not be reached.'
 }
 
+async function fetchReleaseNotes(version: string): Promise<string | undefined> {
+    if (genericFeedUrl) {
+        const response = await net.fetch(new URL('CHANGELOG.md', genericFeedUrl).toString())
+        return response.ok ? response.text() : undefined
+    }
+
+    // electron-updater reports GitHub release notes as rendered HTML; the API returns the Markdown body.
+    const response = await net.fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/v${version}`,
+        { headers: { Accept: 'application/vnd.github+json' } }
+    )
+    if (!response.ok) return undefined
+    const release = await response.json() as { body?: string | null }
+    return release.body ?? undefined
+}
+
 async function fetchChangelog(version: string): Promise<void> {
     try {
-        const response = await net.fetch(new URL('CHANGELOG.md', updateFeedUrl).toString())
-        if (!response.ok) return
-
-        const changelogMarkdown = (await response.text()).trim()
+        const changelogMarkdown = (await fetchReleaseNotes(version))?.trim()
         if (!changelogMarkdown) return
 
         // A newer check may have completed while the changelog request was in flight.
@@ -112,8 +128,13 @@ export function initializeUpdater(): void {
 
     if (!app.isPackaged) return
 
-    updateFeedUrl = (process.env.CYNOSURE_UPDATE_URL || DEFAULT_UPDATE_URL).replace(/\/?$/, '/')
-    autoUpdater.setFeedURL({ provider: 'generic', url: updateFeedUrl })
+    const customFeedUrl = process.env.CYNOSURE_UPDATE_URL?.trim()
+    if (customFeedUrl) {
+        genericFeedUrl = customFeedUrl.replace(/\/?$/, '/')
+        autoUpdater.setFeedURL({ provider: 'generic', url: genericFeedUrl })
+    } else {
+        autoUpdater.setFeedURL({ provider: 'github', owner: GITHUB_OWNER, repo: GITHUB_REPO })
+    }
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
 

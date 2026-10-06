@@ -82,7 +82,7 @@ export class MemoryReranker {
       headers: {
         Authorization: `Bearer ${provider.config.apiKey || ''}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/andreasjhagen/Cynosure',
+        'HTTP-Referer': 'https://cynosure-ai.github.io',
         'X-OpenRouter-Title': 'Cynosure'
       },
       body: JSON.stringify({

@@ -125,7 +125,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     protected get defaultHeaders(): Record<string, string> {
         return {
-            'HTTP-Referer': 'https://github.com/andreasjhagen/Cynosure',
+            'HTTP-Referer': 'https://cynosure-ai.github.io',
             'X-OpenRouter-Title': 'Cynosure'
         }
     }
@@ -1089,7 +1089,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
         return await this.requestOpenRouter<DecisionsResponse>(`${apiRoot}/alpha/decisions`, {
             method: 'POST',
             headers: {
-                'HTTP-Referer': 'https://github.com/andreasjhagen/Cynosure',
+                'HTTP-Referer': 'https://cynosure-ai.github.io',
                 'X-OpenRouter-Title': 'Cynosure'
             },
             body: JSON.stringify(request),
