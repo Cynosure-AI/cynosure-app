@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
 import { AgentExecutor, MaxToolRoundsExceededError } from './agent-executor.js'
 import type { LLMGateway } from '../gateway/gateway.js'
@@ -474,24 +471,16 @@ describe('AgentExecutor tool-loop safety', () => {
       } else yield { content: 'done', done: true }
     })())
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    // Generated media is copied into the conversation's artifact folder.
-    const dataDir = mkdtempSync(join(tmpdir(), 'cynosure-media-origin-'))
-    vi.stubEnv('CYNOSURE_DATA_DIR', dataDir)
     const executor = new AgentExecutor({
       gateway: { streamComplete } as unknown as LLMGateway,
       tools: [viewer, generator], conversationId: 'media-origin', broadcast: vi.fn(), model: 'test',
       saveMessages: false, emitEvents: false,
     })
 
-    try {
-      const result = await executor.run([{ role: 'user', content: 'go' }])
+    const result = await executor.run([{ role: 'user', content: 'go' }])
 
-      expect(result.images).toEqual(['/missing/generated.png'])
-    } finally {
-      warn.mockRestore()
-      vi.unstubAllEnvs()
-      rmSync(dataDir, { recursive: true, force: true })
-    }
+    expect(result.images).toEqual(['/missing/generated.png'])
+    warn.mockRestore()
   })
 
   test('throws a distinct error when tool rounds are exhausted', async () => {

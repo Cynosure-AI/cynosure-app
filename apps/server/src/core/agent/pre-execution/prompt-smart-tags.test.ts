@@ -31,6 +31,15 @@ describe('prompt smart tags', () => {
         )
     })
 
+    test('formats local date/time tags to the minute with a timezone', () => {
+        const result = resolvePromptSmartTags('{{currentDateTime}} | {{currentTime}}', {
+            now: new Date('2026-05-06T07:08:09.000Z'),
+        })
+
+        expect(result).toMatch(/\d:\d{2}/)
+        expect(result).not.toMatch(/\d:\d{2}:\d{2}/)
+    })
+
     test('leaves unknown or syntactically invalid tags unchanged', () => {
         expect(resolvePromptSmartTags('{{unknown}} {{ agentId }} {{1bad}}', { agentId: 'agent' }))
             .toBe('{{unknown}} agent {{1bad}}')

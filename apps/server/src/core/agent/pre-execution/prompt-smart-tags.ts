@@ -63,10 +63,20 @@ function formatSelectedMemoryFolderNames(folders: PromptSmartTagContext['selecte
         : ''
 }
 
+// Minute precision keeps resolved prompts stable enough for provider prefix caching.
+const MINUTE_PRECISION_TIME: Intl.DateTimeFormatOptions = {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+}
+
 function formatDateTime(date: Date, locale: string, timeZone: string): string {
     return new Intl.DateTimeFormat(locale, {
-        dateStyle: 'full',
-        timeStyle: 'long',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        ...MINUTE_PRECISION_TIME,
         timeZone,
     }).format(date)
 }
@@ -80,7 +90,7 @@ function formatDate(date: Date, locale: string, timeZone: string): string {
 
 function formatTime(date: Date, locale: string, timeZone: string): string {
     return new Intl.DateTimeFormat(locale, {
-        timeStyle: 'long',
+        ...MINUTE_PRECISION_TIME,
         timeZone,
     }).format(date)
 }
