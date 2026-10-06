@@ -150,7 +150,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 INSERT INTO conversations (
                     id, title, agent_id, ma_workspace_id, origin, pinned,
                     last_read_at, last_context_tokens, execution_config_json, metadata_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?,
+                    json_set(CASE WHEN json_valid(?) THEN ? ELSE '{}' END, '$.titleGenerationPending', 1), ?, ?)
             `).run(
                 id,
                 title,
@@ -160,6 +161,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 now,
                 lastContextTokens,
                 source.execution_config_json,
+                source.metadata_json,
                 source.metadata_json,
                 now,
                 now,
@@ -835,7 +837,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         async (req) => {
             const { title } = req.body
             const db = getDb()
-            db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(
+            db.prepare(`UPDATE conversations SET title = ?, updated_at = ?,
+                metadata_json = json_remove(CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+                                            '$.titleGenerationPending')
+                WHERE id = ?`).run(
                 title,
                 Date.now(),
                 req.params.id

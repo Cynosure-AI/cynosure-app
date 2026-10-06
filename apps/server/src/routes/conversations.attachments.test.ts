@@ -8,6 +8,7 @@ import { materializeAudioArtifacts, materializeImageArtifacts } from '../core/ar
 import { materializeFileAttachments } from '../core/artifacts/file-artifacts.js'
 import { persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import { registerConversationRoutes } from './conversations.js'
+import { shouldGenerateConversationTitle } from '../core/chat/conversation-title.js'
 
 describe('conversation message attachment resolution', () => {
     let directory = ''
@@ -67,8 +68,8 @@ describe('conversation message attachment resolution', () => {
 
     test('forks persisted history and configuration through the selected message', async () => {
         const db = getDb()
-        db.prepare(`INSERT INTO conversations (id, title, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
-            .run('source', 'Original', '{"model":"selected-model"}', 1, 4)
+        db.prepare(`INSERT INTO conversations (id, title, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run('source', 'Original', '{"model":"selected-model"}', '{"custom":"preserved"}', 1, 4)
         const insert = db.prepare('INSERT INTO messages (id, conversation_id, role, content, context_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)')
         insert.run('user', 'source', 'user', 'Question', null, 1)
         insert.run('answer', 'source', 'assistant', 'Answer', 42, 2)
@@ -89,9 +90,34 @@ describe('conversation message attachment resolution', () => {
             const clonedEvent = db.prepare('SELECT event_json FROM chat_events WHERE conversation_id = ?').get(id) as { event_json: string }
             const forkedAnswer = db.prepare("SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant'").get(id) as { id: string }
             expect(JSON.parse(clonedEvent.event_json).item.id).toBe(forkedAnswer.id)
+            expect(db.prepare('SELECT metadata_json FROM conversations WHERE id = ?').get(id)).toEqual({
+                metadata_json: '{"custom":"preserved","titleGenerationPending":1}',
+            })
+            // Copied messages do not prevent naming from the first new message.
+            expect(shouldGenerateConversationTitle(db, id)).toBe(true)
+            db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run('New Branch Topic', id)
+            expect(shouldGenerateConversationTitle(db, id)).toBe(false)
+            expect(db.prepare('SELECT metadata_json FROM conversations WHERE id = ?').get(id)).toEqual({ metadata_json: '{"custom":"preserved"}' })
+            expect(shouldGenerateConversationTitle(db, 'source')).toBe(false)
+
+            const secondFork = await app.inject({ method: 'POST', url: '/api/chat/conversations/source/fork', payload: { messageId: 'answer' } })
+            const manualId = secondFork.json().id
+            const rename = await app.inject({ method: 'PATCH', url: `/api/chat/conversations/${manualId}/title`, payload: { title: 'My Branch' } })
+            expect(rename.statusCode).toBe(200)
+            expect(shouldGenerateConversationTitle(db, manualId)).toBe(false)
+            expect(db.prepare('SELECT title, metadata_json FROM conversations WHERE id = ?').get(manualId)).toEqual({ title: 'My Branch', metadata_json: '{"custom":"preserved"}' })
         } finally {
             await app.close()
         }
+    })
+
+    test('continues naming new chats while preserving existing titles', () => {
+        const db = getDb()
+        db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('new', 'New Chat', 1, 1)
+        expect(shouldGenerateConversationTitle(db, 'new')).toBe(true)
+        db.prepare('UPDATE conversations SET title = ? WHERE id = ?').run('Existing Title', 'new')
+        expect(shouldGenerateConversationTitle(db, 'new')).toBe(false)
+        expect(shouldGenerateConversationTitle(db, 'missing')).toBe(false)
     })
 
     test('returns provider-safe media and original files for an edited message', async () => {

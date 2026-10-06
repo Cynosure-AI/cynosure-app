@@ -34,6 +34,7 @@ import {
   updateActiveChatExecution,
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
+import { shouldGenerateConversationTitle } from '../core/chat/conversation-title.js'
 import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsHint, insertTurnLocalContext, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
@@ -329,11 +330,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           createdAt: now,
         }, executionId) })
 
-      // Start naming the conversation as soon as the first user message is
-      // available. Title generation only uses that message, so it should not
-      // wait for planning or the assistant response to finish.
-      const conversationForTitle = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId) as { title: string } | undefined
-      if (conversationForTitle?.title === 'New Chat') {
+      // Name new chats and forks from their first new user message without
+      // waiting for planning or the assistant response to finish.
+      if (shouldGenerateConversationTitle(db, conversationId)) {
         if (generateTitlePref !== false) {
           void generateTitle({
             conversationId,
