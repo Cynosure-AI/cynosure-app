@@ -421,6 +421,17 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 21,
+        description: 'Index tool-call chat events by time for usage metrics',
+        // Partial index: the metrics query must repeat this exact WHERE term
+        // to use it, otherwise it falls back to scanning every chat event.
+        up: (db) => db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_chat_events_tool_calls
+                ON chat_events(created_at)
+                WHERE json_extract(event_json, '$.type') = 'tool-calls';
+        `),
+    },
 ]
 
 /** The schema version this build produces and expects. */

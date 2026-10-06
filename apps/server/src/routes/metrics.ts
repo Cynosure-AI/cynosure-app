@@ -148,17 +148,23 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
 
         // Keep per-request token counts for tier-aware cost calculation. A
         // grouped average can cross a long-context threshold incorrectly.
+        // The same rows also feed the per-day model breakdown below.
         const assistantCostRows = db.prepare(`
             SELECT
+                DATE(created_at / 1000, 'unixepoch') as date,
                 COALESCE(provider, 'unknown') as provider,
                 COALESCE(model, 'unknown') as model,
+                model IS NOT NULL as has_model,
                 COALESCE(prompt_tokens, 0) as prompt_tokens,
                 COALESCE(completion_tokens, 0) as completion_tokens
             FROM messages
             WHERE role = 'assistant' AND created_at >= ?
+            ORDER BY created_at ASC
         `).all(sinceMs) as {
+            date: string
             provider: string
             model: string
+            has_model: number
             prompt_tokens: number
             completion_tokens: number
         }[]
@@ -176,18 +182,41 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             }
         }
         const modelCostTotals = new Map<string, number>()
+        // Per-day model breakdown (combine providers for display) and cost
+        const modelsByDate = new Map<string, { model: string; messages: number; tokens: number; estimatedCost: number | null }[]>()
+        const dailyCostMap = new Map<string, number>()
         for (const row of assistantCostRows) {
             const providerType = providerTypeMap.get(row.provider) ?? row.provider
-            const nativeKey = `${row.provider}\u0000${row.model}`
-            const pricing = nativeGatewayCosts.has(nativeKey)
-                ? nativeGatewayCosts.get(nativeKey)
-                : getModelCost(providerType, row.model)
-            if (!pricing) continue
             const key = `${row.provider}\u0000${row.model}`
-            modelCostTotals.set(
-                key,
-                (modelCostTotals.get(key) ?? 0) + estimateTokenCost(pricing, row.prompt_tokens, row.completion_tokens)
-            )
+            const pricing = nativeGatewayCosts.has(key)
+                ? nativeGatewayCosts.get(key)
+                : getModelCost(providerType, row.model)
+            const cost = pricing
+                ? estimateTokenCost(pricing, row.prompt_tokens, row.completion_tokens)
+                : null
+
+            if (cost !== null) {
+                modelCostTotals.set(key, (modelCostTotals.get(key) ?? 0) + cost)
+            }
+
+            if (!row.has_model) continue
+            if (cost !== null) {
+                dailyCostMap.set(row.date, (dailyCostMap.get(row.date) ?? 0) + cost)
+            }
+
+            let arr = modelsByDate.get(row.date)
+            if (!arr) { arr = []; modelsByDate.set(row.date, arr) }
+            const totalTokens = row.prompt_tokens + row.completion_tokens
+            const existing = arr.find(m => m.model === row.model)
+            if (existing) {
+                existing.messages += 1
+                existing.tokens += totalTokens
+                if (cost !== null) {
+                    existing.estimatedCost = (existing.estimatedCost ?? 0) + cost
+                }
+            } else {
+                arr.push({ model: row.model, messages: 1, tokens: totalTokens, estimatedCost: cost })
+            }
         }
 
         const auxiliaryUsage = db.prepare(`
@@ -211,7 +240,8 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             total_completion_tokens: number
         }[]
 
-        // Tool calls are counted from the canonical event log.
+        // Tool calls are counted from the canonical event log. The WHERE terms
+        // must match the partial index idx_chat_events_tool_calls exactly.
         const toolEvents = db.prepare(`
             SELECT event_json FROM chat_events
             WHERE created_at >= ? AND json_extract(event_json, '$.type') = 'tool-calls'
@@ -266,61 +296,6 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             messages: number
             tokens: number
         }[]
-
-        // Per-day model breakdown (only assistant messages have model set)
-        // Include provider and separate token columns for per-day cost calculation
-        const dailyModelRows = db.prepare(`
-            SELECT
-                DATE(created_at / 1000, 'unixepoch') as date,
-                COALESCE(provider, '') as provider,
-                model,
-                1 as messages,
-                COALESCE(prompt_tokens, 0) as prompt_tokens,
-                COALESCE(completion_tokens, 0) as completion_tokens
-            FROM messages
-            WHERE role = 'assistant' AND created_at >= ? AND model IS NOT NULL
-            ORDER BY date ASC, created_at ASC
-        `).all(sinceMs) as {
-            date: string
-            provider: string
-            model: string
-            messages: number
-            prompt_tokens: number
-            completion_tokens: number
-        }[]
-
-        // Aggregate model breakdown by date+model (combine providers for display)
-        const modelsByDate = new Map<string, { model: string; messages: number; tokens: number; estimatedCost: number | null }[]>()
-        const dailyCostMap = new Map<string, number>()
-        for (const row of dailyModelRows) {
-            let arr = modelsByDate.get(row.date)
-            if (!arr) { arr = []; modelsByDate.set(row.date, arr) }
-            const totalTokens = row.prompt_tokens + row.completion_tokens
-
-            const providerType = providerTypeMap.get(row.provider) ?? row.provider
-            const nativeKey = `${row.provider}\u0000${row.model}`
-            const pricing = nativeGatewayCosts.has(nativeKey)
-                ? nativeGatewayCosts.get(nativeKey)
-                : getModelCost(providerType, row.model)
-            const cost = pricing
-                ? estimateTokenCost(pricing, row.prompt_tokens, row.completion_tokens)
-                : null
-
-            if (cost !== null) {
-                dailyCostMap.set(row.date, (dailyCostMap.get(row.date) ?? 0) + cost)
-            }
-
-            const existing = arr.find(m => m.model === row.model)
-            if (existing) {
-                existing.messages += row.messages
-                existing.tokens += totalTokens
-                if (cost !== null) {
-                    existing.estimatedCost = (existing.estimatedCost ?? 0) + cost
-                }
-            } else {
-                arr.push({ model: row.model, messages: row.messages, tokens: totalTokens, estimatedCost: cost })
-            }
-        }
 
         const dailyAuxiliaryRows = db.prepare(`
             SELECT
