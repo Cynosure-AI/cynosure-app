@@ -32,6 +32,7 @@ import { OpenRouterProvider } from './providers/openrouter.provider.js'
 import { RequestyProvider } from './providers/requesty.provider.js'
 import { GroqProvider } from './providers/groq.provider.js'
 import { MistralProvider } from './providers/mistral.provider.js'
+import { UnslothProvider } from './providers/unsloth.provider.js'
 
 export class LLMGateway {
   private providers = new Map<string, BaseLLMProvider>()
@@ -74,6 +75,8 @@ export class LLMGateway {
         return new GroqProvider(config)
       case 'mistral':
         return new MistralProvider(config)
+      case 'unsloth':
+        return new UnslothProvider(config)
       default:
         throw new Error(`Unknown provider type: ${config.type}`)
     }
@@ -152,7 +155,7 @@ export class LLMGateway {
     if (type === 'decision' && !supportsDecisionModels(provider)) return []
 
     const models = await provider.listModelItems(type)
-    if (provider.config.type === 'ollama' || provider.config.type === 'lmstudio') {
+    if (provider.config.type === 'ollama' || provider.config.type === 'lmstudio' || provider.config.type === 'unsloth') {
       return models
     }
 

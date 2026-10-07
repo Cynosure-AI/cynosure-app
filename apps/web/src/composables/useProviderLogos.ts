@@ -15,6 +15,7 @@ import openrouterLogoDark from '../assets/img/provider-logos/openrouter-dark.png
 import requestyLogo from '../assets/img/provider-logos/requesty.png'
 import groqLogo from '../assets/img/provider-logos/groq.png'
 import mistralLogo from '../assets/img/provider-logos/mistral.png'
+import unslothstudioLogo from '../assets/img/provider-logos/unslothstudio.png'
 
 const providerLogos: Record<string, { light: string; dark: string }> = {
     openai: { light: openaiLogo, dark: openaiLogoDark },
@@ -27,6 +28,7 @@ const providerLogos: Record<string, { light: string; dark: string }> = {
     requesty: { light: requestyLogo, dark: requestyLogo },
     groq: { light: groqLogo, dark: groqLogo },
     mistral: { light: mistralLogo, dark: mistralLogo },
+    unsloth: { light: unslothstudioLogo, dark: unslothstudioLogo },
 }
 
 export function useProviderLogos() {

@@ -29,7 +29,8 @@ function getProviderIcon(type: string): string {
     openrouter: 'R',
     requesty: 'R',
     groq: 'G',
-    mistral: 'M'
+    mistral: 'M',
+    unsloth: 'U'
   }
   return icons[type] || '?'
 }

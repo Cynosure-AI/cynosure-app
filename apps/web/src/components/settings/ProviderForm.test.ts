@@ -44,6 +44,23 @@ test('a local provider needs a base URL but no API key', async () => {
   expect(wrapper.text()).toContain('Choose a default model.')
 })
 
+test('Unsloth Studio needs both a base URL and an API key', async () => {
+  const wrapper = mountForm()
+  await wrapper.get('select').setValue('unsloth')
+
+  expect(wrapper.get('input[type="url"]').element).toHaveProperty('value', 'http://localhost:8888/v1')
+  expect(wrapper.text()).not.toContain('(optional)')
+  expect(loadButton(wrapper).attributes('disabled')).toBeDefined()
+  expect(wrapper.text()).toContain('Enter an API key.')
+
+  await wrapper.get('input[type="password"]').setValue('sk-unsloth-test')
+  expect(loadButton(wrapper).attributes('disabled')).toBeUndefined()
+
+  await wrapper.get('input[type="url"]').setValue('')
+  expect(loadButton(wrapper).attributes('disabled')).toBeDefined()
+  expect(wrapper.text()).toContain('Enter the server base URL.')
+})
+
 test('models are loaded from the unsaved draft and failures are explained', async () => {
   mocks.previewModels.mockRejectedValueOnce(new Error('401 Incorrect API key provided'))
   const wrapper = mountForm()

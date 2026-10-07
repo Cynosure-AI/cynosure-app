@@ -359,7 +359,7 @@ async function ensureProviderModels(providerId: string): Promise<void> {
     const models = Array.from(modelMap.values()).sort((a, b) => a.id.localeCompare(b.id));
     const provider = props.providers.find((item) => item.id === providerId);
     const hasMetadata = models.some(modelHasMetadata);
-    if (hasMetadata || provider?.type === 'ollama' || provider?.type === 'lmstudio') {
+    if (hasMetadata || provider?.type === 'ollama' || provider?.type === 'lmstudio' || provider?.type === 'unsloth') {
       sharedModelCache.set(key, { models, types: typeMap, fetchedAt: Date.now() });
     }
     providerModels.value = { ...providerModels.value, [providerId]: models };

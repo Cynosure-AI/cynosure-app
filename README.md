@@ -18,7 +18,7 @@ Run Cynosure as a web app on your own machine or package it as a desktop app. Yo
 
 ## What you can do
 
-- **Chat with different models.** Connect providers such as OpenAI, Anthropic, Google Gemini, or local runtimes including Ollama and LM Studio. Stream responses and work with supported image, file, and audio inputs.
+- **Chat with different models.** Connect providers such as OpenAI, Anthropic, Google Gemini, or local runtimes including Ollama, LM Studio, and Unsloth Studio. Stream responses and work with supported image, file, and audio inputs.
 - **Create agents for recurring work.** Set an agent's instructions, model, tools, and memory access. Use specialist sub-agents for delegated tasks.
 - **Give agents useful tools.** Combine built-in tools with Model Context Protocol (MCP) servers. Review or approve tool use with configurable human approval controls.
 - **Keep a searchable knowledge base.** Organize notes in memory folders and let agents retrieve relevant passages during a conversation. Markdown source files remain the source of truth; search indexes can be rebuilt.

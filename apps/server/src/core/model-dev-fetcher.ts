@@ -120,7 +120,7 @@ export function getModelMetadata(provider: string, model: string): ModelMetadata
 
     // Never attach a hosted provider's price to a locally-served model that
     // happens to share its id.
-    if (normProvider === 'ollama' || normProvider === 'lmstudio') return null
+    if (normProvider === 'ollama' || normProvider === 'lmstudio' || normProvider === 'unsloth') return null
 
     const fallback = modelOnlyLookup.get(model)
     if (fallback) return fallback

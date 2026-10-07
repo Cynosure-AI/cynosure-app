@@ -5,9 +5,11 @@ import type { LLMProviderConfig, ModelListType, TranscriptionRequest, VideoGener
 import { nanoid } from 'nanoid'
 
 const PROVIDER_TYPES = new Set<LLMProviderConfig['type']>([
-  'openai', 'anthropic', 'google', 'lmstudio', 'grok', 'ollama', 'openrouter', 'requesty', 'groq', 'mistral'
+  'openai', 'anthropic', 'google', 'lmstudio', 'grok', 'ollama', 'openrouter', 'requesty', 'groq', 'mistral', 'unsloth'
 ])
-/** Local servers run without authentication; every hosted provider needs a key. */
+/** Local servers take a user-supplied base URL. */
+const LOCAL_PROVIDER_TYPES = new Set<LLMProviderConfig['type']>(['lmstudio', 'ollama', 'unsloth'])
+/** Local servers that run without authentication; every other provider needs a key. */
 const KEYLESS_PROVIDER_TYPES = new Set<LLMProviderConfig['type']>(['lmstudio', 'ollama'])
 const MODEL_LIST_TYPES = new Set<ModelListType>(['llm', 'embedding', 'image', 'video', 'transcription'])
 
@@ -34,7 +36,7 @@ export function parseProviderConfig(body: unknown, { requireModel = true } = {})
   if (requireModel && !name) return { error: 'Provider name is required.' }
   if (requireModel && !defaultModel) return { error: 'Default model is required.' }
   if (!KEYLESS_PROVIDER_TYPES.has(type) && !apiKey) return { error: 'An API key is required for this provider.' }
-  if (KEYLESS_PROVIDER_TYPES.has(type) && !baseUrl) return { error: 'A base URL is required for local providers.' }
+  if (LOCAL_PROVIDER_TYPES.has(type) && !baseUrl) return { error: 'A base URL is required for local providers.' }
   if (baseUrl) {
     try {
       const protocol = new URL(baseUrl).protocol
