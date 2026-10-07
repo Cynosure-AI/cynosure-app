@@ -207,7 +207,7 @@ describe('sub-agent execution', () => {
         mocks.realDb = undefined
     })
 
-    test('rejects an attachment reference outside the current conversation', async () => {
+    test('ignores an attachment reference when the conversation has no attachments', async () => {
         const [tool] = buildSubAgentTools({
             subAgents: [{ agentId: 'worker' }],
             conversationId: 'conversation',
@@ -216,8 +216,26 @@ describe('sub-agent execution', () => {
 
         const result = await tool.execute({ internalName: 'worker', instructions: 'Edit it', attachmentIndex: 1 })
 
+        expect(result.success).toBe(true)
+        expect(mocks.executorMessages).toEqual([{ role: 'user', content: 'Edit it' }])
+    })
+
+    test('rejects an attachment reference beyond the available attachments', async () => {
+        mocks.attachmentMessages = [{
+            id: 'message',
+            content_blocks_json: JSON.stringify([{ type: 'image', artifactId: 'image', url: 'data:image/png;base64,aW1hZ2U=' }]),
+            created_at: 1,
+        }]
+        const [tool] = buildSubAgentTools({
+            subAgents: [{ agentId: 'worker' }],
+            conversationId: 'conversation',
+            broadcast: vi.fn(),
+        })
+
+        const result = await tool.execute({ internalName: 'worker', instructions: 'Edit it', attachmentIndex: 2 })
+
         expect(result.success).toBe(false)
-        expect(result.error).toBe('Attachment index 1 does not exist in this conversation.')
+        expect(result.error).toContain('Attachment index 2 does not exist in this conversation (1 attachment available)')
         expect(mocks.prepareAgentExecution).not.toHaveBeenCalled()
     })
 

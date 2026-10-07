@@ -102,10 +102,8 @@ function parseMediaBlocks(json: string | null): Array<{ type: 'image' | 'audio';
     }
 }
 
-/** Resolve a one-based, newest-first reference across attachments in this conversation. */
-function resolveConversationAttachment(conversationId: string, attachmentIndex: number): ContentPart[] | null {
-    if (!Number.isInteger(attachmentIndex) || attachmentIndex < 1) return null
-
+/** List lazy loaders for every attachment in this conversation, newest message first. */
+function listConversationAttachments(conversationId: string): Array<() => ContentPart[]> {
     const db = getDb()
     const messages = db.prepare(`
         SELECT id, content_blocks_json, created_at
@@ -126,30 +124,29 @@ function resolveConversationAttachment(conversationId: string, attachmentIndex: 
         filesByMessage.set(file.message_id, current)
     }
 
-    let currentIndex = 0
+    const attachments: Array<() => ContentPart[]> = []
     for (const message of messages) {
         for (const block of parseMediaBlocks(message.content_blocks_json)) {
-            currentIndex += 1
-            if (currentIndex === attachmentIndex) {
+            attachments.push(() => {
                 const url = artifactFileUrlToDataUrl(block.url) || block.url
                 return block.type === 'image'
                     ? [{ type: 'image_url', image_url: { url } }]
                     : [{ type: 'audio_url', audio_url: { url } }]
-            }
+            })
         }
         for (const file of filesByMessage.get(message.id) || []) {
-            currentIndex += 1
-            if (currentIndex !== attachmentIndex) continue
-            const text = readFileAttachmentText({ textPath: file.text_path || undefined })
-            const details = [
-                `[Attached file: ${file.name}; attachmentId: ${file.id}]`,
-                file.original_path ? `Path: ${file.original_path}` : '',
-                text || '',
-            ].filter(Boolean).join('\n')
-            return [{ type: 'text', text: details }]
+            attachments.push(() => {
+                const text = readFileAttachmentText({ textPath: file.text_path || undefined })
+                const details = [
+                    `[Attached file: ${file.name}; attachmentId: ${file.id}]`,
+                    file.original_path ? `Path: ${file.original_path}` : '',
+                    text || '',
+                ].filter(Boolean).join('\n')
+                return [{ type: 'text', text: details }]
+            })
         }
     }
-    return null
+    return attachments
 }
 
 function messageText(content: ChatMessage['content']): string {
@@ -350,7 +347,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
                 attachmentIndex: {
                     type: 'integer',
                     minimum: 1,
-                    description: 'Optional one-based reference to an attachment in the parent conversation. Attachments are ordered newest message first; within a message: images, audio, then files. Use 1 for the most recent attachment.'
+                    description: 'Only set this when the user shared an image, audio, or file attachment the sub-agent must see; omit it otherwise. One-based reference to an attachment in the parent conversation, ordered newest message first; within a message: images, audio, then files. 1 is the most recent attachment.'
                 },
             },
             required: ['internalName', 'instructions']
@@ -359,7 +356,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
         execute: async (params: unknown, executionSignal?: AbortSignal): Promise<ToolResult> => {
             const activeSignal = executionSignal ?? signal
             activeSignal?.throwIfAborted()
-            const { internalName, instructions, context, attachmentIndex } = params as { internalName: string; instructions: string; context?: string; attachmentIndex?: number }
+            const { internalName, instructions, context, attachmentIndex } = params as { internalName: string; instructions: string; context?: string; attachmentIndex?: number | null }
             const selected = availableSubAgents.find(({ agentData }) => agentData.internalName === internalName)
 
             if (!selected) {
@@ -375,15 +372,24 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             const userMessage = context
                 ? `## Context\n${context}\n\n## Task\n${instructions}`
                 : instructions
-            const attachmentParts = attachmentIndex === undefined
-                ? undefined
-                : resolveConversationAttachment(conversationId, attachmentIndex)
-            if (attachmentIndex !== undefined && !attachmentParts) {
-                return {
-                    success: false,
-                    output: '',
-                    error: `Attachment index ${attachmentIndex} does not exist in this conversation.`,
+            // Models sometimes fill the optional index even when nothing is attached;
+            // ignore it in that case instead of failing the delegation.
+            const attachments = attachmentIndex === undefined || attachmentIndex === null
+                ? []
+                : listConversationAttachments(conversationId)
+            let attachmentParts: ContentPart[] | undefined
+            if (attachments.length) {
+                const loadAttachment = Number.isInteger(attachmentIndex) && attachmentIndex! >= 1
+                    ? attachments[attachmentIndex! - 1]
+                    : undefined
+                if (!loadAttachment) {
+                    return {
+                        success: false,
+                        output: '',
+                        error: `Attachment index ${attachmentIndex} does not exist in this conversation (${attachments.length} attachment${attachments.length === 1 ? '' : 's'} available). Omit attachmentIndex if the sub-agent does not need an attachment.`,
+                    }
                 }
+                attachmentParts = loadAttachment()
             }
             const content: ChatMessage['content'] = attachmentParts
                 ? [{ type: 'text', text: userMessage }, ...attachmentParts]
