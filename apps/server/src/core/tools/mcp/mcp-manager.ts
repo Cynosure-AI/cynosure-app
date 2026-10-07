@@ -7,6 +7,7 @@ import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js'
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
 import { McpOAuthProvider } from './oauth-provider.js'
 import { normalizeMcpToolResult } from './mcp-result.js'
+import { describeMcpConnectionError, toMcpConnectionError } from './connection-error.js'
 import { existsSync, readdirSync, unlinkSync, rmSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
@@ -125,7 +126,7 @@ export class McpManager {
                 }
                 // Non-auth error — fall back to stdio transport for wrapper commands only.
                 if (config.command === REMOTE_COMMAND) throw err
-                console.warn(`HTTP transport failed for "${config.name}", falling back to stdio:`, (err as Error).message)
+                console.warn(`HTTP transport failed for "${config.name}", falling back to stdio:`, describeMcpConnectionError(err))
             }
         }
 
@@ -163,7 +164,7 @@ export class McpManager {
                 throw new Error('Authorization required — use the Authorize button to connect.')
             }
             try { await transport.close() } catch { /* ignore */ }
-            throw err
+            throw toMcpConnectionError(err)
         }
 
         const ver = client.getServerVersion()
@@ -393,7 +394,7 @@ export class McpManager {
                     return {
                         success: false,
                         output: '',
-                        error: (err as Error).message
+                        error: describeMcpConnectionError(err)
                     }
                 }
             }
