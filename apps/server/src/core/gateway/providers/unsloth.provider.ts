@@ -7,13 +7,17 @@ interface UnslothModel {
     max_context_length?: number
 }
 
+/** /v1/models does not say what a model is for, so embedding models are recognised by name. */
+const EMBEDDING_MODEL_PATTERN = /embed|\bbge\b|\bgte\b|\be5\b/i
+
 /**
  * Unsloth Studio provider — uses the OpenAI-compatible Chat Completions API.
  * Defaults to http://localhost:8888/v1
  *
  * Unlike other local servers, Unsloth Studio requires an API key
- * (`sk-unsloth-…`, created under Settings → API). It only serves chat models,
- * and GET /v1/models lists just the models currently loaded.
+ * (`sk-unsloth-…`, created under Settings → API). GET /v1/models lists just the
+ * models currently loaded, and /v1/embeddings always embeds with the loaded
+ * embedding model, whatever model id the request names.
  */
 export class UnslothProvider extends OpenRouterProvider {
     protected override get defaultBaseUrl(): string { return 'http://localhost:8888/v1' }
@@ -32,8 +36,10 @@ export class UnslothProvider extends OpenRouterProvider {
     }
 
     async listModels(type?: ModelListType): Promise<string[]> {
-        if (type && type !== 'llm') return []
-        return (await this.fetchLoadedModels()).map((m) => m.id).sort()
+        if (type && type !== 'llm' && type !== 'embedding') return []
+        const ids = (await this.fetchLoadedModels()).map((m) => m.id).sort()
+        if (!type) return ids
+        return ids.filter((id) => EMBEDDING_MODEL_PATTERN.test(id) === (type === 'embedding'))
     }
 
     async listModelItems(type?: ModelListType): Promise<ModelListItem[]> {

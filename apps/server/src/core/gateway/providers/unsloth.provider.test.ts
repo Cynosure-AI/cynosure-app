@@ -23,7 +23,11 @@ afterEach(() => {
 describe('Unsloth Studio provider', () => {
     test('lists loaded chat models from the configured server with the API key', async () => {
         const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-            data: [{ id: 'qwen3-8b-GGUF' }, { id: 'gemma-4-26B-A4B-it-GGUF', context_length: 131072 }]
+            data: [
+                { id: 'qwen3-8b-GGUF' },
+                { id: 'gemma-4-26B-A4B-it-GGUF', context_length: 131072 },
+                { id: 'unsloth/embeddinggemma-2-GGUF' }
+            ]
         }), { status: 200 }))
         vi.stubGlobal('fetch', fetchMock)
 
@@ -43,12 +47,22 @@ describe('Unsloth Studio provider', () => {
         })
     })
 
-    test('serves no embedding, image, video, or transcription models', async () => {
+    test('lists embedding models apart from chat models', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+            data: [{ id: 'qwen3-8b-GGUF' }, { id: 'unsloth/embeddinggemma-2-GGUF' }, { id: 'BAAI/bge-m3-GGUF' }]
+        }), { status: 200 })))
+        const provider = new UnslothProvider(config)
+
+        expect(await provider.listModels('embedding')).toEqual(['BAAI/bge-m3-GGUF', 'unsloth/embeddinggemma-2-GGUF'])
+        expect(await provider.listModels('llm')).toEqual(['qwen3-8b-GGUF'])
+    })
+
+    test('serves no image, video, or transcription models', async () => {
         const fetchMock = vi.fn()
         vi.stubGlobal('fetch', fetchMock)
         const provider = new UnslothProvider(config)
 
-        for (const type of ['embedding', 'image', 'video', 'transcription'] as const) {
+        for (const type of ['image', 'video', 'transcription'] as const) {
             expect(await provider.listModelItems(type)).toEqual([])
         }
         expect(fetchMock).not.toHaveBeenCalled()
