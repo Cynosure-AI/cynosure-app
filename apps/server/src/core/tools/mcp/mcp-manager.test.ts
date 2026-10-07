@@ -1,4 +1,5 @@
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { McpOAuthProvider } from './oauth-provider.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -65,7 +66,7 @@ describe('McpManager paginated discovery', () => {
     const manager = new McpManager()
     manager.setServerBaseUrl('http://localhost:3099')
     const registered = vi.fn()
-    manager.setOnAuthComplete(registered)
+    manager.setOnToolsChanged(registered)
     await expect(manager.connect({ id: 'oauth', name: 'OAuth', command: 'remote',
       args: ['--url', 'https://example.test/mcp', '--header=X-Tenant: team'], enabled: true,
     })).rejects.toThrow('Authorization required')
@@ -206,5 +207,145 @@ describe('McpManager tool metadata', () => {
 
     expect(tool.annotations).toBeUndefined()
     expect(tool.execution).toBeUndefined()
+  })
+
+  test('tool calls extend their timeout on progress', async () => {
+    const callTool = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'done' }] })
+    const manager = new McpManager()
+    const [tool] = (manager as unknown as {
+      buildToolDefinitions: (tools: McpTool[], client: Client, config: McpServerConfig) => ToolDefinition[]
+    }).buildToolDefinitions(
+      [{ name: 'slow', inputSchema: { type: 'object', properties: {} } }],
+      { callTool } as unknown as Client,
+      { id: 's', name: 's', command: 'x', args: [], enabled: true },
+    )
+    await tool.execute({})
+    const options = callTool.mock.calls[0][2]
+    expect(options).toEqual(expect.objectContaining({ resetTimeoutOnProgress: true, onprogress: expect.any(Function) }))
+    expect(tool.timeout).toBeGreaterThan(options.maxTotalTimeout)
+  })
+})
+
+type ParsedRemote = { url: string; headers: Record<string, string>; transport: string } | null
+
+describe('McpManager remote configuration', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+  })
+
+  function parse(config: Pick<McpServerConfig, 'command' | 'args' | 'env'>): ParsedRemote {
+    const manager = new McpManager() as unknown as { parseRemoteConfig(config: McpServerConfig): ParsedRemote }
+    return manager.parseRemoteConfig({ id: 'x', name: 'x', enabled: true, ...config })
+  }
+
+  test('keeps local servers with URL arguments on stdio', () => {
+    expect(parse({ command: 'npx', args: ['-y', 'some-server', '--api-base', 'https://api.example.test'] })).toBeNull()
+  })
+
+  test('reads transport and headers and expands ${VAR} references', () => {
+    vi.stubEnv('WP_APP_PASSWORD', 'secret')
+    expect(parse({
+      command: 'remote',
+      args: ['--transport', 'sse', '--url', 'https://${HOST:-site.test}/sse', '--header=Authorization: Basic ${WP_APP_PASSWORD}', '--header-env=X-Key=MY_KEY'],
+      env: { MY_KEY: 'k' },
+    })).toEqual({
+      url: 'https://site.test/sse',
+      transport: 'sse',
+      headers: { Authorization: 'Basic secret', 'X-Key': 'k' },
+    })
+  })
+
+  test('understands mcp-remote style headers', () => {
+    expect(parse({ command: 'npx', args: ['mcp-remote', 'https://example.test/mcp', '--header', 'X-Tenant: team'] }))
+      .toEqual({ url: 'https://example.test/mcp', transport: 'streamable-http', headers: { 'X-Tenant': 'team' } })
+  })
+})
+
+describe('McpManager connection lifecycle', () => {
+  let directory: string
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), 'cynosure-mcp-lifecycle-'))
+    vi.stubEnv('CYNOSURE_DATA_DIR', directory)
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+    vi.unstubAllEnvs()
+    rmSync(directory, { recursive: true, force: true })
+  })
+
+  function descriptor(name: string): McpTool {
+    return { name, description: name, inputSchema: { type: 'object', properties: {} } }
+  }
+
+  function clientOf(manager: McpManager): Client {
+    return (manager as unknown as { connections: Map<string, { client: Client }> }).connections.get('srv')!.client
+  }
+
+  async function connect(manager: McpManager, args = ['https://example.test/mcp']): Promise<void> {
+    vi.spyOn(Client.prototype, 'close').mockResolvedValue()
+    vi.spyOn(Client.prototype, 'getServerVersion').mockReturnValue({ name: 'test', version: '1' })
+    manager.setServerBaseUrl('http://localhost:3099')
+    await manager.connect({ id: 'srv', name: 'Srv', command: 'remote', args, enabled: true })
+  }
+
+  test('uses the SSE transport when configured', async () => {
+    const connectSpy = vi.spyOn(Client.prototype, 'connect').mockResolvedValue()
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({ tools: [] })
+    const manager = new McpManager()
+    await connect(manager, ['--transport', 'sse', '--url', 'https://example.test/sse'])
+    expect(connectSpy.mock.calls[0][0]).toBeInstanceOf(SSEClientTransport)
+    await manager.disconnectAll()
+  })
+
+  test('reconnects after an unexpected close and reports tool changes', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue()
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({ tools: [descriptor('one')] })
+    const manager = new McpManager()
+    const changed = vi.fn()
+    manager.setOnToolsChanged(changed)
+    await connect(manager)
+
+    clientOf(manager).onclose?.()
+    expect(manager.isConnected('srv')).toBe(false)
+    expect(changed).toHaveBeenLastCalledWith('srv', null, expect.anything())
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(manager.isConnected('srv')).toBe(true)
+    expect(changed).toHaveBeenLastCalledWith('srv', [expect.objectContaining({ name: 'one' })], expect.anything())
+    await manager.disconnectAll()
+  })
+
+  test('an explicit disconnect does not trigger a reconnect', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue()
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({ tools: [] })
+    const manager = new McpManager()
+    const changed = vi.fn()
+    manager.setOnToolsChanged(changed)
+    await connect(manager)
+    const client = clientOf(manager)
+    await manager.disconnect('srv')
+    client.onclose?.()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(manager.isConnected('srv')).toBe(false)
+    expect(changed).not.toHaveBeenCalled()
+  })
+
+  test('refreshes tools on tools/list_changed', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue()
+    vi.spyOn(Client.prototype, 'listTools')
+      .mockResolvedValueOnce({ tools: [descriptor('one')] })
+      .mockResolvedValueOnce({ tools: [descriptor('one'), descriptor('two')] })
+    const manager = new McpManager()
+    const changed = vi.fn()
+    manager.setOnToolsChanged(changed)
+    await connect(manager)
+    await (manager as unknown as { refreshTools(id: string, client: Client): Promise<void> }).refreshTools('srv', clientOf(manager))
+    expect(manager.getTools('srv').map(tool => tool.name)).toEqual(['one', 'two'])
+    expect(changed).toHaveBeenCalledWith('srv', expect.arrayContaining([expect.objectContaining({ name: 'two' })]), expect.anything())
+    await manager.disconnectAll()
   })
 })

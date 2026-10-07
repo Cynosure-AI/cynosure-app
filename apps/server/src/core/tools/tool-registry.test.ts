@@ -61,3 +61,31 @@ describe('ToolRegistry behavior annotations', () => {
     expect(registry.resolveForExecution(['builtin::schedule_create'])).toEqual([])
   })
 })
+
+describe('ToolRegistry provider-safe names', () => {
+  test('rewrites characters providers reject and keeps the original tool callable', async () => {
+    const registry = new ToolRegistry()
+    registry.register(makeTool('wp.posts/list items'), { id: 'mcp:wp', label: 'WordPress' })
+    const [resolved] = registry.resolveForExecution(['mcp:wp::wp.posts/list items'])
+    expect(resolved.name).toBe('wp_posts_list_items')
+    expect(resolved.originalName).toBe('wp.posts/list items')
+    expect(await resolved.execute({})).toEqual({ success: true, output: 'ok' })
+  })
+
+  test('truncates long names to 64 characters', () => {
+    const registry = new ToolRegistry()
+    const long = `tool_${'x'.repeat(100)}`
+    registry.register(makeTool(long), { id: 'mcp:a', label: 'A' })
+    const [resolved] = registry.resolveForExecution([`mcp:a::${long}`])
+    expect(resolved.name).toHaveLength(64)
+    expect(resolved.name).toMatch(/^[a-zA-Z0-9_-]+$/)
+  })
+
+  test('keeps names distinct when they collapse to the same safe name', () => {
+    const registry = new ToolRegistry()
+    registry.register(makeTool('a.b'), { id: 'mcp:a', label: 'A' })
+    registry.register(makeTool('a_b'), { id: 'mcp:a', label: 'A' })
+    const names = registry.resolveForExecution(['mcp:a::a.b', 'mcp:a::a_b']).map(tool => tool.name)
+    expect(new Set(names).size).toBe(2)
+  })
+})

@@ -1,5 +1,5 @@
 import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, rmSync, cpSync } from 'fs'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { getAppDataDir } from '../../data-dir.js'
 import type { OAuthClientProvider, OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
@@ -11,8 +11,10 @@ import type {
 
 /**
  * File-backed OAuthClientProvider for MCP StreamableHTTP connections.
- * Persists tokens, client info, and code verifiers to disk per-server
- * under `<appDataDir>/mcp-oauth/<md5(serverUrl)>/`.
+ * Persists tokens, client info, and code verifiers to disk under
+ * `<appDataDir>/mcp-oauth/<md5(storageKey)>/`. The storage key defaults to the
+ * server URL; McpManager passes a per-server key so two entries pointing at
+ * the same URL can hold different accounts.
  */
 export class McpOAuthProvider implements OAuthClientProvider {
     private storageDir: string
@@ -32,13 +34,26 @@ export class McpOAuthProvider implements OAuthClientProvider {
         return actual.length === expected.length && timingSafeEqual(actual, expected)
     }
 
+    static storageDirFor(storageKey: string): string {
+        return join(getAppDataDir(), 'mcp-oauth', createHash('md5').update(storageKey).digest('hex'))
+    }
+
+    static serverStorageKey(serverId: string, serverUrl: string): string {
+        return `${serverId}|${serverUrl}`
+    }
+
     constructor(
         serverUrl: string,
         private _redirectUrl: string,
-        private onRedirect: (url: string) => void
+        private onRedirect: (url: string) => void,
+        storageKey: string = serverUrl,
     ) {
-        const hash = createHash('md5').update(serverUrl).digest('hex')
-        this.storageDir = join(getAppDataDir(), 'mcp-oauth', hash)
+        this.storageDir = McpOAuthProvider.storageDirFor(storageKey)
+        // Tokens used to be stored per URL; carry them over so existing sign-ins survive.
+        const legacyDir = McpOAuthProvider.storageDirFor(serverUrl)
+        if (storageKey !== serverUrl && !existsSync(this.storageDir) && existsSync(legacyDir)) {
+            try { cpSync(legacyDir, this.storageDir, { recursive: true }) } catch { /* start fresh */ }
+        }
         mkdirSync(this.storageDir, { recursive: true })
 
         // Restore persisted state

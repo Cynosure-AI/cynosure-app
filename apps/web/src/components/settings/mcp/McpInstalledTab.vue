@@ -9,6 +9,14 @@ import HoverTooltip from '../../shared/HoverTooltip.vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import { useAgentStore } from '../../../stores/agent-runtime.store'
 import ModalDialog from '../../shared/ModalDialog.vue'
+import McpServerForm from './McpServerForm.vue'
+import {
+  canSubmitServerForm,
+  configFromForm,
+  emptyServerForm,
+  formFromServer,
+  isRemoteServer,
+} from './mcp-server-form'
 import type { McpServerInfo } from '../../../api/types'
 import type { Column } from '../../shared/DataTable.vue'
 
@@ -65,23 +73,12 @@ const tableColumns: Column<McpServerInfo>[] = [
   { key: 'enable', label: 'Enable', width: '56px', sortable: true, sortValue: server => server.enabled },
 ]
 
-type AddMode = 'local' | 'remote'
-
-const newServer = reactive({
-  mode: 'local' as AddMode,
-  name: '',
-  description: '',
-  command: '',
-  args: '',
-  env: '',
-  remoteUrl: '',
-  bearerToken: '',
-  authMode: 'oauth' as 'oauth' | 'bearer',
-})
+const newServer = reactive({ name: '', description: '' })
+const newServerForm = ref(emptyServerForm())
 const pendingAddId = ref<string | null>(null)
 const addConnected = ref(false)
-const editServer = reactive({ name: '', description: '', command: '', args: '', env: '' })
-const editEnvFields = reactive<Record<string, string>>({})
+const editServer = reactive({ name: '', description: '' })
+const editServerForm = ref(emptyServerForm())
 
 const editingServer = computed(() => servers.value.find(s => s.id === editingId.value) ?? null)
 const isSaving = ref(false)
@@ -92,69 +89,19 @@ const editingServerHints = computed(() => {
   return srv?.envHints?.length ? srv.envHints : null
 })
 
-function envToText(env: Record<string, string>): string {
-  return Object.entries(env).map(([k, v]) => `${k}=${v}`).join('\n')
-}
-
-function textToEnv(text: string): Record<string, string> {
-  const env: Record<string, string> = {}
-  if (text.trim()) {
-    for (const line of text.split('\n')) {
-      const eqIdx = line.indexOf('=')
-      if (eqIdx > 0) env[line.slice(0, eqIdx).trim()] = line.slice(eqIdx + 1).trim()
-    }
-  }
-  return env
-}
-
 function resetNewServer(): void {
-  Object.assign(newServer, {
-    mode: 'local',
-    name: '',
-    description: '',
-    command: '',
-    args: '',
-    env: '',
-    remoteUrl: '',
-    bearerToken: '',
-    authMode: 'oauth',
-  })
+  Object.assign(newServer, { name: '', description: '' })
+  newServerForm.value = emptyServerForm()
 }
 
-function remoteTokenEnvName(): string {
-  const source = newServer.name.trim() || newServer.remoteUrl.trim() || 'remote'
-  const slug = source.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')
-  return `MCP_${slug || 'REMOTE'}_TOKEN`
-}
-
-function buildRemoteArgs(): string[] {
-  const args = ['--transport', 'streamable-http', '--url', newServer.remoteUrl.trim()]
-  const token = newServer.authMode === 'bearer' ? newServer.bearerToken.trim() : ''
-  if (token) args.push(`--bearer-token-env=${token.startsWith('$') ? token.slice(1) : remoteTokenEnvName()}`)
-  return args
-}
-
-function buildRemoteEnv(): Record<string, string> {
-  const token = newServer.authMode === 'bearer' ? newServer.bearerToken.trim() : ''
-  if (!token || token.startsWith('$')) return {}
-  return { [remoteTokenEnvName()]: token }
-}
-
-const canSubmitNewServer = computed(() => {
-  if (newServer.mode === 'remote') return /^https?:\/\//.test(newServer.remoteUrl.trim())
-  return !!newServer.command.trim()
-})
+const canSubmitNewServer = computed(() => canSubmitServerForm(newServerForm.value))
 
 async function addServer(): Promise<void> {
   if (!canSubmitNewServer.value || isLoading('add')) return
   setLoading('add', true)
   try {
-    const isRemote = newServer.mode === 'remote'
-    const command = isRemote ? 'remote' : newServer.command.trim()
-    const args = isRemote
-      ? buildRemoteArgs()
-      : (newServer.args ? newServer.args.split('\n').map(a => a.trim()).filter(Boolean) : [])
-    const env = isRemote ? buildRemoteEnv() : textToEnv(newServer.env)
+    const isRemote = newServerForm.value.transport !== 'stdio'
+    const { command, args, env } = configFromForm(newServerForm.value, newServer.name)
     const customName = newServer.name.trim() || null
 
     // If we already created a server that failed to connect, update it instead of creating a duplicate
@@ -227,19 +174,7 @@ function startEditing(server: McpServerInfo): void {
   editingId.value = server.id
   editServer.name = server.customName || ''
   editServer.description = server.description || ''
-  editServer.command = server.command
-  editServer.args = server.args.join('\n')
-  Object.keys(editEnvFields).forEach(k => delete editEnvFields[k])
-  if (server.envHints?.length) {
-    const hintNames = new Set(server.envHints.map(h => h.name))
-    for (const hint of server.envHints) {
-      editEnvFields[hint.name] = server.env[hint.name] || ''
-    }
-    const extraVars = Object.entries(server.env).filter(([k]) => !hintNames.has(k))
-    editServer.env = extraVars.map(([k, v]) => `${k}=${v}`).join('\n')
-  } else {
-    editServer.env = envToText(server.env)
-  }
+  editServerForm.value = formFromServer(server)
 }
 
 function cancelEditing(): void {
@@ -248,30 +183,18 @@ function cancelEditing(): void {
   delete actionError.value['edit']
 }
 
+const canSaveEditing = computed(() => canSubmitServerForm(editServerForm.value))
+
 async function saveEditing(id: string): Promise<void> {
-  if (isLoading(id) || !editServer.command.trim()) return
+  if (isLoading(id) || !canSaveEditing.value) return
   isSaving.value = true
   setLoading(id, true)
   try {
-    const args = editServer.args ? editServer.args.split('\n').map(a => a.trim()).filter(Boolean) : []
-    let env: Record<string, string>
-    if (editingServerHints.value) {
-      env = {}
-      for (const hint of editingServerHints.value) {
-        if (editEnvFields[hint.name]) env[hint.name] = editEnvFields[hint.name]
-      }
-      const extraEnv = textToEnv(editServer.env)
-      const hintNames = new Set(editingServerHints.value.map(h => h.name))
-      for (const [k, v] of Object.entries(extraEnv)) {
-        if (!hintNames.has(k)) env[k] = v
-      }
-    } else {
-      env = textToEnv(editServer.env)
-    }
+    const { command, args, env } = configFromForm(editServerForm.value, editServer.name || editingServer.value?.originalName || '')
     const result = await api.mcp.updateServer(id, {
       customName: editServer.name.trim() || null,
       description: editServer.description,
-      command: editServer.command.trim(),
+      command,
       args,
       env,
     })
@@ -386,32 +309,15 @@ defineExpose({ loadServers })
 
     <ModalDialog
       :show="showAddForm"
-      title="Manually Add MCP"
+      title="Add MCP Server"
       icon="lucide:plug"
       max-width="max-w-2xl"
       @close="cancelForm"
     >
       <div class="space-y-4">
-        <div class="grid grid-cols-2 gap-1 rounded-lg bg-theme-950/70 border border-theme-800 p-1">
-          <button
-            class="h-8 rounded-md text-sm transition-colors"
-            :class="newServer.mode === 'local' ? 'bg-theme-700 text-theme-100' : 'text-ink-secondary hover:text-theme-200'"
-            @click="newServer.mode = 'local'"
-          >
-            Local
-          </button>
-          <button
-            class="h-8 rounded-md text-sm transition-colors"
-            :class="newServer.mode === 'remote' ? 'bg-theme-700 text-theme-100' : 'text-ink-secondary hover:text-theme-200'"
-            @click="newServer.mode = 'remote'"
-          >
-            Remote
-          </button>
-        </div>
-
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm text-ink-secondary mb-1">Custom name</label>
+            <label class="block text-sm text-ink-secondary mb-1">Name</label>
             <input
               v-model="newServer.name"
               type="text"
@@ -419,91 +325,20 @@ defineExpose({ loadServers })
               class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
           </div>
-          <div v-if="newServer.mode === 'remote'">
-            <label class="block text-sm text-ink-secondary mb-1">URL</label>
+          <div>
+            <label class="block text-sm text-ink-secondary mb-1">Description</label>
             <input
-              v-model="newServer.remoteUrl"
-              type="url"
-              placeholder="https://mcp.example.com/mcp"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-            >
-          </div>
-          <div v-else>
-            <label class="block text-sm text-ink-secondary mb-1">Command</label>
-            <input
-              v-model="newServer.command"
+              v-model="newServer.description"
               type="text"
-              placeholder="npx"
+              placeholder="What this MCP server is useful for"
               class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
             >
           </div>
         </div>
-        <div>
-          <label class="block text-sm text-ink-secondary mb-1">Description</label>
-          <textarea
-            v-model="newServer.description"
-            rows="2"
-            placeholder="What this MCP server is useful for"
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-          />
-        </div>
-        <template v-if="newServer.mode === 'local'">
-          <div>
-            <label class="block text-sm text-ink-secondary mb-1">Arguments (one per line)</label>
-            <textarea
-              v-model="newServer.args"
-              rows="3"
-              placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/path/to/dir"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-            />
-          </div>
-        </template>
-        <template v-else>
-          <div>
-            <label class="block text-sm text-ink-secondary mb-1">Authentication</label>
-            <select
-              v-model="newServer.authMode"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="oauth">
-                OAuth / automatic
-              </option>
-              <option value="bearer">
-                Bearer token
-              </option>
-            </select>
-            <p
-              v-if="newServer.authMode === 'oauth'"
-              class="mt-1 text-xs text-ink-muted"
-            >
-              Add the server to start connecting. If sign-in is required, use Authorize to sign in through your browser. Public servers connect directly.
-            </p>
-          </div>
-          <div v-if="newServer.authMode === 'bearer'">
-            <label class="block text-sm text-ink-secondary mb-1">Bearer token</label>
-            <input
-              v-model="newServer.bearerToken"
-              type="password"
-              placeholder="Leave blank for OAuth, paste a token, or use $MCP_BEARER_TOKEN"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-            >
-            <p class="mt-1 text-xs text-ink-muted">
-              Remote MCP servers normally authenticate with OAuth. Use this only for servers that accept an Authorization bearer token.
-            </p>
-          </div>
-        </template>
-        <div v-if="newServer.mode === 'local'">
-          <label class="block text-sm text-ink-secondary mb-1">Environment Variables (KEY=VALUE, one per line)</label>
-          <textarea
-            v-model="newServer.env"
-            rows="2"
-            placeholder="API_KEY=sk-..."
-            class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-          />
-        </div>
+        <McpServerForm v-model="newServerForm" />
         <div
           v-if="actionError['add']"
-          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-status-danger"
+          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-status-danger break-words whitespace-pre-wrap"
           role="alert"
         >
           {{ actionError['add'] }}
@@ -795,89 +630,31 @@ defineExpose({ loadServers })
         >
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-ink-secondary mb-1">Custom name</label>
+              <label class="block text-sm text-ink-secondary mb-1">Name</label>
               <input
                 v-model="editServer.name"
                 type="text"
                 :placeholder="originalServerName(editingServer)"
-                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
               >
             </div>
             <div>
-              <label class="block text-xs text-ink-secondary mb-1">Command</label>
+              <label class="block text-sm text-ink-secondary mb-1">Description</label>
               <input
-                v-model="editServer.command"
+                v-model="editServer.description"
                 type="text"
-                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+                :placeholder="editingServer.serverInfo?.description || 'What this MCP server is useful for'"
+                class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
               >
             </div>
           </div>
-          <div>
-            <label class="block text-xs text-ink-secondary mb-1">Description</label>
-            <textarea
-              v-model="editServer.description"
-              rows="2"
-              :placeholder="editingServer.description || editingServer.serverInfo?.description || 'What this MCP server is useful for'"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-            />
-          </div>
-          <div>
-            <label class="block text-xs text-ink-secondary mb-1">Arguments (one per line)</label>
-            <textarea
-              v-model="editServer.args"
-              rows="3"
-              class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-accent-500"
-            />
-          </div>
-          <div>
-            <label class="block text-xs text-ink-secondary mb-1">Environment Variables</label>
-            <template v-if="editingServer.envHints?.length">
-              <div class="space-y-2">
-                <div
-                  v-for="hint in editingServer.envHints"
-                  :key="hint.name"
-                >
-                  <label class="flex items-center gap-1.5 text-xs text-ink-secondary mb-1">
-                    <span class="font-mono">{{ hint.name }}</span>
-                    <span
-                      v-if="hint.required"
-                      class="text-status-danger/80"
-                    >*</span>
-                    <span
-                      v-if="hint.description"
-                      class="text-ink-secondary/70 font-normal"
-                    >- {{ hint.description }}</span>
-                  </label>
-                  <input
-                    v-model="editEnvFields[hint.name]"
-                    :type="hint.sensitive ? 'password' : 'text'"
-                    :placeholder="hint.name"
-                    class="w-full bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-                  >
-                </div>
-              </div>
-              <div class="mt-2">
-                <label class="block text-[11px] text-ink-muted mb-1">Additional env vars (KEY=VALUE, one per line)</label>
-                <textarea
-                  v-model="editServer.env"
-                  rows="2"
-                  placeholder="EXTRA_VAR=value"
-                  class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-                />
-              </div>
-            </template>
-            <template v-else>
-              <textarea
-                v-model="editServer.env"
-                rows="3"
-                class="w-full resize-y bg-theme-900 border border-theme-700 text-theme-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500 placeholder:text-ink-faint"
-                placeholder="API_KEY=sk-..."
-              />
-            </template>
-          </div>
+          <McpServerForm
+            v-model="editServerForm"
+            :env-hints="editingServerHints"
+          />
           <div
             v-if="actionError['edit']"
-            class="text-xs text-status-danger"
+            class="text-xs text-status-danger break-words whitespace-pre-wrap"
           >
             {{ actionError['edit'] }}
           </div>
@@ -935,7 +712,7 @@ defineExpose({ loadServers })
             </button>
 
             <button
-              v-if="editingServer.enabled && !editingServer.pendingAuthUrl && (editingServer.origin === 'smithery.ai' || editingServer.args.some(a => /^https?:\/\//.test(a) || a === 'mcp-remote'))"
+              v-if="editingServer.enabled && !editingServer.pendingAuthUrl && (isRemoteServer(editingServer) || editingServer.origin === 'smithery.ai' || editingServer.args.includes('mcp-remote'))"
               class="p-1.5 text-ink-faint hover:text-accent-fg rounded-md hover:bg-accent-500/10 transition-colors"
               :disabled="isLoading(editingServer.id)"
               title="Clear cached OAuth tokens and re-authorize"
@@ -968,7 +745,7 @@ defineExpose({ loadServers })
               Cancel
             </button>
             <button
-              :disabled="!editServer.command.trim() || isLoading(editingServer.id)"
+              :disabled="!canSaveEditing || isLoading(editingServer.id)"
               class="px-3 py-1.5 text-xs accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on rounded-md transition-colors"
               @click="saveEditing(editingServer.id)"
             >

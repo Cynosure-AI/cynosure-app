@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { getEventBus } from '../telemetry/event-bus.js'
 import type { RegisteredToolDefinition, RegistryAwareToolDefinition, ToolBehaviorAnnotations, ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import { normalizeToolDescription } from './tool-description.js'
@@ -34,6 +35,29 @@ export interface RegisteredToolInfo {
   annotations?: ToolBehaviorAnnotations
   namespace: ToolNamespace
   ambiguous: boolean
+}
+
+/**
+ * Function names accepted by every provider we talk to: OpenAI allows
+ * ^[a-zA-Z0-9_-]{1,64}$, Anthropic the same charset up to 128. MCP tool names
+ * may contain dots, slashes or spaces and be arbitrarily long.
+ */
+const LLM_TOOL_NAME_MAX = 64
+
+/** Map any tool name onto the provider-safe charset and length. */
+export function toLlmSafeToolName(name: string): string {
+  const cleaned = name.replace(/[^a-zA-Z0-9_-]/g, '_') || 'tool'
+  if (cleaned.length <= LLM_TOOL_NAME_MAX && cleaned === name) return name
+  if (cleaned.length <= LLM_TOOL_NAME_MAX) return cleaned
+  // Keep truncated names distinct with a short hash of the original.
+  const hash = createHash('sha1').update(name).digest('hex').slice(0, 8)
+  return `${cleaned.slice(0, LLM_TOOL_NAME_MAX - hash.length - 1)}_${hash}`
+}
+
+/** Append `_2`, `_3`, ... while staying within the length limit. */
+function withSuffix(name: string, n: number): string {
+  const suffix = `_${n}`
+  return `${name.slice(0, LLM_TOOL_NAME_MAX - suffix.length)}${suffix}`
 }
 
 interface ToolEntry {
@@ -86,7 +110,7 @@ export class ToolRegistry {
     const globalKeys = this.nameIndex.get(entry.tool.name)
     const globalAmbiguous = (globalKeys?.size ?? 0) > 1
     const ambiguous = scope?.ambiguous ?? globalAmbiguous
-    if (!ambiguous) return entry.tool.name
+    if (!ambiguous) return toLlmSafeToolName(entry.tool.name)
 
     const sameNameEntries = scope?.entriesWithSameName
       ?? [...(globalKeys || [])]
@@ -102,7 +126,7 @@ export class ToolRegistry {
       ? `${baseSlug}_${this.safeIdSlugForNamespace(entry.namespace).slice(0, 8)}`
       : baseSlug
 
-    return `${uniqueSlug}__${entry.tool.name}`
+    return toLlmSafeToolName(`${uniqueSlug}__${entry.tool.name}`)
   }
 
   private deriveNamespaceDescription(namespace: ToolNamespace, tools: ToolDefinition[]): string | undefined {
@@ -273,6 +297,7 @@ export class ToolRegistry {
     }
 
     const result: RegisteredToolDefinition[] = []
+    const seenKeys = new Set<string>()
     const seen = new Set<string>()
     const selectedByBareName = new Map<string, ToolEntry[]>()
 
@@ -284,12 +309,15 @@ export class ToolRegistry {
     }
 
     for (const { key, entry } of resolved) {
+      if (seenKeys.has(key)) continue
+      seenKeys.add(key)
       const sameNameEntries = selectedByBareName.get(entry.tool.name) || [entry]
-      const finalName = this.executionNameFor(entry, {
+      let finalName = this.executionNameFor(entry, {
         ambiguous: sameNameEntries.length > 1,
         entriesWithSameName: sameNameEntries,
       })
-      if (seen.has(finalName)) continue
+      // Distinct names can collapse to the same safe name (e.g. `a.b` / `a_b`).
+      for (let n = 2; seen.has(finalName); n++) finalName = withSuffix(finalName, n)
       seen.add(finalName)
       result.push(this.aliasTool(key, entry, finalName))
     }

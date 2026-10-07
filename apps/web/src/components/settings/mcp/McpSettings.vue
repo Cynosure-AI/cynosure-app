@@ -31,6 +31,11 @@ onMounted(() => {
       delete actionError.value[data.serverId]
       await refreshAll()
     }),
+    // Background disconnects, automatic reconnects and tool list changes
+    api.mcp.onServerStatus(async (data) => {
+      if (data.connected) delete actionError.value[data.serverId]
+      await refreshAll()
+    }),
   )
 })
 

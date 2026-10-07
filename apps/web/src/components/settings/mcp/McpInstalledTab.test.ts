@@ -26,14 +26,18 @@ describe('McpInstalledTab manual add', () => {
     mcp.listServers.mockResolvedValue([])
   })
 
-  test('offers automatic OAuth for remote servers and keeps bearer authentication optional', async () => {
+  function transport(wrapper: ReturnType<typeof mount>, label: string) {
+    const match = wrapper.findAll('.mcp-transport-option').find(candidate => candidate.text().startsWith(label))
+    if (!match) throw new Error(`Transport ${label} not found`)
+    return match
+  }
+
+  test('adds a remote HTTP server without headers so OAuth can be discovered', async () => {
     mcp.addServer.mockResolvedValue({ id: 'remote', connected: true })
     const wrapper = mount(McpInstalledTab, { global: { stubs: { Teleport: true, Icon: true } } })
     await button(wrapper, 'Add Manually').trigger('click')
-    await button(wrapper, 'Remote').trigger('click')
+    await transport(wrapper, 'HTTP (remote)').trigger('click')
     await wrapper.get('input[type="url"]').setValue('https://example.test/mcp')
-    expect(wrapper.get('select').element.value).toBe('oauth')
-    expect(wrapper.find('input[type="password"]').exists()).toBe(false)
     await button(wrapper, 'Save & Connect').trigger('click')
     await flushPromises()
     expect(mcp.addServer).toHaveBeenCalledWith(expect.objectContaining({
@@ -42,20 +46,23 @@ describe('McpInstalledTab manual add', () => {
     wrapper.unmount()
   })
 
-  test('sends an explicitly selected bearer token through an environment variable', async () => {
+  test('stores header values in env so secrets stay out of the displayed args', async () => {
     mcp.addServer.mockResolvedValue({ id: 'remote', connected: true })
     const wrapper = mount(McpInstalledTab, { global: { stubs: { Teleport: true, Icon: true } } })
     await button(wrapper, 'Add Manually').trigger('click')
-    await button(wrapper, 'Remote').trigger('click')
-    await wrapper.get('input[type="url"]').setValue('https://example.test/mcp')
-    await wrapper.get('select').setValue('bearer')
-    await wrapper.get('input[type="password"]').setValue('secret-token')
+    await transport(wrapper, 'SSE (remote, legacy)').trigger('click')
+    await wrapper.get('input[type="url"]').setValue('https://wp.test/sse')
+    await wrapper.get('textarea[placeholder^="Authorization"]').setValue('Authorization: Basic c2VjcmV0\nX-Tenant: team')
     await button(wrapper, 'Save & Connect').trigger('click')
     await flushPromises()
     const config = mcp.addServer.mock.calls[0][0]
-    expect(config.args[config.args.length - 1]).toMatch(/^--bearer-token-env=/)
-    expect(Object.values(config.env)).toEqual(['secret-token'])
-    expect(config.args.join(' ')).not.toContain('secret-token')
+    expect(config.args).toEqual([
+      '--transport', 'sse', '--url', 'https://wp.test/sse',
+      '--header-env=Authorization=MCP_WP_TEST_AUTHORIZATION',
+      '--header-env=X-Tenant=MCP_WP_TEST_X_TENANT',
+    ])
+    expect(config.env).toEqual({ MCP_WP_TEST_AUTHORIZATION: 'Basic c2VjcmV0', MCP_WP_TEST_X_TENANT: 'team' })
+    expect(config.args.join(' ')).not.toContain('c2VjcmV0')
     wrapper.unmount()
   })
 

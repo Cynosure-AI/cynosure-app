@@ -162,7 +162,10 @@ function headerEnvName(header: string): string {
 }
 
 function getInstallInfo(srv: McpRegistryServer['server']): InstallInfo | null {
-  const remote = srv.remotes?.find(r => /^https?:\/\//.test(r.url) && (r.type === 'streamable-http' || r.type === 'http'))
+  // Prefer Streamable HTTP; fall back to a legacy SSE endpoint.
+  const remotes = srv.remotes?.filter(r => /^https?:\/\//.test(r.url)) || []
+  const remote = remotes.find(r => r.type === 'streamable-http' || r.type === 'http')
+    || remotes.find(r => r.type === 'sse')
   if (remote) {
     const envVars = (remote.headers || []).map(header => {
       const name = headerEnvName(header.name)
@@ -177,7 +180,7 @@ function getInstallInfo(srv: McpRegistryServer['server']): InstallInfo | null {
       command: 'remote',
       args: [
         '--transport',
-        'streamable-http',
+        remote.type === 'sse' ? 'sse' : 'streamable-http',
         '--url',
         remote.url,
         ...(remote.headers || []).map(header => `--header-env=${header.name}=${headerEnvName(header.name)}`),

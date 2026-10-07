@@ -26,6 +26,8 @@ type ManageMcpArgs = {
   command?: string
   args?: string[]
   url?: string
+  transport?: 'http' | 'sse'
+  headers?: Record<string, string | null>
   env?: Record<string, string | null>
   replaceEnv?: boolean
   enabled?: boolean
@@ -42,12 +44,16 @@ function displayName(row: McpServerRow): string {
 
 function publicServer(row: McpServerRow): Record<string, unknown> {
   const manager = getMcpManager()
+  const args = JSON.parse(row.args_json) as string[]
+  const env = JSON.parse(row.env_json) as Record<string, string>
+  const remote = row.command === 'remote' ? parseRemoteArgs(args, { ...env }, row.id) : null
   return {
     serverId: row.id,
     name: displayName(row),
     command: row.command,
-    args: redactArgs(JSON.parse(row.args_json) as string[]),
-    envKeys: Object.keys(JSON.parse(row.env_json) as Record<string, string>),
+    args: redactArgs(args),
+    ...(remote ? { url: remote.url, transport: remote.transport, headerNames: [...remote.headerEnv.keys()] } : {}),
+    envKeys: Object.keys(env),
     enabled: row.enabled === 1,
     connected: manager.isConnected(row.id),
     toolCount: manager.getTools(row.id).length,
@@ -73,6 +79,63 @@ function redactArgs(args: string[]): string[] {
     if (/^--header=authorization:/i.test(arg)) return '--header=Authorization: [redacted]'
     return arg
   })
+}
+
+type RemoteArgs = {
+  transport: 'http' | 'sse'
+  url: string
+  /** Header name → env var holding its value. */
+  headerEnv: Map<string, string>
+  /** Legacy `--bearer-token-env` arg, kept until an Authorization header replaces it. */
+  bearerEnvArg?: string
+}
+
+function envSlug(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
+/** Read a stored remote config (same format the settings dialog writes). */
+function parseRemoteArgs(args: string[], env: Record<string, string>, serverId: string): RemoteArgs {
+  const valueOf = (name: string) => {
+    const eq = args.find(arg => arg.startsWith(`${name}=`))
+    if (eq) return eq.slice(name.length + 1)
+    const idx = args.indexOf(name)
+    return idx >= 0 && idx + 1 < args.length ? args[idx + 1] : null
+  }
+  const headerEnv = new Map<string, string>()
+  for (const arg of args) {
+    if (arg.startsWith('--header-env=')) {
+      const spec = arg.slice('--header-env='.length)
+      const sep = spec.indexOf('=')
+      if (sep > 0) headerEnv.set(spec.slice(0, sep), spec.slice(sep + 1))
+    } else if (arg.startsWith('--header=')) {
+      // Inline header values move into env so secrets leave the args.
+      const spec = arg.slice('--header='.length)
+      const sep = spec.indexOf(':')
+      if (sep > 0) {
+        const name = spec.slice(0, sep).trim()
+        const envName = `MCP_${envSlug(serverId)}_${envSlug(name)}`
+        env[envName] = spec.slice(sep + 1).trim()
+        headerEnv.set(name, envName)
+      }
+    }
+  }
+  const bearer = args.find(arg => arg.startsWith('--bearer-token-env'))
+  return {
+    transport: (valueOf('--transport') || '').startsWith('sse') ? 'sse' : 'http',
+    url: valueOf('--url') || args.find(arg => /^https?:\/\//.test(arg)) || '',
+    headerEnv,
+    bearerEnvArg: bearer === '--bearer-token-env' ? `--bearer-token-env=${valueOf('--bearer-token-env')}` : bearer,
+  }
+}
+
+function buildRemoteArgs(remote: RemoteArgs): string[] {
+  return [
+    '--transport', remote.transport === 'sse' ? 'sse' : 'streamable-http',
+    '--url', remote.url,
+    ...[...remote.headerEnv].map(([name, envName]) => `--header-env=${name}=${envName}`),
+    ...(remote.bearerEnvArg ? [remote.bearerEnvArg] : []),
+  ]
 }
 
 function findServer(args: ManageMcpArgs): McpServerRow | undefined {
@@ -171,22 +234,26 @@ export async function manageMcp(input: unknown, signal?: AbortSignal): Promise<T
     const remoteUrl = McpManager.extractRemoteUrl(JSON.parse(row.args_json) as string[])
     getToolRegistry().unregisterByNamespace(`mcp:${row.id}`)
     await getMcpManager().disconnect(row.id)
-    if (remoteUrl) McpManager.clearMcpRemoteAuth(remoteUrl)
+    if (remoteUrl) McpManager.clearMcpRemoteAuth(remoteUrl, row.id)
     db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(row.id)
     return result({ action: 'removed', serverId: row.id, name: displayName(row) })
   }
 
   const requestedName = text(args.name)
   const requestedUrl = text(args.url)
-  if (requestedUrl && args.args !== undefined) {
-    return result({ error: 'Provide either url or args, not both. url creates the complete remote argument list.' }, false)
+  const remoteFieldsGiven = requestedUrl !== undefined || args.transport !== undefined || args.headers !== undefined
+  if (remoteFieldsGiven && (args.args !== undefined || text(args.command))) {
+    return result({ error: 'url/transport/headers configure a remote server; do not combine them with command or args.' }, false)
   }
   if (requestedUrl && !/^https?:\/\//i.test(requestedUrl)) {
     return result({ error: 'url must start with http:// or https://.' }, false)
   }
+  if (args.transport !== undefined && args.transport !== 'http' && args.transport !== 'sse') {
+    return result({ error: 'transport must be "http" or "sse".' }, false)
+  }
 
   if (!existing && !text(args.command) && !requestedUrl) {
-    return result({ error: 'A new MCP server requires command for stdio, or url for Streamable HTTP.' }, false)
+    return result({ error: 'A new MCP server requires command for stdio, or url for a remote (HTTP/SSE) server.' }, false)
   }
 
   const now = Date.now()
@@ -194,14 +261,40 @@ export async function manageMcp(input: unknown, signal?: AbortSignal): Promise<T
   const originalName = text(existing?.original_name) || requestedName || requestedUrl || text(args.command) || 'MCP Server'
   const customName = requestedName || text(existing?.custom_name)
   const name = customName || originalName
-  const command = requestedUrl ? 'remote' : (text(args.command) || existing?.command || '')
   const storedArgs = existing ? JSON.parse(existing.args_json) as string[] : []
-  const commandArgs = args.args ?? (requestedUrl ? ['--url', requestedUrl] : storedArgs)
   const storedEnv = existing ? JSON.parse(existing.env_json) as Record<string, string> : {}
   const env = args.replaceEnv ? {} as Record<string, string> : { ...storedEnv }
   for (const [key, value] of Object.entries(args.env || {})) {
     if (value === null) delete env[key]
     else env[key] = value
+  }
+
+  let command = text(args.command) || existing?.command || ''
+  let commandArgs = args.args ?? storedArgs
+  if (remoteFieldsGiven) {
+    if (!requestedUrl && existing?.command !== 'remote') {
+      return result({ error: 'transport/headers require url when the server is not already a remote server.' }, false)
+    }
+    // Patch the stored remote config: url/transport replace, headers merge (null removes).
+    const remote: RemoteArgs = existing?.command === 'remote'
+      ? parseRemoteArgs(storedArgs, env, id)
+      : { transport: 'http', url: '', headerEnv: new Map<string, string>() }
+    if (requestedUrl) remote.url = requestedUrl
+    if (args.transport) remote.transport = args.transport
+    for (const [header, value] of Object.entries(args.headers || {})) {
+      const existingName = [...remote.headerEnv.keys()].find(key => key.toLowerCase() === header.toLowerCase())
+      const envName = (existingName && remote.headerEnv.get(existingName)) || `MCP_${envSlug(id)}_${envSlug(header) || 'HEADER'}`
+      if (existingName) remote.headerEnv.delete(existingName)
+      if (value === null) {
+        delete env[envName]
+        continue
+      }
+      remote.headerEnv.set(header, envName)
+      env[envName] = value
+      if (header.toLowerCase() === 'authorization') remote.bearerEnvArg = undefined
+    }
+    command = 'remote'
+    commandArgs = buildRemoteArgs(remote)
   }
   const enabled = args.enabled ?? (existing ? existing.enabled === 1 : true)
   const description = args.description !== undefined ? args.description.trim() : (existing?.description || '')
@@ -229,7 +322,7 @@ export function makeManageMcpTool(): ToolDefinition {
     name: MANAGE_MCP_TOOL_NAME,
     execution: { readOnly: false },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-    description: 'Install and manage MCP servers. Defaults to an idempotent upsert: use the returned serverId for follow-up corrections. Supports stdio command/args or a Streamable HTTP url, environment-variable patches, enable/disable, listing, and removal. Remote OAuth is discovered automatically: if pendingAuthUrl is returned, tell the user to complete browser authorization through the Authorize prompt. Explicit reconnects and OAuth reauthorization must be performed manually in MCP settings. Never invent credentials; ask the user for missing secrets.',
+    description: 'Install and manage MCP servers. Defaults to an idempotent upsert: use the returned serverId for follow-up corrections. Supports stdio command/args, or remote servers via url with transport (http, or sse for legacy servers) and request headers (e.g. Authorization), environment-variable patches, enable/disable, listing, and removal. For a remote server that uses OAuth, omit headers. Remote OAuth is discovered automatically: if pendingAuthUrl is returned, tell the user to complete browser authorization through the Authorize prompt. Explicit reconnects and OAuth reauthorization must be performed manually in MCP settings. Never invent credentials; ask the user for missing secrets.',
     timeout: 70_000,
     parameters: {
       type: 'object',
@@ -240,7 +333,13 @@ export function makeManageMcpTool(): ToolDefinition {
         name: { type: 'string', description: 'Display name. On upsert without serverId, an exact installed-name match is updated.' },
         command: { type: 'string', description: 'Executable for a stdio MCP server, such as npx, uvx, node, or python.' },
         args: { type: 'array', items: { type: 'string' }, description: 'Complete replacement argument list for the command.' },
-        url: { type: 'string', description: 'Streamable HTTP MCP URL. Shorthand for command="remote" and args=["--url", url].' },
+        url: { type: 'string', description: 'Remote MCP server URL (http:// or https://). Makes this a remote server; do not combine with command/args.' },
+        transport: { type: 'string', enum: ['http', 'sse'], description: 'Remote transport. "http" (Streamable HTTP, default) or "sse" for legacy servers that only expose an /sse endpoint.' },
+        headers: {
+          type: 'object',
+          additionalProperties: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          description: 'Remote request header patch, e.g. {"Authorization": "Bearer <token>"}. Values are stored as secrets, may reference ${ENV_VAR}; null removes a header. Other headers are kept.',
+        },
         env: {
           type: 'object',
           additionalProperties: { anyOf: [{ type: 'string' }, { type: 'null' }] },
