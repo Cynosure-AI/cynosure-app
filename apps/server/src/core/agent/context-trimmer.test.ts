@@ -179,6 +179,6 @@ describe('AgentExecutor dynamic context budget', () => {
             typeof message.content === 'string' && message.content.startsWith('old:'),
         )).toBe(false)
         expect(requests[1].messages.some((message) => message.content === 'load more tools')).toBe(true)
-        expect(requests[1].maxTokens).toBe(900)
+        expect(requests[1].maxTokens).toBe(1_500)
     })
 })

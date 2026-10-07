@@ -10,9 +10,9 @@ import type { ReasoningEffort } from '@shared/types'
  */
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
-export const DEFAULT_MAX_OUTPUT_TOKENS = 4_096
+export const DEFAULT_MAX_OUTPUT_TOKENS = 16_384
 const MIN_OUTPUT_RESERVE = 512
-const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15
+const OUTPUT_RESERVE_CONTEXT_RATIO = 0.25
 const MIN_SAFETY_MARGIN = 256
 const SAFETY_MARGIN_CONTEXT_RATIO = 0.02
 const MAX_REASONING_RESERVE = 32_768

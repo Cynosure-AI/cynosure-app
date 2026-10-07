@@ -360,6 +360,27 @@ describe('AgentExecutor tool-loop safety', () => {
     expect(streamComplete).toHaveBeenCalledTimes(2)
   })
 
+  test('requests the visible output budget plus the reasoning reserve', async () => {
+    const budgets: Array<number | undefined> = []
+    const streamComplete = vi.fn((request: { maxTokens?: number }) => {
+      budgets.push(request.maxTokens)
+      return (async function* (): AsyncIterable<StreamChunk> {
+        yield { content: 'answer', done: true }
+      })()
+    })
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [], conversationId: 'output-budget', broadcast: vi.fn(), model: 'test',
+      contextWindow: 100_000, reasoningEffort: 'medium',
+      saveMessages: false, emitEvents: false,
+    })
+
+    await executor.run([{ role: 'user', content: 'go' }])
+
+    // 16,384 visible output + 5,000 medium reasoning reserve.
+    expect(budgets).toEqual([21_384])
+  })
+
   test('rejects an initial stream that ends without a terminal event', async () => {
     const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
       yield { content: 'partial', done: false }

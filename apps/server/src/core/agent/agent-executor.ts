@@ -7,6 +7,7 @@ import {
     estimateTotalTokens,
     estimateToolDefinitionTokens,
     resolveOutputReserve,
+    resolveReasoningReserve,
     type ContextStrategy,
 } from './context-trimmer.js'
 import type { LLMGateway } from '../gateway/gateway.js'
@@ -615,16 +616,30 @@ export class AgentExecutor {
         if (!this.config.contextWindow) return messages
         return trimMessagesToContextLimit(messages, this.config.contextWindow, {
             tools: this.config.tools,
-            requestedOutputTokens: this.requestedOutputTokens(),
+            requestedOutputTokens: this.outputReserve(),
             thinkingEnabled: this.config.thinkingEnabled !== false,
             reasoningEffort: this.config.reasoningEffort,
             strategy: this.config.contextStrategy,
         })
     }
 
-    private requestedOutputTokens(): number | undefined {
+    /** Tokens reserved for the visible answer (and tool-call arguments). */
+    private outputReserve(): number | undefined {
         if (!this.config.contextWindow) return this.config.maxOutputTokens
         return resolveOutputReserve(this.config.contextWindow, this.config.maxOutputTokens)
+    }
+
+    /**
+     * Completion cap sent to the provider. Reasoning models (OpenAI-compatible,
+     * OpenRouter, Gemini, ...) bill thinking tokens against `max_tokens`, so the
+     * reasoning reserve the context budget already sets aside must be part of the
+     * cap — otherwise thinking alone exhausts it and the round ends with `length`.
+     */
+    private requestedOutputTokens(): number | undefined {
+        const output = this.outputReserve()
+        const { contextWindow, thinkingEnabled, reasoningEffort } = this.config
+        if (output == null || !contextWindow) return output
+        return output + resolveReasoningReserve(contextWindow, thinkingEnabled !== false, reasoningEffort)
     }
 
     private estimateContextTokens(messages: ChatMessage[]): number {
