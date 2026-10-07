@@ -71,22 +71,28 @@ function buildMcpNamespace(serverId: string, name: string, manager: McpManager =
     }
 }
 
-/** Set up the auth-complete callback so background OAuth completions auto-register tools. */
-function setupAuthCompleteCallback(): void {
+/**
+ * Keep the tool registry in sync with background changes: OAuth completion,
+ * tools/list_changed, unexpected disconnects and automatic reconnects.
+ */
+function setupToolsChangedCallback(): void {
     const manager = getMcpManager()
     const registry = getToolRegistry()
 
-    manager.setOnAuthComplete((serverId, tools, config) => {
+    manager.setOnToolsChanged((serverId, tools, config) => {
+        registry.unregisterByNamespace(`mcp:${serverId}`)
+        if (!tools) return
         const row = getDb().prepare('SELECT * FROM mcp_servers WHERE id = ?').get(serverId) as McpServerRow | undefined
-        const originalName = syncOriginalNameFromServerInfo(serverId, row?.original_name || config.name)
-        const ns = buildMcpNamespace(serverId, row?.custom_name?.trim() || originalName, manager)
+        if (!row) return
+        const originalName = syncOriginalNameFromServerInfo(serverId, row.original_name || config.name)
+        const ns = buildMcpNamespace(serverId, row.custom_name?.trim() || originalName, manager)
         registerMcpTools(tools, ns, registry)
     })
 }
 
 /** Load saved MCP servers from DB and connect enabled ones */
 export async function loadSavedMcpServers(): Promise<void> {
-    setupAuthCompleteCallback()
+    setupToolsChangedCallback()
 
     const db = getDb()
     const rows = db.prepare('SELECT * FROM mcp_servers WHERE enabled = 1 ORDER BY created_at').all() as McpServerRow[]
@@ -339,7 +345,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         const row = db.prepare('SELECT args_json FROM mcp_servers WHERE id = ?').get(id) as { args_json: string } | undefined
         if (row) {
             const remoteUrl = McpManager.extractRemoteUrl(JSON.parse(row.args_json))
-            if (remoteUrl) McpManager.clearMcpRemoteAuth(remoteUrl)
+            if (remoteUrl) McpManager.clearMcpRemoteAuth(remoteUrl, id)
         }
 
         registry.unregisterByNamespace(`mcp:${id}`)
@@ -456,7 +462,7 @@ export async function registerMcpServerRoutes(app: FastifyInstance): Promise<voi
         const remoteUrl = McpManager.extractRemoteUrl(args)
         let cleared = 0
         if (remoteUrl) {
-            cleared = McpManager.clearMcpRemoteAuth(remoteUrl)
+            cleared = McpManager.clearMcpRemoteAuth(remoteUrl, id)
         }
 
         // Disconnect, unregister tools, then reconnect to trigger fresh auth

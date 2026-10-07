@@ -414,7 +414,10 @@ export const api = {
     onAuthNeeded: (cb: (data: { serverId: string; serverName: string; authUrl: string }) => void) =>
       onWsEvent('mcp-auth-needed', cb as WsHandler),
     onAuthComplete: (cb: (data: { serverId: string; serverName: string; toolCount: number }) => void) =>
-      onWsEvent('mcp-auth-complete', cb as WsHandler)
+      onWsEvent('mcp-auth-complete', cb as WsHandler),
+    /** Background connection changes: unexpected disconnect, auto-reconnect, tools/list_changed. */
+    onServerStatus: (cb: (data: { serverId: string; connected: boolean; toolCount?: number }) => void) =>
+      onWsEvent('mcp-server-status', cb as WsHandler)
   },
 
   notifications: {

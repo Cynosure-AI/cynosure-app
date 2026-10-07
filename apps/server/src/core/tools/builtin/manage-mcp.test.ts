@@ -107,4 +107,42 @@ describe('manage_mcp', () => {
       'pkg', '--api-key', '[redacted]', '--header=Authorization: [redacted]',
     ])
   })
+
+  test('installs remote servers with transport and headers stored as env secrets', async () => {
+    const installed = await manageMcp({
+      name: 'WP',
+      url: 'https://wp.test/sse',
+      transport: 'sse',
+      headers: { Authorization: 'Basic c2VjcmV0' },
+      enabled: false,
+    })
+    expect(installed.success).toBe(true)
+    expect(installed.output).not.toContain('c2VjcmV0')
+    const payload = JSON.parse(installed.output)
+    const prefix = `MCP_${payload.serverId.toUpperCase()}`   // e.g. MCP_WP_AB12CD34
+    expect(payload).toEqual(expect.objectContaining({
+      command: 'remote',
+      url: 'https://wp.test/sse',
+      transport: 'sse',
+      headerNames: ['Authorization'],
+      args: ['--transport', 'sse', '--url', 'https://wp.test/sse', `--header-env=Authorization=${prefix}_AUTHORIZATION`],
+    }))
+    const row = () => getDb().prepare('SELECT args_json, env_json FROM mcp_servers WHERE id = ?').get(payload.serverId) as { args_json: string; env_json: string }
+    expect(JSON.parse(row().env_json)).toEqual({ [`${prefix}_AUTHORIZATION`]: 'Basic c2VjcmV0' })
+
+    // Patch: switch transport, add a header, keep Authorization, then remove it.
+    await manageMcp({ serverId: payload.serverId, transport: 'http', headers: { 'X-Tenant': 'team' }, enabled: false })
+    expect(JSON.parse(row().args_json)).toEqual([
+      '--transport', 'streamable-http', '--url', 'https://wp.test/sse',
+      `--header-env=Authorization=${prefix}_AUTHORIZATION`, `--header-env=X-Tenant=${prefix}_X_TENANT`,
+    ])
+    await manageMcp({ serverId: payload.serverId, headers: { authorization: null }, enabled: false })
+    expect(JSON.parse(row().env_json)).toEqual({ [`${prefix}_X_TENANT`]: 'team' })
+  })
+
+  test('rejects remote fields mixed with stdio fields or without a url', async () => {
+    expect((await manageMcp({ command: 'npx', url: 'https://x.test/mcp', enabled: false })).success).toBe(false)
+    await manageMcp({ name: 'Local', command: 'node', args: ['a.js'], enabled: false })
+    expect((await manageMcp({ name: 'Local', transport: 'sse', enabled: false })).success).toBe(false)
+  })
 })
