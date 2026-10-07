@@ -12,6 +12,7 @@ import {
   RESPONSE_MODEL_TYPES,
   isLocalProvider,
   providerBaseUrl,
+  providerRequiresApiKey,
   providerFormProblem,
   type ProviderType,
 } from '../../utils/provider-defaults'
@@ -74,10 +75,13 @@ const modelsError = ref('')
 const modelsLoadedFor = ref('')
 
 const local = computed(() => isLocalProvider(draft.type))
+const keyRequired = computed(() => providerRequiresApiKey(draft.type))
 const problem = computed(() => providerFormProblem(draft))
 const credentialsKey = computed(() => JSON.stringify([draft.type, draft.baseUrl.trim(), draft.apiKey.trim()]))
-const canFetchModels = computed(() => local.value ? Boolean(draft.baseUrl.trim()) : Boolean(draft.apiKey.trim()))
-const fetchHint = computed(() => local.value ? 'Enter the base URL to load models.' : 'Enter an API key to load models.')
+const missingBaseUrl = computed(() => local.value && !draft.baseUrl.trim())
+const missingApiKey = computed(() => keyRequired.value && !draft.apiKey.trim())
+const canFetchModels = computed(() => !missingBaseUrl.value && !missingApiKey.value)
+const fetchHint = computed(() => missingBaseUrl.value ? 'Enter the base URL to load models.' : 'Enter an API key to load models.')
 
 // A model list belongs to the credentials it was loaded with.
 watch(credentialsKey, (key) => {
@@ -228,7 +232,7 @@ const labelClass = 'mb-1.5 block text-xs font-medium text-ink-secondary'
       >
         API key
         <span
-          v-if="local"
+          v-if="!keyRequired"
           class="font-normal text-ink-faint"
         >(optional)</span>
       </label>
@@ -239,7 +243,7 @@ const labelClass = 'mb-1.5 block text-xs font-medium text-ink-secondary'
           :type="showApiKey ? 'text' : 'password'"
           autocomplete="off"
           spellcheck="false"
-          :placeholder="local ? 'Only if your server requires one' : 'Paste your API key'"
+          :placeholder="keyRequired ? 'Paste your API key' : 'Only if your server requires one'"
           :class="[inputClass, 'pr-10']"
         >
         <button

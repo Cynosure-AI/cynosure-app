@@ -149,6 +149,7 @@ export class OpenRouterProvider extends BaseLLMProvider {
     private imageGenerationModelsCache: { models: OpenRouterImageModel[]; ts: number } | null = null
     private imageModelsPromise: Promise<ModelListItem[]> | null = null
     protected get defaultBaseUrl(): string { return 'https://openrouter.ai/api/v1' }
+    protected get allowsCustomBaseUrl(): boolean { return false }
 
     protected get defaultHeaders(): Record<string, string> {
         return {
@@ -162,7 +163,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
 
     constructor(config: LLMProviderConfig) {
         super()
-        const baseUrl = this.defaultBaseUrl
+        const baseUrl = this.allowsCustomBaseUrl
+            ? config.baseUrl || this.defaultBaseUrl
+            : this.defaultBaseUrl
         this.config = { ...config, baseUrl }
         this.client = new OpenAI({
             apiKey: config.apiKey || 'not-set',

@@ -14,6 +14,7 @@ import SettingsPersistenceStatus, { type SettingsPersistenceState } from './Sett
 import {
   defaultEmbeddingModelForProviderId,
 } from '../../utils/embedding-defaults'
+import { isLocalProvider } from '../../utils/provider-defaults'
 
 const providerStore = useProviderStore()
 const props = withDefaults(defineProps<{
@@ -79,7 +80,7 @@ const embDimensions = ref(0)
 const embModelRefreshKey = ref(0)
 
 const embSaving = ref(false)
-const savedEmbedding = ref({ providerId: '', model: '' })
+const savedEmbedding = ref({ providerId: '', model: '', dimensions: 0 })
 const embStatus = ref<SettingsPersistenceState>('idle')
 const embError = ref('')
 const embProbing = ref(false)
@@ -185,8 +186,8 @@ async function loadEmbeddingConfig() {
     applyDefaultEmbeddingConfig()
   }
   savedEmbedding.value = persisted
-    ? { providerId: embProviderId.value, model: embModel.value }
-    : { providerId: '', model: '' }
+    ? { providerId: embProviderId.value, model: embModel.value, dimensions: embDimensions.value }
+    : { providerId: '', model: '', dimensions: 0 }
   loadingEmbeddingConfig.value = false
 }
 
@@ -266,13 +267,28 @@ function updateCurationSelection(selection: { providerId: string; model: string 
 function updateEmbeddingSelection(selection: { providerId: string; model: string }) {
   embProviderId.value = selection.providerId
   embModel.value = selection.model
+  embDimensions.value = selection.providerId === savedEmbedding.value.providerId && selection.model === savedEmbedding.value.model
+    ? savedEmbedding.value.dimensions
+    : 0
 }
 
+// A model id only means something to the provider it came from, so switching
+// providers never carries the previous model over. The active-provider
+// fallback has no model list of its own and keeps the current model.
 watch(embProviderId, (id) => {
-  if (loadingEmbeddingConfig.value) return
-  const defaultModel = defaultEmbeddingModelForProviderId(id, providerStore.providers)
-  if (defaultModel) embModel.value = defaultModel
+  if (loadingEmbeddingConfig.value || !id) return
+  updateEmbeddingSelection({
+    providerId: id,
+    model: id === savedEmbedding.value.providerId
+      ? savedEmbedding.value.model
+      : defaultEmbeddingModelForProviderId(id, providerStore.providers),
+  })
 }, { flush: 'sync' })
+
+const embProviderIsLocal = computed(() => {
+  const provider = embeddingProviders.value[0]
+  return provider ? isLocalProvider(provider.type) : false
+})
 
 function applyDefaultEmbeddingConfig() {
   const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
@@ -332,7 +348,7 @@ async function doSaveEmbeddings(reembed: boolean) {
       reembed
     })
     embDimensions.value = res.dimensions
-    savedEmbedding.value = { providerId: embProviderId.value, model: embModel.value }
+    savedEmbedding.value = { providerId: embProviderId.value, model: embModel.value, dimensions: res.dimensions }
     embStatus.value = 'saved'
     embError.value = ''
   } catch (error) {
@@ -436,6 +452,12 @@ function cancelDrop() {
               />
             </button>
           </div>
+          <p
+            v-if="embProviderIsLocal"
+            class="mt-1.5 text-[11px] text-ink-muted"
+          >
+            Only models available on {{ embeddingProviders[0]?.name }} are listed. Add an embedding model there, then refresh.
+          </p>
         </div>
       </div>
 

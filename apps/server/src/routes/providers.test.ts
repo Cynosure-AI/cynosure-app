@@ -66,6 +66,20 @@ describe('provider routes', () => {
         expect(storedProviders()).toEqual([])
     })
 
+    test('requires both a base URL and an API key for Unsloth Studio', async () => {
+        const unsloth = { ...localProvider, type: 'unsloth', name: 'Unsloth Studio', baseUrl: 'http://127.0.0.1:1/v1' }
+        const withoutKey = await app.inject({ method: 'POST', url: '/providers', payload: unsloth })
+        expect(withoutKey.statusCode).toBe(400)
+        expect(withoutKey.json().error).toBe('An API key is required for this provider.')
+
+        const withoutUrl = await app.inject({
+            method: 'POST', url: '/providers', payload: { ...unsloth, baseUrl: '', apiKey: 'sk-unsloth-test' },
+        })
+        expect(withoutUrl.statusCode).toBe(400)
+        expect(withoutUrl.json().error).toBe('A base URL is required for local providers.')
+        expect(storedProviders()).toEqual([])
+    })
+
     test('rejects missing names, models, and malformed base URLs', async () => {
         for (const payload of [
             { ...localProvider, name: '' },

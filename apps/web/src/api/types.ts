@@ -5,7 +5,7 @@ import type { ChatEvent, ConversationExecutionConfig } from '@shared/types'
 export interface LLMProviderConfig {
     id: string
     name: string
-    type: 'openai' | 'anthropic' | 'google' | 'lmstudio' | 'grok' | 'ollama' | 'openrouter' | 'requesty' | 'groq' | 'mistral'
+    type: 'openai' | 'anthropic' | 'google' | 'lmstudio' | 'grok' | 'ollama' | 'openrouter' | 'requesty' | 'groq' | 'mistral' | 'unsloth'
     baseUrl: string
     apiKey?: string
     defaultModel: string

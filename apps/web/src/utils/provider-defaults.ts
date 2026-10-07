@@ -14,6 +14,7 @@ export const PROVIDER_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'grok', label: 'Grok (xAI)' },
   { value: 'ollama', label: 'Ollama (local)' },
   { value: 'lmstudio', label: 'LM Studio (local)' },
+  { value: 'unsloth', label: 'Unsloth Studio (local)' },
 ]
 
 export const PROVIDER_DISPLAY_NAMES: Record<ProviderType, string> = {
@@ -27,6 +28,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<ProviderType, string> = {
   grok: 'Grok',
   ollama: 'Ollama',
   lmstudio: 'LM Studio',
+  unsloth: 'Unsloth Studio',
 }
 
 export const DEFAULT_PROVIDER_BASE_URLS: Record<ProviderType, string> = {
@@ -40,6 +42,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<ProviderType, string> = {
   requesty: 'https://router.requesty.ai/v1',
   groq: 'https://api.groq.com/openai/v1',
   mistral: 'https://api.mistral.ai/v1',
+  unsloth: 'http://localhost:8888/v1',
 }
 
 export const DEFAULT_PROVIDER_MODELS: Record<ProviderType, string> = {
@@ -53,6 +56,7 @@ export const DEFAULT_PROVIDER_MODELS: Record<ProviderType, string> = {
   requesty: 'openai/gpt-4o',
   groq: 'llama-3.3-70b-versatile',
   mistral: 'mistral-large-latest',
+  unsloth: '',
 }
 
 /** Model types a chat provider can serve; used when listing models for a provider. */
@@ -63,11 +67,17 @@ export function providerSupportsVision(type: ProviderType): boolean {
   return type !== 'anthropic'
 }
 
-const LOCAL_PROVIDER_TYPES = new Set<ProviderType>(['lmstudio', 'ollama'])
+const LOCAL_PROVIDER_TYPES = new Set<ProviderType>(['lmstudio', 'ollama', 'unsloth'])
+const KEYLESS_PROVIDER_TYPES = new Set<ProviderType>(['lmstudio', 'ollama'])
 
-/** Local servers have an editable base URL and run without an API key. */
+/** Local servers have an editable base URL. */
 export function isLocalProvider(type: ProviderType): boolean {
   return LOCAL_PROVIDER_TYPES.has(type)
+}
+
+/** Every provider needs an API key except local servers that run without authentication. */
+export function providerRequiresApiKey(type: ProviderType): boolean {
+  return !KEYLESS_PROVIDER_TYPES.has(type)
 }
 
 export function providerBaseUrl(type: ProviderType, baseUrl?: string): string {
@@ -77,11 +87,8 @@ export function providerBaseUrl(type: ProviderType, baseUrl?: string): string {
 /** What is still missing before a provider form can be saved, or null when it is complete. */
 export function providerFormProblem(form: { type: ProviderType; name: string; apiKey?: string; baseUrl?: string; defaultModel: string }): string | null {
   if (!form.name.trim()) return 'Enter a display name.'
-  if (isLocalProvider(form.type)) {
-    if (!form.baseUrl?.trim()) return 'Enter the server base URL.'
-  } else if (!form.apiKey?.trim()) {
-    return 'Enter an API key.'
-  }
+  if (isLocalProvider(form.type) && !form.baseUrl?.trim()) return 'Enter the server base URL.'
+  if (providerRequiresApiKey(form.type) && !form.apiKey?.trim()) return 'Enter an API key.'
   if (!form.defaultModel.trim()) return 'Choose a default model.'
   return null
 }

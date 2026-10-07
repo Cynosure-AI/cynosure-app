@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import MemorySettings from './MemorySettings.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
+import ProviderSelect from '../shared/ProviderSelect.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +24,16 @@ vi.mock('../../api/client', () => ({
         type: 'openai',
         baseUrl: 'https://example.com',
         defaultModel: 'chat-model',
+        availableModels: [],
+        supportsStreaming: true,
+        supportsToolCalls: true,
+        supportsVision: false,
+      }, {
+        id: 'provider-2',
+        name: 'Unsloth Studio',
+        type: 'unsloth',
+        baseUrl: 'http://localhost:8888/v1',
+        defaultModel: '',
         availableModels: [],
         supportsStreaming: true,
         supportsToolCalls: true,
@@ -176,6 +187,27 @@ describe('Embedding model settings', () => {
 
     expect(wrapper.get('[role="alert"]').text()).toBe('The embedding model did not respond: 404 model not found')
     expect(mocks.configureEmbeddings).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  test('switching provider does not carry the previous model over', async () => {
+    const wrapper = mount(MemorySettings, {
+      props: { visibleSections: ['embedding-model'] },
+      global: { plugins: [createPinia()], stubs: { ProviderModelSelect: true, Icon: true } },
+    })
+    await flushPromises()
+    const modelSelect = () => wrapper.getComponent(ProviderModelSelect)
+
+    wrapper.getComponent(ProviderSelect).vm.$emit('update:modelValue', 'provider-2')
+    await flushPromises()
+    expect(modelSelect().props('modelValue')).toBe('')
+    expect(wrapper.text()).not.toContain('dimensions')
+    expect(wrapper.text()).toContain('Only models available on Unsloth Studio are listed.')
+
+    wrapper.getComponent(ProviderSelect).vm.$emit('update:modelValue', 'provider-1')
+    await flushPromises()
+    expect(modelSelect().props('modelValue')).toBe('embed-small')
+    expect(wrapper.text()).toContain('768 dimensions')
     wrapper.unmount()
   })
 })
