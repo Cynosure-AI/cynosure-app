@@ -182,6 +182,7 @@ import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
 import type { McpRegistryServer } from '../../api/types'
 import { useMcpServers } from '../../composables/useMcpServers'
+import { planRemoteHeaders } from '../settings/mcp/registry-remote-headers'
 
 const { servers, loadServers } = useMcpServers()
 
@@ -220,6 +221,10 @@ interface McpOption {
   args: string[]
   argEnvNames: Set<string>
   envVars?: EnvVar[]
+  /** Builds the stored env from input values; defaults to storing each input as-is. */
+  buildEnv?: (values: Record<string, string | undefined>) => Record<string, string>
+  /** Hints for the stored env when it differs from the input fields. */
+  envHints?: { name: string; description?: string; required: boolean; sensitive?: boolean }[]
   installId?: string // substring to check if already installed
 }
 
@@ -264,7 +269,7 @@ function getInstallOption(entry: McpRegistryServer): McpOption | null {
   const srv = entry.server
   const remote = srv.remotes?.find(r => /^https?:\/\//.test(r.url) && (r.type === 'streamable-http' || r.type === 'http'))
   if (remote) {
-    const headerEnvName = (name: string) => `MCP_HEADER_${name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'VALUE'}`
+    const headers = planRemoteHeaders(remote.headers)
     return {
       id: slugify(srv.name),
       name: getDisplayName(srv),
@@ -276,14 +281,15 @@ function getInstallOption(entry: McpRegistryServer): McpOption | null {
       badgeClass: 'bg-accent-500/20 text-accent-fg',
       command: 'remote',
       origin: 'recommended:remote',
-      args: ['--transport', 'streamable-http', '--url', remote.url,
-        ...(remote.headers || []).map(h => `--header-env=${h.name}=${headerEnvName(h.name)}`)],
+      args: ['--transport', 'streamable-http', '--url', remote.url, ...headers.args],
       argEnvNames: new Set(),
-      envVars: (remote.headers || []).map(h => ({
-        name: headerEnvName(h.name), label: h.name,
-        placeholder: h.description || h.name, required: h.isRequired,
-        secret: h.isSecret, description: h.description,
+      envVars: headers.inputs.map(input => ({
+        name: input.name, label: input.name,
+        placeholder: input.description || input.name, required: input.required,
+        secret: input.secret, description: input.description,
       })),
+      buildEnv: headers.buildEnv,
+      envHints: headers.envHints.length ? headers.envHints.map(hint => ({ ...hint, sensitive: true })) : undefined,
       installId: remote.url,
     }
   }
@@ -375,11 +381,14 @@ function canInstallWithEnv(mcp: McpOption): boolean {
 }
 
 async function installWithEnv(mcp: McpOption) {
-  const env: Record<string, string> = {}
+  const values: Record<string, string> = {}
   for (const v of (mcp.envVars || [])) {
-    const val = envValues[mcp.id + ':' + v.name]
-    if (val?.trim() && !mcp.argEnvNames.has(v.name)) env[v.name] = val.trim()
+    const val = envValues[mcp.id + ':' + v.name]?.trim()
+    if (val) values[v.name] = val
   }
+  const env: Record<string, string> = mcp.buildEnv
+    ? mcp.buildEnv(values)
+    : Object.fromEntries(Object.entries(values).filter(([name]) => !mcp.argEnvNames.has(name)))
 
   const args = mcp.args.map(arg => {
     const match = arg.match(/^\$\{([^}]+)\}$/)
@@ -401,12 +410,12 @@ async function doInstall(mcp: McpOption, env: Record<string, string>, argsOverri
       origin: mcp.origin,
       icon_url: mcp.iconUrl,
       description: mcp.description,
-      env_hints: mcp.envVars?.length ? mcp.envVars.map(v => ({
+      env_hints: mcp.envHints ?? (mcp.envVars?.length ? mcp.envVars.map(v => ({
         name: v.name,
         description: v.description,
         required: v.required,
         sensitive: v.secret,
-      })) : undefined,
+      })) : undefined),
     })
     await loadServers()
     checkInstalled()

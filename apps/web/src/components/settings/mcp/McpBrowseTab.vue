@@ -4,6 +4,7 @@ import { api } from '../../../api/client'
 import type { McpRegistryServer } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
+import { planRemoteHeaders } from './registry-remote-headers'
 
 const emit = defineEmits<{
   goToInstalled: []
@@ -24,14 +25,18 @@ const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
 const selectedCategory = ref('all')
 const viewMode = ref<'grid' | 'list'>('grid')
+const failedIconUrls = reactive<Record<string, boolean>>({})
 
 type RegistryRow = McpRegistryServer & { id: string }
 type InstallInfo = {
   kind: 'local' | 'remote'
   command: string
   args: string[]
-  argEnvNames: Set<string>
-  envVars: { name: string; description?: string; required: boolean }[]
+  /** Fields the user fills in before installing. */
+  envVars: { name: string; description?: string; required: boolean; secret: boolean }[]
+  /** Env vars stored on the server config, shown later in the installed list. */
+  envHints: { name: string; description?: string; required: boolean }[]
+  buildEnv: (values: Record<string, string | undefined>) => Record<string, string>
 }
 
 const registryRows = computed<RegistryRow[]>(() =>
@@ -52,7 +57,7 @@ type RegistrySource = {
 }
 
 const registrySources: RegistrySource[] = [
-  { id: 'recommended', label: 'Recommended', detail: 'Curated by Cynosure', icon: 'lucide:star', badge: 'Curated' },
+  { id: 'recommended', label: 'Recommended', detail: 'Popular picks from trusted vendors', icon: 'lucide:star', badge: 'Curated' },
   { id: 'official', label: 'Official', detail: 'MCP Registry', icon: 'lucide:badge-check' },
   { id: 'smithery', label: 'Smithery', detail: 'smithery.ai', icon: 'lucide:sparkles' },
 ]
@@ -71,7 +76,14 @@ const categories = [
 
 const visibleRegistryRows = computed(() => selectedCategory.value === 'all'
   ? registryRows.value
-  : registryRows.value.filter(item => getCategory(item.server) === selectedCategory.value))
+  : registryRows.value.filter(item => getCategory(item) === selectedCategory.value))
+
+// The recommended list is loaded in full, so hide categories it has nothing for.
+const visibleCategories = computed(() => {
+  if (registrySource.value !== 'recommended' || registrySearch.value) return categories
+  const used = new Set(registryRows.value.map(getCategory))
+  return categories.filter(category => category.id === 'all' || used.has(category.id))
+})
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let currentAbortController: AbortController | null = null
@@ -148,6 +160,15 @@ function getDisplayName(srv: McpRegistryServer['server']): string {
   return srv.title || srv.name.split('/').pop() || srv.name
 }
 
+function getIconUrl(srv: McpRegistryServer['server']): string | undefined {
+  return srv.icons?.find(icon => icon.src && !failedIconUrls[icon.src])?.src
+}
+
+function onIconError(event: Event): void {
+  const src = (event.target as HTMLImageElement).getAttribute('src')
+  if (src) failedIconUrls[src] = true
+}
+
 function stripPackageVersion(identifier: string): string {
   const versionAtIndex = identifier.indexOf('@', identifier.startsWith('@') ? 1 : 0)
   return versionAtIndex === -1 ? identifier : identifier.slice(0, versionAtIndex)
@@ -157,36 +178,20 @@ function packageIdentifiersMatch(a: string, b: string): boolean {
   return a === b || stripPackageVersion(a) === stripPackageVersion(b)
 }
 
-function headerEnvName(header: string): string {
-  return `MCP_HEADER_${header.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '') || 'VALUE'}`
-}
-
 function getInstallInfo(srv: McpRegistryServer['server']): InstallInfo | null {
   // Prefer Streamable HTTP; fall back to a legacy SSE endpoint.
   const remotes = srv.remotes?.filter(r => /^https?:\/\//.test(r.url)) || []
   const remote = remotes.find(r => r.type === 'streamable-http' || r.type === 'http')
     || remotes.find(r => r.type === 'sse')
   if (remote) {
-    const envVars = (remote.headers || []).map(header => {
-      const name = headerEnvName(header.name)
-      return {
-        name,
-        description: header.description || `Value for ${header.name}`,
-        required: header.isRequired,
-      }
-    })
+    const headers = planRemoteHeaders(remote.headers)
     return {
       kind: 'remote',
       command: 'remote',
-      args: [
-        '--transport',
-        remote.type === 'sse' ? 'sse' : 'streamable-http',
-        '--url',
-        remote.url,
-        ...(remote.headers || []).map(header => `--header-env=${header.name}=${headerEnvName(header.name)}`),
-      ],
-      argEnvNames: new Set(),
-      envVars,
+      args: ['--transport', remote.type === 'sse' ? 'sse' : 'streamable-http', '--url', remote.url, ...headers.args],
+      envVars: headers.inputs,
+      envHints: headers.envHints,
+      buildEnv: headers.buildEnv,
     }
   }
 
@@ -198,10 +203,19 @@ function getInstallInfo(srv: McpRegistryServer['server']): InstallInfo | null {
       name: v.name,
       description: v.description,
       required: v.isRequired,
+      secret: v.format === 'password' || /token|key|secret|password/i.test(v.name),
     }))
-    if (pkg.registryType === 'smithery') return { kind: 'local', command: 'npx', args: ['-y', '@smithery/cli@latest', 'run', pkg.identifier, ...packageArgs], argEnvNames, envVars }
-    if (pkg.registryType === 'npm') return { kind: 'local', command: 'npx', args: ['-y', pkg.identifier, ...packageArgs], argEnvNames, envVars }
-    if (pkg.registryType === 'pypi') return { kind: 'local', command: 'uvx', args: [pkg.identifier, ...packageArgs], argEnvNames, envVars }
+    const local = {
+      kind: 'local' as const,
+      envVars,
+      envHints: envVars.map(({ name, description, required }) => ({ name, description, required })),
+      buildEnv: (values: Record<string, string | undefined>) => Object.fromEntries(
+        envVars.filter(v => values[v.name] && !argEnvNames.has(v.name)).map(v => [v.name, values[v.name]!]),
+      ),
+    }
+    if (pkg.registryType === 'smithery') return { ...local, command: 'npx', args: ['-y', '@smithery/cli@latest', 'run', pkg.identifier, ...packageArgs] }
+    if (pkg.registryType === 'npm') return { ...local, command: 'npx', args: ['-y', pkg.identifier, ...packageArgs] }
+    if (pkg.registryType === 'pypi') return { ...local, command: 'uvx', args: [pkg.identifier, ...packageArgs] }
   }
   return null
 }
@@ -225,7 +239,10 @@ function getTypeTags(srv: McpRegistryServer['server']): string[] {
   return [...tags]
 }
 
-function getCategory(srv: McpRegistryServer['server']): string {
+function getCategory(entry: McpRegistryServer): string {
+  const curated = entry._meta?.['ai.cynosure/recommended']?.category
+  if (curated && categories.some(category => category.id === curated)) return curated
+  const srv = entry.server
   const haystack = `${srv.name} ${srv.title || ''} ${srv.description || ''}`.toLowerCase()
   if (/mail|gmail|imap|slack|telegram|notification|message/.test(haystack)) return 'communication'
   if (/image|video|media|music|audio|webcam|youtube|chart|mermaid/.test(haystack)) return 'media'
@@ -237,13 +254,15 @@ function getCategory(srv: McpRegistryServer['server']): string {
   return 'utilities'
 }
 
-function getCardTags(srv: McpRegistryServer['server']): string[] {
-  const category = categories.find(item => item.id === getCategory(srv))?.label.toLowerCase() || 'utility'
-  return [category, ...getTypeTags(srv)].slice(0, 3)
+function getCardTags(entry: McpRegistryServer): string[] {
+  const category = categories.find(item => item.id === getCategory(entry))?.label.toLowerCase() || 'utility'
+  return [category, ...getTypeTags(entry.server)].slice(0, 3)
 }
 
-function getPublisher(): string {
-  if (registrySource.value === 'recommended') return 'Cynosure'
+function getPublisher(entry: McpRegistryServer): string {
+  const curatedPublisher = entry._meta?.['ai.cynosure/recommended']?.publisher
+  if (curatedPublisher) return curatedPublisher
+  if (registrySource.value === 'recommended') return 'Recommended'
   if (registrySource.value === 'official') return 'Official registry'
   return 'Smithery'
 }
@@ -280,10 +299,7 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
   addingRegistryId.value = id
   setLoading(id, true)
   try {
-    const env: Record<string, string> = {}
-    for (const v of install.envVars) {
-      if (registryEnv[v.name] && !install.argEnvNames.has(v.name)) env[v.name] = registryEnv[v.name]
-    }
+    const env = install.buildEnv(registryEnv)
     const args = install.args.map(arg => {
       const match = arg.match(/^\$\{([^}]+)\}$/)
       return match ? registryEnv[match[1]] : arg
@@ -302,11 +318,7 @@ async function addFromRegistry(srv: McpRegistryServer): Promise<void> {
       env: Object.keys(env).length ? env : undefined,
       icon_url: iconUrl,
       origin: originLabel,
-      env_hints: install.envVars.length ? install.envVars.map(v => ({
-        name: v.name,
-        description: v.description,
-        required: v.required,
-      })) : undefined,
+      env_hints: install.envHints.length ? install.envHints : undefined,
     })
 
     // Server is always created in the DB, even if initial connection fails.
@@ -442,7 +454,7 @@ onMounted(() => {
       </div>
       <div class="flex gap-2 overflow-x-auto pb-1">
         <button
-          v-for="category in categories"
+          v-for="category in visibleCategories"
           :key="category.id"
           type="button"
           class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition"
@@ -476,11 +488,11 @@ onMounted(() => {
             @click="selectedRegistryServer = item"
           >
             <img
-              v-if="item.server.icons?.length"
-              :src="item.server.icons[0].src"
+              v-if="getIconUrl(item.server)"
+              :src="getIconUrl(item.server)"
               :alt="`${getDisplayName(item.server)} icon`"
               class="h-full w-full object-cover"
-              @error="($event.target as HTMLImageElement).style.display = 'none'"
+              @error="onIconError"
             >
             <Icon
               v-else
@@ -501,11 +513,11 @@ onMounted(() => {
                 v-if="registrySource === 'recommended'"
                 icon="lucide:badge-check"
                 class="h-3.5 w-3.5 shrink-0 text-status-info"
-                aria-label="Verified by Cynosure"
+                aria-label="Recommended by Cynosure"
               />
             </div>
             <p class="mt-0.5 truncate text-[11px] text-ink-muted">
-              {{ getPublisher() }} · v{{ item.server.version }}
+              {{ getPublisher(item) }} · v{{ item.server.version }}
             </p>
           </div>
           <button
@@ -526,7 +538,7 @@ onMounted(() => {
         </p>
         <div class="mt-3 flex flex-wrap gap-1.5">
           <span
-            v-for="tag in getCardTags(item.server)"
+            v-for="tag in getCardTags(item)"
             :key="tag"
             class="rounded-md bg-theme-800 px-2 py-1 text-[10px] text-ink-secondary"
           >{{ tag }}</span>
@@ -556,7 +568,7 @@ onMounted(() => {
             >*</span></label>
             <input
               v-model="registryEnv[ev.name]"
-              :type="ev.name.includes('KEY') || ev.name.includes('PASSWORD') ? 'password' : 'text'"
+              :type="ev.secret ? 'password' : 'text'"
               :placeholder="ev.description || ev.name"
               class="w-full rounded-lg border border-theme-700 bg-theme-950 px-2.5 py-2 text-xs text-theme-200 outline-none placeholder:text-ink-faint focus:border-accent-500/60"
             >
@@ -700,14 +712,16 @@ onMounted(() => {
       <div class="flex items-center justify-between p-4 border-b border-theme-800 shrink-0">
         <div class="flex items-center gap-3">
           <Icon
-            v-if="!selectedRegistryServer.server.icons?.[0]?.src"
+            v-if="!getIconUrl(selectedRegistryServer.server)"
             icon="lucide:box"
             class="w-6 h-6 text-ink-secondary"
           />
           <img
             v-else
-            :src="selectedRegistryServer.server.icons[0].src"
+            :src="getIconUrl(selectedRegistryServer.server)"
+            :alt="`${getDisplayName(selectedRegistryServer.server)} icon`"
             class="w-8 h-8 rounded shrink-0 object-cover"
+            @error="onIconError"
           >
           <h3 class="text-lg font-medium text-theme-100">
             {{ getDisplayName(selectedRegistryServer.server) }}

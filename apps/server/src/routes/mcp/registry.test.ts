@@ -87,7 +87,7 @@ describe('MCP registry pagination', () => {
         }
     })
 
-    test('exposes Cynosure packages, Exa and Chrome DevTools in the recommended storefront', async () => {
+    test('serves the curated recommended list with metadata', async () => {
         const app = Fastify()
         await app.register(registerMcpRegistryRoutes, { prefix: '/api/mcp' })
         try {
@@ -100,13 +100,17 @@ describe('MCP registry pagination', () => {
             const body = response.json()
             expect(body.servers.length).toBeGreaterThan(0)
             expect(body.metadata.count).toBe(body.servers.length)
-            expect(body.servers.every((entry: { server: { name: string } }) =>
-                entry.server.name.startsWith('@cynosure') || ['exa', 'chrome-devtools-mcp'].includes(entry.server.name))).toBe(true)
             expect(body.servers).toEqual(expect.arrayContaining([
                 expect.objectContaining({ server: expect.objectContaining({ name: 'exa', remotes: [{ type: 'streamable-http', url: 'https://mcp.exa.ai/mcp' }] }) }),
-                expect.objectContaining({ server: expect.objectContaining({ name: 'chrome-devtools-mcp' }) }),
+                expect.objectContaining({ server: expect.objectContaining({ name: '@cynosure-mcp/webfetch' }) }),
+                expect.objectContaining({
+                    server: expect.objectContaining({ name: 'notion' }),
+                    _meta: { 'ai.cynosure/recommended': { category: 'productivity', publisher: 'Notion' } },
+                }),
             ]))
-            expect(body.servers.some((entry: { server: { name: string } }) => entry.server.name === '@toolsdk.ai/tavily-mcp')).toBe(false)
+
+            const byPublisher = await app.inject({ method: 'GET', url: '/api/mcp/registry?registry=recommended&search=microsoft' })
+            expect(byPublisher.json().servers.map((entry: { server: { name: string } }) => entry.server.name)).toEqual(['@playwright/mcp'])
 
             const search = await app.inject({ method: 'GET', url: '/api/mcp/registry?registry=recommended&search=exa' })
             expect(search.json().servers.map((entry: { server: { name: string } }) => entry.server.name)).toContain('exa')

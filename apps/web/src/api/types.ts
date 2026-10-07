@@ -202,10 +202,23 @@ export interface McpRegistryServer {
         remotes?: {
             type: string
             url: string
-            headers?: { name: string; description?: string; isRequired: boolean; isSecret: boolean }[]
+            headers?: {
+                name: string
+                description?: string
+                isRequired: boolean
+                isSecret: boolean
+                /** Value template such as `Bearer {TOKEN}`; `{TOKEN}` is filled from `variables`. */
+                value?: string
+                variables?: Record<string, { description?: string; isRequired?: boolean; isSecret?: boolean }>
+            }[]
         }[]
     }
     _meta: {
+        /** Present on entries from the curated "recommended" list. */
+        'ai.cynosure/recommended'?: {
+            category?: string
+            publisher?: string
+        }
         'io.modelcontextprotocol.registry/official'?: {
             status: string
             isLatest: boolean

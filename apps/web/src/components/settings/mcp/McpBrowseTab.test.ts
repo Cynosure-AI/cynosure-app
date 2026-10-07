@@ -100,4 +100,37 @@ describe('McpBrowseTab registry pagination', () => {
 
     wrapper.unmount()
   })
+
+  test('tries another icon after a failure and shows fallbacks in the card and details', async () => {
+    const page = registryPage('Sentry')
+    apiMocks.searchRegistry.mockResolvedValue({
+      ...page,
+      servers: [{
+        ...page.servers[0],
+        server: {
+          ...page.servers[0].server,
+          icons: [{ src: 'https://sentry.io/favicon.ico' }, { src: 'https://github.com/getsentry.png' }],
+        },
+      }],
+    })
+    const wrapper = mount(McpBrowseTab, {
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+
+    await wrapper.get('article img').trigger('error')
+    expect(wrapper.get('article img').attributes('src')).toBe('https://github.com/getsentry.png')
+
+    await wrapper.get('article [aria-label="Show server details"]').trigger('click')
+    const modal = wrapper.get('.fixed')
+    expect(modal.get('img').attributes('src')).toBe('https://github.com/getsentry.png')
+    await modal.get('img').trigger('error')
+
+    expect(wrapper.find('article img').exists()).toBe(false)
+    expect(wrapper.find('article icon-stub[icon="lucide:package"]').exists()).toBe(true)
+    expect(modal.find('img').exists()).toBe(false)
+    expect(modal.find('icon-stub[icon="lucide:box"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
 })

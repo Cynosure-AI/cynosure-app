@@ -1,22 +1,9 @@
 import type { FastifyInstance } from 'fastify'
-import { recommendedServers } from './recommended-servers.js'
+import { CYNOSURE_META_KEY, recommendedServers } from './recommended-servers.js'
 
 type RegistryServerEntry = {
     server: Record<string, unknown>
     _meta?: Record<string, unknown>
-}
-
-const CYNOSURE_NPM_NAMESPACE = '@cynosure'
-
-function isRecommendedServer(entry: RegistryServerEntry): boolean {
-    const name = String(entry.server.name || '')
-    // The currently published packages use the @cynosure-mcp scope. Keep the
-    // prefix check compatible with a future @cynosure/ scope migration.
-    return name === CYNOSURE_NPM_NAMESPACE
-        || name.startsWith(`${CYNOSURE_NPM_NAMESPACE}/`)
-        || name.startsWith(`${CYNOSURE_NPM_NAMESPACE}-mcp/`)
-        || name === 'exa'
-        || name === 'chrome-devtools-mcp'
 }
 
 export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<void> {
@@ -32,20 +19,20 @@ export async function registerMcpRegistryRoutes(app: FastifyInstance): Promise<v
         try {
             if (registrySource === 'recommended') {
                 const query = search?.trim().toLowerCase()
-                const curatedServers = recommendedServers.filter(isRecommendedServer)
                 const servers = query
-                    ? curatedServers.filter((entry) => {
+                    ? recommendedServers.filter((entry) => {
                         const server = entry.server
                         return [
                             server.name,
                             server.title,
                             server.description,
+                            (entry._meta?.[CYNOSURE_META_KEY] as { publisher?: string } | undefined)?.publisher,
                             ...(Array.isArray(server.packages)
                                 ? server.packages.map((pkg) => (pkg as { identifier?: string }).identifier)
                                 : []),
                         ].some((value) => String(value || '').toLowerCase().includes(query))
                     })
-                    : curatedServers
+                    : recommendedServers
 
                 return { servers, metadata: { count: servers.length } }
             }
