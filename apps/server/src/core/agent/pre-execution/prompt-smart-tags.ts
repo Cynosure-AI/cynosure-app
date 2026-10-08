@@ -14,14 +14,33 @@ type PromptSmartTagValues = Record<string, string>
 
 const TAG_PATTERN = /\{\{\s*([a-zA-Z][\w.-]*)\s*\}\}/g
 
+/**
+ * Time-of-day tags change every minute, so resolving them in the system prompt
+ * would invalidate the provider prompt cache on almost every turn. They resolve
+ * to a fixed pointer instead, and the time itself travels as turn-local context.
+ */
+const TURN_TIME_TAGS = new Set(['currentDateTime', 'currentTime', 'localDateTime', 'localTime', 'isoTime'])
+const TURN_TIME_POINTER = '(see the latest [Current time] note)'
+
 export function resolvePromptSmartTags(prompt: string, context: PromptSmartTagContext): string {
     if (!prompt) return prompt
 
     const values = buildPromptSmartTagValues(context)
     return prompt.replace(TAG_PATTERN, (match, tagName: string) => {
+        if (TURN_TIME_TAGS.has(tagName)) return TURN_TIME_POINTER
         const value = values[tagName]
         return value === undefined ? match : value
     })
+}
+
+/** The current time for a prompt that uses time-of-day tags; null when it uses none. */
+export function resolvePromptTimeContext(prompt: string, context: PromptSmartTagContext): string | null {
+    if (!prompt) return null
+    const usesTime = [...prompt.matchAll(TAG_PATTERN)].some(([, tagName]) => TURN_TIME_TAGS.has(tagName))
+    if (!usesTime) return null
+
+    const values = buildPromptSmartTagValues(context)
+    return `[Current time]\nLocal: ${values.localDateTime}\nUTC: ${values.isoDate} ${values.isoTime}\n[/Current time]`
 }
 
 function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartTagValues {
@@ -63,7 +82,6 @@ function formatSelectedMemoryFolderNames(folders: PromptSmartTagContext['selecte
         : ''
 }
 
-// Minute precision keeps resolved prompts stable enough for provider prefix caching.
 const MINUTE_PRECISION_TIME: Intl.DateTimeFormatOptions = {
     hour: 'numeric',
     minute: '2-digit',

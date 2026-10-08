@@ -13,7 +13,7 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
   {
     name: "currentDateTime",
     label: "Current date/time",
-    description: "Current date and time in the server locale and timezone.",
+    description: "Current date and time in the server locale and timezone. Sent with each turn rather than in the system prompt, so prompt caching keeps working.",
   },
   {
     name: "currentDate",
@@ -23,12 +23,12 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
   {
     name: "currentTime",
     label: "Current time",
-    description: "Current time in the server locale and timezone.",
+    description: "Current time in the server locale and timezone. Sent with each turn rather than in the system prompt, so prompt caching keeps working.",
   },
   {
     name: "localDateTime",
     label: "Local date/time",
-    description: "Current date and time in the server locale and timezone.",
+    description: "Current date and time in the server locale and timezone. Sent with each turn rather than in the system prompt, so prompt caching keeps working.",
   },
   {
     name: "localDate",
@@ -38,7 +38,7 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
   {
     name: "localTime",
     label: "Local time",
-    description: "Current time in the server locale and timezone.",
+    description: "Current time in the server locale and timezone. Sent with each turn rather than in the system prompt, so prompt caching keeps working.",
   },
   {
     name: "isoDate",
@@ -48,7 +48,7 @@ export const PROMPT_SMART_TAGS: PromptSmartTag[] = [
   {
     name: "isoTime",
     label: "ISO time",
-    description: "Current UTC time as HH:mm:ss.",
+    description: "Current UTC time as HH:mm:ss. Sent with each turn rather than in the system prompt, so prompt caching keeps working.",
   },
   {
     name: "timezone",
