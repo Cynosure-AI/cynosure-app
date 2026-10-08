@@ -2,6 +2,7 @@ import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { CronExpressionParser } from 'cron-parser'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { isDefaultChatAgent } from '../../agent/execution-preset.js'
+import { describeCurrentDate } from '../../agent/pre-execution/prompt-smart-tags.js'
 
 export interface ScheduleToolOptions {
     agentId: string
@@ -41,6 +42,11 @@ function result(value: unknown) {
     return { success: true as const, output: JSON.stringify(value, null, 2) }
 }
 
+/** Results carry the exact time; descriptions can't without breaking the prompt cache. */
+function serverTime(now = Date.now()): string {
+    return new Date(now).toString()
+}
+
 function failure(message: string) {
     return { success: false as const, output: '', error: message }
 }
@@ -57,7 +63,7 @@ export function oneOffCronExpression(runAt: string, now = Date.now()): { schedul
     if (date.getSeconds() !== 0 || date.getMilliseconds() !== 0) {
         throw new Error('runAt must be aligned to a whole minute')
     }
-    if (timestamp <= now) throw new Error('runAt must be in the future')
+    if (timestamp <= now) throw new Error(`runAt must be in the future; the server time is now ${serverTime(now)}`)
 
     const schedule = `${date.getMinutes()} ${date.getHours()} ${date.getDate()} ${date.getMonth() + 1} *`
     const nextMatchingRun = CronExpressionParser.parse(schedule, { currentDate: new Date(now) }).next().getTime()
@@ -68,17 +74,43 @@ export function oneOffCronExpression(runAt: string, now = Date.now()): { schedul
     return { schedule, runAt: timestamp }
 }
 
+/** A one-time run `minutes` from now, rounded up to the next whole minute. */
+export function relativeOneOffCronExpression(minutes: number, now = Date.now()): { schedule: string; runAt: number } {
+    if (!Number.isInteger(minutes) || minutes < 1) throw new Error('runInMinutes must be a whole number of at least 1')
+    const runAt = Math.ceil((now + minutes * 60_000) / 60_000) * 60_000
+    return oneOffCronExpression(new Date(runAt).toISOString(), now)
+}
+
+function resolveOneOff(input: { runAt?: string; runInMinutes?: number }): { schedule: string; runAt: number } | undefined {
+    if (input.runInMinutes !== undefined) return relativeOneOffCronExpression(input.runInMinutes)
+    if (input.runAt) return oneOffCronExpression(input.runAt)
+    return undefined
+}
+
+function countDefined(...values: unknown[]): number {
+    return values.filter((value) => value !== undefined && value !== '').length
+}
+
+const RUN_IN_MINUTES_PARAMETER = {
+    type: 'integer',
+    minimum: 1,
+    description: 'For a one-time job relative to now, in whole minutes. Prefer this for delays such as "in 2 hours" (120).',
+}
+
 function createTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_create',
         execution: { readOnly: false },
-        description: `Create a scheduled job using the current agent or Free Chat configuration. Use runAt for an exact one-time future run, or schedule for a recurring cron expression. The server's current local date-time is ${new Date().toString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'}). The current configuration must already include any tools needed by the future task.`,
+        // Only the date goes in the description: it is rebuilt every turn, and a
+        // changing description would invalidate the whole prompt cache.
+        description: `Create a scheduled job using the current agent or Free Chat configuration. For a one-time run, use runInMinutes for a delay from now or runAt for a clock time; use schedule for a recurring cron expression. Today is ${describeCurrentDate()}; runAt and cron expressions are interpreted in that timezone unless runAt states an offset. The current configuration must already include any tools needed by the future task.`,
         parameters: {
             type: 'object',
             properties: {
                 name: { type: 'string', description: 'Short user-facing name for the job.' },
                 prompt: { type: 'string', description: 'Complete instructions the agent should execute at the scheduled time.' },
-                runAt: { type: 'string', description: 'For a one-time job: future ISO 8601 date-time including timezone, aligned to a whole minute.' },
+                runAt: { type: 'string', description: 'For a one-time job at a clock time: future ISO 8601 date-time including timezone, aligned to a whole minute.' },
+                runInMinutes: RUN_IN_MINUTES_PARAMETER,
                 schedule: { type: 'string', description: 'For a recurring job: cron expression, such as "0 15 * * *" for every day at 15:00.' },
             },
             required: ['name', 'prompt'],
@@ -89,17 +121,19 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
-            const input = params as { name?: string; prompt?: string; runAt?: string; schedule?: string }
+            const input = params as { name?: string; prompt?: string; runAt?: string; runInMinutes?: number; schedule?: string }
             if (!input.name?.trim() || !input.prompt?.trim()) return failure('name and prompt are required')
-            if (Boolean(input.runAt) === Boolean(input.schedule)) return failure('Provide exactly one of runAt or schedule')
+            if (countDefined(input.runAt, input.runInMinutes, input.schedule) !== 1) {
+                return failure('Provide exactly one of runAt, runInMinutes or schedule')
+            }
 
             const scheduler = await import('../../triggers/cron-scheduler.js')
             let schedule = input.schedule?.trim() || ''
             let oneOff = false
             let requestedRunAt: number | undefined
             try {
-                if (input.runAt) {
-                    const converted = oneOffCronExpression(input.runAt)
+                const converted = resolveOneOff(input)
+                if (converted) {
                     schedule = converted.schedule
                     requestedRunAt = converted.runAt
                     oneOff = true
@@ -116,7 +150,11 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
                     executionConfig: ownerAgentId(opts.agentId) ? undefined : opts.executionConfig,
                 })
                 scheduler.scheduleCronJob(job.id)
-                return result({ ...job, requestedRunAt: requestedRunAt ? new Date(requestedRunAt).toISOString() : undefined })
+                return result({
+                    ...job,
+                    requestedRunAt: requestedRunAt ? new Date(requestedRunAt).toISOString() : undefined,
+                    serverTime: serverTime(),
+                })
             } catch (error) {
                 return failure((error as Error).message)
             }
@@ -136,7 +174,7 @@ function listTool(opts: ScheduleToolOptions): ToolDefinition {
             const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
             const { getCronJobsForAgent } = await import('../../triggers/cron-scheduler.js')
-            return result(getCronJobsForAgent(ownerAgentId(opts.agentId)))
+            return result({ jobs: getCronJobsForAgent(ownerAgentId(opts.agentId)), serverTime: serverTime() })
         },
     }
 }
@@ -145,7 +183,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_update',
         execution: { readOnly: false },
-        description: 'Update a scheduled job owned by this agent. Only supplied fields are changed. Use runAt to turn it into an exact one-time job, or schedule to set a recurring cron expression.',
+        description: 'Update a scheduled job owned by this agent. Only supplied fields are changed. Use runInMinutes or runAt to turn it into a one-time job, or schedule to set a recurring cron expression.',
         parameters: {
             type: 'object',
             properties: {
@@ -153,6 +191,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
                 name: { type: 'string' },
                 prompt: { type: 'string' },
                 runAt: { type: 'string', description: 'Future ISO 8601 date-time including timezone, aligned to a whole minute.' },
+                runInMinutes: RUN_IN_MINUTES_PARAMETER,
                 schedule: { type: 'string', description: 'Recurring cron expression.' },
                 enabled: { type: 'boolean' },
             },
@@ -164,9 +203,11 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
         execute: async (params: unknown) => {
             const contextFailure = requireScheduleContext(opts)
             if (contextFailure) return contextFailure
-            const input = params as { jobId?: string; name?: string; prompt?: string; runAt?: string; schedule?: string; enabled?: boolean }
+            const input = params as { jobId?: string; name?: string; prompt?: string; runAt?: string; runInMinutes?: number; schedule?: string; enabled?: boolean }
             if (!input.jobId) return failure('jobId is required')
-            if (input.runAt && input.schedule) return failure('Provide runAt or schedule, not both')
+            if (countDefined(input.runAt, input.runInMinutes, input.schedule) > 1) {
+                return failure('Provide at most one of runAt, runInMinutes or schedule')
+            }
 
             const scheduler = await import('../../triggers/cron-scheduler.js')
             const existing = scheduler.getCronJob(input.jobId)
@@ -175,8 +216,9 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
             let schedule = input.schedule?.trim()
             let oneOff: boolean | undefined = input.schedule ? false : undefined
             try {
-                if (input.runAt) {
-                    schedule = oneOffCronExpression(input.runAt).schedule
+                const converted = resolveOneOff(input)
+                if (converted) {
+                    schedule = converted.schedule
                     oneOff = true
                 }
                 if (schedule !== undefined && !scheduler.isValidCronSchedule(schedule)) return failure('Invalid cron schedule')
@@ -190,7 +232,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
                 if (!job) return failure('Scheduled job not found')
                 if (job.enabled) scheduler.scheduleCronJob(job.id)
                 else scheduler.unscheduleCronJob(job.id)
-                return result(job)
+                return result({ ...job, serverTime: serverTime() })
             } catch (error) {
                 return failure((error as Error).message)
             }

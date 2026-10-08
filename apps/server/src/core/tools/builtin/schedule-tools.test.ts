@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest'
-import { isScheduleToolName, makeScheduleTools, oneOffCronExpression, SCHEDULE_TOOL_NAMES } from './schedule-tools.js'
+import { describe, expect, test, vi } from 'vitest'
+import { isScheduleToolName, makeScheduleTools, oneOffCronExpression, relativeOneOffCronExpression, SCHEDULE_TOOL_NAMES } from './schedule-tools.js'
 
 describe('schedule built-in tools', () => {
     test('exposes an agent-scoped CRUD toolset with explicit mutation hints', () => {
@@ -83,8 +83,42 @@ describe('schedule built-in tools', () => {
 
     test('rejects ambiguous, past, and sub-minute runAt values', () => {
         expect(() => oneOffCronExpression('2027-01-02T09:00:00')).toThrow(/timezone/)
-        expect(() => oneOffCronExpression('2020-01-02T09:00:00Z')).toThrow(/future/)
+        expect(() => oneOffCronExpression('2020-01-02T09:00:00Z')).toThrow(/future; the server time is now/)
         expect(() => oneOffCronExpression('2099-01-02T09:00:30Z')).toThrow(/whole minute/)
+    })
+
+    test('schedules a relative one-time run on the next whole minute', () => {
+        const now = new Date(2026, 9, 9, 0, 42, 17).getTime()
+        const converted = relativeOneOffCronExpression(120, now)
+        const expected = new Date(2026, 9, 9, 2, 43, 0)
+
+        expect(converted.runAt).toBe(expected.getTime())
+        expect(converted.schedule).toBe('43 2 9 10 *')
+        expect(() => relativeOneOffCronExpression(0, now)).toThrow(/at least 1/)
+        expect(() => relativeOneOffCronExpression(1.5, now)).toThrow(/whole number/)
+    })
+
+    test('keeps tool definitions stable within a day so the prompt cache survives', () => {
+        vi.useFakeTimers()
+        try {
+            vi.setSystemTime(new Date(2026, 9, 9, 9, 0, 5))
+            const morning = JSON.stringify(makeScheduleTools({ agentId: 'agent-1' }).map(({ name, description, parameters }) => ({ name, description, parameters })))
+            vi.setSystemTime(new Date(2026, 9, 9, 17, 31, 44))
+            const evening = JSON.stringify(makeScheduleTools({ agentId: 'agent-1' }).map(({ name, description, parameters }) => ({ name, description, parameters })))
+
+            expect(evening).toBe(morning)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    test('requires exactly one timing option when creating a job', async () => {
+        const [create] = makeScheduleTools({ agentId: 'agent-1' })
+
+        await expect(create.execute({ name: 'n', prompt: 'p', runInMinutes: 5, schedule: '0 9 * * *' }))
+            .resolves.toMatchObject({ success: false, error: expect.stringMatching(/exactly one of runAt, runInMinutes or schedule/) })
+        await expect(create.execute({ name: 'n', prompt: 'p' }))
+            .resolves.toMatchObject({ success: false, error: expect.stringMatching(/exactly one/) })
     })
 
     test('rejects dates whose year cannot be represented safely by cron', () => {

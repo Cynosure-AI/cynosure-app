@@ -15,48 +15,49 @@ type PromptSmartTagValues = Record<string, string>
 const TAG_PATTERN = /\{\{\s*([a-zA-Z][\w.-]*)\s*\}\}/g
 
 /**
- * Time-of-day tags change every minute, so resolving them in the system prompt
- * would invalidate the provider prompt cache on almost every turn. They resolve
- * to a fixed pointer instead, and the time itself travels as turn-local context.
+ * Prompts carry the date but never the time of day: a value that changes every
+ * minute would invalidate the provider prompt cache on almost every turn. The
+ * former time tags stay recognised so older prompts don't show raw tags.
  */
-const TURN_TIME_TAGS = new Set(['currentDateTime', 'currentTime', 'localDateTime', 'localTime', 'isoTime'])
-const TURN_TIME_POINTER = '(see the latest [Current time] note)'
+const RETIRED_TIME_TAGS = new Set(['currentTime', 'localTime', 'isoTime'])
 
 export function resolvePromptSmartTags(prompt: string, context: PromptSmartTagContext): string {
     if (!prompt) return prompt
 
     const values = buildPromptSmartTagValues(context)
     return prompt.replace(TAG_PATTERN, (match, tagName: string) => {
-        if (TURN_TIME_TAGS.has(tagName)) return TURN_TIME_POINTER
+        if (RETIRED_TIME_TAGS.has(tagName)) return ''
         const value = values[tagName]
         return value === undefined ? match : value
     })
 }
 
-/** The current time for a prompt that uses time-of-day tags; null when it uses none. */
-export function resolvePromptTimeContext(prompt: string, context: PromptSmartTagContext): string | null {
-    if (!prompt) return null
-    const usesTime = [...prompt.matchAll(TAG_PATTERN)].some(([, tagName]) => TURN_TIME_TAGS.has(tagName))
-    if (!usesTime) return null
+/** Today's date with the server timezone, e.g. "Friday, October 9, 2026 (Europe/Berlin)". */
+export function describeCurrentDate(now = new Date()): string {
+    const { locale, timezone } = resolveLocaleAndTimezone()
+    return `${formatDate(now, locale, timezone)} (${timezone})`
+}
 
-    const values = buildPromptSmartTagValues(context)
-    return `[Current time]\nLocal: ${values.localDateTime}\nUTC: ${values.isoDate} ${values.isoTime}\n[/Current time]`
+function resolveLocaleAndTimezone(): { locale: string; timezone: string } {
+    const options = Intl.DateTimeFormat().resolvedOptions()
+    return {
+        locale: options.locale || 'en-US',
+        timezone: options.timeZone || process.env.TZ || 'UTC',
+    }
 }
 
 function buildPromptSmartTagValues(context: PromptSmartTagContext): PromptSmartTagValues {
     const now = context.now ?? new Date()
-    const locale = Intl.DateTimeFormat().resolvedOptions().locale || 'en-US'
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || process.env.TZ || 'UTC'
+    const { locale, timezone } = resolveLocaleAndTimezone()
+    const date = formatDate(now, locale, timezone)
     return {
         userName: context.userName || 'user',
-        currentDateTime: formatDateTime(now, locale, timezone),
-        currentDate: formatDate(now, locale, timezone),
-        currentTime: formatTime(now, locale, timezone),
-        localDateTime: formatDateTime(now, locale, timezone),
-        localDate: formatDate(now, locale, timezone),
-        localTime: formatTime(now, locale, timezone),
+        currentDate: date,
+        localDate: date,
+        // Former date/time tags now resolve to the date alone.
+        currentDateTime: date,
+        localDateTime: date,
         isoDate: now.toISOString().slice(0, 10),
-        isoTime: now.toISOString().slice(11, 19),
         timezone,
         locale,
         agentId: context.agentId || '',
@@ -82,33 +83,9 @@ function formatSelectedMemoryFolderNames(folders: PromptSmartTagContext['selecte
         : ''
 }
 
-const MINUTE_PRECISION_TIME: Intl.DateTimeFormatOptions = {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
-}
-
-function formatDateTime(date: Date, locale: string, timeZone: string): string {
-    return new Intl.DateTimeFormat(locale, {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        ...MINUTE_PRECISION_TIME,
-        timeZone,
-    }).format(date)
-}
-
 function formatDate(date: Date, locale: string, timeZone: string): string {
     return new Intl.DateTimeFormat(locale, {
         dateStyle: 'full',
-        timeZone,
-    }).format(date)
-}
-
-function formatTime(date: Date, locale: string, timeZone: string): string {
-    return new Intl.DateTimeFormat(locale, {
-        ...MINUTE_PRECISION_TIME,
         timeZone,
     }).format(date)
 }
