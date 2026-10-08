@@ -193,6 +193,37 @@ export function assembleExecutionMessages(contextMessages: ChatMessage[], histor
     )
 }
 
+/** Close interrupted tool rounds before replaying history to a provider. */
+export function repairInterruptedToolRounds(messages: ChatMessage[]): ChatMessage[] {
+    const result: ChatMessage[] = []
+    const pending = new Set<string>()
+    const closeRound = () => {
+        for (const toolCallId of pending) {
+            result.push({
+                role: 'tool',
+                toolCallId,
+                content: 'Tool execution was interrupted before a result was recorded. No result is available.',
+            })
+        }
+        pending.clear()
+    }
+    for (const message of messages) {
+        if (message.role === 'tool') {
+            // Orphaned, duplicate, and late results cannot be replayed as tool messages.
+            if (!message.toolCallId || !pending.delete(message.toolCallId)) continue
+            result.push(message)
+            continue
+        }
+        closeRound()
+        result.push(message)
+        if (message.role === 'assistant') {
+            for (const call of message.toolCalls ?? []) pending.add(call.id)
+        }
+    }
+    closeRound()
+    return result
+}
+
 export function buildConversationHistory(input: {
     db: Database.Database
     conversationId: string
@@ -241,7 +272,7 @@ export function buildConversationHistory(input: {
         toolCallId: row.tool_call_id || undefined
     }))
 
-    return { historyRows, filteredRows, messages }
+    return { historyRows, filteredRows, messages: repairInterruptedToolRounds(messages) }
 }
 
 function buildHistoryContent(

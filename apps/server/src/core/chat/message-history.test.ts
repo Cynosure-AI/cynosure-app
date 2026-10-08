@@ -25,6 +25,7 @@ import {
     buildRecentImageArtifactsHint,
     insertTurnLocalUntrustedContext,
     assembleExecutionMessages,
+    repairInterruptedToolRounds,
     type ChatHistoryRow,
 } from './message-history.js'
 
@@ -53,6 +54,36 @@ function databaseReturning(rows: ChatHistoryRow[]): Database.Database {
 }
 
 describe('conversation history construction', () => {
+    test('closes an interrupted sub-agent call before the retried user message', () => {
+        const result = buildConversationHistory({
+            db: databaseReturning([
+                row({ role: 'assistant', tool_calls_json: JSON.stringify([
+                    { id: 'pending', type: 'function', function: { name: 'spawn_subagent', arguments: '{}' } },
+                ]) }),
+                row({ role: 'assistant', agent_id: 'child', content: 'child work' }),
+                row({ role: 'user', content: 'continue without codex' }),
+                row({ role: 'assistant', is_error: 1, content: '400 Provider returned error' }),
+            ]),
+            conversationId: 'conversation', mainAgentId: 'main', inlineAttachmentTextLimit: 10_000,
+        })
+        expect(result.messages.map(message => message.role)).toEqual(['assistant', 'tool', 'user'])
+        expect(result.messages[1]).toMatchObject({ toolCallId: 'pending', content: expect.stringContaining('interrupted') })
+    })
+
+    test('preserves completed parallel calls and repairs only missing results', () => {
+        const calls = ['done', 'missing'].map(id => ({ id, type: 'function' as const,
+            function: { name: 'search', arguments: '{}' } }))
+        const assistant = { role: 'assistant' as const, content: '', toolCalls: calls }
+        const tool = { role: 'tool' as const, content: 'real result', toolCallId: 'done' }
+        const user = { role: 'user' as const, content: 'continue' }
+        const repaired = repairInterruptedToolRounds([assistant, tool, tool, user,
+            { role: 'tool', content: 'late', toolCallId: 'missing' }])
+        expect(repaired).toEqual([assistant, tool,
+            { role: 'tool', toolCallId: 'missing', content: expect.stringContaining('interrupted') }, user])
+        expect(repairInterruptedToolRounds(repaired)).toEqual(repaired)
+        expect(repairInterruptedToolRounds([assistant, tool]).at(-1)?.toolCallId).toBe('missing')
+    })
+
     test('keeps only the main-agent tool chain and tolerates malformed tool metadata', () => {
         const rows = [
             row({ id: 'user', role: 'user', content: 'question' }),
