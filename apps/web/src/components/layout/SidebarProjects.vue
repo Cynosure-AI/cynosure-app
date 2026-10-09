@@ -143,19 +143,13 @@ async function openChat(row: ConversationRow): Promise<void> {
   })
 }
 
-// Automatically reveal the active conversation
+// Refresh chat lists without changing the user's expanded state
 watch(
   [
     () => chatStore.activeProjectId,
     () => chatStore.activeConversationId,
   ],
-  ([projectId, conversationId]) => {
-    if (projectId && conversationId && !expanded.value.has(projectId)) {
-      toggleProject(projectId)
-    } else {
-      refreshChats()
-    }
-  },
+  refreshChats,
 )
 
 // Lifecycle
