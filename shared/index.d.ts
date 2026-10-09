@@ -329,3 +329,42 @@ export interface ProjectTaskDto {
   updatedAt: number
   completedAt: number | null
 }
+
+/** Who changed a project: the user, an agent in a chat, the Dream reviewer, a restore, or the pre-history baseline. */
+export type ProjectChangeSource = 'user' | 'ai' | 'dream' | 'restore' | 'initial'
+
+export interface ProjectBriefRevisionDto {
+  id: string
+  revisionNumber: number
+  content: string
+  source: ProjectChangeSource
+  conversationId: string | null
+  agentId: string | null
+  createdAt: number
+  isCurrent: boolean
+}
+
+export interface ProjectDiffSegment {
+  type: 'unchanged' | 'added' | 'removed'
+  text: string
+}
+
+interface ProjectTimelineBase {
+  id: string
+  createdAt: number
+  source: ProjectChangeSource
+  conversationId: string | null
+  conversationTitle: string | null
+  agentId: string | null
+}
+
+export type ProjectTimelineEntry =
+  | (ProjectTimelineBase & { kind: 'brief'; revisionNumber: number; isCurrent: boolean })
+  | (ProjectTimelineBase & {
+    kind: 'task_created' | 'task_updated' | 'task_deleted'
+    taskId: string | null
+    taskTitle: string
+    fromStatus: ProjectTaskStatus | null
+    toStatus: ProjectTaskStatus | null
+  })
+  | (ProjectTimelineBase & { kind: 'chat_started'; origin: string })

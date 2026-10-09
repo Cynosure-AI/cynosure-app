@@ -21,6 +21,7 @@ import {
     resolveProjectExecutionContext,
 } from './project-context.js'
 import { makeProjectTools } from './project-tools.js'
+import { diffBriefRevisions, listBriefRevisions, listProjectTimeline } from './project-history.js'
 import { listEffectiveFileAccessRoots, resolveFileAccessPath, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 import { makeShellTool } from '../tools/builtin/shell-tool.js'
 import { isSystemAutoApprovedTool } from '../tools/tool-policy.js'
@@ -188,3 +189,40 @@ describe('project directory access', () => {
         expect(String(result.output)).toContain(dir)
     })
 })
+
+describe('project history', () => {
+    test('records who changed the brief and diffs revisions', async () => {
+        const project = createProject({ name: 'History', brief: 'Goal: plant tomatoes.', createMemoryFolder: false })
+        insertConversation('chat-1', project.id)
+        const tools = Object.fromEntries(makeProjectTools({ projectId: project.id, conversationId: 'chat-1', agentId: 'agent-x' }).map((tool) => [tool.name, tool]))
+        await tools.project_brief_update.execute({ brief: 'Goal: plant peppers.' })
+        await tools.project_brief_update.execute({ brief: 'Goal: plant peppers.' })
+
+        const revisions = listBriefRevisions(project.id)
+        expect(revisions.map(({ revisionNumber, source, isCurrent }) => ({ revisionNumber, source, isCurrent }))).toEqual([
+            { revisionNumber: 2, source: 'ai', isCurrent: true },
+            { revisionNumber: 1, source: 'user', isCurrent: false },
+        ])
+        expect(revisions[0]).toMatchObject({ conversationId: 'chat-1', agentId: 'agent-x' })
+
+        const changes = diffBriefRevisions(project.id, revisions[0].id)!
+        expect(changes.filter((part) => part.type === 'removed').map((part) => part.text).join('')).toContain('tomatoes')
+        expect(changes.filter((part) => part.type === 'added').map((part) => part.text).join('')).toContain('peppers')
+        expect(diffBriefRevisions(project.id, revisions[1].id)!.every((part) => part.type !== 'removed')).toBe(true)
+    })
+
+    test('the timeline merges brief revisions, task changes, and chats, newest first', () => {
+        const project = createProject({ name: 'Timeline', createMemoryFolder: false })
+        insertConversation('chat-1', project.id)
+        const task = createProjectTask(project.id, { title: 'Buy soil' })
+        updateProjectTask(project.id, task.id, { sortOrder: 5 })
+        updateProjectTask(project.id, task.id, { status: 'done' }, { source: 'ai', conversationId: 'chat-1' })
+        updateProject(project.id, { brief: 'Soil bought.' })
+
+        const kinds = listProjectTimeline(project.id).map((entry) => entry.kind)
+        expect(kinds.sort()).toEqual(['brief', 'chat_started', 'task_created', 'task_updated'])
+        const done = listProjectTimeline(project.id).find((entry) => entry.kind === 'task_updated')
+        expect(done).toMatchObject({ fromStatus: 'todo', toStatus: 'done', source: 'ai', conversationTitle: 'Chat' })
+    })
+})
+

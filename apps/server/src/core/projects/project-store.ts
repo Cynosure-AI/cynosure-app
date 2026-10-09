@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { ensureMemoryFolderPath, ensureMemoryRoot, makeChildFolderPath } from '../memory/memory-folder-directories.js'
 import type { ProjectDto, ProjectTaskDto, ProjectTaskStatus } from '@shared/types'
+import { USER_CHANGE, recordBriefRevision, recordTaskEvent, type ProjectChangeContext } from './project-history.js'
 
 /** Parent memory folder that holds one subfolder per project. */
 export const PROJECTS_MEMORY_FOLDER = 'Projects'
@@ -183,37 +184,49 @@ export function createProject(input: CreateProjectInput): ProjectDto {
         : input.createMemoryFolder === false ? null : createProjectMemoryFolder(name)
     const id = nanoid()
     const now = Date.now()
-    getDb().prepare(`INSERT INTO projects (id, name, description, instructions, brief, brief_updated_at, root_path, memory_folder_id, default_agent_id, color, icon, archived, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`).run(
-        id, name, input.description?.trim() ?? '', input.instructions ?? '', (input.brief ?? '').slice(0, MAX_PROJECT_BRIEF_CHARS),
-        input.brief ? now : null, rootPath, memoryFolderId, defaultAgentId, input.color ?? '', normalizeIcon(input.icon), now, now,
-    )
+    const db = getDb()
+    db.transaction(() => {
+        db.prepare(`INSERT INTO projects (id, name, description, instructions, brief, brief_updated_at, root_path, memory_folder_id, default_agent_id, color, icon, archived, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`).run(
+            id, name, input.description?.trim() ?? '', input.instructions ?? '', (input.brief ?? '').slice(0, MAX_PROJECT_BRIEF_CHARS),
+            input.brief ? now : null, rootPath, memoryFolderId, defaultAgentId, input.color ?? '', normalizeIcon(input.icon), now, now,
+        )
+        if (input.brief) recordBriefRevision(id, input.brief.slice(0, MAX_PROJECT_BRIEF_CHARS), USER_CHANGE, now)
+    })()
     return getProject(id)!
 }
 
-export function updateProject(id: string, input: UpdateProjectInput): ProjectDto | undefined {
+export function updateProject(id: string, input: UpdateProjectInput, context: ProjectChangeContext = USER_CHANGE): ProjectDto | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined
     if (!existing) return undefined
     const now = Date.now()
     const briefChanged = input.brief !== undefined && input.brief !== existing.brief
-    db.prepare(`UPDATE projects SET name = ?, description = ?, instructions = ?, brief = ?, brief_updated_at = ?, root_path = ?, memory_folder_id = ?,
-        default_agent_id = ?, color = ?, icon = ?, archived = ?, sort_order = ?, updated_at = ? WHERE id = ?`).run(
-        input.name !== undefined ? requireName(input.name) : existing.name,
-        input.description !== undefined ? input.description.trim() : existing.description,
-        input.instructions ?? existing.instructions,
-        briefChanged ? input.brief!.slice(0, MAX_PROJECT_BRIEF_CHARS) : existing.brief,
-        briefChanged ? now : existing.brief_updated_at,
-        input.rootPath !== undefined ? normalizeProjectRootPath(input.rootPath) : existing.root_path,
-        input.memoryFolderId !== undefined ? assertMemoryFolder(input.memoryFolderId) : existing.memory_folder_id,
-        input.defaultAgentId !== undefined ? assertAgent(input.defaultAgentId) : existing.default_agent_id,
-        input.color ?? existing.color,
-        input.icon !== undefined ? normalizeIcon(input.icon) : existing.icon,
-        input.archived !== undefined ? (input.archived ? 1 : 0) : existing.archived,
-        input.sortOrder ?? existing.sort_order,
-        now,
-        id,
-    )
+    const brief = briefChanged ? input.brief!.slice(0, MAX_PROJECT_BRIEF_CHARS) : existing.brief
+    db.transaction(() => {
+        if (briefChanged) {
+            // A project from before revisions existed keeps its old brief as the baseline.
+            if (existing.brief) recordBriefRevision(id, existing.brief, { source: 'initial' }, existing.brief_updated_at ?? existing.updated_at)
+            recordBriefRevision(id, brief, context, now)
+        }
+        db.prepare(`UPDATE projects SET name = ?, description = ?, instructions = ?, brief = ?, brief_updated_at = ?, root_path = ?, memory_folder_id = ?,
+            default_agent_id = ?, color = ?, icon = ?, archived = ?, sort_order = ?, updated_at = ? WHERE id = ?`).run(
+            input.name !== undefined ? requireName(input.name) : existing.name,
+            input.description !== undefined ? input.description.trim() : existing.description,
+            input.instructions ?? existing.instructions,
+            brief,
+            briefChanged ? now : existing.brief_updated_at,
+            input.rootPath !== undefined ? normalizeProjectRootPath(input.rootPath) : existing.root_path,
+            input.memoryFolderId !== undefined ? assertMemoryFolder(input.memoryFolderId) : existing.memory_folder_id,
+            input.defaultAgentId !== undefined ? assertAgent(input.defaultAgentId) : existing.default_agent_id,
+            input.color ?? existing.color,
+            input.icon !== undefined ? normalizeIcon(input.icon) : existing.icon,
+            input.archived !== undefined ? (input.archived ? 1 : 0) : existing.archived,
+            input.sortOrder ?? existing.sort_order,
+            now,
+            id,
+        )
+    })()
     return getProject(id)
 }
 
@@ -238,8 +251,8 @@ export function reorderProjects(ids: string[]): void {
     db.transaction(() => ids.forEach((id, index) => statement.run(index, id)))()
 }
 
-export function setProjectBrief(id: string, brief: string): ProjectDto | undefined {
-    return updateProject(id, { brief })
+export function setProjectBrief(id: string, brief: string, context: ProjectChangeContext = USER_CHANGE): ProjectDto | undefined {
+    return updateProject(id, { brief }, context)
 }
 
 export function getConversationProjectId(conversationId: string): string | null {
@@ -287,7 +300,7 @@ export function getProjectTask(projectId: string, taskId: string): ProjectTaskDt
     return row ? rowToTask(row) : undefined
 }
 
-export function createProjectTask(projectId: string, input: ProjectTaskInput & { createdBy?: 'user' | 'agent' }): ProjectTaskDto {
+export function createProjectTask(projectId: string, input: ProjectTaskInput & { createdBy?: 'user' | 'agent' }, context: ProjectChangeContext = USER_CHANGE): ProjectTaskDto {
     const db = getDb()
     if (!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(projectId)) throw new Error('Project not found.')
     const title = input.title?.trim()
@@ -301,10 +314,11 @@ export function createProjectTask(projectId: string, input: ProjectTaskInput & {
         id, projectId, title, input.notes?.trim() ?? '', status, sortOrder, assertAgent(input.assigneeAgentId), input.conversationId ?? null,
         input.createdBy ?? 'user', now, now, status === 'done' ? now : null,
     )
+    recordTaskEvent(projectId, { kind: 'task_created', taskId: id, taskTitle: title, toStatus: status }, context)
     return getProjectTask(projectId, id)!
 }
 
-export function updateProjectTask(projectId: string, taskId: string, input: ProjectTaskInput): ProjectTaskDto | undefined {
+export function updateProjectTask(projectId: string, taskId: string, input: ProjectTaskInput, context: ProjectChangeContext = USER_CHANGE): ProjectTaskDto | undefined {
     const existing = getProjectTask(projectId, taskId)
     if (!existing) return undefined
     const status = assertStatus(input.status) ?? existing.status
@@ -324,9 +338,17 @@ export function updateProjectTask(projectId: string, taskId: string, input: Proj
         taskId,
         projectId,
     )
+    // Reordering within a column is not history; status and wording changes are.
+    if (status !== existing.status || title !== existing.title) {
+        recordTaskEvent(projectId, { kind: 'task_updated', taskId, taskTitle: title, fromStatus: existing.status, toStatus: status }, context)
+    }
     return getProjectTask(projectId, taskId)
 }
 
-export function deleteProjectTask(projectId: string, taskId: string): boolean {
-    return getDb().prepare('DELETE FROM project_tasks WHERE id = ? AND project_id = ?').run(taskId, projectId).changes > 0
+export function deleteProjectTask(projectId: string, taskId: string, context: ProjectChangeContext = USER_CHANGE): boolean {
+    const existing = getProjectTask(projectId, taskId)
+    if (!existing) return false
+    getDb().prepare('DELETE FROM project_tasks WHERE id = ? AND project_id = ?').run(taskId, projectId)
+    recordTaskEvent(projectId, { kind: 'task_deleted', taskId, taskTitle: existing.title, fromStatus: existing.status }, context)
+    return true
 }

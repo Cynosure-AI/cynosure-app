@@ -21,7 +21,15 @@ export function isProjectToolName(name: string): boolean {
 export interface ProjectToolContext {
     projectId: string
     conversationId?: string
+    /** Agent making the change, recorded in the project timeline. */
+    agentId?: string
+    /** Recorded change source; tools in chats are 'ai', Dream review is 'dream'. */
+    source?: 'ai' | 'dream'
     broadcast?: BroadcastFn
+}
+
+function changeContext(ctx: ProjectToolContext) {
+    return { source: ctx.source ?? 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId } as const
 }
 
 function result(success: boolean, output: unknown): ToolResult {
@@ -54,7 +62,7 @@ export function makeProjectBriefTool(ctx: ProjectToolContext): ToolDefinition {
         execute: (params) => guarded(() => {
             const { brief } = params as { brief?: unknown }
             if (typeof brief !== 'string') return result(false, 'brief must be a string.')
-            const project = setProjectBrief(ctx.projectId, brief.trim())
+            const project = setProjectBrief(ctx.projectId, brief.trim(), changeContext(ctx))
             if (!project) return result(false, 'Project no longer exists.')
             ctx.broadcast?.('project:updated', { id: project.id })
             return result(true, `Updated the brief for "${project.name}".`)
@@ -103,7 +111,7 @@ export function makeProjectTaskTools(ctx: ProjectToolContext): ToolDefinition[] 
             },
             execute: (params) => guarded(() => {
                 const input = params as { title: string; notes?: string; status?: ProjectTaskStatus }
-                const task = createProjectTask(ctx.projectId, { ...input, conversationId: ctx.conversationId, createdBy: 'agent' })
+                const task = createProjectTask(ctx.projectId, { ...input, conversationId: ctx.conversationId, createdBy: 'agent' }, changeContext(ctx))
                 notifyTasks()
                 return result(true, { id: task.id, title: task.title, status: task.status })
             }),
@@ -130,7 +138,7 @@ export function makeProjectTaskTools(ctx: ProjectToolContext): ToolDefinition[] 
                 const task = updateProjectTask(ctx.projectId, taskId, {
                     ...input,
                     ...(input.status === 'in_progress' && ctx.conversationId ? { conversationId: ctx.conversationId } : {}),
-                })
+                }, changeContext(ctx))
                 if (!task) return result(false, `Task ${taskId} was not found in this project.`)
                 notifyTasks()
                 return result(true, { id: task.id, title: task.title, status: task.status })

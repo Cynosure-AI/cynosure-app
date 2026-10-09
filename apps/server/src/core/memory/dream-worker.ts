@@ -162,7 +162,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, folders:
     const project = conversation.project_id ? getProject(conversation.project_id) : undefined
     const tools = [
         makeMemorySearchTool(scope), makeMemoryCreateTool(scope), makeMemoryPatchTool(scope), makeMemoryDeleteTool(scope),
-        ...(project ? [makeProjectBriefTool({ projectId: project.id, broadcast })] : []),
+        ...(project ? [makeProjectBriefTool({ projectId: project.id, conversationId: conversation.id, source: 'dream', broadcast })] : []),
     ]
     const guard = () => {
         controller.signal.throwIfAborted()

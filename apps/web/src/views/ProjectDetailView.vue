@@ -6,6 +6,7 @@ import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import ProjectBoard from '../components/project/ProjectBoard.vue'
+import ProjectTimeline from '../components/project/ProjectTimeline.vue'
 import ProjectIcon from '../components/project/ProjectIcon.vue'
 import ProjectForm, { type ProjectDraft } from '../components/project/ProjectForm.vue'
 import RichContent from '../components/shared/RichContent.vue'
@@ -16,8 +17,9 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useChatStore } from '../stores/chat.store'
 import { useProjectChat } from '../composables/useProjectChat'
 import { formatRelativeTime } from '../utils/project-format'
+import { cronToHuman } from '../utils/cron-helpers'
 
-type ProjectTab = 'overview' | 'chats' | 'board' | 'settings'
+type ProjectTab = 'overview' | 'chats' | 'board' | 'timeline' | 'settings'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,12 +45,17 @@ const tabs = computed<TabDef<ProjectTab>[]>(() => [
   { value: 'overview', label: 'Overview', icon: 'lucide:layout-dashboard' },
   { value: 'chats', label: 'Chats', icon: 'lucide:message-square', badge: project.value?.conversationCount || undefined },
   { value: 'board', label: 'Board', icon: 'lucide:square-kanban', badge: project.value?.openTaskCount || undefined },
+  { value: 'timeline', label: 'Timeline', icon: 'lucide:history' },
   { value: 'settings', label: 'Settings', icon: 'lucide:settings' },
 ])
 
 function tabFromQuery(): ProjectTab {
   const tab = route.query.tab
-  return tab === 'chats' || tab === 'board' || tab === 'settings' ? tab : 'overview'
+  return tab === 'chats' || tab === 'board' || tab === 'timeline' || tab === 'settings' ? tab : 'overview'
+}
+
+function agentIconUrl(agentId: string | null): string | null {
+  return agentId ? (agentDefs.get(agentId)?.iconUrl || null) : null
 }
 
 function agentName(agentId: string | null): string {
@@ -258,18 +265,34 @@ onMounted(async () => {
                 </template>
               </p>
             </div>
-            <button
+            <div
               v-if="!editingBrief"
-              type="button"
-              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-theme-700 px-2.5 py-1.5 text-xs text-theme-300 hover:bg-theme-800"
-              @click="startBriefEdit"
+              class="flex shrink-0 gap-1.5"
             >
-              <Icon
-                icon="lucide:pencil"
-                class="h-3.5 w-3.5"
-              />
-              Edit
-            </button>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-theme-700 px-2.5 py-1.5 text-xs text-theme-300 hover:bg-theme-800"
+                title="How the brief and project changed over time"
+                @click="activeTab = 'timeline'"
+              >
+                <Icon
+                  icon="lucide:history"
+                  class="h-3.5 w-3.5"
+                />
+                History
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-theme-700 px-2.5 py-1.5 text-xs text-theme-300 hover:bg-theme-800"
+                @click="startBriefEdit"
+              >
+                <Icon
+                  icon="lucide:pencil"
+                  class="h-3.5 w-3.5"
+                />
+                Edit
+              </button>
+            </div>
           </div>
 
           <form
@@ -419,8 +442,13 @@ onMounted(async () => {
                 class="h-4 w-4 shrink-0"
                 :class="job.enabled ? 'text-status-info' : 'text-ink-faint'"
               />
-              <span class="truncate">{{ job.name || job.prompt || 'Scheduled job' }}</span>
-              <span class="ml-auto shrink-0 font-mono text-[11px] text-ink-faint">{{ job.schedule }}</span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate">{{ job.name || job.prompt || 'Scheduled job' }}</span>
+                <span
+                  class="block truncate text-[11px] text-ink-muted"
+                  :title="job.schedule"
+                >{{ cronToHuman(job.schedule) }}{{ job.enabled ? '' : ' · Paused' }}</span>
+              </span>
             </RouterLink>
           </BaseCard>
         </div>
@@ -447,10 +475,19 @@ onMounted(async () => {
               class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-theme-800/60"
               @click="openConversation(row)"
             >
-              <Icon
-                :icon="row.origin === 'cron' ? 'lucide:calendar-clock' : row.agent_id ? 'lucide:bot' : 'lucide:message-square'"
-                class="h-4 w-4 shrink-0 text-ink-muted"
-              />
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-ink-muted">
+                <img
+                  v-if="agentIconUrl(row.agent_id)"
+                  :src="agentIconUrl(row.agent_id)!"
+                  :alt="`${agentName(row.agent_id)} icon`"
+                  class="h-full w-full object-cover"
+                >
+                <Icon
+                  v-else
+                  :icon="row.origin === 'cron' ? 'lucide:calendar-clock' : row.agent_id ? 'lucide:bot' : 'lucide:message-square'"
+                  class="h-4 w-4"
+                />
+              </span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-sm text-theme-200">{{ row.title }}</span>
                 <span
@@ -469,6 +506,13 @@ onMounted(async () => {
       <ProjectBoard
         v-else-if="activeTab === 'board'"
         :project="project"
+      />
+
+      <!-- Timeline -->
+      <ProjectTimeline
+        v-else-if="activeTab === 'timeline'"
+        :project="project"
+        @restored="projectsStore.refreshProject(project.id)"
       />
 
       <!-- Settings -->

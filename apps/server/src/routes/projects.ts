@@ -14,6 +14,7 @@ import {
     type ProjectTaskInput,
     type UpdateProjectInput,
 } from '../core/projects/project-store.js'
+import { diffBriefRevisions, getBriefRevision, listBriefRevisions, listProjectTimeline } from '../core/projects/project-history.js'
 import type { ProjectTaskStatus } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -70,6 +71,42 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
         if (!deleteProject(req.params.id)) return reply.status(404).send({ error: 'Project not found' })
         projectChanged(req.params.id)
         return { success: true }
+    })
+
+    // ─── History ───────────────────────────────────────────
+
+    // GET /api/projects/:id/timeline — brief revisions, task changes, and chats, newest first
+    app.get<{ Params: { id: string }; Querystring: { limit?: string; before?: string } }>('/:id/timeline', async (req, reply) => {
+        if (!getProject(req.params.id)) return reply.status(404).send({ error: 'Project not found' })
+        return listProjectTimeline(req.params.id, {
+            limit: req.query.limit ? Number(req.query.limit) : undefined,
+            before: req.query.before ? Number(req.query.before) : undefined,
+        })
+    })
+
+    app.get<{ Params: { id: string } }>('/:id/brief/revisions', async (req, reply) => {
+        if (!getProject(req.params.id)) return reply.status(404).send({ error: 'Project not found' })
+        return listBriefRevisions(req.params.id)
+    })
+
+    app.get<{ Params: { id: string; revisionId: string } }>('/:id/brief/revisions/:revisionId', async (req, reply) => (
+        getBriefRevision(req.params.id, req.params.revisionId) ?? reply.status(404).send({ error: 'Revision not found' })
+    ))
+
+    // GET /api/projects/:id/brief/revisions/:revisionId/diff?from=<revisionId>
+    // Without `from`, shows what that revision changed compared with the one before it.
+    app.get<{ Params: { id: string; revisionId: string }; Querystring: { from?: string } }>('/:id/brief/revisions/:revisionId/diff', async (req, reply) => {
+        const segments = diffBriefRevisions(req.params.id, req.params.revisionId, req.query.from || undefined)
+        return segments ? { segments } : reply.status(404).send({ error: 'Revision not found' })
+    })
+
+    // POST /api/projects/:id/brief/revisions/:revisionId/restore — make an earlier brief current again
+    app.post<{ Params: { id: string; revisionId: string } }>('/:id/brief/revisions/:revisionId/restore', async (req, reply) => {
+        const revision = getBriefRevision(req.params.id, req.params.revisionId)
+        if (!revision) return reply.status(404).send({ error: 'Revision not found' })
+        const project = updateProject(req.params.id, { brief: revision.content }, { source: 'restore' })
+        projectChanged(req.params.id)
+        return project
     })
 
     // ─── Tasks ─────────────────────────────────────────────

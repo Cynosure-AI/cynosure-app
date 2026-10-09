@@ -15,7 +15,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, ProjectDto, ProjectTaskDto, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
 
 export interface ConversationRow {
   id: string
@@ -497,6 +497,15 @@ export const api = {
       put<ProjectTaskDto>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, input),
     removeTask: (id: string, taskId: string) =>
       del<{ success: boolean }>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`),
+    timeline: (id: string, before?: number) =>
+      get<ProjectTimelineEntry[]>(`/api/projects/${encodeURIComponent(id)}/timeline?limit=50${before ? `&before=${before}` : ''}`),
+    getBriefRevision: (id: string, revisionId: string) =>
+      get<ProjectBriefRevisionDto>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}`),
+    /** Without `fromId`, the changes that revision made; with it, the changes from `fromId` to `revisionId`. */
+    diffBriefRevision: (id: string, revisionId: string, fromId?: string) =>
+      get<{ segments: ProjectDiffSegment[] }>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}/diff${fromId ? `?from=${encodeURIComponent(fromId)}` : ''}`),
+    restoreBriefRevision: (id: string, revisionId: string) =>
+      post<ProjectDto>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}/restore`),
     onUpdated: (cb: (data: { id: string }) => void) => onWsEvent('project:updated', cb as WsHandler),
     onTasksUpdated: (cb: (data: { projectId: string }) => void) => onWsEvent('project:tasks-updated', cb as WsHandler),
   },

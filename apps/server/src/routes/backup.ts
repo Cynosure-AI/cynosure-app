@@ -157,6 +157,8 @@ const BACKUP_TABLES: Record<string, BackupTable[]> = {
         // Projects restore first so restored conversations keep their project link.
         { table: 'projects', counted: false },
         { table: 'project_tasks', counted: false },
+        { table: 'project_brief_revisions', counted: false },
+        { table: 'project_events', counted: false },
         {
             table: 'conversations',
             // Only restore conversations for agents present in the DB, including freshly restored ones.
@@ -406,6 +408,8 @@ async function resetConversations(db = getDb()): Promise<void> {
     db.prepare('DELETE FROM chat_events').run()
     db.prepare('DELETE FROM messages').run()
     db.prepare('DELETE FROM conversations').run()
+    db.prepare('DELETE FROM project_events').run()
+    db.prepare('DELETE FROM project_brief_revisions').run()
     db.prepare('DELETE FROM project_tasks').run()
     db.prepare('DELETE FROM projects').run()
     await dropConversationAttachmentIndex()

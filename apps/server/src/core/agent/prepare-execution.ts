@@ -126,7 +126,11 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
     // A conversation that belongs to a project runs inside it: the project adds
     // instructions, state, memory scope, and tools. Sub-agents share the parent
     // conversation id, so they inherit the same project context.
-    const project = resolveProjectExecutionContext(rawInput.conversationId, rawInput.broadcast)
+    const project = resolveProjectExecutionContext(
+        rawInput.conversationId,
+        rawInput.broadcast,
+        isDefaultChatAgent(rawInput.preset) ? undefined : rawInput.preset.id,
+    )
     const input: PrepareExecutionInput = project
         ? {
             ...rawInput,

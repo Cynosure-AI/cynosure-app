@@ -110,7 +110,7 @@ export function buildProjectStateMessage(project: ProjectDto): ChatMessage | nul
     return { role: 'user', content: lines.join('\n'), metadata: { contextKind: 'project-state', untrusted: true } }
 }
 
-export function resolveProjectExecutionContext(conversationId: string, broadcast?: BroadcastFn): ProjectExecutionContext | null {
+export function resolveProjectExecutionContext(conversationId: string, broadcast?: BroadcastFn, agentId?: string): ProjectExecutionContext | null {
     let project: ProjectDto | undefined
     try {
         project = getProjectForConversation(conversationId)
@@ -124,6 +124,6 @@ export function resolveProjectExecutionContext(conversationId: string, broadcast
         memoryFolders,
         systemPrompt: buildProjectSystemPrompt(project, memoryFolders),
         stateMessage: buildProjectStateMessage(project),
-        tools: makeProjectTools({ projectId: project.id, conversationId, broadcast }),
+        tools: makeProjectTools({ projectId: project.id, conversationId, agentId, broadcast }),
     }
 }
