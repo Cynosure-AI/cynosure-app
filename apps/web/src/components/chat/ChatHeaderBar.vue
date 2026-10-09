@@ -7,7 +7,6 @@ import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
 import ChatSettingsMenu from "./ChatSettingsMenu.vue";
 import ChatSchedulesPopover from "./ChatSchedulesPopover.vue";
-import ChatProjectPicker from "./ChatProjectPicker.vue";
 
 defineProps<{
   hasPlanningTasks: boolean;
@@ -82,8 +81,6 @@ async function newChat(): Promise<void> {
         @change="onAgentChange"
       />
     </div>
-
-    <ChatProjectPicker />
 
     <!-- Centered conversation title + origin badge (hidden on mobile) -->
     <div class="hidden sm:flex flex-1 min-w-0 items-center justify-center gap-2">

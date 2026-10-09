@@ -509,7 +509,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
-    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; projectId?: string; limit?: string; offset?: string; sort?: string; search?: string; filters?: string } }>('/conversations', async (req) => {
+    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; projectId?: string; excludeProjects?: string; limit?: string; offset?: string; sort?: string; search?: string; filters?: string } }>('/conversations', async (req) => {
         const db = getDb()
         const { agentId, maWorkspaceId, projectId } = req.query
         const limit = req.query.limit ? Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20)) : undefined
@@ -527,6 +527,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         if (projectId) {
             conditions.push('project_id = ?')
             params.push(projectId)
+        } else if (req.query.excludeProjects === '1') {
+            // The sidebar groups project chats under their project instead.
+            conditions.push('project_id IS NULL')
         }
         if (maWorkspaceId) {
             conditions.push('ma_workspace_id = ?')

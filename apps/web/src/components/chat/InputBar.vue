@@ -6,6 +6,7 @@ import type { MediaGenerationSettings } from '@shared/types'
 import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
+import ProjectChip from './inputbar/ProjectChip.vue'
 import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
@@ -690,6 +691,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           @transcription="onTranscription"
           @media-settings="mediaSettings = $event"
         >
+          <ProjectChip />
           <slot name="leading-actions" />
         </InputToolbar>
       </div>

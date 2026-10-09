@@ -6,18 +6,22 @@ import { api } from '../../api/client'
 import type { CronJob, McpServerInfo } from '../../api/types'
 import { useAgentDefinitionsStore, type AgentDefinition } from '../../stores/agent-definitions.store'
 import { useChatStore } from '../../stores/chat.store'
+import { useProjectsStore } from '../../stores/projects.store'
+import { useProjectChat } from '../../composables/useProjectChat'
+import type { ProjectDto } from '@shared/types'
 import { useCommandPalette } from '../../composables/useCommandPalette'
 import { useMcpServers } from '../../composables/useMcpServers'
 import { rankItems } from '../../utils/command-palette'
 import { cronToHuman } from '../../utils/cron-helpers'
 
-type Scope = 'all' | 'conversations' | 'agents' | 'mcp' | 'cron'
+type Scope = 'all' | 'conversations' | 'projects' | 'agents' | 'mcp' | 'cron'
 type GroupId = Exclude<Scope, 'all'>
 
 interface ConversationHit {
   id: string
   title: string
   agentId: string | null
+  projectId: string | null
   origin: string
   updatedAt: number
 }
@@ -42,6 +46,7 @@ interface PaletteGroup {
 const SCOPES: Array<{ id: Scope; label: string; icon: string }> = [
   { id: 'all', label: 'All', icon: 'lucide:search' },
   { id: 'conversations', label: 'Chats', icon: 'lucide:messages-square' },
+  { id: 'projects', label: 'Projects', icon: 'lucide:folder-kanban' },
   { id: 'agents', label: 'Agents', icon: 'lucide:bot' },
   { id: 'mcp', label: 'MCP Servers', icon: 'lucide:plug' },
   { id: 'cron', label: 'Schedules', icon: 'lucide:calendar-clock' },
@@ -54,6 +59,8 @@ const SEARCH_DEBOUNCE_MS = 150
 const router = useRouter()
 const chatStore = useChatStore()
 const agentDefs = useAgentDefinitionsStore()
+const projectsStore = useProjectsStore()
+const { startProjectChat } = useProjectChat()
 const { servers: mcpServers, loadServers: loadMcpServers } = useMcpServers()
 const { commandPaletteOpen, close } = useCommandPalette()
 
@@ -100,10 +107,32 @@ function conversationItem(conversation: ConversationHit): PaletteItem {
   return {
     key: `conversation:${conversation.id}`,
     title: conversation.title || 'Untitled chat',
-    subtitle: agentName(conversation.agentId),
+    subtitle: [agentName(conversation.agentId), projectsStore.get(conversation.projectId)?.name].filter(Boolean).join(' · '),
     icon: conversationIcon(conversation.origin),
     meta: formatTimeAgo(conversation.updatedAt),
     run: () => openConversation(conversation),
+  }
+}
+
+function projectItem(project: ProjectDto): PaletteItem {
+  const counts = `${project.conversationCount ?? 0} chats · ${project.openTaskCount ?? 0} open tasks`
+  return {
+    key: `project:${project.id}`,
+    title: project.name,
+    subtitle: project.description ? `${project.description} · ${counts}` : counts,
+    icon: 'lucide:folder-kanban',
+    badge: project.archived ? { label: 'Archived', tone: 'muted' } : undefined,
+    run: () => router.push({ name: 'project-detail', params: { id: project.id } }),
+  }
+}
+
+function newProjectChatItem(project: ProjectDto): PaletteItem {
+  return {
+    key: `project-chat:${project.id}`,
+    title: `New chat in ${project.name}`,
+    subtitle: project.defaultAgentId ? `With ${agentName(project.defaultAgentId)}` : 'Free chat',
+    icon: 'lucide:message-circle-plus',
+    run: () => startProjectChat(project),
   }
 }
 
@@ -161,6 +190,19 @@ const groups = computed<PaletteGroup[]>(() => {
       items: conversations.value.slice(0, limit).map(conversationItem),
     },
     {
+      id: 'projects',
+      label: 'Projects',
+      items: (() => {
+        // Archived projects only appear when searched for.
+        const candidates = q ? projectsStore.projects : projectsStore.activeProjects
+        const ranked = rankItems(candidates, q, (p) => [p.name, p.description], limit)
+        const top = ranked.find((project) => !project.archived)
+        // A search that finds a project also offers to start working in it.
+        const action = top && (q || scope.value === 'projects') ? [newProjectChatItem(top)] : []
+        return [...ranked.map(projectItem), ...action]
+      })(),
+    },
+    {
       id: 'agents',
       label: 'Agents',
       items: rankItems(agentDefs.agents, q, (a) => [a.name, a.category, a.description], limit).map(agentItem),
@@ -201,6 +243,7 @@ async function searchConversations(): Promise<void> {
       id: row.id,
       title: row.title,
       agentId: row.agent_id,
+      projectId: row.project_id ?? null,
       origin: row.origin,
       updatedAt: row.updated_at,
     }))
@@ -224,6 +267,7 @@ async function loadSources(): Promise<void> {
     searchConversations(),
     agentDefs.loaded ? Promise.resolve() : agentDefs.load().catch(() => undefined),
     loadMcpServers().catch(() => undefined),
+    projectsStore.load().catch(() => undefined),
     api.cronJobs.list().then((jobs) => { cronJobs.value = jobs }).catch(() => undefined),
   ])
 }

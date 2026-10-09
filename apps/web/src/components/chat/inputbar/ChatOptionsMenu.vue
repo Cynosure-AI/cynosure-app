@@ -9,6 +9,8 @@ import { useChatStore } from '../../../stores/chat.store'
 import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
 import { useMcpServers } from '../../../composables/useMcpServers'
+import { useProjectsStore } from '../../../stores/projects.store'
+import { useRouter } from 'vue-router'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
 import { getToolNamespaceIcon } from '../../../utils/tool-namespace-icons'
 import { isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../../utils/memory-folder-selection'
@@ -19,8 +21,10 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const { servers, loadServers } = useMcpServers()
+const projectsStore = useProjectsStore()
+const router = useRouter()
 
-type Panel = 'main' | 'files' | 'tools' | 'memory' | 'agents'
+type Panel = 'main' | 'files' | 'tools' | 'memory' | 'agents' | 'project'
 const root = ref<HTMLElement | null>(null)
 const menu = ref<HTMLElement | null>(null)
 const open = ref(false)
@@ -37,6 +41,7 @@ const entries = [
   { id: 'tools', label: 'Tools (MCPs)', detail: 'Enable and configure tools', icon: 'lucide:wrench' },
   { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:brain' },
   { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users' },
+  { id: 'project', label: 'Project', detail: 'Run this chat inside a project', icon: 'lucide:folder-kanban' },
   { id: 'prompt', label: 'System Prompt', detail: 'View and edit system prompt', icon: 'lucide:scroll-text' },
 ] as const
 const selectableTools = computed(() => agentStore.availableTools.filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name))))
@@ -70,6 +75,26 @@ const visibleFolders = computed(() => {
   if (query) return folders.value.filter(folder => `${folder.name} ${folder.description} ${folder.folderPath}`.toLowerCase().includes(query))
   return folders.value.filter(folder => (folder.isUncategorized && folderPath.value === null) || (!folder.isUncategorized && parentPath(folder) === folderPath.value))
 })
+const activeProject = computed(() => projectsStore.get(chatStore.activeProjectId))
+const visibleProjects = computed(() => {
+  const query = search.value.toLowerCase().trim()
+  return projectsStore.activeProjects.filter(project => !query || `${project.name} ${project.description}`.toLowerCase().includes(query))
+})
+const projectError = ref('')
+async function chooseProject(projectId: string | null): Promise<void> {
+  projectError.value = ''
+  try {
+    await chatStore.setConversationProject(projectId)
+    close()
+    void projectsStore.load()
+  } catch (cause) {
+    projectError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+function newProject(): void {
+  close()
+  void router.push({ name: 'projects', query: { new: '1' } })
+}
 const changedFields = computed(() => new Set(chatStore.activeAgentId
   ? chatStore.agentOverrideFields : chatStore.freeChatOverrideFields))
 function entryChanged(id: string): boolean {
@@ -78,6 +103,7 @@ function entryChanged(id: string): boolean {
     case 'memory': return changedFields.value.has('Memory folders')
     case 'agents': return changedFields.value.has('Sub-agents')
     case 'prompt': return changedFields.value.has('System prompt')
+    case 'project': return Boolean(activeProject.value)
     default: return false
   }
 }
@@ -161,6 +187,10 @@ function navigate(next: Panel): void {
   search.value = ''
   if (next === 'memory') void chatStore.loadMemoryFolders()
   if (next === 'tools' && !servers.value.length) void loadServers().catch(() => undefined)
+  if (next === 'project') {
+    projectError.value = ''
+    void projectsStore.ensureLoaded().catch(() => undefined)
+  }
 }
 function selectEntry(id: string): void {
   if (id === 'prompt') {
@@ -281,8 +311,8 @@ onBeforeUnmount(() => {
             v-model="search"
             type="search"
             class="min-w-0 flex-1 bg-transparent text-xs text-theme-100 outline-none placeholder:text-ink-muted"
-            :placeholder="`Search ${panel}…`"
-            :aria-label="`Search ${panel}`"
+            :placeholder="`Search ${panel === 'project' ? 'projects' : panel}…`"
+            :aria-label="`Search ${panel === 'project' ? 'projects' : panel}`"
           >
         </label>
       </div>
@@ -306,6 +336,10 @@ onBeforeUnmount(() => {
                 class="block text-sm"
                 :class="entryChanged(entry.id) ? 'text-accent-fg' : 'text-theme-100'"
               >{{ entry.label }}</span></span>
+              <span
+                v-if="entry.id === 'project' && activeProject"
+                class="max-w-32 truncate text-[11px] text-ink-muted"
+              >{{ activeProject.name }}</span>
               <Icon
                 icon="lucide:chevron-right"
                 class="h-4 w-4 text-ink-muted"
@@ -502,6 +536,74 @@ onBeforeUnmount(() => {
           >
             No memory folders found
           </div>
+        </template>
+        <template v-else-if="panel === 'project'">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800"
+            role="menuitemradio"
+            :aria-checked="!activeProject"
+            @click="chooseProject(null)"
+          >
+            <Icon
+              icon="lucide:circle-off"
+              class="h-4 w-4 shrink-0 text-ink-muted"
+            />
+            <span class="min-w-0 flex-1 text-xs">No project</span>
+            <Icon
+              v-if="!activeProject"
+              icon="lucide:check"
+              class="h-4 w-4 text-accent-fg"
+            />
+          </button>
+          <button
+            v-for="project in visibleProjects"
+            :key="project.id"
+            type="button"
+            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-theme-800"
+            role="menuitemradio"
+            :aria-checked="project.id === chatStore.activeProjectId"
+            @click="chooseProject(project.id)"
+          >
+            <span class="flex h-4 w-4 shrink-0 items-center justify-center"><span
+              class="h-2.5 w-2.5 rounded-full"
+              :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
+            /></span>
+            <span class="min-w-0 flex-1"><span class="block truncate text-xs">{{ project.name }}</span><span
+              v-if="project.description"
+              class="block truncate text-[10px] text-ink-muted"
+            >{{ project.description }}</span></span>
+            <Icon
+              v-if="project.id === chatStore.activeProjectId"
+              icon="lucide:check"
+              class="h-4 w-4 text-accent-fg"
+            />
+          </button>
+          <div
+            v-if="!visibleProjects.length"
+            class="px-3 py-3 text-center text-xs text-ink-muted"
+          >
+            No projects found
+          </div>
+          <p
+            v-if="projectError"
+            role="alert"
+            class="px-3 py-2 text-xs text-status-danger"
+          >
+            {{ projectError }}
+          </p>
+          <div class="mx-2 my-1 border-t border-theme-700/75" />
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-theme-800"
+            @click="newProject"
+          >
+            <Icon
+              icon="lucide:plus"
+              class="h-4 w-4 text-ink-muted"
+            />
+            New project…
+          </button>
         </template>
         <template v-else-if="panel === 'agents'">
           <label

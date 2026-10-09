@@ -117,8 +117,10 @@ export const api = {
         `/api/chat/conversations${qs ? `?${qs}` : ''}`
       )
     },
-    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated' | 'sidebar', search?: string, agentId?: string | null, filters?: string[]) => {
+    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated' | 'sidebar', search?: string, agentId?: string | null, filters?: string[], scope: { projectId?: string; excludeProjects?: boolean } = {}) => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+      if (scope.projectId) params.set('projectId', scope.projectId)
+      else if (scope.excludeProjects) params.set('excludeProjects', '1')
       if (sort) params.set('sort', sort)
       if (search) params.set('search', search)
       if (agentId !== undefined) params.set('agentId', agentId ?? '')

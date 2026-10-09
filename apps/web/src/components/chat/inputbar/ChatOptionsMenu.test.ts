@@ -21,6 +21,15 @@ const chatStore = reactive({
   loadMemoryFolders: vi.fn().mockResolvedValue(undefined),
   setSelectedToolNames: vi.fn((names: string[]) => { chatStore.selectedToolNames = names }),
   setSessionReasoningEffort: vi.fn(),
+  activeProjectId: null as string | null,
+  setConversationProject: vi.fn(async (projectId: string | null) => { chatStore.activeProjectId = projectId }),
+})
+const projects = [{ id: 'project-1', name: 'Garden Planner', description: 'Spring beds', color: '#10b981', archived: false }]
+const projectsStore = reactive({
+  activeProjects: projects,
+  get: (id: string | null) => projects.find(project => project.id === id),
+  ensureLoaded: vi.fn().mockResolvedValue(undefined),
+  load: vi.fn().mockResolvedValue(undefined),
 })
 const agentStore = reactive({ availableTools: [] as unknown[] })
 const agentDefs = reactive({ agents: [] as unknown[] })
@@ -28,6 +37,8 @@ const agentDefs = reactive({ agents: [] as unknown[] })
 vi.mock('../../../stores/chat.store', () => ({ useChatStore: () => chatStore }))
 vi.mock('../../../stores/agent-runtime.store', () => ({ useAgentStore: () => agentStore }))
 vi.mock('../../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => agentDefs }))
+vi.mock('../../../stores/projects.store', () => ({ useProjectsStore: () => projectsStore }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('../../../composables/useMcpServers', () => ({
   useMcpServers: () => ({
     servers: { value: [{ id: 'docs', icon_url: '/docs-icon.png' }] },
@@ -163,5 +174,32 @@ describe('ChatOptionsMenu', () => {
     expect(menu.querySelector('img[src="/pictured.png"]')).not.toBeNull()
     expect(menu.querySelectorAll('i[data-icon="lucide:bot"]')).toHaveLength(1)
     wrapper.unmount()
+  })
+
+  test('assigns a project and shows it on the menu entry', async () => {
+    chatStore.activeProjectId = null
+    const wrapper = mount(ChatOptionsMenu, {
+      attachTo: document.body,
+      global: { stubs: { SystemPromptModal: true, Icon: { template: '<i />' } } },
+    })
+    await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
+    await flushPromises()
+
+    let menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
+    ;([...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Project') as HTMLButtonElement).click()
+    await flushPromises()
+    menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
+    ;([...menu.querySelectorAll('button')].find(button => button.textContent?.includes('Garden Planner')) as HTMLButtonElement).click()
+    await flushPromises()
+
+    expect(chatStore.setConversationProject).toHaveBeenCalledWith('project-1')
+    expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
+    await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
+    await flushPromises()
+    menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
+    const entry = [...menu.querySelectorAll('button')].find(button => button.textContent?.trim().startsWith('Project'))!
+    expect(entry.textContent).toContain('Garden Planner')
+    wrapper.unmount()
+    chatStore.activeProjectId = null
   })
 })

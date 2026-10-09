@@ -20,6 +20,7 @@ import { commandPaletteShortcutLabel, useCommandPalette } from "../../composable
 import WorkspacePopover from "../status/WorkspacePopover.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
 import GlobalRecentChats from "./GlobalRecentChats.vue";
+import SidebarProjects from "./SidebarProjects.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -41,12 +42,6 @@ const workspaceOpen = ref(true);
 const recentChatsOpen = ref(true);
 const projectsOpen = ref(true);
 const projectsStore = useProjectsStore();
-const MAX_SIDEBAR_PROJECTS = 6;
-const sidebarProjects = computed(() =>
-  [...projectsStore.activeProjects]
-    .sort((a, b) => (b.lastActivityAt ?? b.updatedAt) - (a.lastActivityAt ?? a.updatedAt))
-    .slice(0, MAX_SIDEBAR_PROJECTS),
-);
 const recentFilterMenuOpen = ref(false);
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
@@ -535,7 +530,7 @@ const chatRoute = computed(() =>
       </section>
 
       <section
-        v-if="!sidebarCollapsed && sidebarProjects.length"
+        v-if="!sidebarCollapsed && projectsStore.activeProjects.length"
         class="sidebar-region shrink-0"
       >
         <div class="section-separator" />
@@ -564,34 +559,7 @@ const chatRoute = computed(() =>
             />
           </RouterLink>
         </div>
-        <div
-          v-show="projectsOpen"
-          class="space-y-0.5"
-        >
-          <RouterLink
-            v-for="project in sidebarProjects"
-            :key="project.id"
-            :to="{ name: 'project-detail', params: { id: project.id } }"
-            class="nav-item"
-            :class="{ active: isActive(`/projects/${project.id}`) || (route.name === 'conversation' && chatStore.activeProjectId === project.id) }"
-          >
-            <span
-              class="flex h-4.5 w-4.5 shrink-0 items-center justify-center"
-              aria-hidden="true"
-            >
-              <span
-                class="h-2.5 w-2.5 rounded-full"
-                :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
-              />
-            </span>
-            <span class="truncate">{{ project.name }}</span>
-            <span
-              v-if="project.openTaskCount"
-              class="ml-auto text-[10px] text-ink-faint"
-              :title="`${project.openTaskCount} open tasks`"
-            >{{ project.openTaskCount }}</span>
-          </RouterLink>
-        </div>
+        <SidebarProjects v-show="projectsOpen" />
       </section>
 
       <section class="recent-region flex min-h-0 flex-1 flex-col">
@@ -661,6 +629,7 @@ const chatRoute = computed(() =>
           :awaiting-conversation-ids="awaitingConversationIds"
           :active-conversation-ids="runningConversationIds"
           :filters="recentChatFilter"
+          exclude-project-chats
         />
       </section>
     </nav>
