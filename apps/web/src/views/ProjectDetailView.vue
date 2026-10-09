@@ -36,6 +36,7 @@ const cronJobs = ref<CronJob[]>([])
 const editingBrief = ref(false)
 const briefDraft = ref('')
 const settingsDraft = ref<ProjectDraft | null>(null)
+const settingsSaved = ref(false)
 const saving = ref(false)
 const error = ref('')
 const confirmDelete = ref(false)
@@ -81,6 +82,7 @@ function toDraft(): ProjectDraft | null {
 async function guarded(action: () => Promise<unknown>): Promise<boolean> {
   saving.value = true
   error.value = ''
+  settingsSaved.value = false
   try {
     await action()
     return true
@@ -112,7 +114,7 @@ async function saveBrief(): Promise<void> {
 async function saveSettings(): Promise<void> {
   const draft = settingsDraft.value
   if (!draft?.name.trim()) return
-  await guarded(() => projectsStore.update(projectId.value, {
+  settingsSaved.value = await guarded(() => projectsStore.update(projectId.value, {
     name: draft.name.trim(),
     description: draft.description,
     instructions: draft.instructions,
@@ -150,8 +152,12 @@ watch(activeTab, (tab) => {
 watch(projectId, () => {
   activeTab.value = tabFromQuery()
   editingBrief.value = false
+  settingsSaved.value = false
+  error.value = ''
   void loadRelated()
 })
+
+watch(settingsDraft, () => { settingsSaved.value = false }, { deep: true })
 
 // A new project's memory folder is created after the chat store loaded its folder list.
 watch(() => project.value?.memoryFolderId, (folderId) => {
@@ -240,7 +246,7 @@ onMounted(async () => {
 
     <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <p
-        v-if="error"
+        v-if="error && activeTab !== 'settings'"
         role="alert"
         class="mb-4 rounded-lg bg-status-danger/10 px-3 py-2 text-sm text-status-danger"
       >
@@ -368,7 +374,7 @@ onMounted(async () => {
                 </div>
                 <RouterLink
                   v-if="memoryFolder"
-                  :to="{ name: 'memory-folders', params: { section: 'documents' } }"
+                  :to="{ name: 'memory-folders', params: { section: 'documents' }, query: { folder: memoryFolder.id } }"
                   class="block truncate text-theme-200 hover:text-accent-fg"
                 >
                   {{ memoryFolder.folderPath || memoryFolder.name }}
@@ -527,7 +533,21 @@ onMounted(async () => {
               mode="edit"
               show-instructions
             />
-            <div class="mt-5 flex justify-end">
+            <div class="mt-5 flex flex-wrap items-center justify-end gap-3">
+              <p
+                v-if="error"
+                role="alert"
+                class="text-sm text-status-danger"
+              >
+                {{ error }}
+              </p>
+              <p
+                v-else-if="settingsSaved"
+                role="status"
+                class="text-sm text-status-success"
+              >
+                Project saved.
+              </p>
               <button
                 type="submit"
                 class="rounded-lg accent-action bg-accent-500 px-4 py-2 text-sm font-semibold text-accent-on hover:bg-accent-400 disabled:opacity-50"
