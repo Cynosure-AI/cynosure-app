@@ -87,8 +87,8 @@ onMounted(() => {
 
 <template>
   <div class="h-full overflow-y-auto">
-    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <header class="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <header class="z-10 border-b border-theme-700/60 bg-page-header/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
         <div class="min-w-0">
           <h1 class="text-2xl font-bold text-theme-100">
             Projects
@@ -99,7 +99,7 @@ onMounted(() => {
         </div>
         <button
           type="button"
-          class="inline-flex shrink-0 items-center gap-2 rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-400"
+          class="inline-flex h-10 shrink-0 items-center gap-2 self-start rounded-lg accent-action bg-accent-600 px-4 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500"
           @click="openCreate"
         >
           <Icon
@@ -108,8 +108,10 @@ onMounted(() => {
           />
           New project
         </button>
-      </header>
+      </div>
+    </header>
 
+    <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div
         v-if="archivedCount"
         class="mb-4 flex gap-1 text-xs"
@@ -224,7 +226,8 @@ onMounted(() => {
           </dl>
         </RouterLink>
       </div>
-    </div>
+    </main>
+
 
     <ModalDialog
       :show="createOpen"
