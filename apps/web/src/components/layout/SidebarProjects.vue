@@ -21,8 +21,10 @@ type ProjectChats = {
 }
 
 const props = withDefaults(defineProps<{
+  activeConversationIds?: string[]
   awaitingConversationIds?: string[]
 }>(), {
+  activeConversationIds: () => [],
   awaitingConversationIds: () => [],
 })
 
@@ -51,6 +53,11 @@ const projects = computed(() =>
 )
 
 // Conversations waiting for a HITL decision
+const runningIds = computed(() => new Set([
+  ...props.activeConversationIds,
+  ...agentStore.liveExecutionConversationIds,
+]))
+
 const awaitingIds = computed(() => new Set([
   ...props.awaitingConversationIds,
   ...agentStore.awaitingHITLConvIds,
@@ -319,7 +326,7 @@ onBeforeUnmount(() => {
               aria-label="Waiting for your approval"
             />
             <Icon
-              v-else-if="agentStore.liveExecutionConversationIds.includes(chat.id)"
+              v-else-if="runningIds.has(chat.id)"
               icon="lucide:loader-circle"
               class="h-3 w-3 shrink-0 animate-spin text-accent-fg"
             />

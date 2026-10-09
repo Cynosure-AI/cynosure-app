@@ -561,6 +561,7 @@ const chatRoute = computed(() =>
         </div>
         <SidebarProjects
           v-show="projectsOpen"
+          :active-conversation-ids="runningConversationIds"
           :awaiting-conversation-ids="awaitingConversationIds"
         />
       </section>
