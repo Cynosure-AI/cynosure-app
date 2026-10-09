@@ -559,7 +559,10 @@ const chatRoute = computed(() =>
             />
           </RouterLink>
         </div>
-        <SidebarProjects v-show="projectsOpen" />
+        <SidebarProjects
+          v-show="projectsOpen"
+          :awaiting-conversation-ids="awaitingConversationIds"
+        />
       </section>
 
       <section class="recent-region flex min-h-0 flex-1 flex-col">

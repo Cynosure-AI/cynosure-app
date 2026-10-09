@@ -20,6 +20,12 @@ type ProjectChats = {
   total: number
 }
 
+const props = withDefaults(defineProps<{
+  awaitingConversationIds?: string[]
+}>(), {
+  awaitingConversationIds: () => [],
+})
+
 const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
@@ -43,6 +49,24 @@ const projects = computed(() =>
     )
     .slice(0, MAX_PROJECTS),
 )
+
+// Conversations waiting for a HITL decision
+const awaitingIds = computed(() => new Set([
+  ...props.awaitingConversationIds,
+  ...agentStore.awaitingHITLConvIds,
+]))
+
+const awaitingProjectIds = computed(() => {
+  const ids = new Set<string>()
+
+  for (const [projectId, chats] of Object.entries(chatsByProject.value)) {
+    if (chats.items.some((chat) => awaitingIds.value.has(chat.id))) {
+      ids.add(projectId)
+    }
+  }
+
+  return ids
+})
 
 const hiddenCount = computed(() =>
   Math.max(0, projectsStore.activeProjects.length - MAX_PROJECTS),
@@ -96,6 +120,27 @@ async function loadChats(projectId: string): Promise<void> {
   } catch {
     // Keep cached chats until the next refresh
   }
+}
+
+// Conversation ids already searched for in project chat lists
+const resolvedAwaitingIds = new Set<string>()
+
+// Load chats for collapsed projects too, so a project can flag a pending
+// approval without being expanded first.
+function resolveAwaitingProjects(): void {
+  const known = new Set(
+    Object.values(chatsByProject.value).flatMap((chats) =>
+      chats.items.map((chat) => chat.id),
+    ),
+  )
+  const unresolved = [...awaitingIds.value].filter(
+    (id) => !known.has(id) && !resolvedAwaitingIds.has(id),
+  )
+
+  if (!unresolved.length) return
+
+  for (const id of unresolved) resolvedAwaitingIds.add(id)
+  for (const project of projects.value) void loadChats(project.id)
 }
 
 function refreshChats(): void {
@@ -152,6 +197,11 @@ watch(
   refreshChats,
 )
 
+watch(
+  () => [...awaitingIds.value].sort().join('|'),
+  resolveAwaitingProjects,
+)
+
 // Lifecycle
 onMounted(() => {
   unsubscribe = api.chat.onEvent((event) => {
@@ -170,6 +220,7 @@ onMounted(() => {
           void loadChats(project.id)
         }
       }
+      resolveAwaitingProjects()
     })
     .catch(() => undefined)
 })
@@ -209,9 +260,18 @@ onBeforeUnmount(() => {
             class="h-4 w-4 shrink-0"
           />
 
-          <span class="min-w-0 flex-1 truncate">
+          <span
+            class="min-w-0 flex-1 truncate"
+            :class="{ 'text-amber-200': awaitingProjectIds.has(project.id) }"
+          >
             {{ project.name }}
           </span>
+
+          <span
+            v-if="awaitingProjectIds.has(project.id)"
+            class="h-2 w-2 shrink-0 rounded-full bg-amber-400 animate-pulse"
+            title="A chat in this project is waiting for your approval"
+          />
         </RouterLink>
 
         <!-- New project chat -->
@@ -241,16 +301,25 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-theme-800/70"
-            :class="
+            :class="[
               chat.id === chatStore.activeConversationId
                 ? 'bg-theme-800 text-theme-100'
-                : 'text-theme-300'
-            "
+                : 'text-theme-300',
+              {
+                'bg-amber-500/20 font-medium text-amber-200 hover:bg-amber-500/25':
+                  awaitingIds.has(chat.id),
+              },
+            ]"
             :title="chat.title"
             @click="openChat(chat)"
           >
+            <span
+              v-if="awaitingIds.has(chat.id)"
+              class="h-2 w-2 shrink-0 rounded-full bg-amber-400 animate-pulse"
+              aria-label="Waiting for your approval"
+            />
             <Icon
-              v-if="agentStore.liveExecutionConversationIds.includes(chat.id)"
+              v-else-if="agentStore.liveExecutionConversationIds.includes(chat.id)"
               icon="lucide:loader-circle"
               class="h-3 w-3 shrink-0 animate-spin text-accent-fg"
             />
