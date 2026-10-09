@@ -170,6 +170,13 @@ export interface ToolResult {
 
 export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription' | 'decision'
 
+/** For /models endpoints that do not say what a model is for, embedding models are recognised by name. */
+const EMBEDDING_MODEL_PATTERN = /embed|\bbge\b|\bgte\b|\be5\b/i
+
+export function isEmbeddingModelId(id: string): boolean {
+  return EMBEDDING_MODEL_PATTERN.test(id)
+}
+
 export interface ModelPricing {
   /** Cost in $ per token. */
   prompt?: number

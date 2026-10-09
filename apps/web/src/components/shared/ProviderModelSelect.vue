@@ -54,6 +54,8 @@ const props = withDefaults(
     size?: SelectSize;
     bareTrigger?: boolean;
     onlyShowAvailableModels?: boolean;
+    /** Omit providers that finished loading without any models of the requested type. */
+    hideEmptyProviders?: boolean;
     refreshKey?: string | number;
   }>(),
   {
@@ -75,6 +77,7 @@ const props = withDefaults(
     size: "sm",
     bareTrigger: false,
     onlyShowAvailableModels: false,
+    hideEmptyProviders: false,
     refreshKey: 0,
   },
 );
@@ -503,7 +506,14 @@ const groups = computed((): SelectOptionGroup[] => {
       };
     });
 
-  const providerGroups: SelectOptionGroup[] = props.providers.map(
+  const visibleProviders = props.hideEmptyProviders
+    ? props.providers.filter((provider) =>
+      loadingByProvider.value[provider.id] ||
+      (providerModels.value[provider.id] || []).length > 0 ||
+      provider.id === props.providerId)
+    : props.providers;
+
+  const providerGroups: SelectOptionGroup[] = visibleProviders.map(
     (provider) => {
       const models = providerModels.value[provider.id] || [];
       const modelIds = models.map(modelId);

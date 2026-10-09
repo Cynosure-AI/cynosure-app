@@ -170,7 +170,7 @@ const sections: SettingsSection[] = [
     id: 'embedding-model',
     categoryId: 'memory',
     label: 'Embedding Model',
-    description: 'Select the provider, model, and dimensions used for vector embeddings.',
+    description: 'Select the model used for vector embeddings.',
     terms: ['embedding', 'embeddings', 'embedding model', 'embedding provider', 'dimensions', 'detect dimensions', 'vector', 'mxbai', 're embed', 'drop vectors']
   },
   {
@@ -178,7 +178,7 @@ const sections: SettingsSection[] = [
     categoryId: 'memory',
     label: 'Retrieval Reranker',
     description: 'Configure OpenRouter reranking for memory retrieval candidates.',
-    terms: ['reranker', 'reranking', 'retrieval', 'candidate pool', 'cohere', 'openrouter', 'rank', 'relevance']
+    terms: ['reranker', 'reranking', 'retrieval', 'cohere', 'openrouter', 'rank', 'relevance']
   },
   {
     id: 'generated-titles',

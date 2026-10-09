@@ -1,5 +1,5 @@
 import { OpenRouterProvider } from './openrouter.provider.js'
-import type { ModelInfo, ModelListType } from './base.provider.js'
+import { isEmbeddingModelId, type ModelInfo, type ModelListType } from './base.provider.js'
 
 /**
  * Mistral provider — uses the OpenAI-compatible Chat Completions API
@@ -26,7 +26,8 @@ export class MistralProvider extends OpenRouterProvider {
         const data = (await res.json()) as {
             data: Array<{ id: string }>
         }
-        return data.data.map((m) => m.id).sort()
+        const models = data.data.map((m) => m.id).sort()
+        return _type === 'embedding' ? models.filter(isEmbeddingModelId) : models
     }
 
     async testConnection(): Promise<boolean> {

@@ -1,5 +1,5 @@
 import { OpenRouterProvider } from './openrouter.provider.js'
-import type { ModelInfo, ModelListItem, ModelListType, TranscriptionRequest, TranscriptionResponse } from './base.provider.js'
+import { isEmbeddingModelId, type ModelInfo, type ModelListItem, type ModelListType, type TranscriptionRequest, type TranscriptionResponse } from './base.provider.js'
 
 /**
  * Groq provider — uses the OpenAI-compatible Chat Completions API
@@ -39,6 +39,7 @@ export class GroqProvider extends OpenRouterProvider {
         if (_type === 'transcription') {
             return models.filter((id) => this.transcriptionModels.has(id))
         }
+        if (_type === 'embedding') return models.filter(isEmbeddingModelId)
         return models
     }
 
