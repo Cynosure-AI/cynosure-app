@@ -50,7 +50,9 @@ export async function selectRoutingCandidates<T>(input: {
     request: Parameters<LLMGateway['complete']>[0]
     parse: (raw: string) => T | null
 }): Promise<T | null> {
-    const result = await input.gateway.complete(input.request, input.providerId)
+    // Router prompts start with the same instructions in every conversation.
+    const request = { ...input.request, promptCacheKey: input.request.promptCacheKey ?? `router:${input.usageKind}` }
+    const result = await input.gateway.complete(request, input.providerId)
     input.signal?.throwIfAborted()
     recordAuxiliaryModelUsage({
         kind: input.usageKind,

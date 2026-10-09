@@ -178,6 +178,15 @@ export class OpenAIProvider extends BaseLLMProvider {
     return Number(match[1]) >= 5
   }
 
+  /**
+   * OpenAI caches automatically, but only when a request reaches a server that
+   * holds the prefix; the key keeps one conversation's requests together.
+   * Compatible servers (xAI, LM Studio, Ollama) do not document the field.
+   */
+  private addPromptCacheKey(params: Record<string, unknown>, request: CompletionRequest): void {
+    if (this.config.type === 'openai' && request.promptCacheKey) params.prompt_cache_key = request.promptCacheKey
+  }
+
   /** Build the tools array for the Responses API (function tools + image_generation where supported) */
   private formatToolsForResponses(
     supportsImageGeneration: boolean,
@@ -213,6 +222,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       store: false,
       stream: false
     }
+    this.addPromptCacheKey(params, request)
     if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(supportsImageGeneration, request.tools)
@@ -298,6 +308,7 @@ export class OpenAIProvider extends BaseLLMProvider {
       max_output_tokens: request.maxTokens,
       store: false
     }
+    this.addPromptCacheKey(params, request)
     if (request.temperature != null) params.temperature = request.temperature
     if (instructions) params.instructions = instructions
     const tools = this.formatToolsForResponses(supportsImageGeneration, request.tools)

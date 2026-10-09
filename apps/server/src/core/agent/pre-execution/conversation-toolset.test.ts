@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 import type { RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
-import { MAX_STICKY_TOOLS, resetStickyToolsets, stabilizeRoutedTools } from './conversation-toolset.js'
+import { MAX_STICKY_TOOLS, recordLoadedTools, resetStickyToolsets, stabilizeRoutedTools } from './conversation-toolset.js'
 
 function tool(name: string): RegistryAwareToolDefinition {
     return { name, description: name, parameters: {}, timeout: 1_000, execute: async () => ({ success: true, output: '' }) }
@@ -39,5 +39,17 @@ describe('stabilizeRoutedTools', () => {
         const many = Array.from({ length: MAX_STICKY_TOOLS }, (_, index) => tool(`t${index}`))
         stabilizeRoutedTools('conv', many, [...many, tool('extra')])
         expect(names(stabilizeRoutedTools('conv', [tool('extra')], [...many, tool('extra')]))).toEqual(['extra'])
+    })
+
+    test('offers tools loaded by tool search next turn, after the tool they followed', () => {
+        stabilizeRoutedTools('conv', [tool('a'), tool('b')], catalogue)
+        expect(recordLoadedTools('conv', ['c', 'a'])).toBe('b')
+        expect(recordLoadedTools('conv', ['d'])).toBe('c')
+        expect(names(stabilizeRoutedTools('conv', [tool('a')], catalogue))).toEqual(['a', 'b', 'c', 'd'])
+    })
+
+    test('does not record loaded tools for an untracked key', () => {
+        expect(recordLoadedTools('conv', ['a'])).toBeUndefined()
+        expect(names(stabilizeRoutedTools('conv', [tool('b')], catalogue))).toEqual(['b'])
     })
 })

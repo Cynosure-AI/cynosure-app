@@ -15,7 +15,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, QueuedChatMessageDto } from '@shared/types'
 
 function memoryFolderPathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -169,6 +169,10 @@ export const api = {
       post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/${encodeURIComponent(queueId)}/steer`),
     runNextQueued: (conversationId: string) =>
       post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/run-next`),
+    getRunSettings: () =>
+      get<{ settings: ChatRunSettings; saved: boolean }>('/api/chat/run-settings'),
+    updateRunSettings: (settings: Partial<ChatRunSettings>) =>
+      put<{ settings: ChatRunSettings; saved: boolean }>('/api/chat/run-settings', settings),
     getAttachmentConfig: () =>
       get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
     getMessageAttachments: (conversationId: string, messageId: string) =>

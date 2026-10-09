@@ -40,6 +40,20 @@ export function stabilizeRoutedTools(
     return tools
 }
 
+/**
+ * Append tools that tool search loaded during a turn, so the next turn offers
+ * them where they sit now. Returns the tool they follow, if the key is tracked.
+ */
+export function recordLoadedTools(key: string, names: string[]): string | undefined {
+    const offered = offeredToolNames.get(key)
+    if (!offered) return undefined
+    const anchor = offered.at(-1)
+    for (const name of names) {
+        if (!offered.includes(name)) offered.push(name)
+    }
+    return anchor
+}
+
 export function resetStickyToolsets(): void {
     offeredToolNames.clear()
 }

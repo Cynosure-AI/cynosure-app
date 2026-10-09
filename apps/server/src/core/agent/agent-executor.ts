@@ -100,7 +100,7 @@ export interface AgentExecutorConfig {
     /** Pre-trim estimated token count from the caller.
      *  Used as starting floor so the context indicator never drops after trimming. */
     initialContextEstimate?: number
-    /** Context window management strategy (default: 'sliding-window') */
+    /** Context window management strategy. Compaction runs before the executor; within a run it trims like 'sliding-window' (the default). */
     contextStrategy?: ContextStrategy
     /** Maximum completion tokens requested from the provider and reserved in the context budget. */
     maxOutputTokens?: number
@@ -653,7 +653,7 @@ export class AgentExecutor {
         stream: AsyncIterable<import('../gateway/providers/base.provider.js').StreamChunk>
     } {
         this.config.signal?.throwIfAborted()
-        const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, providerId } = this.config
+        const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, providerId, conversationId, agentId } = this.config
         const signal = modelSignal || this.config.signal
         const maxTokens = this.requestedOutputTokens()
         const request = {
@@ -665,6 +665,8 @@ export class AgentExecutor {
             thinkingEnabled,
             reasoningEffort,
             signal,
+            // Sub-agents share the conversation id but not its prompt prefix.
+            promptCacheKey: agentId ? `${conversationId}:${agentId}` : conversationId,
         }
         return {
             stream: gateway.streamComplete(request, providerId),
@@ -1066,7 +1068,7 @@ export class AgentExecutor {
                 return { toolCallId: tc.id, name: tc.function.name, output: res, success: true }
             }
             if (res?.loadedTools?.length) {
-                this.addLoadedTools(res.loadedTools)
+                this.addLoadedTools(res.loadedTools, res.loadedToolsAfter)
             }
             const images = await this.materializeToolImages(res)
             const imageDataUrls = res?.imageDataUrls?.length
@@ -1145,14 +1147,19 @@ export class AgentExecutor {
         return dataUrls.length ? dataUrls : undefined
     }
 
-    private addLoadedTools(tools: ToolDefinition[]): void {
+    private addLoadedTools(tools: ToolDefinition[], after?: string): void {
         const existingNames = new Set(this.config.tools.map(tool => tool.name))
-
+        const added: ToolDefinition[] = []
         for (const tool of tools) {
             if (existingNames.has(tool.name)) continue
-            this.config.tools.push(tool)
+            added.push(tool)
             existingNames.add(tool.name)
         }
+        // Tool definitions lead the cached prompt. Insert loaded tools where the
+        // next turn will offer them, so that turn reuses this round's prefix.
+        const anchor = after ? this.config.tools.findIndex(tool => tool.name === after) : -1
+        if (anchor === -1) this.config.tools.push(...added)
+        else this.config.tools.splice(anchor + 1, 0, ...added)
     }
 
     private hasOpenPlanningItems(): boolean {

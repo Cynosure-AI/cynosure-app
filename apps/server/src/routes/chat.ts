@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
-import { applyCompactStrategy } from '../core/agent/context-compactor.js'
+import { applyContextStrategy } from '../core/agent/context-compactor.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
@@ -11,7 +11,6 @@ import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-to
 import { isBuiltInMemoryToolKey } from '../core/tools/built-in-tools.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { generateTitle, buildFallbackTitle, generateQuickResponses, getQuickResponses, clearQuickResponses, getActiveActions, getAllActiveActions, cancelPostActions } from '../core/agent/post-execution.js'
-import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../core/agent/context-trimmer.js'
 import type {
   ChatMessage,
   ContentPart,
@@ -35,14 +34,15 @@ import {
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { shouldGenerateConversationTitle } from '../core/chat/conversation-title.js'
-import { getChatAttachmentConfig, normalizeInlineAttachmentTextLimit, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
+import { getChatAttachmentConfig, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
+import { getChatRunSettings, readChatRunSettings, saveChatRunSettings } from '../core/chat/chat-run-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsHint, insertTurnLocalContext, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
 import { defaultAutoModes } from '../core/agent/execution-preset.js'
 import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
 import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
 import { executeImageModel, executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
-import type { ChatEventDraft, ChatEventPayload, ChatSendRequest, ConversationExecutionConfig } from '@shared/types'
+import type { ChatEventDraft, ChatEventPayload, ChatRunSettings, ChatSendRequest, ContextStrategy, ConversationExecutionConfig } from '@shared/types'
 import type { ChatQueueRequest } from '@shared/types'
 import {
   configureChatQueue,
@@ -136,6 +136,19 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return { success: true, inlineAttachmentTextLimit }
   })
 
+  // GET /api/chat/run-settings — chat behavior shared by every client, channel, and scheduled run
+  app.get('/run-settings', async () => {
+    return readChatRunSettings()
+  })
+
+  // PUT /api/chat/run-settings — update some or all chat run settings
+  app.put<{ Body: Partial<ChatRunSettings> }>('/run-settings', async (req, reply) => {
+    if (!req.body || typeof req.body !== 'object') {
+      return reply.status(400).send({ error: 'Expected a settings object' })
+    }
+    return { settings: saveChatRunSettings(req.body), saved: true }
+  })
+
   async function executeSend(conversationId: string, request: QueuedExecutionRequest): Promise<boolean> {
     const initialConversation = getDb().prepare('SELECT agent_id FROM conversations WHERE id = ?')
       .get(conversationId) as { agent_id: string | null } | undefined
@@ -184,30 +197,21 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         providerOverride,
         allowedTools,
         systemPrompt,
-        generateTitle: generateTitlePref,
         generateQuickResponses: generateQuickResponsesPref,
         subAgents: reqSubAgents,
         memoryFolderIds: reqMemoryFolderIds,
         thinkingEnabled: reqThinkingEnabled,
         reasoningEffort: reqReasoningEffort,
-        contextStrategy: reqContextStrategy,
         autoToolRouting: reqAutoToolRouting,
         autoMemory: reqAutoMemory,
         autoRouterProviderId: reqAutoRouterProviderId,
         autoRouterModel: reqAutoRouterModel,
-        compactProviderId: reqCompactProviderId,
-        compactModel: reqCompactModel,
-        titleProviderId: titleProviderIdPref,
-        titleModel: titleModelPref,
-        inlineAttachmentTextLimit: reqInlineAttachmentTextLimit,
         mediaGeneration: reqMediaGeneration,
       } = run
       cancelPostActions(conversationId)
       clearQuickResponses(conversationId, broadcast)
       const db = getDb()
-      const inlineAttachmentTextLimit = reqInlineAttachmentTextLimit !== undefined
-        ? normalizeInlineAttachmentTextLimit(reqInlineAttachmentTextLimit)
-        : getChatAttachmentConfig(db).inlineAttachmentTextLimit
+      const inlineAttachmentTextLimit = getChatAttachmentConfig(db).inlineAttachmentTextLimit
       const toolRegistry = getToolRegistry()
       const { selectedToolKeys, hasExplicitToolAllowlist } = resolveToolSelection(
         toolRegistry,
@@ -333,14 +337,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       // Name new chats and forks from their first new user message without
       // waiting for planning or the assistant response to finish.
       if (shouldGenerateConversationTitle(db, conversationId)) {
-        if (generateTitlePref !== false) {
+        if (getChatRunSettings(db).generateTitle) {
           void generateTitle({
             conversationId,
             userMessage: normalizedContent,
             assistantResponse: '',
             broadcast,
-            providerId: titleProviderIdPref || providerOverride || initialAgent?.providerId,
-            model: titleModelPref || (titleProviderIdPref ? undefined : (model || initialAgent?.model)),
+            providerId: providerOverride || initialAgent?.providerId,
+            model: model || initialAgent?.model,
           })
         } else {
           const fallback = buildFallbackTitle(normalizedContent)
@@ -580,11 +584,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             : agentMaxCtx
         }
 
-        // Apply context strategy (trim or compact) to fit the model's context window
-        const contextStrategy = reqContextStrategy || 'sliding-window'
+        // Apply the configured context strategy (compact or trim) to fit the model's context window
+        let contextStrategy: ContextStrategy | undefined
         let initialContextEstimate: number | undefined
-        if (contextStrategy === 'compact' && contextWindow) {
-          const compactResult = await applyCompactStrategy({
+        if (contextWindow) {
+          const fitted = await applyContextStrategy({
             messages,
             historyRows,
             filteredRows,
@@ -597,26 +601,15 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             gateway,
             providerId,
             responseModel,
-            compactProviderId: reqCompactProviderId || undefined,
-            compactModel: reqCompactModel || undefined,
             conversationId,
             db,
             broadcast,
             signal: abortController.signal,
           })
           abortController.signal.throwIfAborted()
-          messages = compactResult.messages
-          initialContextEstimate = compactResult.initialContextEstimate
-        } else if (contextWindow) {
-          initialContextEstimate = estimateTotalTokens(messages) + estimateToolDefinitionTokens(tools)
-          messages = trimMessagesToContextLimit(messages, contextWindow, {
-            tools,
-            thinkingEnabled: reqThinkingEnabled !== undefined
-              ? reqThinkingEnabled
-              : (resolvedAgent?.thinkingEnabled !== false),
-            reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
-            strategy: contextStrategy,
-          })
+          messages = fitted.messages
+          initialContextEstimate = fitted.initialContextEstimate
+          contextStrategy = fitted.strategy
         }
 
         executor = new AgentExecutor({

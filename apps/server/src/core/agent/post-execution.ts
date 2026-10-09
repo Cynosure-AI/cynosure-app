@@ -15,6 +15,7 @@ import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import { publishChatEvent } from '../chat/transcript.js'
+import { getChatRunSettings } from '../chat/chat-run-settings.js'
 
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -232,6 +233,7 @@ export interface GenerateTitleOpts {
     userMessage: string
     assistantResponse: string
     broadcast: BroadcastFn
+    /** The conversation's model, used unless the chat settings name a title model. */
     providerId?: string
     model?: string
 }
@@ -252,8 +254,7 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     const { conversationId, userMessage, broadcast, providerId, model } = opts
     const gateway = getGateway()
     const db = getDb()
-
-    const signal = startAction(conversationId, 'generating-title', broadcast)
+    const settings = getChatRunSettings(db)
 
     // Give the chat a usable title immediately from the user message, then let
     // the LLM upgrade it in the background. This guarantees every conversation
@@ -262,9 +263,13 @@ export async function generateTitle(opts: GenerateTitleOpts): Promise<void> {
     if (fallback) {
         updateConversationTitle(db, conversationId, fallback, broadcast)
     }
+    if (!settings.generateTitle) return
 
+    const signal = startAction(conversationId, 'generating-title', broadcast)
     try {
-        const titleTarget = resolveTitleTarget(gateway, providerId, model)
+        const titleTarget = settings.titleProviderId
+            ? resolveTitleTarget(gateway, settings.titleProviderId, settings.titleModel || undefined)
+            : resolveTitleTarget(gateway, providerId, settings.titleModel || model)
 
         const result = await gateway.complete({
             messages: buildTitleMessages(userMessage),

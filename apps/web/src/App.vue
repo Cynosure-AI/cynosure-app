@@ -63,6 +63,7 @@ const mcpAuthReconnecting = ref<string | null>(null)
 const cleanups: (() => void)[] = []
 async function loadAllStores() {
   await preferencesStore.loadUserSettings()
+  void preferencesStore.migrateLegacyChatRunSettings()
   await providerStore.loadProviders()
   await agentDefs.load()
   await chatStore.loadMemoryFolders()

@@ -4,15 +4,16 @@ import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '.
 import { persistAssistantTurn } from '../chat/persist-assistant.js'
 import { interruptPlanningRun } from '../agent/planning-state.js'
 import { cancelPostActions } from '../agent/post-execution.js'
-import { trimMessagesToContextLimit, estimateTotalTokens, estimateToolDefinitionTokens } from '../agent/context-trimmer.js'
+import { applyContextStrategy } from '../agent/context-compactor.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getChatAttachmentConfig } from '../chat/attachment-settings.js'
-import { buildConversationHistory } from '../chat/message-history.js'
+import { buildConversationHistory, type BuiltChatHistory } from '../chat/message-history.js'
 import { buildPersistedChatConfig } from '../chat/run-config.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
+import type { ContextStrategy } from '@shared/types'
 import type { PlannedExecution } from '../agent/pre-execution/execution-planner.js'
 import type { ActiveChannelExecutionEntry } from './base.channel.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
@@ -129,9 +130,7 @@ export function finishChannelExecution(input: {
     })
 }
 
-export function buildChannelHistory(conversationId: string, agentId: string): {
-    messages: ChatMessage[]
-} {
+export function buildChannelHistory(conversationId: string, agentId: string): BuiltChatHistory {
     const db = getDb()
     return buildConversationHistory({
         db,
@@ -179,7 +178,11 @@ export async function applyChannelContextLimit(input: {
     planned: PlannedExecution
     agent: AgentData
     messages: ChatMessage[]
-}): Promise<{ messages: ChatMessage[]; contextWindow?: number; initialContextEstimate?: number }> {
+    history: BuiltChatHistory
+    conversationId: string
+    broadcast: BroadcastFn
+    signal?: AbortSignal
+}): Promise<{ messages: ChatMessage[]; contextWindow?: number; initialContextEstimate?: number; strategy?: ContextStrategy }> {
     let contextWindow: number | undefined
     try {
         const info = await input.gateway.getModelInfo(input.planned.responseModel, input.planned.responseProvider)
@@ -193,16 +196,27 @@ export async function applyChannelContextLimit(input: {
     }
     if (!contextWindow) return { messages: input.messages }
 
-    const initialContextEstimate = estimateTotalTokens(input.messages)
-        + estimateToolDefinitionTokens(input.planned.tools)
-    return {
-        messages: trimMessagesToContextLimit(input.messages, contextWindow, {
-            tools: input.planned.tools,
-            thinkingEnabled: input.agent.thinkingEnabled !== false,
-            reasoningEffort: input.agent.reasoningEffort,
-        }),
+    const fitted = await applyContextStrategy({
+        messages: input.messages,
+        historyRows: input.history.historyRows,
+        filteredRows: input.history.filteredRows,
         contextWindow,
-        initialContextEstimate,
+        tools: input.planned.tools,
+        thinkingEnabled: input.agent.thinkingEnabled !== false,
+        reasoningEffort: input.agent.reasoningEffort,
+        gateway: input.gateway,
+        providerId: input.planned.providerId,
+        responseModel: input.planned.responseModel,
+        conversationId: input.conversationId,
+        db: getDb(),
+        broadcast: input.broadcast,
+        signal: input.signal,
+    })
+    return {
+        messages: fitted.messages,
+        contextWindow,
+        initialContextEstimate: fitted.initialContextEstimate,
+        strategy: fitted.strategy,
     }
 }
 

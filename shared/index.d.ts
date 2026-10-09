@@ -133,6 +133,17 @@ export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' |
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
+/** Server-wide chat behavior, shared by the web UI, channels, and scheduled runs. */
+export interface ChatRunSettings {
+  contextStrategy: ContextStrategy
+  generateTitle: boolean
+  /** Empty provider and model use the conversation's model. */
+  titleProviderId: string
+  titleModel: string
+  compactProviderId: string
+  compactModel: string
+}
+
 export type ContextEvidenceKind = 'memory-chunk' | 'attachment-chunk'
 export type ContextVerificationStatus = 'verified' | 'ranked-fallback'
 
@@ -157,23 +168,16 @@ export interface ChatRunConfig {
   providerOverride?: string
   allowedTools?: string[]
   systemPrompt?: string
-  generateTitle?: boolean
   /** Experimental: generate up to three suggested user follow-ups after a turn. */
   generateQuickResponses?: boolean
   subAgents?: SubAgentAssignmentDto[]
   memoryFolderIds?: string[]
   thinkingEnabled?: boolean
   reasoningEffort?: ReasoningEffort
-  contextStrategy?: ContextStrategy
-  titleProviderId?: string
-  titleModel?: string
   autoToolRouting?: boolean
   autoMemory?: boolean
   autoRouterProviderId?: string
   autoRouterModel?: string
-  compactProviderId?: string
-  compactModel?: string
-  inlineAttachmentTextLimit?: number
   /** Settings chosen for this message's image or video generation. */
   mediaGeneration?: MediaGenerationSettings
 }

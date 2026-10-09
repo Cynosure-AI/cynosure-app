@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { syncPrefsToElectron } from '@/utils/electron-prefs'
 import { api } from '@/api/client'
+import type { ChatRunSettings, ContextStrategy } from '@shared/types'
 import {
     SK_THEME, SK_AUTO_EXPAND, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
     SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
@@ -15,7 +16,7 @@ import {
 export type ThemeId = 'dark' | 'light' | 'virtualboy' | 'crimson' | 'cyberpunk' | 'emerald' | 'industrial' | 'monochrome'
 const THEME_IDS = new Set<ThemeId>(['dark', 'light', 'virtualboy', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome'])
 
-export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
+export type { ContextStrategy }
 export type VoiceTranscriptionMode = 'local' | 'remote'
 export type RecentChatFilter = 'all' | 'free' | 'agents' | 'cron' | 'channel'
 
@@ -27,12 +28,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'crimson')
     if (!THEME_IDS.has(theme.value)) theme.value = 'crimson'
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
-    const generateTitle = useLocalStorage(SK_GENERATE_TITLE, true)
     const quickResponses = useLocalStorage(SK_QUICK_RESPONSES, false)
-    const titleProviderId = useLocalStorage(SK_TITLE_PROVIDER, '')
-    const titleModel = useLocalStorage(SK_TITLE_MODEL, '')
-    const compactProviderId = useLocalStorage(SK_COMPACT_PROVIDER, '')
-    const compactModel = useLocalStorage(SK_COMPACT_MODEL, '')
     const sidebarCollapsed = ref(false)
     const recentChatFilter = useLocalStorage<RecentChatFilter[]>(SK_RECENT_CHAT_FILTER, ['all'])
     // Migrate the former single-select preference and discard malformed values.
@@ -44,8 +40,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
         const valid = storedRecentChatFilter.filter((value): value is RecentChatFilter => validRecentChatFilters.has(value as RecentChatFilter))
         recentChatFilter.value = valid.includes('all') || valid.length === 0 ? ['all'] : [...new Set(valid)]
     }
-    const contextStrategy = useLocalStorage<ContextStrategy>(SK_CONTEXT_STRATEGY, 'sliding-window')
-    const inlineAttachmentTextLimit = useLocalStorage(SK_INLINE_ATTACHMENT_TEXT_LIMIT, 24_000)
 
     const agentCategories = useLocalStorage<string[]>(SK_AGENT_CATEGORIES, [])
     const maCategories = useLocalStorage<string[]>(SK_MA_CATEGORIES, [])
@@ -66,7 +60,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, generateTitle, quickResponses, titleProviderId, titleModel, compactProviderId, compactModel, contextStrategy, inlineAttachmentTextLimit, recentChatFilter,
+        [theme, autoExpandSteps, quickResponses, recentChatFilter,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
             voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
@@ -86,6 +80,35 @@ export const usePreferencesStore = defineStore('preferences', () => {
             // Non-critical during startup; reconnect will retry with the other stores.
         } finally {
             userSettingsLoaded.value = true
+        }
+    }
+
+    /**
+     * Chat run settings (titles, context strategy, summarization model) now
+     * live on the server. Copy choices made in this browser once, then drop them.
+     */
+    async function migrateLegacyChatRunSettings() {
+        const read = (key: string) => localStorage.getItem(key)
+        const legacyKeys = [SK_GENERATE_TITLE, SK_TITLE_PROVIDER, SK_TITLE_MODEL, SK_CONTEXT_STRATEGY,
+            SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL]
+        if (!legacyKeys.some((key) => read(key) !== null)) return
+
+        const legacy: Partial<ChatRunSettings> = {}
+        if (read(SK_GENERATE_TITLE) === 'false') legacy.generateTitle = false
+        if (read(SK_TITLE_PROVIDER)) legacy.titleProviderId = read(SK_TITLE_PROVIDER)!
+        if (read(SK_TITLE_MODEL)) legacy.titleModel = read(SK_TITLE_MODEL)!
+        if (read(SK_COMPACT_PROVIDER)) legacy.compactProviderId = read(SK_COMPACT_PROVIDER)!
+        if (read(SK_COMPACT_MODEL)) legacy.compactModel = read(SK_COMPACT_MODEL)!
+        // Sliding window was the stored default, so only a different choice was deliberate.
+        const strategy = read(SK_CONTEXT_STRATEGY)
+        if (strategy && strategy !== 'sliding-window') legacy.contextStrategy = strategy as ContextStrategy
+        try {
+            const { saved } = await api.chat.getRunSettings()
+            if (!saved && Object.keys(legacy).length) await api.chat.updateRunSettings(legacy)
+            legacyKeys.forEach((key) => localStorage.removeItem(key))
+            syncPrefsToElectron()
+        } catch {
+            // Keep the browser values and retry on the next start.
         }
     }
 
@@ -154,8 +177,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     return {
         userName, userAvatarUrl, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
-        theme, autoExpandSteps, generateTitle, quickResponses, titleProviderId, titleModel, compactProviderId, compactModel, sidebarCollapsed, recentChatFilter,
-        contextStrategy, inlineAttachmentTextLimit,
+        migrateLegacyChatRunSettings,
+        theme, autoExpandSteps, quickResponses, sidebarCollapsed, recentChatFilter,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
         voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel,

@@ -158,6 +158,8 @@ export interface ToolResult {
   providerMetadata?: Record<string, unknown>
   /** Internal-only: additional tools to expose on subsequent LLM rounds. */
   loadedTools?: ToolDefinition[]
+  /** Internal-only: name of the tool after which loadedTools are inserted; appended when absent or unknown. */
+  loadedToolsAfter?: string
   /** Image sources for UI display. AgentExecutor materializes these into artifact URLs before persistence. */
   images?: string[]
   /** Base64 data-URL images for LLM vision (e.g. data:image/png;base64,...) */
@@ -351,6 +353,8 @@ export interface CompletionRequest {
   thinkingEnabled?: boolean
   /** Amount of reasoning work requested when thinking is enabled. */
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+  /** Groups requests that share a prompt prefix, for providers that route their prompt cache by key. */
+  promptCacheKey?: string
 }
 
 /**

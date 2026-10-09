@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import { AgentExecutor, MaxToolRoundsExceededError } from './agent-executor.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import { IncompleteModelResponseError, type StreamChunk, type ToolDefinition } from '../gateway/providers/base.provider.js'
+import { IncompleteModelResponseError, type CompletionRequest, type StreamChunk, type ToolDefinition } from '../gateway/providers/base.provider.js'
 
 describe('AgentExecutor cancellation', () => {
   test('passes cancellation to an in-flight tool and stops before another model round', async () => {
@@ -519,5 +519,46 @@ describe('AgentExecutor tool-loop safety', () => {
     })
 
     await expect(executor.run([{ role: 'user', content: 'loop' }])).rejects.toBeInstanceOf(MaxToolRoundsExceededError)
+  })
+})
+
+describe('AgentExecutor loaded tools', () => {
+  const tool = (name: string, execute: ToolDefinition['execute'] = async () => ({ success: true, output: '' })): ToolDefinition => ({
+    name, description: name, parameters: { type: 'object', properties: {} }, timeout: 1_000, execute,
+  })
+
+  async function toolsAfterLoading(loadedToolsAfter?: string): Promise<string[] | undefined> {
+    const requests: CompletionRequest[] = []
+    const streamComplete = vi.fn((request: CompletionRequest) => {
+      requests.push(request)
+      return (async function* (): AsyncIterable<StreamChunk> {
+        if (requests.length === 1) {
+          yield { toolCalls: [{ id: 'load-1', type: 'function', function: { name: 'search', arguments: '{}' } }], done: true }
+          return
+        }
+        yield { content: 'done', done: true }
+      })()
+    })
+    const search = tool('search', async () => ({ success: true, output: 'Loaded', loadedTools: [tool('loaded')], loadedToolsAfter }))
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool('routed'), search, tool('planning')],
+      conversationId: 'loaded-tools',
+      broadcast: vi.fn(),
+      model: 'test-model',
+      saveMessages: false,
+      emitEvents: false,
+    })
+    await executor.run([{ role: 'user', content: 'load a tool' }])
+    return requests[1]?.tools?.map(({ name }) => name)
+  }
+
+  test('inserts loaded tools after the named tool', async () => {
+    expect(await toolsAfterLoading('search')).toEqual(['routed', 'search', 'loaded', 'planning'])
+  })
+
+  test('appends loaded tools without a known position', async () => {
+    expect(await toolsAfterLoading()).toEqual(['routed', 'search', 'planning', 'loaded'])
+    expect(await toolsAfterLoading('missing')).toEqual(['routed', 'search', 'planning', 'loaded'])
   })
 })

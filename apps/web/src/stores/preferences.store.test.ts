@@ -6,9 +6,13 @@ const apiMocks = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),
 }))
+const chatMocks = vi.hoisted(() => ({
+  getRunSettings: vi.fn(),
+  updateRunSettings: vi.fn(),
+}))
 
 vi.mock('../api/client', () => ({
-  api: { userSettings: apiMocks },
+  api: { userSettings: apiMocks, chat: chatMocks },
 }))
 
 vi.mock('../utils/electron-prefs', () => ({
@@ -16,7 +20,7 @@ vi.mock('../utils/electron-prefs', () => ({
 }))
 
 import { usePreferencesStore } from './preferences.store'
-import { SK_QUICK_RESPONSES, SK_RECENT_CHAT_FILTER, SK_THEME } from '../utils/storage-keys'
+import { SK_COMPACT_MODEL, SK_COMPACT_PROVIDER, SK_CONTEXT_STRATEGY, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_RECENT_CHAT_FILTER, SK_THEME } from '../utils/storage-keys'
 
 describe('preferences profile', () => {
   beforeEach(() => {
@@ -94,5 +98,43 @@ describe('preferences profile', () => {
     await nextTick()
 
     expect(localStorage.getItem(SK_QUICK_RESPONSES)).toBe('true')
+  })
+})
+
+describe('legacy chat run settings', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  test('copies deliberate browser choices to the server once and forgets them', async () => {
+    localStorage.setItem(SK_COMPACT_PROVIDER, 'openai')
+    localStorage.setItem(SK_COMPACT_MODEL, 'gpt-mini')
+    localStorage.setItem(SK_CONTEXT_STRATEGY, 'sliding-window')
+    localStorage.setItem(SK_GENERATE_TITLE, 'true')
+    chatMocks.getRunSettings.mockResolvedValue({ saved: false })
+    chatMocks.updateRunSettings.mockResolvedValue({ saved: true })
+
+    await usePreferencesStore().migrateLegacyChatRunSettings()
+
+    expect(chatMocks.updateRunSettings).toHaveBeenCalledWith({ compactProviderId: 'openai', compactModel: 'gpt-mini' })
+    expect(localStorage.getItem(SK_COMPACT_MODEL)).toBeNull()
+    expect(localStorage.getItem(SK_CONTEXT_STRATEGY)).toBeNull()
+  })
+
+  test('keeps server settings that were already saved', async () => {
+    localStorage.setItem(SK_COMPACT_MODEL, 'gpt-mini')
+    chatMocks.getRunSettings.mockResolvedValue({ saved: true })
+
+    await usePreferencesStore().migrateLegacyChatRunSettings()
+
+    expect(chatMocks.updateRunSettings).not.toHaveBeenCalled()
+    expect(localStorage.getItem(SK_COMPACT_MODEL)).toBeNull()
+  })
+
+  test('does nothing without browser values', async () => {
+    await usePreferencesStore().migrateLegacyChatRunSettings()
+    expect(chatMocks.getRunSettings).not.toHaveBeenCalled()
   })
 })

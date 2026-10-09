@@ -186,6 +186,10 @@ async function selectToolsets(input: {
                     'Prefer the smallest sufficient set. Select a toolset when the task is likely to need one or more of its capabilities.',
                     'Return an empty list when the request needs no external or built-in tools.',
                     'Do not answer the user. Do not include rationale. /no_think',
+                    // The catalogue is stable across turns; keep it in the cacheable prefix.
+                    '',
+                    'Available MCPs and toolsets:',
+                    ...candidates.map(formatToolsetCandidate),
                 ].join('\n'),
             },
             {
@@ -193,9 +197,6 @@ async function selectToolsets(input: {
                 content: [
                     recentConversationBlock(input.recentMessages, ROUTER_TURN_CHAR_LIMIT),
                     `Current request: ${input.userQuery}`,
-                    '',
-                    'Available MCPs and toolsets:',
-                    ...candidates.map(formatToolsetCandidate),
                 ].filter(Boolean).join('\n'),
             },
         ],

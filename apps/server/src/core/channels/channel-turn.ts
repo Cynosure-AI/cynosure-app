@@ -179,7 +179,8 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         createdAt: startedAt,
     })
 
-    let messages: ChatMessage[] = buildChannelHistory(conversationId, agentId).messages
+    const history = buildChannelHistory(conversationId, agentId)
+    let messages: ChatMessage[] = history.messages
     if (hasAttachments && messages.length > 0) {
         const lastIdx = messages.length - 1
         messages[lastIdx] = { ...messages[lastIdx], content: multimodalContent(displayText, media) }
@@ -217,7 +218,11 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         updateChannelExecution(state.activeExecutions, streamId, { model: planned.responseModel, planningRunId: planned.planningRunId })
         if (execAbort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
         persistChannelExecutionConfig(conversationId, agent, planned)
-        const context = await applyChannelContextLimit({ gateway: getGateway(), planned, agent, messages: planned.messages })
+        const context = await applyChannelContextLimit({
+            gateway: getGateway(), planned, agent, messages: planned.messages, history,
+            conversationId, broadcast: state.broadcast, signal: execAbort.signal,
+        })
+        execAbort.signal.throwIfAborted()
         messages = context.messages
         thinkingPhase = 'Thinking'
         if (statusMsg !== null) await transport.edit(statusMsg, `🤔 Thinking (${thinkingSeconds}s)`)
@@ -230,7 +235,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
             streamId, agentId, agentName: agent.name,
             agentIconUrl: agent.iconUrl || null, planningRunId: planned.planningRunId,
             contextWindow: context.contextWindow, initialContextEstimate: context.initialContextEstimate,
-            contextStrategy: 'sliding-window', isPrimaryExecutor: true,
+            contextStrategy: context.strategy, isPrimaryExecutor: true,
         })
 
         const eventBus = getEventBus()

@@ -26,15 +26,8 @@ const mocks = vi.hoisted(() => ({
     get: vi.fn(),
   },
   preferences: {
-    generateTitle: true,
-    contextStrategy: 'full',
-    titleProviderId: '',
-    titleModel: '',
     autoRouterProviderId: 'fallback-router-provider',
     autoRouterModel: 'fallback-router-model',
-    compactProviderId: '',
-    compactModel: '',
-    inlineAttachmentTextLimit: 24_000,
   },
 }))
 
@@ -147,9 +140,13 @@ describe('chat message actions', () => {
         autoMemory: true,
         autoRouterProviderId: 'agent-router-provider',
         autoRouterModel: 'agent-router-model',
-        inlineAttachmentTextLimit: 24_000,
       }),
     }))
+    // Titles, context strategy, and attachment limits are server settings.
+    const run = mocks.chat.send.mock.calls[0][1].run
+    expect(run).not.toHaveProperty('contextStrategy')
+    expect(run).not.toHaveProperty('compactModel')
+    expect(run).not.toHaveProperty('inlineAttachmentTextLimit')
     expect(mocks.agentStore.setConversationExecutionState).toHaveBeenLastCalledWith('created-conversation', false)
   })
 

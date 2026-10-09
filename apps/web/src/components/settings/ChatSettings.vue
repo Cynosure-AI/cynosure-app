@@ -7,6 +7,7 @@ import {
 } from "../../stores/preferences.store";
 import { useProviderStore } from "../../stores/provider.store";
 import { api } from "../../api/client";
+import type { ChatRunSettings } from "@shared/types";
 import { RUNTIME_LIMITS } from "@shared/runtime-limits";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
@@ -18,6 +19,17 @@ const prefs = usePreferencesStore();
 const providerStore = useProviderStore();
 const attachmentConfigStatus = ref<"idle" | "saving" | "saved" | "error">("idle");
 const lastSavedAttachmentLimit = ref(RUNTIME_LIMITS.attachments.defaultInlineTextLimit);
+const inlineAttachmentTextLimit = ref(RUNTIME_LIMITS.attachments.defaultInlineTextLimit);
+/** Server-wide settings, so channels and scheduled runs follow the same choices. */
+const runSettings = ref<ChatRunSettings>({
+  contextStrategy: "compact",
+  generateTitle: true,
+  titleProviderId: "",
+  titleModel: "",
+  compactProviderId: "",
+  compactModel: "",
+});
+const runSettingsStatus = ref<"idle" | "saving" | "saved" | "error">("idle");
 /** Discrete slider stops, clipped to the server-enforced bounds so the UI can
  * never offer a value the server would normalize away. */
 const attachmentLimitSteps = computed(() =>
@@ -47,6 +59,11 @@ const contextStrategyOptions: {
   description: string;
 }[] = [
   {
+    value: "compact",
+    label: "Compact (Summarize)",
+    description: "Summarizes older messages using the active model, then continues from the summary",
+  },
+  {
     value: "sliding-window",
     label: "Sliding Window",
     description: "Keeps the most recent messages, trimming older ones",
@@ -55,11 +72,6 @@ const contextStrategyOptions: {
     value: "truncate-middle",
     label: "Truncate Middle",
     description: "Keeps the first and last messages, trimming the middle",
-  },
-  {
-    value: "compact",
-    label: "Compact (Summarize)",
-    description: "Summarizes older messages using the active model, then continues from the summary",
   },
   {
     value: "none",
@@ -72,16 +84,27 @@ function onTitleSelection(selection: {
   providerId: string;
   model: string;
 }): void {
-  prefs.titleProviderId = selection.providerId;
-  prefs.titleModel = selection.model;
+  void updateRunSettings({ titleProviderId: selection.providerId, titleModel: selection.model });
 }
 
 function onCompactSelection(selection: {
   providerId: string;
   model: string;
 }): void {
-  prefs.compactProviderId = selection.providerId;
-  prefs.compactModel = selection.model;
+  void updateRunSettings({ compactProviderId: selection.providerId, compactModel: selection.model });
+}
+
+async function updateRunSettings(changes: Partial<ChatRunSettings>): Promise<void> {
+  const previous = runSettings.value;
+  runSettings.value = { ...previous, ...changes };
+  runSettingsStatus.value = "saving";
+  try {
+    runSettings.value = (await api.chat.updateRunSettings(changes)).settings;
+    runSettingsStatus.value = "saved";
+  } catch {
+    runSettings.value = previous;
+    runSettingsStatus.value = "error";
+  }
 }
 
 function clampInlineAttachmentTextLimit(value: number): number {
@@ -107,28 +130,33 @@ function attachmentLimitFromEvent(event: Event): number {
 }
 
 function previewInlineAttachmentTextLimit(event: Event): void {
-  prefs.inlineAttachmentTextLimit = attachmentLimitFromEvent(event);
+  inlineAttachmentTextLimit.value = attachmentLimitFromEvent(event);
 }
 
 async function updateInlineAttachmentTextLimit(event: Event): Promise<void> {
   const limit = attachmentLimitFromEvent(event);
-  prefs.inlineAttachmentTextLimit = limit;
+  inlineAttachmentTextLimit.value = limit;
   attachmentConfigStatus.value = "saving";
   try {
     const result = await api.chat.updateAttachmentConfig(limit);
-    prefs.inlineAttachmentTextLimit = result.inlineAttachmentTextLimit;
+    inlineAttachmentTextLimit.value = result.inlineAttachmentTextLimit;
     lastSavedAttachmentLimit.value = result.inlineAttachmentTextLimit;
     attachmentConfigStatus.value = "saved";
   } catch {
-    prefs.inlineAttachmentTextLimit = lastSavedAttachmentLimit.value;
+    inlineAttachmentTextLimit.value = lastSavedAttachmentLimit.value;
     attachmentConfigStatus.value = "error";
   }
 }
 
 onMounted(async () => {
   try {
+    runSettings.value = (await api.chat.getRunSettings()).settings;
+  } catch {
+    runSettingsStatus.value = "error";
+  }
+  try {
     const config = await api.chat.getAttachmentConfig();
-    prefs.inlineAttachmentTextLimit = config.inlineAttachmentTextLimit;
+    inlineAttachmentTextLimit.value = config.inlineAttachmentTextLimit;
     lastSavedAttachmentLimit.value = config.inlineAttachmentTextLimit;
   } catch {
     attachmentConfigStatus.value = "error";
@@ -169,24 +197,34 @@ onMounted(async () => {
           </div>
         </div>
         <ToggleSwitch
-          v-model="prefs.generateTitle"
+          :model-value="runSettings.generateTitle"
           label="Generate conversation titles"
+          @update:model-value="updateRunSettings({ generateTitle: $event })"
         />
       </div>
 
       <div
-        v-if="prefs.generateTitle"
+        v-if="runSettings.generateTitle"
         class="pt-1 border-t border-theme-700"
       >
         <label class="block text-xs text-ink-secondary mb-1.5">Provider / Model</label>
         <ProviderModelSelect
-          :provider-id="prefs.titleProviderId"
-          :model-value="prefs.titleModel"
+          :provider-id="runSettings.titleProviderId"
+          :model-value="runSettings.titleModel"
           :providers="providerStore.providers"
           include-default
           default-label="Use chat provider"
           placeholder="Use chat provider"
           @change="onTitleSelection"
+        />
+      </div>
+      <div
+        v-if="runSettingsStatus === 'saving' || runSettingsStatus === 'error'"
+        class="flex justify-end"
+      >
+        <SettingsPersistenceStatus
+          mode="auto"
+          :state="runSettingsStatus"
         />
       </div>
     </BaseCard>
@@ -257,19 +295,19 @@ onMounted(async () => {
           <span class="flex items-center justify-between gap-3 text-xs text-ink-secondary mb-2">
             <span>Inline text limit</span>
             <output class="font-medium tabular-nums text-theme-200">
-              {{ formatAttachmentTextLimit(prefs.inlineAttachmentTextLimit) }}
+              {{ formatAttachmentTextLimit(inlineAttachmentTextLimit) }}
             </output>
           </span>
           <div class="flex items-center gap-3">
             <span class="w-10 text-right text-[11px] tabular-nums text-ink-muted">2 KB</span>
             <input
-              :value="attachmentLimitStepIndex(prefs.inlineAttachmentTextLimit)"
+              :value="attachmentLimitStepIndex(inlineAttachmentTextLimit)"
               type="range"
               min="0"
               :max="attachmentLimitSteps.length - 1"
               step="1"
               aria-label="Inline attachment text limit"
-              :aria-valuetext="formatAttachmentTextLimit(prefs.inlineAttachmentTextLimit)"
+              :aria-valuetext="formatAttachmentTextLimit(inlineAttachmentTextLimit)"
               :disabled="attachmentConfigStatus === 'saving'"
               class="min-w-0 flex-1 accent-accent-500 disabled:cursor-wait disabled:opacity-60"
               @input="previewInlineAttachmentTextLimit"
@@ -318,9 +356,9 @@ onMounted(async () => {
         </div>
       </div>
       <select
-        :value="prefs.contextStrategy"
+        :value="runSettings.contextStrategy"
         class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-        @change="prefs.contextStrategy = ($event.target as HTMLSelectElement).value as ContextStrategy"
+        @change="updateRunSettings({ contextStrategy: ($event.target as HTMLSelectElement).value as ContextStrategy })"
       >
         <option
           v-for="opt in contextStrategyOptions"
@@ -332,18 +370,27 @@ onMounted(async () => {
       </select>
 
       <div
-        v-if="prefs.contextStrategy === 'compact'"
+        v-if="runSettings.contextStrategy === 'compact'"
         class="pt-1 border-t border-theme-700"
       >
         <label class="block text-xs text-ink-secondary mb-1.5">Summarization Provider / Model</label>
         <ProviderModelSelect
-          :provider-id="prefs.compactProviderId"
-          :model-value="prefs.compactModel"
+          :provider-id="runSettings.compactProviderId"
+          :model-value="runSettings.compactModel"
           :providers="providerStore.providers"
           include-default
           default-label="Use chat provider"
           placeholder="Use chat provider"
           @change="onCompactSelection"
+        />
+      </div>
+      <div
+        v-if="runSettingsStatus === 'saving' || runSettingsStatus === 'error'"
+        class="flex justify-end"
+      >
+        <SettingsPersistenceStatus
+          mode="auto"
+          :state="runSettingsStatus"
         />
       </div>
     </BaseCard>

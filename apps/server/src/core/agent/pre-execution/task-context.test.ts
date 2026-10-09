@@ -183,7 +183,7 @@ describe('task context cancellation', () => {
         expect(request.tools?.[0].parameters.properties.toolsetIds).toMatchObject({
             items: { enum: ['mcp:browser', 'mcp:mail'] },
         })
-        expect(request.messages[1].content).toContain('- mcp:mail: Mail MCP')
+        expect(request.messages[0].content).toContain('- mcp:mail: Mail MCP')
 
         await expect(run(respond(['mcp:unknown']))).resolves.toMatchObject({ requiresTools: true, toolsetIds: undefined })
         await expect(run(respond([]))).resolves.toMatchObject({ requiresTools: true, toolsetIds: undefined })

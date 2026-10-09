@@ -1,6 +1,6 @@
 import { getBuiltInMemoryToolKeys, getBuiltInToolKey, hydrateBuiltInTools, makeSearchAvailableMcpToolsTool } from '../../tools/built-in-tools.js'
 import { applyAutoToolRouting } from './auto-tool-routing.js'
-import { stabilizeRoutedTools } from './conversation-toolset.js'
+import { recordLoadedTools, stabilizeRoutedTools } from './conversation-toolset.js'
 import { isRuntimeMemoryEnabled } from './execution-memory.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 import type { PrepareExecutionInput } from '../prepare-execution.js'
@@ -10,6 +10,7 @@ import type { RegistryAwareToolDefinition } from '../../gateway/providers/base.p
 import type { ToolRegistry } from '../../tools/tool-registry.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
 
 export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     | 'preset' | 'conversationId' | 'broadcast' | 'userQuery' | 'recentMessages' | 'usedToolNames'
@@ -77,11 +78,9 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             mcpMetadata: toolRegistry.getNamespaceMetadataForTools(candidateTools),
             getLoadedToolNames: () => new Set(fixedTools.map((tool) => tool.name)),
         })
-        tools = stabilizeRoutedTools(
-            stickyToolsetKey(conversationId, preset),
-            [...fixedTools, searchTool as RegistryAwareToolDefinition],
-            candidateTools,
-        )
+        const stickyKey = stickyToolsetKey(conversationId, preset)
+        tools = stabilizeRoutedTools(stickyKey, [...fixedTools, searchTool as RegistryAwareToolDefinition], candidateTools)
+        tools = withRecordedToolSearch(stickyKey, tools, candidateTools, toolRegistry)
     } else {
         const preferredToolNames = toolRegistry.resolveForExecution(preferredToolKeys ?? []).map((tool) => tool.name)
         const routedTools = await applyAutoToolRouting({
@@ -100,7 +99,9 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             eventMeta,
             signal,
         }) as RegistryAwareToolDefinition[]
-        tools = stabilizeRoutedTools(stickyToolsetKey(conversationId, preset), routedTools, candidateTools)
+        const stickyKey = stickyToolsetKey(conversationId, preset)
+        tools = stabilizeRoutedTools(stickyKey, routedTools, candidateTools)
+        tools = withRecordedToolSearch(stickyKey, tools, candidateTools, toolRegistry)
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memoryFolderOverrides)) {
@@ -156,6 +157,34 @@ export function resolveRoutingCandidateTools(input: {
     const toolKeys = (routingToolKeys ?? toolRegistry.listRegisteredTools().map((tool) => tool.key))
         .filter((key) => key !== manageMcpToolKey || manageMcpEnabled)
     return toolRegistry.resolveForExecution(toolKeys)
+}
+
+/**
+ * Rebuild tool search against the stabilized list, so it skips every tool
+ * already offered, and record what it loads into the conversation's toolset.
+ */
+function withRecordedToolSearch(
+    stickyKey: string,
+    tools: RegistryAwareToolDefinition[],
+    candidateTools: RegistryAwareToolDefinition[],
+    toolRegistry: ToolRegistry,
+): RegistryAwareToolDefinition[] {
+    const index = tools.findIndex((tool) => tool.name === TOOL_SEARCH_TOOL_NAME)
+    if (index === -1) return tools
+    const search = makeSearchAvailableMcpToolsTool({
+        allTools: candidateTools,
+        mcpMetadata: toolRegistry.getNamespaceMetadataForTools(candidateTools),
+        getLoadedToolNames: () => new Set(tools.map((tool) => tool.name)),
+    })
+    const recording: RegistryAwareToolDefinition = {
+        ...search,
+        execute: async (params, signal) => {
+            const result = await search.execute(params, signal)
+            if (!result.loadedTools?.length) return result
+            return { ...result, loadedToolsAfter: recordLoadedTools(stickyKey, result.loadedTools.map((tool) => tool.name)) }
+        },
+    }
+    return tools.map((tool, toolIndex) => toolIndex === index ? recording : tool)
 }
 
 function dedupeToolsByName(tools: RegistryAwareToolDefinition[]): RegistryAwareToolDefinition[] {

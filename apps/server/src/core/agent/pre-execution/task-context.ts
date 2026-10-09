@@ -75,17 +75,19 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                             'Do not include disabled auto modes.',
                             'Do not add execution instructions.',
                             'Do not answer the user. Keep the context specific and omit irrelevant conversation details. /no_think',
+                            // Fixed per conversation, so it belongs in the cacheable prefix
+                            // ahead of the conversation and request that change every turn.
+                            '',
+                            `Enabled auto modes: ${enabledModeLabels(input.enabledModes).join(', ')}`,
+                            ...(toolsets.length ? ['', 'Available MCPs and toolsets:', ...toolsets.map(formatToolsetCandidate)] : []),
                         ].join('\n'),
                     },
                     {
                         role: 'user',
                         content: [
-                            `Enabled auto modes: ${enabledModeLabels(input.enabledModes).join(', ')}`,
-                            '',
                             recentConversationBlock(input.recentMessages || [], ROUTER_TURN_CHAR_LIMIT),
                             '',
                             `Current request: ${currentRequest}`,
-                            ...(toolsets.length ? ['', 'Available MCPs and toolsets:', ...toolsets.map(formatToolsetCandidate)] : []),
                         ].filter(Boolean).join('\n'),
                     },
                 ],

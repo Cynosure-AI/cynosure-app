@@ -5,10 +5,12 @@ import {
     calculateContextBudget,
     estimateToolDefinitionTokens,
     estimateTotalTokens,
+    trimMessagesToContextLimit,
 } from './context-trimmer.js'
+import { getChatRunSettings } from '../chat/chat-run-settings.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage, ContentPart, ToolDefinition } from '../gateway/providers/base.provider.js'
-import type { ReasoningEffort } from '@shared/types'
+import type { ContextStrategy, ReasoningEffort } from '@shared/types'
 import { messageContentJson, publishChatEvent } from '../chat/transcript.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -303,6 +305,35 @@ export async function applyCompactStrategy({
     const finalMessages: ChatMessage[] = [...finalSystemMsgs, ...latestRequestGroup]
 
     return { messages: finalMessages, initialContextEstimate: initialEstimate }
+}
+
+/**
+ * Fit a conversation into the context window with the server's configured
+ * strategy. Returns the strategy so the executor trims later rounds the same way.
+ */
+export async function applyContextStrategy(
+    input: Omit<CompactStrategyInput, 'compactProviderId' | 'compactModel'>,
+): Promise<{ messages: ChatMessage[]; initialContextEstimate: number; strategy: ContextStrategy }> {
+    const { contextStrategy: strategy, compactProviderId, compactModel } = getChatRunSettings(input.db)
+    if (strategy === 'compact') {
+        const compacted = await applyCompactStrategy({
+            ...input,
+            compactProviderId: compactProviderId || undefined,
+            compactModel: compactModel || undefined,
+        })
+        return { ...compacted, strategy }
+    }
+    return {
+        messages: trimMessagesToContextLimit(input.messages, input.contextWindow, {
+            tools: input.tools,
+            requestedOutputTokens: input.requestedOutputTokens,
+            thinkingEnabled: input.thinkingEnabled,
+            reasoningEffort: input.reasoningEffort,
+            strategy,
+        }),
+        initialContextEstimate: estimateTotalTokens(input.messages) + estimateToolDefinitionTokens(input.tools),
+        strategy,
+    }
 }
 
 function findLastUserIndex<T extends { role: string }>(messages: T[]): number {
