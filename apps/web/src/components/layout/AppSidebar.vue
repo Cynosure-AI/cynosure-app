@@ -514,7 +514,7 @@ const chatRoute = computed(() =>
             <RouterLink
               :to="item.to"
               class="nav-item"
-              :class="{ active: isActive(item.to) }"
+              :class="{ active: isActive(item.to, item.to === '/projects') }"
             >
               <Icon
                 :icon="item.icon"
