@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AgentDefinition, CronJob } from '../../api/types'
+import type { ProjectDto } from '@shared/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
@@ -19,6 +20,11 @@ import {
 const router = useRouter()
 
 const cronJobs = ref<CronJob[]>([])
+const projects = ref<ProjectDto[]>([])
+const projectsById = computed(() => new Map(projects.value.map(project => [project.id, project])))
+function projectName(job: CronJob): string {
+  return job.projectId ? projectsById.value.get(job.projectId)?.name || '' : ''
+}
 const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
 const cronFilter = ref('')
@@ -203,12 +209,14 @@ function matchesCronFilter(job: CronJob, q: string): boolean {
     || job.agentName.toLowerCase().includes(q)
     || cronToHuman(job.schedule).toLowerCase().includes(q)
     || (job.prompt || '').toLowerCase().includes(q)
+    || projectName(job).toLowerCase().includes(q)
   )
 }
 
 const tableColumns: Column<CronJob>[] = [
   { key: 'agent', label: 'Agent', width: 'minmax(50px,0.3fr)', sortable: true, sortValue: job => job.agentName, filterValue: job => job.agentName },
   { key: 'job', label: 'Job', width: 'minmax(0,1.4fr)', sortable: true, sortValue: job => job.name || job.agentName },
+  { key: 'project', label: 'Project', width: 'minmax(0,1fr)', sortable: true, sortValue: projectName },
   { key: 'schedule', label: 'Schedule', width: 'minmax(0,1.3fr)', sortable: true, sortValue: job => job.nextRunAt ?? Number.MAX_SAFE_INTEGER },
   { key: 'status', label: 'Status', width: '140px', sortable: true, sortValue: job => job.isRunning ? 2 : job.enabled ? 1 : 0 },
   { key: 'actions', label: 'Actions', width: '200px' },
@@ -245,7 +253,12 @@ function formatCountdown(nextRunAt: number | null): string {
 
 async function loadSchedules() {
   try {
-    cronJobs.value = await api.cronJobs.list()
+    const [jobs, projectList] = await Promise.all([
+      api.cronJobs.list(),
+      api.projects.list(true).catch(() => projects.value),
+    ])
+    cronJobs.value = jobs
+    projects.value = projectList
   } catch {
     // silently ignore
   } finally {
@@ -417,6 +430,26 @@ onUnmounted(() => {
                 <span class="truncate">{{ job.prompt }}</span>
               </div>
             </div>
+          </template>
+
+          <template #col-project="{ item: job }">
+            <RouterLink
+              v-if="projectName(job)"
+              :to="`/projects/${encodeURIComponent(job.projectId!)}`"
+              class="flex min-w-0 items-center gap-1.5 text-xs text-ink-secondary hover:text-accent-fg"
+              :title="projectName(job)"
+              @click.stop
+            >
+              <Icon
+                icon="lucide:folder-kanban"
+                class="h-3.5 w-3.5 shrink-0"
+              />
+              <span class="truncate">{{ projectName(job) }}</span>
+            </RouterLink>
+            <span
+              v-else
+              class="text-xs text-ink-muted"
+            >—</span>
           </template>
 
           <template #col-schedule="{ item: job }">
