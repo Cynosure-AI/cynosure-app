@@ -15,7 +15,7 @@ onMounted(() => { void projectsStore.ensureLoaded().catch(() => undefined) })
 <template>
   <span
     v-if="project"
-    class="inline-flex min-w-0 shrink items-center gap-1 rounded-full border border-theme-700 bg-theme-800 py-0.5 pl-2 pr-1 text-xs text-theme-200 shadow-sm"
+    class="inline-flex min-w-0 shrink items-center gap-1 rounded-full border border-theme-700 bg-theme-800 py-1 pl-2 pr-1 text-xs text-theme-200 shadow-sm"
     data-testid="project-chip"
   >
     <ProjectIcon
