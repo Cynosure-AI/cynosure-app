@@ -8,6 +8,7 @@ import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProjectsStore } from '../../stores/projects.store'
 import { useProjectChat } from '../../composables/useProjectChat'
 import { SK_SIDEBAR_EXPANDED_PROJECTS } from '../../utils/storage-keys'
+import ProjectIcon from '../project/ProjectIcon.vue'
 
 const CHATS_PER_PROJECT = 5
 const MAX_PROJECTS = 8
@@ -130,10 +131,10 @@ onBeforeUnmount(() => {
           :aria-label="`${expanded.has(project.id) ? 'Collapse' : 'Expand'} ${project.name} chats`"
           @click="toggle(project.id)"
         >
-          <span
-            class="h-2.5 w-2.5 rounded-full group-hover/project:hidden"
+          <ProjectIcon
+            :project="project"
+            class="h-4 w-4 group-hover/project:hidden"
             :class="{ hidden: expanded.has(project.id) }"
-            :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
           />
           <Icon
             icon="lucide:chevron-right"

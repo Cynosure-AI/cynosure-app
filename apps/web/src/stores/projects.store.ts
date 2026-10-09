@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { api, type ProjectInput, type ProjectTaskInput } from '../api/client'
 import type { ProjectDto, ProjectTaskDto } from '@shared/types'
 
-export const PROJECT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#64748b'] as const
 
 export const useProjectsStore = defineStore('projects', () => {
   const projects = ref<ProjectDto[]>([])

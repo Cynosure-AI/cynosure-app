@@ -6,6 +6,7 @@ import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import ProjectBoard from '../components/project/ProjectBoard.vue'
+import ProjectIcon from '../components/project/ProjectIcon.vue'
 import ProjectForm, { type ProjectDraft } from '../components/project/ProjectForm.vue'
 import RichContent from '../components/shared/RichContent.vue'
 import { api, type ConversationRow } from '../api/client'
@@ -64,6 +65,7 @@ function toDraft(): ProjectDraft | null {
     rootPath: current.rootPath,
     defaultAgentId: current.defaultAgentId ?? '',
     color: current.color,
+    icon: current.icon,
     memoryFolderId: current.memoryFolderId ?? '',
     createMemoryFolder: false,
   }
@@ -111,6 +113,7 @@ async function saveSettings(): Promise<void> {
     defaultAgentId: draft.defaultAgentId || null,
     memoryFolderId: draft.memoryFolderId || null,
     color: draft.color,
+    icon: draft.icon,
   }))
 }
 
@@ -198,16 +201,11 @@ onMounted(async () => {
         </div>
 
         <div class="mt-2 flex min-w-0 items-center gap-3">
-          <div
-            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg"
-            :style="{ backgroundColor: `color-mix(in srgb, ${project.color || 'var(--color-accent-500)'} 20%, transparent)` }"
-          >
-            <Icon
-              icon="lucide:folder-kanban"
-              class="h-6 w-6"
-              :style="{ color: project.color || 'var(--color-accent-500)' }"
-            />
-          </div>
+          <ProjectIcon
+            :project="project"
+            tile
+            class="h-12 w-12"
+          />
           <div class="min-w-0">
             <h1 class="flex items-center gap-2 break-words text-2xl font-bold leading-tight text-theme-100">
               {{ project.name }}

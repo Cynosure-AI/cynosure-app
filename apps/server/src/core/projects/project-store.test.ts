@@ -84,6 +84,13 @@ describe('project store', () => {
         expect(getDb().prepare('SELECT COUNT(*) AS n FROM project_tasks').get()).toEqual({ n: 0 })
     })
 
+    test('projects keep an Iconify icon and reject other values', () => {
+        const project = createProject({ name: 'Icon', icon: 'lucide:sprout', createMemoryFolder: false })
+        expect(project.icon).toBe('lucide:sprout')
+        expect(updateProject(project.id, { icon: '' })!.icon).toBe('')
+        expect(() => updateProject(project.id, { icon: '<svg onload=x>' })).toThrow(/Iconify/)
+    })
+
     test('archived projects are hidden unless requested', () => {
         const project = createProject({ name: 'Old', createMemoryFolder: false })
         updateProject(project.id, { archived: true })

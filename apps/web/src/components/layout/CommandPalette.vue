@@ -120,7 +120,7 @@ function projectItem(project: ProjectDto): PaletteItem {
     key: `project:${project.id}`,
     title: project.name,
     subtitle: project.description ? `${project.description} · ${counts}` : counts,
-    icon: 'lucide:folder-kanban',
+    icon: project.icon || 'lucide:folder-kanban',
     badge: project.archived ? { label: 'Archived', tone: 'muted' } : undefined,
     run: () => router.push({ name: 'project-detail', params: { id: project.id } }),
   }

@@ -21,6 +21,7 @@ interface ProjectRow {
     memory_folder_id: string | null
     default_agent_id: string | null
     color: string
+    icon: string
     archived: number
     sort_order: number
     created_at: number
@@ -57,6 +58,7 @@ export interface CreateProjectInput {
     createMemoryFolder?: boolean
     defaultAgentId?: string | null
     color?: string
+    icon?: string
 }
 
 export type UpdateProjectInput = Partial<Omit<CreateProjectInput, 'createMemoryFolder'>> & { archived?: boolean; sortOrder?: number }
@@ -87,6 +89,7 @@ function rowToProject(row: ProjectRow): ProjectDto {
         memoryFolderId: row.memory_folder_id,
         defaultAgentId: row.default_agent_id,
         color: row.color,
+        icon: row.icon ?? '',
         archived: row.archived === 1,
         sortOrder: row.sort_order,
         createdAt: row.created_at,
@@ -121,6 +124,13 @@ export function normalizeProjectRootPath(input: string | undefined): string {
     if (!isAbsolute(value)) throw new Error('Enter an absolute folder path for the project directory.')
     if (!existsSync(value) || !statSync(value).isDirectory()) throw new Error('The project directory must be an existing folder.')
     return realpathSync(value)
+}
+
+/** Project icons are Iconify names such as `lucide:sprout`. */
+function normalizeIcon(icon: string | undefined): string {
+    const value = icon?.trim() ?? ''
+    if (value && !/^[a-z0-9-]+:[a-z0-9-]+$/.test(value)) throw new Error('Icon must be an Iconify name such as lucide:sprout.')
+    return value
 }
 
 function requireName(name: string | undefined): string {
@@ -173,10 +183,10 @@ export function createProject(input: CreateProjectInput): ProjectDto {
         : input.createMemoryFolder === false ? null : createProjectMemoryFolder(name)
     const id = nanoid()
     const now = Date.now()
-    getDb().prepare(`INSERT INTO projects (id, name, description, instructions, brief, brief_updated_at, root_path, memory_folder_id, default_agent_id, color, archived, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`).run(
+    getDb().prepare(`INSERT INTO projects (id, name, description, instructions, brief, brief_updated_at, root_path, memory_folder_id, default_agent_id, color, icon, archived, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`).run(
         id, name, input.description?.trim() ?? '', input.instructions ?? '', (input.brief ?? '').slice(0, MAX_PROJECT_BRIEF_CHARS),
-        input.brief ? now : null, rootPath, memoryFolderId, defaultAgentId, input.color ?? '', now, now,
+        input.brief ? now : null, rootPath, memoryFolderId, defaultAgentId, input.color ?? '', normalizeIcon(input.icon), now, now,
     )
     return getProject(id)!
 }
@@ -188,7 +198,7 @@ export function updateProject(id: string, input: UpdateProjectInput): ProjectDto
     const now = Date.now()
     const briefChanged = input.brief !== undefined && input.brief !== existing.brief
     db.prepare(`UPDATE projects SET name = ?, description = ?, instructions = ?, brief = ?, brief_updated_at = ?, root_path = ?, memory_folder_id = ?,
-        default_agent_id = ?, color = ?, archived = ?, sort_order = ?, updated_at = ? WHERE id = ?`).run(
+        default_agent_id = ?, color = ?, icon = ?, archived = ?, sort_order = ?, updated_at = ? WHERE id = ?`).run(
         input.name !== undefined ? requireName(input.name) : existing.name,
         input.description !== undefined ? input.description.trim() : existing.description,
         input.instructions ?? existing.instructions,
@@ -198,6 +208,7 @@ export function updateProject(id: string, input: UpdateProjectInput): ProjectDto
         input.memoryFolderId !== undefined ? assertMemoryFolder(input.memoryFolderId) : existing.memory_folder_id,
         input.defaultAgentId !== undefined ? assertAgent(input.defaultAgentId) : existing.default_agent_id,
         input.color ?? existing.color,
+        input.icon !== undefined ? normalizeIcon(input.icon) : existing.icon,
         input.archived !== undefined ? (input.archived ? 1 : 0) : existing.archived,
         input.sortOrder ?? existing.sort_order,
         now,

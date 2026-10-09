@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { useProjectsStore } from '../../../stores/projects.store'
+import ProjectIcon from '../../project/ProjectIcon.vue'
 
 const chatStore = useChatStore()
 const projectsStore = useProjectsStore()
@@ -17,10 +18,9 @@ onMounted(() => { void projectsStore.ensureLoaded().catch(() => undefined) })
     class="inline-flex min-w-0 shrink items-center gap-1 rounded-full border border-theme-700 bg-theme-800 py-0.5 pl-2 pr-1 text-xs text-theme-200 shadow-sm"
     data-testid="project-chip"
   >
-    <span
-      class="h-2 w-2 shrink-0 rounded-full"
-      :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
-      aria-hidden="true"
+    <ProjectIcon
+      :project="project"
+      class="h-3.5 w-3.5"
     />
     <RouterLink
       :to="{ name: 'project-detail', params: { id: project.id } }"

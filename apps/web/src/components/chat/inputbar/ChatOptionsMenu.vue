@@ -10,6 +10,7 @@ import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
 import { useMcpServers } from '../../../composables/useMcpServers'
 import { useProjectsStore } from '../../../stores/projects.store'
+import ProjectIcon from '../../project/ProjectIcon.vue'
 import { useRouter } from 'vue-router'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
 import { getToolNamespaceIcon } from '../../../utils/tool-namespace-icons'
@@ -565,10 +566,10 @@ onBeforeUnmount(() => {
             :aria-checked="project.id === chatStore.activeProjectId"
             @click="chooseProject(project.id)"
           >
-            <span class="flex h-4 w-4 shrink-0 items-center justify-center"><span
-              class="h-2.5 w-2.5 rounded-full"
-              :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
-            /></span>
+            <ProjectIcon
+              :project="project"
+              class="h-4 w-4"
+            />
             <span class="min-w-0 flex-1"><span class="block truncate text-xs">{{ project.name }}</span><span
               v-if="project.description"
               class="block truncate text-[10px] text-ink-muted"

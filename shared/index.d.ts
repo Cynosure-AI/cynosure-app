@@ -304,6 +304,8 @@ export interface ProjectDto {
   memoryFolderId: string | null
   defaultAgentId: string | null
   color: string
+  /** Iconify icon name, e.g. `lucide:sprout`; empty uses the default project icon. */
+  icon: string
   archived: boolean
   sortOrder: number
   createdAt: number

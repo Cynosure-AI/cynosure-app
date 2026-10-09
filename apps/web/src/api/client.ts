@@ -31,7 +31,7 @@ export interface ConversationRow {
   last_user_message: string | null
 }
 
-export type ProjectInput = Partial<Pick<ProjectDto, 'name' | 'description' | 'instructions' | 'brief' | 'rootPath' | 'memoryFolderId' | 'defaultAgentId' | 'color' | 'archived' | 'sortOrder'>> & {
+export type ProjectInput = Partial<Pick<ProjectDto, 'name' | 'description' | 'instructions' | 'brief' | 'rootPath' | 'memoryFolderId' | 'defaultAgentId' | 'color' | 'icon' | 'archived' | 'sortOrder'>> & {
   createMemoryFolder?: boolean
 }
 

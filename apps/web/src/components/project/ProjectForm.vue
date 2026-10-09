@@ -5,7 +5,7 @@ import AgentSelect from '../shared/AgentSelect.vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useChatStore } from '../../stores/chat.store'
-import { PROJECT_COLORS } from '../../stores/projects.store'
+import { DEFAULT_PROJECT_ICON, PROJECT_COLORS, PROJECT_ICONS } from '../../utils/project-format'
 
 export interface ProjectDraft {
   name: string
@@ -14,6 +14,7 @@ export interface ProjectDraft {
   rootPath: string
   defaultAgentId: string
   color: string
+  icon: string
   /** Memory folder id; '' means none. Only shown when `showMemoryFolder` is set. */
   memoryFolderId: string
   createMemoryFolder: boolean
@@ -165,6 +166,38 @@ async function chooseFolder(): Promise<void> {
           <span class="block text-xs text-ink-faint">Projects/{{ draft.name.trim() || '…' }}</span>
         </span>
       </label>
+    </div>
+
+    <div>
+      <span class="mb-1.5 block text-sm text-ink-secondary">Icon</span>
+      <div
+        class="grid grid-cols-8 gap-1.5 sm:grid-cols-[repeat(16,minmax(0,1fr))]"
+        role="radiogroup"
+        aria-label="Project icon"
+      >
+        <button
+          v-for="icon in PROJECT_ICONS"
+          :key="icon"
+          type="button"
+          role="radio"
+          :aria-checked="(draft.icon || DEFAULT_PROJECT_ICON) === icon"
+          :aria-label="icon.replace('lucide:', '').replace(/-/g, ' ')"
+          :title="icon.replace('lucide:', '').replace(/-/g, ' ')"
+          class="flex aspect-square items-center justify-center rounded-lg border transition-colors"
+          :class="(draft.icon || DEFAULT_PROJECT_ICON) === icon
+            ? 'border-transparent'
+            : 'border-theme-800 text-ink-muted hover:border-theme-600 hover:text-theme-200'"
+          :style="(draft.icon || DEFAULT_PROJECT_ICON) === icon
+            ? { color: draft.color, backgroundColor: `color-mix(in srgb, ${draft.color || 'var(--color-accent-500)'} 20%, transparent)` }
+            : undefined"
+          @click="draft.icon = icon"
+        >
+          <Icon
+            :icon="icon"
+            class="h-4 w-4"
+          />
+        </button>
+      </div>
     </div>
 
     <div>

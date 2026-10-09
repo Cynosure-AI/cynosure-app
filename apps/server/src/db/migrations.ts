@@ -487,6 +487,14 @@ const MIGRATIONS: SchemaMigration[] = [
             db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id, updated_at)')
         },
     },
+    {
+        version: 24,
+        description: 'Add an icon to projects',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(projects)') as Array<{ name: string }>).map((column) => column.name))
+            if (!columns.has('icon')) db.exec("ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

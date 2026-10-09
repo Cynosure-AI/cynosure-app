@@ -4,9 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import ProjectForm, { type ProjectDraft } from '../components/project/ProjectForm.vue'
-import { PROJECT_COLORS, useProjectsStore } from '../stores/projects.store'
+import { useProjectsStore } from '../stores/projects.store'
+import ProjectIcon from '../components/project/ProjectIcon.vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
-import { formatRelativeTime } from '../utils/project-format'
+import { DEFAULT_PROJECT_ICON, PROJECT_COLORS, formatRelativeTime } from '../utils/project-format'
 
 const projectsStore = useProjectsStore()
 const agentDefs = useAgentDefinitionsStore()
@@ -30,6 +31,7 @@ function emptyDraft(): ProjectDraft {
     rootPath: '',
     defaultAgentId: '',
     color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
+    icon: DEFAULT_PROJECT_ICON,
     memoryFolderId: '',
     createMemoryFolder: true,
   }
@@ -57,6 +59,7 @@ async function create(): Promise<void> {
       rootPath: draft.value.rootPath,
       defaultAgentId: draft.value.defaultAgentId || null,
       color: draft.value.color,
+      icon: draft.value.icon,
       createMemoryFolder: draft.value.createMemoryFolder,
     })
     createOpen.value = false
@@ -157,8 +160,13 @@ onMounted(() => {
             :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
             aria-hidden="true"
           />
-          <div class="flex items-start justify-between gap-3">
-            <h2 class="min-w-0 truncate text-base font-semibold text-theme-100">
+          <div class="flex items-center gap-3">
+            <ProjectIcon
+              :project="project"
+              tile
+              class="h-9 w-9"
+            />
+            <h2 class="min-w-0 flex-1 truncate text-base font-semibold text-theme-100">
               {{ project.name }}
             </h2>
             <Icon
