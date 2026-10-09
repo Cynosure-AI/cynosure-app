@@ -151,7 +151,7 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
       <section
         v-for="column in columns"
         :key="column.status"
-        class="flex min-h-40 flex-col rounded-xl border bg-theme-900/60 p-2 transition-colors"
+        class="flex min-h-40 min-w-0 flex-col rounded-xl border bg-theme-900/60 p-2 transition-colors"
         :class="dropStatus === column.status ? 'border-accent-500/60' : 'border-theme-800'"
         :aria-label="column.label"
         @dragover.prevent="dropStatus = column.status"
@@ -190,7 +190,7 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
               >{{ task.title }}</span>
               <span
                 v-if="task.notes"
-                class="mt-1 line-clamp-2 block text-xs text-ink-muted"
+                class="mt-1 line-clamp-2 text-xs text-ink-muted [overflow-wrap:anywhere]"
               >{{ task.notes }}</span>
             </button>
             <div class="mt-2 flex items-center gap-1.5 text-[11px] text-ink-faint">
@@ -263,8 +263,7 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
       :show="Boolean(editing)"
       title="Edit task"
       icon="lucide:square-kanban"
-      max-width="max-w-lg"
-      body-overflow-visible
+      max-width="max-w-3xl"
       @close="editing = null"
     >
       <form
@@ -295,10 +294,10 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
           <textarea
             id="task-notes"
             v-model="editing.notes"
-            rows="5"
+            rows="12"
             maxlength="4000"
             placeholder="Context an agent needs to do this without the original chat"
-            class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
+            class="max-h-[50vh] w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
           />
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
@@ -329,6 +328,8 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
               include-default
               default-label="Project default"
               agents-group-label="Agents"
+              drop-up
+              max-height="max-h-48"
               size="sm"
             />
           </div>
