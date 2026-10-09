@@ -48,6 +48,15 @@ export const api = {
     list: () => get<{ folders: string[] }>('/api/file-access'),
     add: (path: string) => post<{ folders: string[] }>('/api/file-access', { path }),
     remove: (path: string) => del<{ folders: string[] }>(`/api/file-access?path=${encodeURIComponent(path)}`),
+    directories: (path?: string, showHidden = false) => {
+      const params = new URLSearchParams()
+      if (path) params.set('path', path)
+      if (showHidden) params.set('showHidden', 'true')
+      const qs = params.toString()
+      return get<{ path: string; parent: string | null; home: string; directories: { name: string; path: string }[] }>(
+        `/api/file-access/directories${qs ? `?${qs}` : ''}`
+      )
+    },
   },
   modelFavorites: {
     get: () => get<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>; initialized: boolean }>('/api/model-favorites'),

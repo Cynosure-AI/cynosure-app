@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import AgentSelect from '../shared/AgentSelect.vue'
+import FolderBrowseButton from '../shared/FolderBrowseButton.vue'
 import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useChatStore } from '../../stores/chat.store'
@@ -30,7 +31,6 @@ const draft = defineModel<ProjectDraft>({ required: true })
 
 const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()
-const electron = (window as unknown as { electron?: { chooseFileAccessDirectory?: () => Promise<string | null> } }).electron
 const inputClass = 'w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500'
 
 const memoryFolderOptions = computed<SelectOptionGroup[]>(() => [{
@@ -43,11 +43,6 @@ const memoryFolderOptions = computed<SelectOptionGroup[]>(() => [{
     })),
   ],
 }])
-
-async function chooseFolder(): Promise<void> {
-  const selected = await electron?.chooseFileAccessDirectory?.()
-  if (selected) draft.value.rootPath = selected
-}
 </script>
 
 <template>
@@ -115,18 +110,10 @@ async function chooseFolder(): Promise<void> {
           placeholder="Absolute folder path"
           :class="[inputClass, 'font-mono']"
         >
-        <button
-          v-if="electron?.chooseFileAccessDirectory"
-          type="button"
-          class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-theme-700 px-3 text-sm text-theme-300 hover:bg-theme-800"
-          @click="chooseFolder"
-        >
-          <Icon
-            icon="lucide:folder-open"
-            class="h-4 w-4"
-          />
-          Browse
-        </button>
+        <FolderBrowseButton
+          :initial-path="draft.rootPath"
+          @select="draft.rootPath = $event"
+        />
       </div>
     </div>
 

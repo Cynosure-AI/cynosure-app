@@ -36,6 +36,31 @@ describe('file access settings routes', () => {
         await app.close()
     })
 
+    it('lists subdirectories for the folder picker', async () => {
+        const app = Fastify()
+        await app.register(registerFileAccessRoutes, { prefix: '/file-access' })
+        const root = await fs.realpath(sandbox)
+        await fs.mkdir(path.join(root, 'beta'))
+        await fs.mkdir(path.join(root, 'Alpha'))
+        await fs.mkdir(path.join(root, '.hidden'))
+        await fs.writeFile(path.join(root, 'file.txt'), 'content')
+
+        const listing = (await app.inject({ method: 'GET', url: `/file-access/directories?path=${encodeURIComponent(root)}` })).json()
+        expect(listing.path).toBe(root)
+        expect(listing.parent).toBe(path.dirname(root))
+        expect(listing.directories).toEqual([
+            { name: 'Alpha', path: path.join(root, 'Alpha') },
+            { name: 'beta', path: path.join(root, 'beta') },
+        ])
+
+        const withHidden = (await app.inject({ method: 'GET', url: `/file-access/directories?path=${encodeURIComponent(root)}&showHidden=true` })).json()
+        expect(withHidden.directories.map((entry: { name: string }) => entry.name)).toContain('.hidden')
+
+        expect((await app.inject({ method: 'GET', url: '/file-access/directories?path=relative' })).statusCode).toBe(400)
+        expect((await app.inject({ method: 'GET', url: `/file-access/directories?path=${encodeURIComponent(path.join(root, 'missing'))}` })).statusCode).toBe(400)
+        await app.close()
+    })
+
     it('rejects relative paths and files', async () => {
         const app = Fastify()
         await app.register(registerFileAccessRoutes, { prefix: '/file-access' })
