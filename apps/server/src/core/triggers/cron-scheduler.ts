@@ -50,6 +50,7 @@ export interface CronJobRow {
     updated_at: number
     last_run_at: number | null
     execution_config_json: string
+    project_id: string | null
 }
 
 export interface CronJobData {
@@ -67,6 +68,7 @@ export interface CronJobData {
     updatedAt: number
     lastRunAt: number | null
     executionConfig: ConversationExecutionConfig | null
+    projectId: string | null
 }
 
 export function isValidCronSchedule(schedule: string): boolean {
@@ -98,6 +100,7 @@ function rowToData(row: CronJobRow): CronJobData {
         updatedAt: row.updated_at,
         lastRunAt: row.last_run_at ?? null,
         executionConfig,
+        projectId: row.project_id ?? null,
     }
 }
 
@@ -115,19 +118,19 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; executionConfig?: ConversationExecutionConfig }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; executionConfig?: ConversationExecutionConfig; projectId?: string | null }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     const notificationMode = input.notificationMode === 'conditional' ? 'conditional' : 'always'
     // Set lastRunAt to now so missed first runs are caught up after downtime
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, execution_config_json, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', JSON.stringify(input.executionConfig ?? {}), now, now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, execution_config_json, project_id, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', JSON.stringify(input.executionConfig ?? {}), input.projectId || null, now, now, now)
     return getCronJob(id)!
 }
 
-export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string }): CronJobData | undefined {
+export function updateCronJob(id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; projectId?: string | null }): CronJobData | undefined {
     const db = getDb()
     const existing = db.prepare('SELECT * FROM cron_jobs WHERE id = ?').get(id) as CronJobRow | undefined
     if (!existing) return undefined
@@ -139,7 +142,7 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         : (existing.notification_mode === 'conditional' ? 'conditional' : 'always')
     const shouldResetLastRun = (existing.enabled !== 1 && enabled === 1) || schedule !== existing.schedule
     db.prepare(
-        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, output_channel_id = ?, notification_mode = ?, notification_condition = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
+        'UPDATE cron_jobs SET name = ?, agent_id = ?, schedule = ?, prompt = ?, enabled = ?, one_off = ?, output_channel_id = ?, notification_mode = ?, notification_condition = ?, project_id = ?, updated_at = ?, last_run_at = ? WHERE id = ?'
     ).run(
         input.name !== undefined ? input.name : existing.name,
         input.agentId !== undefined ? input.agentId : existing.agent_id,
@@ -150,6 +153,7 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         input.outputChannelId !== undefined ? input.outputChannelId : (existing.output_channel_id || ''),
         notificationMode,
         input.notificationCondition !== undefined ? input.notificationCondition : (existing.notification_condition || ''),
+        input.projectId !== undefined ? (input.projectId || null) : (existing.project_id ?? null),
         now,
         shouldResetLastRun ? now : existing.last_run_at,
         id
@@ -284,6 +288,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
         const { conversationId, result } = await runTriggerExecution({
             agent,
             executionConfig: job.executionConfig ?? undefined,
+            projectId: job.projectId,
             userContent,
             origin: 'cron',
             title: job.name.trim() || 'New Chat',

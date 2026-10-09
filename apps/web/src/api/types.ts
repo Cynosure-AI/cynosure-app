@@ -493,6 +493,7 @@ export interface CronJob {
     isRunning: boolean
     nextRunAt: number | null
     executionConfig: ConversationExecutionConfig | null
+    projectId?: string | null
 }
 
 export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'

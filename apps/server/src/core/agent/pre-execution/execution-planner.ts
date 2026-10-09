@@ -12,6 +12,7 @@ import {
     PLANNING_SYSTEM_PROMPT,
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
+import { isProjectToolName } from '../../projects/project-tools.js'
 import { DIRECT_TOOL_SELECTION_LIMIT } from '../../runtime-limits.js'
 import type { ExecutionRequest } from './execution-input.js'
 import { assembleExecutionMessages } from '../../chat/message-history.js'
@@ -209,7 +210,8 @@ function applyPlanningIfToolCapable(
         return { tools, contextMessages }
     }
 
-    const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name))
+    // Project tools are present in every project run; they alone do not warrant a todo list.
+    const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name) && !isProjectToolName(tool.name))
     if (!hasVisibleExecutionTool) {
         return { tools, contextMessages }
     }

@@ -17,6 +17,7 @@ export interface Conversation {
   id: string
   title: string
   agentId?: string | null
+  projectId?: string | null
   origin?: string
   pinned: boolean
   lastReadAt?: number | null
@@ -71,6 +72,8 @@ export const useChatStore = defineStore('chat', () => {
 
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
+  /** Project of the active conversation, or the project a new chat will be created in. */
+  const activeProjectId = ref<string | null>(null)
   const draftDiscardRevision = ref(0)
   const messages = ref<DisplayMessage[]>([])
   const mediaGenerationSettings = ref<MediaGenerationSettings | null>(null)
@@ -166,10 +169,11 @@ export const useChatStore = defineStore('chat', () => {
     const agentId = agentConfig.activeAgentId.value
     const rows = await api.chat.listConversations(agentId !== null ? agentId : '')
     conversations.value = rows.map(
-      (r: { id: string; title: string; agent_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number }) => ({
+      (r) => ({
         id: r.id,
         title: r.title,
         agentId: r.agent_id,
+        projectId: r.project_id ?? null,
         origin: r.origin,
         pinned: !!r.pinned,
         lastReadAt: r.last_read_at,
@@ -233,12 +237,15 @@ export const useChatStore = defineStore('chat', () => {
   async function createConversation(title?: string): Promise<string> {
     const conv = await api.chat.createConversation(
       title,
-      agentConfig.activeAgentId.value ?? undefined
+      agentConfig.activeAgentId.value ?? undefined,
+      undefined,
+      activeProjectId.value,
     )
     conversations.value.unshift({
       id: conv.id,
       title: conv.title,
       agentId: conv.agentId,
+      projectId: conv.projectId ?? null,
       origin: conv.origin,
       pinned: false,
       lastReadAt: conv.createdAt,
@@ -288,6 +295,7 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const response = await api.chat.getMessages(id)
       if (activeConversationId.value !== id) return
+      activeProjectId.value = response.conversationProjectId ?? null
       agentConfig.setConversationAgent(agentIdHint !== undefined ? agentIdHint : response.conversationAgentId)
 
       // The conversation list is scoped to the selected agent. Entering a chat
@@ -513,7 +521,12 @@ export const useChatStore = defineStore('chat', () => {
     streaming.subAgentUsage.value = null
   }
 
-  async function startNewChat(): Promise<void> {
+  /**
+   * Start an empty chat. `projectId` places the chat in a project once it is
+   * created; omit it to start outside any project.
+   */
+  async function startNewChat(options: { projectId?: string | null } = {}): Promise<void> {
+    activeProjectId.value = options.projectId ?? null
     const previousConversationId = activeConversationId.value
     draftDiscardRevision.value++
     if (previousConversationId) await api.chat.discardStagedAttachments(previousConversationId)
@@ -530,6 +543,17 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     agentStore.setActiveViewConversation(null)
     resetStreaming()
+  }
+
+  /** Move the active chat into a project (or out of one); a new chat applies it on creation. */
+  async function setConversationProject(projectId: string | null): Promise<void> {
+    const conversationId = activeConversationId.value
+    if (conversationId) {
+      await api.chat.setProject(conversationId, projectId)
+      const conversation = conversations.value.find((candidate) => candidate.id === conversationId)
+      if (conversation) conversation.projectId = projectId
+    }
+    activeProjectId.value = projectId
   }
 
   async function deleteAllConversations(allConversations = false): Promise<void> {
@@ -577,6 +601,7 @@ export const useChatStore = defineStore('chat', () => {
       id: fork.id,
       title: fork.title,
       agentId: fork.agentId,
+      projectId: fork.projectId ?? null,
       origin: fork.origin,
       pinned: false,
       lastReadAt: fork.createdAt,
@@ -663,6 +688,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations,
     sortedConversations,
     activeConversationId,
+    activeProjectId,
     draftDiscardRevision,
     messages,
     mediaGenerationSettings,
@@ -850,6 +876,7 @@ export const useChatStore = defineStore('chat', () => {
     pinConversation,
     renameConversation,
     startNewChat,
+    setConversationProject,
     handlePostAction,
     handleQuickResponses,
   }

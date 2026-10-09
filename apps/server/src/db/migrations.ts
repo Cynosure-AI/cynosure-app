@@ -442,6 +442,51 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 23,
+        description: 'Add projects, project tasks, and project links on conversations and cron jobs',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS projects (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    instructions TEXT NOT NULL DEFAULT '',
+                    brief TEXT NOT NULL DEFAULT '',
+                    brief_updated_at INTEGER,
+                    root_path TEXT NOT NULL DEFAULT '',
+                    memory_folder_id TEXT,
+                    default_agent_id TEXT,
+                    color TEXT NOT NULL DEFAULT '',
+                    archived INTEGER NOT NULL DEFAULT 0,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS project_tasks (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL,
+                    notes TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'todo'
+                        CHECK(status IN ('todo', 'in_progress', 'blocked', 'done')),
+                    sort_order REAL NOT NULL DEFAULT 0,
+                    assignee_agent_id TEXT,
+                    conversation_id TEXT,
+                    created_by TEXT NOT NULL DEFAULT 'user',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    completed_at INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS idx_project_tasks_project ON project_tasks(project_id, status, sort_order);
+            `)
+            for (const table of ['conversations', 'cron_jobs']) {
+                const columns = new Set((db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name))
+                if (!columns.has('project_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN project_id TEXT`)
+            }
+            db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id, updated_at)')
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

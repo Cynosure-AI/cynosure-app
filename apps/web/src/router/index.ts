@@ -41,6 +41,17 @@ const router = createRouter({
       name: 'activity',
       component: () => import('@/views/ActivityLogView.vue')
     },
+    // Projects
+    {
+      path: '/projects',
+      name: 'projects',
+      component: () => import('@/views/ProjectsView.vue')
+    },
+    {
+      path: '/projects/:id',
+      name: 'project-detail',
+      component: () => import('@/views/ProjectDetailView.vue')
+    },
     // Agents
     {
       path: '/agents',

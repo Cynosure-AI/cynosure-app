@@ -272,6 +272,7 @@ export interface ConversationDto {
   title: string
   agentId: string | null
   maWorkspaceId: string | null
+  projectId: string | null
   origin: string
   createdAt: number
   updatedAt: number
@@ -284,4 +285,45 @@ export interface ConversationMessagesResponse {
   latestEventSequence: number
   lastContextTokens: number | null
   executionConfig: ConversationExecutionConfig
+  conversationProjectId?: string | null
+}
+
+export type ProjectTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done'
+
+export interface ProjectDto {
+  id: string
+  name: string
+  description: string
+  /** User-authored instructions added to every run in the project. */
+  instructions: string
+  /** Living summary of goal, state, decisions, and open questions, maintained by agents. */
+  brief: string
+  briefUpdatedAt: number | null
+  /** Optional working directory; file tools may access it and the shell starts there. */
+  rootPath: string
+  memoryFolderId: string | null
+  defaultAgentId: string | null
+  color: string
+  archived: boolean
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  conversationCount?: number
+  openTaskCount?: number
+  lastActivityAt?: number | null
+}
+
+export interface ProjectTaskDto {
+  id: string
+  projectId: string
+  title: string
+  notes: string
+  status: ProjectTaskStatus
+  sortOrder: number
+  assigneeAgentId: string | null
+  conversationId: string | null
+  createdBy: 'user' | 'agent'
+  createdAt: number
+  updatedAt: number
+  completedAt: number | null
 }

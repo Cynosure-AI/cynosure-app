@@ -7,6 +7,8 @@ import { describeCurrentDate } from '../../agent/pre-execution/prompt-smart-tags
 export interface ScheduleToolOptions {
     agentId: string
     executionConfig?: ConversationExecutionConfig
+    /** Jobs created from a project conversation run inside that project. */
+    projectId?: string
 }
 
 export const SCHEDULE_TOOL_NAMES = [
@@ -148,6 +150,7 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
                     enabled: true,
                     oneOff,
                     executionConfig: ownerAgentId(opts.agentId) ? undefined : opts.executionConfig,
+                    projectId: opts.projectId,
                 })
                 scheduler.scheduleCronJob(job.id)
                 return result({

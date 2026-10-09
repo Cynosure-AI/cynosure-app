@@ -23,6 +23,7 @@ import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/provid
 import { getUserSettings } from '../user-settings.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { MEMORY_WRITE_TOOL_NAMES } from '../tools/builtin/memory-tools.js'
+import { mergeProjectMemoryScope, resolveProjectExecutionContext } from '../projects/project-context.js'
 
 const MEMORY_STEWARDSHIP_PROMPT = `When maintaining memory, treat canonical files as the source of truth and retrieval chunks as search-only indexes. Search before creating, patch matching files instead of duplicating facts or appending change logs, and include enough unchanged context for every patch hunk to resolve uniquely. Use Title Case paths such as People/<Person>, Projects/<Project>, Organizations/<Organization>, or Topics/<Topic>. Keep related information together in coherent files; chunk boundaries are not editing boundaries. Use Uncategorized only when no clear category exists.`
 
@@ -121,7 +122,23 @@ export interface PreparedExecution {
  * - Creating the AbortController and AgentExecutor
  * - Post-execution persistence
  */
-export async function prepareAgentExecution(input: PrepareExecutionInput): Promise<PreparedExecution> {
+export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Promise<PreparedExecution> {
+    // A conversation that belongs to a project runs inside it: the project adds
+    // instructions, state, memory scope, and tools. Sub-agents share the parent
+    // conversation id, so they inherit the same project context.
+    const project = resolveProjectExecutionContext(rawInput.conversationId, rawInput.broadcast)
+    const input: PrepareExecutionInput = project
+        ? {
+            ...rawInput,
+            memoryFolderOverrides: mergeProjectMemoryScope({
+                overrides: rawInput.memoryFolderOverrides,
+                projectFolders: project.memoryFolders,
+                assignedFolders: () => getAssignedMemoryFolders(rawInput.preset.id),
+                isFreeChat: isDefaultChatAgent(rawInput.preset),
+            }),
+            systemPromptSuffix: [rawInput.systemPromptSuffix, project.systemPrompt].filter(Boolean).join('\n\n'),
+        }
+        : rawInput
     const {
         preset,
         conversationId,
@@ -251,11 +268,15 @@ export async function prepareAgentExecution(input: PrepareExecutionInput): Promi
 
     const systemMessages = [
         ...promptMessages,
+        ...(project?.stateMessage ? [project.stateMessage] : []),
         ...memoryContext.messages,
     ]
+    const projectToolNames = new Set(project?.tools.map((tool) => tool.name))
 
     return {
-        tools: toolLayer.tools,
+        tools: project
+            ? [...toolLayer.tools.filter((tool) => !projectToolNames.has(tool.name)), ...project.tools]
+            : toolLayer.tools,
         providerId: providerModel.providerId,
         model: providerModel.model,
         contextBundle: { messages: systemMessages, evidence: memoryContext.evidence },

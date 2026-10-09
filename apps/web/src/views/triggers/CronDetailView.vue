@@ -9,6 +9,8 @@ import type {
 } from "../../api/types";
 import { Icon } from "@iconify/vue";
 import AgentSelect from "../../components/shared/AgentSelect.vue";
+import CustomSelect, { type SelectOptionGroup } from "../../components/shared/CustomSelect.vue";
+import type { ProjectDto } from "@shared/types";
 import BaseCard from "../../components/shared/BaseCard.vue";
 import HoverMenu from "../../components/shared/HoverMenu.vue";
 import {
@@ -59,6 +61,16 @@ const cronOneOff = ref(false);
 const cronOutputChannelId = ref("");
 const cronNotificationMode = ref<"always" | "conditional">("always");
 const cronNotificationCondition = ref("");
+const cronProjectId = ref("");
+const allProjects = ref<ProjectDto[]>([]);
+const projectOptions = computed<SelectOptionGroup[]>(() => [{
+  options: [
+    { value: "", label: "No project", iconName: "lucide:circle-off" },
+    ...allProjects.value
+      .filter((project) => !project.archived || project.id === cronProjectId.value)
+      .map((project) => ({ value: project.id, label: project.name, iconName: "lucide:folder-kanban" })),
+  ],
+}]);
 
 // Schedule builder refs
 const dlgFrequency = ref<CronFrequency>("daily");
@@ -103,6 +115,7 @@ const editableSnapshot = computed(() => JSON.stringify({
   outputChannelId: cronOutputChannelId.value,
   notificationMode: cronNotificationMode.value,
   notificationCondition: cronNotificationCondition.value,
+  projectId: cronProjectId.value,
 }));
 const savedSnapshot = ref("");
 const isDirty = computed(() => Boolean(job.value) && editableSnapshot.value !== savedSnapshot.value);
@@ -156,6 +169,7 @@ function populateFields(j: CronJob) {
   cronOutputChannelId.value = j.outputChannelId || "";
   cronNotificationMode.value = j.notificationMode === "conditional" ? "conditional" : "always";
   cronNotificationCondition.value = j.notificationCondition || "";
+  cronProjectId.value = j.projectId || "";
 
   const p = parseCronExpr(j.schedule);
   dlgFrequency.value = p.frequency;
@@ -172,11 +186,14 @@ async function loadJob() {
   loading.value = true;
   loadError.value = "";
   try {
-    const [jobs, agents, channels] = await Promise.all([
+    const [jobs, agents, channels, projects] = await Promise.all([
       api.cronJobs.list(),
       api.agents.list(),
       api.channels.list(),
+      // Projects are optional for a job; a failed list leaves only "No project".
+      api.projects.list(true).catch(() => [] as ProjectDto[]),
     ]);
+    allProjects.value = projects;
     allAgents.value = agents;
     allChannels.value = channels;
     const found = jobs.find((j) => j.id === jobId.value);
@@ -212,6 +229,7 @@ async function save() {
       outputChannelId: cronOutputChannelId.value,
       notificationMode: cronNotificationMode.value,
       notificationCondition: cronNotificationCondition.value,
+      projectId: cronProjectId.value || null,
     });
     saveMessage.value = "Saved";
     setTimeout(() => (saveMessage.value = ""), 2000);
@@ -435,6 +453,16 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 />
                 Free Chat configuration
               </div>
+            </div>
+            <div>
+              <label class="block text-xs text-ink-secondary mb-1.5">Project</label>
+              <CustomSelect
+                v-model="cronProjectId"
+                :groups="projectOptions"
+              />
+              <p class="mt-1.5 text-xs text-ink-faint">
+                Runs start inside the project, with its instructions, brief, tasks, memory folder, and project folder.
+              </p>
             </div>
           </BaseCard>
 

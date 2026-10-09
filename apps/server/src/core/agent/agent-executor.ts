@@ -22,7 +22,7 @@ import {
 import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { getPlanningState } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
-import { preflightFileToolAccess } from '../tools/builtin/file-access-policy.js'
+import { preflightFileToolAccess, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 
 /** Maximum tool-use rounds for the main (orchestrator) agent per request. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
@@ -1039,18 +1039,19 @@ export class AgentExecutor {
 
             const registryTool = tool as RegistryAwareToolDefinition
             if (registryTool.namespaceId === 'builtin:files') {
-                await preflightFileToolAccess({
+                await runInFileAccessScope(this.config.conversationId, () => preflightFileToolAccess({
                     toolName: registryTool.originalName || tool.name,
                     arguments: args as Record<string, unknown>,
                     conversationId: this.config.conversationId,
                     signal,
-                })
+                }))
             }
 
             const timeoutSignal = AbortSignal.timeout(tool.timeout)
             const combined = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
             signal?.throwIfAborted()
-            let execPromise = tool.execute(args, combined)
+            // File tools resolve the conversation's project directory from this scope.
+            let execPromise = runInFileAccessScope(this.config.conversationId, () => tool.execute(args, combined))
             execPromise = Promise.race([
                 execPromise,
                 new Promise<never>((_, reject) => {

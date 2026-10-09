@@ -2,7 +2,7 @@ import type { ToolBehaviorAnnotations, ToolCall, ToolDefinition } from '../gatew
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
 import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
-import { fileToolNeedsFolderApproval } from '../tools/builtin/file-access-policy.js'
+import { fileToolNeedsFolderApproval, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 
 export interface ApprovalResult {
   approved: boolean
@@ -113,7 +113,7 @@ export class HITLGate {
       if (tool?.namespaceId !== 'builtin:files') continue
       try {
         const args = JSON.parse(tc.function.arguments) as Record<string, unknown>
-        if (await fileToolNeedsFolderApproval(tool.originalName || tool.name, args)) {
+        if (await runInFileAccessScope(conversationId, () => fileToolNeedsFolderApproval(tool.originalName || tool.name, args))) {
           specificallyApprovedCalls.add(tc.id)
         }
       } catch { /* Invalid arguments are handled by the executor. */ }

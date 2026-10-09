@@ -13,6 +13,7 @@ import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools
 import { makeManageMcpTool } from "./builtin/manage-mcp.js";
 import { makeFileTools } from "./builtin/file-tools.js";
 import { makeShellTool } from "./builtin/shell-tool.js";
+import { getProjectForConversation } from "../projects/project-store.js";
 import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
@@ -83,19 +84,29 @@ interface BuiltInHydrationContext {
     scheduleExecutionConfig?: ConversationExecutionConfig;
 }
 
+function scheduleOptions(ctx: BuiltInHydrationContext) {
+    return {
+        agentId: ctx.agentId || "",
+        executionConfig: ctx.scheduleExecutionConfig,
+        projectId: ctx.conversationId ? getProjectForConversation(ctx.conversationId)?.id : undefined,
+    };
+}
+
 const BUILTIN_TOOL_HYDRATORS = {
     ...Object.fromEntries(makeFileTools().map((tool) => [tool.name, () => tool])),
-    shell_execute: () => makeShellTool(),
+    shell_execute: (ctx: BuiltInHydrationContext) => makeShellTool({
+        defaultCwd: ctx.conversationId ? getProjectForConversation(ctx.conversationId)?.rootPath : undefined,
+    }),
     manage_mcp: () => makeManageMcpTool(),
     notify_user: (ctx: BuiltInHydrationContext) => makeNotificationTool({
         agentId: ctx.agentId || "",
         conversationId: ctx.conversationId,
         broadcast: ctx.broadcast,
     }),
-    schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[0],
-    schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[1],
-    schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[2],
-    schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools({ agentId: ctx.agentId || "", executionConfig: ctx.scheduleExecutionConfig })[3],
+    schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[0],
+    schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[1],
+    schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[2],
+    schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[3],
     memory_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
         folderFilter: ctx.folderFilter,
         assignedFolders: ctx.assignedFolders,

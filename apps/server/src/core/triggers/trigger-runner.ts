@@ -23,6 +23,8 @@ export interface TriggerRunConfig {
     agent: AgentData | null
     /** Frozen Free Chat configuration for an agentless trigger. */
     executionConfig?: ConversationExecutionConfig
+    /** Project the run belongs to; its conversation is created inside the project. */
+    projectId?: string | null
     /** User message content for this trigger execution */
     userContent: string
     /** Conversation origin label (e.g. 'cron') */
@@ -46,6 +48,11 @@ export interface TriggerRunResult {
     result: AgentExecutorResult
 }
 
+function existingProjectId(projectId: string | null | undefined): string | null {
+    if (!projectId) return null
+    return getDb().prepare('SELECT 1 FROM projects WHERE id = ?').get(projectId) ? projectId : null
+}
+
 /**
  * Shared orchestration for trigger-based agent executions.
  *
@@ -54,7 +61,7 @@ export interface TriggerRunResult {
  * for managing abort controllers and active-run tracking.
  */
 export async function runTriggerExecution(config: TriggerRunConfig): Promise<TriggerRunResult> {
-    const { agent, executionConfig, userContent, origin, title, systemPromptSuffix, broadcast, signal, logPrefix, onConversationCreated } = config
+    const { agent, executionConfig, projectId, userContent, origin, title, systemPromptSuffix, broadcast, signal, logPrefix, onConversationCreated } = config
     if (!agent && !executionConfig) throw new Error('Trigger execution requires an agent or an execution configuration')
     const gateway = getGateway()
     const db = getDb()
@@ -62,8 +69,8 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     // Create conversation
     const conversationId = nanoid()
     db.prepare(
-        'INSERT INTO conversations (id, title, agent_id, origin, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(conversationId, title, agent?.id ?? null, origin, JSON.stringify(executionConfig ?? {}), Date.now(), Date.now())
+        'INSERT INTO conversations (id, title, agent_id, project_id, origin, execution_config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(conversationId, title, agent?.id ?? null, existingProjectId(projectId), origin, JSON.stringify(executionConfig ?? {}), Date.now(), Date.now())
 
     // Notify the caller and persist the trigger input before any fallible
     // context preparation. Failed/cancelled pre-turn work must still leave a

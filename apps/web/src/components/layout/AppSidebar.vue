@@ -6,6 +6,7 @@ import { useProviderStore } from "../../stores/provider.store";
 import { useNotificationStore } from "../../stores/notification.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
+import { useProjectsStore } from "../../stores/projects.store";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { usePreferencesStore } from "../../stores/preferences.store";
 import type { RecentChatFilter } from "../../stores/preferences.store";
@@ -38,6 +39,14 @@ const statusButtonRef = ref<HTMLElement | null>(null);
 const showNotifications = ref(false);
 const workspaceOpen = ref(true);
 const recentChatsOpen = ref(true);
+const projectsOpen = ref(true);
+const projectsStore = useProjectsStore();
+const MAX_SIDEBAR_PROJECTS = 6;
+const sidebarProjects = computed(() =>
+  [...projectsStore.activeProjects]
+    .sort((a, b) => (b.lastActivityAt ?? b.updatedAt) - (a.lastActivityAt ?? a.updatedAt))
+    .slice(0, MAX_SIDEBAR_PROJECTS),
+);
 const recentFilterMenuOpen = ref(false);
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
@@ -116,6 +125,7 @@ function removeFinishedChatInstance(data: { streamId: string; conversationId: st
 }
 
 onMounted(() => {
+  void projectsStore.ensureLoaded().catch(() => undefined);
   loadInstances();
   void loadDreamRuns();
   memoryJobsStore.startPolling();
@@ -495,6 +505,7 @@ const chatRoute = computed(() =>
         >
           <HoverTooltip
             v-for="item in [
+              { to: '/projects', icon: 'lucide:folder-kanban', label: 'Projects' },
               { to: '/cron', icon: 'lucide:calendar-clock', label: 'Scheduled Jobs' },
               { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
               { to: '/memory-folders', icon: 'lucide:database', label: 'Memory' },
@@ -520,6 +531,66 @@ const chatRoute = computed(() =>
               {{ item.label }}
             </template>
           </HoverTooltip>
+        </div>
+      </section>
+
+      <section
+        v-if="!sidebarCollapsed && sidebarProjects.length"
+        class="sidebar-region shrink-0"
+      >
+        <div class="section-separator" />
+        <div class="group/projects-header relative flex items-center">
+          <button
+            type="button"
+            class="region-toggle min-w-0 flex-1 pr-1"
+            :aria-expanded="projectsOpen"
+            @click="projectsOpen = !projectsOpen"
+          >
+            <span>Projects</span>
+            <Icon
+              icon="lucide:chevron-down"
+              class="h-3.5 w-3.5 transition-transform"
+              :class="{ '-rotate-90': !projectsOpen }"
+            />
+          </button>
+          <RouterLink
+            :to="{ name: 'projects', query: { new: '1' } }"
+            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-ink-muted opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/projects-header:opacity-100 focus-visible:opacity-100"
+            aria-label="New project"
+          >
+            <Icon
+              icon="lucide:plus"
+              class="h-4 w-4"
+            />
+          </RouterLink>
+        </div>
+        <div
+          v-show="projectsOpen"
+          class="space-y-0.5"
+        >
+          <RouterLink
+            v-for="project in sidebarProjects"
+            :key="project.id"
+            :to="{ name: 'project-detail', params: { id: project.id } }"
+            class="nav-item"
+            :class="{ active: isActive(`/projects/${project.id}`) || (route.name === 'conversation' && chatStore.activeProjectId === project.id) }"
+          >
+            <span
+              class="flex h-4.5 w-4.5 shrink-0 items-center justify-center"
+              aria-hidden="true"
+            >
+              <span
+                class="h-2.5 w-2.5 rounded-full"
+                :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
+              />
+            </span>
+            <span class="truncate">{{ project.name }}</span>
+            <span
+              v-if="project.openTaskCount"
+              class="ml-auto text-[10px] text-ink-faint"
+              :title="`${project.openTaskCount} open tasks`"
+            >{{ project.openTaskCount }}</span>
+          </RouterLink>
         </div>
       </section>
 

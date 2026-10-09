@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
 import { z } from 'zod';
-import { listFileAccessRoots, resolveFileAccessPath } from './file-access-policy.js';
+import { listEffectiveFileAccessRoots, resolveFileAccessPath } from './file-access-policy.js';
 import type { ToolDefinition, ToolResult, ToolResultContent } from '../../gateway/providers/base.provider.js';
 
 type SortBy = 'name' | 'size' | 'modified';
@@ -85,7 +85,7 @@ function isWithin(parent: string, child: string): boolean {
 }
 
 async function assertNotAllowedRoot(candidate: string): Promise<void> {
-    for (const root of listFileAccessRoots()) {
+    for (const root of listEffectiveFileAccessRoots()) {
         const realRoot = await fs.realpath(root).catch(() => root);
         if (candidate === realRoot) throw new Error('Cannot move or delete an allowed directory root.');
     }
@@ -660,7 +660,7 @@ export function makeFileTools(): ToolDefinition[] {
         define('file_info', 'Get file or directory metadata. Omit path to list the directory roots available to native file tools.',
             z.object({ path: pathField.optional() }), true, false,
             async ({ path: inputPath }) => {
-                if (inputPath === undefined) return jsonResult({ allowedDirectories: listFileAccessRoots() });
+                if (inputPath === undefined) return jsonResult({ allowedDirectories: listEffectiveFileAccessRoots() });
                 return jsonResult(await toFileEntry(await resolveAllowedPath(inputPath)));
             }),
         define('directory_list', 'List a directory or return a tree. Common dependency, build, and cache folders are excluded.',

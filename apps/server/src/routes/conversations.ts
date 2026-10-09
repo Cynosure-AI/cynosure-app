@@ -20,6 +20,7 @@ import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { ContentBlock, ConversationExecutionConfig, MessageToolCall } from '@shared/types'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
+import { getProject, setConversationProject } from '../core/projects/project-store.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
 function escapeSqlLike(value: string): string {
@@ -97,8 +98,10 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
 
 export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
     // POST /api/chat/conversations — create
-    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; origin?: string; executionConfig?: ConversationExecutionConfig } }>('/conversations', async (req) => {
+    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; projectId?: string | null; origin?: string; executionConfig?: ConversationExecutionConfig } }>('/conversations', async (req, reply) => {
         const { title, agentId, maWorkspaceId, origin, executionConfig } = req.body
+        const projectId = req.body.projectId || null
+        if (projectId && !getProject(projectId)) return reply.status(404).send({ error: 'Project not found' })
         const db = getDb()
         const id = nanoid()
         const now = Date.now()
@@ -106,9 +109,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const memoryFolderIds = agentId ? getAssignedMemoryFolders(agentId).map((space) => space.id) : []
         const initialExecutionConfig = executionConfig ?? buildInitialExecutionConfig({ agent, memoryFolderIds })
         db.prepare(
-            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, origin || 'chat', JSON.stringify(initialExecutionConfig), '{}', now, now)
-        return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, origin: origin || 'chat', createdAt: now, updatedAt: now }
+            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, project_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, projectId, origin || 'chat', JSON.stringify(initialExecutionConfig), '{}', now, now)
+        return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, projectId, origin: origin || 'chat', createdAt: now, updatedAt: now }
     })
 
     // POST /api/chat/conversations/:id/fork — clone config and history through one message
@@ -125,6 +128,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 title: string | null
                 agent_id: string | null
                 ma_workspace_id: string | null
+                project_id: string | null
                 origin: string
                 execution_config_json: string
                 metadata_json: string
@@ -148,15 +152,16 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
             db.prepare(`
                 INSERT INTO conversations (
-                    id, title, agent_id, ma_workspace_id, origin, pinned,
+                    id, title, agent_id, ma_workspace_id, project_id, origin, pinned,
                     last_read_at, last_context_tokens, execution_config_json, metadata_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?,
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?,
                     json_set(CASE WHEN json_valid(?) THEN ? ELSE '{}' END, '$.titleGenerationPending', 1), ?, ?)
             `).run(
                 id,
                 title,
                 source.agent_id,
                 source.ma_workspace_id,
+                source.project_id,
                 source.origin || 'chat',
                 now,
                 lastContextTokens,
@@ -315,6 +320,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 title,
                 agentId: source.agent_id,
                 maWorkspaceId: source.ma_workspace_id,
+                projectId: source.project_id,
                 origin: source.origin || 'chat',
                 createdAt: now,
                 updatedAt: now,
@@ -503,9 +509,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     // GET /api/chat/conversations — list (optionally filtered by agent_id or ma_workspace_id)
     // Supports pagination via ?limit=N&offset=N — when limit is set, returns { items, total }
-    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; limit?: string; offset?: string; sort?: string; search?: string; filters?: string } }>('/conversations', async (req) => {
+    app.get<{ Querystring: { agentId?: string; maWorkspaceId?: string; projectId?: string; limit?: string; offset?: string; sort?: string; search?: string; filters?: string } }>('/conversations', async (req) => {
         const db = getDb()
-        const { agentId, maWorkspaceId } = req.query
+        const { agentId, maWorkspaceId, projectId } = req.query
         const limit = req.query.limit ? Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20)) : undefined
         const offset = req.query.offset ? Math.max(0, parseInt(req.query.offset, 10) || 0) : 0
         const search = req.query.search?.trim()
@@ -518,6 +524,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         const conditions: string[] = []
         const params: unknown[] = []
+        if (projectId) {
+            conditions.push('project_id = ?')
+            params.push(projectId)
+        }
         if (maWorkspaceId) {
             conditions.push('ma_workspace_id = ?')
             params.push(maWorkspaceId)
@@ -554,7 +564,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const db = getDb()
 
         // Fetch conversation-level metadata (context tokens + execution config)
-        const convRow = db.prepare('SELECT agent_id, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; last_context_tokens: number | null; execution_config_json: string } | undefined
+        const convRow = db.prepare('SELECT agent_id, project_id, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; project_id: string | null; last_context_tokens: number | null; execution_config_json: string } | undefined
 
         const rows = db
             .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
@@ -615,6 +625,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         return {
             conversationAgentId: convRow?.agent_id ?? null,
+            conversationProjectId: convRow?.project_id ?? null,
             latestEventSequence: (db.prepare(`
                 SELECT MAX(sequence) AS sequence FROM chat_events
                 WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
@@ -772,6 +783,18 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             return { success: true }
         }
     )
+
+    // PATCH /api/chat/conversations/:id/project — move into a project or out of one (null)
+    app.patch<{ Params: { id: string }; Body: { projectId: string | null } }>('/conversations/:id/project', async (req, reply) => {
+        try {
+            if (!setConversationProject(req.params.id, req.body?.projectId || null)) {
+                return reply.status(404).send({ error: 'Conversation not found' })
+            }
+        } catch (error) {
+            return reply.status(404).send({ error: (error as Error).message })
+        }
+        return { success: true, projectId: req.body?.projectId || null }
+    })
 
     // PATCH /api/chat/conversations/:id/read — mark conversation as read
     app.patch<{ Params: { id: string } }>('/conversations/:id/read', async (req) => {
