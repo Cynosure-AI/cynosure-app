@@ -34,24 +34,74 @@
 }
 
 [data-theme="emerald"] body::before {
-  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 20; opacity: .52;
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0.52;
   background:
-    radial-gradient(circle at 0 0, transparent 0 68px, rgba(216,173,69,.8) 69px 70px, transparent 71px 91px, rgba(216,173,69,.42) 92px 93px, transparent 94px),
-    radial-gradient(circle at 100% 10%, transparent 0 70px, rgba(216,173,69,.72) 71px 72px, transparent 73px),
-    radial-gradient(circle at 100% 57%, transparent 0 116px, rgba(216,173,69,.68) 117px 118px, transparent 119px 140px, rgba(216,173,69,.3) 141px 142px, transparent 143px),
-    radial-gradient(circle at 2% 76%, transparent 0 74px, rgba(216,173,69,.62) 75px 76px, transparent 77px 96px, rgba(216,173,69,.28) 97px 98px, transparent 99px),
-    linear-gradient(90deg, rgba(216,173,69,.62), rgba(216,173,69,.62)) 0 68px / 14rem 1px no-repeat,
-    linear-gradient(90deg, rgba(216,173,69,.44), rgba(216,173,69,.44)) 100% calc(100% - 18px) / 13rem 1px no-repeat,
-    linear-gradient(180deg, rgba(216,173,69,.5), rgba(216,173,69,.5)) calc(100% - 10px) 0 / 1px 9rem no-repeat;
+    radial-gradient(
+      circle at 0 0,
+      transparent 0 68px,
+      rgba(216, 173, 69, 0.8) 69px 70px,
+      transparent 71px 91px,
+      rgba(216, 173, 69, 0.42) 92px 93px,
+      transparent 94px
+    ),
+    radial-gradient(
+      circle at 100% 10%,
+      transparent 0 70px,
+      rgba(216, 173, 69, 0.72) 71px 72px,
+      transparent 73px
+    ),
+    radial-gradient(
+      circle at 100% 57%,
+      transparent 0 116px,
+      rgba(216, 173, 69, 0.68) 117px 118px,
+      transparent 119px 140px,
+      rgba(216, 173, 69, 0.3) 141px 142px,
+      transparent 143px
+    ),
+    radial-gradient(
+      circle at 2% 76%,
+      transparent 0 74px,
+      rgba(216, 173, 69, 0.62) 75px 76px,
+      transparent 77px 96px,
+      rgba(216, 173, 69, 0.28) 97px 98px,
+      transparent 99px
+    ),
+    linear-gradient(90deg, rgba(216, 173, 69, 0.62), rgba(216, 173, 69, 0.62)) 0
+      68px / 14rem 1px no-repeat,
+    linear-gradient(90deg, rgba(216, 173, 69, 0.44), rgba(216, 173, 69, 0.44))
+      100% calc(100% - 18px) / 13rem 1px no-repeat,
+    linear-gradient(180deg, rgba(216, 173, 69, 0.5), rgba(216, 173, 69, 0.5))
+      calc(100% - 10px) 0 / 1px 9rem no-repeat;
   clip-path: polygon(18rem 0, 100% 0, 100% 100%, 18rem 100%);
 }
 
 [data-theme="emerald"] body::after {
-  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 20; opacity: .28;
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0.28;
   background:
-    radial-gradient(circle, rgba(216,173,69,.92) 0 1px, transparent 1.35px) 0 0 / 10px 10px,
-    linear-gradient(116deg, transparent 49.75%, rgba(216,173,69,.72) 49.9% 50.1%, transparent 50.25%),
-    linear-gradient(64deg, transparent 49.78%, rgba(216,173,69,.48) 49.92% 50.08%, transparent 50.22%);
+    radial-gradient(circle, rgba(216, 173, 69, 0.92) 0 1px, transparent 1.35px)
+      0 0 / 10px 10px,
+    linear-gradient(
+      116deg,
+      transparent 49.75%,
+      rgba(216, 173, 69, 0.72) 49.9% 50.1%,
+      transparent 50.25%
+    ),
+    linear-gradient(
+      64deg,
+      transparent 49.78%,
+      rgba(216, 173, 69, 0.48) 49.92% 50.08%,
+      transparent 50.22%
+    );
   -webkit-mask-image:
     radial-gradient(ellipse 12rem 8rem at 96% 38%, #000, transparent 72%),
     radial-gradient(ellipse 10rem 7rem at 5% 70%, #000, transparent 72%),
@@ -85,7 +135,9 @@
 /* Blackwall frames the content panel like a HUD readout. */
 [data-theme="blackwall"] .app-content {
   position: relative;
-  box-shadow: 0 0 0 1px var(--bw-line), 0 0 28px rgba(255, 46, 59, 0.1);
+  box-shadow:
+    0 0 0 1px var(--bw-line),
+    0 0 28px rgba(255, 46, 59, 0.1);
 }
 [data-theme="blackwall"] .app-content::before,
 [data-theme="blackwall"] .app-content::after {
@@ -118,8 +170,12 @@
   background-image:
     linear-gradient(var(--bw-red), var(--bw-red)),
     linear-gradient(90deg, rgba(255, 46, 59, 0.1), transparent 55%);
-  background-size: 7rem 2px, 100% 100%;
-  background-position: left bottom, 0 0;
+  background-size:
+    7rem 2px,
+    100% 100%;
+  background-position:
+    left bottom,
+    0 0;
   background-repeat: no-repeat;
   box-shadow: 0 1px 16px rgba(255, 46, 59, 0.1);
 }
@@ -132,7 +188,11 @@
 [data-theme="blackwall"] .dt-header {
   color: var(--color-accent-300);
   border-color: var(--bw-line);
-  background-image: linear-gradient(90deg, rgba(255, 46, 59, 0.14), rgba(255, 46, 59, 0.03));
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 46, 59, 0.14),
+    rgba(255, 46, 59, 0.03)
+  );
 }
 [data-theme="blackwall"] .dt-pagination {
   border-color: var(--bw-line);
@@ -146,10 +206,20 @@
 }
 
 /* Bordered fields light up crimson when hovered or focused. */
-[data-theme="blackwall"] :is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select):hover {
+[data-theme="blackwall"]
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="range"]),
+    textarea,
+    select
+  ):hover {
   border-color: rgba(255, 46, 59, 0.45);
 }
-[data-theme="blackwall"] :is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select):focus {
+[data-theme="blackwall"]
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="range"]),
+    textarea,
+    select
+  ):focus {
   border-color: rgba(255, 46, 59, 0.8);
 }
 
@@ -159,7 +229,9 @@
 }
 [data-theme="blackwall"] .accent-action:not(:disabled):hover {
   background-image: linear-gradient(180deg, #3d0a11, #22060a);
-  box-shadow: inset 0 0 0 1px var(--color-accent-400), 0 0 20px rgba(255, 46, 59, 0.45);
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent-400),
+    0 0 20px rgba(255, 46, 59, 0.45);
 }
 
 /* The empty chat is a breach display: the frame wraps greeting, composer, and
@@ -174,16 +246,26 @@
     /* Corner brackets, with a CP2077 notch on the top-right and bottom-left. */
     linear-gradient(var(--bw-red), var(--bw-red)) top left / 22px 2px no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) top left / 2px 22px no-repeat,
-    linear-gradient(225deg, var(--bw-red) 0 9.2px, transparent 9.2px) top right / 16px 16px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 0 / 16px 2px no-repeat,
+    linear-gradient(225deg, var(--bw-red) 0 9.2px, transparent 9.2px) top
+      right / 16px 16px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 0 / 16px 2px
+      no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) 100% 10px / 2px 16px no-repeat,
-    linear-gradient(45deg, var(--bw-red) 0 9.2px, transparent 9.2px) bottom left / 16px 16px no-repeat,
+    linear-gradient(45deg, var(--bw-red) 0 9.2px, transparent 9.2px) bottom
+      left / 16px 16px no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) 10px 100% / 16px 2px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) 0 calc(100% - 10px) / 2px 16px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 22px 2px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 2px 22px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 0 calc(100% - 10px) / 2px 16px
+      no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 22px 2px
+      no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 2px 22px
+      no-repeat,
     /* Keeps the reading area dark so the wall never sits behind text. */
-    radial-gradient(ellipse 52% 46% at 50% 50%, var(--bw-void) 55%, transparent 100%),
+    radial-gradient(
+        ellipse 52% 46% at 50% 50%,
+        var(--bw-void) 55%,
+        transparent 100%
+      ),
     var(--bw-wall);
   color: var(--bw-red);
   font-size: 10px;
@@ -191,7 +273,14 @@
   letter-spacing: 0.18em;
   white-space: pre;
   pointer-events: none;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  clip-path: polygon(
+    0 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% 100%,
+    10px 100%,
+    0 calc(100% - 10px)
+  );
 }
 /* Ongoing chats keep the wall in the side margins; it fades to solid black
    before the message column, so narrow windows simply show black. */
@@ -200,7 +289,12 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, transparent calc(50% - 40rem), var(--bw-void) calc(50% - 32rem) calc(50% + 32rem), transparent calc(50% + 40rem)),
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 40rem),
+      var(--bw-void) calc(50% - 32rem) calc(50% + 32rem),
+      transparent calc(50% + 40rem)
+    ),
     var(--bw-wall);
   opacity: 0.9;
   pointer-events: none;
@@ -222,17 +316,23 @@
 [data-theme="blackwall"] .chat-empty-state h2 {
   color: var(--bw-red);
   letter-spacing: 0.14em;
-  text-shadow: -1px 0 rgba(0, 217, 255, 0.45), 1px 0 rgba(255, 46, 59, 0.5), 0 0 18px rgba(255, 46, 59, 0.45);
-  animation: blackwall-glitch 7s steps(1) infinite;
+  text-shadow:
+    -1px 0 rgba(0, 217, 255, 0.45),
+    1px 0 rgba(255, 46, 59, 0.5),
+    0 0 18px rgba(255, 46, 59, 0.45);
 }
 @keyframes blackwall-glitch {
-  0%, 93%, 100% {
+  0%,
+  93%,
+  100% {
     transform: none;
     clip-path: none;
   }
   94% {
     transform: translateX(-3px);
-    text-shadow: -3px 0 rgba(0, 217, 255, 0.7), 3px 0 rgba(255, 46, 59, 0.7);
+    text-shadow:
+      -3px 0 rgba(0, 217, 255, 0.7),
+      3px 0 rgba(255, 46, 59, 0.7);
     clip-path: polygon(0 12%, 100% 12%, 100% 46%, 0 46%);
   }
   95% {
@@ -241,7 +341,9 @@
   }
   96% {
     transform: translateX(-1px);
-    text-shadow: 2px 0 rgba(0, 217, 255, 0.6), -2px 0 rgba(255, 46, 59, 0.6);
+    text-shadow:
+      2px 0 rgba(0, 217, 255, 0.6),
+      -2px 0 rgba(255, 46, 59, 0.6);
     clip-path: none;
   }
 }
@@ -264,18 +366,39 @@
     linear-gradient(var(--bw-red), var(--bw-red)) top left / 3px 20px no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) top right / 20px 3px no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) top right / 3px 20px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom left / 20px 3px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom left / 3px 20px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 20px 3px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 3px 20px no-repeat;
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom left / 20px 3px
+      no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom left / 3px 20px
+      no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 20px 3px
+      no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 3px 20px
+      no-repeat;
   filter: drop-shadow(0 0 4px rgba(255, 46, 59, 0.55));
 }
 [data-theme="blackwall"] .chat-empty-icon::after {
   inset: -52px;
   background:
-    linear-gradient(90deg, var(--bw-line) 0 24px, transparent 24px calc(100% - 24px), var(--bw-line) calc(100% - 24px)) center / 100% 1px no-repeat,
-    linear-gradient(180deg, var(--bw-line) 0 24px, transparent 24px calc(100% - 24px), var(--bw-line) calc(100% - 24px)) center / 1px 100% no-repeat,
-    radial-gradient(circle closest-side, transparent 98.5%, var(--bw-line-faint) 99%, transparent 100%);
+    linear-gradient(
+        90deg,
+        var(--bw-line) 0 24px,
+        transparent 24px calc(100% - 24px),
+        var(--bw-line) calc(100% - 24px)
+      )
+      center / 100% 1px no-repeat,
+    linear-gradient(
+        180deg,
+        var(--bw-line) 0 24px,
+        transparent 24px calc(100% - 24px),
+        var(--bw-line) calc(100% - 24px)
+      )
+      center / 1px 100% no-repeat,
+    radial-gradient(
+      circle closest-side,
+      transparent 98.5%,
+      var(--bw-line-faint) 99%,
+      transparent 100%
+    );
 }
 
 @media (max-width: 767px) {
@@ -284,5 +407,132 @@
   }
   [data-theme="blackwall"] .chat-column--empty::after {
     content: none;
+  }
+}
+
+/* Blackwall motion: slow breathing, one-shot boot effects, and a rare scan
+   sweep. Opacity and transform only, and nothing runs for reduced motion. */
+[data-theme="blackwall"] .chat-composer:focus-within {
+  box-shadow:
+    0 0 0 1px rgba(255, 46, 59, 0.75),
+    0 0 26px rgba(255, 46, 59, 0.22);
+}
+[data-theme="blackwall"] .accent-action {
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The wall and frame brackets breathe. */
+  [data-theme="blackwall"] .chat-column::before {
+    animation: blackwall-breathe 7s ease-in-out infinite alternate;
+  }
+  [data-theme="blackwall"] .app-content::before,
+  [data-theme="blackwall"] .app-content::after {
+    animation: blackwall-breathe 4.5s ease-in-out infinite alternate;
+  }
+
+  /* Target lock: the icon brackets tighten while the crosshair pulses. */
+  [data-theme="blackwall"] .chat-empty-icon::before {
+    animation: blackwall-lock 3.2s ease-in-out infinite alternate;
+  }
+  [data-theme="blackwall"] .chat-empty-icon::after {
+    animation: blackwall-breathe 3.2s ease-in-out infinite alternate;
+  }
+  [data-theme="blackwall"] .chat-empty-state h2 {
+    animation: blackwall-glitch 7s steps(1) infinite;
+  }
+
+  /* Newly selected entries and freshly opened pages power on. */
+  [data-theme="blackwall"] .nav-item.active {
+    animation: blackwall-flicker 360ms steps(1) both;
+  }
+  [data-theme="blackwall"] .page-header,
+  [data-theme="blackwall"] .chat-header-bar {
+    animation: blackwall-header-boot 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  [data-theme="blackwall"] .page-header h1 {
+    animation: blackwall-flicker 420ms 120ms steps(1) both;
+  }
+
+  /* New messages slide in from the wall. */
+  [data-theme="blackwall"] .chat-user-message {
+    animation: blackwall-materialize 280ms ease-out both;
+  }
+}
+
+@keyframes blackwall-scan {
+  0% {
+    transform: translateY(-18vh);
+    opacity: 0;
+  }
+  4% {
+    opacity: 1;
+  }
+  30% {
+    transform: translateY(100vh);
+    opacity: 1;
+  }
+  31%,
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+@keyframes blackwall-breathe {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes blackwall-lock {
+  from {
+    transform: scale(1.06);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes blackwall-flicker {
+  0% {
+    opacity: 0.2;
+  }
+  20% {
+    opacity: 1;
+  }
+  35% {
+    opacity: 0.45;
+  }
+  55%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes blackwall-header-boot {
+  from {
+    background-size:
+      0 2px,
+      100% 100%;
+  }
+  to {
+    background-size:
+      7rem 2px,
+      100% 100%;
+  }
+}
+@keyframes blackwall-materialize {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
