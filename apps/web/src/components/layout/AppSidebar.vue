@@ -748,7 +748,7 @@ const chatRoute = computed(() =>
   color: var(--color-ink-secondary);
   cursor: pointer;
   margin-bottom: 2px;
-  transition: all 150ms ease;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
   width: 100%;
 }
 
