@@ -303,12 +303,12 @@ const chatRoute = computed(() =>
                 v-if="showNotifications"
                 role="dialog"
                 aria-label="Notifications"
-                class="w-80 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
+                class="notification-popover w-80 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
                 :style="notifPopoverStyle"
                 @click.stop
               >
                 <!-- Header -->
-                <div class="flex items-center justify-between px-3 py-2.5 border-b border-theme-800">
+                <div class="notification-popover-header flex items-center justify-between px-3 py-2.5 border-b border-theme-800">
                   <span class="text-xs font-semibold text-theme-200">Notifications</span>
                   <div class="flex items-center gap-1">
                     <RouterLink
@@ -348,7 +348,7 @@ const chatRoute = computed(() =>
                     :key="notif.id"
                     role="button"
                     tabindex="0"
-                    class="w-full text-left px-3 py-2.5 hover:bg-theme-800/60 transition-colors border-b border-theme-800/50 last:border-0 flex gap-2.5 cursor-pointer"
+                    class="notification-popover-item w-full text-left px-3 py-2.5 hover:bg-theme-800/60 transition-colors border-b border-theme-800/50 last:border-0 flex gap-2.5 cursor-pointer"
                     :class="{ 'bg-theme-800/30': !notif.read }"
                     @click="navigateToNotification(notif)"
                     @keydown.enter.prevent="navigateToNotification(notif)"

@@ -193,7 +193,9 @@
   text-shadow: 0 0 16px rgba(255, 46, 59, 0.3);
 }
 
-/* Command search uses the same crimson HUD frame and navigation highlights. */
+/* Floating panels share the crimson HUD frame, including teleported panels. */
+[data-theme="blackwall"] .notification-popover,
+[data-theme="blackwall"] .planning-task-panel,
 [data-theme="blackwall"] .command-palette {
   border-color: var(--bw-line);
   background:
@@ -201,6 +203,36 @@
     linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 32px 2px no-repeat,
     var(--bw-void);
   box-shadow: 0 0 24px var(--bw-glow), 0 24px 80px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="blackwall"] .notification-popover-header,
+[data-theme="blackwall"] .planning-task-panel > div:first-child {
+  border-color: var(--bw-line-faint);
+  background: linear-gradient(90deg, rgba(255, 46, 59, 0.1), transparent 55%);
+}
+
+[data-theme="blackwall"] .notification-popover-header > span {
+  color: var(--color-accent-fg);
+  text-transform: uppercase;
+  letter-spacing: var(--theme-heading-spacing);
+}
+
+[data-theme="blackwall"] .notification-popover-item {
+  border-color: var(--bw-line-faint);
+}
+
+[data-theme="blackwall"] .planning-task-toggle {
+  color: var(--color-accent-fg);
+}
+
+[data-theme="blackwall"] .planning-task-toggle[aria-expanded="true"] {
+  box-shadow: inset 0 0 0 1px var(--bw-line), 0 0 12px var(--bw-glow);
+}
+
+[data-theme="blackwall"] .planning-task-count {
+  background: var(--color-accent-950);
+  color: var(--color-accent-fg);
+  box-shadow: inset 0 0 0 1px var(--bw-line);
 }
 
 [data-theme="blackwall"] .palette-search {

@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Blackwall Theme — holographic HUD: deep black, glowing crimson, cyan data
+   Blackwall Theme — holographic HUD: deep black and glowing crimson
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Variable overrides ── */
 [data-theme="blackwall"] {
-  --color-accent-fg: #00d9ff;
+  --color-accent-fg: #ff5a64;
   --color-accent-on: #050507;
 
   --color-theme-950: #050507;

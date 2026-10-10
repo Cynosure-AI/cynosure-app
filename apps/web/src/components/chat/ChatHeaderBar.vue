@@ -111,7 +111,7 @@ async function newChat(): Promise<void> {
     <button
       v-if="hasPlanningTasks"
       type="button"
-      class="relative shrink-0 rounded-lg p-1.5 transition-colors"
+      class="planning-task-toggle relative shrink-0 rounded-lg p-1.5 transition-colors"
       :class="taskListOpen
         ? 'bg-accent-500/15 text-accent-fg'
         : 'text-theme-300 hover:bg-theme-800'"
@@ -125,7 +125,7 @@ async function newChat(): Promise<void> {
         class="h-4 w-4"
       />
       <span
-        class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full accent-action bg-accent-600 px-1 text-[9px] font-semibold leading-none text-accent-on"
+        class="planning-task-count absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-600 px-1 text-[9px] font-semibold leading-none text-accent-on"
       >
         {{ planningTaskCount > 9 ? '9+' : planningTaskCount }}
       </span>
