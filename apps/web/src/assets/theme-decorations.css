@@ -135,32 +135,41 @@
 /* Blackwall frames the content panel like a HUD readout. */
 [data-theme="blackwall"] .app-content {
   position: relative;
-  box-shadow:
-    0 0 0 1px var(--bw-line),
-    0 0 28px rgba(255, 46, 59, 0.1);
+  --tw-ring-shadow: 0 0 #0000;
+  box-shadow: none;
+  border-radius: 0;
+  /* Cut every painted layer, including headers and the wall, to the bezel. */
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    0 calc(100% - 10px),
+    0 10px
+  );
 }
-[data-theme="blackwall"] .app-content::before,
 [data-theme="blackwall"] .app-content::after {
   content: "";
   position: absolute;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--bw-red);
+  inset: 0;
+  background:
+    linear-gradient(135deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) top left / 12px 12px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 10px 0 / 16px 2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 0 10px / 2px 16px no-repeat,
+    linear-gradient(225deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) top right / 12px 12px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 0 / 16px 2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 100% 10px / 2px 16px no-repeat,
+    linear-gradient(45deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) bottom left / 12px 12px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 10px 100% / 16px 2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 0 calc(100% - 10px) / 2px 16px no-repeat,
+    linear-gradient(315deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) bottom right / 12px 12px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 100% / 16px 2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 100% calc(100% - 10px) / 2px 16px no-repeat;
   pointer-events: none;
   z-index: 50;
   filter: drop-shadow(0 0 4px rgba(255, 46, 59, 0.6));
-}
-[data-theme="blackwall"] .app-content::before {
-  top: 0;
-  left: 0;
-  border-right: 0;
-  border-bottom: 0;
-}
-[data-theme="blackwall"] .app-content::after {
-  right: 0;
-  bottom: 0;
-  border-top: 0;
-  border-left: 0;
 }
 
 /* Page and chat headers read as HUD title bars. */
@@ -293,32 +302,13 @@
     0 0 20px rgba(255, 46, 59, 0.45);
 }
 
-/* The empty chat is a breach display: the frame wraps greeting, composer, and
-   recents, with the red data wall bleeding in from the edges. */
+/* The empty chat wall fills the column; the content panel owns the bezel. */
 [data-theme="blackwall"] .chat-column--empty::before {
   content: "CYNOSURE\A SECURE // LOCAL // AUGMENTED" / "";
   position: absolute;
-  inset: 1rem;
+  inset: 0;
   padding: 1rem 1.5rem;
-  border: 1px solid var(--bw-line-faint);
   background:
-    /* Corner brackets, with a CP2077 notch on the top-right and bottom-left. */
-    linear-gradient(var(--bw-red), var(--bw-red)) top left / 22px 2px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) top left / 2px 22px no-repeat,
-    linear-gradient(225deg, var(--bw-red) 0 9.2px, transparent 9.2px) top
-      right / 16px 16px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 0 / 16px 2px
-      no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) 100% 10px / 2px 16px no-repeat,
-    linear-gradient(45deg, var(--bw-red) 0 9.2px, transparent 9.2px) bottom
-      left / 16px 16px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) 10px 100% / 16px 2px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) 0 calc(100% - 10px) / 2px 16px
-      no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 22px 2px
-      no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 2px 22px
-      no-repeat,
     /* Keeps the reading area dark so the wall never sits behind text. */
     radial-gradient(
         ellipse 52% 46% at 50% 50%,
@@ -332,14 +322,6 @@
   letter-spacing: 0.18em;
   white-space: pre;
   pointer-events: none;
-  clip-path: polygon(
-    0 0,
-    calc(100% - 10px) 0,
-    100% 10px,
-    100% 100%,
-    10px 100%,
-    0 calc(100% - 10px)
-  );
 }
 /* Ongoing chats keep the wall in the side margins; it fades to solid black
    before the message column, so narrow windows simply show black. */
@@ -488,7 +470,6 @@
   [data-theme="blackwall"] .chat-column::before {
     animation: blackwall-breathe 7s ease-in-out infinite alternate;
   }
-  [data-theme="blackwall"] .app-content::before,
   [data-theme="blackwall"] .app-content::after {
     animation: blackwall-breathe 4.5s ease-in-out infinite alternate;
   }
