@@ -8,12 +8,12 @@
   --color-accent-on: #050507;
 
   --color-theme-950: #050507;
-  --color-theme-900: #0a0a0d;
-  --color-theme-800: #111115;
-  --color-theme-700: #1d1c21;
-  --color-theme-600: #2e2c33;
-  --color-theme-500: #4a4850;
-  --color-theme-400: #7d808a;
+  --color-theme-900: #0b090b;
+  --color-theme-800: #131012;
+  --color-theme-700: #2a171b;
+  --color-theme-600: #40222a;
+  --color-theme-500: #643a44;
+  --color-theme-400: #8d8a90;
   --color-theme-300: #a3a6b0;
   --color-theme-200: #c9cbd2;
   --color-theme-100: #eaeaea;
@@ -37,10 +37,25 @@
   --bw-line-faint: rgba(255, 46, 59, 0.16);
   --bw-grid: rgba(255, 46, 59, 0.05);
   --bw-void: #08080a;
+  /* The Blackwall itself: irregular red data columns with horizontal tears,
+     glowing at the base. Shared by every surface that shows the wall. */
+  --bw-wall:
+    linear-gradient(transparent 7%, rgba(255, 46, 59, 0.1) 7% 7.3%, transparent 7.3% 72%, rgba(255, 46, 59, 0.08) 72% 72.25%, transparent 72.25% 86%, rgba(255, 46, 59, 0.12) 86% 86.6%, transparent 86.6%),
+    repeating-linear-gradient(90deg, rgba(255, 46, 59, 0.07) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(90deg, transparent 0 37px, rgba(255, 46, 59, 0.14) 37px 39px, transparent 39px 83px, rgba(255, 46, 59, 0.09) 83px 84px, transparent 84px 131px),
+    linear-gradient(0deg, rgba(255, 46, 59, 0.14), transparent 45%),
+    linear-gradient(var(--bw-grid) 1px, transparent 1px) 0 0 / 48px 48px,
+    linear-gradient(90deg, var(--bw-grid) 1px, transparent 1px) 0 0 / 48px 48px;
   --bw-glow: rgba(255, 46, 59, 0.18);
 
   --color-user-message: #1c080c;
   --color-user-message-text: #eaeaea;
+  --color-control-surface: #0b090b;
+  --color-table-surface: #09080a;
+  --color-table-header: #170a0d;
+  --color-table-border: #2a171b;
+  --color-table-hover: color-mix(in srgb, #ff2e3b 6%, transparent);
+  --color-table-selected: color-mix(in srgb, #ff2e3b 11%, transparent);
 
   --radius-xs: 0px;
   --radius-sm: 1px;
@@ -61,6 +76,7 @@
   /* Conversations sit on solid black; the data wall belongs to the empty view. */
   --theme-content-background:
     radial-gradient(ellipse 70% 18rem at 50% -6rem, rgba(255, 46, 59, 0.07), transparent),
+    linear-gradient(0deg, rgba(255, 46, 59, 0.06), transparent 14rem),
     var(--bw-void);
   --theme-sidebar-background: linear-gradient(180deg, #09090c, #050507);
   --theme-sidebar-border: var(--bw-line);

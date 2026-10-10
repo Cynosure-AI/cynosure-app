@@ -278,7 +278,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
   <div class="h-full overflow-y-auto">
     <header
       v-if="job"
-      class="z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5"
+      class="page-header z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5"
     >
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex flex-wrap items-start justify-between gap-3">

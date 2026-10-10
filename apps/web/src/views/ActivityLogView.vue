@@ -607,7 +607,7 @@ watch(searchQuery, () => {
     class="h-full overflow-y-auto"
     @scroll.passive="handleScroll"
   >
-    <header class="z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5">
+    <header class="page-header z-10 border-b border-theme-800/60 bg-theme-950/95 py-4 backdrop-blur-sm sm:sticky sm:top-0 sm:py-5">
       <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:px-8">
         <div>
           <h1 class="text-2xl font-bold text-theme-100">

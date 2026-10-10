@@ -111,6 +111,48 @@
   border-left: 0;
 }
 
+/* Page and chat headers read as HUD title bars. */
+[data-theme="blackwall"] .page-header,
+[data-theme="blackwall"] .chat-header-bar {
+  border-bottom-color: var(--bw-line);
+  background-image:
+    linear-gradient(var(--bw-red), var(--bw-red)),
+    linear-gradient(90deg, rgba(255, 46, 59, 0.1), transparent 55%);
+  background-size: 7rem 2px, 100% 100%;
+  background-position: left bottom, 0 0;
+  background-repeat: no-repeat;
+  box-shadow: 0 1px 16px rgba(255, 46, 59, 0.1);
+}
+[data-theme="blackwall"] .page-header h1 {
+  color: var(--bw-red);
+  text-shadow: 0 0 16px rgba(255, 46, 59, 0.3);
+}
+
+/* Data tables: crimson header strip and pagination. */
+[data-theme="blackwall"] .dt-header {
+  color: var(--color-accent-300);
+  border-color: var(--bw-line);
+  background-image: linear-gradient(90deg, rgba(255, 46, 59, 0.14), rgba(255, 46, 59, 0.03));
+}
+[data-theme="blackwall"] .dt-pagination {
+  border-color: var(--bw-line);
+}
+[data-theme="blackwall"] .dt-pagination button:not(:disabled) {
+  color: var(--color-accent-300);
+}
+[data-theme="blackwall"] .dt-pagination button:not(:disabled):hover {
+  color: var(--color-accent-200);
+  text-shadow: 0 0 8px rgba(255, 46, 59, 0.5);
+}
+
+/* Bordered fields light up crimson when hovered or focused. */
+[data-theme="blackwall"] :is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select):hover {
+  border-color: rgba(255, 46, 59, 0.45);
+}
+[data-theme="blackwall"] :is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select):focus {
+  border-color: rgba(255, 46, 59, 0.8);
+}
+
 /* Primary actions glow as outlined crimson controls instead of solid fills. */
 [data-theme="blackwall"] .accent-action:not(:disabled) {
   color: var(--color-accent-400);
@@ -142,14 +184,7 @@
     linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 2px 22px no-repeat,
     /* Keeps the reading area dark so the wall never sits behind text. */
     radial-gradient(ellipse 52% 46% at 50% 50%, var(--bw-void) 55%, transparent 100%),
-    /* Horizontal tears through the wall. */
-    linear-gradient(transparent 7%, rgba(255, 46, 59, 0.1) 7% 7.3%, transparent 7.3% 72%, rgba(255, 46, 59, 0.08) 72% 72.25%, transparent 72.25% 86%, rgba(255, 46, 59, 0.12) 86% 86.6%, transparent 86.6%),
-    /* The wall: irregular vertical data columns that glow at the base. */
-    repeating-linear-gradient(90deg, rgba(255, 46, 59, 0.07) 0 1px, transparent 1px 9px),
-    repeating-linear-gradient(90deg, transparent 0 37px, rgba(255, 46, 59, 0.14) 37px 39px, transparent 39px 83px, rgba(255, 46, 59, 0.09) 83px 84px, transparent 84px 131px),
-    linear-gradient(0deg, rgba(255, 46, 59, 0.14), transparent 45%),
-    linear-gradient(var(--bw-grid) 1px, transparent 1px) 0 0 / 48px 48px,
-    linear-gradient(90deg, var(--bw-grid) 1px, transparent 1px) 0 0 / 48px 48px;
+    var(--bw-wall);
   color: var(--bw-red);
   font-size: 10px;
   line-height: 1.7;
@@ -157,6 +192,18 @@
   white-space: pre;
   pointer-events: none;
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+/* Ongoing chats keep the wall in the side margins; it fades to solid black
+   before the message column, so narrow windows simply show black. */
+[data-theme="blackwall"] .chat-column:not(.chat-column--empty)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 40rem), var(--bw-void) calc(50% - 32rem) calc(50% + 32rem), transparent calc(50% + 40rem)),
+    var(--bw-wall);
+  opacity: 0.9;
+  pointer-events: none;
 }
 [data-theme="blackwall"] .chat-column--empty::after {
   content: "PEOPLE\A DATA\A PATTERNS\A ANALYSIS\A INTELLIGENCE" / "";
