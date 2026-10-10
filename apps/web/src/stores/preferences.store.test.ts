@@ -75,6 +75,17 @@ describe('preferences profile', () => {
     expect(document.documentElement.dataset.theme).toBe('crimson')
   })
 
+  test('migrates the retired VirtualBoy theme to Blackwall', async () => {
+    localStorage.setItem(SK_THEME, 'virtualboy')
+
+    const store = usePreferencesStore()
+    await nextTick()
+
+    expect(store.theme).toBe('blackwall')
+    expect(localStorage.getItem(SK_THEME)).toBe('blackwall')
+    expect(document.documentElement.dataset.theme).toBe('blackwall')
+  })
+
   test('defaults to Crimson and toggles between Crimson and Light', () => {
     const store = usePreferencesStore()
     expect(store.theme).toBe('crimson')

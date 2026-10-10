@@ -13,8 +13,8 @@ import {
     SK_VOICE_TRANSCRIPTION_MODE, SK_REMOTE_TRANSCRIPTION_PROVIDER, SK_REMOTE_TRANSCRIPTION_MODEL,
 } from '@/utils/storage-keys'
 
-export type ThemeId = 'dark' | 'light' | 'virtualboy' | 'crimson' | 'cyberpunk' | 'emerald' | 'industrial' | 'monochrome'
-const THEME_IDS = new Set<ThemeId>(['dark', 'light', 'virtualboy', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome'])
+export type ThemeId = 'dark' | 'light' | 'blackwall' | 'crimson' | 'cyberpunk' | 'emerald' | 'industrial' | 'monochrome'
+const THEME_IDS = new Set<ThemeId>(['dark', 'light', 'blackwall', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome'])
 
 export type { ContextStrategy }
 export type VoiceTranscriptionMode = 'local' | 'remote'
@@ -26,6 +26,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const userSettingsLoaded = ref(false)
     const userSettingsSaving = ref(false)
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'crimson')
+    // Blackwall replaced the VirtualBoy theme.
+    if ((theme.value as string) === 'virtualboy') theme.value = 'blackwall'
     if (!THEME_IDS.has(theme.value)) theme.value = 'crimson'
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const quickResponses = useLocalStorage(SK_QUICK_RESPONSES, false)

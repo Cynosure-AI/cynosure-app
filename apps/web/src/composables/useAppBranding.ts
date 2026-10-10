@@ -22,7 +22,7 @@ export function useAppBranding() {
             case 'industrial': return cynosureLogoYellow
             case 'monochrome': return cynosureLogoRed
             case 'dark': return cynosureLogoBlue
-            case 'virtualboy': return cynosureLogoRed
+            case 'blackwall': return cynosureLogoRed
             case 'crimson': return cynosureLogoRed
             default: return cynosureLogoRed
         }
@@ -36,7 +36,7 @@ export function useAppBranding() {
             case 'industrial': return cynosureLogoTextYellow
             case 'monochrome': return cynosureLogoTextRed
             case 'dark': return cynosureLogoTextBlue
-            case 'virtualboy': return cynosureLogoTextRed
+            case 'blackwall': return cynosureLogoTextRed
             case 'crimson': return cynosureLogoTextRed
             default: return cynosureLogoTextRed
         }

@@ -556,9 +556,9 @@ onMounted(() => {
     <!-- Empty state -->
     <div
       v-else-if="chatStore.messages.length === 0"
-      class="flex flex-col items-center justify-center h-full text-ink-secondary"
+      class="chat-empty-state flex flex-col items-center justify-center h-full text-ink-secondary"
     >
-      <div class="relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
+      <div class="chat-empty-icon relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
         <RouterLink
           v-if="conversationAgentId"
           :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"

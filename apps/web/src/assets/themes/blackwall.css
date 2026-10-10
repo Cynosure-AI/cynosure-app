@@ -1,0 +1,105 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Blackwall Theme — holographic HUD: deep black, glowing crimson, cyan data
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variable overrides ── */
+[data-theme="blackwall"] {
+  --color-accent-fg: #00d9ff;
+  --color-accent-on: #050507;
+
+  --color-theme-950: #050507;
+  --color-theme-900: #0a0a0d;
+  --color-theme-800: #111115;
+  --color-theme-700: #1d1c21;
+  --color-theme-600: #2e2c33;
+  --color-theme-500: #4a4850;
+  --color-theme-400: #7d808a;
+  --color-theme-300: #a3a6b0;
+  --color-theme-200: #c9cbd2;
+  --color-theme-100: #eaeaea;
+
+  --color-accent-50: #fff1f2;
+  --color-accent-100: #ffdcdf;
+  --color-accent-200: #ffb8bd;
+  --color-accent-300: #ff8a92;
+  --color-accent-400: #ff5a64;
+  --color-accent-500: #ff2e3b;
+  --color-accent-600: #f0222f;
+  --color-accent-700: #b3242f;
+  --color-accent-800: #8a1a23;
+  --color-accent-900: #5c1118;
+  --color-accent-950: #2a070b;
+
+  --bw-red: #ff2e3b;
+  --bw-red-muted: #b3242f;
+  --bw-cyan: #00d9ff;
+  --bw-line: rgba(255, 46, 59, 0.45);
+  --bw-line-faint: rgba(255, 46, 59, 0.16);
+  --bw-grid: rgba(255, 46, 59, 0.05);
+  --bw-void: #08080a;
+  --bw-glow: rgba(255, 46, 59, 0.18);
+
+  --color-user-message: #1c080c;
+  --color-user-message-text: #eaeaea;
+
+  --radius-xs: 0px;
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 3px;
+  --radius-3xl: 3px;
+  --radius-4xl: 4px;
+
+  --theme-glow-strong: 0 0 0 1px rgba(255, 46, 59, 0.55), 0 0 18px rgba(255, 46, 59, 0.28);
+
+  font-family: "IBM Plex Mono", "Cascadia Code", "SF Mono", "Consolas", monospace;
+  letter-spacing: 0.01em;
+  color-scheme: dark;
+
+  --theme-shell-background: var(--color-theme-950);
+  /* Conversations sit on solid black; the data wall belongs to the empty view. */
+  --theme-content-background:
+    radial-gradient(ellipse 70% 18rem at 50% -6rem, rgba(255, 46, 59, 0.07), transparent),
+    var(--bw-void);
+  --theme-sidebar-background: linear-gradient(180deg, #09090c, #050507);
+  --theme-sidebar-border: var(--bw-line);
+  --theme-sidebar-shadow: 0 0 22px var(--bw-glow);
+  --theme-composer-background:
+    linear-gradient(var(--bw-red), var(--bw-red)) top left / 32px 2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 32px 2px no-repeat,
+    #0b0b0e;
+  --theme-composer-shadow: 0 0 0 1px var(--bw-line), 0 0 20px rgba(255, 46, 59, 0.12);
+  --theme-heading-shadow: none;
+  --theme-heading-transform: uppercase;
+  --theme-heading-spacing: .1em;
+  --theme-region-label-color: var(--bw-red);
+  --theme-nav-active-background:
+    linear-gradient(225deg, var(--bw-red) 0 8.2px, transparent 8.2px) top right / 14px 14px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) left / 3px 100% no-repeat,
+    linear-gradient(90deg, rgba(255, 46, 59, 0.16), rgba(255, 46, 59, 0.03));
+  --theme-nav-active-shadow: inset 0 0 12px rgba(255, 46, 59, 0.1);
+  --theme-nav-active-border: 1px solid rgba(255, 46, 59, 0.8);
+  --theme-nav-active-clip: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  --theme-selection-background: rgba(255, 46, 59, 0.35);
+  --theme-scrollbar-size: 6px;
+  --theme-scrollbar-track: #050507;
+  --theme-scrollbar-thumb: rgba(255, 46, 59, 0.28);
+  --theme-scrollbar-hover: rgba(255, 46, 59, 0.5);
+  --theme-scrollbar-radius: 0;
+  --theme-action-gradient: linear-gradient(180deg, #2a070b, #17050a);
+  --theme-action-shadow: inset 0 0 0 1px var(--bw-red), 0 0 14px rgba(255, 46, 59, 0.3);
+
+  --color-ink-secondary: #c4c6cf;
+  --color-ink-muted: #a3a6b0;
+  --color-ink-faint: #8d909b;
+}
+
+[data-theme="blackwall"] .chat-composer {
+  border-color: transparent;
+}
+
+[data-theme="blackwall"] .chat-user-message {
+  border-color: var(--bw-line);
+  box-shadow: inset 0 0 0 1px var(--bw-line), 0 0 12px rgba(255, 46, 59, 0.1);
+}

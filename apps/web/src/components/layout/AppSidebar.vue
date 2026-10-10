@@ -787,7 +787,7 @@ const chatRoute = computed(() =>
   align-items: center;
   justify-content: space-between;
   padding: 0.65rem 0.75rem 0.4rem;
-  color: var(--color-theme-500, #71717a);
+  color: var(--theme-region-label-color, var(--color-theme-500, #71717a));
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.06em;

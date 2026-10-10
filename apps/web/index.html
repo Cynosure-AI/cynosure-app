@@ -10,7 +10,7 @@
     // Keep this list in sync with ThemeId in preferences.store.ts.
     try {
       const storedTheme = localStorage.getItem('cy-theme')
-      const supportedThemes = new Set(['dark', 'light', 'virtualboy', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome'])
+      const supportedThemes = new Set(['dark', 'light', 'blackwall', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome'])
       const theme = supportedThemes.has(storedTheme) ? storedTheme : 'crimson'
       if (theme !== storedTheme) localStorage.setItem('cy-theme', theme)
       document.documentElement.dataset.theme = theme
