@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 const chat = vi.hoisted(() => ({
@@ -11,18 +11,26 @@ const chat = vi.hoisted(() => ({
   modelInfoStatus: 'idle',
   resolvedModelProvider: null,
   cancelStream: vi.fn(async () => undefined),
+  setSessionModel: vi.fn(),
 }))
 
 vi.mock('../../../stores/chat.store', () => ({ useChatStore: () => chat }))
 vi.mock('../../../stores/preferences.store', () => ({ usePreferencesStore: () => ({ whisperEnabled: false }) }))
 vi.mock('../../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ get: () => null }) }))
-vi.mock('../../../stores/provider.store', () => ({ useProviderStore: () => ({ lastUsedProviderId: 'provider', providers: [] }) }))
+vi.mock('../../../stores/provider.store', () => ({ useProviderStore: () => ({
+  lastUsedProviderId: 'provider',
+  providers: [{ id: 'provider', name: 'Provider', type: 'openai', defaultModel: 'test-model' }],
+  listModelItems: vi.fn(async () => [{ id: 'test-model', inputModalities: ['text'] }]),
+  setLastUsed: vi.fn(),
+}) }))
 vi.mock('../../../composables/useWhisper', () => ({ useWhisper: () => ({
   status: { value: 'idle' }, progress: { value: 0 }, downloadedModels: { value: [] },
   startRecording: vi.fn(), stopRecording: vi.fn(),
 }) }))
 
 import InputToolbar from './InputToolbar.vue'
+import HoverTooltip from '../../shared/HoverTooltip.vue'
+import { api } from '../../../api/client'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -52,4 +60,39 @@ test('places thinking effort immediately before the model selectors', () => {
   const button = wrapper.find('thinking-mode-button-stub').element
   expect(button.nextElementSibling?.getAttribute('aria-label')).toBe('Select provider and model')
   expect(button.nextElementSibling?.nextElementSibling?.classList.contains('lg:flex')).toBe(true)
+})
+
+test.each(['toggle', 'escape', 'outside', 'selection'])('hides model details while the dropdown is open and restores them after %s', async (closeMethod) => {
+  vi.spyOn(api.modelFavorites, 'get').mockResolvedValue({ favorites: [], initialized: true })
+  const wrapper = mount(InputToolbar, {
+    attachTo: document.body,
+    props: { canSend: false, isRunning: false, editingQueue: false },
+    global: { stubs: {
+      SplitButton: true, ModelSelectorModal: true, ChatOptionsMenu: true, ThinkingModeButton: true,
+    } },
+  })
+  await flushPromises()
+
+  const tooltipTrigger = wrapper.findComponent(HoverTooltip).get('.inline-flex')
+  await tooltipTrigger.trigger('mouseenter')
+  expect(document.body.textContent).toContain('Capabilities')
+
+  const selector = wrapper.get('[role="combobox"]')
+  await selector.trigger('click')
+  expect(wrapper.find('[role="listbox"]').exists()).toBe(true)
+  await wrapper.get('[role="option"]').trigger('mouseenter')
+  expect(document.body.textContent).not.toContain('Capabilities')
+
+  if (closeMethod === 'toggle') await selector.trigger('click')
+  else if (closeMethod === 'escape') await wrapper.get('input[placeholder="Search…"]').trigger('keydown', { key: 'Escape' })
+  else if (closeMethod === 'outside') {
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flushPromises()
+  } else await wrapper.get('[role="option"]').trigger('click')
+
+  expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+  await tooltipTrigger.trigger('mouseleave')
+  await tooltipTrigger.trigger('mouseenter')
+  expect(document.body.textContent).toContain('Capabilities')
+  wrapper.unmount()
 })

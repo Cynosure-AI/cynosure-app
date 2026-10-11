@@ -94,9 +94,11 @@ const emit = defineEmits<{
   change: [value: string];
   "option-action": [option: SelectOption];
   open: [];
+  "open-change": [value: boolean];
 }>();
 
 const isOpen = ref(false);
+watch(isOpen, (value) => emit("open-change", value));
 const containerRef = ref<HTMLElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
 const filterInputRef = ref<HTMLInputElement | null>(null);
