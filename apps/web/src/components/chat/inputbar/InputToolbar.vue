@@ -45,6 +45,7 @@ const agentDefs = useAgentDefinitionsStore();
 const providerStore = useProviderStore();
 
 const showModelModal = ref(false);
+const modelDropdownOpen = ref(false);
 
 const selectedAgent = computed(() =>
   chatStore.activeAgentId ? agentDefs.get(chatStore.activeAgentId) : null,
@@ -236,6 +237,7 @@ async function toggleMic(): Promise<void> {
       <HoverTooltip
         placement="above"
         :max-width="280"
+        :disabled="modelDropdownOpen"
       >
         <div class="w-56">
           <ProviderModelSelect
@@ -254,6 +256,7 @@ async function toggleMic(): Promise<void> {
             size="sm"
             :bare-trigger="true"
             @change="onModelProviderOverride"
+            @open-change="modelDropdownOpen = $event"
           />
         </div>
 

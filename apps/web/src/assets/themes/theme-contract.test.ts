@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, test } from 'vitest'
 
-const themes = ['light', 'dark', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome', 'virtualboy']
+const themes = ['light', 'dark', 'crimson', 'cyberpunk', 'emerald', 'industrial', 'monochrome', 'blackwall']
 
 function color(css: string, token: string): string {
   const matches = [...css.matchAll(new RegExp(`--${token}:\\s*(#[0-9a-f]{6})\\s*;`, 'gi'))]

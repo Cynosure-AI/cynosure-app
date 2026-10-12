@@ -389,10 +389,10 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
           class="command-palette flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-theme-800 bg-theme-900 shadow-2xl"
         >
           <!-- Search input -->
-          <div class="flex shrink-0 items-center gap-3 border-b border-theme-800 px-4">
+          <div class="palette-search flex shrink-0 items-center gap-3 border-b border-theme-800 px-4">
             <Icon
               icon="lucide:search"
-              class="h-4.5 w-4.5 shrink-0 text-ink-muted"
+              class="palette-search-icon h-4.5 w-4.5 shrink-0 text-ink-muted"
             />
             <input
               ref="inputRef"
@@ -414,19 +414,19 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
               icon="lucide:loader-circle"
               class="h-4 w-4 shrink-0 animate-spin text-ink-faint"
             />
-            <kbd class="hidden shrink-0 rounded border border-theme-700 bg-theme-800 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint sm:inline-flex">
+            <kbd class="palette-kbd hidden shrink-0 rounded border border-theme-700 bg-theme-800 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint sm:inline-flex">
               Esc
             </kbd>
           </div>
 
           <!-- Scope chips -->
-          <div class="flex shrink-0 gap-1 overflow-x-auto overflow-y-hidden border-b border-theme-800/60 px-3 py-2">
+          <div class="palette-scopes flex shrink-0 gap-1 overflow-x-auto overflow-y-hidden border-b border-theme-800/60 px-3 py-2">
             <button
               v-for="entry in SCOPES"
               :key="entry.id"
               type="button"
               tabindex="-1"
-              class="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
+              class="palette-scope flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors"
               :class="scope === entry.id
                 ? 'bg-accent-500/15 text-accent-fg'
                 : 'text-ink-muted hover:bg-theme-800 hover:text-theme-200'"
@@ -457,7 +457,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
               :aria-label="group.label"
               class="mb-1 last:mb-0"
             >
-              <div class="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+              <div class="palette-group-label px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
                 {{ group.label }}
               </div>
               <div
@@ -466,13 +466,13 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
                 :key="item.key"
                 role="option"
                 :aria-selected="activeItem === item"
-                class="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors"
+                class="palette-option flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors"
                 :class="activeItem === item ? 'bg-theme-800 text-theme-100' : 'text-theme-300'"
                 @mousemove="activeIndex = itemIndex(item)"
                 @mousedown.prevent
                 @click="runItem(item)"
               >
-                <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800/80">
+                <div class="palette-option-icon flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800/80">
                   <img
                     v-if="item.imageUrl"
                     :src="item.imageUrl"
@@ -509,7 +509,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
                 <Icon
                   v-if="activeItem === item"
                   icon="lucide:corner-down-left"
-                  class="h-3.5 w-3.5 shrink-0 text-ink-faint"
+                  class="palette-open-icon h-3.5 w-3.5 shrink-0 text-ink-faint"
                 />
               </div>
             </div>
@@ -529,7 +529,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
           </div>
 
           <!-- Footer hints -->
-          <div class="hidden shrink-0 items-center gap-4 border-t border-theme-800 px-4 py-2 text-[11px] text-ink-faint sm:flex">
+          <div class="palette-footer hidden shrink-0 items-center gap-4 border-t border-theme-800 px-4 py-2 text-[11px] text-ink-faint sm:flex">
             <span class="flex items-center gap-1"><kbd class="palette-kbd">↑</kbd><kbd class="palette-kbd">↓</kbd> navigate</span>
             <span class="flex items-center gap-1"><kbd class="palette-kbd">↵</kbd> open</span>
             <span class="flex items-center gap-1"><kbd class="palette-kbd">Tab</kbd> filter</span>

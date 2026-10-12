@@ -3,7 +3,7 @@
 /* ── Theme stylesheets ── */
 @import "./themes/light.css";
 @import "./themes/dark.css";
-@import "./themes/virtualboy.css";
+@import "./themes/blackwall.css";
 @import "./themes/crimson.css";
 @import "./themes/cyberpunk.css";
 @import "./themes/emerald.css";
@@ -90,7 +90,7 @@
 }
 
 /* No theme attribute is the complete default Crimson presentation. */
-@custom-variant dark (&:where(:root:not([data-theme]), :root:not([data-theme]) *, [data-theme="dark"], [data-theme="dark"] *, [data-theme="virtualboy"], [data-theme="virtualboy"] *, [data-theme="crimson"], [data-theme="crimson"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="emerald"], [data-theme="emerald"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
+@custom-variant dark (&:where(:root:not([data-theme]), :root:not([data-theme]) *, [data-theme="dark"], [data-theme="dark"] *, [data-theme="blackwall"], [data-theme="blackwall"] *, [data-theme="crimson"], [data-theme="crimson"] *, [data-theme="cyberpunk"], [data-theme="cyberpunk"] *, [data-theme="emerald"], [data-theme="emerald"] *, [data-theme="industrial"], [data-theme="industrial"] *, [data-theme="monochrome"], [data-theme="monochrome"] *));
 
 /* ── Global defaults ── */
 body {

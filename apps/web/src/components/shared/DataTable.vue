@@ -500,7 +500,7 @@ defineExpose({ startEditing, closeEditor })
     >
       <div
         v-if="showTopPagination"
-        class="flex items-center justify-center gap-2 border-b border-table-border bg-table-header px-4 py-2"
+        class="dt-pagination flex items-center justify-center gap-2 border-b border-table-border bg-table-header px-4 py-2"
       >
         <button
           type="button"
@@ -524,7 +524,7 @@ defineExpose({ startEditing, closeEditor })
       <!-- Header Row -->
       <div
         v-if="showHeader"
-        class="dt-grid grid items-start gap-4 border-b border-table-border bg-table-header px-5 py-3 text-[11px] uppercase tracking-wider text-ink-secondary"
+        class="dt-header dt-grid grid items-start gap-4 border-b border-table-border bg-table-header px-5 py-3 text-[11px] uppercase tracking-wider text-ink-secondary"
         :style="{ '--dt-cols': gridColsTemplate }"
       >
         <!-- Select All Checkbox -->
@@ -673,7 +673,7 @@ defineExpose({ startEditing, closeEditor })
 
       <div
         v-if="showBottomPagination"
-        class="flex items-center justify-center gap-2 border-t border-table-border bg-table-header px-4 py-2"
+        class="dt-pagination flex items-center justify-center gap-2 border-t border-table-border bg-table-header px-4 py-2"
       >
         <button
           type="button"

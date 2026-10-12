@@ -86,6 +86,7 @@ const emit = defineEmits<{
   "update:providerId": [value: string];
   "update:modelValue": [value: string];
   change: [value: { providerId: string; model: string }];
+  "open-change": [value: boolean];
 }>();
 
 const providerStore = useProviderStore();
@@ -617,5 +618,6 @@ function onSelectionChange(value: string): void {
     @update:model-value="onSelectionChange"
     @option-action="toggleFavorite"
     @open="refreshIncompleteModels"
+    @open-change="emit('open-change', $event)"
   />
 </template>

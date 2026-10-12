@@ -1,0 +1,121 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Blackwall Theme — holographic HUD: deep black and glowing crimson
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variable overrides ── */
+[data-theme="blackwall"] {
+  --color-accent-fg: #ff5a64;
+  --color-accent-on: #050507;
+
+  --color-theme-950: #050507;
+  --color-theme-900: #0b090b;
+  --color-theme-800: #131012;
+  --color-theme-700: #2a171b;
+  --color-theme-600: #40222a;
+  --color-theme-500: #643a44;
+  --color-theme-400: #8d8a90;
+  --color-theme-300: #a3a6b0;
+  --color-theme-200: #c9cbd2;
+  --color-theme-100: #eaeaea;
+
+  --color-accent-50: #fff1f2;
+  --color-accent-100: #ffdcdf;
+  --color-accent-200: #ffb8bd;
+  --color-accent-300: #ff8a92;
+  --color-accent-400: #ff5a64;
+  --color-accent-500: #ff2e3b;
+  --color-accent-600: #f0222f;
+  --color-accent-700: #b3242f;
+  --color-accent-800: #8a1a23;
+  --color-accent-900: #5c1118;
+  --color-accent-950: #2a070b;
+
+  --bw-red: #ff2e3b;
+  --bw-red-muted: #b3242f;
+  --bw-cyan: #00d9ff;
+  --bw-line: rgba(255, 46, 59, 0.45);
+  --bw-line-faint: rgba(255, 46, 59, 0.16);
+  --bw-grid: rgba(255, 46, 59, 0.05);
+  --bw-void: #08080a;
+  /* The Blackwall itself: irregular red data columns with horizontal tears,
+     glowing at the base. Shared by every surface that shows the wall. */
+  --bw-wall:
+    linear-gradient(transparent 7%, rgba(255, 46, 59, 0.1) 7% 7.3%, transparent 7.3% 72%, rgba(255, 46, 59, 0.08) 72% 72.25%, transparent 72.25% 86%, rgba(255, 46, 59, 0.12) 86% 86.6%, transparent 86.6%),
+    repeating-linear-gradient(90deg, rgba(255, 46, 59, 0.07) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(90deg, transparent 0 37px, rgba(255, 46, 59, 0.14) 37px 39px, transparent 39px 83px, rgba(255, 46, 59, 0.09) 83px 84px, transparent 84px 131px),
+    linear-gradient(0deg, rgba(255, 46, 59, 0.14), transparent 45%),
+    linear-gradient(var(--bw-grid) 1px, transparent 1px) 0 0 / 48px 48px,
+    linear-gradient(90deg, var(--bw-grid) 1px, transparent 1px) 0 0 / 48px 48px;
+  --bw-glow: rgba(255, 46, 59, 0.18);
+
+  --color-user-message: #1c080c;
+  --color-user-message-text: #eaeaea;
+  --color-control-surface: #0b090b;
+  --color-table-surface: #09080a;
+  --color-table-header: #170a0d;
+  --color-table-border: #2a171b;
+  --color-table-hover: color-mix(in srgb, #ff2e3b 6%, transparent);
+  --color-table-selected: color-mix(in srgb, #ff2e3b 11%, transparent);
+
+  --radius-xs: 0px;
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 3px;
+  --radius-3xl: 3px;
+  --radius-4xl: 4px;
+
+  --theme-glow-strong: 0 0 0 1px rgba(255, 46, 59, 0.55), 0 0 18px rgba(255, 46, 59, 0.28);
+
+  font-family: "IBM Plex Mono", "Cascadia Code", "SF Mono", "Consolas", monospace;
+  letter-spacing: 0.01em;
+  color-scheme: dark;
+
+  --theme-shell-background: var(--color-theme-950);
+  /* Conversations sit on solid black; the data wall belongs to the empty view. */
+  --theme-content-background:
+    radial-gradient(ellipse 70% 18rem at 50% -6rem, rgba(255, 46, 59, 0.07), transparent),
+    linear-gradient(0deg, rgba(255, 46, 59, 0.06), transparent 14rem),
+    var(--bw-void);
+  --theme-sidebar-background: linear-gradient(180deg, #09090c, #050507);
+  --theme-sidebar-border: var(--bw-line);
+  --theme-sidebar-shadow: 0 0 22px var(--bw-glow);
+  --theme-composer-background:
+    linear-gradient(var(--bw-red), var(--bw-red)) top left / 32px 2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 32px 2px no-repeat,
+    #0b0b0e;
+  --theme-composer-shadow: 0 0 0 1px var(--bw-line), 0 0 20px rgba(255, 46, 59, 0.12);
+  --theme-heading-shadow: none;
+  --theme-heading-transform: uppercase;
+  --theme-heading-spacing: .1em;
+  --theme-region-label-color: var(--bw-red);
+  --theme-nav-active-background:
+    linear-gradient(225deg, var(--bw-red) 0 8.2px, transparent 8.2px) top right / 14px 14px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) left / 3px 100% no-repeat,
+    linear-gradient(90deg, rgba(255, 46, 59, 0.16), rgba(255, 46, 59, 0.03));
+  --theme-nav-active-shadow: inset 0 0 12px rgba(255, 46, 59, 0.1);
+  --theme-nav-active-border: 1px solid rgba(255, 46, 59, 0.8);
+  --theme-nav-active-clip: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  --theme-selection-background: rgba(255, 46, 59, 0.35);
+  --theme-scrollbar-size: 6px;
+  --theme-scrollbar-track: #050507;
+  --theme-scrollbar-thumb: rgba(255, 46, 59, 0.28);
+  --theme-scrollbar-hover: rgba(255, 46, 59, 0.5);
+  --theme-scrollbar-radius: 0;
+  --theme-action-gradient: linear-gradient(180deg, #2a070b, #17050a);
+  --theme-action-shadow: inset 0 0 0 1px var(--bw-red), 0 0 14px rgba(255, 46, 59, 0.3);
+
+  --color-ink-secondary: #c4c6cf;
+  --color-ink-muted: #a3a6b0;
+  --color-ink-faint: #8d909b;
+}
+
+[data-theme="blackwall"] .chat-composer {
+  border-color: transparent;
+}
+
+[data-theme="blackwall"] .chat-user-message {
+  border-color: var(--bw-line);
+  box-shadow: inset 0 0 0 1px var(--bw-line), 0 0 12px rgba(255, 46, 59, 0.1);
+}
