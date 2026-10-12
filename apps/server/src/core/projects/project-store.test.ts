@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { closeDb, getDb } from '../../db/database.js'
 import {
+    BriefConflictError,
     createProject,
     createProjectTask,
     deleteProject,
@@ -167,6 +168,35 @@ describe('project execution context', () => {
         expect((await tools.project_task_update.execute({ taskId: 'missing', status: 'done' })).success).toBe(false)
         expect(broadcast).toHaveBeenCalledWith('project:updated', { id: project.id })
         expect(broadcast).toHaveBeenCalledWith('project:tasks-updated', { projectId: project.id })
+    })
+    test('a brief update from a stale view is rejected with the current brief, and the retry succeeds', async () => {
+        const project = createProject({ name: 'Race', brief: 'Goal: v1.', createMemoryFolder: false })
+        insertConversation('slow', project.id)
+        const [briefTool] = makeProjectTools({ projectId: project.id, conversationId: 'slow', seenBrief: project.brief })
+
+        // Dream (or another chat) updates the brief while this run still holds the old one.
+        updateProject(project.id, { brief: 'Goal: v1. Decided: Postgres.' }, { source: 'dream' })
+
+        const conflict = await briefTool.execute({ brief: 'Goal: v1. Shipped the API.' })
+        expect(conflict.success).toBe(false)
+        expect(conflict.output).toContain('Decided: Postgres.')
+        expect(getProject(project.id)?.brief).toBe('Goal: v1. Decided: Postgres.')
+
+        // The conflict showed the model the current brief, so a merged retry goes through, as do follow-ups.
+        expect((await briefTool.execute({ brief: 'Goal: v1. Decided: Postgres. Shipped the API.' })).success).toBe(true)
+        expect((await briefTool.execute({ brief: 'Goal: v1. Decided: Postgres. Shipped the API and docs.' })).success).toBe(true)
+        expect(getProject(project.id)?.brief).toBe('Goal: v1. Decided: Postgres. Shipped the API and docs.')
+    })
+
+    test('user brief saves with a stale base are rejected', () => {
+        const project = createProject({ name: 'Editor', brief: 'Old.', createMemoryFolder: false })
+        updateProject(project.id, { brief: 'Agent update.' }, { source: 'ai' })
+
+        expect(() => updateProject(project.id, { brief: 'My edit.', expectedBrief: 'Old.' })).toThrow(BriefConflictError)
+        expect(getProject(project.id)?.brief).toBe('Agent update.')
+        expect(updateProject(project.id, { brief: 'My edit.', expectedBrief: 'Agent update.' })?.brief).toBe('My edit.')
+        // Saves that leave the brief alone never conflict.
+        expect(updateProject(project.id, { name: 'Renamed', brief: 'My edit.', expectedBrief: 'stale' })?.name).toBe('Renamed')
     })
 })
 

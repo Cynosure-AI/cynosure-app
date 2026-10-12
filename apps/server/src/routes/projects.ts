@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import {
+    BriefConflictError,
     createProject,
     createProjectTask,
     deleteProject,
@@ -62,6 +63,12 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
             projectChanged(project.id)
             return project
         } catch (error) {
+            if (error instanceof BriefConflictError) {
+                return reply.status(409).send({
+                    error: 'The brief changed while you were editing it. Your draft is kept; save again to replace the new version (it stays in the timeline).',
+                    brief: error.currentBrief,
+                })
+            }
             return reply.status(400).send({ error: message(error) })
         }
     })

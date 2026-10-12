@@ -62,7 +62,20 @@ export interface CreateProjectInput {
     icon?: string
 }
 
-export type UpdateProjectInput = Partial<Omit<CreateProjectInput, 'createMemoryFolder'>> & { archived?: boolean; sortOrder?: number }
+export type UpdateProjectInput = Partial<Omit<CreateProjectInput, 'createMemoryFolder'>> & {
+    archived?: boolean
+    sortOrder?: number
+    /** The brief the writer last saw; a brief change is rejected when the stored brief differs. */
+    expectedBrief?: string
+}
+
+/** A brief write based on a version that another writer has since replaced. */
+export class BriefConflictError extends Error {
+    constructor(readonly currentBrief: string) {
+        super('The brief was changed by someone else since it was read.')
+        this.name = 'BriefConflictError'
+    }
+}
 
 export interface ProjectTaskInput {
     title?: string
@@ -202,6 +215,9 @@ export function updateProject(id: string, input: UpdateProjectInput, context: Pr
     if (!existing) return undefined
     const now = Date.now()
     const briefChanged = input.brief !== undefined && input.brief !== existing.brief
+    if (briefChanged && input.expectedBrief !== undefined && input.expectedBrief !== existing.brief) {
+        throw new BriefConflictError(existing.brief)
+    }
     const brief = briefChanged ? input.brief!.slice(0, MAX_PROJECT_BRIEF_CHARS) : existing.brief
     db.transaction(() => {
         if (briefChanged) {
@@ -251,8 +267,12 @@ export function reorderProjects(ids: string[]): void {
     db.transaction(() => ids.forEach((id, index) => statement.run(index, id)))()
 }
 
-export function setProjectBrief(id: string, brief: string, context: ProjectChangeContext = USER_CHANGE): ProjectDto | undefined {
-    return updateProject(id, { brief }, context)
+/**
+ * Replace the brief. With `expectedBrief`, the write is a compare-and-swap:
+ * it throws BriefConflictError when the stored brief no longer matches.
+ */
+export function setProjectBrief(id: string, brief: string, context: ProjectChangeContext = USER_CHANGE, expectedBrief?: string): ProjectDto | undefined {
+    return updateProject(id, { brief, ...(expectedBrief !== undefined ? { expectedBrief } : {}) }, context)
 }
 
 export function getConversationProjectId(conversationId: string): string | null {

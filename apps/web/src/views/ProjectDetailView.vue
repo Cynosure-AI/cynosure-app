@@ -35,6 +35,8 @@ const conversations = ref<ConversationRow[]>([])
 const cronJobs = ref<CronJob[]>([])
 const editingBrief = ref(false)
 const briefDraft = ref('')
+/** The brief the draft started from, so a save cannot overwrite an agent's newer version unseen. */
+const briefBase = ref('')
 const settingsDraft = ref<ProjectDraft | null>(null)
 const settingsSaved = ref(false)
 const saving = ref(false)
@@ -104,11 +106,19 @@ async function loadRelated(): Promise<void> {
 
 function startBriefEdit(): void {
   briefDraft.value = project.value?.brief ?? ''
+  briefBase.value = briefDraft.value
   editingBrief.value = true
 }
 
 async function saveBrief(): Promise<void> {
-  if (await guarded(() => projectsStore.update(projectId.value, { brief: briefDraft.value }))) editingBrief.value = false
+  const saved = await guarded(() => projectsStore.update(projectId.value, { brief: briefDraft.value, expectedBrief: briefBase.value }))
+  if (saved) {
+    editingBrief.value = false
+    return
+  }
+  // After a conflict the user has been told; saving again replaces the newer brief on purpose.
+  await projectsStore.refreshProject(projectId.value)
+  briefBase.value = project.value?.brief ?? briefBase.value
 }
 
 async function saveSettings(): Promise<void> {

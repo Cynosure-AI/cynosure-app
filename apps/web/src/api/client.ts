@@ -33,6 +33,8 @@ export interface ConversationRow {
 
 export type ProjectInput = Partial<Pick<ProjectDto, 'name' | 'description' | 'instructions' | 'brief' | 'rootPath' | 'memoryFolderId' | 'defaultAgentId' | 'color' | 'icon' | 'archived' | 'sortOrder'>> & {
   createMemoryFolder?: boolean
+  /** The brief the edit started from; the server rejects the save (409) if it changed since. */
+  expectedBrief?: string
 }
 
 export type ProjectTaskInput = Partial<Pick<ProjectTaskDto, 'title' | 'notes' | 'status' | 'sortOrder' | 'assigneeAgentId' | 'conversationId'>>

@@ -124,6 +124,6 @@ export function resolveProjectExecutionContext(conversationId: string, broadcast
         memoryFolders,
         systemPrompt: buildProjectSystemPrompt(project, memoryFolders),
         stateMessage: buildProjectStateMessage(project),
-        tools: makeProjectTools({ projectId: project.id, conversationId, agentId, broadcast }),
+        tools: makeProjectTools({ projectId: project.id, conversationId, agentId, broadcast, seenBrief: project.brief }),
     }
 }

@@ -1,6 +1,7 @@
 import type { ToolDefinition, ToolResult } from '../gateway/providers/base.provider.js'
 import type { ProjectTaskStatus } from '@shared/types'
 import {
+    BriefConflictError,
     MAX_PROJECT_BRIEF_CHARS,
     PROJECT_TASK_STATUSES,
     createProjectTask,
@@ -26,6 +27,12 @@ export interface ProjectToolContext {
     /** Recorded change source; tools in chats are 'ai', Dream review is 'dream'. */
     source?: 'ai' | 'dream'
     broadcast?: BroadcastFn
+    /**
+     * The brief shown to the model when the run started. Brief updates are
+     * rejected when the stored brief has changed since, so a stale view never
+     * silently overwrites another chat's, Dream's, or the user's edit.
+     */
+    seenBrief?: string
 }
 
 function changeContext(ctx: ProjectToolContext) {
@@ -45,9 +52,11 @@ function guarded(run: () => ToolResult): Promise<ToolResult> {
 }
 
 export function makeProjectBriefTool(ctx: ProjectToolContext): ToolDefinition {
+    // Advances with each write the model sees, so later calls in the run compare against it.
+    let seenBrief = ctx.seenBrief
     return {
         name: 'project_brief_update',
-        description: `Replace the project brief: the short, always-loaded summary that every chat and agent in this project starts from. Send the complete new brief (Markdown, at most ${MAX_PROJECT_BRIEF_CHARS} characters) covering the goal, current state, key decisions, and open questions. Update it after meaningful progress or decisions; do not log routine chatter or keep a change history.`,
+        description: `Replace the project brief: the short, always-loaded summary that every chat and agent in this project starts from. Send the complete new brief (Markdown, at most ${MAX_PROJECT_BRIEF_CHARS} characters) covering the goal, current state, key decisions, and open questions. Update it after meaningful progress or decisions; do not log routine chatter or keep a change history. If the brief changed since you saw it, the update is rejected and the current brief is returned; merge your changes into that version and call again.`,
         timeout: 5_000,
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -62,10 +71,23 @@ export function makeProjectBriefTool(ctx: ProjectToolContext): ToolDefinition {
         execute: (params) => guarded(() => {
             const { brief } = params as { brief?: unknown }
             if (typeof brief !== 'string') return result(false, 'brief must be a string.')
-            const project = setProjectBrief(ctx.projectId, brief.trim(), changeContext(ctx))
-            if (!project) return result(false, 'Project no longer exists.')
-            ctx.broadcast?.('project:updated', { id: project.id })
-            return result(true, `Updated the brief for "${project.name}".`)
+            try {
+                const project = setProjectBrief(ctx.projectId, brief.trim(), changeContext(ctx), seenBrief)
+                if (!project) return result(false, 'Project no longer exists.')
+                if (seenBrief !== undefined) seenBrief = project.brief
+                ctx.broadcast?.('project:updated', { id: project.id })
+                return result(true, `Updated the brief for "${project.name}".`)
+            } catch (error) {
+                if (!(error instanceof BriefConflictError)) throw error
+                seenBrief = error.currentBrief
+                return result(false, [
+                    'The brief was not saved: another chat, Dream, or the user changed it since you last saw it. Current brief:',
+                    '',
+                    error.currentBrief || '(empty)',
+                    '',
+                    'Keep what is still true in it, add your changes, and call project_brief_update again with the merged brief.',
+                ].join('\n'))
+            }
         }),
     }
 }
