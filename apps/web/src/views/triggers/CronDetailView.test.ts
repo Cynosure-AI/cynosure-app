@@ -20,6 +20,7 @@ vi.mock('../../api/client', () => ({
     cronJobs: { list: mocks.listJobs, update: mocks.update },
     agents: { list: async () => [] },
     channels: { list: async () => [] },
+    projects: { list: async () => [{ id: 'project-1', name: 'Launch', archived: false }] },
   },
 }))
 
@@ -93,4 +94,15 @@ test('leaving with unsaved changes asks before discarding them', async () => {
 
   await wrapper.findAll('button').find((button) => button.text() === 'Discard changes')!.trigger('click')
   expect(mocks.push).toHaveBeenCalledWith('/cron')
+})
+
+test('the project choice is saved with the job', async () => {
+  const wrapper = mountView()
+  await flushPromises()
+
+  await wrapper.getComponent({ name: 'CustomSelect' }).vm.$emit('update:modelValue', 'project-1')
+  await saveButton(wrapper).trigger('click')
+  await flushPromises()
+
+  expect(mocks.update).toHaveBeenCalledWith('job-1', expect.objectContaining({ projectId: 'project-1' }))
 })

@@ -1,14 +1,13 @@
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { estimateTextTokens, estimateTextsTokens, recordAuxiliaryModelUsage } from '../usage-metering.js'
-import { RERANKER_LIMITS } from '../runtime-limits.js'
+import { RERANKER_CANDIDATE_COUNT } from '../runtime-limits.js'
 import type { SearchResult } from './rag.js'
 
 export interface MemoryRerankerConfig {
   enabled: boolean
   providerId?: string
   model: string
-  candidateCount: number
   /** Curates memory when reranking is off; unset falls back to the conversation model. */
   curationProviderId?: string
   curationModel: string
@@ -25,19 +24,14 @@ const SETTINGS_KEY = 'memoryReranker'
 const DEFAULT_CONFIG: MemoryRerankerConfig = {
   enabled: false,
   model: '',
-  candidateCount: RERANKER_LIMITS.defaultCandidateCount,
   curationModel: ''
 }
 
 function normalizeConfig(config: Partial<MemoryRerankerConfig> | undefined): MemoryRerankerConfig {
-  const candidateCount = Number.isFinite(config?.candidateCount)
-    ? Math.round(config!.candidateCount as number)
-    : DEFAULT_CONFIG.candidateCount
   return {
     enabled: !!config?.enabled,
     providerId: config?.providerId?.trim() || undefined,
     model: config?.model?.trim() || '',
-    candidateCount: Math.min(RERANKER_LIMITS.maxCandidateCount, Math.max(RERANKER_LIMITS.minCandidateCount, candidateCount)),
     curationProviderId: config?.curationProviderId?.trim() || undefined,
     curationModel: config?.curationModel?.trim() || ''
   }
@@ -64,7 +58,7 @@ export class MemoryReranker {
 
   getCandidateCount(topK: number): number {
     const config = this.getConfig()
-    return config.enabled ? Math.max(topK, config.candidateCount) : topK
+    return config.enabled ? Math.max(topK, RERANKER_CANDIDATE_COUNT) : topK
   }
 
   async rerank(query: string, results: SearchResult[], topK: number): Promise<SearchResult[]> {

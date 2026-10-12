@@ -3,13 +3,13 @@ import { onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
 import BaseCard from '../shared/BaseCard.vue'
+import FolderBrowseButton from '../shared/FolderBrowseButton.vue'
 
 const folders = ref<string[]>([])
 const folderPath = ref('')
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
-const electron = (window as unknown as { electron?: { chooseFileAccessDirectory?: () => Promise<string | null> } }).electron
 
 async function refresh(): Promise<void> {
   loading.value = true
@@ -35,11 +35,6 @@ async function addFolder(): Promise<void> {
   } finally {
     busy.value = false
   }
-}
-
-async function chooseFolder(): Promise<void> {
-  const selected = await electron?.chooseFileAccessDirectory?.()
-  if (selected) folderPath.value = selected
 }
 
 async function removeFolder(path: string): Promise<void> {
@@ -80,14 +75,10 @@ onMounted(refresh)
         placeholder="Absolute folder path"
         class="min-w-0 flex-1 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 placeholder:text-ink-muted focus:border-accent-500 focus:outline-none"
       >
-      <button
-        v-if="electron?.chooseFileAccessDirectory"
-        type="button"
-        class="rounded-lg border border-theme-700 px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
-        @click="chooseFolder"
-      >
-        Browse
-      </button>
+      <FolderBrowseButton
+        :initial-path="folderPath"
+        @select="folderPath = $event"
+      />
       <button
         type="submit"
         :disabled="busy || !folderPath.trim()"

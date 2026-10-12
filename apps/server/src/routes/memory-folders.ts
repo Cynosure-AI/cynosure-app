@@ -575,6 +575,7 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
             for (const target of rowsToDelete) {
                 db.prepare('DELETE FROM memory_file_index WHERE category_id = ?').run(target.id)
                 db.prepare('DELETE FROM agent_memory_folders WHERE category_id = ?').run(target.id)
+                db.prepare('UPDATE projects SET memory_folder_id = NULL WHERE memory_folder_id = ?').run(target.id)
                 db.prepare('DELETE FROM memory_folders WHERE id = ?').run(target.id)
             }
         })

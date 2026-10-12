@@ -56,7 +56,8 @@ const activeOrigin = computed(() => {
 });
 
 async function newChat(): Promise<void> {
-  await chatStore.startNewChat();
+  // A new chat started from a project chat stays in that project.
+  await chatStore.startNewChat({ projectId: chatStore.activeProjectId });
 }
 
 </script>

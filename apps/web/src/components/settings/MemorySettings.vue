@@ -2,10 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
-import { RUNTIME_LIMITS } from '@shared/runtime-limits'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../shared/ModalDialog.vue'
-import ProviderSelect from '../shared/ProviderSelect.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
@@ -90,7 +88,6 @@ const loadingEmbeddingConfig = ref(true)
 const rerankEnabled = ref(false)
 const rerankProviderId = ref('')
 const rerankModel = ref('')
-const rerankCandidateCount = ref(RUNTIME_LIMITS.reranker.defaultCandidateCount)
 // Curation model used instead of the reranker when reranking is off; empty = conversation model
 const curationProviderId = ref('')
 const curationModel = ref('')
@@ -99,7 +96,6 @@ const savedReranker = ref({
   enabled: false,
   providerId: '',
   model: '',
-  candidateCount: RUNTIME_LIMITS.reranker.defaultCandidateCount,
   curationProviderId: '',
   curationModel: '',
 })
@@ -112,7 +108,6 @@ const rerankDirty = computed(() =>
   rerankEnabled.value !== savedReranker.value.enabled ||
   rerankProviderId.value !== savedReranker.value.providerId ||
   rerankModel.value !== savedReranker.value.model ||
-  rerankCandidateCount.value !== savedReranker.value.candidateCount ||
   curationProviderId.value !== savedReranker.value.curationProviderId ||
   curationModel.value !== savedReranker.value.curationModel
 )
@@ -130,10 +125,9 @@ const manualDirty = computed(() => embDirty.value || rerankDirty.value || dreamD
 
 watch(manualDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
-const embeddingProviders = computed(() => {
-  const provider = providerStore.providers.find((candidate) => candidate.id === embProviderId.value)
-  return provider ? [provider] : []
-})
+const hasLocalProvider = computed(() =>
+  providerStore.providers.some((provider) => isLocalProvider(provider.type))
+)
 
 const openRouterProviders = computed(() =>
   providerStore.providers.filter((provider) => provider.type === 'openrouter')
@@ -197,14 +191,12 @@ async function loadRerankerConfig() {
     rerankEnabled.value = config.enabled
     rerankProviderId.value = config.providerId || openRouterProviders.value[0]?.id || ''
     rerankModel.value = config.model
-    rerankCandidateCount.value = config.candidateCount
     curationProviderId.value = config.curationProviderId || ''
     curationModel.value = config.curationModel || ''
     savedReranker.value = {
       enabled: config.enabled,
       providerId: config.providerId || rerankProviderId.value,
       model: config.model,
-      candidateCount: config.candidateCount,
       curationProviderId: curationProviderId.value,
       curationModel: curationModel.value,
     }
@@ -214,7 +206,6 @@ async function loadRerankerConfig() {
       enabled: rerankEnabled.value,
       providerId: rerankProviderId.value,
       model: rerankModel.value,
-      candidateCount: rerankCandidateCount.value,
       curationProviderId: curationProviderId.value,
       curationModel: curationModel.value,
     }
@@ -229,21 +220,18 @@ async function saveReranker() {
       enabled: rerankEnabled.value,
       providerId: rerankProviderId.value || undefined,
       model: rerankModel.value,
-      candidateCount: rerankCandidateCount.value,
       curationProviderId: curationProviderId.value || undefined,
       curationModel: curationModel.value,
     })
     rerankEnabled.value = res.enabled
     rerankProviderId.value = res.providerId || rerankProviderId.value
     rerankModel.value = res.model
-    rerankCandidateCount.value = res.candidateCount
     curationProviderId.value = res.curationProviderId || ''
     curationModel.value = res.curationModel || ''
     savedReranker.value = {
       enabled: res.enabled,
       providerId: res.providerId || rerankProviderId.value,
       model: res.model,
-      candidateCount: res.candidateCount,
       curationProviderId: curationProviderId.value,
       curationModel: curationModel.value,
     }
@@ -271,24 +259,6 @@ function updateEmbeddingSelection(selection: { providerId: string; model: string
     ? savedEmbedding.value.dimensions
     : 0
 }
-
-// A model id only means something to the provider it came from, so switching
-// providers never carries the previous model over. The active-provider
-// fallback has no model list of its own and keeps the current model.
-watch(embProviderId, (id) => {
-  if (loadingEmbeddingConfig.value || !id) return
-  updateEmbeddingSelection({
-    providerId: id,
-    model: id === savedEmbedding.value.providerId
-      ? savedEmbedding.value.model
-      : defaultEmbeddingModelForProviderId(id, providerStore.providers),
-  })
-}, { flush: 'sync' })
-
-const embProviderIsLocal = computed(() => {
-  const provider = embeddingProviders.value[0]
-  return provider ? isLocalProvider(provider.type) : false
-})
 
 function applyDefaultEmbeddingConfig() {
   const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
@@ -397,68 +367,56 @@ function cancelDrop() {
             Embedding Model
           </h3>
           <p class="text-xs text-ink-muted mt-0.5">
-            Select the provider and model for vector embeddings. Changing the model will offer to re-embed existing memories or drop them.
+            Select the model for vector embeddings. Changing the model will offer to re-embed existing memories or drop them.
             For local embeddings, <span class="text-theme-300 font-medium">mxbai-embed-large</span> gives the best retrieval quality.
           </p>
         </div>
       </div>
 
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs text-ink-secondary mb-1">Provider</label>
-          <ProviderSelect
-            v-model="embProviderId"
-            :providers="providerStore.providers"
-            include-default
-            default-label="Use active provider (fallback)"
-            placeholder="Use active provider (fallback)"
-          />
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between gap-3 mb-1">
-            <label class="block text-xs text-ink-secondary">Model</label>
-            <span
-              v-if="embDimensions"
-              class="text-[11px] text-ink-muted whitespace-nowrap"
-            >
-              {{ embDimensions }} dimensions
-            </span>
-          </div>
-          <div class="flex gap-2">
-            <ProviderModelSelect
-              class="flex-1"
-              :provider-id="embProviderId"
-              :model-value="embModel"
-              :providers="embeddingProviders"
-              model-type="embedding"
-              :include-provider-default="false"
-              :refresh-key="embModelRefreshKey"
-              placeholder="Select embedding model"
-              dropdown-width="min-w-full"
-              max-height="max-h-72"
-              @change="updateEmbeddingSelection"
-            />
-            <button
-              :disabled="!embProviderId"
-              class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-ink-faint text-theme-300 text-sm rounded-lg transition-colors"
-              title="Refresh embedding models"
-              aria-label="Refresh embedding models"
-              @click="embModelRefreshKey += 1"
-            >
-              <Icon
-                icon="lucide:refresh-cw"
-                class="w-4 h-4"
-              />
-            </button>
-          </div>
-          <p
-            v-if="embProviderIsLocal"
-            class="mt-1.5 text-[11px] text-ink-muted"
+      <div>
+        <div class="flex items-center justify-between gap-3 mb-1">
+          <label class="block text-xs text-ink-secondary">Model</label>
+          <span
+            v-if="embDimensions"
+            class="text-[11px] text-ink-muted whitespace-nowrap"
           >
-            Only models available on {{ embeddingProviders[0]?.name }} are listed. Add an embedding model there, then refresh.
-          </p>
+            {{ embDimensions }} dimensions
+          </span>
         </div>
+        <div class="flex gap-2">
+          <ProviderModelSelect
+            class="flex-1"
+            :provider-id="embProviderId"
+            :model-value="embModel"
+            :providers="providerStore.providers"
+            model-type="embedding"
+            :include-provider-default="false"
+            hide-empty-providers
+            :refresh-key="embModelRefreshKey"
+            placeholder="Select embedding model"
+            dropdown-width="min-w-full"
+            max-height="max-h-72"
+            @change="updateEmbeddingSelection"
+          />
+          <button
+            :disabled="providerStore.providers.length === 0"
+            class="px-3 py-2 bg-theme-700 hover:bg-theme-600 disabled:bg-theme-800 disabled:text-ink-faint text-theme-300 text-sm rounded-lg transition-colors"
+            title="Refresh embedding models"
+            aria-label="Refresh embedding models"
+            @click="embModelRefreshKey += 1"
+          >
+            <Icon
+              icon="lucide:refresh-cw"
+              class="w-4 h-4"
+            />
+          </button>
+        </div>
+        <p
+          v-if="hasLocalProvider"
+          class="mt-1.5 text-[11px] text-ink-muted"
+        >
+          Local providers only list models they have installed. Add an embedding model there, then refresh.
+        </p>
       </div>
 
       <p
@@ -538,25 +496,6 @@ function cancelDrop() {
             class="text-xs text-status-warning mt-1"
           >
             Add an OpenRouter provider before enabling reranking.
-          </p>
-        </div>
-
-        <div>
-          <label
-            for="reranker-candidate-pool"
-            class="block text-xs text-ink-secondary mb-1"
-          >Candidate Pool</label>
-          <input
-            id="reranker-candidate-pool"
-            v-model.number="rerankCandidateCount"
-            type="number"
-            :min="RUNTIME_LIMITS.reranker.minCandidateCount"
-            :max="RUNTIME_LIMITS.reranker.maxCandidateCount"
-            step="1"
-            class="w-32 px-3 py-2 bg-theme-900 border border-theme-600 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          >
-          <p class="text-xs text-ink-muted mt-1">
-            Candidates fetched before reranking. Larger pools can improve relevance but increase reranking cost.
           </p>
         </div>
       </div>

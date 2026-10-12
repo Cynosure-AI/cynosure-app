@@ -493,6 +493,7 @@ export interface CronJob {
     isRunning: boolean
     nextRunAt: number | null
     executionConfig: ConversationExecutionConfig | null
+    projectId?: string | null
 }
 
 export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
@@ -617,7 +618,6 @@ export interface MemoryRerankerConfig {
     enabled: boolean
     providerId?: string
     model: string
-    candidateCount: number
     /** Curates memory when reranking is off; empty uses the conversation model. */
     curationProviderId?: string
     curationModel: string

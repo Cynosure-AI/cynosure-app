@@ -3,6 +3,7 @@ import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
 import { isMemoryReadToolName } from './builtin/memory-tools.js'
 import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
 import type { ToolBehaviorAnnotations } from '../gateway/providers/base.provider.js'
+import { isProjectToolName } from '../projects/project-tools.js'
 
 /**
  * Tool policy lives here so approval and UI visibility decisions use the same
@@ -25,7 +26,8 @@ export function isInternalTool(toolName: string): boolean {
 }
 
 export function isSystemAutoApprovedTool(toolName: string): boolean {
-  return isInternalTool(toolName)
+  // Project tools only change the project's own brief and task board.
+  return isInternalTool(toolName) || isProjectToolName(toolName)
 }
 
 /**

@@ -15,7 +15,27 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
+
+export interface ConversationRow {
+  id: string
+  title: string
+  agent_id: string | null
+  ma_workspace_id: string | null
+  project_id?: string | null
+  origin: string
+  pinned: number
+  last_read_at: number | null
+  created_at: number
+  updated_at: number
+  last_user_message: string | null
+}
+
+export type ProjectInput = Partial<Pick<ProjectDto, 'name' | 'description' | 'instructions' | 'brief' | 'rootPath' | 'memoryFolderId' | 'defaultAgentId' | 'color' | 'icon' | 'archived' | 'sortOrder'>> & {
+  createMemoryFolder?: boolean
+}
+
+export type ProjectTaskInput = Partial<Pick<ProjectTaskDto, 'title' | 'notes' | 'status' | 'sortOrder' | 'assigneeAgentId' | 'conversationId'>>
 
 function memoryFolderPathId(id: string): string {
   return encodeURIComponent(encodeURIComponent(id))
@@ -28,6 +48,15 @@ export const api = {
     list: () => get<{ folders: string[] }>('/api/file-access'),
     add: (path: string) => post<{ folders: string[] }>('/api/file-access', { path }),
     remove: (path: string) => del<{ folders: string[] }>(`/api/file-access?path=${encodeURIComponent(path)}`),
+    directories: (path?: string, showHidden = false) => {
+      const params = new URLSearchParams()
+      if (path) params.set('path', path)
+      if (showHidden) params.set('showHidden', 'true')
+      const qs = params.toString()
+      return get<{ path: string; parent: string | null; home: string; directories: { name: string; path: string }[] }>(
+        `/api/file-access/directories${qs ? `?${qs}` : ''}`
+      )
+    },
   },
   modelFavorites: {
     get: () => get<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }>; initialized: boolean }>('/api/model-favorites'),
@@ -76,11 +105,15 @@ export const api = {
   },
 
   chat: {
-    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string) =>
+    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string, projectId?: string | null) =>
       post<ConversationDto>(
         '/api/chat/conversations',
-        { title, agentId, maWorkspaceId }
+        { title, agentId, maWorkspaceId, projectId: projectId || undefined }
       ),
+    setProject: (conversationId: string, projectId: string | null) =>
+      patch<{ success: boolean; projectId: string | null }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/project`, { projectId }),
+    listProjectConversations: (projectId: string) =>
+      get<ConversationRow[]>(`/api/chat/conversations?projectId=${encodeURIComponent(projectId)}&sort=updated`),
     listConversations: (agentId?: string | null, maWorkspaceId?: string | null) => {
       const params = new URLSearchParams()
       if (maWorkspaceId) {
@@ -89,17 +122,19 @@ export const api = {
         params.set('agentId', agentId ?? '')
       }
       const qs = params.toString()
-      return get<{ id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number; last_user_message: string | null }[]>(
+      return get<ConversationRow[]>(
         `/api/chat/conversations${qs ? `?${qs}` : ''}`
       )
     },
-    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated' | 'sidebar', search?: string, agentId?: string | null, filters?: string[]) => {
+    listConversationsPaginated: (limit: number, offset: number, sort?: 'updated' | 'sidebar', search?: string, agentId?: string | null, filters?: string[], scope: { projectId?: string; excludeProjects?: boolean } = {}) => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+      if (scope.projectId) params.set('projectId', scope.projectId)
+      else if (scope.excludeProjects) params.set('excludeProjects', '1')
       if (sort) params.set('sort', sort)
       if (search) params.set('search', search)
       if (agentId !== undefined) params.set('agentId', agentId ?? '')
       if (filters?.length && !filters.includes('all')) params.set('filters', filters.join(','))
-      return get<{ items: { id: string; title: string; agent_id: string | null; ma_workspace_id: string | null; origin: string; pinned: number; last_read_at: number | null; created_at: number; updated_at: number; last_user_message: string | null }[]; total: number }>(
+      return get<{ items: ConversationRow[]; total: number }>(
         `/api/chat/conversations?${params}`
       )
     },
@@ -187,7 +222,7 @@ export const api = {
         { messageId }
       ),
     forkConversation: (conversationId: string, messageId: string) =>
-      post<{ id: string; title: string; agentId: string | null; maWorkspaceId: string | null; origin: string; createdAt: number; updatedAt: number }>(
+      post<{ id: string; title: string; agentId: string | null; maWorkspaceId: string | null; projectId: string | null; origin: string; createdAt: number; updatedAt: number }>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/fork`,
         { messageId }
       ),
@@ -456,6 +491,34 @@ export const api = {
     stopAll: () => post<StopAllActivityResult>('/api/activity/stop-all', {}),
   },
 
+  projects: {
+    list: (includeArchived = false) => get<ProjectDto[]>(`/api/projects${includeArchived ? '?includeArchived=1' : ''}`),
+    get: (id: string) => get<ProjectDto>(`/api/projects/${encodeURIComponent(id)}`),
+    create: (input: ProjectInput & { name: string }) => post<ProjectDto>('/api/projects', input),
+    update: (id: string, input: ProjectInput) => put<ProjectDto>(`/api/projects/${encodeURIComponent(id)}`, input),
+    remove: (id: string) => del<{ success: boolean }>(`/api/projects/${encodeURIComponent(id)}`),
+    reorder: (ids: string[]) => put<{ success: boolean }>('/api/projects/reorder', { ids }),
+    listTasks: (id: string, statuses?: ProjectTaskStatus[]) =>
+      get<ProjectTaskDto[]>(`/api/projects/${encodeURIComponent(id)}/tasks${statuses?.length ? `?status=${statuses.join(',')}` : ''}`),
+    createTask: (id: string, input: ProjectTaskInput & { title: string }) =>
+      post<ProjectTaskDto>(`/api/projects/${encodeURIComponent(id)}/tasks`, input),
+    updateTask: (id: string, taskId: string, input: ProjectTaskInput) =>
+      put<ProjectTaskDto>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, input),
+    removeTask: (id: string, taskId: string) =>
+      del<{ success: boolean }>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`),
+    timeline: (id: string, before?: number) =>
+      get<ProjectTimelineEntry[]>(`/api/projects/${encodeURIComponent(id)}/timeline?limit=50${before ? `&before=${before}` : ''}`),
+    getBriefRevision: (id: string, revisionId: string) =>
+      get<ProjectBriefRevisionDto>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}`),
+    /** Without `fromId`, the changes that revision made; with it, the changes from `fromId` to `revisionId`. */
+    diffBriefRevision: (id: string, revisionId: string, fromId?: string) =>
+      get<{ segments: ProjectDiffSegment[] }>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}/diff${fromId ? `?from=${encodeURIComponent(fromId)}` : ''}`),
+    restoreBriefRevision: (id: string, revisionId: string) =>
+      post<ProjectDto>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}/restore`),
+    onUpdated: (cb: (data: { id: string }) => void) => onWsEvent('project:updated', cb as WsHandler),
+    onTasksUpdated: (cb: (data: { projectId: string }) => void) => onWsEvent('project:tasks-updated', cb as WsHandler),
+  },
+
   instances: {
     list: () =>
       get<AgentInstance[]>('/api/instances'),
@@ -466,9 +529,9 @@ export const api = {
   cronJobs: {
     list: () =>
       get<CronJob[]>('/api/cron-jobs'),
-    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string; executionConfig?: ConversationExecutionConfig }) =>
+    create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string; executionConfig?: ConversationExecutionConfig; projectId?: string | null }) =>
       post<CronJob>('/api/cron-jobs', input),
-    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string }) =>
+    update: (id: string, input: { name?: string; agentId?: string; schedule?: string; prompt?: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string; projectId?: string | null }) =>
       put<CronJob>(`/api/cron-jobs/${encodeURIComponent(id)}`, input),
     delete: (id: string) =>
       del<{ success: boolean }>(`/api/cron-jobs/${encodeURIComponent(id)}`),

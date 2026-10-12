@@ -6,6 +6,7 @@ import { useProviderStore } from "../../stores/provider.store";
 import { useNotificationStore } from "../../stores/notification.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
+import { useProjectsStore } from "../../stores/projects.store";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { usePreferencesStore } from "../../stores/preferences.store";
 import type { RecentChatFilter } from "../../stores/preferences.store";
@@ -19,6 +20,7 @@ import { commandPaletteShortcutLabel, useCommandPalette } from "../../composable
 import WorkspacePopover from "../status/WorkspacePopover.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
 import GlobalRecentChats from "./GlobalRecentChats.vue";
+import SidebarProjects from "./SidebarProjects.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -38,6 +40,8 @@ const statusButtonRef = ref<HTMLElement | null>(null);
 const showNotifications = ref(false);
 const workspaceOpen = ref(true);
 const recentChatsOpen = ref(true);
+const projectsOpen = ref(true);
+const projectsStore = useProjectsStore();
 const recentFilterMenuOpen = ref(false);
 const bellBtnRef = ref<HTMLElement | null>(null);
 const notifPopoverStyle = computed(() => {
@@ -116,6 +120,7 @@ function removeFinishedChatInstance(data: { streamId: string; conversationId: st
 }
 
 onMounted(() => {
+  void projectsStore.ensureLoaded().catch(() => undefined);
   loadInstances();
   void loadDreamRuns();
   memoryJobsStore.startPolling();
@@ -495,6 +500,7 @@ const chatRoute = computed(() =>
         >
           <HoverTooltip
             v-for="item in [
+              { to: '/projects', icon: 'lucide:folder-kanban', label: 'Projects' },
               { to: '/cron', icon: 'lucide:calendar-clock', label: 'Scheduled Jobs' },
               { to: '/agents', icon: 'lucide:bot', label: 'Agents' },
               { to: '/memory-folders', icon: 'lucide:database', label: 'Memory' },
@@ -508,7 +514,7 @@ const chatRoute = computed(() =>
             <RouterLink
               :to="item.to"
               class="nav-item"
-              :class="{ active: isActive(item.to) }"
+              :class="{ active: isActive(item.to, item.to === '/projects') }"
             >
               <Icon
                 :icon="item.icon"
@@ -521,6 +527,43 @@ const chatRoute = computed(() =>
             </template>
           </HoverTooltip>
         </div>
+      </section>
+
+      <section
+        v-if="!sidebarCollapsed && projectsStore.activeProjects.length"
+        class="sidebar-region shrink-0"
+      >
+        <div class="section-separator" />
+        <div class="group/projects-header relative flex items-center">
+          <button
+            type="button"
+            class="region-toggle min-w-0 flex-1 pr-1"
+            :aria-expanded="projectsOpen"
+            @click="projectsOpen = !projectsOpen"
+          >
+            <span>Projects</span>
+            <Icon
+              icon="lucide:chevron-down"
+              class="h-3.5 w-3.5 transition-transform"
+              :class="{ '-rotate-90': !projectsOpen }"
+            />
+          </button>
+          <RouterLink
+            :to="{ name: 'projects', query: { new: '1' } }"
+            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-ink-muted opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/projects-header:opacity-100 focus-visible:opacity-100"
+            aria-label="New project"
+          >
+            <Icon
+              icon="lucide:plus"
+              class="h-4 w-4"
+            />
+          </RouterLink>
+        </div>
+        <SidebarProjects
+          v-show="projectsOpen"
+          :active-conversation-ids="runningConversationIds"
+          :awaiting-conversation-ids="awaitingConversationIds"
+        />
       </section>
 
       <section class="recent-region flex min-h-0 flex-1 flex-col">
@@ -590,6 +633,7 @@ const chatRoute = computed(() =>
           :awaiting-conversation-ids="awaitingConversationIds"
           :active-conversation-ids="runningConversationIds"
           :filters="recentChatFilter"
+          exclude-project-chats
         />
       </section>
     </nav>

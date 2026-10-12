@@ -1,8 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../../../db/database.js'
 import { getEventBus } from '../../telemetry/event-bus.js'
+import { getProjectForConversation } from '../../projects/project-store.js'
 
 const SETTINGS_KEY = 'fileAccessAllowedDirectories'
 
@@ -20,6 +22,30 @@ export function listFileAccessRoots(): string[] {
     } catch {
         return []
     }
+}
+
+const fileAccessScope = new AsyncLocalStorage<{ conversationId: string }>()
+
+/** Run file-access checks on behalf of a conversation so its project directory is allowed. */
+export function runInFileAccessScope<T>(conversationId: string | undefined, fn: () => T): T {
+    return conversationId ? fileAccessScope.run({ conversationId }, fn) : fn()
+}
+
+/** Folders granted only to the conversation in scope, such as its project directory. */
+export function listScopedFileAccessRoots(conversationId = fileAccessScope.getStore()?.conversationId): string[] {
+    if (!conversationId) return []
+    try {
+        const rootPath = getProjectForConversation(conversationId)?.rootPath
+        return rootPath ? [rootPath] : []
+    } catch {
+        return []
+    }
+}
+
+/** Saved folders plus folders granted to the conversation in scope. */
+export function listEffectiveFileAccessRoots(): string[] {
+    const roots = listFileAccessRoots()
+    return [...roots, ...listScopedFileAccessRoots().filter((root) => !roots.includes(root))]
 }
 
 function saveRoots(roots: string[]): void {
@@ -76,7 +102,7 @@ export async function resolveFileAccessPath(input: string): Promise<string> {
             }
         }
     }
-    for (const root of listFileAccessRoots()) {
+    for (const root of listEffectiveFileAccessRoots()) {
         const canonicalRoot = await fs.realpath(root).catch(() => root)
         if (isWithin(canonicalRoot, resolved)) return resolved
     }

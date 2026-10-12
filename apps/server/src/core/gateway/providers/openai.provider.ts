@@ -10,7 +10,8 @@ import {
   type ContentPart,
   type ToolCall,
   type ModelInfo,
-  type ModelListType
+  type ModelListType,
+  isEmbeddingModelId
 } from './base.provider.js'
 import { ensurePricingLoaded, modelSupportsOutputModality } from '../../model-dev-fetcher.js'
 
@@ -477,7 +478,8 @@ export class OpenAIProvider extends BaseLLMProvider {
   async listModels(_type?: ModelListType): Promise<string[]> {
     if (_type === 'video' || _type === 'image') return []
     const models = await this.client.models.list()
-    return models.data.map((m) => m.id).sort()
+    const ids = models.data.map((m) => m.id).sort()
+    return _type === 'embedding' ? ids.filter(isEmbeddingModelId) : ids
   }
 
   async testConnection(): Promise<boolean> {

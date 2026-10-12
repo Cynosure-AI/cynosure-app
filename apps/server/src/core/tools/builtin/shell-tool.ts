@@ -6,7 +6,8 @@ const MAX_OUTPUT_BYTES = 128 * 1024
 const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
 const MAX_COMMAND_TIMEOUT_SECONDS = 600
 
-export function makeShellTool(): ToolDefinition {
+export function makeShellTool(options: { defaultCwd?: string } = {}): ToolDefinition {
+    const defaultCwd = options.defaultCwd || undefined
     const operatingSystems: Partial<Record<NodeJS.Platform, string>> = { linux: 'Linux', win32: 'Windows', darwin: 'macOS' }
     const operatingSystem = operatingSystems[process.platform] ?? process.platform
     // Match Node's default shell and use the same executable advertised to the model.
@@ -28,7 +29,9 @@ export function makeShellTool(): ToolDefinition {
                 },
                 cwd: {
                     type: 'string',
-                    description: 'Directory in which to execute the command. Defaults to the current server working directory.',
+                    description: defaultCwd
+                        ? `Directory in which to execute the command. Defaults to the project directory ${defaultCwd}.`
+                        : 'Directory in which to execute the command. Defaults to the current server working directory.',
                 },
                 timeoutSeconds: {
                     type: 'integer',
@@ -52,7 +55,7 @@ export function makeShellTool(): ToolDefinition {
             if (input.timeoutSeconds !== undefined && (!Number.isInteger(input.timeoutSeconds) || Number(input.timeoutSeconds) < 1 || Number(input.timeoutSeconds) > MAX_COMMAND_TIMEOUT_SECONDS)) {
                 return { success: false, output: 'timeoutSeconds must be an integer from 1 to 600.' }
             }
-            const cwd = path.resolve(typeof input.cwd === 'string' ? input.cwd : process.cwd())
+            const cwd = path.resolve(defaultCwd ?? process.cwd(), typeof input.cwd === 'string' ? input.cwd : '.')
             const timeoutMs = Number(input.timeoutSeconds ?? DEFAULT_COMMAND_TIMEOUT_SECONDS) * 1000
             try {
                 signal?.throwIfAborted()

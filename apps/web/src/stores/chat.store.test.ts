@@ -34,3 +34,27 @@ test('New Chat clears pending composer reads even before a conversation exists',
   expect(store.draftDiscardRevision).toBe(1)
   expect(discard).not.toHaveBeenCalled()
 })
+
+test('a chat started in a project is created in it, and moving it updates the server', async () => {
+  const create = vi.spyOn(api.chat, 'createConversation').mockResolvedValue({
+    id: 'new-chat', title: 'New Chat', agentId: null, maWorkspaceId: null, projectId: 'project-1', origin: 'chat', createdAt: 1, updatedAt: 1,
+  })
+  const setProject = vi.spyOn(api.chat, 'setProject').mockResolvedValue({ success: true, projectId: null })
+  vi.spyOn(api.chat, 'discardStagedAttachments').mockResolvedValue({ success: true })
+  const store = useChatStore()
+  await flushPromises()
+
+  await store.startNewChat({ projectId: 'project-1' })
+  expect(store.activeProjectId).toBe('project-1')
+  await store.createConversation()
+  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, 'project-1')
+  expect(store.conversations[0].projectId).toBe('project-1')
+
+  await store.setConversationProject(null)
+  expect(setProject).toHaveBeenCalledWith('new-chat', null)
+  expect(store.activeProjectId).toBeNull()
+  expect(store.conversations[0].projectId).toBeNull()
+
+  await store.startNewChat()
+  expect(store.activeProjectId).toBeNull()
+})

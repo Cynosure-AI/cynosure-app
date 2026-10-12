@@ -13,6 +13,8 @@ const props = withDefaults(defineProps<{
   activeConversationIds?: string[]
   agentId?: string | null
   filters?: string[]
+  /** Leave out chats that belong to a project; they are listed under their project. Searching still finds them. */
+  excludeProjectChats?: boolean
 }>(), {
   awaitingConversationIds: () => [],
   activeConversationIds: () => [],
@@ -157,6 +159,7 @@ async function load(reset = false, clearExisting = false): Promise<void> {
       activeQuery.value || undefined,
       props.agentId,
       props.filters,
+      { excludeProjects: props.excludeProjectChats && !activeQuery.value },
     )
     if (token !== requestToken.value) return
     const rows = response.items.map(mapRow)
@@ -286,6 +289,9 @@ watch([() => props.agentId, () => props.filters], () => {
 watch(() => chatStore.activeConversationId, (conversationId) => {
   if (conversationId) scheduleRefresh()
 })
+
+// Moving a chat into or out of a project moves it between the sidebar groups.
+watch(() => chatStore.activeProjectId, scheduleRefresh)
 
 watch(() => props.activeConversationIds.join('|'), scheduleRefresh)
 

@@ -272,6 +272,7 @@ export interface ConversationDto {
   title: string
   agentId: string | null
   maWorkspaceId: string | null
+  projectId: string | null
   origin: string
   createdAt: number
   updatedAt: number
@@ -284,4 +285,86 @@ export interface ConversationMessagesResponse {
   latestEventSequence: number
   lastContextTokens: number | null
   executionConfig: ConversationExecutionConfig
+  conversationProjectId?: string | null
 }
+
+export type ProjectTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done'
+
+export interface ProjectDto {
+  id: string
+  name: string
+  description: string
+  /** User-authored instructions added to every run in the project. */
+  instructions: string
+  /** Living summary of goal, state, decisions, and open questions, maintained by agents. */
+  brief: string
+  briefUpdatedAt: number | null
+  /** Optional working directory; file tools may access it and the shell starts there. */
+  rootPath: string
+  memoryFolderId: string | null
+  defaultAgentId: string | null
+  color: string
+  /** Iconify icon name, e.g. `lucide:sprout`; empty uses the default project icon. */
+  icon: string
+  archived: boolean
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+  conversationCount?: number
+  openTaskCount?: number
+  lastActivityAt?: number | null
+}
+
+export interface ProjectTaskDto {
+  id: string
+  projectId: string
+  title: string
+  notes: string
+  status: ProjectTaskStatus
+  sortOrder: number
+  assigneeAgentId: string | null
+  conversationId: string | null
+  createdBy: 'user' | 'agent'
+  createdAt: number
+  updatedAt: number
+  completedAt: number | null
+}
+
+/** Who changed a project: the user, an agent in a chat, the Dream reviewer, a restore, or the pre-history baseline. */
+export type ProjectChangeSource = 'user' | 'ai' | 'dream' | 'restore' | 'initial'
+
+export interface ProjectBriefRevisionDto {
+  id: string
+  revisionNumber: number
+  content: string
+  source: ProjectChangeSource
+  conversationId: string | null
+  agentId: string | null
+  createdAt: number
+  isCurrent: boolean
+}
+
+export interface ProjectDiffSegment {
+  type: 'unchanged' | 'added' | 'removed'
+  text: string
+}
+
+interface ProjectTimelineBase {
+  id: string
+  createdAt: number
+  source: ProjectChangeSource
+  conversationId: string | null
+  conversationTitle: string | null
+  agentId: string | null
+}
+
+export type ProjectTimelineEntry =
+  | (ProjectTimelineBase & { kind: 'brief'; revisionNumber: number; isCurrent: boolean })
+  | (ProjectTimelineBase & {
+    kind: 'task_created' | 'task_updated' | 'task_deleted'
+    taskId: string | null
+    taskTitle: string
+    fromStatus: ProjectTaskStatus | null
+    toStatus: ProjectTaskStatus | null
+  })
+  | (ProjectTimelineBase & { kind: 'chat_started'; origin: string })

@@ -52,6 +52,10 @@ const globalEventNames = new Set([
   // Carries only execution discovery metadata so clients can subscribe to a
   // remotely-created channel conversation before its scoped stream events.
   'channel:conversation-state',
+  // Project brief and board changes carry only the project id; any open
+  // project view, sidebar, or picker may need them.
+  'project:updated',
+  'project:tasks-updated',
 ])
 
 export function addClient(ws: WebSocket): void {

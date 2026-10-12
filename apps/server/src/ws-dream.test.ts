@@ -15,6 +15,18 @@ test('Dream run updates reach activity clients without conversation subscription
     }
 })
 
+test('project brief and board updates reach clients without conversation subscriptions', () => {
+    const client = Object.assign(new EventEmitter(), { OPEN: 1, readyState: 1, send: vi.fn() })
+    const socket = client as unknown as WebSocket
+    addClient(socket)
+    try {
+        broadcast('project:updated', { id: 'project' })
+        broadcast('project:tasks-updated', { projectId: 'project' })
+        expect(client.send).toHaveBeenCalledTimes(2)
+    } finally {
+        removeClient(socket)
+    }
+})
 
 test('registry changes reach chat menus and coalesce a batch of discoveries', async () => {
     const { ToolRegistry } = await import('./core/tools/tool-registry.js')

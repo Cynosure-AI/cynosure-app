@@ -1,14 +1,11 @@
 import { OpenRouterProvider } from './openrouter.provider.js'
-import type { ModelInfo, ModelListItem, ModelListType } from './base.provider.js'
+import { isEmbeddingModelId, type ModelInfo, type ModelListItem, type ModelListType } from './base.provider.js'
 
 interface UnslothModel {
     id: string
     context_length?: number
     max_context_length?: number
 }
-
-/** /v1/models does not say what a model is for, so embedding models are recognised by name. */
-const EMBEDDING_MODEL_PATTERN = /embed|\bbge\b|\bgte\b|\be5\b/i
 
 /**
  * Unsloth Studio provider — uses the OpenAI-compatible Chat Completions API.
@@ -39,7 +36,7 @@ export class UnslothProvider extends OpenRouterProvider {
         if (type && type !== 'llm' && type !== 'embedding') return []
         const ids = (await this.fetchLoadedModels()).map((m) => m.id).sort()
         if (!type) return ids
-        return ids.filter((id) => EMBEDDING_MODEL_PATTERN.test(id) === (type === 'embedding'))
+        return ids.filter((id) => isEmbeddingModelId(id) === (type === 'embedding'))
     }
 
     async listModelItems(type?: ModelListType): Promise<ModelListItem[]> {

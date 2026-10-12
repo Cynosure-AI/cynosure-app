@@ -442,6 +442,99 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 23,
+        description: 'Add projects, project tasks, and project links on conversations and cron jobs',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS projects (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    instructions TEXT NOT NULL DEFAULT '',
+                    brief TEXT NOT NULL DEFAULT '',
+                    brief_updated_at INTEGER,
+                    root_path TEXT NOT NULL DEFAULT '',
+                    memory_folder_id TEXT,
+                    default_agent_id TEXT,
+                    color TEXT NOT NULL DEFAULT '',
+                    archived INTEGER NOT NULL DEFAULT 0,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS project_tasks (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL,
+                    notes TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'todo'
+                        CHECK(status IN ('todo', 'in_progress', 'blocked', 'done')),
+                    sort_order REAL NOT NULL DEFAULT 0,
+                    assignee_agent_id TEXT,
+                    conversation_id TEXT,
+                    created_by TEXT NOT NULL DEFAULT 'user',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    completed_at INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS idx_project_tasks_project ON project_tasks(project_id, status, sort_order);
+            `)
+            for (const table of ['conversations', 'cron_jobs']) {
+                const columns = new Set((db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name))
+                if (!columns.has('project_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN project_id TEXT`)
+            }
+            db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id, updated_at)')
+        },
+    },
+    {
+        version: 24,
+        description: 'Add an icon to projects',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(projects)') as Array<{ name: string }>).map((column) => column.name))
+            if (!columns.has('icon')) db.exec("ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
+        },
+    },
+    {
+        version: 25,
+        description: 'Record project brief revisions and project timeline events',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS project_brief_revisions (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    revision_number INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK(source IN ('user', 'ai', 'dream', 'restore', 'initial')),
+                    conversation_id TEXT,
+                    agent_id TEXT,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE(project_id, revision_number)
+                );
+                CREATE TABLE IF NOT EXISTS project_events (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL CHECK(kind IN ('task_created', 'task_updated', 'task_deleted')),
+                    task_id TEXT,
+                    task_title TEXT NOT NULL DEFAULT '',
+                    from_status TEXT,
+                    to_status TEXT,
+                    source TEXT NOT NULL CHECK(source IN ('user', 'ai', 'dream', 'restore', 'initial')),
+                    conversation_id TEXT,
+                    agent_id TEXT,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_project_brief_revisions ON project_brief_revisions(project_id, revision_number DESC);
+                CREATE INDEX IF NOT EXISTS idx_project_events ON project_events(project_id, created_at DESC);
+            `)
+            // Existing briefs become the first revision so later changes have a baseline.
+            db.prepare(`
+                INSERT INTO project_brief_revisions (id, project_id, revision_number, content, source, created_at)
+                SELECT lower(hex(randomblob(16))), id, 1, brief, 'initial', COALESCE(brief_updated_at, updated_at)
+                FROM projects WHERE brief != '' AND id NOT IN (SELECT project_id FROM project_brief_revisions)
+            `).run()
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

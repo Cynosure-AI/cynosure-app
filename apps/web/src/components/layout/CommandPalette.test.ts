@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listConversationsPaginated: vi.fn(),
   listCronJobs: vi.fn(),
   loadServers: vi.fn(),
+  startProjectChat: vi.fn(),
 }))
 
 const mcpServers = ref([
@@ -40,6 +41,22 @@ vi.mock('../../stores/agent-definitions.store', () => {
     }),
   }
 })
+vi.mock('../../stores/projects.store', () => {
+  const projects = [
+    { id: 'project-1', name: 'Garden Planner', description: 'Spring beds', archived: false, defaultAgentId: null, conversationCount: 2, openTaskCount: 1 },
+  ]
+  return {
+    useProjectsStore: () => ({
+      projects,
+      activeProjects: projects,
+      load: vi.fn().mockResolvedValue(undefined),
+      get: (id: string | null) => projects.find((project) => project.id === id),
+    }),
+  }
+})
+vi.mock('../../composables/useProjectChat', () => ({
+  useProjectChat: () => ({ startProjectChat: mocks.startProjectChat }),
+}))
 vi.mock('../../composables/useMcpServers', () => ({
   useMcpServers: () => ({ servers: mcpServers, loadServers: mocks.loadServers }),
 }))
@@ -101,7 +118,8 @@ describe('CommandPalette', () => {
     const { wrapper, input, text } = await openPalette()
     await vi.waitFor(() => expect(text()).toContain('Morning digest'))
 
-    // First row is the conversation; the next one is the first agent.
+    // First row is the conversation, then the project, then the first agent.
+    keydown(input(), 'ArrowDown')
     keydown(input(), 'ArrowDown')
     keydown(input(), 'Enter')
     await vi.waitFor(() => expect(mocks.push).toHaveBeenCalledWith({ name: 'agent-detail', params: { id: 'agent-1' } }))
@@ -126,11 +144,29 @@ describe('CommandPalette', () => {
     keydown(input(), 'Tab')
     keydown(input(), 'Tab')
     keydown(input(), 'Tab')
+    keydown(input(), 'Tab')
     await vi.waitFor(() => expect(text()).not.toContain('Morning digest'))
     expect(text()).not.toContain('Research Assistant')
 
     keydown(input(), 'Enter')
     await vi.waitFor(() => expect(mocks.push).toHaveBeenCalledWith({ name: 'settings-mcp', query: { filter: 'GitHub' } }))
+    wrapper.unmount()
+  })
+
+  it('finds projects and offers a new chat in the best match', async () => {
+    const { wrapper, input, text } = await openPalette()
+    await vi.waitFor(() => expect(text()).toContain('Garden Planner'))
+    mocks.listConversationsPaginated.mockResolvedValue({ items: [], total: 0 })
+
+    input().value = 'garden'
+    input().dispatchEvent(new Event('input'))
+    await vi.waitFor(() => expect(text()).not.toContain('Trip planning'))
+    expect(text()).toContain('New chat in Garden Planner')
+    expect(text()).not.toContain('Research Assistant')
+
+    keydown(input(), 'ArrowDown')
+    keydown(input(), 'Enter')
+    await vi.waitFor(() => expect(mocks.startProjectChat).toHaveBeenCalledWith(expect.objectContaining({ id: 'project-1' })))
     wrapper.unmount()
   })
 

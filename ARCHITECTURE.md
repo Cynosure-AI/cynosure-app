@@ -121,6 +121,14 @@ For each inbound message the platform builds a `ChannelTransport`, which says ho
 
 Adding a channel means adding its folder with a `ChannelProvider` class, a transport, a command style, and HITL buttons, then registering the class in `channel-manager.ts` and extending `ChannelType`.
 
+## Projects
+
+A project is a context that conversations run in, not an agent. Agents decide who does the work and how (model, tools, prompt, sub-agents); a project decides what the work is and where it lives. Any agent, Free Chat included, can work inside any project, and `conversations.project_id` records the membership. Scheduled jobs can carry a `project_id` too, and their runs then start inside the project. A `schedule_create` call made from a project chat binds the new job to that project.
+
+`prepareAgentExecution` resolves the conversation's project and layers it onto the run. The project's instructions are appended to the system prompt. The brief and open tasks travel as turn-local, untrusted `project-state` context. The project's memory folder is merged into the folder scope, unless the chat has an explicit empty scope, which means memory is off. Four project tools (`project_brief_update` and `project_task_list/create/update`) are added and auto-approved. Sub-agents share the parent conversation id, so they inherit all of this. The project folder (`root_path`) is allowed for file tools only while a tool call runs for that conversation (an `AsyncLocalStorage` scope set by the executor and the HITL gate), and the shell tool uses it as its default working directory.
+
+Dream reviews of project conversations put the project's memory folder first and also receive the brief tool, so the brief stays current without a user turn. Deleting a project keeps its conversations, jobs and memory folder; it removes only the project row and its tasks.
+
 ## Code landmarks
 
 - Conversation initialization and saved config: `apps/server/src/routes/conversations.ts`, `apps/server/src/core/chat/run-config.ts`
@@ -130,5 +138,6 @@ Adding a channel means adding its folder with a `ChannelProvider` class, a trans
 - Memory documents and retrieval: `apps/server/src/core/memory/parser.ts`, `apps/server/src/core/memory/rag.ts`, `apps/server/src/core/memory/memory-aggregator.ts`, `apps/server/src/db/schema.ts`
 - Memory evaluation: `apps/server/src/scripts/memory-eval/cli.ts`, `apps/server/src/scripts/memory-eval/worker.ts`, `apps/server/src/core/memory/retrieval-evaluation.ts`
 - Subagent spawn/continue: `apps/server/src/core/agent/sub-agent-tools.ts`
+- Projects: `apps/server/src/core/projects/` (store, run context, tools), `apps/server/src/routes/projects.ts`, `apps/web/src/views/ProjectDetailView.vue`
 - Media dispatch and execution: `apps/server/src/routes/chat.ts`, `apps/server/src/core/chat/media-execution.ts`, `apps/web/src/composables/useWhisper.ts`
 - Messaging channels: `apps/server/src/core/channels/channel-turn.ts`, `apps/server/src/core/channels/channel-session.ts`, `apps/server/src/core/channels/channel-commands.ts`, `apps/server/src/core/channels/channel-manager.ts`

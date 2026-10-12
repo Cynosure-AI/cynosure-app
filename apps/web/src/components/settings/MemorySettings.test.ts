@@ -3,7 +3,6 @@ import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import MemorySettings from './MemorySettings.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
-import ProviderSelect from '../shared/ProviderSelect.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -46,7 +45,6 @@ vi.mock('../../api/client', () => ({
       getLimits: vi.fn().mockResolvedValue({
         analysisChunkLimit: 20,
         chunking: { minChunkSize: 64, maxChunkSize: 4096, defaultChunkSize: 512, defaultChunkOverlap: 64 },
-        reranker: { minCandidateCount: 3, maxCandidateCount: 100, defaultCandidateCount: 50 },
         attachments: { minInlineTextLimit: 2_000, maxInlineTextLimit: 500_000, defaultInlineTextLimit: 24_000 },
         chunkReadLimit: 20,
         graph: { maxNodes: 5000, defaultNodes: 80, maxSuggestions: 20, defaultSuggestions: 8, maxSeedNodes: 50, maxFolders: 100 },
@@ -61,7 +59,6 @@ vi.mock('../../api/client', () => ({
         enabled: false,
         providerId: '',
         model: '',
-        candidateCount: 50,
       }),
     },
   },
@@ -190,7 +187,7 @@ describe('Embedding model settings', () => {
     wrapper.unmount()
   })
 
-  test('switching provider does not carry the previous model over', async () => {
+  test('one selector lists embedding models from every provider', async () => {
     const wrapper = mount(MemorySettings, {
       props: { visibleSections: ['embedding-model'] },
       global: { plugins: [createPinia()], stubs: { ProviderModelSelect: true, Icon: true } },
@@ -198,15 +195,17 @@ describe('Embedding model settings', () => {
     await flushPromises()
     const modelSelect = () => wrapper.getComponent(ProviderModelSelect)
 
-    wrapper.getComponent(ProviderSelect).vm.$emit('update:modelValue', 'provider-2')
-    await flushPromises()
-    expect(modelSelect().props('modelValue')).toBe('')
-    expect(wrapper.text()).not.toContain('dimensions')
-    expect(wrapper.text()).toContain('Only models available on Unsloth Studio are listed.')
+    expect(modelSelect().props('providers').map((provider: { id: string }) => provider.id)).toEqual(['provider-1', 'provider-2'])
+    expect(modelSelect().props('hideEmptyProviders')).toBe(true)
 
-    wrapper.getComponent(ProviderSelect).vm.$emit('update:modelValue', 'provider-1')
+    modelSelect().vm.$emit('change', { providerId: 'provider-2', model: 'embed-local' })
     await flushPromises()
-    expect(modelSelect().props('modelValue')).toBe('embed-small')
+    expect(modelSelect().props('providerId')).toBe('provider-2')
+    expect(modelSelect().props('modelValue')).toBe('embed-local')
+    expect(wrapper.text()).not.toContain('dimensions')
+
+    modelSelect().vm.$emit('change', { providerId: 'provider-1', model: 'embed-small' })
+    await flushPromises()
     expect(wrapper.text()).toContain('768 dimensions')
     wrapper.unmount()
   })
