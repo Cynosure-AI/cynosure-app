@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { routeToolsLexically, shouldRouteTools } from './tool-router.js'
+import { routeToolsLexically, shouldRouteTools, toolEmbeddingText } from './tool-router.js'
 import type { RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 
 function tool(name: string, description: string, namespaceId?: string): RegistryAwareToolDefinition {
@@ -49,5 +49,31 @@ describe('tool router degraded mode', () => {
             'calendar_list',
             'expand_available_toolset',
         ]))
+    })
+})
+
+describe('tool embedding text', () => {
+    test('names the namespace and parameters but omits the JSON schema', () => {
+        const text = toolEmbeddingText({
+            ...tool('github__search_issues', 'Search issues and pull requests.', 'mcp:github'),
+            originalName: 'search_issues',
+            namespaceLabel: 'GitHub',
+            parameters: {
+                type: 'object',
+                properties: { query: { type: 'string' }, repo: { type: 'string', description: 'owner/name' } },
+                required: ['query'],
+            },
+        })
+
+        expect(text).toBe([
+            'Namespace: GitHub',
+            'Tool: search_issues',
+            'Search issues and pull requests.',
+            'Parameters: query, repo',
+        ].join('\n'))
+    })
+
+    test('omits empty namespace and parameter lines', () => {
+        expect(toolEmbeddingText(tool('read_workspace', 'Read project files'))).toBe('Tool: read_workspace\nRead project files')
     })
 })

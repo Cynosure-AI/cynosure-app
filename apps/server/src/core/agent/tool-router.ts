@@ -396,12 +396,10 @@ function groupContentHash(group: McpToolGroup): string {
         .digest('hex')
 }
 
-function toolContentHash(tool: ToolDefinition): string {
-    const namespaceId = (tool as RegistryAwareToolDefinition).namespaceId || ''
-    const originalName = (tool as RegistryAwareToolDefinition).originalName || tool.name
-
+/** Hashes exactly what is embedded, so only changes to that text force a re-embed. */
+function toolContentHash(tool: RegistryAwareToolDefinition): string {
     return createHash('sha256')
-        .update(`${namespaceId}\n${originalName}\n${compactToolDescription(tool.description)}\n${JSON.stringify(tool.parameters || {})}`)
+        .update(`${tool.namespaceId || ''}\n${toolEmbeddingText(tool)}`)
         .digest('hex')
 }
 
@@ -510,11 +508,20 @@ function toolText(tool: ToolDefinition): string {
     return `${tool.name} ${tool.description}`
 }
 
-function toolEmbeddingText(tool: ToolDefinition): string {
+/**
+ * The namespace label tells same-named tools of different servers apart.
+ * Parameter names carry meaning; the rest of the JSON schema only dilutes it.
+ */
+export function toolEmbeddingText(tool: RegistryAwareToolDefinition): string {
+    const parameterNames = Object.keys(
+        (tool.parameters as { properties?: Record<string, unknown> } | undefined)?.properties || {},
+    )
+
     return [
-        `Tool: ${(tool as RegistryAwareToolDefinition).originalName || tool.name}`,
+        tool.namespaceLabel ? `Namespace: ${tool.namespaceLabel}` : '',
+        `Tool: ${tool.originalName || tool.name}`,
         compactToolDescription(tool.description),
-        JSON.stringify(tool.parameters || {}),
+        parameterNames.length ? `Parameters: ${parameterNames.join(', ')}` : '',
     ].filter(Boolean).join('\n')
 }
 
