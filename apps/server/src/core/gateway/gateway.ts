@@ -144,6 +144,7 @@ export class LLMGateway {
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     if (type === 'decision' && !supportsDecisionModels(provider)) return []
+    if (type === 'transcription' && !supportsTranscription(provider)) return []
     return provider.listModels(type)
   }
 
@@ -153,6 +154,7 @@ export class LLMGateway {
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     if (type === 'decision' && !supportsDecisionModels(provider)) return []
+    if (type === 'transcription' && !supportsTranscription(provider)) return []
 
     const models = await provider.listModelItems(type)
     if (provider.config.type === 'ollama' || provider.config.type === 'lmstudio' || provider.config.type === 'unsloth') {
@@ -404,6 +406,15 @@ function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>[
 /** Decision models (typed judgments instead of text) are an OpenRouter catalog. */
 function supportsDecisionModels(provider: BaseLLMProvider): boolean {
   return provider.config.type === 'openrouter'
+}
+
+/**
+ * Hosts with a working /audio/transcriptions client. Other providers would
+ * otherwise list their chat models for the transcription picker.
+ */
+function supportsTranscription(provider: BaseLLMProvider): boolean {
+  const type = provider.config.type
+  return type === 'openrouter' || type === 'groq' || type === 'requesty'
 }
 
 function hasProviderPricingCatalog(type: LLMProviderConfig['type']): boolean {

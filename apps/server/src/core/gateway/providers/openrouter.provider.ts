@@ -1090,6 +1090,9 @@ export class OpenRouterProvider extends BaseLLMProvider {
         })
 
         if (!res.ok) {
+            // The SDK list has no modality filter, so it cannot stand in for
+            // the transcription catalog without leaking chat models.
+            if (type === 'transcription') return []
             // Fall back to OpenAI SDK models list
             const models = await this.client.models.list()
             return models.data.map((m) => m.id).sort()

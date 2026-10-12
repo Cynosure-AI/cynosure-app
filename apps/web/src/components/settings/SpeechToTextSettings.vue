@@ -289,6 +289,8 @@ onMounted(() => {
           max-height="max-h-80"
           dropdown-width="min-w-full"
           only-show-available-models
+          hide-empty-providers
+          :include-provider-default="false"
         />
         <p class="text-xs text-ink-muted">
           Audio from the microphone is sent to the selected provider for transcription.

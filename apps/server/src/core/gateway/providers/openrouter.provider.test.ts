@@ -67,6 +67,17 @@ describe('OpenRouter reranker model pricing', () => {
 })
 
 describe('OpenRouter model metadata', () => {
+    test('does not fall back to unfiltered chat models when the transcription catalog fails', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('unavailable', { status: 503 })))
+        const provider = new OpenRouterProvider(config)
+        const list = vi.fn().mockResolvedValue({ data: [{ id: 'deepseek/deepseek-v4.1-flash' }] })
+        ;(provider as unknown as { client: { models: { list: typeof list } } }).client = { models: { list } }
+
+        expect(await provider.listModels('transcription')).toEqual([])
+        expect(await provider.listModelItems('transcription')).toEqual([])
+        expect(list).not.toHaveBeenCalled()
+    })
+
     test('keeps tool support, pricing tiers and explicit transcription units', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
             data: [

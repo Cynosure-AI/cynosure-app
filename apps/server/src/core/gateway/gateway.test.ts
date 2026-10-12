@@ -142,3 +142,40 @@ describe('LLMGateway model metadata enrichment', () => {
         expect(getModelInfo).toHaveBeenCalledTimes(2)
     })
 })
+
+describe('LLMGateway transcription model listing', () => {
+    function registerStub(gateway: LLMGateway, id: string, type: string) {
+        const provider = {
+            config: { id, type },
+            listModels: vi.fn().mockResolvedValue(['chat-model']),
+            listModelItems: vi.fn().mockResolvedValue([{ id: 'chat-model' }]),
+        } as unknown as BaseLLMProvider
+        gateway.getAllProviders().set(id, provider)
+        return provider
+    }
+
+    test.each(['openai', 'anthropic', 'google', 'ollama', 'lmstudio', 'mistral'])(
+        'lists no transcription models for %s, which cannot transcribe',
+        async (type) => {
+            const gateway = new LLMGateway()
+            const provider = registerStub(gateway, `${type}-1`, type)
+
+            expect(await gateway.listModels(`${type}-1`, 'transcription')).toEqual([])
+            expect(await gateway.listModelItems(`${type}-1`, 'transcription')).toEqual([])
+            expect(provider.listModels).not.toHaveBeenCalled()
+            expect(provider.listModelItems).not.toHaveBeenCalled()
+        },
+    )
+
+    test.each(['openrouter', 'groq', 'requesty'])(
+        'asks %s for its transcription catalog',
+        async (type) => {
+            const gateway = new LLMGateway()
+            const provider = registerStub(gateway, `${type}-1`, type)
+
+            await gateway.listModels(`${type}-1`, 'transcription')
+
+            expect(provider.listModels).toHaveBeenCalledWith('transcription')
+        },
+    )
+})
