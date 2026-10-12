@@ -129,6 +129,14 @@ A project is a context that conversations run in, not an agent. Agents decide wh
 
 Dream reviews of project conversations put the project's memory folder first and also receive the brief tool, so the brief stays current without a user turn. Deleting a project keeps its conversations, jobs and memory folder; it removes only the project row and its tasks.
 
+Brief updates are compare-and-swap. The brief tool remembers the brief its run was shown, and the brief editor in the UI sends the brief the edit started from (`expectedBrief`). If another chat, Dream, or the user changed the brief since, the write is rejected: the tool returns the current brief so the agent can merge and retry, and the UI gets a 409 that keeps the draft.
+
+## Conversation history
+
+`conversation_search` and `conversation_read` (namespace `builtin:conversations`) let a run look up earlier chats. Their scope comes from the run: a project chat sees the chats in its project, an agent sees its own chats, and Free Chat sees all chats. The calling chat is always excluded. Sub-agents are one-off delegates and get neither tool: `isSubAgent` removes them from the run's tools and routing candidates. Only the main thread is visible: user and assistant messages without sub-agent sessions. Tool calls are named, but tool output is left out.
+
+Search uses an FTS5 index (`message_search`, keyed through `message_search_rows`) that triggers on `messages` keep current. The triggers are idempotent because backup restore re-inserts rows with `INSERT OR REPLACE`, which does not fire delete triggers. A search tries all terms first and then falls back to any of them.
+
 ## Code landmarks
 
 - Conversation initialization and saved config: `apps/server/src/routes/conversations.ts`, `apps/server/src/core/chat/run-config.ts`
@@ -139,5 +147,6 @@ Dream reviews of project conversations put the project's memory folder first and
 - Memory evaluation: `apps/server/src/scripts/memory-eval/cli.ts`, `apps/server/src/scripts/memory-eval/worker.ts`, `apps/server/src/core/memory/retrieval-evaluation.ts`
 - Subagent spawn/continue: `apps/server/src/core/agent/sub-agent-tools.ts`
 - Projects: `apps/server/src/core/projects/` (store, run context, tools), `apps/server/src/routes/projects.ts`, `apps/web/src/views/ProjectDetailView.vue`
+- Conversation history tools: `apps/server/src/core/tools/builtin/conversation-tools.ts`, index in `apps/server/src/db/migrations.ts` (v26)
 - Media dispatch and execution: `apps/server/src/routes/chat.ts`, `apps/server/src/core/chat/media-execution.ts`, `apps/web/src/composables/useWhisper.ts`
 - Messaging channels: `apps/server/src/core/channels/channel-turn.ts`, `apps/server/src/core/channels/channel-session.ts`, `apps/server/src/core/channels/channel-commands.ts`, `apps/server/src/core/channels/channel-manager.ts`

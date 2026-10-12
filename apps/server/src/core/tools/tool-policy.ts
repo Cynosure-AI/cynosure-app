@@ -4,6 +4,7 @@ import { isMemoryReadToolName } from './builtin/memory-tools.js'
 import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
 import type { ToolBehaviorAnnotations } from '../gateway/providers/base.provider.js'
 import { isProjectToolName } from '../projects/project-tools.js'
+import { isConversationToolName } from './builtin/conversation-tools.js'
 
 /**
  * Tool policy lives here so approval and UI visibility decisions use the same
@@ -27,7 +28,8 @@ export function isInternalTool(toolName: string): boolean {
 
 export function isSystemAutoApprovedTool(toolName: string): boolean {
   // Project tools only change the project's own brief and task board.
-  return isInternalTool(toolName) || isProjectToolName(toolName)
+  // Conversation tools only read chats within the caller's scope.
+  return isInternalTool(toolName) || isProjectToolName(toolName) || isConversationToolName(toolName)
 }
 
 /**

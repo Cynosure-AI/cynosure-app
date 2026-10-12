@@ -61,11 +61,12 @@ function preset(overrides: Partial<ExecutionPreset> = {}): ExecutionPreset {
     }
 }
 
-function registry() {
+function registry(extra: Array<[string, RegistryAwareToolDefinition]> = []) {
     const tools = new Map([
         [manageMcpKey, tool('manage_mcp', manageMcpKey)],
         [readKey, tool('read', readKey)],
         [writeKey, tool('write', writeKey)],
+        ...extra,
     ])
     return {
         listRegisteredTools: () => [...tools].map(([key, value]) => ({
@@ -161,5 +162,27 @@ describe('resolveExecutionTools selection', () => {
 
         expect((await routed()).tools.map(({ name }) => name)).toEqual(['write'])
         expect((await routed()).tools.map(({ name }) => name)).toEqual(['write', 'read'])
+    })
+
+    test('sub-agents never get conversation history tools, whether configured or routed', async () => {
+        const searchKey = 'builtin:conversations::conversation_search'
+        const toolRegistry = registry([[searchKey, tool('conversation_search', searchKey)]])
+        const configured = preset({ tools: [searchKey, readKey] })
+
+        const parent = await resolveExecutionTools(input({ toolRegistry, preset: configured }))
+        expect(parent.tools.map(({ name }) => name)).toEqual(['conversation_search', 'read'])
+
+        const subAgent = await resolveExecutionTools(input({ toolRegistry, preset: configured, isSubAgent: true }))
+        expect(subAgent.tools.map(({ name }) => name)).toEqual(['read'])
+
+        await resolveExecutionTools(input({
+            toolRegistry,
+            conversationId: 'conversation-2',
+            preset: preset({ autoToolRouting: true }),
+            autoToolRouting: true,
+            isSubAgent: true,
+        }))
+        const routingCandidates = applyAutoToolRouting.mock.calls.at(-1)![0].tools.map(({ name }) => name)
+        expect(routingCandidates).not.toContain('conversation_search')
     })
 })

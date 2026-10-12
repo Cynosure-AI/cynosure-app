@@ -11,11 +11,12 @@ import type { ToolRegistry } from '../../tools/tool-registry.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
+import { isConversationToolName } from '../../tools/builtin/conversation-tools.js'
 
 export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     | 'preset' | 'conversationId' | 'broadcast' | 'userQuery' | 'recentMessages' | 'usedToolNames'
     | 'preferredToolKeys' | 'routingToolKeys' | 'autoToolRouting' | 'autoMemory' | 'includeSubAgents'
-    | 'subAgentAssignments' | 'signal' | 'memoryFolderOverrides' | 'hydrationAgentId' | 'eventMeta'> & {
+    | 'subAgentAssignments' | 'signal' | 'memoryFolderOverrides' | 'hydrationAgentId' | 'eventMeta' | 'isSubAgent'> & {
     toolRegistry: ToolRegistry
     gateway: LLMGateway
     /** Router provider and model used for toolset selection. */
@@ -60,12 +61,15 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         suppressAutoTools = false,
         scheduleExecutionConfig,
         plannedToolsetIds,
+        isSubAgent = false,
     } = input
 
+    // Sub-agents never see conversation history, not even through tool search.
+    const allowedForRun = (tool: RegistryAwareToolDefinition) => !isSubAgent || !isConversationToolName(tool.originalName ?? tool.name)
     const autoRoutingEnabled = isToolRoutingEnabled(preset, autoToolRouting)
-    const candidateTools = autoRoutingEnabled
+    const candidateTools = (autoRoutingEnabled
         ? resolveRoutingCandidateTools({ preset, toolRegistry, preferredToolKeys, routingToolKeys })
-        : toolRegistry.resolveForExecution(preset.tools || [])
+        : toolRegistry.resolveForExecution(preset.tools || [])).filter(allowedForRun)
     let tools: RegistryAwareToolDefinition[]
     if (!autoRoutingEnabled) {
         tools = candidateTools
@@ -129,12 +133,13 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         ]
     }
 
-    tools = hydrateBuiltInTools(tools, {
+    tools = hydrateBuiltInTools(tools.filter(allowedForRun), {
         agentId: hydrationAgentId !== undefined ? hydrationAgentId : preset.id,
         conversationId,
         broadcast,
         memoryFolderOverrides,
         scheduleExecutionConfig,
+        isSubAgent,
     })
     return {
         tools,

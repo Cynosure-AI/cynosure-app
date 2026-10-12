@@ -76,6 +76,8 @@ export interface PrepareExecutionInput {
     subAgentAssignments?: SubAgentAssignment[]
     /** Parent abort signal passed to sub-agent executors */
     signal?: AbortSignal
+    /** The run is a delegated sub-agent session; it gets no conversation history tools. */
+    isSubAgent?: boolean
 
     // ── Agentless overrides ──
 

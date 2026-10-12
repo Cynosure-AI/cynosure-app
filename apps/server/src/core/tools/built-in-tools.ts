@@ -14,6 +14,7 @@ import { makeManageMcpTool } from "./builtin/manage-mcp.js";
 import { makeFileTools } from "./builtin/file-tools.js";
 import { makeShellTool } from "./builtin/shell-tool.js";
 import { getProjectForConversation } from "../projects/project-store.js";
+import { CONVERSATION_TOOL_NAMES, makeConversationReadTool, makeConversationSearchTool } from "./builtin/conversation-tools.js";
 import {
     makeMemorySearchTool,
     makeMemoryCreateTool,
@@ -33,6 +34,7 @@ export const BUILTIN_NAMESPACE_IDS = {
     utility: "builtin:utility",
     files: "builtin:files",
     shell: "builtin:shell",
+    conversations: "builtin:conversations",
 } as const;
 
 export const BUILTIN_NAMESPACES = {
@@ -66,6 +68,11 @@ export const BUILTIN_NAMESPACES = {
         label: "Built-In: Shell",
         description: "Run shell commands with server permissions using the normal tool approval settings.",
     },
+    conversations: {
+        id: BUILTIN_NAMESPACE_IDS.conversations,
+        label: "Built-In: Conversations",
+        description: "Search and read earlier chats: the project's chats in a project, an agent's own chats, or all chats in Free Chat.",
+    },
 } as const satisfies Record<string, ToolNamespace>;
 
 type BuiltInToolSpec = Pick<
@@ -82,6 +89,8 @@ interface BuiltInHydrationContext {
     assignedFolders: MemoryFolderRef[];
     folderFilter?: string;
     scheduleExecutionConfig?: ConversationExecutionConfig;
+    /** Sub-agents are one-off delegates and get no conversation history. */
+    isSubAgent?: boolean;
 }
 
 function scheduleOptions(ctx: BuiltInHydrationContext) {
@@ -123,6 +132,8 @@ const BUILTIN_TOOL_HYDRATORS = {
         assignedFolders: ctx.assignedFolders,
         revisionContext: { source: 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId },
     }),
+    conversation_search: (ctx: BuiltInHydrationContext) => makeConversationSearchTool(ctx),
+    conversation_read: (ctx: BuiltInHydrationContext) => makeConversationReadTool(ctx),
 } as const satisfies Record<string, (ctx: BuiltInHydrationContext) => ToolDefinition>;
 
 export const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_HYDRATORS);
@@ -136,6 +147,7 @@ export function getBuiltInNamespace(toolName: string): ToolNamespace {
         return BUILTIN_NAMESPACES.memory;
     }
     if (SCHEDULE_TOOL_NAMES.includes(toolName as never)) return BUILTIN_NAMESPACES.scheduling;
+    if (CONVERSATION_TOOL_NAMES.includes(toolName as never)) return BUILTIN_NAMESPACES.conversations;
     return BUILTIN_NAMESPACES.utility;
 }
 
@@ -220,6 +232,7 @@ export function hydrateBuiltInTools(
         broadcast: BroadcastFn;
         memoryFolderOverrides?: MemoryFolderRef[];
         scheduleExecutionConfig?: ConversationExecutionConfig;
+        isSubAgent?: boolean;
     },
 ): RegistryAwareToolDefinition[] {
     const selectedFolders =
@@ -235,6 +248,7 @@ export function hydrateBuiltInTools(
         assignedFolders,
         folderFilter,
         scheduleExecutionConfig: ctx.scheduleExecutionConfig,
+        isSubAgent: ctx.isSubAgent,
     };
 
     return tools.map((t) => {
