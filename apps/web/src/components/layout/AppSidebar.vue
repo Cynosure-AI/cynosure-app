@@ -303,7 +303,7 @@ const chatRoute = computed(() =>
                 v-if="showNotifications"
                 role="dialog"
                 aria-label="Notifications"
-                class="notification-popover w-80 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
+                class="notification-popover w-90 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
                 :style="notifPopoverStyle"
                 @click.stop
               >
@@ -323,7 +323,7 @@ const chatRoute = computed(() =>
                       class="text-[10px] text-accent-fg hover:text-accent-fg transition-colors px-1.5 py-0.5"
                       @click.stop="notificationStore.markAllRead()"
                     >
-                      Mark all read
+                      Mark read
                     </button>
                     <button
                       v-if="notificationStore.notifications.length > 0"
