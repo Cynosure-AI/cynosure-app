@@ -189,6 +189,47 @@ function getCronEvaluationContext(conversationId: string, result: AgentExecutorR
         : context
 }
 
+/** Intermediate text shorter than this is treated as tool-call narration ("Let me search…"). */
+const MIN_INTERMEDIATE_SEGMENT_CHARS = 200
+
+/**
+ * Build the channel notification body from every substantive assistant text
+ * segment of the run, not just the final round. Agents often write the actual
+ * deliverable alongside a tool call (e.g. updating a project brief) and end
+ * with a short wrap-up that only makes sense next to the earlier message.
+ */
+export function composeCronNotificationBody(intermediateSegments: string[], finalContent: string): string {
+    const final = finalContent.trim()
+    const segments = intermediateSegments
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length >= MIN_INTERMEDIATE_SEGMENT_CHARS && segment !== final)
+    // '(completed)' is the executor's placeholder for a run whose last round had no text.
+    if (final && (final !== '(completed)' || segments.length === 0)) segments.push(final)
+    return segments.join('\n\n')
+}
+
+/** Text the primary agent wrote alongside its tool calls during the run, oldest first. */
+function getIntermediateAssistantSegments(conversationId: string): string[] {
+    const rows = getDb().prepare(
+        `SELECT content FROM messages
+         WHERE conversation_id = ? AND role = 'assistant' AND tool_calls_json IS NOT NULL
+           AND ma_codename IS NULL AND ma_invocation_id IS NULL
+         ORDER BY created_at ASC`
+    ).all(conversationId) as { content: string | null }[]
+    return rows.map((row) => row.content || '')
+}
+
+function getCronDeliveryInstructions(outputChannelId: string): string {
+    if (!outputChannelId) return ''
+    const channelType = getChannelManager().getFromDb(outputChannelId)?.type
+    const channelName = channelType ? channelType[0].toUpperCase() + channelType.slice(1) : 'a messaging channel'
+    return [
+        '',
+        `Your reply will be forwarded verbatim to the user via ${channelName}, where earlier messages and tool activity are not visible.`,
+        'Do all tool calls and bookkeeping first, then put the complete deliverable in your final message. Never refer to content "above".',
+    ].join('\n')
+}
+
 async function shouldNotifyForCronJob(job: CronJobData, result: AgentExecutorResult, conversationId: string): Promise<boolean> {
     if (job.notificationMode !== 'conditional') return true
 
@@ -292,7 +333,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
             userContent,
             origin: 'cron',
             title: job.name.trim() || 'New Chat',
-            systemPromptSuffix: '\nUse your tools to perform the scheduled task.',
+            systemPromptSuffix: `\nUse your tools to perform the scheduled task.${getCronDeliveryInstructions(job.outputChannelId)}`,
             broadcast,
             signal: abortController.signal,
             logPrefix: '[cron]',
@@ -327,7 +368,8 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
                     const target = resolveChannelTarget(job.outputChannelId)
                     if (target) {
                         const label = job.name?.trim() || 'Cron job'
-                        await getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${result.content}`)
+                        const body = composeCronNotificationBody(getIntermediateAssistantSegments(conversationId), result.content)
+                        await getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${body}`)
                     } else {
                         console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because channel "${job.outputChannelId}" has no known target`)
                     }
