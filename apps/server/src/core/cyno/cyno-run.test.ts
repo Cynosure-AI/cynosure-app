@@ -6,7 +6,8 @@ import { closeDb } from '../../db/database.js'
 import { getDefaultMemoryFolder } from '../memory/memory-folder-scope.js'
 import { getBuiltInToolKey } from '../tools/built-in-tools.js'
 import { saveCynoProfile } from './cyno-profile.js'
-import { agentlessRunOptions, cynoExecutionConfig } from './cyno-run.js'
+import { cynoExecutionConfig } from './cyno-run.js'
+import { resolveRunSettings } from '../agent/run-settings.js'
 
 let directory: string
 beforeEach(() => {
@@ -25,7 +26,7 @@ describe('Cyno runs outside the app', () => {
         expect(config.allowedTools).toContain(getBuiltInToolKey('schedule_create'))
         expect(config.allowedTools).toContain(getBuiltInToolKey('manage_mcp'))
         expect(config.memoryFolderIds).toEqual([getDefaultMemoryFolder()!.id])
-        expect(agentlessRunOptions(config).memoryFolderOverrides!.length).toBeGreaterThan(0)
+        expect(resolveRunSettings(null, config).plan.memoryFolderOverrides!.length).toBeGreaterThan(0)
     })
 
     test('saved choices are used as they are, including memory off', () => {
@@ -33,7 +34,7 @@ describe('Cyno runs outside the app', () => {
         const config = cynoExecutionConfig()
 
         expect(config).toMatchObject({ allowedTools: [], memoryFolderIds: [], model: 'glm-5.3', providerId: 'openrouter' })
-        expect(agentlessRunOptions(config)).toMatchObject({
+        expect(resolveRunSettings(null, config).plan).toMatchObject({
             memoryFolderOverrides: [], modelOverride: 'glm-5.3', providerOverride: 'openrouter', hasExplicitToolAllowlist: true,
         })
     })

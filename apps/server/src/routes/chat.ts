@@ -37,8 +37,7 @@ import { shouldGenerateConversationTitle } from '../core/chat/conversation-title
 import { getChatAttachmentConfig, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
 import { getChatRunSettings, readChatRunSettings, saveChatRunSettings } from '../core/chat/chat-run-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsHint, insertTurnLocalContext, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
-import { buildPersistedChatConfig, resolveChatRunFlags, resolveMemoryFolderOverrides, resolveToolSelection } from '../core/chat/run-config.js'
-import { defaultAutoModes } from '../core/agent/execution-preset.js'
+import { resolveRunSettings } from '../core/agent/run-settings.js'
 import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
 import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
 import { executeImageModel, executeTranscriptionModel, executeVideoModel } from '../core/chat/media-execution.js'
@@ -213,11 +212,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const db = getDb()
       const inlineAttachmentTextLimit = getChatAttachmentConfig(db).inlineAttachmentTextLimit
       const toolRegistry = getToolRegistry()
-      const { selectedToolKeys, hasExplicitToolAllowlist } = resolveToolSelection(
-        toolRegistry,
-        allowedTools,
-        reqAutoToolRouting,
-      )
 
       // Persist user-uploaded images as file artifacts and keep only file URLs in DB.
       // We still use inline data URLs for the immediate provider request in this send call.
@@ -383,13 +377,21 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const convCheck = db.prepare('SELECT agent_id, ma_workspace_id FROM conversations WHERE id = ?').get(conversationId) as { agent_id: string | null; ma_workspace_id: string | null } | undefined
       const agentId: string | null = convCheck?.agent_id || null
       const resolvedAgent = agentId ? getAgent(agentId) : null
-      const effectiveRunFlags = resolveChatRunFlags({
-        resolvedAgent,
+      // The chat's session settings take precedence over the agent's; a Cyno chat sends all of them.
+      const settings = resolveRunSettings(resolvedAgent, {
+        providerId: providerOverride,
+        model,
+        allowedTools,
+        systemPrompt,
+        subAgents: reqSubAgents,
+        memoryFolderIds: reqMemoryFolderIds,
+        thinkingEnabled: reqThinkingEnabled,
+        reasoningEffort: reqReasoningEffort,
+        autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
         autoMemory: reqAutoMemory,
-      })
-
-      // Resolve memory folder overrides (request body ids -> { id, name } objects)
-      const memoryFolderOverrides = resolveMemoryFolderOverrides(db, reqMemoryFolderIds)
+        autoRouterProviderId: reqAutoRouterProviderId,
+        autoRouterModel: reqAutoRouterModel,
+      }, toolRegistry)
 
       const usedToolNames = new Set<string>()
 
@@ -406,20 +408,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           userText: normalizedContent,
           eventMeta: { executionId },
           run: {
-            providerOverride: providerOverride || undefined,
-            modelOverride: model || undefined,
-            systemPrompt: systemPrompt || undefined,
-            requestedSubAgents: reqSubAgents,
-            memoryFolderOverrides,
-            autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : undefined,
-            autoMemory: effectiveRunFlags.autoMemory,
-            autoRouterProviderId: reqAutoRouterProviderId || undefined,
-            autoRouterModel: reqAutoRouterModel || undefined,
-            selectedToolKeys: Array.isArray(allowedTools) ? selectedToolKeys : undefined,
-            hasExplicitToolAllowlist,
+            ...settings.plan,
             usedToolNames,
-            thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
-            reasoningEffort: reqReasoningEffort,
             inlineAttachmentTextLimit,
           },
         })
@@ -484,20 +474,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // Persist the full session config with RESOLVED model/provider so it can
         // be restored correctly when navigating back to this conversation.
-        executionConfig = buildPersistedChatConfig({
-          selectedToolKeys,
-          requestedSubAgents: reqSubAgents,
-          requestedMemoryFolderIds: reqMemoryFolderIds,
-          systemPrompt,
-          responseModel,
-          responseProvider,
-          thinkingEnabled: reqThinkingEnabled !== undefined
-            ? reqThinkingEnabled
-            : (resolvedAgent?.thinkingEnabled !== false),
-          reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
-          autoToolRouting: typeof reqAutoToolRouting === 'boolean' ? reqAutoToolRouting : defaultAutoModes(resolvedAgent).autoToolRouting,
-          autoMemory: effectiveRunFlags.autoMemory,
-        })
+        executionConfig = settings.persistedConfig(responseModel, responseProvider)
         db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(
           JSON.stringify(executionConfig),
           conversationId
@@ -577,8 +554,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         // If the agent defines a hard max-context-token limit, use the lower of
         // the model's context window and the agent's cap as the effective window.
-        const agentMaxCtx = resolvedAgent?.maxContextTokens
-        if (typeof agentMaxCtx === 'number' && agentMaxCtx > 0) {
+        const agentMaxCtx = settings.maxContextTokens
+        if (agentMaxCtx !== null) {
           contextWindow = contextWindow
             ? Math.min(contextWindow, agentMaxCtx)
             : agentMaxCtx
@@ -594,10 +571,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             filteredRows,
             contextWindow,
             tools,
-            thinkingEnabled: reqThinkingEnabled !== undefined
-              ? reqThinkingEnabled
-              : (resolvedAgent?.thinkingEnabled !== false),
-            reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
+            thinkingEnabled: settings.thinkingEnabled,
+            reasoningEffort: settings.reasoningEffort,
             gateway,
             providerId,
             responseModel,
@@ -619,10 +594,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           broadcast: executionBroadcast,
           providerId,
           model: responseModel,
-          hitl: resolvedAgent ? !resolvedAgent.autoApproveTools : true,
+          hitl: settings.hitl,
           maxRounds: MAIN_AGENT_MAX_ROUNDS,
-          thinkingEnabled: reqThinkingEnabled !== undefined ? reqThinkingEnabled : (resolvedAgent?.thinkingEnabled !== false),
-          reasoningEffort: reqReasoningEffort ?? resolvedAgent?.reasoningEffort,
+          thinkingEnabled: settings.thinkingEnabled,
+          reasoningEffort: settings.reasoningEffort,
           streamMode: 'single',
           signal: abortController.signal,
           streamId,

@@ -13,10 +13,10 @@ import { closePlanningRun } from '../agent/planning-state.js'
 import { generateTitle } from '../agent/post-execution.js'
 import { getAgent } from '../agents/agent-store.js'
 import { getCynoProfile } from '../cyno/cyno-profile.js'
-import { agentlessRunOptions, cynoExecutionConfig } from '../cyno/cyno-run.js'
+import { cynoExecutionConfig } from '../cyno/cyno-run.js'
+import { resolveRunSettings } from '../agent/run-settings.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { getEventBus } from '../telemetry/event-bus.js'
-import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import type { ChatMessage, ContentPart } from '../gateway/providers/base.provider.js'
 import {
     applyChannelContextLimit, beginChannelExecution, buildChannelHistory, channelImageDataUrl, finishChannelExecution,
@@ -208,24 +208,11 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         return
     }
     // Cyno runs without an agent, with the settings of its profile.
-    const cynoConfig = agent ? null : cynoExecutionConfig()
-    const runner = agent
-        ? {
-            id: agent.id, name: agent.name, iconUrl: agent.iconUrl || null, model: agent.model || null,
-            hitl: !agent.autoApproveTools, thinkingEnabled: agent.thinkingEnabled !== false,
-            reasoningEffort: agent.reasoningEffort, maxContextTokens: agent.maxContextTokens,
-            run: {
-                memoryFolderOverrides: getAssignedMemoryFolders(agent.id),
-                autoMemory: agent.autoMemory === true,
-                thinkingEnabled: agent.thinkingEnabled !== false,
-            },
-        }
-        : {
-            id: CYNO_AGENT_ID, name: getCynoProfile().name, iconUrl: null, model: cynoConfig!.model || null,
-            hitl: true, thinkingEnabled: cynoConfig!.thinkingEnabled,
-            reasoningEffort: cynoConfig!.reasoningEffort, maxContextTokens: null,
-            run: agentlessRunOptions(cynoConfig!),
-        }
+    const cynoConfig = agent ? undefined : cynoExecutionConfig()
+    const settings = resolveRunSettings(agent, cynoConfig)
+    const identity = agent
+        ? { id: agent.id, name: agent.name, iconUrl: agent.iconUrl || null, model: agent.model || null }
+        : { id: CYNO_AGENT_ID, name: getCynoProfile().name, iconUrl: null, model: cynoConfig!.model || null }
     if (statusMsg !== null) {
         thinkingTimer = setInterval(() => {
             thinkingSeconds++
@@ -236,20 +223,20 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
 
     const unsubs: Array<() => void> = [stopThinkingTimer]
     const { streamId, controller: execAbort } = beginChannelExecution({
-        executions: state.activeExecutions, channelId: state.channelId, agent: runner, conversationId, broadcast: state.broadcast,
+        executions: state.activeExecutions, channelId: state.channelId, agent: identity, conversationId, broadcast: state.broadcast,
     })
     let planned: Awaited<ReturnType<typeof planExecution>> | undefined
     try {
         planned = await planExecution({
             resolvedAgent: agent, conversationId, broadcast: state.broadcast, abortSignal: execAbort.signal,
             gateway: getGateway(), toolRegistry: getToolRegistry(), messages, userText,
-            run: runner.run,
+            run: settings.plan,
         })
         updateChannelExecution(state.activeExecutions, streamId, { model: planned.responseModel, planningRunId: planned.planningRunId })
         if (execAbort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
-        persistChannelExecutionConfig(conversationId, agent, planned)
+        persistChannelExecutionConfig(conversationId, settings.persistedConfig(planned.responseModel, planned.responseProvider))
         const context = await applyChannelContextLimit({
-            gateway: getGateway(), planned, agent: runner, messages: planned.messages, history,
+            gateway: getGateway(), planned, settings, messages: planned.messages, history,
             conversationId, broadcast: state.broadcast, signal: execAbort.signal,
         })
         execAbort.signal.throwIfAborted()
@@ -259,11 +246,11 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
 
         const executor = new AgentExecutor({
             gateway: getGateway(), tools: planned.tools, conversationId, broadcast: state.broadcast,
-            providerId: planned.providerId, model: planned.responseModel, hitl: runner.hitl,
-            maxRounds: MAIN_AGENT_MAX_ROUNDS, thinkingEnabled: runner.thinkingEnabled,
-            reasoningEffort: runner.reasoningEffort, streamMode: 'single', signal: execAbort.signal,
-            streamId, agentId: agent?.id, agentName: runner.name,
-            agentIconUrl: runner.iconUrl, planningRunId: planned.planningRunId,
+            providerId: planned.providerId, model: planned.responseModel, hitl: settings.hitl,
+            maxRounds: MAIN_AGENT_MAX_ROUNDS, thinkingEnabled: settings.thinkingEnabled,
+            reasoningEffort: settings.reasoningEffort, streamMode: 'single', signal: execAbort.signal,
+            streamId, agentId: agent?.id, agentName: identity.name,
+            agentIconUrl: identity.iconUrl, planningRunId: planned.planningRunId,
             contextWindow: context.contextWindow, initialContextEstimate: context.initialContextEstimate,
             contextStrategy: context.strategy, isPrimaryExecutor: true,
         })

@@ -8,17 +8,14 @@ import { applyContextStrategy } from '../agent/context-compactor.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getChatAttachmentConfig } from '../chat/attachment-settings.js'
 import { buildConversationHistory, type BuiltChatHistory } from '../chat/message-history.js'
-import { buildPersistedChatConfig } from '../chat/run-config.js'
-import type { AgentData } from '../agents/agent-store.js'
+import type { RunSettings } from '../agent/run-settings.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
 import type { LLMGateway } from '../gateway/gateway.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
-import type { ContextStrategy } from '@shared/types'
+import type { ContextStrategy, ConversationExecutionConfig } from '@shared/types'
 import type { PlannedExecution } from '../agent/pre-execution/execution-planner.js'
 import type { ActiveChannelExecutionEntry } from './base.channel.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
-import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
-import { cynoExecutionConfig } from '../cyno/cyno-run.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 export type ActiveChannelExecutionMap = Map<string, ActiveChannelExecutionEntry>
@@ -177,7 +174,7 @@ export function channelImageDataUrl(source: string): string | null {
 export async function applyChannelContextLimit(input: {
     gateway: LLMGateway
     planned: PlannedExecution
-    agent: Pick<AgentData, 'maxContextTokens' | 'thinkingEnabled' | 'reasoningEffort'>
+    settings: Pick<RunSettings, 'maxContextTokens' | 'thinkingEnabled' | 'reasoningEffort'>
     messages: ChatMessage[]
     history: BuiltChatHistory
     conversationId: string
@@ -190,10 +187,11 @@ export async function applyChannelContextLimit(input: {
         contextWindow = info.contextLength
     } catch { /* model metadata is best-effort */ }
 
-    if (typeof input.agent.maxContextTokens === 'number' && input.agent.maxContextTokens > 0) {
+    const maxContextTokens = input.settings.maxContextTokens
+    if (maxContextTokens !== null) {
         contextWindow = contextWindow
-            ? Math.min(contextWindow, input.agent.maxContextTokens)
-            : input.agent.maxContextTokens
+            ? Math.min(contextWindow, maxContextTokens)
+            : maxContextTokens
     }
     if (!contextWindow) return { messages: input.messages }
 
@@ -203,8 +201,8 @@ export async function applyChannelContextLimit(input: {
         filteredRows: input.history.filteredRows,
         contextWindow,
         tools: input.planned.tools,
-        thinkingEnabled: input.agent.thinkingEnabled !== false,
-        reasoningEffort: input.agent.reasoningEffort,
+        thinkingEnabled: input.settings.thinkingEnabled,
+        reasoningEffort: input.settings.reasoningEffort,
         gateway: input.gateway,
         providerId: input.planned.providerId,
         responseModel: input.planned.responseModel,
@@ -221,26 +219,8 @@ export async function applyChannelContextLimit(input: {
     }
 }
 
-/** Record the settings a channel turn ran with; `agent` is null for Cyno. */
-export function persistChannelExecutionConfig(
-    conversationId: string,
-    agent: AgentData | null,
-    planned: PlannedExecution,
-): void {
-    const config = !agent
-        ? { ...cynoExecutionConfig(), model: planned.responseModel, providerId: planned.responseProvider }
-        : buildPersistedChatConfig({
-        selectedToolKeys: agent.tools || [],
-        requestedSubAgents: agent.subAgents || [],
-        requestedMemoryFolderIds: getAssignedMemoryFolders(agent.id).map((space) => space.id),
-        systemPrompt: agent.systemPrompt,
-        responseModel: planned.responseModel,
-        responseProvider: planned.responseProvider,
-        thinkingEnabled: agent.thinkingEnabled !== false,
-        reasoningEffort: agent.reasoningEffort,
-        autoToolRouting: agent.autoToolRouting === true,
-        autoMemory: agent.autoMemory === true,
-    })
+/** Record the settings a channel turn ran with. */
+export function persistChannelExecutionConfig(conversationId: string, config: ConversationExecutionConfig): void {
     getDb().prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?')
         .run(JSON.stringify(config), conversationId)
 }

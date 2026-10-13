@@ -15,14 +15,13 @@ vi.mock('../../db/database.js', () => ({
 }))
 vi.mock('../gateway/gateway.js', () => ({ getGateway: () => ({}) }))
 vi.mock('../tools/tool-registry.js', () => ({ getToolRegistry: () => ({}) }))
-vi.mock('../memory/memory-folder-scope.js', () => ({ getAssignedMemoryFolders: () => [] }))
+vi.mock('../memory/memory-folder-scope.js', () => ({ getAssignedMemoryFolders: () => [], getAssignedMemoryFolderIds: () => [] }))
 vi.mock('../agents/agent-store.js', () => ({
     getAgent: (id: string) => id === 'agent' ? { id, name: 'Agent' } : null,
 }))
 vi.mock('../cyno/cyno-profile.js', () => ({ getCynoProfile: () => ({ name: 'Cyno' }) }))
 vi.mock('../cyno/cyno-run.js', () => ({
-    cynoExecutionConfig: () => ({ model: 'cyno-model', thinkingEnabled: true, reasoningEffort: 'medium' }),
-    agentlessRunOptions: () => ({ systemPrompt: 'Cyno prompt' }),
+    cynoExecutionConfig: () => ({ model: 'cyno-model', systemPrompt: 'Cyno prompt', thinkingEnabled: true, reasoningEffort: 'medium' }),
 }))
 vi.mock('../agent/pre-execution/execution-planner.js', () => ({ planExecution: mocks.planExecution }))
 vi.mock('../agent/planning-state.js', () => ({ closePlanningRun: vi.fn() }))
@@ -194,7 +193,9 @@ describe('channel turn', () => {
 
         await receiveChannelMessage(state, inbound(transport))
 
-        expect(mocks.planExecution).toHaveBeenCalledWith(expect.objectContaining({ resolvedAgent: null, run: { systemPrompt: 'Cyno prompt' } }))
+        expect(mocks.planExecution).toHaveBeenCalledWith(expect.objectContaining({
+            resolvedAgent: null, run: expect.objectContaining({ systemPrompt: 'Cyno prompt', modelOverride: 'cyno-model' }),
+        }))
         expect(mocks.persistAssistant).toHaveBeenCalledWith(expect.objectContaining({ agentId: null }))
         expect(messages).toContain('hi from Cyno')
     })
