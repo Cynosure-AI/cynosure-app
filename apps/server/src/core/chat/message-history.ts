@@ -272,7 +272,18 @@ export function buildConversationHistory(input: {
         toolCallId: row.tool_call_id || undefined
     }))
 
-    return { historyRows, filteredRows, messages: repairInterruptedToolRounds(messages) }
+    return { historyRows, filteredRows, messages: leadWithUserTurn(repairInterruptedToolRounds(messages)) }
+}
+
+/**
+ * Some providers reject a conversation that opens with an assistant turn. A
+ * thread can, when it starts with a message the agent sent on its own (such
+ * as a delivered scheduled result), so give it a neutral opening user turn.
+ */
+export function leadWithUserTurn(messages: ChatMessage[]): ChatMessage[] {
+    const first = messages.find((message) => message.role !== 'system')
+    if (first?.role !== 'assistant') return messages
+    return [{ role: 'user', content: '(The conversation continues from a message you sent on your own.)' }, ...messages]
 }
 
 function buildHistoryContent(

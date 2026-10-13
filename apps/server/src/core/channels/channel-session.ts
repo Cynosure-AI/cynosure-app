@@ -9,6 +9,9 @@ import { getDb } from '../../db/database.js'
 import { getAgent, listAgents } from '../agents/agent-store.js'
 import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig } from '../chat/run-config.js'
+import { DEFAULT_CHAT_AGENT, isDefaultChatAgent } from '../agent/execution-preset.js'
+import { getCynoProfile } from '../cyno/cyno-profile.js'
+import { cynoExecutionConfig } from '../cyno/cyno-run.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { cancelChannelExecutionsWhere, type ActiveChannelExecutionMap } from './channel-execution.js'
 import type { ChannelType } from './base.channel.js'
@@ -52,6 +55,18 @@ export function getAvailableAgents<K extends ChannelTargetId>(state: ChannelSess
     return all.filter(a => allowed.has(a.id))
 }
 
+/** Agent id a channel uses for Cyno, which runs without an agent. Its conversations store no agent. */
+export const CYNO_AGENT_ID = DEFAULT_CHAT_AGENT.id
+
+export function isCynoAgentId(agentId: string | null | undefined): boolean {
+    return !agentId || isDefaultChatAgent({ id: agentId })
+}
+
+/** Display name of the agent a channel target talks to. */
+export function channelAgentName(agentId: string): string {
+    return isCynoAgentId(agentId) ? getCynoProfile().name : (getAgent(agentId)?.name || 'Unknown')
+}
+
 /** Command name an agent can be switched to with, e.g. `my-agent` → `my_agent`. */
 export function agentCommandName(internalName: string): string {
     return internalName.toLowerCase().replace(/[^a-z0-9_]/g, '_')
@@ -67,8 +82,8 @@ function channelConversationKey<K extends ChannelTargetId>(state: ChannelSession
 
 function findActiveConversation(channelKey: string, agentId: string): string | undefined {
     const row = getDb()
-        .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id = ? AND json_extract(metadata_json, '$.channelKey') = ? AND json_extract(metadata_json, '$.archived') IS NULL")
-        .get(agentId, channelKey) as { id: string } | undefined
+        .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id IS ? AND json_extract(metadata_json, '$.channelKey') = ? AND json_extract(metadata_json, '$.archived') IS NULL")
+        .get(isCynoAgentId(agentId) ? null : agentId, channelKey) as { id: string } | undefined
     return row?.id
 }
 
@@ -84,13 +99,46 @@ export function getOrCreateChannelConversation<K extends ChannelTargetId>(
 
     const id = nanoid()
     const now = Date.now()
-    const agent = getAgent(agentId)
-    const memoryFolderIds = getAssignedMemoryFolders(agentId).map((space) => space.id)
-    const executionConfig = buildInitialExecutionConfig({ agent, memoryFolderIds })
+    const cyno = isCynoAgentId(agentId)
+    const executionConfig = cyno
+        ? cynoExecutionConfig()
+        : buildInitialExecutionConfig({
+            agent: getAgent(agentId),
+            memoryFolderIds: getAssignedMemoryFolders(agentId).map((space) => space.id),
+        })
     getDb().prepare(
         'INSERT INTO conversations (id, title, agent_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, senderName, agentId, 'channel', JSON.stringify(executionConfig), JSON.stringify({ channelKey }), now, now)
+    ).run(id, senderName, cyno ? null : agentId, 'channel', JSON.stringify(executionConfig), JSON.stringify({ channelKey }), now, now)
     return id
+}
+
+/** The conversation the target's next message would continue: the active one with its current agent. */
+export function resolveHomeConversation<K extends ChannelTargetId>(
+    state: ChannelSessionState<K>,
+    target: K,
+): { conversationId: string; agentId: string } {
+    const agentId = effectiveAgentId(state, target)
+    const conversationId = getOrCreateChannelConversation(state, target, 'Channel chat', agentId)
+    state.conversationTargets.set(conversationId, target)
+    return { conversationId, agentId }
+}
+
+/**
+ * A conversation a channel message continues explicitly, such as a scheduled
+ * run the user replied to. It keeps its own agent (Cyno when it has none) when
+ * that agent is usable on this channel; otherwise `agentId` is null and the
+ * target's current agent takes over.
+ */
+export function resolveContinuedConversation<K extends ChannelTargetId>(
+    state: ChannelSessionState<K>,
+    conversationId: string,
+): { conversationId: string; agentId: string | null } | null {
+    const row = getDb().prepare('SELECT id, agent_id FROM conversations WHERE id = ?')
+        .get(conversationId) as { id: string; agent_id: string | null } | undefined
+    if (!row) return null
+    if (!row.agent_id) return { conversationId: row.id, agentId: CYNO_AGENT_ID }
+    const ownAgentUsable = getAvailableAgents(state).some((agent) => agent.id === row.agent_id)
+    return { conversationId: row.id, agentId: ownAgentUsable ? row.agent_id : null }
 }
 
 /** Archive the active conversation for a target so the next message starts a fresh one. */

@@ -18,6 +18,7 @@ import type { PlannedExecution } from '../agent/pre-execution/execution-planner.
 import type { ActiveChannelExecutionEntry } from './base.channel.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
+import { cynoExecutionConfig } from '../cyno/cyno-run.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 export type ActiveChannelExecutionMap = Map<string, ActiveChannelExecutionEntry>
@@ -54,7 +55,7 @@ export function publishChannelStreamError(broadcast: BroadcastFn, conversationId
 export function beginChannelExecution(input: {
     executions: ActiveChannelExecutionMap
     channelId: string
-    agent: AgentData
+    agent: { id: string; model: string | null }
     conversationId: string
     broadcast: BroadcastFn
 }): { streamId: string; controller: AbortController } {
@@ -130,7 +131,7 @@ export function finishChannelExecution(input: {
     })
 }
 
-export function buildChannelHistory(conversationId: string, agentId: string): BuiltChatHistory {
+export function buildChannelHistory(conversationId: string, agentId: string | null): BuiltChatHistory {
     const db = getDb()
     return buildConversationHistory({
         db,
@@ -176,7 +177,7 @@ export function channelImageDataUrl(source: string): string | null {
 export async function applyChannelContextLimit(input: {
     gateway: LLMGateway
     planned: PlannedExecution
-    agent: AgentData
+    agent: Pick<AgentData, 'maxContextTokens' | 'thinkingEnabled' | 'reasoningEffort'>
     messages: ChatMessage[]
     history: BuiltChatHistory
     conversationId: string
@@ -220,12 +221,15 @@ export async function applyChannelContextLimit(input: {
     }
 }
 
+/** Record the settings a channel turn ran with; `agent` is null for Cyno. */
 export function persistChannelExecutionConfig(
     conversationId: string,
-    agent: AgentData,
+    agent: AgentData | null,
     planned: PlannedExecution,
 ): void {
-    const config = buildPersistedChatConfig({
+    const config = !agent
+        ? { ...cynoExecutionConfig(), model: planned.responseModel, providerId: planned.responseProvider }
+        : buildPersistedChatConfig({
         selectedToolKeys: agent.tools || [],
         requestedSubAgents: agent.subAgents || [],
         requestedMemoryFolderIds: getAssignedMemoryFolders(agent.id).map((space) => space.id),
@@ -243,7 +247,8 @@ export function persistChannelExecutionConfig(
 
 export function persistChannelAssistantMessage(input: {
     conversationId: string
-    agentId: string
+    /** Null for Cyno. */
+    agentId: string | null
     planned: PlannedExecution
     result: AgentExecutorResult
     startedAt: number

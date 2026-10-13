@@ -55,6 +55,16 @@ describe('shared channel commands', () => {
         expect(replies.at(-1)).toBe('🔄 Switched back to default agent: *Default*\n\nStarting a fresh conversation.')
     })
 
+    test('!cyno switches to Cyno even when the channel defaults to another agent', async () => {
+        const state = makeState()
+        const replies: string[] = []
+
+        expect(await handleChannelCommand(state, 'T1', '!cyno', async (r) => { replies.push(r) }, style)).toBe(true)
+
+        expect(state.agentOverride.get('T1')).toBe('__agentless__')
+        expect(replies.at(-1)).toBe('🔀 Switched to *Cyno*. Starting a fresh conversation.\n\nUse !start to switch back.')
+    })
+
     test('respects the agent allow-list and ignores unknown commands', async () => {
         const state = makeState()
         state.allowedAgentIds = ['default']

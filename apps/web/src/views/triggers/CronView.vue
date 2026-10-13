@@ -16,6 +16,9 @@ import {
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
   type CronFrequency
 } from '../../utils/cron-helpers'
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 const router = useRouter()
 
@@ -102,7 +105,7 @@ async function openAddCronDialog() {
 
 async function saveCronJob() {
   const expr = dlgGeneratedExpr.value
-  if (!expr.trim() || !cronAgentId.value) return
+  if (!expr.trim()) return
   cronSaving.value = true
   createError.value = ''
   try {
@@ -228,7 +231,7 @@ function openCronJob(job: CronJob) {
 }
 
 function openAgentDetails(agentId: string) {
-  router.push(`/agents/${agentId}`)
+  router.push(agentId ? `/agents/${agentId}` : { name: 'cyno' })
 }
 
 // ─── Ticking countdown ───────────────────────────────────
@@ -403,8 +406,8 @@ onUnmounted(() => {
             >
               <span class="w-9 h-9 rounded-full bg-theme-700 flex items-center justify-center shrink-0 overflow-hidden hover:ring-2 hover:ring-accent-500/60 transition-shadow">
                 <img
-                  v-if="job.agentIconUrl"
-                  :src="job.agentIconUrl"
+                  v-if="job.agentIconUrl || !job.agentId"
+                  :src="job.agentIconUrl || cyno.iconUrl"
                   :alt="job.agentName"
                   class="w-full h-full object-cover"
                 >
@@ -591,6 +594,10 @@ onUnmounted(() => {
               <AgentSelect
                 v-model="cronAgentId"
                 :agents="allAgents"
+                include-default
+                :default-label="cyno.name"
+                :default-img-src="cyno.iconUrl"
+                agents-group-label="Agents"
                 placeholder="Select an agent…"
                 max-height="max-h-96"
                 size="sm"
@@ -842,7 +849,7 @@ onUnmounted(() => {
               Cancel
             </button>
             <button
-              :disabled="!cronAgentId || !dlgGeneratedExpr.trim() || cronSaving"
+              :disabled="!dlgGeneratedExpr.trim() || cronSaving"
               class="px-4 py-2 rounded-lg accent-action bg-accent-600 hover:bg-accent-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-accent-on transition-colors"
               @click="saveCronJob"
             >

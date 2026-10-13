@@ -12,6 +12,8 @@ import { planExecution } from '../agent/pre-execution/execution-planner.js'
 import { closePlanningRun } from '../agent/planning-state.js'
 import { generateTitle } from '../agent/post-execution.js'
 import { getAgent } from '../agents/agent-store.js'
+import { getCynoProfile } from '../cyno/cyno-profile.js'
+import { agentlessRunOptions, cynoExecutionConfig } from '../cyno/cyno-run.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
@@ -22,7 +24,7 @@ import {
     persistChannelExecutionConfig, persistChannelUserMessage, publishChannelStreamError, updateChannelExecution,
 } from './channel-execution.js'
 import {
-    effectiveAgentId, getOrCreateChannelConversation, withTargetLock,
+    CYNO_AGENT_ID, effectiveAgentId, getOrCreateChannelConversation, isCynoAgentId, resolveContinuedConversation, withTargetLock,
     type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ChannelTargetId,
 } from './channel-session.js'
 
@@ -72,6 +74,10 @@ export interface ChannelInboundMessage<K extends ChannelTargetId, H> {
     transport: ChannelTransport<H>
     /** Called once the turn's conversation is known. */
     onConversation?(conversationId: string): void
+    /** Continue this conversation instead of the target's active one, e.g. for a reply to a delivered message. */
+    continueConversationId?: string
+    /** Called with the final reply's message, so a later reply to it can continue the same conversation. */
+    onFinalReply?(handle: H, conversationId: string): void
 }
 
 /**
@@ -140,14 +146,19 @@ function truncate(text: string, limit: number): string {
     return text.length > limit ? text.slice(0, limit) + '…' : text
 }
 
-/** Replace a streamed preview with the final text, overflowing into follow-up messages. */
-async function finalizeStreamedMessage<H>(transport: ChannelTransport<H>, handle: H | null, text: string): Promise<void> {
+/**
+ * Replace a streamed preview with the final text, overflowing into follow-up
+ * messages. Returns the first message of the final text when it is known.
+ */
+async function finalizeStreamedMessage<H>(transport: ChannelTransport<H>, handle: H | null, text: string): Promise<H | null> {
     if (handle === null) {
+        if (text.length <= transport.messageLimit) return transport.send(text)
         await transport.sendLong(text)
-        return
+        return null
     }
     await transport.edit(handle, text.slice(0, transport.messageLimit))
     if (text.length > transport.messageLimit) await transport.sendLong(text.slice(transport.messageLimit))
+    return handle
 }
 
 async function runChannelTurn<K extends ChannelTargetId, H>(
@@ -160,14 +171,17 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
     const hasAttachments = media.imageDataUrls.length > 0 || media.audioDataUrls.length > 0
     const displayText = userText || '(attached media)'
 
-    const agentId = effectiveAgentId(state, target)
+    const continued = message.continueConversationId
+        ? resolveContinuedConversation(state, message.continueConversationId)
+        : null
+    const agentId = continued?.agentId ?? effectiveAgentId(state, target)
     const statusMsg = await transport.reply('🧭 Preparing context...')
     let thinkingSeconds = 0
     let thinkingPhase = 'Preparing context'
     let thinkingTimer: ReturnType<typeof setInterval> | null = null
     const stopThinkingTimer = () => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } }
 
-    const conversationId = getOrCreateChannelConversation(state, target, message.senderName, agentId)
+    const conversationId = continued?.conversationId ?? getOrCreateChannelConversation(state, target, message.senderName, agentId)
     state.conversationTargets.set(conversationId, target)
     message.onConversation?.(conversationId)
 
@@ -179,19 +193,39 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         createdAt: startedAt,
     })
 
-    const history = buildChannelHistory(conversationId, agentId)
+    const cyno = isCynoAgentId(agentId)
+    const history = buildChannelHistory(conversationId, cyno ? null : agentId)
     let messages: ChatMessage[] = history.messages
     if (hasAttachments && messages.length > 0) {
         const lastIdx = messages.length - 1
         messages[lastIdx] = { ...messages[lastIdx], content: multimodalContent(displayText, media) }
     }
 
-    const agent = getAgent(agentId)
-    if (!agent) {
+    const agent = cyno ? null : getAgent(agentId)
+    if (!cyno && !agent) {
         if (statusMsg !== null) await transport.edit(statusMsg, '⚠️ Agent not found.')
         else await transport.reply('⚠️ Agent not found.')
         return
     }
+    // Cyno runs without an agent, with the settings of its profile.
+    const cynoConfig = agent ? null : cynoExecutionConfig()
+    const runner = agent
+        ? {
+            id: agent.id, name: agent.name, iconUrl: agent.iconUrl || null, model: agent.model || null,
+            hitl: !agent.autoApproveTools, thinkingEnabled: agent.thinkingEnabled !== false,
+            reasoningEffort: agent.reasoningEffort, maxContextTokens: agent.maxContextTokens,
+            run: {
+                memoryFolderOverrides: getAssignedMemoryFolders(agent.id),
+                autoMemory: agent.autoMemory === true,
+                thinkingEnabled: agent.thinkingEnabled !== false,
+            },
+        }
+        : {
+            id: CYNO_AGENT_ID, name: getCynoProfile().name, iconUrl: null, model: cynoConfig!.model || null,
+            hitl: true, thinkingEnabled: cynoConfig!.thinkingEnabled,
+            reasoningEffort: cynoConfig!.reasoningEffort, maxContextTokens: null,
+            run: agentlessRunOptions(cynoConfig!),
+        }
     if (statusMsg !== null) {
         thinkingTimer = setInterval(() => {
             thinkingSeconds++
@@ -202,24 +236,20 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
 
     const unsubs: Array<() => void> = [stopThinkingTimer]
     const { streamId, controller: execAbort } = beginChannelExecution({
-        executions: state.activeExecutions, channelId: state.channelId, agent, conversationId, broadcast: state.broadcast,
+        executions: state.activeExecutions, channelId: state.channelId, agent: runner, conversationId, broadcast: state.broadcast,
     })
     let planned: Awaited<ReturnType<typeof planExecution>> | undefined
     try {
         planned = await planExecution({
             resolvedAgent: agent, conversationId, broadcast: state.broadcast, abortSignal: execAbort.signal,
             gateway: getGateway(), toolRegistry: getToolRegistry(), messages, userText,
-            run: {
-                memoryFolderOverrides: getAssignedMemoryFolders(agent.id),
-                autoMemory: agent.autoMemory === true,
-                thinkingEnabled: agent.thinkingEnabled !== false,
-            },
+            run: runner.run,
         })
         updateChannelExecution(state.activeExecutions, streamId, { model: planned.responseModel, planningRunId: planned.planningRunId })
         if (execAbort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
         persistChannelExecutionConfig(conversationId, agent, planned)
         const context = await applyChannelContextLimit({
-            gateway: getGateway(), planned, agent, messages: planned.messages, history,
+            gateway: getGateway(), planned, agent: runner, messages: planned.messages, history,
             conversationId, broadcast: state.broadcast, signal: execAbort.signal,
         })
         execAbort.signal.throwIfAborted()
@@ -229,11 +259,11 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
 
         const executor = new AgentExecutor({
             gateway: getGateway(), tools: planned.tools, conversationId, broadcast: state.broadcast,
-            providerId: planned.providerId, model: planned.responseModel, hitl: !agent.autoApproveTools,
-            maxRounds: MAIN_AGENT_MAX_ROUNDS, thinkingEnabled: agent.thinkingEnabled !== false,
-            reasoningEffort: agent.reasoningEffort, streamMode: 'single', signal: execAbort.signal,
-            streamId, agentId, agentName: agent.name,
-            agentIconUrl: agent.iconUrl || null, planningRunId: planned.planningRunId,
+            providerId: planned.providerId, model: planned.responseModel, hitl: runner.hitl,
+            maxRounds: MAIN_AGENT_MAX_ROUNDS, thinkingEnabled: runner.thinkingEnabled,
+            reasoningEffort: runner.reasoningEffort, streamMode: 'single', signal: execAbort.signal,
+            streamId, agentId: agent?.id, agentName: runner.name,
+            agentIconUrl: runner.iconUrl, planningRunId: planned.planningRunId,
             contextWindow: context.contextWindow, initialContextEstimate: context.initialContextEstimate,
             contextStrategy: context.strategy, isPrimaryExecutor: true,
         })
@@ -323,14 +353,15 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
             if (sub.content) await finalizeStreamedMessage(transport, sub.handle, subAgentHeader(codename) + sub.content)
         }
 
-        persistChannelAssistantMessage({ conversationId, agentId, planned, result, startedAt })
+        persistChannelAssistantMessage({ conversationId, agentId: cyno ? null : agentId, planned, result, startedAt })
         maybeGenerateTitle(state.broadcast, conversationId, userText, result.content, planned)
 
         if (statusMsg !== null) {
             const durationSec = Math.round((Date.now() - startedAt) / 1000)
             await transport.edit(statusMsg, `✅ Done thinking (${durationSec}s)`)
         }
-        await finalizeStreamedMessage(transport, main.handle, result.content || '(no response)')
+        const finalReply = await finalizeStreamedMessage(transport, main.handle, result.content || '(no response)')
+        if (finalReply !== null) message.onFinalReply?.(finalReply, conversationId)
 
         const images = (result.images ?? []).flatMap((image, i) => {
             const dataUrl = channelImageDataUrl(image)

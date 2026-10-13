@@ -3,7 +3,7 @@ import type { WebClient } from '@slack/web-api'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { parseHITLActionId, resolveChannelHITL, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { parseHITLActionId, resolveChannelHITL, resolveHomeConversation, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
 import { sendLongSlackMessage, uploadImage, extractAttachments } from './slack.api.js'
 
@@ -287,5 +287,9 @@ export class SlackChannel implements ChannelProvider {
         } catch (err) {
             console.error(`[Slack] sendNotification failed: ${(err as Error).message}`)
         }
+    }
+
+    homeConversation(target: string): { conversationId: string; agentId: string } | null {
+        return target ? resolveHomeConversation(this, target) : null
     }
 }

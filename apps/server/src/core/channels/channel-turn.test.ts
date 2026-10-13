@@ -19,6 +19,11 @@ vi.mock('../memory/memory-folder-scope.js', () => ({ getAssignedMemoryFolders: (
 vi.mock('../agents/agent-store.js', () => ({
     getAgent: (id: string) => id === 'agent' ? { id, name: 'Agent' } : null,
 }))
+vi.mock('../cyno/cyno-profile.js', () => ({ getCynoProfile: () => ({ name: 'Cyno' }) }))
+vi.mock('../cyno/cyno-run.js', () => ({
+    cynoExecutionConfig: () => ({ model: 'cyno-model', thinkingEnabled: true, reasoningEffort: 'medium' }),
+    agentlessRunOptions: () => ({ systemPrompt: 'Cyno prompt' }),
+}))
 vi.mock('../agent/pre-execution/execution-planner.js', () => ({ planExecution: mocks.planExecution }))
 vi.mock('../agent/planning-state.js', () => ({ closePlanningRun: vi.fn() }))
 vi.mock('../agent/post-execution.js', () => ({ generateTitle: vi.fn(async () => {}) }))
@@ -29,6 +34,8 @@ vi.mock('../agent/agent-executor.js', () => ({
 vi.mock('./channel-session.js', async (importOriginal) => ({
     ...await importOriginal<typeof import('./channel-session.js')>(),
     getOrCreateChannelConversation: () => 'conversation',
+    resolveContinuedConversation: (_state: unknown, id: string) =>
+        id === 'cron-run' ? { conversationId: 'cron-run', agentId: null } : null,
 }))
 vi.mock('./channel-execution.js', async (importOriginal) => ({
     ...await importOriginal<typeof import('./channel-execution.js')>(),
@@ -163,6 +170,43 @@ describe('channel turn', () => {
 
         expect(messages[1]).toBe('✅ `search` executed\n❌ `fetch` failed'.slice(0, 20))
         expect(messages[2]).toBe('done')
+    })
+
+    test('a reply to a delivered message continues that conversation and reports the final reply', async () => {
+        const state = makeState()
+        const { transport, messages } = makeTransport()
+        const onFinalReply = vi.fn()
+        mocks.run.mockResolvedValue({ content: 'more detail', images: [] })
+
+        await receiveChannelMessage(state, inbound(transport, { continueConversationId: 'cron-run', onFinalReply }))
+
+        expect(mocks.persistUser).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'cron-run' }))
+        expect(mocks.planExecution).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'cron-run' }))
+        expect(state.conversationTargets.get('cron-run')).toBe('target')
+        expect(onFinalReply).toHaveBeenCalledWith(messages.indexOf('more detail'), 'cron-run')
+    })
+
+    test('a channel set to Cyno runs without an agent, with Cyno\'s settings', async () => {
+        const state = makeState()
+        state.agentId = '__agentless__'
+        const { transport, messages } = makeTransport()
+        mocks.run.mockResolvedValue({ content: 'hi from Cyno', images: [] })
+
+        await receiveChannelMessage(state, inbound(transport))
+
+        expect(mocks.planExecution).toHaveBeenCalledWith(expect.objectContaining({ resolvedAgent: null, run: { systemPrompt: 'Cyno prompt' } }))
+        expect(mocks.persistAssistant).toHaveBeenCalledWith(expect.objectContaining({ agentId: null }))
+        expect(messages).toContain('hi from Cyno')
+    })
+
+    test('an unknown continued conversation falls back to the active one', async () => {
+        const state = makeState()
+        const { transport } = makeTransport()
+        mocks.run.mockResolvedValue({ content: 'ok', images: [] })
+
+        await receiveChannelMessage(state, inbound(transport, { continueConversationId: 'deleted' }))
+
+        expect(mocks.persistUser).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'conversation' }))
     })
 
     test('reports execution errors on the status line', async () => {

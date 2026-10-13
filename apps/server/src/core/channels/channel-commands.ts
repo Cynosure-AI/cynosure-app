@@ -1,8 +1,7 @@
-/** Chat commands shared by all messaging channels: kill, stop, new, start, and agent switching. */
-import { getAgent } from '../agents/agent-store.js'
+/** Chat commands shared by all messaging channels: kill, stop, new, start, cyno, and agent switching. */
 import { stopAllActivity } from '../activity/stop-all.js'
 import {
-    agentCommandName, archiveChannelConversation, cancelExecutionsForTarget, getAvailableAgents,
+    CYNO_AGENT_ID, agentCommandName, archiveChannelConversation, cancelExecutionsForTarget, channelAgentName, getAvailableAgents,
     type ChannelSessionState, type ChannelTargetId,
 } from './channel-session.js'
 
@@ -50,8 +49,7 @@ export async function handleChannelCommand<K extends ChannelTargetId>(
         else state.agentOverride.set(target, agentId)
         state.lastUsedAgent.set(target, agentId)
         archiveChannelConversation(state, target, agentId)
-        const agent = getAgent(agentId)
-        await reply(`🆕 Starting a fresh conversation with ${style.bold(agent?.name || 'Unknown')}.`)
+        await reply(`🆕 Starting a fresh conversation with ${style.bold(channelAgentName(agentId))}.`)
         return true
     }
 
@@ -63,13 +61,16 @@ export async function handleChannelCommand<K extends ChannelTargetId>(
         }
         state.agentOverride.delete(target)
         archiveChannelConversation(state, target, prevAgentId)
-        const agent = getAgent(state.agentId)
-        await reply(`🔄 Switched back to default agent: ${style.bold(agent?.name || 'Unknown')}\n\nStarting a fresh conversation.`)
+        await reply(`🔄 Switched back to default agent: ${style.bold(channelAgentName(state.agentId))}\n\nStarting a fresh conversation.`)
         return true
     }
 
-    const matchedAgent = getAvailableAgents(state).find(a =>
-        agentCommandName(a.internalName) === command || a.internalName.toLowerCase() === command)
+    // Cyno is always reachable, also on channels whose default is a specialist agent.
+    const matchedAgent = command === 'cyno'
+        ? { id: CYNO_AGENT_ID, name: channelAgentName(CYNO_AGENT_ID) }
+        : getAvailableAgents(state).find(a =>
+            agentCommandName(a.internalName) === command || a.internalName.toLowerCase() === command)
+
     if (!matchedAgent) return false
 
     cancelExecutionsForTarget(state, target)

@@ -48,11 +48,12 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
     // POST /api/cron-jobs — create a new cron job
     app.post<{ Body: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; executionConfig?: ConversationExecutionConfig; projectId?: string | null } }>('/', async (req, reply) => {
         const { name, agentId, schedule, prompt, enabled, oneOff, outputChannelId, notificationMode, notificationCondition, executionConfig, projectId } = req.body
-        if (!schedule || (!agentId && !executionConfig)) {
+        if (!schedule) {
             reply.code(400)
-            return { error: 'schedule and either agentId or executionConfig are required' }
+            return { error: 'schedule is required' }
         }
-        if (!agentId && (!executionConfig?.providerId || !executionConfig.model)) {
+        // Without an agent or a chat snapshot, the job runs as Cyno with its current settings.
+        if (!agentId && executionConfig && (!executionConfig.providerId || !executionConfig.model)) {
             reply.code(400)
             return { error: 'Agentless cron jobs require a resolved provider and model snapshot' }
         }
@@ -84,7 +85,8 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
             reply.code(400)
             return { error: 'Invalid cron schedule' }
         }
-        if (req.body.agentId !== undefined && !getAgent(req.body.agentId)) {
+        // An empty agentId moves the job to Cyno.
+        if (req.body.agentId && !getAgent(req.body.agentId)) {
             reply.code(404)
             return { error: 'Agent not found' }
         }

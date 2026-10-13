@@ -19,7 +19,8 @@ export function isNotificationChannelType(value: unknown): value is ChannelType 
     return value === 'telegram' || value === 'discord' || value === 'slack'
 }
 
-export async function notifyOnChannel(channel: ChannelType, message: string): Promise<{ channelId: string; target: string }> {
+/** A reply to the notification on the platform continues `sourceConversationId`. */
+export async function notifyOnChannel(channel: ChannelType, message: string, sourceConversationId?: string): Promise<{ channelId: string; target: string }> {
     const manager = getChannelManager()
     const candidates = manager.listFromDb().filter((candidate) => {
         return candidate.enabled && candidate.type === channel
@@ -32,7 +33,7 @@ export async function notifyOnChannel(channel: ChannelType, message: string): Pr
     for (const candidate of candidates) {
         const target = resolveNotificationTarget(candidate)
         if (!target) continue
-        if (await manager.queueNotification(candidate.id, target, message)) {
+        if (await manager.deliver(candidate.id, target, message, { sourceConversationId })) {
             return { channelId: candidate.id, target }
         }
     }

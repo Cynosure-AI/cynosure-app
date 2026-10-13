@@ -535,6 +535,25 @@ const MIGRATIONS: SchemaMigration[] = [
             `).run()
         },
     },
+    {
+        version: 26,
+        description: 'Record channel deliveries for reply routing',
+        up: (db) => {
+            // One row per platform message: a reply to that message continues `conversation_id`.
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS channel_deliveries (
+                    id TEXT PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    target TEXT NOT NULL,
+                    platform_message_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_channel_deliveries_message
+                    ON channel_deliveries(channel_id, target, platform_message_id);
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

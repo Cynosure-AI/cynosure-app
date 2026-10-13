@@ -27,16 +27,19 @@ async function callWithFormattedText<T>(ctx: TelegramCtx, method: string, body: 
     return callTelegram<T>(ctx, method, { ...body, text })
 }
 
-export async function sendMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {
-    const data = await callWithFormattedText(ctx, 'sendMessage', { chat_id: chatId }, text)
+/** Returns the sent message's id. */
+export async function sendMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<number | undefined> {
+    const data = await callWithFormattedText<{ message_id: number }>(ctx, 'sendMessage', { chat_id: chatId }, text)
     if (!data.ok) throw new Error(data.description || 'Telegram API error')
+    return data.result?.message_id
 }
 
-export async function sendLongMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<void> {
+/** Returns the ids of the sent messages, in order. */
+export async function sendLongMessage(ctx: TelegramCtx, chatId: number, text: string): Promise<number[]> {
     const MAX_LEN = 4000
     if (text.length <= MAX_LEN) {
-        await sendMessage(ctx, chatId, text)
-        return
+        const id = await sendMessage(ctx, chatId, text)
+        return id === undefined ? [] : [id]
     }
     const chunks: string[] = []
     let remaining = text
@@ -51,9 +54,12 @@ export async function sendLongMessage(ctx: TelegramCtx, chatId: number, text: st
         chunks.push(remaining.slice(0, splitAt))
         remaining = remaining.slice(splitAt).trimStart()
     }
+    const ids: number[] = []
     for (const chunk of chunks) {
-        await sendMessage(ctx, chatId, chunk)
+        const id = await sendMessage(ctx, chatId, chunk)
+        if (id !== undefined) ids.push(id)
     }
+    return ids
 }
 
 export async function sendMessageReturningId(

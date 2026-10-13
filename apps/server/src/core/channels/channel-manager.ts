@@ -3,6 +3,8 @@ import { TelegramChannel } from './telegram/telegram.channel.js'
 import { DiscordChannel } from './discord/discord.channel.js'
 import { SlackChannel } from './slack/slack.channel.js'
 import { getDb } from '../../db/database.js'
+import { persistProactiveMessage, recordChannelDeliveries } from './channel-delivery.js'
+import { CYNO_AGENT_ID, isCynoAgentId } from './channel-session.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -129,16 +131,17 @@ class ChannelManager {
      * @param channelId  The channel DB id.
      * @param target     Platform-specific target (Telegram chat ID, Discord/Slack channel ID).
      * @param text       Message text to send.
+     * @returns The platform ids of the sent messages (possibly empty), or null when delivery failed.
      */
-    queueNotification(channelId: string, target: string, text: string): Promise<boolean> {
+    queueNotification(channelId: string, target: string, text: string): Promise<string[] | null> {
         const provider = this.providers.get(channelId)
         if (!provider) {
             console.warn(`[ChannelManager] Cannot send notification for channel ${channelId}: channel is not running`)
-            return Promise.resolve(false)
+            return Promise.resolve(null)
         }
         if (!provider.sendNotification) {
             console.warn(`[ChannelManager] Cannot send notification for channel ${channelId}: provider does not support notifications`)
-            return Promise.resolve(false)
+            return Promise.resolve(null)
         }
 
         const prev = this.notificationQueues.get(channelId) ?? Promise.resolve()
@@ -150,7 +153,7 @@ class ChannelManager {
             })
         // Store a settled chain so one delivery failure does not poison later
         // notifications for the channel.
-        this.notificationQueues.set(channelId, next.catch(() => undefined))
+        this.notificationQueues.set(channelId, next.then(() => undefined, () => undefined))
         // Clean up the queue entry once the chain settles
         const settled = this.notificationQueues.get(channelId)!
         void settled.then(() => {
@@ -158,7 +161,38 @@ class ChannelManager {
                 this.notificationQueues.delete(channelId)
             }
         })
-        return next.then(() => true, () => false)
+        return next.then((messageIds) => messageIds ?? [], () => null)
+    }
+
+    /**
+     * Send a proactive message and make it part of the user's thread: the text
+     * is saved into the target's active conversation, and a reply to the sent
+     * message continues `sourceConversationId` (or that thread without one).
+     * Returns false when the message was not sent.
+     */
+    async deliver(channelId: string, target: string, text: string, opts: { sourceConversationId?: string } = {}): Promise<boolean> {
+        const messageIds = await this.queueNotification(channelId, target, text)
+        if (messageIds === null) return false
+        try {
+            const home = this.providers.get(channelId)?.homeConversation?.(target) ?? null
+            // A notification sent from inside the thread is already part of it.
+            if (home && home.conversationId !== opts.sourceConversationId) {
+                persistProactiveMessage({
+                    broadcast: this.broadcast,
+                    conversationId: home.conversationId,
+                    agentId: isCynoAgentId(home.agentId) ? null : home.agentId,
+                    content: text,
+                })
+            }
+            const replyConversationId = opts.sourceConversationId ?? home?.conversationId
+            if (replyConversationId) {
+                recordChannelDeliveries({ channelId, target, platformMessageIds: messageIds, conversationId: replyConversationId })
+            }
+        } catch (err) {
+            // The message reached the user; failing to record it must not report a failed delivery.
+            console.warn(`[ChannelManager] Could not record delivery for channel ${channelId}: ${(err as Error).message}`)
+        }
+        return true
     }
 
     // ─── DB helpers ───────────────────────────────────────────
@@ -188,21 +222,21 @@ class ChannelManager {
             case 'telegram':
                 return new TelegramChannel(
                     channel.id,
-                    channel.agentId,
+                    channel.agentId || CYNO_AGENT_ID,
                     channel.config as { botToken: string; allowedAgentIds?: string[]; allowedUserIds?: Array<string | number> },
                     this.broadcast
                 )
             case 'discord':
                 return new DiscordChannel(
                     channel.id,
-                    channel.agentId,
+                    channel.agentId || CYNO_AGENT_ID,
                     channel.config as { botToken: string; allowedAgentIds?: string[]; allowedUserIds?: string[] },
                     this.broadcast
                 )
             case 'slack':
                 return new SlackChannel(
                     channel.id,
-                    channel.agentId,
+                    channel.agentId || CYNO_AGENT_ID,
                     channel.config as { botToken: string; appToken: string; allowedAgentIds?: string[] },
                     this.broadcast
                 )

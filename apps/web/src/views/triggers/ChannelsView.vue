@@ -13,6 +13,9 @@ import SettingsSubheading from '../../components/settings/SettingsSubheading.vue
 import SettingsPersistenceStatus, { type SettingsPersistenceState } from '../../components/settings/SettingsPersistenceStatus.vue'
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 import ChannelDetailView from './ChannelDetailView.vue'
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -75,7 +78,7 @@ function parseUserIds(value: string): string[] {
 }
 
 const canSaveChannel = computed(() => {
-  if (!dlgAgentId.value || !dlgBotToken.value.trim() || dlgSaving.value) return false
+  if (!dlgBotToken.value.trim() || dlgSaving.value) return false
   if (dlgType.value === 'slack' && !dlgAppToken.value.trim()) return false
   if ((dlgType.value === 'telegram' || dlgType.value === 'discord') && parseUserIds(dlgAllowedUserIds.value).length === 0) return false
   return true
@@ -92,12 +95,13 @@ const channelTypeOptions = [
   { value: 'slack' as ChannelType, label: 'Slack', icon: 'mdi:slack' }
 ]
 
+/** A channel without an agent answers as Cyno. */
 function agentNameById(id: string): string {
-  return allAgents.value.find(a => a.id === id)?.name || id
+  return id ? (allAgents.value.find(a => a.id === id)?.name || id) : cyno.name
 }
 
 function agentIconById(id: string): string | null {
-  return allAgents.value.find(a => a.id === id)?.iconUrl || null
+  return id ? (allAgents.value.find(a => a.id === id)?.iconUrl || null) : cyno.iconUrl
 }
 
 function showSection(id: string): boolean {
@@ -193,7 +197,6 @@ async function saveChannel() {
   dlgSaving.value = true
   addSaveStatus.value = 'saving'
   try {
-    if (!dlgAgentId.value) return
     await api.channels.create({
       name: dlgName.value.trim() || `${dlgType.value} channel`,
       type: dlgType.value,
@@ -565,6 +568,10 @@ onUnmounted(() => {
             <AgentSelect
               v-model="dlgAgentId"
               :agents="allAgents"
+              include-default
+              :default-label="cyno.name"
+              :default-img-src="cyno.iconUrl"
+              agents-group-label="Agents"
               placeholder="Select an agent…"
             />
           </div>

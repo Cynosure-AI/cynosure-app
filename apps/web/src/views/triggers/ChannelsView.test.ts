@@ -1,5 +1,6 @@
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import type { ChannelDefinition } from '../../api/types'
 import ChannelDetailView from './ChannelDetailView.vue'
 import ChannelsView from './ChannelsView.vue'
@@ -44,6 +45,7 @@ const channel: ChannelDefinition = {
 
 describe('ChannelsView editing', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     mocks.route.query = {}
     mocks.replace.mockReset()
     mocks.listChannels.mockReset().mockResolvedValue([channel])

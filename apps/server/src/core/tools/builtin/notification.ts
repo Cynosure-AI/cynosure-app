@@ -10,7 +10,7 @@ export interface NotificationToolOptions {
     conversationId: string
     broadcast: BroadcastFn
     availableChannels?: ChannelType[]
-    notify?: (channel: ChannelType, message: string) => Promise<{ channelId: string; target: string }>
+    notify?: (channel: ChannelType, message: string, sourceConversationId?: string) => Promise<{ channelId: string; target: string }>
 }
 
 /** Notify the user in the app by default, or through a configured messaging channel. */
@@ -59,7 +59,7 @@ export function makeNotificationTool(opts: NotificationToolOptions): ToolDefinit
                     })
                     return { success: true, output: `Notification created in app: ${title}` }
                 }
-                const delivered = await (opts.notify ?? notifyOnChannel)(channel as ChannelType, `${title}\n\n${body}`)
+                const delivered = await (opts.notify ?? notifyOnChannel)(channel as ChannelType, `${title}\n\n${body}`, opts.conversationId)
                 return { success: true, output: `Notification sent on ${channel} (channel ${delivered.channelId}).` }
             } catch (err) {
                 return { success: false, output: (err as Error).message }
