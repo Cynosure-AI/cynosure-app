@@ -10,6 +10,7 @@ import ProjectTimeline from '../components/project/ProjectTimeline.vue'
 import ProjectIcon from '../components/project/ProjectIcon.vue'
 import ProjectForm, { type ProjectDraft } from '../components/project/ProjectForm.vue'
 import RichContent from '../components/shared/RichContent.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import { api, type ConversationRow } from '../api/client'
 import type { CronJob } from '../api/types'
 import { useProjectsStore } from '../stores/projects.store'
@@ -137,6 +138,10 @@ async function saveSettings(): Promise<void> {
     color: draft.color,
     icon: draft.icon,
   }))
+}
+
+async function setScheduledBriefUpdates(enabled: boolean): Promise<void> {
+  await guarded(() => projectsStore.update(projectId.value, { scheduledBriefUpdates: enabled }))
 }
 
 async function toggleArchived(): Promise<void> {
@@ -278,11 +283,21 @@ onMounted(async () => {
                 Brief
               </h2>
               <p class="mt-0.5 text-xs text-ink-muted">
-                Goal, current state, decisions, and open questions. Every agent in this project reads it, and agents keep it up to date.
+                The current picture: goal, state, decisions, and next steps. Every agent in this project reads it; agents keep it up to date, and you can edit it.
                 <template v-if="project.briefUpdatedAt">
                   Updated {{ formatRelativeTime(project.briefUpdatedAt) }}.
                 </template>
               </p>
+              <div class="mt-2 flex items-center gap-2 text-xs text-ink-muted">
+                <ToggleSwitch
+                  :model-value="project.scheduledBriefUpdates"
+                  size="sm"
+                  label="Scheduled jobs may update the brief"
+                  :disabled="saving"
+                  @update:model-value="setScheduledBriefUpdates"
+                />
+                <span>Scheduled jobs may update it<template v-if="!project.scheduledBriefUpdates"> (off: they report results in their own chat)</template></span>
+              </div>
             </div>
             <div
               v-if="!editingBrief"
@@ -385,6 +400,9 @@ onMounted(async () => {
                 <div class="text-ink-muted">
                   Memory folder
                 </div>
+                <div class="text-[11px] text-ink-faint">
+                  Lasting facts and knowledge; agents add to it automatically
+                </div>
                 <RouterLink
                   v-if="memoryFolder"
                   :to="{ name: 'memory-folders', params: { section: 'documents' }, query: { folder: memoryFolder.id } }"
@@ -425,6 +443,9 @@ onMounted(async () => {
               <div class="min-w-0">
                 <div class="text-ink-muted">
                   Instructions
+                </div>
+                <div class="text-[11px] text-ink-faint">
+                  Written by you; followed in every chat of this project
                 </div>
                 <p
                   class="line-clamp-4 whitespace-pre-line text-xs"

@@ -57,7 +57,22 @@ export function mergeProjectMemoryScope(input: {
     return [...projectFolders, ...base].filter((folder) => !seen.has(folder.id) && Boolean(seen.add(folder.id)))
 }
 
-export function buildProjectSystemPrompt(project: ProjectDto, memoryFolders: MemoryFolderRef[]): string {
+/** Unattended runs (scheduled jobs, webhooks) only rewrite the brief when the project allows it. */
+export function canUpdateBrief(project: Pick<ProjectDto, 'scheduledBriefUpdates'>, unattended: boolean): boolean {
+    return !unattended || project.scheduledBriefUpdates
+}
+
+const PROJECT_LEAD_PROMPT = [
+    '### Your role: project lead',
+    'You lead this project for the user. Keep the brief and the task board an honest picture of where things stand.',
+    '- When asked to continue or move the project forward without a specific request, take the most important open task (in_progress first, then todo), set it in_progress, and work on it.',
+    '- Split work that will not fit in one run into tasks with enough notes to pick them up later.',
+    '- If you have sub-agents and one fits a task better than your own tools, delegate it with the task notes and the relevant brief as context, then check and summarize its result.',
+    '- Finish by saying what changed, which tasks moved, and what comes next.',
+].join('\n')
+
+/** `lead` gives the run the project-lead role; Cyno leads the projects it works in. */
+export function buildProjectSystemPrompt(project: ProjectDto, memoryFolders: MemoryFolderRef[], options: { unattended?: boolean; lead?: boolean } = {}): string {
     const lines = [
         `## Project: ${project.name}`,
         `This conversation belongs to the project "${project.name}".${project.description ? ` ${project.description}` : ''}`,
@@ -70,22 +85,28 @@ export function buildProjectSystemPrompt(project: ProjectDto, memoryFolders: Mem
     }
     lines.push(
         'A project brief and open tasks are provided as project state. Treat them as the shared, current picture of the project.',
-        'Use `project_brief_update` after meaningful progress, decisions, or changed goals so later chats and agents start from the current state. Keep it short and complete; it replaces the previous brief.',
+        canUpdateBrief(project, options.unattended === true)
+            ? 'Use `project_brief_update` when the goal, state, decisions, or next steps change, so later chats and agents start from the current picture. It replaces the whole brief; results of a run and change logs belong in your reply, not in the brief.'
+            : 'This is an unattended run: report its results in your reply. The brief is not updated from unattended runs in this project; record follow-ups that need attention as tasks.',
         'Use `project_task_create` for follow-up work that should outlive this chat, and `project_task_update` to move tasks you work on (in_progress, blocked with a note, done).',
     )
+    if (options.lead) lines.push('', PROJECT_LEAD_PROMPT)
     if (project.instructions.trim()) {
         lines.push('', '### Project instructions', project.instructions.trim())
     }
     return lines.join('\n')
 }
 
-export function buildProjectStateMessage(project: ProjectDto): ChatMessage | null {
+export function buildProjectStateMessage(project: ProjectDto, options: { canUpdateBrief?: boolean } = {}): ChatMessage | null {
     const tasks = listProjectTasks(project.id, { statuses: ['in_progress', 'blocked', 'todo'] })
     const brief = project.brief.trim()
     if (!brief && !tasks.length) {
+        const hint = options.canUpdateBrief === false
+            ? ''
+            : ' Once the goal or state of the work is clear, write a brief with project_brief_update.'
         return {
             role: 'user',
-            content: '[Project state]\nThe project brief is empty and there are no open tasks. Once the goal or state of the work is clear, write a brief with project_brief_update.\n[/Project state]',
+            content: `[Project state]\nThe project brief is empty and there are no open tasks.${hint}\n[/Project state]`,
             metadata: { contextKind: 'project-state', untrusted: true },
         }
     }
@@ -110,7 +131,12 @@ export function buildProjectStateMessage(project: ProjectDto): ChatMessage | nul
     return { role: 'user', content: lines.join('\n'), metadata: { contextKind: 'project-state', untrusted: true } }
 }
 
-export function resolveProjectExecutionContext(conversationId: string, broadcast?: BroadcastFn, agentId?: string): ProjectExecutionContext | null {
+export function resolveProjectExecutionContext(
+    conversationId: string,
+    broadcast?: BroadcastFn,
+    agentId?: string,
+    options: { unattended?: boolean; lead?: boolean } = {},
+): ProjectExecutionContext | null {
     let project: ProjectDto | undefined
     try {
         project = getProjectForConversation(conversationId)
@@ -119,11 +145,12 @@ export function resolveProjectExecutionContext(conversationId: string, broadcast
     }
     if (!project) return null
     const memoryFolders = getProjectMemoryFolders(project)
+    const briefWritable = canUpdateBrief(project, options.unattended === true)
     return {
         project,
         memoryFolders,
-        systemPrompt: buildProjectSystemPrompt(project, memoryFolders),
-        stateMessage: buildProjectStateMessage(project),
-        tools: makeProjectTools({ projectId: project.id, conversationId, agentId, broadcast, seenBrief: project.brief }),
+        systemPrompt: buildProjectSystemPrompt(project, memoryFolders, options),
+        stateMessage: buildProjectStateMessage(project, { canUpdateBrief: briefWritable }),
+        tools: makeProjectTools({ projectId: project.id, conversationId, agentId, broadcast, seenBrief: project.brief, canUpdateBrief: briefWritable }),
     }
 }

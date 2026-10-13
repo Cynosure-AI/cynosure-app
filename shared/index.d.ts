@@ -321,9 +321,11 @@ export interface ProjectDto {
   description: string
   /** User-authored instructions added to every run in the project. */
   instructions: string
-  /** Living summary of goal, state, decisions, and open questions, maintained by agents. */
+  /** Living summary of goal, state, decisions, and next steps, maintained by agents. */
   brief: string
   briefUpdatedAt: number | null
+  /** Whether unattended runs (scheduled jobs, webhooks) may rewrite the brief. */
+  scheduledBriefUpdates: boolean
   /** Optional working directory; file tools may access it and the shell starts there. */
   rootPath: string
   memoryFolderId: string | null

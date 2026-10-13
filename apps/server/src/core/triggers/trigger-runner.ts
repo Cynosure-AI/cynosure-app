@@ -121,6 +121,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
                 autoRouterModel: executionConfig?.autoRouterModel,
                 thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
                 reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
+                unattended: true,
             },
         })
         planningRunId = planned.planningRunId

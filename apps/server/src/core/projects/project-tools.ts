@@ -19,6 +19,16 @@ export function isProjectToolName(name: string): boolean {
     return (PROJECT_TOOL_NAMES as readonly string[]).includes(name)
 }
 
+/** Sections of an agent-written brief, each a Markdown heading, in this order. */
+export const PROJECT_BRIEF_SECTIONS = ['Goal', 'State', 'Decisions', 'Next'] as const
+
+const BRIEF_TEMPLATE = PROJECT_BRIEF_SECTIONS.map((section) => `## ${section}\n…`).join('\n\n')
+
+/** Brief sections that have no heading in `brief`. */
+export function missingBriefSections(brief: string): string[] {
+    return PROJECT_BRIEF_SECTIONS.filter((section) => !new RegExp(`^#{1,6}[ \\t]*${section}\\b`, 'im').test(brief))
+}
+
 export interface ProjectToolContext {
     projectId: string
     conversationId?: string
@@ -56,7 +66,7 @@ export function makeProjectBriefTool(ctx: ProjectToolContext): ToolDefinition {
     let seenBrief = ctx.seenBrief
     return {
         name: 'project_brief_update',
-        description: `Replace the project brief: the short, always-loaded summary that every chat and agent in this project starts from. Send the complete new brief (Markdown, at most ${MAX_PROJECT_BRIEF_CHARS} characters) covering the goal, current state, key decisions, and open questions. Update it after meaningful progress or decisions; do not log routine chatter or keep a change history. If the brief changed since you saw it, the update is rejected and the current brief is returned; merge your changes into that version and call again.`,
+        description: `Replace the project brief: the short, always-loaded picture of the project that every chat and agent starts from. Send the complete new brief in Markdown (at most ${MAX_PROJECT_BRIEF_CHARS} characters) with these sections: "## Goal" (what the project is for), "## State" (where it stands now), "## Decisions" (choices made and why), "## Next" (the next steps). Update it when one of them changes. Results of a run (reports, briefings, search results) and change logs do not belong in it; put them in your reply. If the brief changed since you saw it, the update is rejected and the current brief is returned; merge your changes into that version and call again.`,
         timeout: 5_000,
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -71,6 +81,10 @@ export function makeProjectBriefTool(ctx: ProjectToolContext): ToolDefinition {
         execute: (params) => guarded(() => {
             const { brief } = params as { brief?: unknown }
             if (typeof brief !== 'string') return result(false, 'brief must be a string.')
+            const missing = missingBriefSections(brief)
+            if (missing.length) {
+                return result(false, `The brief was not saved: it needs the headings ${PROJECT_BRIEF_SECTIONS.map((section) => `"## ${section}"`).join(', ')}. Missing: ${missing.join(', ')}. Use this structure:\n\n${BRIEF_TEMPLATE}`)
+            }
             try {
                 const project = setProjectBrief(ctx.projectId, brief.trim(), changeContext(ctx), seenBrief)
                 if (!project) return result(false, 'Project no longer exists.')
@@ -169,7 +183,8 @@ export function makeProjectTaskTools(ctx: ProjectToolContext): ToolDefinition[] 
     ]
 }
 
-export function makeProjectTools(ctx: ProjectToolContext): ToolDefinition[] {
+/** Project tools for a run; without `canUpdateBrief` the brief is read-only. */
+export function makeProjectTools(ctx: ProjectToolContext & { canUpdateBrief?: boolean }): ToolDefinition[] {
     if (!getProject(ctx.projectId)) return []
-    return [makeProjectBriefTool(ctx), ...makeProjectTaskTools(ctx)]
+    return ctx.canUpdateBrief === false ? makeProjectTaskTools(ctx) : [makeProjectBriefTool(ctx), ...makeProjectTaskTools(ctx)]
 }

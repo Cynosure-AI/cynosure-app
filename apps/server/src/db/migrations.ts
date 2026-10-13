@@ -554,6 +554,16 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 27,
+        description: 'Let projects opt scheduled runs into brief updates',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(projects)') as Array<{ name: string }>).map(({ name }) => name))
+            if (!columns.has('scheduled_brief_updates')) {
+                db.exec('ALTER TABLE projects ADD COLUMN scheduled_brief_updates INTEGER NOT NULL DEFAULT 0')
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

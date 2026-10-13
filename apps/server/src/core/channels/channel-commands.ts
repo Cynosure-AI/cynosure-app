@@ -1,7 +1,9 @@
-/** Chat commands shared by all messaging channels: kill, stop, new, start, cyno, and agent switching. */
+/** Chat commands shared by all messaging channels: kill, stop, new, start, cyno, project, and agent switching. */
 import { stopAllActivity } from '../activity/stop-all.js'
+import { getProjectForConversation, listProjects, setConversationProject } from '../projects/project-store.js'
 import {
     CYNO_AGENT_ID, agentCommandName, archiveChannelConversation, cancelExecutionsForTarget, channelAgentName, getAvailableAgents,
+    resolveHomeConversation,
     type ChannelSessionState, type ChannelTargetId,
 } from './channel-session.js'
 
@@ -14,6 +16,41 @@ export interface ChannelCommandStyle {
 /** Command word of a `!cmd` or `/cmd` message; drops a Telegram-style `@botname` suffix. */
 function parseChannelCommand(text: string): string {
     return text.split(/\s|@/)[0].slice(1).toLowerCase()
+}
+
+/**
+ * Show or change the project the target's active conversation works in.
+ * `arg` is empty (list), "off", a list number, or a project name.
+ */
+export function runProjectCommand<K extends ChannelTargetId>(
+    state: ChannelSessionState<K>,
+    target: K,
+    arg: string,
+    style: Pick<ChannelCommandStyle, 'bold'>,
+): string {
+    const projects = listProjects()
+    const { conversationId } = resolveHomeConversation(state, target)
+    const current = getProjectForConversation(conversationId)
+    const query = arg.trim().toLowerCase()
+
+    if (!query) {
+        if (!projects.length) return 'There are no projects yet. Create one in the app first.'
+        const list = projects.map((project, i) => `${i + 1}. ${project.name}${project.id === current?.id ? ' (current)' : ''}`).join('\n')
+        const status = current ? `Working in ${style.bold(current.name)}.` : 'This chat is not in a project.'
+        return `${status}\n\n${list}\n\nSend /project <name or number> to switch, or /project off to leave.`
+    }
+    if (query === 'off' || query === 'none') {
+        if (!current) return 'This chat is not in a project.'
+        setConversationProject(conversationId, null)
+        return `Left ${style.bold(current.name)}.`
+    }
+    const match = /^\d+$/.test(query)
+        ? projects[Number(query) - 1]
+        : projects.find((project) => project.name.toLowerCase() === query)
+            ?? projects.find((project) => project.name.toLowerCase().includes(query))
+    if (!match) return `No project matches "${arg.trim()}". Send /project to see the list.`
+    setConversationProject(conversationId, match.id)
+    return `📁 Now working in ${style.bold(match.name)}. Its brief, open tasks, and instructions apply from your next message.`
 }
 
 /** Handle a chat command. Returns true if the text was a command and was handled. */
@@ -39,6 +76,11 @@ export async function handleChannelCommand<K extends ChannelTargetId>(
         await reply(cancelled > 0
             ? `⏹ Stopped ${cancelled} running execution(s).`
             : '✅ No executions are currently running.')
+        return true
+    }
+
+    if (command === 'project') {
+        await reply(runProjectCommand(state, target, text.replace(/^\S+\s*/, ''), style))
         return true
     }
 

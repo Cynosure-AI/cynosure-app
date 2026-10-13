@@ -21,7 +21,7 @@ import {
     mergeProjectMemoryScope,
     resolveProjectExecutionContext,
 } from './project-context.js'
-import { makeProjectTools } from './project-tools.js'
+import { makeProjectTools, missingBriefSections } from './project-tools.js'
 import { diffBriefRevisions, listBriefRevisions, listProjectTimeline } from './project-history.js'
 import { listEffectiveFileAccessRoots, resolveFileAccessPath, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 import { makeShellTool } from '../tools/builtin/shell-tool.js'
@@ -45,6 +45,11 @@ afterEach(async () => {
     else process.env.CYNOSURE_DATA_DIR = previousDataDir
     await fs.rm(sandbox, { recursive: true, force: true })
 })
+
+/** A brief in the structure agents must write. */
+function structuredBrief(state: string, decisions = '-'): string {
+    return `## Goal\nShip v1.\n\n## State\n${state}\n\n## Decisions\n${decisions}\n\n## Next\n-`
+}
 
 function insertConversation(id: string, projectId: string | null = null, agentId: string | null = null): void {
     getDb().prepare('INSERT INTO conversations (id, title, agent_id, project_id, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
@@ -157,8 +162,8 @@ describe('project execution context', () => {
         const broadcast = vi.fn()
         const tools = Object.fromEntries(makeProjectTools({ projectId: project.id, conversationId: 'conv', broadcast }).map((tool) => [tool.name, tool]))
 
-        expect((await tools.project_brief_update.execute({ brief: 'New state' })).success).toBe(true)
-        expect(getProject(project.id)?.brief).toBe('New state')
+        expect((await tools.project_brief_update.execute({ brief: structuredBrief('New state') })).success).toBe(true)
+        expect(getProject(project.id)?.brief).toBe(structuredBrief('New state'))
         expect(getProject(project.id)?.briefUpdatedAt).toBeTypeOf('number')
 
         const created = JSON.parse((await tools.project_task_create.execute({ title: 'Follow up', notes: 'Call the vendor' })).output as string)
@@ -177,15 +182,15 @@ describe('project execution context', () => {
         // Dream (or another chat) updates the brief while this run still holds the old one.
         updateProject(project.id, { brief: 'Goal: v1. Decided: Postgres.' }, { source: 'dream' })
 
-        const conflict = await briefTool.execute({ brief: 'Goal: v1. Shipped the API.' })
+        const conflict = await briefTool.execute({ brief: structuredBrief('Shipped the API.') })
         expect(conflict.success).toBe(false)
         expect(conflict.output).toContain('Decided: Postgres.')
         expect(getProject(project.id)?.brief).toBe('Goal: v1. Decided: Postgres.')
 
         // The conflict showed the model the current brief, so a merged retry goes through, as do follow-ups.
-        expect((await briefTool.execute({ brief: 'Goal: v1. Decided: Postgres. Shipped the API.' })).success).toBe(true)
-        expect((await briefTool.execute({ brief: 'Goal: v1. Decided: Postgres. Shipped the API and docs.' })).success).toBe(true)
-        expect(getProject(project.id)?.brief).toBe('Goal: v1. Decided: Postgres. Shipped the API and docs.')
+        expect((await briefTool.execute({ brief: structuredBrief('Shipped the API.', 'Postgres.') })).success).toBe(true)
+        expect((await briefTool.execute({ brief: structuredBrief('Shipped the API and docs.', 'Postgres.') })).success).toBe(true)
+        expect(getProject(project.id)?.brief).toBe(structuredBrief('Shipped the API and docs.', 'Postgres.'))
     })
 
     test('user brief saves with a stale base are rejected', () => {
@@ -197,6 +202,48 @@ describe('project execution context', () => {
         expect(updateProject(project.id, { brief: 'My edit.', expectedBrief: 'Agent update.' })?.brief).toBe('My edit.')
         // Saves that leave the brief alone never conflict.
         expect(updateProject(project.id, { name: 'Renamed', brief: 'My edit.', expectedBrief: 'stale' })?.name).toBe('Renamed')
+    })
+})
+
+describe('project brief rules', () => {
+    test('agent briefs need the Goal, State, Decisions, and Next sections', async () => {
+        const project = createProject({ name: 'Structured', brief: 'Old.', createMemoryFolder: false })
+        const [briefTool] = makeProjectTools({ projectId: project.id, conversationId: 'conv' })
+
+        const rejected = await briefTool.execute({ brief: '## Goal\nShip.\n\nToday\'s headlines: …' })
+        expect(rejected.success).toBe(false)
+        expect(rejected.output).toContain('Missing: State, Decisions, Next')
+        expect(rejected.output).toContain('## Decisions')
+        expect(getProject(project.id)?.brief).toBe('Old.')
+        expect(missingBriefSections(structuredBrief('ok'))).toEqual([])
+        expect(missingBriefSections('# goal\n### state\n## Decisions\n## Next steps')).toEqual([])
+        expect(missingBriefSections('# Goal\nState: fine\n## Decisions\n## Nextcloud')).toEqual(['State', 'Next'])
+    })
+
+    test('unattended runs leave the brief alone unless the project allows it', () => {
+        const project = createProject({ name: 'Scheduled', createMemoryFolder: false })
+        insertConversation('cron-run', project.id)
+
+        const unattended = resolveProjectExecutionContext('cron-run', undefined, undefined, { unattended: true })!
+        expect(unattended.tools.map((tool) => tool.name)).not.toContain('project_brief_update')
+        expect(unattended.systemPrompt).toContain('This is an unattended run')
+        expect(unattended.stateMessage?.content).not.toContain('project_brief_update')
+        expect(resolveProjectExecutionContext('cron-run')!.tools.map((tool) => tool.name)).toContain('project_brief_update')
+
+        expect(updateProject(project.id, { scheduledBriefUpdates: true })?.scheduledBriefUpdates).toBe(true)
+        const allowed = resolveProjectExecutionContext('cron-run', undefined, undefined, { unattended: true })!
+        expect(allowed.tools.map((tool) => tool.name)).toContain('project_brief_update')
+        expect(allowed.systemPrompt).not.toContain('This is an unattended run')
+    })
+})
+
+describe('project lead', () => {
+    test('Cyno leads projects; specialist agents get the plain project prompt', () => {
+        const project = createProject({ name: 'Lead', createMemoryFolder: false })
+        insertConversation('lead-chat', project.id)
+
+        expect(resolveProjectExecutionContext('lead-chat', undefined, undefined, { lead: true })!.systemPrompt).toContain('### Your role: project lead')
+        expect(resolveProjectExecutionContext('lead-chat', undefined, 'researcher')!.systemPrompt).not.toContain('project lead')
     })
 })
 
@@ -225,8 +272,8 @@ describe('project history', () => {
         const project = createProject({ name: 'History', brief: 'Goal: plant tomatoes.', createMemoryFolder: false })
         insertConversation('chat-1', project.id)
         const tools = Object.fromEntries(makeProjectTools({ projectId: project.id, conversationId: 'chat-1', agentId: 'agent-x' }).map((tool) => [tool.name, tool]))
-        await tools.project_brief_update.execute({ brief: 'Goal: plant peppers.' })
-        await tools.project_brief_update.execute({ brief: 'Goal: plant peppers.' })
+        await tools.project_brief_update.execute({ brief: structuredBrief('Plant peppers.') })
+        await tools.project_brief_update.execute({ brief: structuredBrief('Plant peppers.') })
 
         const revisions = listBriefRevisions(project.id)
         expect(revisions.map(({ revisionNumber, source, isCurrent }) => ({ revisionNumber, source, isCurrent }))).toEqual([

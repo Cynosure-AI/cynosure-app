@@ -94,6 +94,7 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
         { command: 'kill', description: 'Stop all running executions' },
         { command: 'new', description: 'Start a fresh conversation with the last used agent' },
         { command: 'cyno', description: `Switch to ${getCynoProfile().name}, your default assistant` },
+        { command: 'project', description: 'Show or switch the project this chat works in' },
     ]
     for (const agent of getAvailableAgents(ctx)) {
         const cmd = agentCommandName(agent.internalName).slice(0, 32)

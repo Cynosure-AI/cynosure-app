@@ -33,6 +33,8 @@ export interface ExecutionRequest {
         thinkingEnabled?: boolean
         reasoningEffort?: ReasoningEffort
         inlineAttachmentTextLimit?: number
+        /** Nobody is watching this run (scheduled job, webhook). */
+        unattended?: boolean
     }
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
