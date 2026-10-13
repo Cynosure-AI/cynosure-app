@@ -123,13 +123,13 @@ describe('project execution context', () => {
     test('merges project memory into run scopes', () => {
         const projectFolders = [folder('project')]
         const assigned = () => [folder('assigned')]
-        expect(mergeProjectMemoryScope({ overrides: [], projectFolders, assignedFolders: assigned, isFreeChat: false })).toEqual([])
-        expect(mergeProjectMemoryScope({ overrides: undefined, projectFolders, assignedFolders: assigned, isFreeChat: true })).toBeUndefined()
-        expect(mergeProjectMemoryScope({ overrides: undefined, projectFolders, assignedFolders: assigned, isFreeChat: false })!.map((f) => f.id))
+        expect(mergeProjectMemoryScope({ overrides: [], projectFolders, assignedFolders: assigned, isCyno: false })).toEqual([])
+        expect(mergeProjectMemoryScope({ overrides: undefined, projectFolders, assignedFolders: assigned, isCyno: true })).toBeUndefined()
+        expect(mergeProjectMemoryScope({ overrides: undefined, projectFolders, assignedFolders: assigned, isCyno: false })!.map((f) => f.id))
             .toEqual(['project', 'assigned'])
-        expect(mergeProjectMemoryScope({ overrides: [folder('chosen'), folder('project')], projectFolders, assignedFolders: assigned, isFreeChat: false })!.map((f) => f.id))
+        expect(mergeProjectMemoryScope({ overrides: [folder('chosen'), folder('project')], projectFolders, assignedFolders: assigned, isCyno: false })!.map((f) => f.id))
             .toEqual(['project', 'chosen'])
-        expect(mergeProjectMemoryScope({ overrides: [folder('chosen')], projectFolders: [], assignedFolders: assigned, isFreeChat: false })!.map((f) => f.id))
+        expect(mergeProjectMemoryScope({ overrides: [folder('chosen')], projectFolders: [], assignedFolders: assigned, isCyno: false })!.map((f) => f.id))
             .toEqual(['chosen'])
     })
 

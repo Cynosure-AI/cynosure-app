@@ -2,10 +2,9 @@
 import { stopAllActivity } from '../activity/stop-all.js'
 import { getProjectForConversation, listProjects, setConversationProject } from '../projects/project-store.js'
 import {
-    CYNO_AGENT_ID, agentCommandName, archiveChannelConversation, cancelExecutionsForTarget, channelAgentName, getAvailableAgents,
-    resolveHomeConversation,
-    type ChannelSessionState, type ChannelTargetId,
+    agentCommandName, archiveChannelConversation, cancelExecutionsForTarget, channelAgentName, getAvailableAgents, resolveHomeConversation, type ChannelSessionState, type ChannelTargetId,
 } from './channel-session.js'
+import { CYNO_AGENT_ID } from '../agent/execution-preset.js'
 
 export interface ChannelCommandStyle {
     bold(text: string): string

@@ -175,7 +175,7 @@ const activeAgentName = computed(() => {
 })
 
 const emptyStateSubAgents = computed(() => {
-  return chatStore.freeChatSubAgentIds
+  return chatStore.sessionSubAgentIds
     .map((id) => agentDefs.get(id))
     .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
 })

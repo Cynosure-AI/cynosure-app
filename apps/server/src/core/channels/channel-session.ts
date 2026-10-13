@@ -9,7 +9,7 @@ import { getDb } from '../../db/database.js'
 import { getAgent, listAgents } from '../agents/agent-store.js'
 import { getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig } from '../chat/run-config.js'
-import { DEFAULT_CHAT_AGENT, isDefaultChatAgent } from '../agent/execution-preset.js'
+import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
 import { getCynoProfile } from '../cyno/cyno-profile.js'
 import { cynoExecutionConfig } from '../cyno/cyno-run.js'
 import { getEventBus } from '../telemetry/event-bus.js'
@@ -55,16 +55,9 @@ export function getAvailableAgents<K extends ChannelTargetId>(state: ChannelSess
     return all.filter(a => allowed.has(a.id))
 }
 
-/** Agent id a channel uses for Cyno, which runs without an agent. Its conversations store no agent. */
-export const CYNO_AGENT_ID = DEFAULT_CHAT_AGENT.id
-
-export function isCynoAgentId(agentId: string | null | undefined): boolean {
-    return !agentId || isDefaultChatAgent({ id: agentId })
-}
-
 /** Display name of the agent a channel target talks to. */
 export function channelAgentName(agentId: string): string {
-    return isCynoAgentId(agentId) ? getCynoProfile().name : (getAgent(agentId)?.name || 'Unknown')
+    return isCyno(agentId) ? getCynoProfile().name : (getAgent(agentId)?.name || 'Unknown')
 }
 
 /** Command name an agent can be switched to with, e.g. `my-agent` → `my_agent`. */
@@ -83,7 +76,7 @@ function channelConversationKey<K extends ChannelTargetId>(state: ChannelSession
 function findActiveConversation(channelKey: string, agentId: string): string | undefined {
     const row = getDb()
         .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id IS ? AND json_extract(metadata_json, '$.channelKey') = ? AND json_extract(metadata_json, '$.archived') IS NULL")
-        .get(isCynoAgentId(agentId) ? null : agentId, channelKey) as { id: string } | undefined
+        .get(isCyno(agentId) ? null : agentId, channelKey) as { id: string } | undefined
     return row?.id
 }
 
@@ -99,7 +92,7 @@ export function getOrCreateChannelConversation<K extends ChannelTargetId>(
 
     const id = nanoid()
     const now = Date.now()
-    const cyno = isCynoAgentId(agentId)
+    const cyno = isCyno(agentId)
     const executionConfig = cyno
         ? cynoExecutionConfig()
         : buildInitialExecutionConfig({

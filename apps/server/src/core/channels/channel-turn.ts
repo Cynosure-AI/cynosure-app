@@ -24,9 +24,9 @@ import {
     persistChannelExecutionConfig, persistChannelUserMessage, publishChannelStreamError, updateChannelExecution,
 } from './channel-execution.js'
 import {
-    CYNO_AGENT_ID, effectiveAgentId, getOrCreateChannelConversation, isCynoAgentId, resolveContinuedConversation, withTargetLock,
-    type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ChannelTargetId,
+    effectiveAgentId, getOrCreateChannelConversation, resolveContinuedConversation, withTargetLock, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ChannelTargetId,
 } from './channel-session.js'
+import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
 
 const CONTENT_EDIT_INTERVAL_MS = 1500
 const STREAMING_CURSOR = ' ▍'
@@ -193,7 +193,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         createdAt: startedAt,
     })
 
-    const cyno = isCynoAgentId(agentId)
+    const cyno = isCyno(agentId)
     const history = buildChannelHistory(conversationId, cyno ? null : agentId)
     let messages: ChatMessage[] = history.messages
     if (hasAttachments && messages.length > 0) {

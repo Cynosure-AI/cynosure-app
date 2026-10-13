@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { closeDb, getDb } from '../../db/database.js'
 import { createAgent } from '../agents/agent-store.js'
 import { findDeliveryConversation, persistProactiveMessage, recordChannelDeliveries } from './channel-delivery.js'
-import { CYNO_AGENT_ID, resolveContinuedConversation, resolveHomeConversation, type ChannelSessionState } from './channel-session.js'
+import { resolveContinuedConversation, resolveHomeConversation, type ChannelSessionState } from './channel-session.js'
+import { CYNO_AGENT_ID } from '../agent/execution-preset.js'
 
 let directory: string
 beforeEach(() => {

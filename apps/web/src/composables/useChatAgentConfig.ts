@@ -33,16 +33,16 @@ export interface ChatAgentConfigApi {
     sessionAutoMemory: Ref<boolean>
     selectedToolNames: Ref<string[]>
     agentOriginalSystemPrompt: Ref<string>
-    freeChatSubAgentIds: Ref<string[]>
-    freeChatMemoryFolderIds: Ref<string[]>
+    sessionSubAgentIds: Ref<string[]>
+    sessionMemoryFolderIds: Ref<string[]>
     agentOriginalTools: Ref<string[]>
     agentOriginalSubAgentIds: Ref<string[]>
     agentOriginalMemoryFolderIds: Ref<string[]>
-    freeChatMemorySelectionInitialized: Ref<boolean>
+    sessionMemorySelectionInitialized: Ref<boolean>
     hasAgentOverrides: ComputedRef<boolean>
     agentOverrideFields: ComputedRef<string[]>
-    freeChatOverrideFields: ComputedRef<string[]>
-    hasFreeChatOverrides: ComputedRef<boolean>
+    cynoOverrideFields: ComputedRef<string[]>
+    hasCynoOverrides: ComputedRef<boolean>
     markOverridesModified(): void
     setSelectedToolNames(names: string[]): void
     resetAgentOverrides(): void
@@ -54,9 +54,9 @@ export interface ChatAgentConfigApi {
     setSessionModel(model: string | null, providerId?: string | null): void
     setSessionReasoningEffort(effort: ReasoningEffort | 'off'): void
     syncAgentBaseline(): void
-    setFreeChatDefaultMemoryFolderIds(ids: string[]): void
-    ensureFreeChatPreset(): void
-    captureFreeChatPreset(): void
+    setCynoDefaultMemoryFolderIds(ids: string[]): void
+    ensureCynoPreset(): void
+    captureCynoPreset(): void
 }
 
 function arraysEqual(a: string[], b: string[]): boolean {
@@ -141,15 +141,15 @@ export function useChatAgentConfig(
     const agentOriginalSystemPrompt = ref<string>('')
     const agentOriginalModelOverride = ref<string | null>(null)
     const agentOriginalProviderOverride = ref<string | null>(null)
-    const freeChatSubAgentIds = ref<string[]>([])
-    const freeChatMemoryFolderIds = ref<string[]>([])
-    const freeChatMemorySelectionInitialized = ref<boolean>(false)
+    const sessionSubAgentIds = ref<string[]>([])
+    const sessionMemoryFolderIds = ref<string[]>([])
+    const sessionMemorySelectionInitialized = ref<boolean>(false)
     const agentOriginalTools = ref<string[]>([])
     const agentOriginalSubAgentIds = ref<string[]>([])
     const agentOriginalMemoryFolderIds = ref<string[]>([])
-    const freeChatDefaultMemoryFolderIds = ref<string[]>([])
-    const freeChatPreset = ref<ChatPreset | null>(null)
-    let freeChatToolsFollowDefaults = true
+    const cynoDefaultMemoryFolderIds = ref<string[]>([])
+    const cynoSessionPreset = ref<ChatPreset | null>(null)
+    let cynoToolsFollowDefaults = true
 
     function filterToolsForChatContext(names: string[], _hasAgent = Boolean(activeAgentId.value)): string[] {
         return [...names]
@@ -163,7 +163,7 @@ export function useChatAgentConfig(
         )
     }
 
-    function defaultFreeChatToolKeys(tools: ToolInfo[], profile: CynoProfile | null = cyno.profile): string[] {
+    function cynoDefaultToolKeys(tools: ToolInfo[], profile: CynoProfile | null = cyno.profile): string[] {
         return defaultCynoToolKeys(tools, profile?.tools)
     }
 
@@ -173,26 +173,26 @@ export function useChatAgentConfig(
         if (activeAgentId.value) {
             agentOriginalTools.value = agentOriginalTools.value.filter((name) => availableKeys.has(name))
         }
-        const previousDefaults = defaultFreeChatToolKeys(previousTools ?? [])
-        const nextDefaults = defaultFreeChatToolKeys(tools)
-        const followsDefaults = !activeAgentId.value && freeChatToolsFollowDefaults && arraysEqual(filtered, previousDefaults)
-        if (freeChatToolsFollowDefaults && freeChatPreset.value && arraysEqual(freeChatPreset.value.tools, previousDefaults)) {
-            freeChatPreset.value = { ...freeChatPreset.value, tools: nextDefaults }
+        const previousDefaults = cynoDefaultToolKeys(previousTools ?? [])
+        const nextDefaults = cynoDefaultToolKeys(tools)
+        const followsDefaults = !activeAgentId.value && cynoToolsFollowDefaults && arraysEqual(filtered, previousDefaults)
+        if (cynoToolsFollowDefaults && cynoSessionPreset.value && arraysEqual(cynoSessionPreset.value.tools, previousDefaults)) {
+            cynoSessionPreset.value = { ...cynoSessionPreset.value, tools: nextDefaults }
         }
-        if (followsDefaults && freeChatMemorySelectionInitialized.value) {
+        if (followsDefaults && sessionMemorySelectionInitialized.value) {
             selectedToolNames.value = nextDefaults
         } else if (!arraysEqual(filtered, selectedToolNames.value)) {
             selectedToolNames.value = filtered
-            captureFreeChatPreset()
+            captureCynoPreset()
         }
     }, { deep: true })
 
     /** Cyno's defaults; a profile without a memory selection uses All Memory. */
-    function regularFreeChatPreset(profile: CynoProfile | null = cyno.profile): ChatPreset {
+    function cynoDefaultPreset(profile: CynoProfile | null = cyno.profile): ChatPreset {
         return {
-            tools: defaultFreeChatToolKeys(agentStore.availableTools, profile),
+            tools: cynoDefaultToolKeys(agentStore.availableTools, profile),
             subAgentIds: profile?.subAgents.map((assignment) => assignment.agentId) ?? [],
-            memoryFolderIds: profile?.memoryFolders ? [...profile.memoryFolders] : [...freeChatDefaultMemoryFolderIds.value],
+            memoryFolderIds: profile?.memoryFolders ? [...profile.memoryFolders] : [...cynoDefaultMemoryFolderIds.value],
             systemPrompt: profile?.systemPrompt ?? '',
             thinkingEnabled: profile?.thinkingEnabled ?? true,
             reasoningEffort: profile?.reasoningEffort ?? 'medium',
@@ -206,8 +206,8 @@ export function useChatAgentConfig(
     function currentPreset(): ChatPreset {
         return {
             tools: [...selectedToolNames.value],
-            subAgentIds: [...freeChatSubAgentIds.value],
-            memoryFolderIds: [...freeChatMemoryFolderIds.value],
+            subAgentIds: [...sessionSubAgentIds.value],
+            memoryFolderIds: [...sessionMemoryFolderIds.value],
             systemPrompt: sessionSystemPrompt.value,
             thinkingEnabled: sessionThinkingEnabled.value,
             reasoningEffort: sessionReasoningEffort.value,
@@ -220,9 +220,9 @@ export function useChatAgentConfig(
 
     function applyPreset(preset: ChatPreset): void {
         selectedToolNames.value = filterToolsForChatContext(preset.tools)
-        freeChatSubAgentIds.value = [...preset.subAgentIds]
-        freeChatMemoryFolderIds.value = [...preset.memoryFolderIds]
-        freeChatMemorySelectionInitialized.value = true
+        sessionSubAgentIds.value = [...preset.subAgentIds]
+        sessionMemoryFolderIds.value = [...preset.memoryFolderIds]
+        sessionMemorySelectionInitialized.value = true
         sessionSystemPrompt.value = preset.systemPrompt
         sessionThinkingEnabled.value = preset.thinkingEnabled
         sessionReasoningEffort.value = preset.reasoningEffort
@@ -232,7 +232,7 @@ export function useChatAgentConfig(
         sessionProviderOverride.value = preset.providerOverride
     }
 
-    function restoreFreeChatModelSelection(): void {
+    function restoreCynoModelSelection(): void {
         const { model, providerId } = profileModel(cyno.profile)
         sessionModelOverride.value = model
         sessionProviderOverride.value = providerId
@@ -272,22 +272,22 @@ export function useChatAgentConfig(
         }
     }
 
-    function ensureFreeChatPreset(): void {
-        if (!freeChatPreset.value) {
-            freeChatPreset.value = regularFreeChatPreset()
+    function ensureCynoPreset(): void {
+        if (!cynoSessionPreset.value) {
+            cynoSessionPreset.value = cynoDefaultPreset()
         }
-        if (!activeAgentId.value && !freeChatMemorySelectionInitialized.value) {
-            applyPreset(freeChatPreset.value)
+        if (!activeAgentId.value && !sessionMemorySelectionInitialized.value) {
+            applyPreset(cynoSessionPreset.value)
         }
     }
 
-    function captureFreeChatPreset(): void {
+    function captureCynoPreset(): void {
         if (activeAgentId.value) return
-        freeChatPreset.value = currentPreset()
+        cynoSessionPreset.value = currentPreset()
     }
 
     function setSelectedToolNames(names: string[]): void {
-        if (!activeAgentId.value) freeChatToolsFollowDefaults = false
+        if (!activeAgentId.value) cynoToolsFollowDefaults = false
         const availableKeys = selectableToolKeys()
         const seen = new Set<string>()
         selectedToolNames.value = names.filter((name) => {
@@ -295,46 +295,46 @@ export function useChatAgentConfig(
             seen.add(name)
             return true
         })
-        captureFreeChatPreset()
+        captureCynoPreset()
     }
 
-    function setFreeChatDefaultMemoryFolderIds(ids: string[]): void {
-        const previousDefault = regularFreeChatPreset()
-        freeChatDefaultMemoryFolderIds.value = [...ids]
-        refreshFreeChatDefaults(previousDefault)
+    function setCynoDefaultMemoryFolderIds(ids: string[]): void {
+        const previousDefault = cynoDefaultPreset()
+        cynoDefaultMemoryFolderIds.value = [...ids]
+        refreshCynoDefaults(previousDefault)
     }
 
     /**
      * Cyno's defaults changed (profile loaded or edited, default memory known).
      * A new chat, or one still on the old defaults, moves to the new ones.
      */
-    function refreshFreeChatDefaults(previousDefault: ChatPreset): void {
-        const nextDefault = regularFreeChatPreset()
-        if (!freeChatPreset.value) {
-            freeChatPreset.value = clonePreset(nextDefault)
-        } else if (presetsEqualWithoutProviderModel(freeChatPreset.value, previousDefault)) {
-            freeChatPreset.value = {
+    function refreshCynoDefaults(previousDefault: ChatPreset): void {
+        const nextDefault = cynoDefaultPreset()
+        if (!cynoSessionPreset.value) {
+            cynoSessionPreset.value = clonePreset(nextDefault)
+        } else if (presetsEqualWithoutProviderModel(cynoSessionPreset.value, previousDefault)) {
+            cynoSessionPreset.value = {
                 ...clonePreset(nextDefault),
-                modelOverride: freeChatPreset.value.modelOverride,
-                providerOverride: freeChatPreset.value.providerOverride,
+                modelOverride: cynoSessionPreset.value.modelOverride,
+                providerOverride: cynoSessionPreset.value.providerOverride,
             }
         }
         if (
             !activeAgentId.value &&
             (
-                !freeChatMemorySelectionInitialized.value ||
+                !sessionMemorySelectionInitialized.value ||
                 presetsEqualWithoutProviderModel(currentPreset(), previousDefault)
             )
         ) {
-            applyPreset(freeChatPreset.value)
+            applyPreset(cynoSessionPreset.value)
         }
     }
 
     function presetChangedFields(preset: ChatPreset): string[] {
         const fields: string[] = []
         if (!arraysEqual(selectedToolNames.value, preset.tools)) fields.push('Tools')
-        if (!arraysEqual(freeChatSubAgentIds.value, preset.subAgentIds)) fields.push('Sub-agents')
-        if (!arraysEqual(freeChatMemoryFolderIds.value, preset.memoryFolderIds)) fields.push('Memory folders')
+        if (!arraysEqual(sessionSubAgentIds.value, preset.subAgentIds)) fields.push('Sub-agents')
+        if (!arraysEqual(sessionMemoryFolderIds.value, preset.memoryFolderIds)) fields.push('Memory folders')
         if (sessionSystemPrompt.value !== preset.systemPrompt) fields.push('System prompt')
         if (sessionThinkingEnabled.value !== preset.thinkingEnabled) fields.push('Thinking mode')
         if (sessionReasoningEffort.value !== preset.reasoningEffort) fields.push('Reasoning effort')
@@ -343,8 +343,8 @@ export function useChatAgentConfig(
         return fields
     }
 
-    const freeChatOverrideFields = computed(() =>
-        activeAgentId.value ? [] : presetChangedFields(regularFreeChatPreset())
+    const cynoOverrideFields = computed(() =>
+        activeAgentId.value ? [] : presetChangedFields(cynoDefaultPreset())
     )
 
     const agentOverrideFields = computed(() => {
@@ -362,13 +362,13 @@ export function useChatAgentConfig(
 
     const hasAgentOverrides = computed(() => agentOverrideFields.value.length > 0)
 
-    const hasFreeChatOverrides = computed(() => {
+    const hasCynoOverrides = computed(() => {
         if (activeAgentId.value) return false
-        return !presetsEqualWithoutProviderModel(currentPreset(), regularFreeChatPreset())
+        return !presetsEqualWithoutProviderModel(currentPreset(), cynoDefaultPreset())
     })
 
     function markOverridesModified(): void {
-        captureFreeChatPreset()
+        captureCynoPreset()
     }
 
     function resetAgentOverrides(): void {
@@ -385,9 +385,9 @@ export function useChatAgentConfig(
         }
         const modelOverride = sessionModelOverride.value
         const providerOverride = sessionProviderOverride.value
-        const preset = regularFreeChatPreset()
-        freeChatToolsFollowDefaults = true
-        freeChatPreset.value = clonePreset(preset)
+        const preset = cynoDefaultPreset()
+        cynoToolsFollowDefaults = true
+        cynoSessionPreset.value = clonePreset(preset)
         applyPreset(preset)
         sessionModelOverride.value = modelOverride
         sessionProviderOverride.value = providerOverride
@@ -395,13 +395,13 @@ export function useChatAgentConfig(
 
     /** Save the current chat's changes as Cyno's defaults. */
     async function applyOverridesToCyno(): Promise<void> {
-        const defaults = regularFreeChatPreset()
+        const defaults = cynoDefaultPreset()
         const updates: Partial<CynoProfile> = {}
         if (!arraysEqual(selectedToolNames.value, defaults.tools)) updates.tools = [...selectedToolNames.value]
-        if (!arraysEqual(freeChatSubAgentIds.value, defaults.subAgentIds)) {
-            updates.subAgents = freeChatSubAgentIds.value.map((agentId) => ({ agentId }))
+        if (!arraysEqual(sessionSubAgentIds.value, defaults.subAgentIds)) {
+            updates.subAgents = sessionSubAgentIds.value.map((agentId) => ({ agentId }))
         }
-        if (!arraysEqual(freeChatMemoryFolderIds.value, defaults.memoryFolderIds)) updates.memoryFolders = [...freeChatMemoryFolderIds.value]
+        if (!arraysEqual(sessionMemoryFolderIds.value, defaults.memoryFolderIds)) updates.memoryFolders = [...sessionMemoryFolderIds.value]
         if (sessionSystemPrompt.value !== defaults.systemPrompt) updates.systemPrompt = sessionSystemPrompt.value
         if (sessionThinkingEnabled.value !== defaults.thinkingEnabled) updates.thinkingEnabled = sessionThinkingEnabled.value
         if (sessionReasoningEffort.value !== defaults.reasoningEffort) updates.reasoningEffort = sessionReasoningEffort.value
@@ -423,11 +423,11 @@ export function useChatAgentConfig(
         if (!arraysEqual(selectedToolNames.value, actualPreset.tools)) {
             updates.tools = [...selectedToolNames.value]
         }
-        if (!arraysEqual(freeChatSubAgentIds.value, actualPreset.subAgentIds)) {
-            updates.subAgents = freeChatSubAgentIds.value.map(id => ({ agentId: id }))
+        if (!arraysEqual(sessionSubAgentIds.value, actualPreset.subAgentIds)) {
+            updates.subAgents = sessionSubAgentIds.value.map(id => ({ agentId: id }))
         }
-        if (!arraysEqual(freeChatMemoryFolderIds.value, actualPreset.memoryFolderIds)) {
-            updates.memoryFolders = [...freeChatMemoryFolderIds.value]
+        if (!arraysEqual(sessionMemoryFolderIds.value, actualPreset.memoryFolderIds)) {
+            updates.memoryFolders = [...sessionMemoryFolderIds.value]
         }
         if (sessionSystemPrompt.value !== actualPreset.systemPrompt) updates.systemPrompt = sessionSystemPrompt.value
         if (sessionThinkingEnabled.value !== actualPreset.thinkingEnabled) updates.thinkingEnabled = sessionThinkingEnabled.value
@@ -458,7 +458,7 @@ export function useChatAgentConfig(
     }
 
     function applyAgentSelection(id: string | null): void {
-        if (!activeAgentId.value) captureFreeChatPreset()
+        if (!activeAgentId.value) captureCynoPreset()
         activeAgentId.value = id
         if (id) {
             sessionStorage.setItem(SK_ACTIVE_AGENT, id)
@@ -469,10 +469,10 @@ export function useChatAgentConfig(
         } else {
             sessionStorage.removeItem(SK_ACTIVE_AGENT)
             persistStoredValue(SK_ACTIVE_AGENT, null)
-            ensureFreeChatPreset()
-            applyPreset(freeChatPreset.value || regularFreeChatPreset())
-            restoreFreeChatModelSelection()
-            setAgentBaseline(regularFreeChatPreset())
+            ensureCynoPreset()
+            applyPreset(cynoSessionPreset.value || cynoDefaultPreset())
+            restoreCynoModelSelection()
+            setAgentBaseline(cynoDefaultPreset())
         }
         syncPrefsToElectron()
     }
@@ -525,7 +525,7 @@ export function useChatAgentConfig(
     }
 
     function restoreConversationConfig(config: ConversationExecutionConfig): void {
-        if (!activeAgentId.value) freeChatToolsFollowDefaults = false
+        if (!activeAgentId.value) cynoToolsFollowDefaults = false
         const activeAgent = activeAgentId.value ? useAgentDefinitionsStore().get(activeAgentId.value) : null
         const restoredModel = config.model || null
         const restoredProviderId = config.providerId || null
@@ -549,7 +549,7 @@ export function useChatAgentConfig(
         if (activeAgentId.value) {
             setAgentBaseline(agentPreset(activeAgentId.value).preset)
         } else {
-            captureFreeChatPreset()
+            captureCynoPreset()
         }
     }
 
@@ -590,11 +590,11 @@ export function useChatAgentConfig(
 
     function syncAgentBaseline(): void {
         if (!activeAgentId.value) {
-            freeChatToolsFollowDefaults = true
-            const preset = regularFreeChatPreset()
-            freeChatPreset.value = clonePreset(preset)
+            cynoToolsFollowDefaults = true
+            const preset = cynoDefaultPreset()
+            cynoSessionPreset.value = clonePreset(preset)
             applyPreset(preset)
-            restoreFreeChatModelSelection()
+            restoreCynoModelSelection()
             setAgentBaseline(preset)
             return
         }
@@ -605,15 +605,15 @@ export function useChatAgentConfig(
 
     watch(() => cyno.profile, (next, previous) => {
         const previousModel = profileModel(previous ?? null)
-        refreshFreeChatDefaults(regularFreeChatPreset(previous ?? null))
+        refreshCynoDefaults(cynoDefaultPreset(previous ?? null))
         // A Cyno chat still on the old default model follows the new one.
         if (!activeAgentId.value
             && sessionModelOverride.value === previousModel.model
             && sessionProviderOverride.value === previousModel.providerId) {
-            restoreFreeChatModelSelection()
-            if (freeChatPreset.value) {
-                freeChatPreset.value = {
-                    ...freeChatPreset.value,
+            restoreCynoModelSelection()
+            if (cynoSessionPreset.value) {
+                cynoSessionPreset.value = {
+                    ...cynoSessionPreset.value,
                     modelOverride: sessionModelOverride.value,
                     providerOverride: sessionProviderOverride.value,
                 }
@@ -632,16 +632,16 @@ export function useChatAgentConfig(
         sessionAutoMemory,
         selectedToolNames,
         agentOriginalSystemPrompt,
-        freeChatSubAgentIds,
-        freeChatMemoryFolderIds,
-        freeChatMemorySelectionInitialized,
+        sessionSubAgentIds,
+        sessionMemoryFolderIds,
+        sessionMemorySelectionInitialized,
         agentOriginalTools,
         agentOriginalSubAgentIds,
         agentOriginalMemoryFolderIds,
         hasAgentOverrides,
         agentOverrideFields,
-        freeChatOverrideFields,
-        hasFreeChatOverrides,
+        cynoOverrideFields,
+        hasCynoOverrides,
         markOverridesModified,
         setSelectedToolNames,
         resetAgentOverrides,
@@ -653,8 +653,8 @@ export function useChatAgentConfig(
         setSessionModel,
         setSessionReasoningEffort,
         syncAgentBaseline,
-        setFreeChatDefaultMemoryFolderIds,
-        ensureFreeChatPreset,
-        captureFreeChatPreset,
+        setCynoDefaultMemoryFolderIds,
+        ensureCynoPreset,
+        captureCynoPreset,
     }
 }

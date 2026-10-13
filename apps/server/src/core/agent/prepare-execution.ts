@@ -18,7 +18,7 @@ import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-att
 import { buildTaskContext } from './pre-execution/task-context.js'
 import { getAssignedMemoryFolders, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
-import { isDefaultChatAgent, type ExecutionPreset } from './execution-preset.js'
+import { isCyno, type ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 import { getUserSettings } from '../user-settings.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
@@ -79,9 +79,9 @@ export interface PrepareExecutionInput {
     /** Nobody is watching this run (scheduled job, webhook); sub-agents inherit it. */
     unattended?: boolean
 
-    // ── Agentless overrides ──
+    // ── Cyno (no agent) overrides ──
 
-    /** Memory folder overrides for agentless chat (bypasses agent's assigned spaces) */
+    /** Memory folder overrides for the run (bypasses the agent's assigned folders) */
     memoryFolderOverrides?: MemoryFolderRef[]
     /** Agent id used during built-in tool hydration. Defaults to agent.id. */
     hydrationAgentId?: string
@@ -89,7 +89,7 @@ export interface PrepareExecutionInput {
     eventMeta?: Record<string, unknown>
     /** Inline text threshold; larger conversation attachments are indexed before execution. */
     inlineAttachmentTextLimit?: number
-    /** Explicitly selected tools to preserve in agentless schedule snapshots. */
+    /** Explicitly selected tools to preserve when a Cyno chat schedules a job. */
     scheduleSelectedToolKeys?: string[]
     thinkingEnabled?: boolean
     reasoningEffort?: ReasoningEffort
@@ -131,9 +131,9 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
     const project = resolveProjectExecutionContext(
         rawInput.conversationId,
         rawInput.broadcast,
-        isDefaultChatAgent(rawInput.preset) ? undefined : rawInput.preset.id,
+        isCyno(rawInput.preset) ? undefined : rawInput.preset.id,
         // Cyno (no agent) leads the projects it works in; specialist agents work on their part.
-        { unattended: rawInput.unattended, lead: isDefaultChatAgent(rawInput.preset) },
+        { unattended: rawInput.unattended, lead: isCyno(rawInput.preset) },
     )
     const input: PrepareExecutionInput = project
         ? {
@@ -142,7 +142,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
                 overrides: rawInput.memoryFolderOverrides,
                 projectFolders: project.memoryFolders,
                 assignedFolders: () => getAssignedMemoryFolders(rawInput.preset.id),
-                isFreeChat: isDefaultChatAgent(rawInput.preset),
+                isCyno: isCyno(rawInput.preset),
             }),
             systemPromptSuffix: [rawInput.systemPromptSuffix, project.systemPrompt].filter(Boolean).join('\n\n'),
         }
@@ -167,7 +167,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         providerOverride,
         modelOverride,
     })
-    const scheduleExecutionConfig: ConversationExecutionConfig | undefined = isDefaultChatAgent(preset)
+    const scheduleExecutionConfig: ConversationExecutionConfig | undefined = isCyno(preset)
         ? {
             allowedTools: [...(input.scheduleSelectedToolKeys ?? preset.tools)],
             subAgents: (input.subAgentAssignments ?? preset.subAgents).map(({ agentId }) => ({ agentId })),
@@ -307,7 +307,7 @@ function resolveSelectedMemoryFolderNames(
         return memoryFolderOverrides.map(({ name, description }) => ({ name, ...(description ? { description } : {}) }))
     }
 
-    if (isDefaultChatAgent({ id: agentId })) return []
+    if (isCyno({ id: agentId })) return []
 
     return getAssignedMemoryFolders(agentId).map(({ name, description }) => ({ name, ...(description ? { description } : {}) }))
 }

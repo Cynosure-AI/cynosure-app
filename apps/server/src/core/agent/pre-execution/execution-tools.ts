@@ -23,7 +23,7 @@ export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     resolvedModel: string
     /** Skip routing when task-context planning says no tool is needed; pinned tools and tool search remain. */
     suppressAutoTools?: boolean
-    /** Snapshot used when an agentless scheduling tool creates a durable job. */
+    /** Settings saved with a job that a Cyno chat schedules. */
     scheduleExecutionConfig?: ConversationExecutionConfig
     /** Toolsets already chosen by task-context planning. */
     plannedToolsetIds?: string[]

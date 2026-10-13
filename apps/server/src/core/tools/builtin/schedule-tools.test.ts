@@ -33,19 +33,19 @@ describe('schedule built-in tools', () => {
         expect(isScheduleToolName('memory_create')).toBe(false)
     })
 
-    test('rejects agentless scheduling when no Free Chat execution snapshot is available', async () => {
+    test('rejects scheduling without an agent when no Cyno chat settings are available', async () => {
         const tools = makeScheduleTools({ agentId: '__agentless__' })
 
         for (const tool of tools) {
             const response = await tool.execute({})
             expect(response).toMatchObject({
                 success: false,
-                error: expect.stringMatching(/require either an agent or a Free Chat execution configuration/i),
+                error: expect.stringMatching(/require either an agent or Cyno's chat settings/i),
             })
         }
     })
 
-    test('accepts a Free Chat execution snapshot as agentless scheduling context', async () => {
+    test('accepts the settings of a Cyno chat as scheduling context', async () => {
         const [create] = makeScheduleTools({
             agentId: '__agentless__',
             executionConfig: {

@@ -21,7 +21,7 @@ type BroadcastFn = (event: string, data: unknown) => void
 export interface TriggerRunConfig {
     /** Agent definition (from getAgent) */
     agent: AgentData | null
-    /** Frozen Free Chat configuration for an agentless trigger. */
+    /** Settings for a run without an agent: a job's saved chat settings, or Cyno's profile. */
     executionConfig?: ConversationExecutionConfig
     /** Project the run belongs to; its conversation is created inside the project. */
     projectId?: string | null

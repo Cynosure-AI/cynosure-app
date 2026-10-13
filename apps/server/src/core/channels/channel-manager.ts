@@ -4,7 +4,8 @@ import { DiscordChannel } from './discord/discord.channel.js'
 import { SlackChannel } from './slack/slack.channel.js'
 import { getDb } from '../../db/database.js'
 import { persistProactiveMessage, recordChannelDeliveries } from './channel-delivery.js'
-import { CYNO_AGENT_ID, isCynoAgentId } from './channel-session.js'
+import {  } from './channel-session.js'
+import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -180,7 +181,7 @@ class ChannelManager {
                 persistProactiveMessage({
                     broadcast: this.broadcast,
                     conversationId: home.conversationId,
-                    agentId: isCynoAgentId(home.agentId) ? null : home.agentId,
+                    agentId: isCyno(home.agentId) ? null : home.agentId,
                     content: text,
                 })
             }

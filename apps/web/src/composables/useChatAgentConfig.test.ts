@@ -54,7 +54,7 @@ describe('chat agent provider defaults', () => {
     })
   })
 
-  test('allows scheduling tools in Free Chat selections', () => {
+  test('allows scheduling tools in Cyno chat selections', () => {
     const runtime = useAgentStore()
     runtime.availableTools = [
       tool('builtin::schedule_create', 'schedule_create'),
@@ -70,7 +70,7 @@ describe('chat agent provider defaults', () => {
   test('enables MCP management and scheduling by default after tools load', async () => {
     const runtime = useAgentStore()
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.ensureFreeChatPreset()
+    config.ensureCynoPreset()
     const defaultTools = [
       tool('builtin:utility::manage_mcp', 'manage_mcp'),
       tool('builtin:scheduling::schedule_create', 'schedule_create'),
@@ -82,7 +82,7 @@ describe('chat agent provider defaults', () => {
     await Promise.resolve()
 
     expect(config.selectedToolNames.value).toEqual(defaultTools.map((item) => item.key))
-    expect(config.hasFreeChatOverrides.value).toBe(false)
+    expect(config.hasCynoOverrides.value).toBe(false)
 
     config.setSelectedToolNames([])
     expect(config.selectedToolNames.value).toEqual([])
@@ -90,7 +90,7 @@ describe('chat agent provider defaults', () => {
     expect(config.selectedToolNames.value).toEqual(defaultTools.map((item) => item.key))
   })
 
-  test('preserves an existing Free Chat tool selection when tools load later', async () => {
+  test('preserves an existing Cyno chat tool selection when tools load later', async () => {
     const runtime = useAgentStore()
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
     config.restoreConversationConfig({
@@ -104,40 +104,40 @@ describe('chat agent provider defaults', () => {
     expect(config.selectedToolNames.value).toEqual([])
   })
 
-  test('uses the Cyno system prompt for new Free Chats', () => {
+  test('uses the Cyno system prompt for new Cyno chats', () => {
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
 
-    config.ensureFreeChatPreset()
+    config.ensureCynoPreset()
 
     expect(config.sessionSystemPrompt.value).toBe(CYNO_PROMPT)
-    expect(config.hasFreeChatOverrides.value).toBe(false)
+    expect(config.hasCynoOverrides.value).toBe(false)
   })
 
-  test('restores the Cyno system prompt when Free Chat defaults are reset', () => {
+  test('restores the Cyno system prompt when Cyno chat defaults are reset', () => {
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.ensureFreeChatPreset()
+    config.ensureCynoPreset()
     config.sessionSystemPrompt.value = 'Temporary override'
     config.markOverridesModified()
 
-    expect(config.freeChatOverrideFields.value).toContain('System prompt')
+    expect(config.cynoOverrideFields.value).toContain('System prompt')
 
     config.resetToDefaults()
 
     expect(config.sessionSystemPrompt.value).toBe(CYNO_PROMPT)
-    expect(config.hasFreeChatOverrides.value).toBe(false)
-    expect(config.freeChatOverrideFields.value).toEqual([])
+    expect(config.hasCynoOverrides.value).toBe(false)
+    expect(config.cynoOverrideFields.value).toEqual([])
   })
 
   test('starts a new Cyno chat from its defaults instead of retaining overrides', () => {
     useCynoStore().profile = cynoProfile({ model: 'preferred-model', providerId: 'preferred-provider' })
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.setFreeChatDefaultMemoryFolderIds(['uncategorized'])
-    config.ensureFreeChatPreset()
+    config.setCynoDefaultMemoryFolderIds(['uncategorized'])
+    config.ensureCynoPreset()
     config.sessionSystemPrompt.value = 'Temporary override'
     config.sessionThinkingEnabled.value = false
     config.sessionAutoToolRouting.value = false
-    config.freeChatSubAgentIds.value = ['agent-2']
-    config.freeChatMemoryFolderIds.value = ['custom-folder']
+    config.sessionSubAgentIds.value = ['agent-2']
+    config.sessionMemoryFolderIds.value = ['custom-folder']
     config.markOverridesModified()
 
     config.syncAgentBaseline()
@@ -145,36 +145,36 @@ describe('chat agent provider defaults', () => {
     expect(config.sessionSystemPrompt.value).toBe(CYNO_PROMPT)
     expect(config.sessionThinkingEnabled.value).toBe(true)
     expect(config.sessionAutoToolRouting.value).toBe(true)
-    expect(config.freeChatSubAgentIds.value).toEqual([])
-    expect(config.freeChatMemoryFolderIds.value).toEqual(['uncategorized'])
+    expect(config.sessionSubAgentIds.value).toEqual([])
+    expect(config.sessionMemoryFolderIds.value).toEqual(['uncategorized'])
     expect(config.sessionModelOverride.value).toBe('preferred-model')
     expect(config.sessionProviderOverride.value).toBe('preferred-provider')
-    expect(config.hasFreeChatOverrides.value).toBe(false)
+    expect(config.hasCynoOverrides.value).toBe(false)
   })
 
   test('Cyno\'s saved selections are its defaults, and an empty memory selection stays off', () => {
     useCynoStore().profile = cynoProfile({ memoryFolders: [], subAgents: [{ agentId: 'researcher' }], autoToolRouting: false })
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.setFreeChatDefaultMemoryFolderIds(['uncategorized'])
-    config.ensureFreeChatPreset()
+    config.setCynoDefaultMemoryFolderIds(['uncategorized'])
+    config.ensureCynoPreset()
 
-    expect(config.freeChatMemoryFolderIds.value).toEqual([])
-    expect(config.freeChatSubAgentIds.value).toEqual(['researcher'])
+    expect(config.sessionMemoryFolderIds.value).toEqual([])
+    expect(config.sessionSubAgentIds.value).toEqual(['researcher'])
     expect(config.sessionAutoToolRouting.value).toBe(false)
-    expect(config.hasFreeChatOverrides.value).toBe(false)
+    expect(config.hasCynoOverrides.value).toBe(false)
   })
 
   test('a new Cyno chat follows profile edits', async () => {
     const cyno = useCynoStore()
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.ensureFreeChatPreset()
+    config.ensureCynoPreset()
 
     cyno.profile = cynoProfile({ systemPrompt: 'Be brief.', model: 'new-model', providerId: 'p' })
     await Promise.resolve()
 
     expect(config.sessionSystemPrompt.value).toBe('Be brief.')
     expect(config.sessionModelOverride.value).toBe('new-model')
-    expect(config.hasFreeChatOverrides.value).toBe(false)
+    expect(config.hasCynoOverrides.value).toBe(false)
   })
 
   test('applying changes in a Cyno chat saves them to Cyno, and model picks stick', async () => {
@@ -184,13 +184,13 @@ describe('chat agent provider defaults', () => {
       return cyno.profile
     })
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.ensureFreeChatPreset()
+    config.ensureCynoPreset()
 
     config.sessionSystemPrompt.value = 'Answer in German.'
     config.markOverridesModified()
     await config.applyOverridesToAgent()
     expect(cyno.update).toHaveBeenCalledWith({ systemPrompt: 'Answer in German.' })
-    expect(config.hasFreeChatOverrides.value).toBe(false)
+    expect(config.hasCynoOverrides.value).toBe(false)
 
     config.setSessionModel('glm-5.3', 'openrouter')
     expect(cyno.update).toHaveBeenLastCalledWith({ model: 'glm-5.3', providerId: 'openrouter' })

@@ -213,7 +213,7 @@ export const useChatStore = defineStore('chat', () => {
         if (b.isUncategorized) return 1
         return (a.folderPath || '').localeCompare(b.folderPath || '')
       })
-      agentConfig.setFreeChatDefaultMemoryFolderIds(memoryFolders.value.filter((space) => space.isUncategorized).map((space) => space.id))
+      agentConfig.setCynoDefaultMemoryFolderIds(memoryFolders.value.filter((space) => space.isUncategorized).map((space) => space.id))
     } catch {
       // Non-critical; memory selectors can retry later.
     }
@@ -275,7 +275,7 @@ export const useChatStore = defineStore('chat', () => {
     // Cyno chats need Cyno's defaults (system prompt, model) before the first message.
     if (!useCynoStore().profile) await useCynoStore().load().catch(() => undefined)
     if (!memoryFolders.value.length) await loadMemoryFolders()
-    agentConfig.ensureFreeChatPreset()
+    agentConfig.ensureCynoPreset()
     const conversationId = activeConversationId.value
     if (conversationId) {
       quickResponsesMap.delete(conversationId)
@@ -789,7 +789,7 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     async queueMessage(content: string, delivery: ChatQueueDelivery, imageDataUrls?: string[], files?: import('@shared/types').ChatAttachmentInput[], audioDataUrls?: string[], mediaGeneration?: MediaGenerationSettings): Promise<void> {
       if (!memoryFolders.value.length) await loadMemoryFolders()
-      agentConfig.ensureFreeChatPreset()
+      agentConfig.ensureCynoPreset()
       await chatMessages.queueMessage(content, delivery, imageDataUrls, files, audioDataUrls, mediaGeneration)
       await loadQueue()
     },
@@ -848,16 +848,16 @@ export const useChatStore = defineStore('chat', () => {
     sessionAutoMemory: agentConfig.sessionAutoMemory,
     selectedToolNames: agentConfig.selectedToolNames,
     agentOriginalSystemPrompt: agentConfig.agentOriginalSystemPrompt,
-    freeChatSubAgentIds: agentConfig.freeChatSubAgentIds,
-    freeChatMemoryFolderIds: agentConfig.freeChatMemoryFolderIds,
-    freeChatMemorySelectionInitialized: agentConfig.freeChatMemorySelectionInitialized,
+    sessionSubAgentIds: agentConfig.sessionSubAgentIds,
+    sessionMemoryFolderIds: agentConfig.sessionMemoryFolderIds,
+    sessionMemorySelectionInitialized: agentConfig.sessionMemorySelectionInitialized,
     agentOriginalTools: agentConfig.agentOriginalTools,
     agentOriginalSubAgentIds: agentConfig.agentOriginalSubAgentIds,
     agentOriginalMemoryFolderIds: agentConfig.agentOriginalMemoryFolderIds,
     hasAgentOverrides: agentConfig.hasAgentOverrides,
     agentOverrideFields: agentConfig.agentOverrideFields,
-    freeChatOverrideFields: agentConfig.freeChatOverrideFields,
-    hasFreeChatOverrides: agentConfig.hasFreeChatOverrides,
+    cynoOverrideFields: agentConfig.cynoOverrideFields,
+    hasCynoOverrides: agentConfig.hasCynoOverrides,
     markOverridesModified: agentConfig.markOverridesModified,
     setSelectedToolNames: agentConfig.setSelectedToolNames,
     resetAgentOverrides: agentConfig.resetAgentOverrides,

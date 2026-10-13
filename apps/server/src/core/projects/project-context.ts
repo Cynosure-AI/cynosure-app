@@ -40,18 +40,18 @@ export function getProjectMemoryFolders(project: Pick<ProjectDto, 'memoryFolderI
  * - An explicit empty scope means memory is off for the chat and is kept.
  * - An explicit selection gains the project folders.
  * - Without a selection, agents keep their assigned folders plus the project's;
- *   Free Chat keeps its unscoped default, which already includes the project.
+ *   Cyno keeps its unscoped default, which already includes the project.
  */
 export function mergeProjectMemoryScope(input: {
     overrides: MemoryFolderRef[] | undefined
     projectFolders: MemoryFolderRef[]
     assignedFolders: () => MemoryFolderRef[]
-    isFreeChat: boolean
+    isCyno: boolean
 }): MemoryFolderRef[] | undefined {
     const { overrides, projectFolders } = input
     if (!projectFolders.length) return overrides
     if (Array.isArray(overrides) && overrides.length === 0) return overrides
-    if (!overrides && input.isFreeChat) return overrides
+    if (!overrides && input.isCyno) return overrides
     const base = overrides ?? input.assignedFolders()
     const seen = new Set<string>()
     return [...projectFolders, ...base].filter((folder) => !seen.has(folder.id) && Boolean(seen.add(folder.id)))
