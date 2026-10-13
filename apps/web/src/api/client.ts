@@ -15,7 +15,7 @@ import type {
   TranscriptionResponse,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, CynoProfile, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
 
 export interface ConversationRow {
   id: string
@@ -66,9 +66,9 @@ export const api = {
       put<{ favorites: Array<{ providerId: string; model: string; modelType: ModelListType; label: string }> }>('/api/model-favorites', { favorites }),
   },
   cyno: {
-    get: () => get<CynoProfile>('/api/cyno'),
-    defaults: () => get<CynoProfile>('/api/cyno/defaults'),
-    update: (changes: Partial<Omit<CynoProfile, 'updatedAt'>>) => put<CynoProfile>('/api/cyno', changes),
+    get: () => get<CynoProfileView>('/api/cyno'),
+    defaults: () => get<CynoProfileView>('/api/cyno/defaults'),
+    update: (changes: Partial<Omit<CynoProfile, 'updatedAt'>>) => put<CynoProfileView>('/api/cyno', changes),
   },
   userSettings: {
     get: () => get<{ name: string; avatarUrl: string | null }>('/api/user-settings'),

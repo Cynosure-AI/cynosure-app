@@ -3,11 +3,10 @@ import { useAgentStore, type ToolInfo } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import type { Conversation, DisplayMessage } from '../stores/chat.store'
 import { useCynoStore } from '../stores/cyno.store'
-import type { ConversationExecutionConfig, CynoProfile, ReasoningEffort } from '@shared/types'
+import type { ConversationExecutionConfig, CynoProfile, CynoProfileView, ReasoningEffort } from '@shared/types'
 import { SK_ACTIVE_AGENT } from '../utils/storage-keys'
 import { syncPrefsToElectron } from '../utils/electron-prefs'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../utils/internal-tools'
-import { defaultCynoToolKeys } from '../utils/cyno-defaults'
 
 interface ChatPreset {
     tools: string[]
@@ -54,7 +53,6 @@ export interface ChatAgentConfigApi {
     setSessionModel(model: string | null, providerId?: string | null): void
     setSessionReasoningEffort(effort: ReasoningEffort | 'off'): void
     syncAgentBaseline(): void
-    setCynoDefaultMemoryFolderIds(ids: string[]): void
     ensureCynoPreset(): void
     captureCynoPreset(): void
 }
@@ -147,9 +145,7 @@ export function useChatAgentConfig(
     const agentOriginalTools = ref<string[]>([])
     const agentOriginalSubAgentIds = ref<string[]>([])
     const agentOriginalMemoryFolderIds = ref<string[]>([])
-    const cynoDefaultMemoryFolderIds = ref<string[]>([])
     const cynoSessionPreset = ref<ChatPreset | null>(null)
-    let cynoToolsFollowDefaults = true
 
     function filterToolsForChatContext(names: string[], _hasAgent = Boolean(activeAgentId.value)): string[] {
         return [...names]
@@ -163,36 +159,32 @@ export function useChatAgentConfig(
         )
     }
 
-    function cynoDefaultToolKeys(tools: ToolInfo[], profile: CynoProfile | null = cyno.profile): string[] {
-        return defaultCynoToolKeys(tools, profile?.tools)
+    /** Cyno's default tools (resolved by the server), limited to tools that are available once they are known. */
+    function cynoDefaultToolKeys(profile: CynoProfileView | null = cyno.profile): string[] {
+        const tools = profile?.effective.tools ?? []
+        if (!agentStore.availableTools.length) return [...tools]
+        const availableKeys = selectableToolKeys()
+        return tools.filter((key) => availableKeys.has(key))
     }
 
-    watch(() => agentStore.availableTools, (tools, previousTools) => {
+    watch(() => agentStore.availableTools, () => {
         const availableKeys = selectableToolKeys()
-        const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
         if (activeAgentId.value) {
             agentOriginalTools.value = agentOriginalTools.value.filter((name) => availableKeys.has(name))
         }
-        const previousDefaults = cynoDefaultToolKeys(previousTools ?? [])
-        const nextDefaults = cynoDefaultToolKeys(tools)
-        const followsDefaults = !activeAgentId.value && cynoToolsFollowDefaults && arraysEqual(filtered, previousDefaults)
-        if (cynoToolsFollowDefaults && cynoSessionPreset.value && arraysEqual(cynoSessionPreset.value.tools, previousDefaults)) {
-            cynoSessionPreset.value = { ...cynoSessionPreset.value, tools: nextDefaults }
-        }
-        if (followsDefaults && sessionMemorySelectionInitialized.value) {
-            selectedToolNames.value = nextDefaults
-        } else if (!arraysEqual(filtered, selectedToolNames.value)) {
+        const filtered = selectedToolNames.value.filter((name) => availableKeys.has(name))
+        if (!arraysEqual(filtered, selectedToolNames.value)) {
             selectedToolNames.value = filtered
             captureCynoPreset()
         }
     }, { deep: true })
 
-    /** Cyno's defaults; a profile without a memory selection uses All Memory. */
-    function cynoDefaultPreset(profile: CynoProfile | null = cyno.profile): ChatPreset {
+    /** Cyno's defaults, with unset tools and memory as the server resolved them. */
+    function cynoDefaultPreset(profile: CynoProfileView | null = cyno.profile): ChatPreset {
         return {
-            tools: cynoDefaultToolKeys(agentStore.availableTools, profile),
+            tools: cynoDefaultToolKeys(profile),
             subAgentIds: profile?.subAgents.map((assignment) => assignment.agentId) ?? [],
-            memoryFolderIds: profile?.memoryFolders ? [...profile.memoryFolders] : [...cynoDefaultMemoryFolderIds.value],
+            memoryFolderIds: [...(profile?.effective.memoryFolders ?? [])],
             systemPrompt: profile?.systemPrompt ?? '',
             thinkingEnabled: profile?.thinkingEnabled ?? true,
             reasoningEffort: profile?.reasoningEffort ?? 'medium',
@@ -287,7 +279,6 @@ export function useChatAgentConfig(
     }
 
     function setSelectedToolNames(names: string[]): void {
-        if (!activeAgentId.value) cynoToolsFollowDefaults = false
         const availableKeys = selectableToolKeys()
         const seen = new Set<string>()
         selectedToolNames.value = names.filter((name) => {
@@ -296,12 +287,6 @@ export function useChatAgentConfig(
             return true
         })
         captureCynoPreset()
-    }
-
-    function setCynoDefaultMemoryFolderIds(ids: string[]): void {
-        const previousDefault = cynoDefaultPreset()
-        cynoDefaultMemoryFolderIds.value = [...ids]
-        refreshCynoDefaults(previousDefault)
     }
 
     /**
@@ -386,7 +371,6 @@ export function useChatAgentConfig(
         const modelOverride = sessionModelOverride.value
         const providerOverride = sessionProviderOverride.value
         const preset = cynoDefaultPreset()
-        cynoToolsFollowDefaults = true
         cynoSessionPreset.value = clonePreset(preset)
         applyPreset(preset)
         sessionModelOverride.value = modelOverride
@@ -525,7 +509,6 @@ export function useChatAgentConfig(
     }
 
     function restoreConversationConfig(config: ConversationExecutionConfig): void {
-        if (!activeAgentId.value) cynoToolsFollowDefaults = false
         const activeAgent = activeAgentId.value ? useAgentDefinitionsStore().get(activeAgentId.value) : null
         const restoredModel = config.model || null
         const restoredProviderId = config.providerId || null
@@ -590,7 +573,6 @@ export function useChatAgentConfig(
 
     function syncAgentBaseline(): void {
         if (!activeAgentId.value) {
-            cynoToolsFollowDefaults = true
             const preset = cynoDefaultPreset()
             cynoSessionPreset.value = clonePreset(preset)
             applyPreset(preset)
@@ -653,7 +635,6 @@ export function useChatAgentConfig(
         setSessionModel,
         setSessionReasoningEffort,
         syncAgentBaseline,
-        setCynoDefaultMemoryFolderIds,
         ensureCynoPreset,
         captureCynoPreset,
     }

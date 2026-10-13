@@ -7,16 +7,24 @@ import { useAgentStore, type ToolInfo } from '../stores/agent-runtime.store'
 import { useCynoStore } from '../stores/cyno.store'
 import { SK_ACTIVE_AGENT } from '../utils/storage-keys'
 import type { AgentDefinition } from '../api/types'
-import type { ConversationExecutionConfig, CynoProfile } from '@shared/types'
+import type { ConversationExecutionConfig, CynoProfile, CynoProfileView } from '@shared/types'
 
 const CYNO_PROMPT = 'You are Cyno.'
 
-function cynoProfile(overrides: Partial<CynoProfile> = {}): CynoProfile {
-  return {
+/** The server's default tools for Cyno when its profile has no selection. */
+const DEFAULT_TOOL_KEYS = [
+  'builtin:utility::manage_mcp', 'builtin:scheduling::schedule_create', 'builtin:scheduling::schedule_list',
+  'builtin:scheduling::schedule_update', 'builtin:scheduling::schedule_delete',
+]
+
+/** A profile as the API returns it: unset tools and memory resolved to the defaults. */
+function cynoProfile(overrides: Partial<CynoProfile> = {}): CynoProfileView {
+  const profile: CynoProfile = {
     name: 'Cyno', iconUrl: null, systemPrompt: CYNO_PROMPT, providerId: '', model: '',
     tools: null, memoryFolders: null, subAgents: [], thinkingEnabled: true, reasoningEffort: 'medium',
     autoToolRouting: true, autoMemory: true, dreamingEnabled: true, updatedAt: 1, ...overrides,
   }
+  return { ...profile, effective: { tools: profile.tools ?? DEFAULT_TOOL_KEYS, memoryFolders: profile.memoryFolders ?? ['uncategorized'] } }
 }
 
 describe('chat agent provider defaults', () => {
@@ -67,7 +75,7 @@ describe('chat agent provider defaults', () => {
     expect(config.selectedToolNames.value).toEqual(['builtin::schedule_create', 'builtin::read_file'])
   })
 
-  test('enables MCP management and scheduling by default after tools load', async () => {
+  test('uses the server\'s default tools (MCP management and scheduling) once tools load', async () => {
     const runtime = useAgentStore()
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
     config.ensureCynoPreset()
@@ -131,7 +139,6 @@ describe('chat agent provider defaults', () => {
   test('starts a new Cyno chat from its defaults instead of retaining overrides', () => {
     useCynoStore().profile = cynoProfile({ model: 'preferred-model', providerId: 'preferred-provider' })
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.setCynoDefaultMemoryFolderIds(['uncategorized'])
     config.ensureCynoPreset()
     config.sessionSystemPrompt.value = 'Temporary override'
     config.sessionThinkingEnabled.value = false
@@ -155,7 +162,6 @@ describe('chat agent provider defaults', () => {
   test('Cyno\'s saved selections are its defaults, and an empty memory selection stays off', () => {
     useCynoStore().profile = cynoProfile({ memoryFolders: [], subAgents: [{ agentId: 'researcher' }], autoToolRouting: false })
     const config = useChatAgentConfig(ref(null), ref([]), ref([]), vi.fn().mockResolvedValue(undefined))
-    config.setCynoDefaultMemoryFolderIds(['uncategorized'])
     config.ensureCynoPreset()
 
     expect(config.sessionMemoryFolderIds.value).toEqual([])

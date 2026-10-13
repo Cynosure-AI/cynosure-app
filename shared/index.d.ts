@@ -277,6 +277,15 @@ export interface CynoProfile {
   updatedAt: number
 }
 
+/** The Cyno profile as the API returns it, with its defaults resolved. */
+export interface CynoProfileView extends CynoProfile {
+  /** What unset fields mean right now: the default tool keys and the All Memory folder. */
+  effective: {
+    tools: string[]
+    memoryFolders: string[]
+  }
+}
+
 export interface ConversationExecutionConfig {
   allowedTools: string[]
   subAgents: SubAgentAssignmentDto[]

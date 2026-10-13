@@ -1,16 +1,16 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { computed, ref } from 'vue'
-import type { CynoProfile } from '@shared/types'
+import type { CynoProfile, CynoProfileView } from '@shared/types'
 import { api } from '../api/client'
 import { useAppBranding } from '../composables/useAppBranding'
 import { SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
 
-export type { CynoProfile }
+export type { CynoProfile, CynoProfileView }
 
 /** Cyno, the default assistant: its server-side profile and how to show it. */
 export const useCynoStore = defineStore('cyno', () => {
-    const profile = ref<CynoProfile | null>(null)
-    const defaults = ref<CynoProfile | null>(null)
+    const profile = ref<CynoProfileView | null>(null)
+    const defaults = ref<CynoProfileView | null>(null)
     let loading: Promise<void> | null = null
 
     const name = computed(() => profile.value?.name || 'Cyno')
@@ -42,7 +42,7 @@ export const useCynoStore = defineStore('cyno', () => {
         }
     }
 
-    async function update(changes: Partial<Omit<CynoProfile, 'updatedAt'>>): Promise<CynoProfile> {
+    async function update(changes: Partial<Omit<CynoProfile, 'updatedAt'>>): Promise<CynoProfileView> {
         const next = await api.cyno.update(changes)
         profile.value = next
         return next

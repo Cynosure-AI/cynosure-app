@@ -6,8 +6,6 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentHealthStore } from '../stores/agent-health.store'
 import { useChatStore } from '../stores/chat.store'
 import { useCynoStore } from '../stores/cyno.store'
-import { useAgentStore } from '../stores/agent-runtime.store'
-import { defaultCynoToolKeys } from '../utils/cyno-defaults'
 import { Icon } from '@iconify/vue'
 import type { AgentDefinition } from '../api/types'
 import AgentGeneralTab from '../components/agent/AgentGeneralTab.vue'
@@ -33,7 +31,6 @@ const agentDefs = useAgentDefinitionsStore()
 const agentHealth = useAgentHealthStore()
 const chatStore = useChatStore()
 const cyno = useCynoStore()
-const agentRuntime = useAgentStore()
 
 const activeSectionId = ref<AgentSectionId>('general')
 
@@ -48,9 +45,9 @@ const cynoAgent = computed<AgentDefinition | null>(() => {
   return {
     id: 'cyno', name: profile.name, internalName: 'cyno', description: '', category: '',
     iconUrl: profile.iconUrl, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
-    tools: defaultCynoToolKeys(agentRuntime.availableTools, profile.tools),
+    tools: profile.effective.tools,
     subAgents: profile.subAgents,
-    memoryFolders: profile.memoryFolders ?? chatStore.memoryFolders.filter((folder) => folder.isUncategorized).map((folder) => folder.id),
+    memoryFolders: profile.effective.memoryFolders,
     autoApproveTools: false, autoToolRouting: profile.autoToolRouting, autoMemory: profile.autoMemory,
     dreamingEnabled: profile.dreamingEnabled, autoRouterProviderId: '', autoRouterModel: '', generateTitle: true,
     thinkingEnabled: profile.thinkingEnabled, reasoningEffort: profile.reasoningEffort, maxContextTokens: null,

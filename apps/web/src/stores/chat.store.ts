@@ -213,7 +213,6 @@ export const useChatStore = defineStore('chat', () => {
         if (b.isUncategorized) return 1
         return (a.folderPath || '').localeCompare(b.folderPath || '')
       })
-      agentConfig.setCynoDefaultMemoryFolderIds(memoryFolders.value.filter((space) => space.isUncategorized).map((space) => space.id))
     } catch {
       // Non-critical; memory selectors can retry later.
     }
