@@ -59,6 +59,12 @@ const router = createRouter({
       component: () => import('@/views/AgentsView.vue')
     },
     {
+      // Cyno, the default assistant, is edited with the agent editor.
+      path: '/agents/cyno',
+      name: 'cyno',
+      component: () => import('@/views/AgentDetailView.vue')
+    },
+    {
       path: '/agents/:id',
       name: 'agent-detail',
       component: () => import('@/views/AgentDetailView.vue')

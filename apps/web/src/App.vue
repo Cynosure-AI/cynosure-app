@@ -4,6 +4,7 @@ import { useProviderStore } from './stores/provider.store'
 import { useChatStore } from './stores/chat.store'
 import { useAgentStore, type HITLRequest } from './stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from './stores/agent-definitions.store'
+import { useCynoStore } from './stores/cyno.store'
 import { usePreferencesStore } from './stores/preferences.store'
 import { useNotificationStore } from './stores/notification.store'
 import { api } from './api/client'
@@ -25,6 +26,7 @@ const providerStore = useProviderStore()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
+const cynoStore = useCynoStore()
 const notificationStore = useNotificationStore()
 
 // Initialize preferences early so theme is applied before first render
@@ -66,6 +68,7 @@ async function loadAllStores() {
   void preferencesStore.migrateLegacyChatRunSettings()
   await providerStore.loadProviders()
   await agentDefs.load()
+  await cynoStore.load()
   await chatStore.loadMemoryFolders()
   await chatStore.loadConversations()
   chatStore.syncAgentBaseline()

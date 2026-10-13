@@ -20,6 +20,7 @@ vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => mocks.
 vi.mock('../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ get: (id: string) => ({ id, name: id }) }) }))
 vi.mock('../../stores/preferences.store', () => ({ usePreferencesStore: () => ({ quickResponses: false }) }))
 vi.mock('../../stores/agent-health.store', () => ({ useAgentHealthStore: () => reactive(mocks.health) }))
+vi.mock('../../stores/cyno.store', () => ({ useCynoStore: () => ({ profile: null, name: 'Cyno', iconUrl: 'logo.png' }) }))
 vi.mock('../../api/http', () => ({ wsConnected: { __v_isRef: true, value: true } }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ fullPath: '/chat' }) }))
 

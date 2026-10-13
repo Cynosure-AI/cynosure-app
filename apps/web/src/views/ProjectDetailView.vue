@@ -18,6 +18,9 @@ import { useChatStore } from '../stores/chat.store'
 import { useProjectChat } from '../composables/useProjectChat'
 import { formatRelativeTime } from '../utils/project-format'
 import { cronToHuman } from '../utils/cron-helpers'
+import { useCynoStore } from '../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 type ProjectTab = 'overview' | 'chats' | 'board' | 'timeline' | 'settings'
 
@@ -62,7 +65,7 @@ function agentIconUrl(agentId: string | null): string | null {
 }
 
 function agentName(agentId: string | null): string {
-  return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : 'Free Chat'
+  return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : cyno.name
 }
 
 function toDraft(): ProjectDraft | null {

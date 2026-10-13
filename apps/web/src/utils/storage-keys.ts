@@ -17,6 +17,7 @@ export const SK_INLINE_ATTACHMENT_TEXT_LIMIT = 'cy-inline-attachment-text-limit'
 export const SK_COMPACT_PROVIDER = 'cy-compact-provider'
 export const SK_COMPACT_MODEL = 'cy-compact-model'
 export const SK_PROVIDER_MODEL_FAVORITES = 'cy-provider-model-favorites'
+/** Legacy: Free Chat's model before it moved to the server-side Cyno profile. Read once, then removed. */
 export const SK_FREE_CHAT_PROVIDER = 'cy-free-chat-provider'
 export const SK_FREE_CHAT_MODEL = 'cy-free-chat-model'
 export const SK_GLOBAL_HOTKEY = 'cy-global-hotkey'

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { getCynoProfile } from '../cyno/cyno-profile.js'
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
 import { AgentExecutor } from '../agent/agent-executor.js'
@@ -57,7 +58,7 @@ function resolveConversationDreamCategories(conversation: Conversation): MemoryF
     return fallback ? expandMemoryFolderScope([fallback]) : []
 }
 export function isDreamEligibleConversation(conversation: Pick<Conversation, 'agent_id'>): boolean {
-    if (!conversation.agent_id) return true
+    if (!conversation.agent_id) return getCynoProfile().dreamingEnabled
     return getAgent(conversation.agent_id)?.dreamingEnabled === true
 }
 function emit(runId: string): void {

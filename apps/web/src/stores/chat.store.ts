@@ -1,4 +1,5 @@
 import { useAgentHealthStore } from './agent-health.store'
+import { useCynoStore } from './cyno.store'
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
@@ -271,6 +272,8 @@ export const useChatStore = defineStore('chat', () => {
   )
 
   async function sendMessage(...args: Parameters<typeof chatMessages.sendMessage>): Promise<void> {
+    // Cyno chats need Cyno's defaults (system prompt, model) before the first message.
+    if (!useCynoStore().profile) await useCynoStore().load().catch(() => undefined)
     if (!memoryFolders.value.length) await loadMemoryFolders()
     agentConfig.ensureFreeChatPreset()
     const conversationId = activeConversationId.value
@@ -531,7 +534,7 @@ export const useChatStore = defineStore('chat', () => {
     draftDiscardRevision.value++
     if (previousConversationId) await api.chat.discardStagedAttachments(previousConversationId)
     if (!memoryFolders.value.length) await loadMemoryFolders()
-    // Every new chat starts from its selected agent or Free Chat defaults.
+    // Every new chat starts from its selected agent or Cyno's defaults.
     agentConfig.syncAgentBaseline()
 
     if (!activeConversationId.value && messages.value.length === 0) {

@@ -15,6 +15,8 @@ const props = withDefaults(
     defaultLabel?: string
     /** Icon for the default entry */
     defaultIcon?: string
+    /** Image for the default entry; takes precedence over `defaultIcon`. */
+    defaultImgSrc?: string
     /**
      * When set, agents are placed in a labeled group with this label.
      * Useful when pairing with a "Default" entry in a separate group above.
@@ -79,7 +81,8 @@ const groups = computed((): SelectOptionGroup[] => {
     const defaultOption = {
       value: '',
       label: props.defaultLabel,
-      iconName: props.defaultIcon,
+      iconName: props.defaultImgSrc ? undefined : props.defaultIcon,
+      imgSrc: props.defaultImgSrc,
     }
     return [
       { options: [defaultOption] },

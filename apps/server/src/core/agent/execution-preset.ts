@@ -15,11 +15,11 @@ export interface ExecutionPreset {
     autoRouterModel?: string
 }
 
-/** Free chat's fixed agent definition. Each execution receives its own snapshot. */
+/** Cyno's fixed run identity when no agent is chosen. Its settings come from the Cyno profile. */
 export const DEFAULT_CHAT_AGENT = Object.freeze({
     id: '__agentless__',
-    name: 'Free Chat',
-    internalName: 'free_chat',
+    name: 'Cyno',
+    internalName: 'cyno',
     tools: Object.freeze([] as string[]),
     subAgents: Object.freeze([] as SubAgentAssignment[]),
     autoToolRouting: true,

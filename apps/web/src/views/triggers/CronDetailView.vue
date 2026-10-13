@@ -26,6 +26,9 @@ import {
 } from "../../utils/cron-helpers";
 import ToggleSwitch from "@/components/shared/ToggleSwitch.vue";
 import ModalDialog from "@/components/shared/ModalDialog.vue";
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 const route = useRoute();
 const router = useRouter();
@@ -447,11 +450,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 v-else
                 class="flex items-center gap-2 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-300"
               >
-                <Icon
-                  icon="lucide:message-square"
-                  class="h-4 w-4 text-accent-fg"
-                />
-                Free Chat configuration
+                <img
+                  :src="cyno.iconUrl"
+                  alt=""
+                  class="h-4 w-4 rounded object-cover"
+                >
+                {{ cyno.name }}
               </div>
             </div>
             <div>

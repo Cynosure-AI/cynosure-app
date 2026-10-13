@@ -10,6 +10,9 @@ import ModalDialog from '../shared/ModalDialog.vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useChatStore } from '../../stores/chat.store'
 import { TASK_COLUMNS } from '../../utils/project-format'
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 type BriefEntry = Extract<ProjectTimelineEntry, { kind: 'brief' }>
 type ViewMode = 'changes' | 'since' | 'text'
@@ -70,7 +73,7 @@ function actor(entry: ProjectTimelineEntry): string {
 }
 
 function agentName(agentId: string | null): string {
-  return agentId ? (agentDefs.get(agentId)?.name ?? 'Agent') : 'Free Chat'
+  return agentId ? (agentDefs.get(agentId)?.name ?? 'Agent') : cyno.name
 }
 
 function statusLabel(status: string | null): string {

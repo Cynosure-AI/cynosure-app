@@ -6,7 +6,8 @@ import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import { useProviderStore } from "../../stores/provider.store";
 
-const props = defineProps<{ agent: AgentDefinition }>();
+/** `cyno` edits the default assistant, which has no approval, routing, or context-limit settings. */
+const props = defineProps<{ agent: AgentDefinition; cyno?: boolean }>();
 const emit = defineEmits<{
   update: [field: string, value: unknown];
   updateReasoning: [enabled: boolean, effort: AgentDefinition['reasoningEffort']];
@@ -118,7 +119,10 @@ function onMaxCtxSliderInput(event: Event) {
 <template>
   <div class="space-y-4">
     <!-- Auto-approve tools -->
-    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+    <div
+      v-if="!cyno"
+      class="bg-theme-800 border border-theme-700 rounded-xl p-5"
+    >
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
@@ -148,7 +152,10 @@ function onMaxCtxSliderInput(event: Event) {
     </div>
 
     <!-- Context Routing -->
-    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+    <div
+      v-if="!cyno"
+      class="bg-theme-800 border border-theme-700 rounded-xl p-5"
+    >
       <div class="flex items-center gap-2 mb-1">
         <Icon
           icon="lucide:sparkles"
@@ -210,7 +217,10 @@ function onMaxCtxSliderInput(event: Event) {
     </div>
 
     <!-- Max Context Tokens -->
-    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
+    <div
+      v-if="!cyno"
+      class="bg-theme-800 border border-theme-700 rounded-xl p-5"
+    >
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">

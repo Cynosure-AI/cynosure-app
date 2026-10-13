@@ -557,7 +557,7 @@ function cancelDrop() {
             Dream Mode
           </h3>
           <p class="text-xs text-gray-500 mt-1">
-            Automatically reviews new Free Chat activity and conversations from agents that explicitly allow Dreaming to learn useful facts and update memory.
+            Automatically reviews new Cyno chats and conversations from agents that explicitly allow Dreaming to learn useful facts and update memory.
             Checks every minute after a conversation has been inactive for 5 minutes, while the server is running.
             Uses model requests and may incur provider costs. Existing history is used only as context.
           </p>

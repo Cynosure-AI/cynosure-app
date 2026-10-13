@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { getCynoProfile } from '../core/cyno/cyno-profile.js'
 import { CronExpressionParser } from 'cron-parser'
 import {
     listCronJobs,
@@ -30,13 +31,14 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
     app.get('/', async () => {
         const jobs = listCronJobs()
         const activeRuns = new Set(getActiveCronRuns().map(r => r.jobId))
+        const cyno = getCynoProfile()
 
         return jobs.map((job) => {
             const agent = getAgent(job.agentId)
             return {
                 ...job,
-                agentName: job.agentId ? (agent?.name || 'Unknown') : 'Free Chat',
-                agentIconUrl: agent?.iconUrl || null,
+                agentName: job.agentId ? (agent?.name || 'Unknown') : cyno.name,
+                agentIconUrl: job.agentId ? (agent?.iconUrl || null) : cyno.iconUrl,
                 isRunning: activeRuns.has(job.id),
                 nextRunAt: job.enabled ? getNextRunAt(job.schedule) : null,
             }

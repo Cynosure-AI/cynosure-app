@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, expect, test, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import type { CronJob } from '../../api/types'
 import CronDetailView from './CronDetailView.vue'
 
@@ -40,6 +41,7 @@ function mountView() {
 const saveButton = (wrapper: ReturnType<typeof mountView>) => wrapper.findAll('button').find((button) => /Save Changes|Saving/.test(button.text()))!
 
 beforeEach(() => {
+  setActivePinia(createPinia())
   mocks.listJobs.mockReset().mockResolvedValue([job])
   mocks.update.mockReset().mockResolvedValue(undefined)
   mocks.push.mockReset()
