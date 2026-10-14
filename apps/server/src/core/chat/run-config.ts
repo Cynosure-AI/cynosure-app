@@ -11,10 +11,6 @@ export interface ToolSelectionConfig {
     hasExplicitToolAllowlist: boolean
 }
 
-export interface EffectiveChatRunFlags {
-    autoMemory: boolean
-}
-
 export interface PersistedChatConfigInput {
     selectedToolKeys: string[]
     requestedSubAgents?: SubAgentAssignment[]
@@ -50,18 +46,6 @@ export function resolveToolSelection(
     return {
         selectedToolKeys,
         hasExplicitToolAllowlist: Array.isArray(allowedTools) && autoToolRouting !== true,
-    }
-}
-
-export function resolveChatRunFlags(input: {
-    resolvedAgent: AgentData | null
-    autoMemory?: boolean
-}): EffectiveChatRunFlags {
-    const { resolvedAgent, autoMemory } = input
-    return {
-        autoMemory: autoMemory !== undefined
-            ? autoMemory === true
-            : defaultAutoModes(resolvedAgent).autoMemory,
     }
 }
 

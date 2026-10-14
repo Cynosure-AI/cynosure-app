@@ -17,8 +17,8 @@ let pollTimer: ReturnType<typeof setInterval> | undefined
 let requestId = 0
 
 const agentJobs = computed(() => jobs.value
-  .filter(job => job.agentId === (chatStore.activeAgentId ?? ''))
-  .sort((a, b) => Number(b.enabled) - Number(a.enabled) || (a.nextRunAt ?? Infinity) - (b.nextRunAt ?? Infinity) || a.name.localeCompare(b.name)))
+  .filter(job => job.enabled && job.agentId === (chatStore.activeAgentId ?? ''))
+  .sort((a, b) => (a.nextRunAt ?? Infinity) - (b.nextRunAt ?? Infinity) || a.name.localeCompare(b.name)))
 
 async function loadJobs(): Promise<void> {
   const currentRequest = ++requestId
@@ -36,7 +36,6 @@ function toggle(): void {
 }
 
 function executionTime(job: CronJob): string {
-  if (!job.enabled) return 'Disabled'
   if (!job.nextRunAt) return cronToHuman(job.schedule)
   return `Next ${new Date(job.nextRunAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`
 }
@@ -96,8 +95,7 @@ onBeforeUnmount(() => {
         >
           <button
             type="button"
-            class="w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-theme-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
-            :class="job.enabled ? 'text-theme-200' : 'text-ink-muted'"
+            class="w-full rounded-lg px-2.5 py-2 text-left text-theme-200 transition-colors hover:bg-theme-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
             :aria-label="`Open schedule ${job.name || job.prompt || 'Untitled schedule'}`"
             @click="openJob(job)"
           >
@@ -116,8 +114,7 @@ onBeforeUnmount(() => {
                 class="h-3 w-3 shrink-0"
               />
               <span>{{ cronToHuman(job.schedule) }}</span>
-              <span v-if="job.enabled && job.nextRunAt">· {{ executionTime(job) }}</span>
-              <span v-else-if="!job.enabled">· Disabled</span>
+              <span v-if="job.nextRunAt">· {{ executionTime(job) }}</span>
             </div>
           </button>
         </div>

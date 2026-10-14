@@ -130,8 +130,16 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
             unscheduleCronJob(job.id)
         }
         db.prepare('DELETE FROM cron_jobs WHERE agent_id = ?').run(id)
+        // Channels that answered as this agent answer as Cyno from now on.
+        const channelIds = (db.prepare('SELECT id FROM channels WHERE agent_id = ?').all(id) as { id: string }[]).map((row) => row.id)
+        db.prepare("UPDATE channels SET agent_id = '' WHERE agent_id = ?").run(id)
         deleteAgent(id)
-        await getChannelManager().refreshAllCommands()
+        const channelManager = getChannelManager()
+        for (const channelId of channelIds) {
+            const channel = channelManager.getFromDb(channelId)
+            if (channel?.enabled) await channelManager.startChannel(channel)
+        }
+        await channelManager.refreshAllCommands()
         return { success: true }
     })
 

@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../api/client', () => ({
-  api: { memoryFolders: { list: mocks.listFolders } },
+  api: {
+    memoryFolders: { list: mocks.listFolders },
+    cyno: { get: vi.fn().mockResolvedValue(null), defaults: vi.fn().mockResolvedValue(null) },
+  },
 }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('../composables/useMcpServers', () => ({

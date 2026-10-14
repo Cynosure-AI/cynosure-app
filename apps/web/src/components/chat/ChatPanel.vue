@@ -23,6 +23,7 @@ import { useRoute } from 'vue-router'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 import { getGreeting } from '../../utils/greetings'
+import { useCynoStore } from '../../stores/cyno.store'
 
 const props = withDefaults(defineProps<{
   searchOpen?: boolean
@@ -160,18 +161,21 @@ const activeAgentIssues = computed(() => conversationAgentId.value
   ? agentHealth.healthByAgent.get(conversationAgentId.value)?.issues ?? []
   : [])
 
+// Chats without an agent are Cyno chats; a null icon shows the app logo.
+const cyno = useCynoStore()
+
 const activeAgentIconUrl = computed(() => {
-  if (!conversationAgentId.value) return null
+  if (!conversationAgentId.value) return cyno.profile?.iconUrl ?? null
   return agentDefs.get(conversationAgentId.value)?.iconUrl ?? null
 })
 
 const activeAgentName = computed(() => {
-  if (!conversationAgentId.value) return null
+  if (!conversationAgentId.value) return cyno.name
   return agentDefs.get(conversationAgentId.value)?.name ?? null
 })
 
 const emptyStateSubAgents = computed(() => {
-  return chatStore.freeChatSubAgentIds
+  return chatStore.sessionSubAgentIds
     .map((id) => agentDefs.get(id))
     .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
 })
@@ -577,11 +581,18 @@ onMounted(() => {
             class="w-10 h-10 text-accent-fg"
           />
         </RouterLink>
-        <Icon
+        <RouterLink
           v-else
-          icon="lucide:message-square"
-          class="w-10 h-10 text-accent-fg"
-        />
+          :to="{ name: 'cyno', query: { returnTo: route.fullPath } }"
+          :aria-label="`Open ${cyno.name} settings`"
+          class="absolute inset-0 flex items-center justify-center"
+        >
+          <img
+            :src="cyno.iconUrl"
+            class="w-full h-full object-cover"
+            alt=""
+          >
+        </RouterLink>
       </div>
       <template v-if="!wsConnected">
         <Icon

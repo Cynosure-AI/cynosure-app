@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentHealthStore } from '../stores/agent-health.store'
 import { useChatStore } from '../stores/chat.store'
+import { useCynoStore } from '../stores/cyno.store'
 import { Icon } from '@iconify/vue'
 import type { AgentDefinition } from '../api/types'
 import AgentGeneralTab from '../components/agent/AgentGeneralTab.vue'
@@ -29,11 +30,33 @@ const router = useRouter()
 const agentDefs = useAgentDefinitionsStore()
 const agentHealth = useAgentHealthStore()
 const chatStore = useChatStore()
+const cyno = useCynoStore()
 
 const activeSectionId = ref<AgentSectionId>('general')
 
+/** The same editor configures Cyno, the default assistant, whose settings live in its profile. */
+const isCyno = computed(() => route.name === 'cyno')
 const agentId = computed(() => route.params.id as string)
-const agent = computed(() => agentDefs.get(agentId.value))
+
+/** Cyno's profile in agent shape, so the agent tabs can edit it. */
+const cynoAgent = computed<AgentDefinition | null>(() => {
+  const profile = cyno.profile
+  if (!profile) return null
+  return {
+    id: 'cyno', name: profile.name, internalName: 'cyno', description: '', category: '',
+    iconUrl: profile.iconUrl, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
+    tools: profile.effective.tools,
+    subAgents: profile.subAgents,
+    memoryFolders: profile.effective.memoryFolders,
+    autoApproveTools: false, autoToolRouting: profile.autoToolRouting, autoMemory: profile.autoMemory,
+    dreamingEnabled: profile.dreamingEnabled, autoRouterProviderId: '', autoRouterModel: '', generateTitle: true,
+    thinkingEnabled: profile.thinkingEnabled, reasoningEffort: profile.reasoningEffort, maxContextTokens: null,
+    sortOrder: 0, favorite: false, createdAt: 0, updatedAt: profile.updatedAt,
+  }
+})
+const agent = computed(() => isCyno.value ? cynoAgent.value : agentDefs.get(agentId.value))
+const CYNO_FIELDS = new Set(['name', 'iconUrl', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled'])
+const headerIconUrl = computed(() => agent.value?.iconUrl || (isCyno.value ? cyno.iconUrl : null))
 const activeSection = computed(() => sections.find(section => section.id === activeSectionId.value) || sections[0])
 const returnToChat = computed(() => {
   const target = route.query.returnTo
@@ -51,25 +74,37 @@ function goBack(): void {
 onMounted(async () => {
   void agentHealth.loadMemoryFolders()
   await agentDefs.load()
+  if (isCyno.value) {
+    if (!chatStore.memoryFolders.length) void chatStore.loadMemoryFolders()
+    if (!cyno.profile) await cyno.load()
+  }
   if (!agent.value) {
     router.push('/agents')
   }
 })
 
 async function updateField(field: string, value: unknown) {
+  if (isCyno.value) {
+    if (CYNO_FIELDS.has(field)) await cyno.update({ [field]: value })
+    return
+  }
   if (agent.value) {
     await agentDefs.update(agentId.value, { [field]: value })
   }
 }
 
 async function updateReasoning(enabled: boolean, effort: AgentDefinition['reasoningEffort']) {
+  if (isCyno.value) {
+    await cyno.update({ thinkingEnabled: enabled, reasoningEffort: effort })
+    return
+  }
   if (agent.value) {
     await agentDefs.update(agentId.value, { thinkingEnabled: enabled, reasoningEffort: effort })
   }
 }
 
 async function goToChat() {
-  await chatStore.setActiveAgent(agentId.value)
+  await chatStore.setActiveAgent(isCyno.value ? null : agentId.value)
   await router.push({ name: 'triggers-chat' })
 }
 
@@ -172,8 +207,8 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
             class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20"
           >
             <img
-              v-if="agent.iconUrl"
-              :src="agent.iconUrl"
+              v-if="headerIconUrl"
+              :src="headerIconUrl"
               alt=""
               class="h-full w-full object-cover"
             >
@@ -188,7 +223,13 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
               {{ agent.name }}
             </h1>
             <p
-              v-if="agent.description"
+              v-if="isCyno"
+              class="mt-1 line-clamp-2 text-sm leading-relaxed text-ink-muted"
+            >
+              Your default assistant. New chats start with these settings.
+            </p>
+            <p
+              v-else-if="agent.description"
               class="mt-1 line-clamp-2 text-sm leading-relaxed text-ink-muted"
             >
               {{ agent.description }}
@@ -229,6 +270,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
           <component
             :is="activeSection.component"
             :agent="agent"
+            :cyno="isCyno"
             @update="updateField"
             @update-reasoning="updateReasoning"
           />

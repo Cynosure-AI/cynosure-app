@@ -13,6 +13,7 @@ import { getEventBus } from '../telemetry/event-bus.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { parseExecutionConfig } from '../chat/run-config.js'
+import { cynoExecutionConfig } from '../cyno/cyno-run.js'
 
 type CronNotificationMode = 'always' | 'conditional'
 
@@ -302,13 +303,15 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
     const runStartedAt = Date.now()
     const scheduledAt = opts?.scheduledAt ?? runStartedAt
     const agent = job.agentId ? getAgent(job.agentId) : null
-    if (!agent && !job.executionConfig) {
+    if (job.agentId && !agent) {
         if (!opts?.force) {
             getDb().prepare('UPDATE cron_jobs SET last_run_at = ? WHERE id = ?').run(scheduledAt, jobId)
         }
-        console.warn(`[cron] Skipping job "${job.name || job.id}" (${job.id}) because its execution configuration is unavailable`)
+        console.warn(`[cron] Skipping job "${job.name || job.id}" (${job.id}) because its agent no longer exists`)
         return
     }
+    // A job without an agent uses its saved chat setup, or else runs as Cyno with its current settings.
+    const executionConfig = agent ? undefined : (job.executionConfig ?? cynoExecutionConfig())
 
     activeCronRuns.set(jobId, { jobId, agentId: job.agentId, conversationId: '', startedAt: Date.now() })
 
@@ -328,7 +331,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
     try {
         const { conversationId, result } = await runTriggerExecution({
             agent,
-            executionConfig: job.executionConfig ?? undefined,
+            executionConfig,
             projectId: job.projectId,
             userContent,
             origin: 'cron',
@@ -369,7 +372,7 @@ async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?:
                     if (target) {
                         const label = job.name?.trim() || 'Cron job'
                         const body = composeCronNotificationBody(getIntermediateAssistantSegments(conversationId), result.content)
-                        await getChannelManager().queueNotification(job.outputChannelId, target, `**${label}:**\n${body}`)
+                        await getChannelManager().deliver(job.outputChannelId, target, `**${label}:**\n${body}`, { sourceConversationId: conversationId })
                     } else {
                         console.warn(`[cron] Job "${job.name || job.id}" (${job.id}) did not send output notification because channel "${job.outputChannelId}" has no known target`)
                     }

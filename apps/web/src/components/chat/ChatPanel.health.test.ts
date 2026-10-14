@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   chat: {
     activeAgentId: 'agent' as string | null, activeConversationId: null as string | null,
     conversations: [] as Array<{ id: string; agentId: string }>,
-    messages: [] as DisplayMessage[], freeChatSubAgentIds: [] as string[], activeQuickResponses: [],
+    messages: [] as DisplayMessage[], sessionSubAgentIds: [] as string[], activeQuickResponses: [],
     activePostActions: new Set(), loadingMessages: false,
   },
   runtime: { availableTools: [], executionSteps: [], isExecuting: false },
@@ -20,6 +20,7 @@ vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => mocks.
 vi.mock('../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ get: (id: string) => ({ id, name: id }) }) }))
 vi.mock('../../stores/preferences.store', () => ({ usePreferencesStore: () => ({ quickResponses: false }) }))
 vi.mock('../../stores/agent-health.store', () => ({ useAgentHealthStore: () => reactive(mocks.health) }))
+vi.mock('../../stores/cyno.store', () => ({ useCynoStore: () => ({ profile: null, name: 'Cyno', iconUrl: 'logo.png' }) }))
 vi.mock('../../api/http', () => ({ wsConnected: { __v_isRef: true, value: true } }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ fullPath: '/chat' }) }))
 
@@ -35,7 +36,7 @@ describe('chat greeting health warning', () => {
     mocks.chat.activeConversationId = null
     mocks.chat.conversations = []
     mocks.health.healthByAgent.clear()
-    mocks.chat.freeChatSubAgentIds = []
+    mocks.chat.sessionSubAgentIds = []
     mocks.chat.messages = []
   })
 
@@ -55,17 +56,17 @@ describe('chat greeting health warning', () => {
 
   test.each([8, 9, 10, 11])('accounts for all %i empty-state sub-agents', (count) => {
     mocks.chat.activeAgentId = null
-    mocks.chat.freeChatSubAgentIds = Array.from({ length: count }, (_, index) => `agent-${index}`)
+    mocks.chat.sessionSubAgentIds = Array.from({ length: count }, (_, index) => `agent-${index}`)
     const wrapper = mountPanel()
     const overflow = wrapper.find('[aria-label="Additional assigned sub-agents"]')
     const visibleCount = count > 8 ? 7 : count
-    for (const id of mocks.chat.freeChatSubAgentIds.slice(0, visibleCount)) {
+    for (const id of mocks.chat.sessionSubAgentIds.slice(0, visibleCount)) {
       expect(wrapper.find(`[title="${id}"]`).exists()).toBe(true)
     }
     expect(overflow.exists()).toBe(count > 8)
     if (count > 8) {
       expect(overflow.text()).toBe(`+${count - visibleCount}`)
-      expect(overflow.attributes('title')).toBe(mocks.chat.freeChatSubAgentIds.slice(visibleCount).join('\n'))
+      expect(overflow.attributes('title')).toBe(mocks.chat.sessionSubAgentIds.slice(visibleCount).join('\n'))
     }
   })
 
@@ -81,7 +82,7 @@ describe('chat greeting health warning', () => {
     })
   })
 
-  test('clears the warning when assignments are repaired and stays hidden in free chat', async () => {
+  test('clears the warning when assignments are repaired and stays hidden in a Cyno chat', async () => {
     mocks.health.healthByAgent.set('agent', { issues: ['Tool: removed'] })
     const wrapper = mountPanel()
     expect(wrapper.find('[aria-label^="Agent health warning:"]').exists()).toBe(true)

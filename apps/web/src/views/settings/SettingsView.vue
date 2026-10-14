@@ -198,7 +198,7 @@ const sections: SettingsSection[] = [
     id: 'dream-mode',
     categoryId: 'memory',
     label: 'Dream Mode',
-    description: 'Review Free Chat and opted-in agent conversations to learn and update memory in the background.',
+    description: 'Review Cyno and opted-in agent conversations to learn and update memory in the background.',
     terms: ['dream', 'dreaming', 'background', 'learn', 'remember', 'conversations']
   },
   {

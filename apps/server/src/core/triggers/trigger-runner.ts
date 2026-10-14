@@ -4,14 +4,11 @@ import { getGateway } from '../gateway/gateway.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS, type AgentExecutorResult } from '../agent/agent-executor.js'
 import { planExecution } from '../agent/pre-execution/execution-planner.js'
-import { defaultAutoModes } from '../agent/execution-preset.js'
+import { resolveRunSettings } from '../agent/run-settings.js'
 import { closePlanningRun } from '../agent/planning-state.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
-import { getAssignedMemoryFolderIds, getAssignedMemoryFolders } from '../memory/memory-folder-scope.js'
-import { buildPersistedChatConfig } from '../chat/run-config.js'
-import { resolveMemoryFolderOverrides } from '../chat/run-config.js'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
 import { persistAssistantTurn } from '../chat/persist-assistant.js'
 import type { ConversationExecutionConfig } from '@shared/types'
@@ -21,7 +18,7 @@ type BroadcastFn = (event: string, data: unknown) => void
 export interface TriggerRunConfig {
     /** Agent definition (from getAgent) */
     agent: AgentData | null
-    /** Frozen Free Chat configuration for an agentless trigger. */
+    /** Settings for a run without an agent: a job's saved chat settings, or Cyno's profile. */
     executionConfig?: ConversationExecutionConfig
     /** Project the run belongs to; its conversation is created inside the project. */
     projectId?: string | null
@@ -94,9 +91,8 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     let planningRunId: string | undefined
 
     try {
-        const memoryFolders = agent
-            ? getAssignedMemoryFolders(agent.id)
-            : (resolveMemoryFolderOverrides(db, executionConfig?.memoryFolderIds) ?? [])
+        // A job without an agent runs with its saved chat settings or Cyno's profile.
+        const settings = resolveRunSettings(agent, executionConfig)
         const planned = await planExecution({
             resolvedAgent: agent,
             conversationId,
@@ -106,39 +102,11 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             toolRegistry: getToolRegistry(),
             messages: [{ role: 'user', content: userContent }],
             userText: userContent,
-            run: {
-                systemPromptSuffix,
-                providerOverride: executionConfig?.providerId || undefined,
-                modelOverride: executionConfig?.model || undefined,
-                systemPrompt: executionConfig?.systemPrompt,
-                requestedSubAgents: executionConfig?.subAgents,
-                selectedToolKeys: executionConfig?.allowedTools,
-                hasExplicitToolAllowlist: executionConfig ? executionConfig.autoToolRouting !== true : undefined,
-                memoryFolderOverrides: memoryFolders,
-                autoToolRouting: executionConfig?.autoToolRouting ?? defaultAutoModes(agent).autoToolRouting,
-                autoMemory: executionConfig?.autoMemory ?? defaultAutoModes(agent).autoMemory,
-                autoRouterProviderId: executionConfig?.autoRouterProviderId,
-                autoRouterModel: executionConfig?.autoRouterModel,
-                thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
-                reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
-            },
+            run: { ...settings.plan, systemPromptSuffix },
         })
         planningRunId = planned.planningRunId
 
-        const persistedExecutionConfig = buildPersistedChatConfig({
-            selectedToolKeys: executionConfig?.allowedTools ?? agent?.tools ?? [],
-            requestedSubAgents: executionConfig?.subAgents ?? agent?.subAgents ?? [],
-            requestedMemoryFolderIds: executionConfig?.memoryFolderIds ?? (agent ? getAssignedMemoryFolderIds(agent.id, db) : []),
-            // The planner appends trigger instructions and runtime context to its
-            // prompt. Only the editable base prompt belongs in session settings.
-            systemPrompt: executionConfig?.systemPrompt ?? agent?.systemPrompt ?? '',
-            responseModel: planned.responseModel,
-            responseProvider: planned.responseProvider,
-            thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
-            reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
-            autoToolRouting: executionConfig?.autoToolRouting ?? defaultAutoModes(agent).autoToolRouting,
-            autoMemory: executionConfig?.autoMemory ?? defaultAutoModes(agent).autoMemory,
-        })
+        const persistedExecutionConfig = settings.persistedConfig(planned.responseModel, planned.responseProvider)
         db.prepare('UPDATE conversations SET execution_config_json = ? WHERE id = ?').run(JSON.stringify(persistedExecutionConfig), conversationId)
 
         const messages: ChatMessage[] = planned.messages
@@ -150,10 +118,10 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             providerId: planned.providerId,
             model: planned.responseModel,
             maxRounds: MAIN_AGENT_MAX_ROUNDS,
-            thinkingEnabled: executionConfig?.thinkingEnabled ?? (agent?.thinkingEnabled !== false),
-            reasoningEffort: executionConfig?.reasoningEffort ?? agent?.reasoningEffort,
+            thinkingEnabled: settings.thinkingEnabled,
+            reasoningEffort: settings.reasoningEffort,
             streamMode: 'per-round',
-            hitl: agent ? !agent.autoApproveTools : true,
+            hitl: settings.hitl,
             agentId: agent?.id,
             agentName: agent?.name,
             agentIconUrl: agent?.iconUrl || null,

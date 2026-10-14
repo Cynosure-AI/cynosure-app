@@ -61,9 +61,9 @@ function setup(initialConversationId: string | null = 'conversation') {
     sessionAutoToolRouting: ref(true),
     sessionAutoMemory: ref(true),
     selectedToolNames: ref(['builtin::read']),
-    freeChatSubAgentIds: ref(['sub-agent']),
-    freeChatMemoryFolderIds: ref(['memory-space']),
-    freeChatMemorySelectionInitialized: ref(true),
+    sessionSubAgentIds: ref(['sub-agent']),
+    sessionMemoryFolderIds: ref(['memory-space']),
+    sessionMemorySelectionInitialized: ref(true),
   }
   const mediaGenerationSettings = ref<MediaGenerationSettings | null>(null)
   const createConversation = vi.fn(async () => {

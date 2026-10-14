@@ -7,6 +7,9 @@ import CustomSelect, { type SelectOptionGroup } from '../shared/CustomSelect.vue
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useChatStore } from '../../stores/chat.store'
 import { DEFAULT_PROJECT_ICON, PROJECT_COLORS, PROJECT_ICONS } from '../../utils/project-format'
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 export interface ProjectDraft {
   name: string
@@ -124,7 +127,8 @@ const memoryFolderOptions = computed<SelectOptionGroup[]>(() => [{
           v-model="draft.defaultAgentId"
           :agents="agentDefs.agents"
           include-default
-          default-label="Free Chat"
+          :default-label="cyno.name"
+          :default-img-src="cyno.iconUrl"
           agents-group-label="Agents"
           size="sm"
         />

@@ -1,5 +1,6 @@
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import type { ChannelDefinition } from '../../api/types'
 import SettingsPersistenceStatus from '../../components/settings/SettingsPersistenceStatus.vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
@@ -36,6 +37,7 @@ const channel: ChannelDefinition = {
 
 describe('ChannelDetailView persistence', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     mocks.getChannel.mockReset().mockResolvedValue(channel)
     mocks.updateChannel.mockReset()
     mocks.listAgents.mockReset().mockResolvedValue([{ id: 'agent-1', name: 'Agent' }])

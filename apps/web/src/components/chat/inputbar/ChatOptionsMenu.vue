@@ -67,7 +67,7 @@ const activeTools = computed(() => {
 })
 const visibleAgents = computed(() => agentDefs.agents.filter(agent => `${agent.name} ${agent.internalName || ''} ${agent.description || ''}`.toLowerCase().includes(search.value.toLowerCase().trim())))
 const folders = computed(() => chatStore.memoryFolders)
-const folderSet = computed(() => new Set(chatStore.freeChatMemoryFolderIds))
+const folderSet = computed(() => new Set(chatStore.sessionMemoryFolderIds))
 const rootFolder = computed(() => folders.value.find(folder => folder.isUncategorized))
 const rootSelected = computed(() => !!rootFolder.value && folderSet.value.has(rootFolder.value.id))
 const activeFolder = computed(() => folders.value.find(folder => folder.folderPath === folderPath.value))
@@ -97,7 +97,7 @@ function newProject(): void {
   void router.push({ name: 'projects', query: { new: '1' } })
 }
 const changedFields = computed(() => new Set(chatStore.activeAgentId
-  ? chatStore.agentOverrideFields : chatStore.freeChatOverrideFields))
+  ? chatStore.agentOverrideFields : chatStore.cynoOverrideFields))
 function entryChanged(id: string): boolean {
   switch (id) {
     case 'tools': return changedFields.value.has('Tools')
@@ -122,7 +122,7 @@ function folderSelected(folder: MemoryFolder): boolean {
   return isMemoryFolderSelected(folder, folderSet.value, rootSelected.value)
 }
 function toggleFolder(folder: MemoryFolder): void {
-  const selected = new Set(chatStore.freeChatMemoryFolderIds)
+  const selected = new Set(chatStore.sessionMemoryFolderIds)
   const scope = folder.isUncategorized ? [folder.id] : folders.value.filter(item => item.id === folder.id || item.folderPath.startsWith(`${folder.folderPath}/`)).map(item => item.id)
   if (folder.isUncategorized) {
     selected.clear()
@@ -136,8 +136,8 @@ function toggleFolder(folder: MemoryFolder): void {
     remaining.forEach(id => selected.add(id))
   } else if (selected.has(folder.id)) scope.forEach(id => selected.delete(id))
   else scope.forEach(id => selected.add(id))
-  chatStore.freeChatMemoryFolderIds.splice(0, chatStore.freeChatMemoryFolderIds.length, ...selected)
-  chatStore.freeChatMemorySelectionInitialized = true
+  chatStore.sessionMemoryFolderIds.splice(0, chatStore.sessionMemoryFolderIds.length, ...selected)
+  chatStore.sessionMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
 function toggleTool(tool: ToolInfo): void {
@@ -170,9 +170,9 @@ function markIconBroken(namespaceId: string): void {
   brokenMcpIcons.value = new Set([...brokenMcpIcons.value, namespaceId])
 }
 function toggleAgent(id: string): void {
-  const index = chatStore.freeChatSubAgentIds.indexOf(id)
-  if (index < 0) chatStore.freeChatSubAgentIds.push(id)
-  else chatStore.freeChatSubAgentIds.splice(index, 1)
+  const index = chatStore.sessionSubAgentIds.indexOf(id)
+  if (index < 0) chatStore.sessionSubAgentIds.push(id)
+  else chatStore.sessionSubAgentIds.splice(index, 1)
   chatStore.markOverridesModified()
 }
 function setAutoTools(): void {
@@ -614,7 +614,7 @@ onBeforeUnmount(() => {
           ><input
             type="checkbox"
             class="h-4 w-4 accent-accent-500"
-            :checked="chatStore.freeChatSubAgentIds.includes(agent.id)"
+            :checked="chatStore.sessionSubAgentIds.includes(agent.id)"
             @change="toggleAgent(agent.id)"
           ><img
             v-if="agent.iconUrl"

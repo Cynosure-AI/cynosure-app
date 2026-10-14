@@ -42,11 +42,11 @@ describe('notify_user', () => {
         const { tool: notification } = tool()
         expect((await notification.execute({ channel: 'app', title: 'Hello', body: 'World' })).success).toBe(true)
     })
-    test.each(['telegram', 'discord', 'slack'] as const)('sends the same title and body to %s', async channel => {
+    test.each(['telegram', 'discord', 'slack'] as const)('sends the same title and body to %s, linked to the conversation', async channel => {
         const { tool: notification, notify, broadcast } = tool([channel])
         const result = await notification.execute({ channel, title: '  Finished  ', body: '  Task done  ' })
         expect(result).toEqual({ success: true, output: `Notification sent on ${channel} (channel channel-1).` })
-        expect(notify).toHaveBeenCalledWith(channel, 'Finished\n\nTask done')
+        expect(notify).toHaveBeenCalledWith(channel, 'Finished\n\nTask done', 'chat-1')
         expect(broadcast).not.toHaveBeenCalled()
     })
     test('rejects unavailable channels and invalid input without sending', async () => {

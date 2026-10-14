@@ -23,12 +23,12 @@ const savingAgent = ref(false)
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
 const canSaveAsAgent = computed(() => (
   chatStore.selectedToolNames.length > 0 ||
-  chatStore.freeChatSubAgentIds.length > 0 ||
-  chatStore.hasFreeChatOverrides ||
+  chatStore.sessionSubAgentIds.length > 0 ||
+  chatStore.hasCynoOverrides ||
   chatStore.sessionSystemPrompt.trim().length > 0
 ))
 const hasCustomConfig = computed(() => hasOverrides.value || (
-  !chatStore.activeAgentId && chatStore.hasFreeChatOverrides
+  !chatStore.activeAgentId && chatStore.hasCynoOverrides
 ))
 const canShowSaveAction = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && canSaveAsAgent.value
@@ -82,7 +82,7 @@ async function saveAsNewAgent(): Promise<void> {
     const model = chatStore.sessionProviderOverride && !chatStore.sessionModelOverride
       ? ''
       : chatStore.sessionModelOverride || currentAgent?.model || lastUsedProvider?.defaultModel || ''
-    const subAgents = chatStore.freeChatSubAgentIds.map((id) => {
+    const subAgents = chatStore.sessionSubAgentIds.map((id) => {
       const definition = agentDefs.get(id)
       const codename = definition
         ? `${definition.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}_agent`
@@ -98,7 +98,7 @@ async function saveAsNewAgent(): Promise<void> {
       systemPrompt: chatStore.sessionSystemPrompt,
       tools: [...chatStore.selectedToolNames],
       subAgents,
-      memoryFolders: [...chatStore.freeChatMemoryFolderIds],
+      memoryFolders: [...chatStore.sessionMemoryFolderIds],
       thinkingEnabled: chatStore.sessionThinkingEnabled,
       reasoningEffort: chatStore.sessionReasoningEffort,
     })
@@ -293,11 +293,11 @@ async function saveAsNewAgent(): Promise<void> {
         <p v-if="chatStore.selectedToolNames.length">
           {{ chatStore.selectedToolNames.length }} tool{{ chatStore.selectedToolNames.length === 1 ? '' : 's' }}
         </p>
-        <p v-if="chatStore.freeChatSubAgentIds.length">
-          {{ chatStore.freeChatSubAgentIds.length }} sub-agent{{ chatStore.freeChatSubAgentIds.length === 1 ? '' : 's' }}
+        <p v-if="chatStore.sessionSubAgentIds.length">
+          {{ chatStore.sessionSubAgentIds.length }} sub-agent{{ chatStore.sessionSubAgentIds.length === 1 ? '' : 's' }}
         </p>
-        <p v-if="chatStore.freeChatMemoryFolderIds.length">
-          {{ chatStore.freeChatMemoryFolderIds.length }} memory folder{{ chatStore.freeChatMemoryFolderIds.length === 1 ? '' : 's' }}
+        <p v-if="chatStore.sessionMemoryFolderIds.length">
+          {{ chatStore.sessionMemoryFolderIds.length }} memory folder{{ chatStore.sessionMemoryFolderIds.length === 1 ? '' : 's' }}
         </p>
         <p v-if="chatStore.sessionSystemPrompt.trim()">
           Custom system prompt

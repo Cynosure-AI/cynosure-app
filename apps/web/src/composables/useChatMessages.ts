@@ -33,9 +33,9 @@ export function useChatMessages(
         sessionAutoToolRouting: Ref<boolean>
         sessionAutoMemory: Ref<boolean>
         selectedToolNames: Ref<string[]>
-        freeChatSubAgentIds: Ref<string[]>
-        freeChatMemoryFolderIds: Ref<string[]>
-        freeChatMemorySelectionInitialized: Ref<boolean>
+        sessionSubAgentIds: Ref<string[]>
+        sessionMemoryFolderIds: Ref<string[]>
+        sessionMemorySelectionInitialized: Ref<boolean>
     },
     mediaGenerationSettings: Ref<MediaGenerationSettings | null>,
 ): ChatMessagesApi {
@@ -113,8 +113,8 @@ export function useChatMessages(
                 allowedTools: agentConfig.selectedToolNames.value,
                 systemPrompt: agentConfig.sessionSystemPrompt.value || activeAgent?.systemPrompt || undefined,
                 generateQuickResponses: prefs.quickResponses,
-                subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.freeChatSubAgentIds.value]),
-                memoryFolderIds: agentConfig.freeChatMemorySelectionInitialized.value ? [...agentConfig.freeChatMemoryFolderIds.value] : undefined,
+                subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.sessionSubAgentIds.value]),
+                memoryFolderIds: agentConfig.sessionMemorySelectionInitialized.value ? [...agentConfig.sessionMemoryFolderIds.value] : undefined,
                 thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
                 reasoningEffort: agentConfig.sessionReasoningEffort.value,
                 autoToolRouting: agentConfig.sessionAutoToolRouting.value,

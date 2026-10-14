@@ -1,7 +1,7 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { CronExpressionParser } from 'cron-parser'
 import type { ConversationExecutionConfig } from '@shared/types'
-import { isDefaultChatAgent } from '../../agent/execution-preset.js'
+import { isCyno } from '../../agent/execution-preset.js'
 import { describeCurrentDate } from '../../agent/pre-execution/prompt-smart-tags.js'
 
 export interface ScheduleToolOptions {
@@ -27,7 +27,7 @@ export function isScheduleToolName(name?: string | null): name is ScheduleToolNa
 }
 
 function ownerAgentId(agentId: string): string {
-    return isDefaultChatAgent({ id: agentId }) ? '' : agentId
+    return isCyno({ id: agentId }) ? '' : agentId
 }
 
 function hasScheduleContext(opts: ScheduleToolOptions): boolean {
@@ -37,7 +37,7 @@ function hasScheduleContext(opts: ScheduleToolOptions): boolean {
 function requireScheduleContext(opts: ScheduleToolOptions): ReturnType<typeof failure> | undefined {
     return hasScheduleContext(opts)
         ? undefined
-        : failure('Scheduling tools require either an agent or a Free Chat execution configuration.')
+        : failure('Scheduling tools require either an agent or Cyno\'s chat settings.')
 }
 
 function result(value: unknown) {
@@ -105,7 +105,7 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
         execution: { readOnly: false },
         // Only the date goes in the description: it is rebuilt every turn, and a
         // changing description would invalidate the whole prompt cache.
-        description: `Create a scheduled job using the current agent or Free Chat configuration. For a one-time run, use runInMinutes for a delay from now or runAt for a clock time; use schedule for a recurring cron expression. Today is ${describeCurrentDate()}; runAt and cron expressions are interpreted in that timezone unless runAt states an offset. The current configuration must already include any tools needed by the future task.`,
+        description: `Create a scheduled job using the current agent or Cyno's chat settings. For a one-time run, use runInMinutes for a delay from now or runAt for a clock time; use schedule for a recurring cron expression. Today is ${describeCurrentDate()}; runAt and cron expressions are interpreted in that timezone unless runAt states an offset. The current configuration must already include any tools needed by the future task.`,
         parameters: {
             type: 'object',
             properties: {
@@ -168,7 +168,7 @@ function createTool(opts: ScheduleToolOptions): ToolDefinition {
 function listTool(opts: ScheduleToolOptions): ToolDefinition {
     return {
         name: 'schedule_list',
-        description: 'List scheduled jobs owned by the current agent or by Free Chat. Use this before updating or deleting a job when its ID is unknown.',
+        description: 'List scheduled jobs owned by the current agent or by Cyno. Use this before updating or deleting a job when its ID is unknown.',
         parameters: { type: 'object', properties: {}, additionalProperties: false },
         timeout: 5_000,
         execution: { readOnly: true },

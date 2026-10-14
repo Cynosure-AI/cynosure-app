@@ -7,6 +7,7 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProviderStore } from '../stores/provider.store'
 import { useProviderLogos } from '../composables/useProviderLogos'
+import { useCynoStore } from '../stores/cyno.store'
 import { useMcpServers } from '../composables/useMcpServers'
 import DataTable from '../components/shared/DataTable.vue'
 import BaseCard from '../components/shared/BaseCard.vue'
@@ -22,6 +23,7 @@ const agentStore = useAgentStore()
 const agentHealth = useAgentHealthStore()
 const providerStore = useProviderStore()
 const router = useRouter()
+const cyno = useCynoStore()
 const { logoUrl } = useProviderLogos()
 const { servers, loadServers } = useMcpServers()
 const TOOLTIP_MAX_TOOLS = 20
@@ -45,6 +47,7 @@ const dropTargetId = ref<string | null>(null)
 const brokenIcons = ref<Set<string>>(new Set())
 
 onMounted(() => {
+  if (!cyno.profile) void cyno.load()
   void agentDefs.load()
   void agentHealth.loadMemoryFolders()
   if (servers.value.length === 0) void loadServers().catch(() => undefined)
@@ -284,6 +287,31 @@ function formatDate(timestamp: number): string {
     </header>
 
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <!-- Cyno, the default assistant, is configured like an agent but is always present. -->
+      <RouterLink
+        :to="{ name: 'cyno' }"
+        class="mb-4 flex items-center gap-3 rounded-xl border border-accent-500/25 bg-accent-500/5 px-4 py-3 transition-colors hover:bg-accent-500/10"
+      >
+        <img
+          :src="cyno.iconUrl"
+          alt=""
+          class="h-10 w-10 shrink-0 rounded-lg object-cover"
+        >
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 text-sm font-medium text-theme-100">
+            {{ cyno.name }}
+            <span class="rounded bg-accent-500/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-fg">Default</span>
+          </div>
+          <p class="mt-0.5 text-xs text-ink-muted">
+            Your default assistant. New chats start with these settings.
+          </p>
+        </div>
+        <Icon
+          icon="lucide:chevron-right"
+          class="h-4 w-4 shrink-0 text-ink-muted"
+        />
+      </RouterLink>
+
       <div
         v-if="selectedAgentIds.length"
         class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-500/25 bg-accent-500/8 px-3 py-2"

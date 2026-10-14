@@ -7,6 +7,9 @@ import { wsConnected } from '../../api/http'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 const props = withDefaults(defineProps<{
   awaitingConversationIds?: string[]
@@ -244,7 +247,7 @@ function formatDate(timestamp: number): string {
 }
 
 function agentName(conversation: Conversation): string {
-  return conversation.agentId ? agentDefs.get(conversation.agentId)?.name || 'Agent' : 'Free Chat'
+  return conversation.agentId ? agentDefs.get(conversation.agentId)?.name || 'Agent' : cyno.name
 }
 
 function closeMenu(): void {
@@ -340,7 +343,7 @@ onBeforeUnmount(() => {
           :placeholder="agentId === undefined
             ? 'Filter all chats…'
             : agentId === null
-              ? 'Filter Free Chat conversations…'
+              ? `Filter ${cyno.name} conversations…`
               : 'Filter this agent’s chats…'"
           aria-label="Filter recent chats"
           class="w-full rounded-lg border border-theme-800 bg-theme-900/70 py-1.5 pl-8 pr-3 text-xs text-theme-300 outline-none transition placeholder:text-ink-faint focus:border-theme-600"

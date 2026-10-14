@@ -24,20 +24,23 @@ describe('ChatSchedulesPopover', () => {
     mocks.list.mockResolvedValue([job('Disabled', '', false), job('Other agent', 'agent-1', true), job('Enabled', '', true)])
   })
 
-  it('shows only the current chat schedules with disabled jobs last', async () => {
+  it('shows only enabled schedules for the current agent', async () => {
     const wrapper = mount(ChatSchedulesPopover, { global: { stubs: { Icon: true } } })
     await vi.waitFor(() => expect(wrapper.find('[aria-label="Schedules"]').exists()).toBe(true))
     await wrapper.get('button[aria-label="Schedules"]').trigger('click')
     const text = wrapper.get('[role="dialog"]').text()
     expect(text).toContain('Enabled')
-    expect(text).toContain('Disabled')
+    expect(text).not.toContain('Disabled')
     expect(text).not.toContain('Other agent')
-    expect(text.indexOf('Enabled')).toBeLessThan(text.indexOf('Disabled'))
     wrapper.unmount()
   })
 
-  it('hides the header button when this agent has no schedules', async () => {
+  it.each([
+    { jobs: [] },
+    { jobs: [job('Disabled', 'agent-2', false)] },
+  ])('hides the header button when this agent has no enabled schedules ($jobs)', async ({ jobs }) => {
     mocks.chatStore.activeAgentId = 'agent-2'
+    mocks.list.mockResolvedValue(jobs)
     const wrapper = mount(ChatSchedulesPopover, { global: { stubs: { Icon: true } } })
     await vi.waitFor(() => expect(mocks.list).toHaveBeenCalled())
     expect(wrapper.find('button').exists()).toBe(false)

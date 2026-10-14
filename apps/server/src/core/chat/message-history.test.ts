@@ -22,6 +22,7 @@ import {
     appendHiddenSystemContext,
     attachPreviousGeneratedImageToActiveUser,
     buildConversationHistory,
+    leadWithUserTurn,
     buildRecentImageArtifactsHint,
     insertTurnLocalUntrustedContext,
     assembleExecutionMessages,
@@ -57,6 +58,7 @@ describe('conversation history construction', () => {
     test('closes an interrupted sub-agent call before the retried user message', () => {
         const result = buildConversationHistory({
             db: databaseReturning([
+                row({ role: 'user', content: 'delegate this' }),
                 row({ role: 'assistant', tool_calls_json: JSON.stringify([
                     { id: 'pending', type: 'function', function: { name: 'spawn_subagent', arguments: '{}' } },
                 ]) }),
@@ -66,8 +68,20 @@ describe('conversation history construction', () => {
             ]),
             conversationId: 'conversation', mainAgentId: 'main', inlineAttachmentTextLimit: 10_000,
         })
-        expect(result.messages.map(message => message.role)).toEqual(['assistant', 'tool', 'user'])
-        expect(result.messages[1]).toMatchObject({ toolCallId: 'pending', content: expect.stringContaining('interrupted') })
+        expect(result.messages.map(message => message.role)).toEqual(['user', 'assistant', 'tool', 'user'])
+        expect(result.messages[2]).toMatchObject({ toolCallId: 'pending', content: expect.stringContaining('interrupted') })
+    })
+
+    test('opens with a user turn when the thread starts with a message the agent sent on its own', () => {
+        const result = buildConversationHistory({
+            db: databaseReturning([
+                row({ role: 'assistant', agent_id: 'main', content: '**Morning briefing:**\nToday...' }),
+                row({ role: 'user', content: 'tell me more about the second item' }),
+            ]),
+            conversationId: 'conversation', mainAgentId: 'main', inlineAttachmentTextLimit: 10_000,
+        })
+        expect(result.messages.map(message => message.role)).toEqual(['user', 'assistant', 'user'])
+        expect(leadWithUserTurn([{ role: 'user', content: 'hi' }])).toEqual([{ role: 'user', content: 'hi' }])
     })
 
     test('preserves completed parallel calls and repairs only missing results', () => {

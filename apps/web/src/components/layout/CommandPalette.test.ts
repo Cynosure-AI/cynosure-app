@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import CommandPalette from './CommandPalette.vue'
 import { useCommandPalette } from '../../composables/useCommandPalette'
 
@@ -80,6 +81,7 @@ function keydown(target: Element, key: string, init: KeyboardEventInit = {}) {
 
 describe('CommandPalette', () => {
   beforeEach(() => {
+  setActivePinia(createPinia())
     vi.clearAllMocks()
     useCommandPalette().close()
     mocks.listConversationsPaginated.mockResolvedValue({ items: [conversationRow('c-1', 'Trip planning', 'agent-1')], total: 1 })

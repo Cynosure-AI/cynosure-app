@@ -44,6 +44,7 @@ import { registerMetricsRoutes } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerFileAccessRoutes } from './routes/file-access.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
+import { registerCynoRoutes } from './routes/cyno.js'
 import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { registerProjectRoutes } from './routes/projects.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat, startToolRegistryUpdates } from './ws.js'
@@ -605,6 +606,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerFileRoutes, { prefix: '/api/files' })
   app.register(registerFileAccessRoutes, { prefix: '/api/file-access' })
   app.register(registerUserSettingsRoutes, { prefix: '/api/user-settings' })
+  app.register(registerCynoRoutes, { prefix: '/api/cyno' })
   app.register(registerModelFavoritesRoutes, { prefix: '/api/model-favorites' })
   app.register(async (instance) => registerProjectRoutes(instance, broadcast), { prefix: '/api/projects' })
 

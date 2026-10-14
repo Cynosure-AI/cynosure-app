@@ -6,17 +6,17 @@ import ChatOptionsMenu from './ChatOptionsMenu.vue'
 const chatStore = reactive({
   activeAgentId: null as string | null,
   agentOverrideFields: [] as string[],
-  freeChatOverrideFields: [] as string[],
+  cynoOverrideFields: [] as string[],
   sessionAutoToolRouting: false,
   sessionAutoMemory: false,
   sessionThinkingEnabled: false,
   sessionReasoningEffort: 'medium',
   sessionSystemPrompt: '',
   selectedToolNames: [] as string[],
-  freeChatMemoryFolderIds: [] as string[],
-  freeChatSubAgentIds: [] as string[],
+  sessionMemoryFolderIds: [] as string[],
+  sessionSubAgentIds: [] as string[],
   memoryFolders: [] as unknown[],
-  freeChatMemorySelectionInitialized: false,
+  sessionMemorySelectionInitialized: false,
   markOverridesModified: vi.fn(),
   loadMemoryFolders: vi.fn().mockResolvedValue(undefined),
   setSelectedToolNames: vi.fn((names: string[]) => { chatStore.selectedToolNames = names }),
@@ -50,7 +50,7 @@ describe('ChatOptionsMenu', () => {
   beforeEach(() => {
     chatStore.activeAgentId = null
     chatStore.agentOverrideFields = []
-    chatStore.freeChatOverrideFields = []
+    chatStore.cynoOverrideFields = []
     chatStore.sessionAutoToolRouting = false
     chatStore.sessionAutoMemory = false
     chatStore.selectedToolNames = []
@@ -67,7 +67,7 @@ describe('ChatOptionsMenu', () => {
   ])('colors the $label icon and label when $field differs from the preset', async ({ agentId, field, label }) => {
     chatStore.activeAgentId = agentId
     if (agentId) chatStore.agentOverrideFields = [field]
-    else chatStore.freeChatOverrideFields = [field]
+    else chatStore.cynoOverrideFields = [field]
     const wrapper = mount(ChatOptionsMenu, {
       attachTo: document.body,
       global: { stubs: { SystemPromptModal: true, Icon: { template: '<i />' } } },

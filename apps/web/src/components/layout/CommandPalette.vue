@@ -13,6 +13,9 @@ import { useCommandPalette } from '../../composables/useCommandPalette'
 import { useMcpServers } from '../../composables/useMcpServers'
 import { rankItems } from '../../utils/command-palette'
 import { cronToHuman } from '../../utils/cron-helpers'
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 type Scope = 'all' | 'conversations' | 'projects' | 'agents' | 'mcp' | 'cron'
 type GroupId = Exclude<Scope, 'all'>
@@ -95,7 +98,7 @@ function conversationIcon(origin: string): string {
 }
 
 function agentName(agentId: string | null): string {
-  return agentId ? agentDefs.get(agentId)?.name ?? 'Agent' : 'Free chat'
+  return agentId ? agentDefs.get(agentId)?.name ?? 'Agent' : cyno.name
 }
 
 async function openConversation(conversation: ConversationHit): Promise<void> {
@@ -130,7 +133,7 @@ function newProjectChatItem(project: ProjectDto): PaletteItem {
   return {
     key: `project-chat:${project.id}`,
     title: `New chat in ${project.name}`,
-    subtitle: project.defaultAgentId ? `With ${agentName(project.defaultAgentId)}` : 'Free chat',
+    subtitle: `With ${agentName(project.defaultAgentId)}`,
     icon: 'lucide:message-circle-plus',
     run: () => startProjectChat(project),
   }

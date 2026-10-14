@@ -6,6 +6,9 @@ import { api } from '../api/client'
 import type { ActivityArtifact, ActivityItem, ConversationUpload } from '../api/types'
 import LibraryPreviewModal from '../components/shared/LibraryPreviewModal.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
+import { useCynoStore } from '../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 type LibraryPanel = 'generated' | 'uploads'
 type LibraryFilter = 'all' | ActivityArtifact['kind']
@@ -581,7 +584,7 @@ onUnmounted(() => {
             </p>
             <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-ink-muted">
               <span class="min-w-0 truncate">
-                {{ entry.agentName || (activePanel === 'uploads' ? 'Free Chat' : 'AI assistant') }}
+                {{ entry.agentName || (activePanel === 'uploads' ? cyno.name : 'AI assistant') }}
                 <template v-if="entry.sizeBytes != null"> · {{ formatBytes(entry.sizeBytes) }}</template>
               </span>
               <span class="shrink-0">{{ formatDate(entry.createdAt) }}</span>

@@ -1,5 +1,5 @@
 import { applyAutoMemoryRoutingWithEvidence } from './auto-memory-routing.js'
-import { isDefaultChatAgent, type ExecutionPreset } from '../execution-preset.js'
+import { isCyno, type ExecutionPreset } from '../execution-preset.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage } from '../../gateway/providers/base.provider.js'
 import type { MemoryFolderRef } from '../../memory/memory-folder-scope.js'
@@ -74,7 +74,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         gateway,
         providerId,
         model,
-        agentId: isDefaultChatAgent(preset) ? undefined : preset.id,
+        agentId: isCyno(preset) ? undefined : preset.id,
         memoryFolderIds: memoryFolderOverrides?.map((space) => space.id),
         eventMeta,
         signal,

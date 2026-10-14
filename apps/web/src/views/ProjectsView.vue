@@ -8,6 +8,9 @@ import { useProjectsStore } from '../stores/projects.store'
 import ProjectIcon from '../components/project/ProjectIcon.vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { DEFAULT_PROJECT_ICON, PROJECT_COLORS, formatRelativeTime } from '../utils/project-format'
+import { useCynoStore } from '../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 const projectsStore = useProjectsStore()
 const agentDefs = useAgentDefinitionsStore()
@@ -72,7 +75,7 @@ async function create(): Promise<void> {
 }
 
 function agentName(agentId: string | null): string {
-  return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : 'Free Chat'
+  return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : cyno.name
 }
 
 watch(() => route.query.new, (value) => {

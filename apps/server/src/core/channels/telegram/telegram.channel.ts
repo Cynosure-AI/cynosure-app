@@ -1,8 +1,10 @@
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, resolveHomeConversation, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
+import { getCynoProfile } from '../../cyno/cyno-profile.js'
+import { findDeliveryConversation, recordChannelDeliveries } from '../channel-delivery.js'
 import {
     TELEGRAM_API,
     answerCallbackQuery,
@@ -37,6 +39,7 @@ export interface TelegramUpdate {
         voice?: { file_id: string; mime_type?: string; duration: number; file_size?: number }
         video?: { file_id: string; file_name?: string; mime_type?: string; duration: number; width: number; height: number; file_size?: number }
         video_note?: { file_id: string; duration: number; length: number; file_size?: number }
+        reply_to_message?: { message_id: number }
     }
     callback_query?: {
         id: string
@@ -89,11 +92,14 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
         { command: 'start', description: 'Start a fresh conversation with the default agent' },
         { command: 'stop', description: 'Cancel the currently running execution' },
         { command: 'kill', description: 'Stop all running executions' },
-        { command: 'new', description: 'Start a fresh conversation with the last used agent' }
+        { command: 'new', description: 'Start a fresh conversation with the last used agent' },
+        { command: 'cyno', description: `Switch to ${getCynoProfile().name}, your default assistant` },
+        { command: 'project', description: 'Show or switch the project this chat works in' },
     ]
     for (const agent of getAvailableAgents(ctx)) {
         const cmd = agentCommandName(agent.internalName).slice(0, 32)
-        if (cmd) {
+        // Built-in commands win; a duplicate would make Telegram reject the whole menu.
+        if (cmd && !commands.some((command) => command.command === cmd)) {
             commands.push({ command: cmd, description: `Switch to ${agent.name}` })
         }
     }
@@ -106,7 +112,7 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
 
 /** Handle slash commands. Returns true if the message was a command and was handled. */
 export async function handleCommand(ctx: TelegramCtx, chatId: number, text: string): Promise<boolean> {
-    return handleChannelCommand(ctx, chatId, text, (reply) => sendMessage(ctx, chatId, reply), TELEGRAM_COMMAND_STYLE)
+    return handleChannelCommand(ctx, chatId, text, async (reply) => { await sendMessage(ctx, chatId, reply) }, TELEGRAM_COMMAND_STYLE)
 }
 
 function createTransport(ctx: TelegramCtx, chatId: number): ChannelTransport<number> {
@@ -118,8 +124,10 @@ function createTransport(ctx: TelegramCtx, chatId: number): ChannelTransport<num
         reply: (text) => sendMessageReturningId(ctx, chatId, text),
         send: (text) => sendMessageReturningId(ctx, chatId, text),
         edit: async (messageId, text) => { await editMessage(ctx, chatId, messageId, text) },
-        sendLong: (text) => sendLongMessage(ctx, chatId, text).catch(e =>
-            console.warn('[Telegram] Failed to send message:', (e as Error).message)),
+        sendLong: async (text) => {
+            await sendLongMessage(ctx, chatId, text).catch(e =>
+                console.warn('[Telegram] Failed to send message:', (e as Error).message))
+        },
         sendImages: async (images, replyTo) => {
             for (const { dataUrl } of images) {
                 await sendPhoto(ctx, chatId, dataUrl, replyTo ?? undefined).catch(e =>
@@ -137,6 +145,11 @@ export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): P
     const chatId = msg.chat.id
     const userId = msg.from!.id
     const text = msg.text || msg.caption || ''
+    // Replying to a delivered result or an earlier answer continues that conversation.
+    const repliedTo = msg.reply_to_message?.message_id
+    const continueConversationId = repliedTo === undefined
+        ? undefined
+        : findDeliveryConversation(ctx.channelId, String(chatId), String(repliedTo)) ?? undefined
 
     await receiveChannelMessage(ctx, {
         target: chatId,
@@ -147,6 +160,10 @@ export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): P
         handleCommand: text.startsWith('/') ? () => handleCommand(ctx, chatId, text) : undefined,
         transport: createTransport(ctx, chatId),
         onConversation: (conversationId) => ctx.conversationToUser.set(conversationId, userId),
+        continueConversationId,
+        onFinalReply: (messageId, conversationId) => recordChannelDeliveries({
+            channelId: ctx.channelId, target: String(chatId), platformMessageIds: [String(messageId)], conversationId,
+        }),
     })
 }
 
@@ -324,7 +341,7 @@ export class TelegramChannel implements ChannelProvider {
         await registerBotCommands(this)
     }
 
-    async sendNotification(target: string, text: string): Promise<void> {
+    async sendNotification(target: string, text: string): Promise<string[]> {
         if (!this.connected) {
             throw new Error('Telegram channel is not connected')
         }
@@ -335,7 +352,14 @@ export class TelegramChannel implements ChannelProvider {
         if (!isTelegramUserAllowed(this.allowedUserIds, chatId)) {
             throw new Error('Telegram notification target is not an allowed user')
         }
-        await sendLongMessage(this, chatId, text)
+        const messageIds = await sendLongMessage(this, chatId, text)
+        return messageIds.map(String)
+    }
+
+    homeConversation(target: string): { conversationId: string; agentId: string } | null {
+        const chatId = parseInt(target, 10)
+        if (isNaN(chatId) || !isTelegramUserAllowed(this.allowedUserIds, chatId)) return null
+        return resolveHomeConversation(this, chatId)
     }
 
     // ─── Polling ──────────────────────────────────────────────

@@ -15,28 +15,36 @@ export interface ExecutionPreset {
     autoRouterModel?: string
 }
 
-/** Free chat's fixed agent definition. Each execution receives its own snapshot. */
-export const DEFAULT_CHAT_AGENT = Object.freeze({
-    id: '__agentless__',
-    name: 'Free Chat',
-    internalName: 'free_chat',
+/**
+ * Agent id that stands for Cyno, which runs without an agent. Cyno's
+ * conversations, channel chats, and jobs store no agent id at all.
+ */
+export const CYNO_AGENT_ID = '__agentless__'
+
+/** Cyno's fixed run identity. Its settings come from the Cyno profile. */
+export const CYNO_PRESET = Object.freeze({
+    id: CYNO_AGENT_ID,
+    name: 'Cyno',
+    internalName: 'cyno',
     tools: Object.freeze([] as string[]),
     subAgents: Object.freeze([] as SubAgentAssignment[]),
     autoToolRouting: true,
     autoMemory: true,
 })
 
-/** Auto-mode defaults when a run does not specify them: the agent's saved settings, or Free Chat's. */
+/** Auto-mode defaults when a run does not specify them: the agent's saved settings, or Cyno's. */
 export function defaultAutoModes(
     agent: Pick<AgentData, 'autoToolRouting' | 'autoMemory'> | null | undefined,
 ): { autoToolRouting: boolean; autoMemory: boolean } {
     return agent
         ? { autoToolRouting: agent.autoToolRouting === true, autoMemory: agent.autoMemory === true }
-        : { autoToolRouting: DEFAULT_CHAT_AGENT.autoToolRouting, autoMemory: DEFAULT_CHAT_AGENT.autoMemory }
+        : { autoToolRouting: CYNO_PRESET.autoToolRouting, autoMemory: CYNO_PRESET.autoMemory }
 }
 
-export function isDefaultChatAgent(preset: Pick<ExecutionPreset, 'id'>): boolean {
-    return preset.id === DEFAULT_CHAT_AGENT.id
+/** Whether an agent id (or preset) means Cyno: no id, an empty id, or Cyno's id. */
+export function isCyno(agent: string | Pick<ExecutionPreset, 'id'> | null | undefined): boolean {
+    const id = typeof agent === 'object' && agent !== null ? agent.id : agent
+    return !id || id === CYNO_AGENT_ID
 }
 
 /** Resolve either chat mode to the same per-execution value object. */
@@ -60,7 +68,7 @@ export function snapshotChatExecutionPreset(
             model: agent.model,
             systemPrompt: agent.systemPrompt,
         }
-        : DEFAULT_CHAT_AGENT
+        : CYNO_PRESET
     return {
         ...base,
         tools: [...options.tools],

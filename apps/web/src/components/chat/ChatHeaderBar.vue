@@ -7,6 +7,9 @@ import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
 import ChatSettingsMenu from "./ChatSettingsMenu.vue";
 import ChatSchedulesPopover from "./ChatSchedulesPopover.vue";
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 defineProps<{
   hasPlanningTasks: boolean;
@@ -72,10 +75,10 @@ async function newChat(): Promise<void> {
         :model-value="agentDropdownValue"
         :agents="agentDefs.agents"
         include-default
-        default-label="Free Chat"
-        default-icon="lucide:message-square"
+        :default-label="cyno.name"
+        :default-img-src="cyno.iconUrl"
         agents-group-label="Agents"
-        placeholder="Free Chat"
+        :placeholder="cyno.name"
         max-height="max-h-96"
         size="sm"
         @change="onAgentChange"

@@ -65,6 +65,14 @@ export interface ChannelProvider {
      * For Telegram: target is a numeric chat ID (as string).
      * For Discord:  target is a Discord text-channel ID.
      * For Slack:    target is a Slack channel ID (e.g. C012AB3CD).
+     * Resolves to the platform ids of the sent messages when the platform reports them.
      */
-    sendNotification?(target: string, text: string): Promise<void>
+    sendNotification?(target: string, text: string): Promise<string[] | void>
+
+    /**
+     * The target's active conversation with the channel's current agent,
+     * created on demand. Proactive messages are saved there so the agent
+     * knows what it sent when the user answers.
+     */
+    homeConversation?(target: string): { conversationId: string; agentId: string } | null
 }

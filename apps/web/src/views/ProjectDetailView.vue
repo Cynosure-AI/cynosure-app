@@ -18,6 +18,9 @@ import { useChatStore } from '../stores/chat.store'
 import { useProjectChat } from '../composables/useProjectChat'
 import { formatRelativeTime } from '../utils/project-format'
 import { cronToHuman } from '../utils/cron-helpers'
+import { useCynoStore } from '../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 type ProjectTab = 'overview' | 'chats' | 'board' | 'timeline' | 'settings'
 
@@ -62,7 +65,7 @@ function agentIconUrl(agentId: string | null): string | null {
 }
 
 function agentName(agentId: string | null): string {
-  return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : 'Free Chat'
+  return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : cyno.name
 }
 
 function toDraft(): ProjectDraft | null {
@@ -275,7 +278,7 @@ onMounted(async () => {
                 Brief
               </h2>
               <p class="mt-0.5 text-xs text-ink-muted">
-                Goal, current state, decisions, and open questions. Every agent in this project reads it, and agents keep it up to date.
+                The current picture: goal, state, decisions, and next steps. Every agent in this project reads it; agents keep it up to date, and you can edit it.
                 <template v-if="project.briefUpdatedAt">
                   Updated {{ formatRelativeTime(project.briefUpdatedAt) }}.
                 </template>
@@ -382,6 +385,9 @@ onMounted(async () => {
                 <div class="text-ink-muted">
                   Memory folder
                 </div>
+                <div class="text-[11px] text-ink-faint">
+                  Lasting facts and knowledge; agents add to it automatically
+                </div>
                 <RouterLink
                   v-if="memoryFolder"
                   :to="{ name: 'memory-folders', params: { section: 'documents' }, query: { folder: memoryFolder.id } }"
@@ -422,6 +428,9 @@ onMounted(async () => {
               <div class="min-w-0">
                 <div class="text-ink-muted">
                   Instructions
+                </div>
+                <div class="text-[11px] text-ink-faint">
+                  Written by you; followed in every chat of this project
                 </div>
                 <p
                   class="line-clamp-4 whitespace-pre-line text-xs"

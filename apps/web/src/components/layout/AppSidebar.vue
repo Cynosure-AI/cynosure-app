@@ -160,7 +160,7 @@ function closeRecentFilterMenu(): void {
 
 const recentChatFilterOptions: Array<{ value: RecentChatFilter; label: string; icon: string }> = [
   { value: "all", label: "All", icon: "lucide:messages-square" },
-  { value: "free", label: "Free Chats", icon: "lucide:message-square" },
+  { value: "free", label: "Cyno", icon: "lucide:message-square" },
   { value: "agents", label: "Agents", icon: "lucide:bot" },
   { value: "cron", label: "Cron", icon: "lucide:calendar-clock" },
   { value: "channel", label: "Channel", icon: "lucide:radio" },

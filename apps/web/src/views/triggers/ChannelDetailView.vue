@@ -10,6 +10,9 @@ import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
 import SettingsPersistenceStatus, { type SettingsPersistenceState } from '../../components/settings/SettingsPersistenceStatus.vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 const props = defineProps<{
   channelId: string
@@ -108,7 +111,7 @@ const stateMeta = computed(() => {
 })
 
 const canSave = computed(() => {
-  if (!dlgAgentId.value || !dlgName.value.trim()) return false
+  if (!dlgName.value.trim()) return false
   if (channel.value?.type === 'slack') {
     return !!dlgBotToken.value.trim() && !!dlgAppToken.value.trim()
   }
@@ -276,7 +279,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               {{ channel.name || 'Unnamed channel' }}
             </h1>
             <p class="text-sm text-ink-secondary mt-0.5">
-              Agent: {{ selectedAgent?.name || channel.agentId }}
+              Agent: {{ selectedAgent?.name || channel.agentId || cyno.name }}
             </p>
           </div>
         </div>
@@ -322,6 +325,10 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             <AgentSelect
               v-model="dlgAgentId"
               :agents="allAgents"
+              include-default
+              :default-label="cyno.name"
+              :default-img-src="cyno.iconUrl"
+              agents-group-label="Agents"
               placeholder="Select an agent..."
             />
           </div>

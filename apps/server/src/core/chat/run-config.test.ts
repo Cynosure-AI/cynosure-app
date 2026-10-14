@@ -6,7 +6,6 @@ import {
     buildInitialExecutionConfig,
     buildPersistedChatConfig,
     parseExecutionConfig,
-    resolveChatRunFlags,
     resolveMemoryFolderOverrides,
     resolveToolSelection,
 } from './run-config.js'
@@ -24,14 +23,6 @@ describe('chat run configuration', () => {
             selectedToolKeys: [],
             hasExplicitToolAllowlist: false,
         })
-    })
-
-    test('lets a request override the agent automatic-memory default', () => {
-        const agent = { autoMemory: true } as AgentData
-
-        expect(resolveChatRunFlags({ resolvedAgent: agent }).autoMemory).toBe(true)
-        expect(resolveChatRunFlags({ resolvedAgent: agent, autoMemory: false }).autoMemory).toBe(false)
-        expect(resolveChatRunFlags({ resolvedAgent: null }).autoMemory).toBe(true)
     })
 
     test('resolves unique, existing memory folders while preserving request order', () => {

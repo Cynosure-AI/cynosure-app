@@ -8,7 +8,8 @@ import BaseCard from "../shared/BaseCard.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import PromptSmartTagPicker from "../shared/PromptSmartTagPicker.vue";
 
-const props = defineProps<{ agent: AgentDefinition }>();
+/** `cyno` edits the default assistant: identity fields that only agents have are hidden. */
+const props = defineProps<{ agent: AgentDefinition; cyno?: boolean }>();
 const emit = defineEmits<{ update: [field: string, value: unknown] }>();
 
 const providerStore = useProviderStore();
@@ -68,8 +69,13 @@ onMounted(() =>
         @update="emit('update', 'iconUrl', $event)"
       >
         <template #description>
-          Custom avatar for this agent. Falls back to the provider icon if not
-          set.
+          <template v-if="cyno">
+            Custom avatar for {{ agent.name }}. Falls back to the app logo if not set.
+          </template>
+          <template v-else>
+            Custom avatar for this agent. Falls back to the provider icon if not
+            set.
+          </template>
         </template>
       </IconUpload>
 
@@ -85,7 +91,7 @@ onMounted(() =>
         >
       </div>
 
-      <div>
+      <div v-if="!cyno">
         <label class="block text-sm text-ink-secondary mb-1.5">Internal Name</label>
         <p class="text-xs text-ink-faint mb-2">
           Machine identifier used by the orchestrator to invoke this agent as a sub-agent (e.g. <code class="text-ink-secondary">web_researcher</code>). Auto-generated from the name if left empty.
@@ -101,7 +107,7 @@ onMounted(() =>
         >
       </div>
 
-      <div>
+      <div v-if="!cyno">
         <label class="block text-sm text-ink-secondary mb-1.5">Description</label>
         <textarea
           :value="agent.description"
@@ -116,7 +122,10 @@ onMounted(() =>
         />
       </div>
 
-      <div class="flex items-center justify-between gap-4 rounded-lg border border-theme-800 bg-theme-900/50 px-3 py-2">
+      <div
+        v-if="!cyno"
+        class="flex items-center justify-between gap-4 rounded-lg border border-theme-800 bg-theme-900/50 px-3 py-2"
+      >
         <span class="text-sm text-theme-300">
           Favorite this agent
         </span>
@@ -128,7 +137,10 @@ onMounted(() =>
           @update:model-value="emit('update', 'favorite', $event)"
         />
       </div>
-      <dl class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+      <dl
+        v-if="!cyno"
+        class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted"
+      >
         <div class="flex items-center gap-1">
           <dt>Created</dt>
           <dd class="text-ink-secondary">

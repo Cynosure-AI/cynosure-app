@@ -26,6 +26,9 @@ import {
 } from "../../utils/cron-helpers";
 import ToggleSwitch from "@/components/shared/ToggleSwitch.vue";
 import ModalDialog from "@/components/shared/ModalDialog.vue";
+import { useCynoStore } from '../../stores/cyno.store'
+
+const cyno = useCynoStore()
 
 const route = useRoute();
 const router = useRouter();
@@ -221,7 +224,8 @@ async function save() {
   try {
     await api.cronJobs.update(jobId.value, {
       name: cronName.value.trim(),
-      ...(job.value.agentId ? { agentId: cronAgentId.value } : {}),
+      // Jobs saved from a chat keep that chat's settings; others run as an agent or as Cyno ('').
+      ...(!job.value.executionConfig ? { agentId: cronAgentId.value } : {}),
       schedule: expr.trim(),
       prompt: cronPrompt.value,
       enabled: cronEnabled.value,
@@ -330,11 +334,11 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-sky-500/20 to-indigo-500/20 transition-shadow hover:ring-2 hover:ring-accent-500/60"
             :title="`Open ${job.agentName} agent details`"
             :aria-label="`Open ${job.agentName} agent details`"
-            @click="router.push(`/agents/${job.agentId}`)"
+            @click="router.push(job.agentId ? `/agents/${job.agentId}` : { name: 'cyno' })"
           >
             <img
-              v-if="job.agentIconUrl"
-              :src="job.agentIconUrl"
+              v-if="job.agentIconUrl || !job.agentId"
+              :src="job.agentIconUrl || cyno.iconUrl"
               alt=""
               class="h-full w-full object-cover"
             >
@@ -438,9 +442,13 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div>
               <label class="block text-xs text-ink-secondary mb-1.5">Agent</label>
               <AgentSelect
-                v-if="job.agentId"
+                v-if="!job.executionConfig"
                 v-model="cronAgentId"
                 :agents="allAgents"
+                include-default
+                :default-label="cyno.name"
+                :default-img-src="cyno.iconUrl"
+                agents-group-label="Agents"
                 placeholder="Select an agent…"
               />
               <div
@@ -451,7 +459,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                   icon="lucide:message-square"
                   class="h-4 w-4 text-accent-fg"
                 />
-                Free Chat configuration
+                Settings saved from the chat that created it
               </div>
             </div>
             <div>

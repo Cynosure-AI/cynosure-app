@@ -252,6 +252,40 @@ export interface ChatQueueRequest extends ChatSendRequest {
   delivery: ChatQueueDelivery
 }
 
+/**
+ * Cyno: the default assistant used for new chats, and (when no agent is
+ * chosen) for messaging channels and scheduled jobs. Stored server-side.
+ */
+export interface CynoProfile {
+  name: string
+  /** Image data URL, or null for the app logo. */
+  iconUrl: string | null
+  systemPrompt: string
+  /** Empty means the app's default provider and model. */
+  providerId: string
+  model: string
+  /** Selected tool keys; null means the default tools (MCP management and scheduling). */
+  tools: string[] | null
+  /** Selected memory folder ids; null means All Memory, an empty list means memory off. */
+  memoryFolders: string[] | null
+  subAgents: SubAgentAssignmentDto[]
+  thinkingEnabled: boolean
+  reasoningEffort: ReasoningEffort
+  autoToolRouting: boolean
+  autoMemory: boolean
+  dreamingEnabled: boolean
+  updatedAt: number
+}
+
+/** The Cyno profile as the API returns it, with its defaults resolved. */
+export interface CynoProfileView extends CynoProfile {
+  /** What unset fields mean right now: the default tool keys and the All Memory folder. */
+  effective: {
+    tools: string[]
+    memoryFolders: string[]
+  }
+}
+
 export interface ConversationExecutionConfig {
   allowedTools: string[]
   subAgents: SubAgentAssignmentDto[]
@@ -296,7 +330,7 @@ export interface ProjectDto {
   description: string
   /** User-authored instructions added to every run in the project. */
   instructions: string
-  /** Living summary of goal, state, decisions, and open questions, maintained by agents. */
+  /** Living summary of goal, state, decisions, and next steps, maintained by agents. */
   brief: string
   briefUpdatedAt: number | null
   /** Optional working directory; file tools may access it and the shell starts there. */

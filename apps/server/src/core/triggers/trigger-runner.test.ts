@@ -8,7 +8,7 @@ import { planExecution } from '../agent/pre-execution/execution-planner.js'
 
 vi.mock('../../db/database.js', () => ({ getDb: vi.fn() }))
 vi.mock('../gateway/gateway.js', () => ({ getGateway: () => ({}) }))
-vi.mock('../tools/tool-registry.js', () => ({ getToolRegistry: () => ({}) }))
+vi.mock('../tools/tool-registry.js', () => ({ getToolRegistry: () => ({ hasKey: () => true }) }))
 vi.mock('../agent/pre-execution/execution-planner.js', () => ({
     planExecution: vi.fn().mockResolvedValue({
         messages: [], tools: [], providerId: 'provider', responseProvider: 'provider', responseModel: 'model',
@@ -64,7 +64,7 @@ test('publishes a cron final reply with its saved ID and final round stream for 
 })
 
 
-test('the Free Chat configuration is visible when a cron chat is created, even if planning fails', async () => {
+test('the saved chat settings of a job are visible when a cron chat is created, even if planning fails', async () => {
     const db = new Database(':memory:')
     applySchemaMigrations(db)
     vi.mocked(getDb).mockReturnValue(db)

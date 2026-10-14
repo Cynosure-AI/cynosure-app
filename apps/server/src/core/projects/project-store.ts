@@ -225,8 +225,8 @@ export function updateProject(id: string, input: UpdateProjectInput, context: Pr
             if (existing.brief) recordBriefRevision(id, existing.brief, { source: 'initial' }, existing.brief_updated_at ?? existing.updated_at)
             recordBriefRevision(id, brief, context, now)
         }
-        db.prepare(`UPDATE projects SET name = ?, description = ?, instructions = ?, brief = ?, brief_updated_at = ?, root_path = ?, memory_folder_id = ?,
-            default_agent_id = ?, color = ?, icon = ?, archived = ?, sort_order = ?, updated_at = ? WHERE id = ?`).run(
+        db.prepare(`UPDATE projects SET name = ?, description = ?, instructions = ?, brief = ?, brief_updated_at = ?,
+            root_path = ?, memory_folder_id = ?, default_agent_id = ?, color = ?, icon = ?, archived = ?, sort_order = ?, updated_at = ? WHERE id = ?`).run(
             input.name !== undefined ? requireName(input.name) : existing.name,
             input.description !== undefined ? input.description.trim() : existing.description,
             input.instructions ?? existing.instructions,
