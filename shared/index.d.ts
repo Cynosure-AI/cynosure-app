@@ -333,8 +333,6 @@ export interface ProjectDto {
   /** Living summary of goal, state, decisions, and next steps, maintained by agents. */
   brief: string
   briefUpdatedAt: number | null
-  /** Whether unattended runs (scheduled jobs, webhooks) may rewrite the brief. */
-  scheduledBriefUpdates: boolean
   /** Optional working directory; file tools may access it and the shell starts there. */
   rootPath: string
   memoryFolderId: string | null

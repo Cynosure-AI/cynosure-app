@@ -66,7 +66,6 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
         thinkingEnabled,
         reasoningEffort,
         inlineAttachmentTextLimit,
-        unattended,
     } = run
     const autoToolRouting = run.autoToolRouting ?? defaultAutoModes(resolvedAgent).autoToolRouting
     const autoMemory = run.autoMemory ?? defaultAutoModes(resolvedAgent).autoMemory
@@ -125,7 +124,6 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
         scheduleSelectedToolKeys: selectedToolKeys,
         thinkingEnabled,
         reasoningEffort,
-        unattended,
     })
 
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id

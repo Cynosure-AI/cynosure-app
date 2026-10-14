@@ -219,22 +219,6 @@ describe('project brief rules', () => {
         expect(missingBriefSections('# goal\n### state\n## Decisions\n## Next steps')).toEqual([])
         expect(missingBriefSections('# Goal\nState: fine\n## Decisions\n## Nextcloud')).toEqual(['State', 'Next'])
     })
-
-    test('unattended runs leave the brief alone unless the project allows it', () => {
-        const project = createProject({ name: 'Scheduled', createMemoryFolder: false })
-        insertConversation('cron-run', project.id)
-
-        const unattended = resolveProjectExecutionContext('cron-run', undefined, undefined, { unattended: true })!
-        expect(unattended.tools.map((tool) => tool.name)).not.toContain('project_brief_update')
-        expect(unattended.systemPrompt).toContain('This is an unattended run')
-        expect(unattended.stateMessage?.content).not.toContain('project_brief_update')
-        expect(resolveProjectExecutionContext('cron-run')!.tools.map((tool) => tool.name)).toContain('project_brief_update')
-
-        expect(updateProject(project.id, { scheduledBriefUpdates: true })?.scheduledBriefUpdates).toBe(true)
-        const allowed = resolveProjectExecutionContext('cron-run', undefined, undefined, { unattended: true })!
-        expect(allowed.tools.map((tool) => tool.name)).toContain('project_brief_update')
-        expect(allowed.systemPrompt).not.toContain('This is an unattended run')
-    })
 })
 
 describe('project lead', () => {

@@ -18,7 +18,6 @@ interface ProjectRow {
     instructions: string
     brief: string
     brief_updated_at: number | null
-    scheduled_brief_updates: number
     root_path: string
     memory_folder_id: string | null
     default_agent_id: string | null
@@ -65,7 +64,6 @@ export interface CreateProjectInput {
 
 export type UpdateProjectInput = Partial<Omit<CreateProjectInput, 'createMemoryFolder'>> & {
     archived?: boolean
-    scheduledBriefUpdates?: boolean
     sortOrder?: number
     /** The brief the writer last saw; a brief change is rejected when the stored brief differs. */
     expectedBrief?: string
@@ -101,7 +99,6 @@ function rowToProject(row: ProjectRow): ProjectDto {
         instructions: row.instructions,
         brief: row.brief,
         briefUpdatedAt: row.brief_updated_at,
-        scheduledBriefUpdates: row.scheduled_brief_updates === 1,
         rootPath: row.root_path,
         memoryFolderId: row.memory_folder_id,
         defaultAgentId: row.default_agent_id,
@@ -228,14 +225,13 @@ export function updateProject(id: string, input: UpdateProjectInput, context: Pr
             if (existing.brief) recordBriefRevision(id, existing.brief, { source: 'initial' }, existing.brief_updated_at ?? existing.updated_at)
             recordBriefRevision(id, brief, context, now)
         }
-        db.prepare(`UPDATE projects SET name = ?, description = ?, instructions = ?, brief = ?, brief_updated_at = ?, scheduled_brief_updates = ?,
+        db.prepare(`UPDATE projects SET name = ?, description = ?, instructions = ?, brief = ?, brief_updated_at = ?,
             root_path = ?, memory_folder_id = ?, default_agent_id = ?, color = ?, icon = ?, archived = ?, sort_order = ?, updated_at = ? WHERE id = ?`).run(
             input.name !== undefined ? requireName(input.name) : existing.name,
             input.description !== undefined ? input.description.trim() : existing.description,
             input.instructions ?? existing.instructions,
             brief,
             briefChanged ? now : existing.brief_updated_at,
-            input.scheduledBriefUpdates !== undefined ? (input.scheduledBriefUpdates ? 1 : 0) : existing.scheduled_brief_updates,
             input.rootPath !== undefined ? normalizeProjectRootPath(input.rootPath) : existing.root_path,
             input.memoryFolderId !== undefined ? assertMemoryFolder(input.memoryFolderId) : existing.memory_folder_id,
             input.defaultAgentId !== undefined ? assertAgent(input.defaultAgentId) : existing.default_agent_id,

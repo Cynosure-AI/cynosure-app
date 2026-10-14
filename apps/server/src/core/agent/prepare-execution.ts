@@ -76,8 +76,6 @@ export interface PrepareExecutionInput {
     subAgentAssignments?: SubAgentAssignment[]
     /** Parent abort signal passed to sub-agent executors */
     signal?: AbortSignal
-    /** Nobody is watching this run (scheduled job, webhook); sub-agents inherit it. */
-    unattended?: boolean
 
     // ── Cyno (no agent) overrides ──
 
@@ -133,7 +131,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         rawInput.broadcast,
         isCyno(rawInput.preset) ? undefined : rawInput.preset.id,
         // Cyno (no agent) leads the projects it works in; specialist agents work on their part.
-        { unattended: rawInput.unattended, lead: isCyno(rawInput.preset) },
+        { lead: isCyno(rawInput.preset) },
     )
     const input: PrepareExecutionInput = project
         ? {

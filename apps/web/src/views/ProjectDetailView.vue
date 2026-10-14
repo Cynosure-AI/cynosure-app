@@ -10,7 +10,6 @@ import ProjectTimeline from '../components/project/ProjectTimeline.vue'
 import ProjectIcon from '../components/project/ProjectIcon.vue'
 import ProjectForm, { type ProjectDraft } from '../components/project/ProjectForm.vue'
 import RichContent from '../components/shared/RichContent.vue'
-import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import { api, type ConversationRow } from '../api/client'
 import type { CronJob } from '../api/types'
 import { useProjectsStore } from '../stores/projects.store'
@@ -138,10 +137,6 @@ async function saveSettings(): Promise<void> {
     color: draft.color,
     icon: draft.icon,
   }))
-}
-
-async function setScheduledBriefUpdates(enabled: boolean): Promise<void> {
-  await guarded(() => projectsStore.update(projectId.value, { scheduledBriefUpdates: enabled }))
 }
 
 async function toggleArchived(): Promise<void> {
@@ -288,16 +283,6 @@ onMounted(async () => {
                   Updated {{ formatRelativeTime(project.briefUpdatedAt) }}.
                 </template>
               </p>
-              <div class="mt-2 flex items-center gap-2 text-xs text-ink-muted">
-                <ToggleSwitch
-                  :model-value="project.scheduledBriefUpdates"
-                  size="sm"
-                  label="Scheduled jobs may update the brief"
-                  :disabled="saving"
-                  @update:model-value="setScheduledBriefUpdates"
-                />
-                <span>Scheduled jobs may update it<template v-if="!project.scheduledBriefUpdates"> (off: they report results in their own chat)</template></span>
-              </div>
             </div>
             <div
               v-if="!editingBrief"

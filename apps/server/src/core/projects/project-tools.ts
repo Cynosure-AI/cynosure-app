@@ -183,8 +183,8 @@ export function makeProjectTaskTools(ctx: ProjectToolContext): ToolDefinition[] 
     ]
 }
 
-/** Project tools for a run; without `canUpdateBrief` the brief is read-only. */
-export function makeProjectTools(ctx: ProjectToolContext & { canUpdateBrief?: boolean }): ToolDefinition[] {
+/** Project tools for a run. */
+export function makeProjectTools(ctx: ProjectToolContext): ToolDefinition[] {
     if (!getProject(ctx.projectId)) return []
-    return ctx.canUpdateBrief === false ? makeProjectTaskTools(ctx) : [makeProjectBriefTool(ctx), ...makeProjectTaskTools(ctx)]
+    return [makeProjectBriefTool(ctx), ...makeProjectTaskTools(ctx)]
 }

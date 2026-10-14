@@ -15,7 +15,7 @@ import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-tool
 export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     | 'preset' | 'conversationId' | 'broadcast' | 'userQuery' | 'recentMessages' | 'usedToolNames'
     | 'preferredToolKeys' | 'routingToolKeys' | 'autoToolRouting' | 'autoMemory' | 'includeSubAgents'
-    | 'subAgentAssignments' | 'signal' | 'memoryFolderOverrides' | 'hydrationAgentId' | 'eventMeta' | 'unattended'> & {
+    | 'subAgentAssignments' | 'signal' | 'memoryFolderOverrides' | 'hydrationAgentId' | 'eventMeta'> & {
     toolRegistry: ToolRegistry
     gateway: LLMGateway
     /** Router provider and model used for toolset selection. */
@@ -125,7 +125,6 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
                 broadcast,
                 signal,
                 eventMeta,
-                unattended: input.unattended,
             }),
         ]
     }

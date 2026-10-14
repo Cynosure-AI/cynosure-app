@@ -39,8 +39,6 @@ interface SubAgentToolOptions {
     signal?: AbortSignal
     /** Root execution metadata propagated through delegated work. */
     eventMeta?: Record<string, unknown>
-    /** The parent run is unattended; delegated runs are too. */
-    unattended?: boolean
 }
 
 interface SubAgentSessionRow {
@@ -231,7 +229,6 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             memoryFolderOverrides: getAssignedMemoryFolders(agentData.id),
             eventMeta,
             signal: subAgentSignal,
-            unattended: options.unattended,
         })
         subAgentSignal.throwIfAborted()
         const gateway = getGateway()

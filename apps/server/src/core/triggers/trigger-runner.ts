@@ -102,7 +102,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             toolRegistry: getToolRegistry(),
             messages: [{ role: 'user', content: userContent }],
             userText: userContent,
-            run: { ...settings.plan, systemPromptSuffix, unattended: true },
+            run: { ...settings.plan, systemPromptSuffix },
         })
         planningRunId = planned.planningRunId
 
