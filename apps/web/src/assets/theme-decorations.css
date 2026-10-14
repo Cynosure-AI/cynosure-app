@@ -155,18 +155,46 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(135deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) top left / 12px 12px no-repeat,
+    linear-gradient(
+        135deg,
+        transparent 7.07px,
+        var(--bw-red) 7.07px 8.49px,
+        transparent 8.49px
+      )
+      top left / 12px 12px no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) 10px 0 / 16px 2px no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) 0 10px / 2px 16px no-repeat,
-    linear-gradient(225deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) top right / 12px 12px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 0 / 16px 2px no-repeat,
+    linear-gradient(
+        225deg,
+        transparent 7.07px,
+        var(--bw-red) 7.07px 8.49px,
+        transparent 8.49px
+      )
+      top right / 12px 12px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 0 / 16px 2px
+      no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) 100% 10px / 2px 16px no-repeat,
-    linear-gradient(45deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) bottom left / 12px 12px no-repeat,
+    linear-gradient(
+        45deg,
+        transparent 7.07px,
+        var(--bw-red) 7.07px 8.49px,
+        transparent 8.49px
+      )
+      bottom left / 12px 12px no-repeat,
     linear-gradient(var(--bw-red), var(--bw-red)) 10px 100% / 16px 2px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) 0 calc(100% - 10px) / 2px 16px no-repeat,
-    linear-gradient(315deg, transparent 7.07px, var(--bw-red) 7.07px 8.49px, transparent 8.49px) bottom right / 12px 12px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 100% / 16px 2px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) 100% calc(100% - 10px) / 2px 16px no-repeat;
+    linear-gradient(var(--bw-red), var(--bw-red)) 0 calc(100% - 10px) / 2px 16px
+      no-repeat,
+    linear-gradient(
+        315deg,
+        transparent 7.07px,
+        var(--bw-red) 7.07px 8.49px,
+        transparent 8.49px
+      )
+      bottom right / 12px 12px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) calc(100% - 10px) 100% / 16px
+      2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) 100% calc(100% - 10px) / 2px
+      16px no-repeat;
   pointer-events: none;
   z-index: 50;
   filter: drop-shadow(0 0 4px rgba(255, 46, 59, 0.6));
@@ -200,9 +228,12 @@
   border-color: var(--bw-line);
   background:
     linear-gradient(var(--bw-red), var(--bw-red)) top left / 32px 2px no-repeat,
-    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 32px 2px no-repeat,
+    linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 32px 2px
+      no-repeat,
     var(--bw-void);
-  box-shadow: 0 0 24px var(--bw-glow), 0 24px 80px rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 0 24px var(--bw-glow),
+    0 24px 80px rgba(0, 0, 0, 0.7);
 }
 
 [data-theme="blackwall"] .notification-popover-header,
@@ -226,7 +257,9 @@
 }
 
 [data-theme="blackwall"] .planning-task-toggle[aria-expanded="true"] {
-  box-shadow: inset 0 0 0 1px var(--bw-line), 0 0 12px var(--bw-glow);
+  box-shadow:
+    inset 0 0 0 1px var(--bw-line),
+    0 0 12px var(--bw-glow);
 }
 
 [data-theme="blackwall"] .planning-task-count {
@@ -260,12 +293,16 @@
 [data-theme="blackwall"] .palette-scope[aria-pressed="true"] {
   color: var(--color-accent-300);
   background: var(--theme-action-gradient);
-  box-shadow: inset 0 0 0 1px var(--bw-red), inset 0 0 12px var(--bw-glow);
+  box-shadow:
+    inset 0 0 0 1px var(--bw-red),
+    inset 0 0 12px var(--bw-glow);
 }
 
 [data-theme="blackwall"] .palette-option[aria-selected="true"] {
   background: var(--theme-nav-active-background);
-  box-shadow: var(--theme-nav-active-shadow), inset 0 0 0 1px var(--bw-line);
+  box-shadow:
+    var(--theme-nav-active-shadow),
+    inset 0 0 0 1px var(--bw-line);
   clip-path: var(--theme-nav-active-clip);
 }
 
@@ -274,7 +311,10 @@
   box-shadow: inset 0 0 0 1px var(--bw-line-faint);
 }
 
-[data-theme="blackwall"] .palette-option[aria-selected="true"] .palette-option-icon svg {
+[data-theme="blackwall"]
+  .palette-option[aria-selected="true"]
+  .palette-option-icon
+  svg {
   color: var(--color-accent-300);
 }
 
@@ -343,10 +383,10 @@
   background:
     /* Keeps the reading area dark so the wall never sits behind text. */
     radial-gradient(
-        ellipse 52% 46% at 50% 50%,
-        var(--bw-void) 55%,
-        transparent 100%
-      ),
+      ellipse 52% 46% at 50% 50%,
+      var(--bw-void) 55%,
+      transparent 100%
+    ),
     var(--bw-wall);
   color: var(--bw-red);
   font-size: 10px;
@@ -373,7 +413,7 @@
   pointer-events: none;
 }
 [data-theme="blackwall"] .chat-column--empty::after {
-  content: "PEOPLE\A DATA\A PATTERNS\A ANALYSIS\A INTELLIGENCE" / "";
+  content: "INSIGHT\A DATA\A PATTERNS\A ANALYSIS\A INTELLIGENCE" / "";
   position: absolute;
   top: 2rem;
   right: 2.5rem;
