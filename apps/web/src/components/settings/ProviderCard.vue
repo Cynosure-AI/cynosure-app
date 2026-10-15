@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { LLMProviderConfig } from '../../api/types'
 import { useProviderLogos } from '../../composables/useProviderLogos'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 defineProps<{
   provider: LLMProviderConfig
   isLastUsed: boolean
   isTesting: boolean
+  isTogglingEnabled?: boolean
   testStatus?: boolean
   testError?: string
 }>()
@@ -14,6 +16,7 @@ const emit = defineEmits<{
   test: [providerId: string]
   edit: [provider: LLMProviderConfig]
   remove: [providerId: string]
+  'update:enabled': [providerId: string, enabled: boolean]
 }>()
 
 const { providerLogos } = useProviderLogos()
@@ -38,7 +41,10 @@ function getProviderIcon(type: string): string {
 
 <template>
   <div class="bg-theme-800 border border-theme-700 rounded-xl p-4 flex items-center gap-4">
-    <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-theme-900 p-1.5">
+    <div
+      class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-theme-900 p-1.5 transition-opacity"
+      :class="{ 'opacity-40': provider.enabled === false }"
+    >
       <img
         v-if="providerLogos[provider.type]"
         :src="providerLogos[provider.type].dark"
@@ -59,9 +65,17 @@ function getProviderIcon(type: string): string {
 
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2">
-        <span class="font-medium text-theme-200">{{ provider.name }}</span>
         <span
-          v-if="isLastUsed"
+          class="font-medium"
+          :class="provider.enabled === false ? 'text-ink-muted' : 'text-theme-200'"
+        >{{ provider.name }}</span>
+        <span
+          v-if="provider.enabled === false"
+          class="text-[10px] px-1.5 py-0.5 rounded-full bg-theme-700 text-ink-muted font-medium"
+          title="Its models are hidden from model selectors. Anything already using it keeps working."
+        >Disabled</span>
+        <span
+          v-else-if="isLastUsed"
           class="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-500/20 text-accent-fg font-medium"
         >Last used</span>
       </div>
@@ -78,6 +92,13 @@ function getProviderIcon(type: string): string {
     </div>
 
     <div class="flex items-center gap-2">
+      <ToggleSwitch
+        :model-value="provider.enabled !== false"
+        size="sm"
+        :disabled="isTogglingEnabled"
+        :label="`${provider.enabled === false ? 'Enable' : 'Disable'} ${provider.name} in model selectors`"
+        @update:model-value="emit('update:enabled', provider.id, $event)"
+      />
       <button
         type="button"
         :disabled="isTesting"

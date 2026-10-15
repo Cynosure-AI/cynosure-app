@@ -15,6 +15,11 @@ export const useProviderStore = defineStore('provider', () => {
     providers.value.find((p) => p.id === lastUsedProviderId.value)
   )
 
+  /** Providers whose models are offered in selectors. Disabled ones stay configured. */
+  const enabledProviders = computed(() =>
+    providers.value.filter((p) => p.enabled !== false)
+  )
+
   async function loadProviders(): Promise<void> {
     try {
       await api.provider.loadSaved()
@@ -42,6 +47,11 @@ export const useProviderStore = defineStore('provider', () => {
     }
   }
 
+  async function setProviderEnabled(id: string, enabled: boolean): Promise<void> {
+    await api.provider.setEnabled(id, enabled)
+    providers.value = providers.value.map((p) => (p.id === id ? { ...p, enabled } : p))
+  }
+
   async function setLastUsed(id: string): Promise<void> {
     await api.provider.setLastUsed(id)
     lastUsedProviderId.value = id
@@ -53,12 +63,12 @@ export const useProviderStore = defineStore('provider', () => {
     return result
   }
 
-  async function listModels(id: string, type?: ModelListType): Promise<string[]> {
-    return api.provider.listModels(id, type)
+  async function listModels(id: string, type?: ModelListType, refresh = false): Promise<string[]> {
+    return api.provider.listModels(id, type, refresh)
   }
 
-  async function listModelItems(id: string, type?: ModelListType): Promise<ModelListItem[]> {
-    return api.provider.listModelItems(id, type)
+  async function listModelItems(id: string, type?: ModelListType, refresh = false): Promise<ModelListItem[]> {
+    return api.provider.listModelItems(id, type, refresh)
   }
 
   return {
@@ -67,9 +77,11 @@ export const useProviderStore = defineStore('provider', () => {
     lastUsedProviderId,
     connectionStatus,
     lastUsedProvider,
+    enabledProviders,
     loadProviders,
     addProvider,
     removeProvider,
+    setProviderEnabled,
     setLastUsed,
     testConnection,
     listModels,

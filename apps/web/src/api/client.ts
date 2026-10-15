@@ -29,6 +29,15 @@ export interface ConversationRow {
   created_at: number
   updated_at: number
   last_user_message: string | null
+  /** When a pending schedule_wait resumes this conversation. */
+  wait_until?: number | null
+}
+
+/** A schedule_wait that will resume a conversation. */
+export interface PendingWait {
+  jobId: string
+  resumesAt: number
+  note: string
 }
 
 export type ProjectInput = Partial<Pick<ProjectDto, 'name' | 'description' | 'instructions' | 'brief' | 'rootPath' | 'memoryFolderId' | 'defaultAgentId' | 'color' | 'icon' | 'archived' | 'sortOrder'>> & {
@@ -80,18 +89,24 @@ export const api = {
     add: (config: LLMProviderConfig) => post<{ id: string }>('/api/providers', config).then((r) => r.id),
     remove: (id: string) => del<void>(`/api/providers/${encodeURIComponent(id)}`),
     setLastUsed: (id: string) => put<void>('/api/providers/active', { id }),
+    setEnabled: (id: string, enabled: boolean) => put<void>(`/api/providers/${encodeURIComponent(id)}/enabled`, { enabled }),
     getLastUsed: () => get<{ id: string }>('/api/providers/active').then((r) => r.id),
     test: (id: string) => post<{ success: boolean; error?: string }>(`/api/providers/${encodeURIComponent(id)}/test`),
     /** List the models of a provider config that has not been saved yet. */
     previewModels: (config: Pick<LLMProviderConfig, 'type' | 'baseUrl' | 'apiKey'>, types: ModelListType[]) =>
       post<{ models: string[] }>('/api/providers/models/preview', { config, types }).then((r) => r.models),
-    listModels: (id: string, type?: ModelListType) => {
-      const params = type ? `?type=${type}` : ''
-      return get<string[]>(`/api/providers/${encodeURIComponent(id)}/models${params}`)
+    /** `refresh` bypasses the server's model list cache. */
+    listModels: (id: string, type?: ModelListType, refresh = false) => {
+      const params = new URLSearchParams()
+      if (type) params.set('type', type)
+      if (refresh) params.set('refresh', 'true')
+      const query = params.toString() ? `?${params}` : ''
+      return get<string[]>(`/api/providers/${encodeURIComponent(id)}/models${query}`)
     },
-    listModelItems: (id: string, type?: ModelListType) => {
+    listModelItems: (id: string, type?: ModelListType, refresh = false) => {
       const params = new URLSearchParams({ details: 'true' })
       if (type) params.set('type', type)
+      if (refresh) params.set('refresh', 'true')
       return get<ModelListItem[]>(`/api/providers/${encodeURIComponent(id)}/models?${params}`)
     },
     listVideoModels: (id: string) =>
@@ -171,6 +186,8 @@ export const api = {
       get<PlanningState | null>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/planning-state`
       ),
+    getPendingWait: (conversationId: string) =>
+      get<PendingWait | null>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/wait`),
     deleteConversation: (conversationId: string) =>
       del<void>(`/api/chat/conversations/${encodeURIComponent(conversationId)}`),
     deleteAllConversations: (agentId?: string | null) => {
@@ -238,6 +255,8 @@ export const api = {
     onChannelConversationState: (
       cb: (data: { conversationId: string; agentId: string; running: boolean }) => void
     ) => onWsEvent('channel:conversation-state', cb as WsHandler),
+    /** A wait was scheduled or ended somewhere; refetch to see which chats are waiting. */
+    onWaitsChanged: (cb: () => void) => onWsEvent('cron:waits-changed', cb),
     getPostActions: (conversationId: string) =>
       get<{ actions: string[]; quickResponses: { messageId: string | null; suggestions: string[] } }>(`/api/chat/post-actions?conversationId=${encodeURIComponent(conversationId)}`),
     cancelPostActions: (conversationId: string) =>
@@ -290,7 +309,7 @@ export const api = {
   memory: {
     getLimits: () => get<RuntimeLimits>('/api/memory/limits'),
     getDreamConfig: () => get<DreamConfig>('/api/memory/dream/config'),
-    configureDream: (config: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
+    configureDream: (config: Pick<DreamConfig, 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
     cancelDreamRun: (id: string) => post<{ success: boolean }>(`/api/memory/dream/runs/${encodeURIComponent(id)}/cancel`, {}),
     onDreamUpdated: (cb: (data: { id: string; status: string }) => void) => onWsEvent('memory:dream-updated', cb as WsHandler),
     search: (query: string, topK?: number, folderId?: string) =>
@@ -513,6 +532,9 @@ export const api = {
       put<ProjectTaskDto>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, input),
     removeTask: (id: string, taskId: string) =>
       del<{ success: boolean }>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`),
+    /** Todo lists of the runs that worked on the task, newest first. */
+    taskWorkLog: (id: string, taskId: string) =>
+      get<PlanningState[]>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/work-log`),
     timeline: (id: string, before?: number) =>
       get<ProjectTimelineEntry[]>(`/api/projects/${encodeURIComponent(id)}/timeline?limit=50${before ? `&before=${before}` : ''}`),
     getBriefRevision: (id: string, revisionId: string) =>

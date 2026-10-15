@@ -31,7 +31,7 @@
             Set up memory later
           </option>
           <option
-            v-for="provider in providerStore.providers"
+            v-for="provider in providerStore.enabledProviders"
             :key="provider.id"
             :value="provider.id"
           >
@@ -244,7 +244,7 @@ function onEmbeddingModelChange() {
 }
 
 function applyDefaultEmbeddingConfig() {
-  const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
+  const providerId = providerStore.lastUsedProviderId || providerStore.enabledProviders[0]?.id || ''
   if (!providerId) return
   embProviderId.value = providerId
   embDimensions.value = 0

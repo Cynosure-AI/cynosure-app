@@ -6,6 +6,7 @@ import { useAgentStore, type ToolInfo, type ToolNamespace } from '../stores/agen
 import DataTable, { type Column } from '../components/shared/DataTable.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ToolBehaviorBadges from '../components/shared/ToolBehaviorBadges.vue'
+import ApprovalModeControl, { type ApprovalMode } from '../components/shared/ApprovalModeControl.vue'
 import { isBuiltInNamespaceId } from '../utils/internal-tools'
 import { toolInjectionCondition } from '../utils/tool-injection-condition'
 import { useMcpServers } from '../composables/useMcpServers'
@@ -35,23 +36,27 @@ interface ToolParamSchema {
   required?: string[]
 }
 
-type ApprovalState = 'all' | 'defaults' | 'none' | 'partial'
+type GroupMode = ApprovalMode | 'mixed'
+type StateFilter = 'all' | 'allowed' | 'ask' | 'custom'
 
 const agentStore = useAgentStore()
 const { servers, loadServers } = useMcpServers()
 const tools = ref<ToolInfo[]>([])
 const brokenIcons = ref<Set<string>>(new Set())
 const filterText = ref('')
+const stateFilter = ref<StateFilter>('all')
 const expandedGroupIds = ref<Set<string>>(new Set())
 const loading = ref(true)
-const defaultApprovalNames = ref<Set<string>>(new Set())
-const debouncedSearchExpansion = ref(false)
+const pending = ref(false)
+const errorMessage = ref('')
+let expandedBeforeNarrowing: Set<string> | null = null
 let searchExpansionTimer: number | undefined
 
 const columns: Column<NamespaceGroup>[] = [
   {
     key: 'icon',
     label: '',
+    ariaLabel: 'Icon',
     width: '40px',
   },
   {
@@ -63,15 +68,22 @@ const columns: Column<NamespaceGroup>[] = [
   },
   {
     key: 'state',
-    label: 'Selected State',
-    width: '190px',
+    label: 'Approval',
+    width: '210px',
     class: 'text-right',
     sortable: true,
-    sortValue: (group) => namespaceApprovalSort(group),
+    sortValue: (group) => groupModeSort(group),
   },
 ]
 
-const filteredTools = computed(() => {
+const stateFilters: { value: StateFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'allowed', label: 'Allowed' },
+  { value: 'ask', label: 'Asks' },
+  { value: 'custom', label: 'Customized' },
+]
+
+const searchedTools = computed(() => {
   const query = filterText.value.trim().toLowerCase()
   if (!query) return tools.value
 
@@ -83,16 +95,29 @@ const filteredTools = computed(() => {
   )
 })
 
+const stateCounts = computed<Record<StateFilter, number>>(() => ({
+  all: searchedTools.value.length,
+  allowed: searchedTools.value.filter((tool) => matchesState(tool, 'allowed')).length,
+  ask: searchedTools.value.filter((tool) => matchesState(tool, 'ask')).length,
+  custom: searchedTools.value.filter((tool) => matchesState(tool, 'custom')).length,
+}))
+
+const filteredTools = computed(() =>
+  searchedTools.value.filter((tool) => matchesState(tool, stateFilter.value))
+)
+
+const isNarrowed = computed(() => filterText.value.trim() !== '' || stateFilter.value !== 'all')
+
 const groupedTools = computed<NamespaceGroup[]>(() => {
   const groups = new Map<string, NamespaceGroup>()
 
   for (const tool of filteredTools.value) {
-    const namespace = normalizeNamespace(tool.namespace)
+    const namespace = tool.namespace
     if (!groups.has(namespace.id)) {
       groups.set(namespace.id, {
         id: namespace.id,
         namespace,
-        description: namespaceDescription(namespace, tool),
+        description: namespaceDescription(namespace),
         tools: [],
       })
     }
@@ -111,17 +136,36 @@ const groupedTools = computed<NamespaceGroup[]>(() => {
     })
 })
 
-const autoApprovedCount = computed(() =>
-  tools.value.filter((tool) => isAutoApproved(approvalName(tool))).length
+const allExpanded = computed(() =>
+  groupedTools.value.length > 0 && groupedTools.value.every((group) => expandedGroupIds.value.has(group.id))
 )
 
-function normalizeNamespace(namespace: ToolNamespace): ToolNamespace {
-  return namespace
+const bulkScopeLabel = computed(() =>
+  isNarrowed.value
+    ? `${filteredTools.value.length} shown tool${filteredTools.value.length === 1 ? '' : 's'}`
+    : `all ${tools.value.length} tools`
+)
+
+function matchesState(tool: ToolInfo, filter: StateFilter): boolean {
+  if (filter === 'allowed') return tool.autoApprove
+  if (filter === 'ask') return !tool.autoApprove
+  if (filter === 'custom') return !tool.usesDefaultApproval
+  return true
 }
 
-function namespaceDescription(namespace: ToolNamespace, firstTool: ToolInfo): string {
-  if (isBuiltInNamespaceId(namespace.id)) return `Cynosure ${namespace.label.toLowerCase()} tools.`
-  return displayDescription(firstTool)
+function namespaceDescription(namespace: ToolNamespace): string {
+  if (namespace.id.startsWith('mcp:')) {
+    const server = servers.value.find((entry) => entry.id === namespace.id.slice(4))
+    const description = server?.serverInfo?.description || server?.description
+    if (description) return description
+  }
+  return namespace.description ?? ''
+}
+
+function toolNamePreview(group: NamespaceGroup): string {
+  const names = group.tools.map(displayName)
+  const shown = names.slice(0, 4).join(', ')
+  return names.length > 4 ? `${shown} +${names.length - 4} more` : shown
 }
 
 function displayName(tool: ToolInfo): string {
@@ -137,41 +181,22 @@ function approvalName(tool: ToolInfo): string {
   return tool.executionName
 }
 
-function isAutoApproved(name: string): boolean {
-  return agentStore.isToolAutoApproved(name)
+function toolMode(tool: ToolInfo): ApprovalMode {
+  if (tool.usesDefaultApproval) return 'default'
+  return tool.autoApprove ? 'allow' : 'ask'
 }
 
-function toolApprovalLabel(tool: ToolInfo): string {
-  if (defaultApprovalNames.value.has(approvalName(tool))) return 'auto'
-  return isAutoApproved(approvalName(tool)) ? 'allow' : 'ask'
+function groupMode(group: NamespaceGroup): GroupMode {
+  const first = toolMode(group.tools[0])
+  return group.tools.every((tool) => toolMode(tool) === first) ? first : 'mixed'
 }
 
-function namespaceAutoApprovedCount(group: NamespaceGroup): number {
-  return group.tools.filter((tool) => isAutoApproved(approvalName(tool))).length
+function groupAllowedCount(group: NamespaceGroup): number {
+  return group.tools.filter((tool) => tool.autoApprove).length
 }
 
-function namespaceApprovalState(group: NamespaceGroup): ApprovalState {
-  if (group.tools.every((tool) => defaultApprovalNames.value.has(approvalName(tool)))) return 'defaults'
-  const autoCount = namespaceAutoApprovedCount(group)
-  if (autoCount === 0) return 'none'
-  if (autoCount === group.tools.length) return 'all'
-  return 'partial'
-}
-
-function namespaceApprovalSort(group: NamespaceGroup): number {
-  const state = namespaceApprovalState(group)
-  if (state === 'all') return 3
-  if (state === 'defaults') return 2
-  if (state === 'partial') return 1
-  return 0
-}
-
-function namespaceApprovalLabel(group: NamespaceGroup): string {
-  const state = namespaceApprovalState(group)
-  if (state === 'all') return 'all allow'
-  if (state === 'defaults') return 'default'
-  if (state === 'none') return 'all ask'
-  return 'mixed'
+function groupModeSort(group: NamespaceGroup): number {
+  return groupAllowedCount(group) / group.tools.length
 }
 
 function namespaceIconUrl(namespaceId: string): string | null {
@@ -181,20 +206,6 @@ function namespaceIconUrl(namespaceId: string): string | null {
 
 function markIconBroken(namespaceId: string): void {
   brokenIcons.value = new Set([...brokenIcons.value, namespaceId])
-}
-
-function stateIcon(state: ApprovalState): string {
-  if (state === 'all') return 'lucide:shield-check'
-  if (state === 'defaults') return 'lucide:shield'
-  if (state === 'none') return 'lucide:shield-alert'
-  return 'lucide:shield-question'
-}
-
-function stateClass(state: ApprovalState): string {
-  if (state === 'all') return 'bg-green-500/15 text-status-green hover:bg-green-500/25'
-  if (state === 'defaults') return 'bg-sky-500/15 text-status-info hover:bg-sky-500/25'
-  if (state === 'none') return 'bg-amber-500/10 text-status-warning hover:bg-amber-500/20'
-  return 'bg-accent-500/15 text-accent-fg hover:bg-accent-500/25'
 }
 
 function toolParams(tool: ToolInfo): ToolParam[] {
@@ -237,7 +248,7 @@ function paramDescription(param: ToolParam): string | undefined {
 }
 
 function isExpanded(groupId: string): boolean {
-  return debouncedSearchExpansion.value || expandedGroupIds.value.has(groupId)
+  return expandedGroupIds.value.has(groupId)
 }
 
 function toggleExpanded(group: NamespaceGroup): void {
@@ -247,54 +258,84 @@ function toggleExpanded(group: NamespaceGroup): void {
   expandedGroupIds.value = next
 }
 
-async function toggleApproval(name: string): Promise<void> {
-  await agentStore.setToolApproval(name, !isAutoApproved(name))
-  await refreshPolicyTools()
+function toggleExpandAll(): void {
+  expandedGroupIds.value = allExpanded.value
+    ? new Set()
+    : new Set(groupedTools.value.map((group) => group.id))
 }
 
-async function setAllInGroup(group: NamespaceGroup, autoApprove: boolean): Promise<void> {
-  await setApprovals(group.tools, autoApprove)
+function clearFilters(): void {
+  filterText.value = ''
+  stateFilter.value = 'all'
 }
 
-async function setApprovals(policyTools: ToolInfo[], autoApprove: boolean): Promise<void> {
-  const approvals = Object.fromEntries(policyTools.map((tool) => [approvalName(tool), autoApprove]))
-  await api.agent.setToolApprovalsBulk(approvals)
-  await refreshPolicyTools()
-}
-
-async function restoreDefaults(policyTools: ToolInfo[]): Promise<void> {
-  const names = policyTools.map(approvalName)
-  await api.agent.resetToolApprovalsToDefaults(names)
-  await refreshPolicyTools()
-}
-
-async function toggleNamespaceApproval(group: NamespaceGroup): Promise<void> {
-  const state = namespaceApprovalState(group)
-  if (state === 'all' || state === 'partial') {
-    await restoreDefaults(group.tools)
-  } else if (state === 'defaults') {
-    await setAllInGroup(group, false)
-  } else {
-    await setAllInGroup(group, true)
+/** Expand matching groups while narrowing; restore the previous layout once filters are cleared. */
+function syncNarrowingExpansion(): void {
+  if (isNarrowed.value) {
+    expandedBeforeNarrowing ??= new Set(expandedGroupIds.value)
+    expandedGroupIds.value = new Set(groupedTools.value.map((group) => group.id))
+  } else if (expandedBeforeNarrowing) {
+    expandedGroupIds.value = expandedBeforeNarrowing
+    expandedBeforeNarrowing = null
   }
 }
 
-async function confirmAll(): Promise<void> {
-  await setApprovals(tools.value, true)
+async function runUpdate(update: () => Promise<unknown>): Promise<void> {
+  if (pending.value) return
+  pending.value = true
+  errorMessage.value = ''
+  try {
+    await update()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to update tool approvals.'
+  } finally {
+    try {
+      await refreshPolicyTools()
+    } catch {
+      // Keep the last known state; the update error (if any) is already shown.
+    }
+    pending.value = false
+  }
 }
 
-async function defaultsAll(): Promise<void> {
-  await restoreDefaults(tools.value)
+function applyMode(policyTools: ToolInfo[], mode: ApprovalMode): Promise<unknown> {
+  if (mode === 'default') return api.agent.resetToolApprovalsToDefaults(policyTools.map(approvalName))
+  const approvals = Object.fromEntries(policyTools.map((tool) => [approvalName(tool), mode === 'allow']))
+  return api.agent.setToolApprovalsBulk(approvals)
 }
 
-async function askAll(): Promise<void> {
-  await setApprovals(tools.value, false)
+function confirmAllow(policyTools: ToolInfo[]): boolean {
+  const risky = policyTools.filter((tool) => !tool.autoApprove && tool.annotations?.readOnlyHint !== true)
+  if (risky.length === 0) return true
+  const destructive = risky.filter((tool) => tool.annotations?.destructiveHint === true).length
+  const detail = destructive > 0 ? ` (${destructive} marked destructive)` : ''
+  return window.confirm(
+    `Allow ${risky.length} tool${risky.length === 1 ? '' : 's'} that may modify data${detail} to run without asking?`
+  )
+}
+
+function setToolMode(tool: ToolInfo, mode: ApprovalMode): void {
+  void runUpdate(() => applyMode([tool], mode))
+}
+
+function setGroupMode(group: NamespaceGroup, mode: ApprovalMode): void {
+  if (mode === 'allow' && group.tools.length > 1 && !confirmAllow(group.tools)) return
+  void runUpdate(() => applyMode(group.tools, mode))
+}
+
+function setVisibleMode(mode: ApprovalMode): void {
+  const policyTools = filteredTools.value
+  if (policyTools.length === 0) return
+  if (mode === 'allow' && !confirmAllow(policyTools)) return
+  void runUpdate(() => applyMode(policyTools, mode))
 }
 
 async function loadPolicyTools(): Promise<void> {
   loading.value = true
   try {
     await refreshPolicyTools()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to load tools.'
   } finally {
     loading.value = false
   }
@@ -304,21 +345,14 @@ async function refreshPolicyTools(): Promise<void> {
   const policyTools = await api.agent.listPolicyTools()
   tools.value = policyTools
   agentStore.syncToolApprovals(policyTools)
-  defaultApprovalNames.value = new Set(
-    policyTools.filter((tool) => tool.usesDefaultApproval).map(approvalName)
-  )
 }
 
-watch(filterText, (value) => {
+watch(filterText, () => {
   window.clearTimeout(searchExpansionTimer)
-  if (!value.trim()) {
-    debouncedSearchExpansion.value = false
-    return
-  }
-  searchExpansionTimer = window.setTimeout(() => {
-    debouncedSearchExpansion.value = true
-  }, 150)
+  searchExpansionTimer = window.setTimeout(syncNarrowingExpansion, 150)
 })
+
+watch(stateFilter, syncNarrowingExpansion)
 
 onBeforeUnmount(() => {
   window.clearTimeout(searchExpansionTimer)
@@ -339,7 +373,7 @@ onMounted(() => {
             Tools
           </h1>
           <p class="mt-1 max-w-3xl text-sm leading-relaxed text-ink-muted">
-            Set the approval behaviour for every registered MCP and built-in tool. <strong class="text-ink-secondary">Allow</strong> lets the agent call a tool without asking; <strong class="text-ink-secondary">Ask</strong> pauses for your approval; <strong class="text-ink-secondary">Default</strong> follows each tool's behavior annotations.
+            Set the approval behaviour for every registered MCP and built-in tool. <strong class="text-ink-secondary">Allow</strong> lets the agent call a tool without asking; <strong class="text-ink-secondary">Ask</strong> pauses for your approval; <strong class="text-ink-secondary">Default</strong> follows each tool's behavior annotations (read-only tools are allowed, everything else asks).
           </p>
         </div>
         <RouterLink
@@ -358,39 +392,115 @@ onMounted(() => {
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div class="space-y-3">
         <div class="flex flex-col gap-3 rounded-xl border border-theme-800 bg-theme-900 p-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <span class="text-xs text-ink-muted">
-              {{ autoApprovedCount }}/{{ tools.length }} allowed
-            </span>
-            <div class="flex items-center gap-3">
-              <button
-                class="text-xs text-status-green hover:text-green-300 transition-colors"
-                @click="confirmAll"
-              >
-                Allow all
-              </button>
-              <button
-                class="text-xs text-status-info hover:text-sky-300 transition-colors"
-                title="Use annotation defaults: read-only tools are allowed; write, destructive, and unannotated tools ask"
-                @click="defaultsAll"
-              >
-                Default
-              </button>
-              <button
-                class="text-xs text-ink-secondary hover:text-theme-200 transition-colors"
-                @click="askAll"
-              >
-                Ask all
-              </button>
-            </div>
+          <div class="relative">
+            <Icon
+              icon="lucide:search"
+              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+            />
+            <input
+              v-model="filterText"
+              type="text"
+              placeholder="Search tools, descriptions, or MCP servers..."
+              aria-label="Search tools"
+              class="w-full rounded-lg border border-theme-700 bg-theme-950 py-2 pl-9 pr-9 text-sm text-theme-200 placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent-500"
+              @keydown.esc="filterText = ''"
+            >
+            <button
+              v-if="filterText"
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
+              title="Clear search (Esc)"
+              aria-label="Clear search"
+              @click="filterText = ''"
+            >
+              <Icon
+                icon="lucide:x"
+                class="h-3.5 w-3.5"
+              />
+            </button>
           </div>
 
-          <input
-            v-model="filterText"
-            type="text"
-            placeholder="Search tools..."
-            class="w-full bg-theme-950 border border-theme-700 rounded-lg px-3 py-2 text-sm text-theme-200 placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent-500"
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div
+              class="flex flex-wrap items-center gap-1.5"
+              role="group"
+              aria-label="Filter by approval state"
+            >
+              <button
+                v-for="filter in stateFilters"
+                :key="filter.value"
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors"
+                :class="stateFilter === filter.value
+                  ? 'border-accent-500/60 bg-accent-500/15 text-theme-100'
+                  : 'border-theme-700 text-ink-muted hover:border-theme-600 hover:text-theme-200'"
+                :aria-pressed="stateFilter === filter.value"
+                @click="stateFilter = filter.value"
+              >
+                {{ filter.label }}
+                <span class="tabular-nums text-ink-muted">{{ stateCounts[filter.value] }}</span>
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs text-ink-muted">Set {{ bulkScopeLabel }} to</span>
+              <ApprovalModeControl
+                mode="mixed"
+                label="Set approval for shown tools"
+                :disabled="pending || filteredTools.length === 0"
+                @change="setVisibleMode"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="errorMessage"
+          class="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-status-danger"
+          role="alert"
+        >
+          <Icon
+            icon="lucide:circle-alert"
+            class="mt-px h-3.5 w-3.5 shrink-0"
+          />
+          <span class="flex-1">{{ errorMessage }}</span>
+          <button
+            type="button"
+            class="text-ink-muted hover:text-theme-200"
+            aria-label="Dismiss error"
+            @click="errorMessage = ''"
           >
+            <Icon
+              icon="lucide:x"
+              class="h-3.5 w-3.5"
+            />
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between px-1 text-xs text-ink-muted">
+          <span>
+            {{ groupedTools.length }} group{{ groupedTools.length === 1 ? '' : 's' }} · {{ filteredTools.length }} tool{{ filteredTools.length === 1 ? '' : 's' }}
+            <button
+              v-if="isNarrowed"
+              type="button"
+              class="ml-2 text-status-info hover:text-sky-300"
+              @click="clearFilters"
+            >
+              Clear filters
+            </button>
+          </span>
+          <button
+            v-if="groupedTools.length"
+            type="button"
+            class="inline-flex items-center gap-1 transition-colors hover:text-theme-200"
+            @click="toggleExpandAll"
+          >
+            <Icon
+              :icon="allExpanded ? 'lucide:chevrons-down-up' : 'lucide:chevrons-up-down'"
+              class="h-3.5 w-3.5"
+            />
+            {{ allExpanded ? 'Collapse all' : 'Expand all' }}
+          </button>
         </div>
 
         <DataTable
@@ -398,7 +508,7 @@ onMounted(() => {
           :columns="columns"
           :loading="loading"
           :row-clickable="true"
-          empty-message="No tools found"
+          :empty-message="isNarrowed ? 'No tools match your filters' : 'No tools registered'"
           :row-class="(group) => isExpanded(group.id) ? 'bg-theme-800/30' : undefined"
           @row-click="toggleExpanded"
         >
@@ -434,9 +544,28 @@ onMounted(() => {
                   <span class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">
                     {{ group.tools.length }} tool{{ group.tools.length === 1 ? '' : 's' }}
                   </span>
+                  <span
+                    class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide tabular-nums"
+                    :class="groupAllowedCount(group) === 0
+                      ? 'bg-amber-500/10 text-status-warning'
+                      : groupAllowedCount(group) === group.tools.length
+                        ? 'bg-green-500/10 text-status-green'
+                        : 'bg-theme-800 text-ink-secondary'"
+                  >
+                    {{ groupAllowedCount(group) }}/{{ group.tools.length }} allowed
+                  </span>
                 </div>
-                <p class="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-muted">
+                <p
+                  v-if="group.description"
+                  class="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-muted"
+                >
                   {{ group.description }}
+                </p>
+                <p
+                  v-else
+                  class="mt-1 truncate font-mono text-[11px] text-ink-muted"
+                >
+                  {{ toolNamePreview(group) }}
                 </p>
               </div>
             </div>
@@ -444,26 +573,12 @@ onMounted(() => {
 
           <template #col-state="{ item: group }">
             <div class="flex justify-end">
-              <button
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
-                :class="stateClass(namespaceApprovalState(group))"
-                role="checkbox"
-                :aria-checked="namespaceApprovalState(group) === 'partial' || namespaceApprovalState(group) === 'defaults' ? 'mixed' : namespaceApprovalState(group) === 'all'"
-                :title="namespaceApprovalState(group) === 'all'
-                  ? 'All tools are allowed. Click to restore annotation defaults.'
-                  : namespaceApprovalState(group) === 'defaults'
-                    ? 'Using annotation defaults. Click to require approval for all.'
-                    : namespaceApprovalState(group) === 'none'
-                      ? 'All tools ask. Click to allow all.'
-                      : 'Custom mix. Click to restore annotation defaults.'"
-                @click.stop="toggleNamespaceApproval(group)"
-              >
-                <Icon
-                  :icon="stateIcon(namespaceApprovalState(group))"
-                  class="h-3.5 w-3.5"
-                />
-                {{ namespaceApprovalLabel(group) }}
-              </button>
+              <ApprovalModeControl
+                :mode="groupMode(group)"
+                :label="`Approval for ${group.namespace.label}`"
+                :disabled="pending"
+                @change="(mode) => setGroupMode(group, mode)"
+              />
             </div>
           </template>
 
@@ -531,18 +646,13 @@ onMounted(() => {
                     </template>
                   </HoverTooltip>
 
-                  <button
-                    class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
-                    :class="isAutoApproved(approvalName(tool)) ? 'bg-green-500/15 text-status-green hover:bg-green-500/25' : 'bg-amber-500/10 text-status-warning hover:bg-amber-500/20'"
-                    :title="isAutoApproved(approvalName(tool)) ? 'Allowed - click to require approval' : 'Requires approval - click to allow'"
-                    @click.stop="toggleApproval(approvalName(tool))"
-                  >
-                    <Icon
-                      :icon="isAutoApproved(approvalName(tool)) ? 'lucide:shield-check' : 'lucide:shield-alert'"
-                      class="h-3.5 w-3.5"
-                    />
-                    {{ toolApprovalLabel(tool) }}
-                  </button>
+                  <ApprovalModeControl
+                    :mode="toolMode(tool)"
+                    :default-allows="tool.autoApprove"
+                    :label="`Approval for ${displayName(tool)}`"
+                    :disabled="pending"
+                    @change="(mode) => setToolMode(tool, mode)"
+                  />
                 </div>
               </div>
             </div>

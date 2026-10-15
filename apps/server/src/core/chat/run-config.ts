@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { AgentData, SubAgentAssignment } from '../agents/agent-store.js'
 import type { ToolRegistry } from '../tools/tool-registry.js'
-import type { ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
+import type { ChatRunConfig, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { folderPathForDirectory } from '../memory/memory-folder-directories.js'
 import { expandMemoryFolderScope, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 import { defaultAutoModes } from '../agent/execution-preset.js'
@@ -98,6 +98,24 @@ export function buildInitialExecutionConfig(input: {
         thinkingEnabled: agent?.thinkingEnabled !== false,
         reasoningEffort: agent?.reasoningEffort ?? 'medium',
         ...defaultAutoModes(agent),
+    }
+}
+
+/** The run request that repeats a conversation's saved settings, for turns no client starts. */
+export function runConfigFromExecutionConfig(config: ConversationExecutionConfig): ChatRunConfig {
+    return {
+        model: config.model || undefined,
+        providerOverride: config.providerId || undefined,
+        allowedTools: config.allowedTools,
+        systemPrompt: config.systemPrompt,
+        subAgents: config.subAgents,
+        memoryFolderIds: config.memoryFolderIds,
+        thinkingEnabled: config.thinkingEnabled,
+        reasoningEffort: config.reasoningEffort,
+        autoToolRouting: config.autoToolRouting,
+        autoMemory: config.autoMemory,
+        autoRouterProviderId: config.autoRouterProviderId,
+        autoRouterModel: config.autoRouterModel,
     }
 }
 

@@ -23,15 +23,16 @@ describe('visible planning state', () => {
   beforeEach(() => {
     dbHolder.current = new Database(':memory:')
     dbHolder.current.exec(`
-      CREATE TABLE tasks (
+      CREATE TABLE run_plans (
         id TEXT PRIMARY KEY,
-        conversation_id TEXT,
-        status TEXT NOT NULL,
-        definition_json TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running',
+        objective TEXT NOT NULL DEFAULT '',
+        items_json TEXT NOT NULL DEFAULT '[]',
+        current_item_id TEXT,
         result_json TEXT,
-        iterations INTEGER,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER,
+        updated_at INTEGER NOT NULL,
         completed_at INTEGER
       )
     `)
@@ -156,8 +157,8 @@ describe('visible planning state', () => {
     expect(getPlanningState(empty.runId)).toBeNull()
 
     dbHolder.current.prepare(
-      'INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run('corrupt', 'other', 'running', '{broken', null, 0, 1, 1, null)
+      'INSERT INTO run_plans VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run('corrupt', 'other', 'running', '', '{broken', null, null, 1, 1, null)
     expect(getLatestPlanningState('other')).toBeNull()
     const replacement = resumeOrCreatePlanningRun('other', 'Recovered')
     expect(replacement.objective).toBe('Recovered')

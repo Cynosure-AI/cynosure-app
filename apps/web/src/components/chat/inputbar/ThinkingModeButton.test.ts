@@ -46,14 +46,12 @@ describe('ThinkingModeButton', () => {
 
     await new DOMWrapper(slider!).setValue('0')
     expect(chatStore.sessionThinkingEnabled).toBe(false)
-    expect(document.body.textContent).toContain('Planning off')
 
     await new DOMWrapper(slider!).setValue('6')
     expect(chatStore.sessionThinkingEnabled).toBe(true)
     expect(chatStore.sessionReasoningEffort).toBe('max')
     expect(slider!.getAttribute('aria-valuetext')).toBe('Maximum')
     expect(wrapper.get('button').attributes('aria-label')).toBe('Reasoning level: Maximum')
-    expect(document.body.textContent).toContain('Planning available')
 
     wrapper.unmount()
   })

@@ -40,7 +40,7 @@ const chatsByProject = ref<Record<string, ProjectChats>>({})
 const activityChatsByProject = ref<Record<string, ConversationRow[]>>({})
 
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
-let unsubscribe: (() => void) | undefined
+const liveCleanups: Array<() => void> = []
 
 // Projects ordered by recent activity
 const projects = computed(() =>
@@ -87,6 +87,15 @@ const awaitingProjectIds = computed(() => projectIdsWithActivity(awaitingIds.val
 const hiddenCount = computed(() =>
   Math.max(0, projectsStore.activeProjects.length - MAX_PROJECTS),
 )
+
+/** Waiting for a scheduled wait to resume it, and not doing anything else meanwhile. */
+function isWaiting(chat: ConversationRow): boolean {
+  return Boolean(chat.wait_until) && !runningIds.value.has(chat.id)
+}
+
+function resumeLabel(chat: ConversationRow): string {
+  return `Waiting. Resumes at ${new Date(chat.wait_until!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+}
 
 // Expanded state
 function readExpanded(): Set<string> {
@@ -239,14 +248,17 @@ watch(
 
 // Lifecycle
 onMounted(() => {
-  unsubscribe = api.chat.onEvent((event) => {
-    if (
-      event.type === 'title-updated' ||
-      (event.type === 'transcript-item' && event.item.type === 'message')
-    ) {
-      refreshChats()
-    }
-  })
+  liveCleanups.push(
+    api.chat.onEvent((event) => {
+      if (
+        event.type === 'title-updated' ||
+        (event.type === 'transcript-item' && event.item.type === 'message')
+      ) {
+        refreshChats()
+      }
+    }),
+    api.chat.onWaitsChanged(refreshChats),
+  )
 
   void projectsStore.ensureLoaded()
     .then(() => {
@@ -262,7 +274,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (refreshTimer) clearTimeout(refreshTimer)
-  unsubscribe?.()
+  liveCleanups.forEach((cleanup) => cleanup())
 })
 </script>
 
@@ -365,6 +377,14 @@ onBeforeUnmount(() => {
               v-else-if="runningIds.has(chat.id)"
               icon="lucide:loader-circle"
               class="h-3 w-3 shrink-0 animate-spin text-accent-fg"
+            />
+            <Icon
+              v-else-if="isWaiting(chat)"
+              icon="lucide:hourglass"
+              class="h-3 w-3 shrink-0 text-status-info"
+              role="img"
+              :aria-label="resumeLabel(chat)"
+              :title="resumeLabel(chat)"
             />
             <Icon
               v-else-if="chat.origin === 'cron'"

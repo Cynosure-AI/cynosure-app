@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAgentStore } from '../../stores/agent-runtime.store'
-import type { PlanningTaskItem, PlanningTaskStatus } from '../../api/types'
+import type { PlanningTaskItem } from '../../api/types'
+import { PLANNING_ITEM_STATUS as statusMeta } from '../../utils/planning-status'
 
 const agentStore = useAgentStore()
 defineEmits<{ close: [] }>()
@@ -11,14 +12,6 @@ const state = computed(() => agentStore.planningState)
 const shouldShow = computed(() => Boolean(state.value?.items.length))
 const completedCount = computed(() => state.value?.items.filter((item) => item.status === 'completed').length ?? 0)
 const totalCount = computed(() => state.value?.items.length ?? 0)
-
-const statusMeta: Record<PlanningTaskStatus, { icon: string; cls: string }> = {
-  pending: { icon: 'lucide:circle', cls: 'text-ink-muted' },
-  in_progress: { icon: 'svg-spinners:ring-resize', cls: 'text-accent-fg' },
-  completed: { icon: 'lucide:check-circle-2', cls: 'text-status-success' },
-  blocked: { icon: 'lucide:octagon-alert', cls: 'text-status-warning' },
-  cancelled: { icon: 'lucide:circle-x', cls: 'text-ink-muted' },
-}
 
 function itemClass(item: PlanningTaskItem): string {
   if (item.status === 'completed') return 'text-ink-secondary'

@@ -13,6 +13,8 @@ export interface LLMProviderConfig {
     supportsStreaming: boolean
     supportsToolCalls: boolean
     supportsVision: boolean
+    /** False hides the provider's models from selectors; the provider and anything already using it keep working. */
+    enabled?: boolean
 }
 
 export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription' | 'decision'
@@ -494,6 +496,8 @@ export interface CronJob {
     nextRunAt: number | null
     executionConfig: ConversationExecutionConfig | null
     projectId?: string | null
+    /** Set for a wait an agent scheduled: the run continues this conversation. */
+    conversationId?: string | null
 }
 
 export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
@@ -623,8 +627,8 @@ export interface MemoryRerankerConfig {
     curationModel: string
 }
 
+/** Dream runs whenever a provider is set; agents and the default chat opt out individually. */
 export interface DreamConfig {
-    enabled: boolean
     providerId: string
     model: string
     windowId: string

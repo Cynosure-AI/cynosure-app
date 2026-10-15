@@ -27,6 +27,8 @@ const formDirty = ref(false)
 const savingProvider = ref(false)
 const saveError = ref('')
 const testingId = ref<string | null>(null)
+const togglingEnabledId = ref<string | null>(null)
+const toggleEnabledError = ref('')
 const testResults = ref<Record<string, { success: boolean; error?: string }>>({})
 const providerToRemove = ref<LLMProviderConfig | null>(null)
 const removingProvider = ref(false)
@@ -59,6 +61,7 @@ function closeForm(): void {
 
 async function saveProvider(draft: ProviderDraft): Promise<void> {
   const id = editingProviderId.value || ''
+  const existing = providerStore.providers.find((provider) => provider.id === id)
   const config: LLMProviderConfig = {
     id,
     name: draft.name,
@@ -69,7 +72,8 @@ async function saveProvider(draft: ProviderDraft): Promise<void> {
     availableModels: [],
     supportsStreaming: true,
     supportsToolCalls: true,
-    supportsVision: providerSupportsVision(draft.type)
+    supportsVision: providerSupportsVision(draft.type),
+    enabled: existing?.enabled !== false
   }
 
   savingProvider.value = true
@@ -136,6 +140,18 @@ async function testConnection(id: string): Promise<void> {
     }
   } finally {
     testingId.value = null
+  }
+}
+
+async function setProviderEnabled(id: string, enabled: boolean): Promise<void> {
+  togglingEnabledId.value = id
+  toggleEnabledError.value = ''
+  try {
+    await providerStore.setProviderEnabled(id, enabled)
+  } catch (error) {
+    toggleEnabledError.value = error instanceof Error ? error.message : 'The provider could not be updated.'
+  } finally {
+    togglingEnabledId.value = null
   }
 }
 
@@ -213,6 +229,13 @@ async function confirmRemove(): Promise<void> {
       v-if="showSection('provider-actions')"
       class="space-y-3"
     >
+      <p
+        v-if="toggleEnabledError"
+        role="alert"
+        class="text-xs text-status-danger"
+      >
+        {{ toggleEnabledError }}
+      </p>
       <CollapsibleSection
         v-for="provider in providerStore.providers"
         :key="provider.id"
@@ -223,11 +246,13 @@ async function confirmRemove(): Promise<void> {
             :provider="provider"
             :is-last-used="provider.id === providerStore.lastUsedProviderId"
             :is-testing="testingId === provider.id"
+            :is-toggling-enabled="togglingEnabledId === provider.id"
             :test-status="testResults[provider.id]?.success"
             :test-error="testResults[provider.id]?.error"
             @test="testConnection"
             @edit="toggleEditProvider"
             @remove="requestRemove"
+            @update:enabled="setProviderEnabled"
           />
         </template>
 

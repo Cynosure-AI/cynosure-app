@@ -6,6 +6,8 @@ export interface TabDef<V extends string = string> {
   label: string
   icon?: string
   badge?: string | number
+  /** Tooltip explaining what the badge counts. */
+  badgeTitle?: string
   warning?: string
 }
 
@@ -47,6 +49,7 @@ const emit = defineEmits<{
       <span
         v-if="tab.badge != null && tab.badge !== '' && tab.badge !== 0"
         class="text-xs px-1.5 py-0.5 rounded-full bg-theme-700 text-theme-300"
+        :title="tab.badgeTitle"
       >
         {{ tab.badge }}
       </span>

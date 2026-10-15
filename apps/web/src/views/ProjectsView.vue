@@ -257,21 +257,23 @@ onMounted(() => {
         </p>
       </form>
       <template #actions>
-        <button
-          type="button"
-          class="rounded-lg px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
-          @click="closeCreate"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          form="create-project-form"
-          class="rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on hover:bg-accent-400 disabled:opacity-50"
-          :disabled="!draft.name.trim() || creating"
-        >
-          {{ creating ? 'Creating…' : 'Create project' }}
-        </button>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-lg px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
+            @click="closeCreate"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="create-project-form"
+            class="rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on hover:bg-accent-400 disabled:opacity-50"
+            :disabled="!draft.name.trim() || creating"
+          >
+            {{ creating ? 'Creating…' : 'Create project' }}
+          </button>
+        </div>
       </template>
     </ModalDialog>
   </div>

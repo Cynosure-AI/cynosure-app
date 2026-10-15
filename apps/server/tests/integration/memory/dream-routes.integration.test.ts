@@ -26,20 +26,21 @@ afterEach(async () => {
     delete process.env.CYNOSURE_DATA_DIR
     rmSync(directory, { recursive: true, force: true })
 })
-test('Dream config defaults off and validates opt-in model selection', async () => {
-    expect((await app.inject('/api/memory/dream/config')).json()).toMatchObject({ enabled: false })
-    for (const payload of [{}, { enabled: 'true', providerId: 'dream-test', model: 'model' }, { enabled: true, providerId: 'missing', model: 'model' }]) {
+test('Dream config defaults off and validates the model selection', async () => {
+    expect((await app.inject('/api/memory/dream/config')).json()).toMatchObject({ providerId: '' })
+    for (const payload of [{}, { providerId: 1, model: 'model' }, { providerId: 'missing', model: 'model' }]) {
         expect((await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload })).statusCode).toBe(400)
     }
-    const defaultModel = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { enabled: true, providerId: 'dream-test', model: ' ' } })
-    expect(defaultModel.json()).toMatchObject({ enabled: true, providerId: 'dream-test', model: '' })
-    const response = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { enabled: true, providerId: ' dream-test ', model: ' model ' } })
+    const defaultModel = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { providerId: 'dream-test', model: ' ' } })
+    expect(defaultModel.json()).toMatchObject({ providerId: 'dream-test', model: '' })
+    const response = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { providerId: ' dream-test ', model: ' model ' } })
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toMatchObject({ enabled: true, providerId: 'dream-test', model: 'model' })
+    expect(response.json()).toMatchObject({ providerId: 'dream-test', model: 'model' })
+    expect(response.json()).not.toHaveProperty('enabled')
     expect((await app.inject('/api/memory/dream/config')).json()).toEqual(response.json())
 })
 async function seedRun(status = 'completed') {
-    await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { enabled: true, providerId: 'dream-test', model: 'model' } })
+    await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { providerId: 'dream-test', model: 'model' } })
     const now = Date.now()
     getDb().prepare("INSERT INTO conversations(id, title, origin, created_at, updated_at) VALUES ('chat', 'My preferences', 'chat', ?, ?)").run(now, now)
     getDb().prepare(`INSERT INTO memory_documents
@@ -86,9 +87,9 @@ test('individual cancellation and Stop All cancel Dream runs', async () => {
     expect(stopped.counts.dreamRuns).toBe(1)
     expect(stopped.total).toBe(1)
 })
-test('disabling Dream cancels pending retries and persists the disabled state', async () => {
+test('clearing the Dream model cancels pending retries and persists the cleared state', async () => {
     await seedRun('failed')
-    const response = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { enabled: false, providerId: 'dream-test', model: 'model' } })
-    expect(response.json().enabled).toBe(false)
+    const response = await app.inject({ method: 'POST', url: '/api/memory/dream/configure', payload: { providerId: '', model: 'model' } })
+    expect(response.json()).toMatchObject({ providerId: '', model: '' })
     expect((await app.inject('/api/activity?types=dream')).json().items[0].status).toBe('cancelled')
 })

@@ -12,6 +12,7 @@ import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../composables/useMcpServers'
+import { useFreshChat } from '../../composables/useFreshChat'
 import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
 
 const chatStore = useChatStore()
@@ -105,6 +106,9 @@ const showCenteredComposer = computed(() => {
     !chatStore.loadingMessages &&
     chatStore.messages.length === 0
 })
+
+const { setFreshChat } = useFreshChat()
+watch(showCenteredComposer, setFreshChat, { immediate: true })
 
 const latestAgentChats = computed(() => {
   const agentId = chatStore.activeAgentId
@@ -218,6 +222,7 @@ async function openRecentChat(conversation: Conversation): Promise<void> {
 }
 
 onUnmounted(() => {
+  setFreshChat(false)
   mcpResizeObserver?.disconnect()
   document.removeEventListener('keydown', onChatSearchShortcut)
   const conversationId = chatStore.activeConversationId
@@ -354,7 +359,6 @@ watch(
           <!-- Input bar (full width of chat column) -->
           <InputBar
             ref="inputBarRef"
-            :floating="showCenteredComposer"
             class="order-2 md:order-0"
           >
             <template #leading-actions>
@@ -500,6 +504,18 @@ watch(
 
 .chat-column--empty .composer-spacer {
   flex-grow: 1;
+}
+
+/* While the composer is centered, park the context ring where it will sit once
+   the composer docks (bottom-right of the column, matching the bar's px-4/py-3). */
+.chat-column--empty > :deep(.chat-input-bar) {
+  position: static;
+}
+
+.chat-column--empty :deep(.context-ring-anchor) {
+  position: absolute;
+  right: 1rem;
+  bottom: 0.75rem;
 }
 
 .chat-column--empty > div:first-child {

@@ -14,6 +14,7 @@ import ModalDialog from './components/shared/ModalDialog.vue'
 import NotificationToastHost from './components/notifications/NotificationToastHost.vue'
 import CommandPalette from './components/layout/CommandPalette.vue'
 import ServerStartupErrorScreen from './components/status/ServerStartupErrorScreen.vue'
+import WaterRippleField from './components/shared/WaterRippleField.vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
@@ -21,6 +22,7 @@ import { useSidebar } from './composables/useSidebar'
 import { useChatEvents } from './composables/useChatEvents'
 import { isCommandPaletteShortcut, useCommandPalette } from './composables/useCommandPalette'
 import { useServerStartupError } from './composables/useServerStartupError'
+import { useFreshChat } from './composables/useFreshChat'
 
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
@@ -36,6 +38,11 @@ const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
 const router = useRouter()
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
+// Blackwall's content panel is a dark water surface the cursor trails through.
+const showWaterField = computed(() => preferencesStore.theme === 'blackwall' && !isOnboardingRoute.value)
+// It stays quiet on a fresh chat and fainter still everywhere else.
+const { freshChat } = useFreshChat()
+const waterIntensity = computed(() => freshChat.value ? 0.35 : 0.16)
 const { toggle: toggleCommandPalette, close: closeCommandPalette } = useCommandPalette()
 const { startupError, serverVersion } = useServerStartupError()
 
@@ -247,6 +254,11 @@ onUnmounted(() => {
           ? 'bg-theme-950'
           : 'app-content bg-theme-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
       >
+        <WaterRippleField
+          v-if="showWaterField"
+          :intensity="waterIntensity"
+          class="absolute inset-0 -z-10"
+        />
         <RouterView />
       </main>
     </div>

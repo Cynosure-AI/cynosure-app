@@ -362,6 +362,15 @@ export interface ProjectTaskDto {
   createdAt: number
   updatedAt: number
   completedAt: number | null
+  /** Steps of the newest run plan that worked on the task; set on API responses, null when no run has. */
+  progress?: ProjectTaskProgress | null
+}
+
+export interface ProjectTaskProgress {
+  runId: string
+  status: 'running' | 'completed' | 'cancelled' | 'error'
+  completed: number
+  total: number
 }
 
 /** Who changed a project: the user, an agent in a chat, the Dream reviewer, a restore, or the pre-history baseline. */

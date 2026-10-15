@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useChatStore } from "../../stores/chat.store";
 import { useProviderStore } from "../../stores/provider.store";
 import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
@@ -26,6 +26,59 @@ const agentDefs = useAgentDefinitionsStore();
 const conversationTitle = computed(
   () => chatStore.activeConversation?.title || "",
 );
+
+const editingConversationId = ref<string | null>(null);
+const editingTitle = ref("");
+const titleInputRef = ref<HTMLInputElement | null>(null);
+const titleButtonRef = ref<HTMLButtonElement | null>(null);
+const savingTitle = ref(false);
+const renameError = ref("");
+
+watch(() => chatStore.activeConversationId, () => {
+  editingConversationId.value = null;
+  renameError.value = "";
+});
+
+async function startRename(): Promise<void> {
+  const conversation = chatStore.activeConversation;
+  if (!conversation || savingTitle.value) return;
+  editingConversationId.value = conversation.id;
+  editingTitle.value = conversation.title;
+  renameError.value = "";
+  await nextTick();
+  titleInputRef.value?.focus();
+  titleInputRef.value?.select();
+}
+
+async function cancelRename(): Promise<void> {
+  editingConversationId.value = null;
+  await nextTick();
+  titleButtonRef.value?.focus();
+}
+
+async function commitRename(restoreFocus = false): Promise<void> {
+  const id = editingConversationId.value;
+  if (!id) return;
+  const title = editingTitle.value.trim();
+  editingConversationId.value = null;
+  if (id !== chatStore.activeConversationId) return;
+  if (title && title !== conversationTitle.value) {
+    savingTitle.value = true;
+    try {
+      await chatStore.renameConversation(id, title);
+    } catch {
+      if (id === chatStore.activeConversationId) {
+        renameError.value = "Could not rename chat. Please try again.";
+      }
+    } finally {
+      savingTitle.value = false;
+    }
+  }
+  if (restoreFocus && id === chatStore.activeConversationId) {
+    await nextTick();
+    titleButtonRef.value?.focus();
+  }
+}
 
 const agentDropdownValue = computed(() => chatStore.activeAgentId || "");
 
@@ -87,12 +140,42 @@ async function newChat(): Promise<void> {
 
     <!-- Centered conversation title + origin badge (hidden on mobile) -->
     <div class="hidden sm:flex flex-1 min-w-0 items-center justify-center gap-2">
-      <span
+      <div
         v-if="conversationTitle"
-        class="text-sm font-medium text-theme-300 truncate select-none"
+        class="min-w-0 flex flex-col items-center gap-1"
       >
-        {{ conversationTitle }}
-      </span>
+        <input
+          v-if="editingConversationId"
+          ref="titleInputRef"
+          v-model="editingTitle"
+          aria-label="Conversation title"
+          class="w-64 max-w-full min-w-0 rounded border border-theme-600 bg-theme-900 px-2 py-0.5 text-center text-sm font-medium text-theme-100 outline-none focus:border-accent-500"
+          @blur="commitRename()"
+          @keydown.enter.prevent="commitRename(true)"
+          @keydown.escape.prevent="cancelRename"
+        >
+        <button
+          v-else
+          ref="titleButtonRef"
+          type="button"
+          aria-label="Rename chat"
+          title="Rename chat"
+          :disabled="savingTitle"
+          class="group flex max-w-full min-w-0 items-center gap-1.5 rounded px-2 py-0.5 text-sm font-medium text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100 focus-visible:outline-2 focus-visible:outline-accent-500 disabled:opacity-60"
+          @click="startRename"
+        >
+          <span class="truncate">{{ conversationTitle }}</span>
+          <Icon
+            icon="lucide:pencil"
+            class="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+          />
+        </button>
+        <span
+          v-if="renameError"
+          role="alert"
+          class="text-xs text-status-error"
+        >{{ renameError }}</span>
+      </div>
       <span
         v-if="activeOrigin"
         class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-theme-800 shrink-0"

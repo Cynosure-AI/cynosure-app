@@ -13,11 +13,13 @@ import ChatActivityIndicator from '../chat/ChatActivityIndicator.vue'
 import QuickResponses from '../chat/QuickResponses.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
+import WaitResumeMarker from '../chat/WaitResumeMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import ToolExecutionList from './ToolExecutionList.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import { useToolPresentation } from '../../composables/useToolPresentation'
 import RichContent from '../shared/RichContent.vue'
+import ParticleWaveField from '../shared/ParticleWaveField.vue'
 import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
@@ -560,8 +562,19 @@ onMounted(() => {
     <!-- Empty state -->
     <div
       v-else-if="chatStore.messages.length === 0"
-      class="chat-empty-state flex flex-col items-center justify-center h-full text-ink-secondary"
+      class="chat-empty-state relative isolate flex flex-col items-center justify-center h-full text-ink-secondary"
     >
+      <Transition
+        enter-active-class="transition-opacity duration-700 ease-out"
+        enter-from-class="opacity-0"
+        leave-active-class="transition-opacity duration-500 ease-in"
+        leave-to-class="opacity-0"
+      >
+        <ParticleWaveField
+          v-if="!wsConnected"
+          class="absolute inset-0 -z-10"
+        />
+      </Transition>
       <div class="chat-empty-icon relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
         <RouterLink
           v-if="conversationAgentId"
@@ -595,10 +608,6 @@ onMounted(() => {
         </RouterLink>
       </div>
       <template v-if="!wsConnected">
-        <Icon
-          icon="lucide:loader-2"
-          class="w-8 h-8 text-ink-muted animate-spin mb-4"
-        />
         <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
           Initializing…
         </h2>
@@ -923,6 +932,12 @@ onMounted(() => {
           </div>
         </div>
       </template>
+
+      <!-- Pending schedule_wait -->
+      <WaitResumeMarker
+        v-if="chatStore.activeConversationId && !agentStore.isExecuting && !chatStore.isStreaming"
+        :conversation-id="chatStore.activeConversationId"
+      />
 
       <!-- Title generation activity indicator -->
       <ChatActivityIndicator

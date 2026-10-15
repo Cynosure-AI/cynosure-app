@@ -179,3 +179,121 @@ describe('LLMGateway transcription model listing', () => {
         },
     )
 })
+
+describe('LLMGateway model list cache', () => {
+    function setStub(gateway: LLMGateway, id: string, type: string, listModelItems = vi.fn().mockResolvedValue([{ id: 'model-a' }])) {
+        const provider = {
+            config: { id, type },
+            listModels: vi.fn().mockResolvedValue(['model-a']),
+            listModelItems,
+        } as unknown as BaseLLMProvider
+        gateway.getAllProviders().set(id, provider)
+        return provider
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        metadataMocks.getModelMetadata.mockReturnValue(null)
+    })
+
+    test('reuses a listed catalog per provider and type', async () => {
+        const gateway = new LLMGateway()
+        const provider = setStub(gateway, 'openai-1', 'openai')
+
+        await gateway.listModelItems('openai-1', 'llm')
+        await gateway.listModelItems('openai-1', 'llm')
+        await gateway.listModelItems('openai-1', 'embedding')
+        await gateway.listModels('openai-1', 'llm')
+        await gateway.listModels('openai-1', 'llm')
+
+        expect(provider.listModelItems).toHaveBeenCalledTimes(2)
+        expect(provider.listModels).toHaveBeenCalledTimes(1)
+    })
+
+    test('shares one in-flight request between concurrent callers', async () => {
+        const gateway = new LLMGateway()
+        let resolve!: (models: ModelListItem[]) => void
+        const provider = setStub(gateway, 'openai-1', 'openai', vi.fn(() => new Promise<ModelListItem[]>((r) => { resolve = r })))
+
+        const first = gateway.listModelItems('openai-1', 'llm')
+        const second = gateway.listModelItems('openai-1', 'llm')
+        await Promise.resolve()
+        resolve([{ id: 'model-a' }])
+
+        expect(await first).toEqual([{ id: 'model-a' }])
+        expect(await second).toEqual([{ id: 'model-a' }])
+        expect(provider.listModelItems).toHaveBeenCalledTimes(1)
+    })
+
+    test('refetches when refresh is requested or the TTL has passed', async () => {
+        vi.useFakeTimers()
+        try {
+            const gateway = new LLMGateway()
+            const provider = setStub(gateway, 'openai-1', 'openai')
+
+            await gateway.listModelItems('openai-1', 'llm')
+            await gateway.listModelItems('openai-1', 'llm', { refresh: true })
+            vi.advanceTimersByTime(10 * 60 * 1000)
+            await gateway.listModelItems('openai-1', 'llm')
+
+            expect(provider.listModelItems).toHaveBeenCalledTimes(3)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    test('drops the cached catalog when a provider is re-registered or removed', async () => {
+        const gateway = new LLMGateway()
+        const config = {
+            id: 'openai-1',
+            name: 'OpenAI',
+            type: 'openai' as const,
+            baseUrl: '',
+            apiKey: 'test-key',
+            defaultModel: 'gpt-test',
+            availableModels: [],
+            supportsStreaming: true,
+            supportsToolCalls: true,
+            supportsVision: true,
+        }
+        gateway.registerProvider(config)
+        const first = vi.spyOn(gateway.getProvider('openai-1')!, 'listModelItems').mockResolvedValue([{ id: 'old-key-model' }])
+        await gateway.listModelItems('openai-1', 'llm')
+
+        gateway.registerProvider(config)
+        const second = vi.spyOn(gateway.getProvider('openai-1')!, 'listModelItems').mockResolvedValue([{ id: 'new-key-model' }])
+        expect(await gateway.listModelItems('openai-1', 'llm')).toEqual([{ id: 'new-key-model' }])
+
+        gateway.removeProvider('openai-1')
+        const replacement = setStub(gateway, 'openai-1', 'openai')
+        await gateway.listModelItems('openai-1', 'llm')
+
+        expect(first).toHaveBeenCalledTimes(1)
+        expect(second).toHaveBeenCalledTimes(1)
+        expect(replacement.listModelItems).toHaveBeenCalledTimes(1)
+    })
+
+    test('does not cache failures or empty catalogs', async () => {
+        const gateway = new LLMGateway()
+        const listModelItems = vi.fn()
+            .mockRejectedValueOnce(new Error('rate limited'))
+            .mockResolvedValueOnce([])
+            .mockResolvedValue([{ id: 'model-a' }])
+        setStub(gateway, 'openai-1', 'openai', listModelItems)
+
+        await expect(gateway.listModelItems('openai-1', 'llm')).rejects.toThrow('rate limited')
+        expect(await gateway.listModelItems('openai-1', 'llm')).toEqual([])
+        expect(await gateway.listModelItems('openai-1', 'llm')).toEqual([{ id: 'model-a' }])
+        expect(listModelItems).toHaveBeenCalledTimes(3)
+    })
+
+    test.each(['ollama', 'lmstudio', 'unsloth'])('always asks local %s servers for installed models', async (type) => {
+        const gateway = new LLMGateway()
+        const provider = setStub(gateway, `${type}-1`, type)
+
+        await gateway.listModelItems(`${type}-1`, 'llm')
+        await gateway.listModelItems(`${type}-1`, 'llm')
+
+        expect(provider.listModelItems).toHaveBeenCalledTimes(2)
+    })
+})

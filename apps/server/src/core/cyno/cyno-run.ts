@@ -9,7 +9,7 @@ import type { ConversationExecutionConfig, CynoProfile } from '@shared/types'
 import { getCynoProfile } from './cyno-profile.js'
 
 /** Tools a Cyno chat starts with when the profile has no selection of its own. */
-const DEFAULT_TOOL_NAMES = ['manage_mcp', 'schedule_create', 'schedule_list', 'schedule_update', 'schedule_delete']
+const DEFAULT_TOOL_NAMES = ['manage_mcp', 'schedule_create', 'schedule_list', 'schedule_update', 'schedule_delete', 'schedule_wait']
 
 /** Cyno's profile as a run configuration: unset tools are the defaults, unset memory is All Memory. */
 export function cynoExecutionConfig(profile: CynoProfile = getCynoProfile()): ConversationExecutionConfig {

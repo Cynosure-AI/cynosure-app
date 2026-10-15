@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
@@ -15,6 +15,7 @@ import type { CronJob } from '../api/types'
 import { useProjectsStore } from '../stores/projects.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useChatStore } from '../stores/chat.store'
+import { useAgentStore } from '../stores/agent-runtime.store'
 import { useProjectChat } from '../composables/useProjectChat'
 import { formatRelativeTime } from '../utils/project-format'
 import { cronToHuman } from '../utils/cron-helpers'
@@ -29,6 +30,7 @@ const router = useRouter()
 const projectsStore = useProjectsStore()
 const agentDefs = useAgentDefinitionsStore()
 const chatStore = useChatStore()
+const agentStore = useAgentStore()
 const { startProjectChat } = useProjectChat()
 
 const projectId = computed(() => route.params.id as string)
@@ -49,8 +51,8 @@ const confirmDelete = ref(false)
 const memoryFolder = computed(() => chatStore.memoryFolders.find((folder) => folder.id === project.value?.memoryFolderId))
 const tabs = computed<TabDef<ProjectTab>[]>(() => [
   { value: 'overview', label: 'Overview', icon: 'lucide:layout-dashboard' },
+  { value: 'board', label: 'Board', icon: 'lucide:square-kanban', badge: project.value?.openTaskCount || undefined, badgeTitle: `${project.value?.openTaskCount ?? 0} open tasks` },
   { value: 'chats', label: 'Chats', icon: 'lucide:message-square', badge: project.value?.conversationCount || undefined },
-  { value: 'board', label: 'Board', icon: 'lucide:square-kanban', badge: project.value?.openTaskCount || undefined },
   { value: 'timeline', label: 'Timeline', icon: 'lucide:history' },
   { value: 'settings', label: 'Settings', icon: 'lucide:settings' },
 ])
@@ -105,6 +107,15 @@ async function loadRelated(): Promise<void> {
   if (id !== projectId.value) return
   if (rows.status === 'fulfilled') conversations.value = rows.value
   if (jobs.status === 'fulfilled') cronJobs.value = jobs.value.filter((job) => job.projectId === id)
+}
+
+/** Waiting for a scheduled wait to resume it, and not doing anything else meanwhile. */
+function isWaiting(row: ConversationRow): boolean {
+  return Boolean(row.wait_until) && !agentStore.liveExecutionConversationIds.includes(row.id)
+}
+
+function resumeLabel(row: ConversationRow): string {
+  return `Waiting. Resumes at ${new Date(row.wait_until!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
 function startBriefEdit(): void {
@@ -193,6 +204,9 @@ onMounted(async () => {
   if (activeTab.value === 'settings') settingsDraft.value = toDraft()
   void loadRelated()
 })
+
+const stopWaitUpdates = api.chat.onWaitsChanged(() => void loadRelated())
+onBeforeUnmount(stopWaitUpdates)
 </script>
 
 <template>
@@ -257,7 +271,11 @@ onMounted(async () => {
       </div>
     </header>
 
-    <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <!-- The board gets more room: its four lanes are what need the width. -->
+    <main
+      class="mx-auto px-4 py-6 sm:px-6 lg:px-8"
+      :class="activeTab === 'board' ? 'max-w-384' : 'max-w-7xl'"
+    >
       <p
         v-if="error && activeTab !== 'settings'"
         role="alert"
@@ -489,7 +507,7 @@ onMounted(async () => {
         </div>
         <ul
           v-else
-          class="divide-y divide-theme-800 overflow-hidden rounded-xl border border-theme-800"
+          class="divide-y divide-theme-700 overflow-hidden rounded-xl border border-theme-700 bg-theme-800"
         >
           <li
             v-for="row in conversations"
@@ -497,21 +515,35 @@ onMounted(async () => {
           >
             <button
               type="button"
-              class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-theme-800/60"
+              class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-theme-700/60"
               @click="openConversation(row)"
             >
-              <span class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-ink-muted">
+              <span class="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-700 text-ink-muted">
                 <img
                   v-if="agentIconUrl(row.agent_id)"
                   :src="agentIconUrl(row.agent_id)!"
                   :alt="`${agentName(row.agent_id)} icon`"
                   class="h-full w-full object-cover"
+                  :class="{ 'opacity-15': isWaiting(row) }"
                 >
                 <Icon
                   v-else
                   :icon="row.origin === 'cron' ? 'lucide:calendar-clock' : row.agent_id ? 'lucide:bot' : 'lucide:message-square'"
                   class="h-4 w-4"
+                  :class="{ 'opacity-15': isWaiting(row) }"
                 />
+                <span
+                  v-if="isWaiting(row)"
+                  class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
+                  role="img"
+                  :aria-label="resumeLabel(row)"
+                  :title="resumeLabel(row)"
+                >
+                  <Icon
+                    icon="lucide:hourglass"
+                    class="h-4 w-4 text-status-info drop-shadow-sm"
+                  />
+                </span>
               </span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-sm text-theme-200">{{ row.title }}</span>
@@ -628,20 +660,22 @@ onMounted(async () => {
         The project and its {{ project.openTaskCount ?? 0 }} open tasks are removed. Its {{ project.conversationCount ?? 0 }} chats stay in your chat list, and the memory folder stays in Memory.
       </p>
       <template #actions>
-        <button
-          type="button"
-          class="rounded-lg px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
-          @click="confirmDelete = false"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-status-danger px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-          @click="deleteProject"
-        >
-          Delete project
-        </button>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-lg px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
+            @click="confirmDelete = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-status-danger px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
+            @click="deleteProject"
+          >
+            Delete project
+          </button>
+        </div>
       </template>
     </ModalDialog>
   </div>

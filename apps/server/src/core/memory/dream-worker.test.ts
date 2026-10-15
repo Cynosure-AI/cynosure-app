@@ -45,7 +45,7 @@ function message(id = 'm1', conversationId = 'chat', content = 'I prefer concise
     getDb().prepare('INSERT INTO messages(id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)')
         .run(id, conversationId, role, content, Date.now())
 }
-function enable() { return saveDreamConfig({ enabled: true, providerId: 'provider', model: 'model' }) }
+function enable() { return saveDreamConfig({ providerId: 'provider', model: 'model' }) }
 async function ready() {
     conversation()
     enable()
@@ -83,23 +83,30 @@ afterEach(async () => {
 })
 
 describe('Dream worker', () => {
-    test('defaults off and establishes a fresh persisted window on each enable', async () => {
+    test('defaults off and establishes a fresh persisted window each time a model is configured', async () => {
         conversation()
         message('old')
-        expect(getDreamConfig().enabled).toBe(false)
+        expect(getDreamConfig().providerId).toBe('')
         stop = startDreamWorker(broadcast)
         await settleDreamWork()
         expect(mocks.run).not.toHaveBeenCalled()
         const first = enable()
         expect(first.startSequence).toBe(1)
         expect(enable().windowId).toBe(first.windowId)
-        saveDreamConfig({ enabled: false, providerId: 'provider', model: 'model' })
+        saveDreamConfig({ providerId: '', model: '' })
         message('disabled')
         const second = enable()
         expect(second.windowId).not.toBe(first.windowId)
         expect(second.startSequence).toBe(2)
         closeDb()
         expect(getDreamConfig()).toEqual(second)
+    })
+    test('keeps configs saved with the removed on/off switch disabled', () => {
+        getDb().prepare("INSERT INTO settings(key, value_json) VALUES ('dreamMode', ?)").run(JSON.stringify({
+            enabled: false, providerId: 'provider', model: 'model', windowId: 'old', enabledAt: 1, startSequence: 0,
+        }))
+        expect(getDreamConfig()).toEqual({ providerId: '', model: '', windowId: 'old', enabledAt: 1, startSequence: 0 })
+        expect(enable().windowId).not.toBe('old')
     })
     test('waits for inactivity, processes once, and never persists Dream chat messages', async () => {
         conversation()
@@ -125,7 +132,7 @@ describe('Dream worker', () => {
     })
     test('resolves a provider-only selection to its default model when creating a run', async () => {
         conversation()
-        saveDreamConfig({ enabled: true, providerId: 'provider', model: '' })
+        saveDreamConfig({ providerId: 'provider', model: '' })
         message()
         vi.setSystemTime(Date.now() + DREAM_IDLE_MS)
         stop = startDreamWorker(broadcast)

@@ -24,6 +24,8 @@ export interface Conversation {
   lastReadAt?: number | null
   createdAt: number
   updatedAt: number
+  /** When a pending wait resumes this conversation. */
+  waitUntil?: number | null
 }
 
 export interface DisplayMessage {

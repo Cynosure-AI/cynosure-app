@@ -56,6 +56,9 @@ const globalEventNames = new Set([
   // project view, sidebar, or picker may need them.
   'project:updated',
   'project:tasks-updated',
+  // A wait was scheduled or ended. Carries nothing; chat lists refetch to show
+  // which conversations are waiting to resume.
+  'cron:waits-changed',
 ])
 
 export function addClient(ws: WebSocket): void {

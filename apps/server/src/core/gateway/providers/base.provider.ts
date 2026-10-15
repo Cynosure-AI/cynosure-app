@@ -11,6 +11,8 @@ export interface LLMProviderConfig {
   supportsStreaming: boolean
   supportsToolCalls: boolean
   supportsVision: boolean
+  /** False hides the provider's models from selectors; the provider and anything already using it keep working. */
+  enabled?: boolean
 }
 
 export type ContentPart =

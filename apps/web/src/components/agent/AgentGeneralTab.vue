@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
+import { Icon } from "@iconify/vue";
 import { useProviderStore } from "../../stores/provider.store";
 import type { AgentDefinition } from "../../api/types";
 import IconUpload from "../shared/IconUpload.vue";
@@ -7,13 +8,39 @@ import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
 import PromptSmartTagPicker from "../shared/PromptSmartTagPicker.vue";
+import ReasoningSlider from "../shared/ReasoningSlider.vue";
 
 /** `cyno` edits the default assistant: identity fields that only agents have are hidden. */
 const props = defineProps<{ agent: AgentDefinition; cyno?: boolean }>();
-const emit = defineEmits<{ update: [field: string, value: unknown] }>();
+const emit = defineEmits<{
+  update: [field: string, value: unknown];
+  updateReasoning: [enabled: boolean, effort: AgentDefinition['reasoningEffort']];
+}>();
 
 const providerStore = useProviderStore();
 const systemPromptRef = ref<HTMLTextAreaElement | null>(null);
+
+const REASONING_LEVELS: Array<{
+  value: AgentDefinition['reasoningEffort'] | 'off';
+  label: string;
+  description: string;
+}> = [
+  { value: 'off', label: 'Off', description: 'Disables reasoning when the selected model permits it. Also disables the task planner.' },
+  { value: 'minimal', label: 'Minimal', description: 'Minimal reasoning for the lowest latency and token use.' },
+  { value: 'low', label: 'Low', description: 'Quick reasoning for straightforward tasks.' },
+  { value: 'medium', label: 'Medium', description: 'Balanced reasoning, speed, and token use.' },
+  { value: 'high', label: 'High', description: 'Deep reasoning for complex tasks.' },
+  { value: 'xhigh', label: 'Extra high', description: 'Extra reasoning for especially difficult tasks.' },
+  { value: 'max', label: 'Maximum', description: "The provider's maximum available reasoning effort." },
+];
+const selectedReasoning = computed(() => props.agent.thinkingEnabled === false ? 'off' : props.agent.reasoningEffort || 'medium');
+const selectedReasoningOption = computed(() => REASONING_LEVELS.find(level => level.value === selectedReasoning.value) || REASONING_LEVELS[3]);
+
+function onReasoningChange(value: AgentDefinition['reasoningEffort'] | 'off'): void {
+  const level = REASONING_LEVELS.find(item => item.value === value);
+  if (!level) return;
+  emit('updateReasoning', level.value !== 'off', level.value === 'off' ? props.agent.reasoningEffort || 'medium' : level.value);
+}
 
 function autoResize(e: Event) {
   const el = e.target as HTMLTextAreaElement;
@@ -181,6 +208,33 @@ onMounted(() =>
             />
           </div>
         </div>
+      </div>
+    </BaseCard>
+
+    <!-- Thinking / Reasoning -->
+    <BaseCard class="p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <Icon
+          icon="lucide:lightbulb"
+          class="w-4 h-4 text-status-indigo"
+        />
+        <h3 class="text-sm font-medium text-theme-200">
+          Thinking / Reasoning
+        </h3>
+      </div>
+      <p class="text-xs text-ink-muted leading-relaxed">
+        Set the default reasoning effort for this agent. Higher levels can improve complex answers but use more time and tokens.
+      </p>
+      <div class="mt-4 max-w-md">
+        <ReasoningSlider
+          id="agent-reasoning-level"
+          :model-value="selectedReasoning"
+          :levels="REASONING_LEVELS"
+          @update:model-value="onReasoningChange"
+        />
+        <p class="mt-3 min-h-4 text-xs text-ink-muted">
+          {{ selectedReasoningOption.description }}
+        </p>
       </div>
     </BaseCard>
 

@@ -39,7 +39,7 @@ beforeEach(() => {
 
 test('the visible Stop button always requests chat cancellation', async () => {
   const wrapper = mount(InputToolbar, {
-    props: { canSend: false, isRunning: true, editingQueue: false },
+    props: { canSend: false, hasInput: false, isRunning: true, editingQueue: false },
     global: { stubs: {
       Icon: true, HoverMenu: true, HoverTooltip: true, ProviderModelSelect: true,
       SplitButton: true, ModelSelectorModal: true, ChatOptionsMenu: true, ThinkingModeButton: true,
@@ -49,9 +49,42 @@ test('the visible Stop button always requests chat cancellation', async () => {
   expect(chat.cancelStream).toHaveBeenCalledOnce()
 })
 
+function mountRunning(props: { canSend: boolean; hasInput: boolean; editingQueue?: boolean }) {
+  return mount(InputToolbar, {
+    props: { isRunning: true, editingQueue: false, ...props },
+    global: { stubs: {
+      Icon: true, HoverMenu: true, HoverTooltip: true, ProviderModelSelect: true,
+      ModelSelectorModal: true, ChatOptionsMenu: true, ThinkingModeButton: true,
+    } },
+  })
+}
+
+test('while running, an empty input offers Stop and no Queue', () => {
+  const wrapper = mountRunning({ canSend: false, hasInput: false })
+  expect(wrapper.find('[aria-label="Stop current response"]').exists()).toBe(true)
+  expect(wrapper.find('[aria-label="Queue message for next turn"]').exists()).toBe(false)
+})
+
+test('while running, typing turns Stop into Queue and clearing the input turns it back', async () => {
+  const wrapper = mountRunning({ canSend: true, hasInput: true })
+  expect(wrapper.find('[aria-label="Stop current response"]').exists()).toBe(false)
+  await wrapper.get('[aria-label="Queue message for next turn"]').trigger('click')
+  expect(wrapper.emitted('send')).toHaveLength(1)
+
+  await wrapper.setProps({ canSend: false, hasInput: false })
+  expect(wrapper.find('[aria-label="Stop current response"]').exists()).toBe(true)
+  expect(wrapper.find('[aria-label="Queue message for next turn"]').exists()).toBe(false)
+})
+
+test('while running, a message that cannot be sent yet shows a disabled Queue', () => {
+  const wrapper = mountRunning({ canSend: false, hasInput: true })
+  expect(wrapper.find('[aria-label="Stop current response"]').exists()).toBe(false)
+  expect(wrapper.get('[aria-label="Queue message for next turn"]').attributes('disabled')).toBeDefined()
+})
+
 test('places thinking effort immediately before the model selectors', () => {
   const wrapper = mount(InputToolbar, {
-    props: { canSend: false, isRunning: false, editingQueue: false },
+    props: { canSend: false, hasInput: false, isRunning: false, editingQueue: false },
     global: { stubs: {
       Icon: true, HoverMenu: true, HoverTooltip: true, ProviderModelSelect: true,
       SplitButton: true, ModelSelectorModal: true, ChatOptionsMenu: true, ThinkingModeButton: true,
@@ -66,7 +99,7 @@ test.each(['toggle', 'escape', 'outside', 'selection'])('hides model details whi
   vi.spyOn(api.modelFavorites, 'get').mockResolvedValue({ favorites: [], initialized: true })
   const wrapper = mount(InputToolbar, {
     attachTo: document.body,
-    props: { canSend: false, isRunning: false, editingQueue: false },
+    props: { canSend: false, hasInput: false, isRunning: false, editingQueue: false },
     global: { stubs: {
       SplitButton: true, ModelSelectorModal: true, ChatOptionsMenu: true, ThinkingModeButton: true,
     } },

@@ -10,7 +10,6 @@ import { useProviderStore } from "../../stores/provider.store";
 const props = defineProps<{ agent: AgentDefinition; cyno?: boolean }>();
 const emit = defineEmits<{
   update: [field: string, value: unknown];
-  updateReasoning: [enabled: boolean, effort: AgentDefinition['reasoningEffort']];
 }>();
 
 const AGENT_ROUTER_PROVIDER = "__agent_provider__";
@@ -21,28 +20,6 @@ const MIN_CONTEXT_TOKENS = 2048;
 const DEFAULT_CONTEXT_TOKENS = 30720;
 const CONTEXT_TOKEN_STEP = 2048;
 const DEFAULT_MAX_CONTEXT_TOKENS = 262144;
-const REASONING_LEVELS: Array<{
-  value: AgentDefinition['reasoningEffort'] | 'off';
-  label: string;
-  description: string;
-}> = [
-  { value: 'off', label: 'Off', description: 'Disables reasoning when the selected model permits it. Also disables the task planner.' },
-  { value: 'minimal', label: 'Minimal', description: 'Minimal reasoning for the lowest latency and token use.' },
-  { value: 'low', label: 'Low', description: 'Quick reasoning for straightforward tasks.' },
-  { value: 'medium', label: 'Medium', description: 'Balanced reasoning, speed, and token use.' },
-  { value: 'high', label: 'High', description: 'Deep reasoning for complex tasks.' },
-  { value: 'xhigh', label: 'Extra high', description: 'Extra reasoning for especially difficult tasks.' },
-  { value: 'max', label: 'Maximum', description: "The provider's maximum available reasoning effort." },
-];
-const selectedReasoning = computed(() => props.agent.thinkingEnabled === false ? 'off' : props.agent.reasoningEffort || 'medium');
-const selectedReasoningOption = computed(() => REASONING_LEVELS.find(level => level.value === selectedReasoning.value) || REASONING_LEVELS[3]);
-
-function onReasoningChange(event: Event): void {
-  const level = REASONING_LEVELS.find(item => item.value === (event.target as HTMLSelectElement).value);
-  if (!level) return;
-  emit('updateReasoning', level.value !== 'off', level.value === 'off' ? props.agent.reasoningEffort || 'medium' : level.value);
-}
-
 const autoRouterLeadingSelections = [
   {
     providerId: AGENT_ROUTER_PROVIDER,
@@ -181,38 +158,6 @@ function onMaxCtxSliderInput(event: Event) {
           placeholder="Use agent model"
           @change="onAutoRouterSelection"
         />
-      </div>
-    </div>
-
-    <!-- Thinking / Reasoning -->
-    <div class="bg-theme-800 border border-theme-700 rounded-xl p-5">
-      <div class="flex items-center gap-2 mb-1">
-        <Icon
-          icon="lucide:lightbulb"
-          class="w-4 h-4 text-status-indigo"
-        />
-        <h3 class="text-sm font-medium text-theme-200">
-          Thinking / Reasoning
-        </h3>
-      </div>
-      <p class="text-xs text-ink-muted leading-relaxed">
-        Set the default reasoning effort for this agent. Higher levels can improve complex answers but use more time and tokens.
-      </p>
-      <div class="mt-4 max-w-md">
-        <label for="agent-reasoning-level" class="block text-xs font-medium text-theme-300 mb-1.5">Reasoning</label>
-        <select
-          id="agent-reasoning-level"
-          :value="selectedReasoning"
-          class="w-full bg-theme-900 border border-theme-600 rounded-lg px-3 py-2 text-sm text-theme-200 focus:outline-none focus:border-indigo-500/50"
-          @change="onReasoningChange"
-        >
-          <option v-for="level in REASONING_LEVELS" :key="level.value" :value="level.value">
-            {{ level.label }}
-          </option>
-        </select>
-        <p class="mt-3 min-h-4 text-xs text-ink-muted">
-          {{ selectedReasoningOption.description }}
-        </p>
       </div>
     </div>
 

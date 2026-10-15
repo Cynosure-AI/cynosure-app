@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getEventBus } from '../telemetry/event-bus.js'
+import type { ProjectTaskProgress } from '@shared/types'
 
 export type PlanningTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
 export type PlanningRunStatus = 'running' | 'completed' | 'cancelled' | 'error'
@@ -26,19 +27,20 @@ export interface PlanningState {
   completedAt?: number
 }
 
-interface TaskRow {
+interface PlanRow {
   id: string
   conversation_id: string
   status: string
-  definition_json: string
+  objective: string
+  items_json: string
+  current_item_id: string | null
   result_json: string | null
-  iterations: number | null
   created_at: number
-  updated_at: number | null
+  updated_at: number
   completed_at: number | null
 }
 
-const STATE_TYPE = 'planning_state'
+const PLAN_COLUMNS = 'id, conversation_id, status, objective, items_json, current_item_id, result_json, created_at, updated_at, completed_at'
 const MAX_OBJECTIVE_LENGTH = 300
 const MAX_TASKS = 24
 const MAX_TASK_TITLE_LENGTH = 120
@@ -59,9 +61,9 @@ export function createPlanningRun(conversationId: string, objective: string): Pl
   }
 
   db.prepare(
-    `INSERT INTO tasks (id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(runId, conversationId, state.status, JSON.stringify(toDefinition(state)), null, 0, now, now, null)
+    `INSERT INTO run_plans (id, conversation_id, status, objective, items_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(runId, conversationId, state.status, state.objective, '[]', now, now)
 
   return state
 }
@@ -124,13 +126,13 @@ export function buildPlanningStateContext(state: PlanningState): string | null {
 
 export function getLatestPlanningState(conversationId: string): PlanningState | null {
   const rows = getDb().prepare(
-    `SELECT id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at
-     FROM tasks
+    `SELECT ${PLAN_COLUMNS}
+     FROM run_plans
      WHERE conversation_id = ?
      ORDER BY
        CASE WHEN status = 'running' THEN 0 ELSE 1 END,
-       COALESCE(updated_at, created_at) DESC`
-  ).all(conversationId) as TaskRow[]
+       updated_at DESC`
+  ).all(conversationId) as PlanRow[]
 
   for (const row of rows) {
     const state = fromRow(row)
@@ -260,27 +262,76 @@ function clearTodoList(current: PlanningState): { success: boolean; output: stri
 }
 
 export function getPlanningState(runId: string): PlanningState | null {
-  const row = getDb().prepare(
-    `SELECT id, conversation_id, status, definition_json, result_json, iterations, created_at, updated_at, completed_at
-     FROM tasks WHERE id = ?`
-  ).get(runId) as TaskRow | undefined
+  const row = getDb().prepare(`SELECT ${PLAN_COLUMNS} FROM run_plans WHERE id = ?`).get(runId) as PlanRow | undefined
   return row ? fromRow(row) : null
 }
 
+/**
+ * Record that the conversation's running plan works on a project task, so the
+ * plan becomes part of that task's work log. No-op when no plan is running.
+ */
+export function linkRunningPlanToProjectTask(conversationId: string, projectTaskId: string): void {
+  const db = getDb()
+  const plan = db.prepare(
+    `SELECT id FROM run_plans WHERE conversation_id = ? AND status = 'running' ORDER BY updated_at DESC LIMIT 1`
+  ).get(conversationId) as { id: string } | undefined
+  if (!plan) return
+  db.prepare('INSERT OR IGNORE INTO run_plan_project_tasks (plan_id, project_task_id, linked_at) VALUES (?, ?, ?)')
+    .run(plan.id, projectTaskId, Date.now())
+}
+
+/** Plans that worked on a project task, newest first: the task's work log. */
+export function listProjectTaskPlans(projectTaskId: string): PlanningState[] {
+  const rows = getDb().prepare(
+    `SELECT ${PLAN_COLUMNS.split(', ').map((column) => `p.${column}`).join(', ')}
+     FROM run_plans p
+     JOIN run_plan_project_tasks l ON l.plan_id = p.id
+     WHERE l.project_task_id = ?
+     ORDER BY p.created_at DESC`
+  ).all(projectTaskId) as PlanRow[]
+  return rows.map(fromRow).filter((state): state is PlanningState => state !== null)
+}
+
+/** Step counts of the newest plan that worked on each of a project's tasks, keyed by task id. */
+export function listProjectTaskProgress(projectId: string): Map<string, ProjectTaskProgress> {
+  const rows = getDb().prepare(
+    `SELECT l.project_task_id AS task_id, ${PLAN_COLUMNS.split(', ').map((column) => `p.${column}`).join(', ')}
+     FROM run_plans p
+     JOIN run_plan_project_tasks l ON l.plan_id = p.id
+     JOIN project_tasks t ON t.id = l.project_task_id
+     WHERE t.project_id = ?
+     ORDER BY p.created_at DESC`
+  ).all(projectId) as Array<PlanRow & { task_id: string }>
+  const progress = new Map<string, ProjectTaskProgress>()
+  for (const row of rows) {
+    if (progress.has(row.task_id)) continue
+    const plan = fromRow(row)
+    if (!plan) continue
+    progress.set(row.task_id, {
+      runId: plan.runId,
+      status: plan.status,
+      completed: plan.items.filter((item) => item.status === 'completed').length,
+      total: plan.items.length,
+    })
+  }
+  return progress
+}
+
 function deletePlanningRun(runId: string): void {
-  getDb().prepare('DELETE FROM tasks WHERE id = ?').run(runId)
+  getDb().prepare('DELETE FROM run_plans WHERE id = ?').run(runId)
 }
 
 function persistState(state: PlanningState, completed = false): void {
   getDb().prepare(
-    `UPDATE tasks
-     SET status = ?, definition_json = ?, result_json = ?, iterations = ?, updated_at = ?, completed_at = ?
+    `UPDATE run_plans
+     SET status = ?, objective = ?, items_json = ?, current_item_id = ?, result_json = ?, updated_at = ?, completed_at = ?
      WHERE id = ?`
   ).run(
     state.status,
-    JSON.stringify(toDefinition(state)),
+    state.objective,
+    JSON.stringify(state.items),
+    state.currentTaskId ?? null,
     state.result ? JSON.stringify(state.result) : null,
-    state.items.filter((item) => item.status === 'completed').length,
     state.updatedAt,
     completed ? state.completedAt ?? state.updatedAt : state.completedAt ?? null,
     state.runId,
@@ -291,40 +342,24 @@ function emitState(state: PlanningState): void {
   getEventBus().emit('planning:state-updated', serializeState(state))
 }
 
-function fromRow(row: TaskRow): PlanningState | null {
+function fromRow(row: PlanRow): PlanningState | null {
   try {
-    const definition = JSON.parse(row.definition_json) as {
-      type?: string
-      objective?: string
-      items?: PlanningTaskItem[]
-      currentTaskId?: string
-    }
-    if (definition.type !== STATE_TYPE) return null
-
+    const items = JSON.parse(row.items_json) as unknown
     const result = row.result_json ? JSON.parse(row.result_json) as PlanningState['result'] : undefined
     return {
       runId: row.id,
       conversationId: row.conversation_id,
       status: normalizeRunStatus(row.status),
-      objective: definition.objective || '',
-      items: Array.isArray(definition.items) ? definition.items : [],
-      currentTaskId: definition.currentTaskId,
+      objective: row.objective,
+      items: Array.isArray(items) ? items as PlanningTaskItem[] : [],
+      currentTaskId: row.current_item_id ?? undefined,
       result,
       createdAt: row.created_at,
-      updatedAt: row.updated_at ?? row.created_at,
+      updatedAt: row.updated_at,
       completedAt: row.completed_at ?? undefined,
     }
   } catch {
     return null
-  }
-}
-
-function toDefinition(state: PlanningState): Record<string, unknown> {
-  return {
-    type: STATE_TYPE,
-    objective: state.objective,
-    items: state.items,
-    currentTaskId: state.currentTaskId,
   }
 }
 

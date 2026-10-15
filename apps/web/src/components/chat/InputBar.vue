@@ -16,10 +16,6 @@ import type { StagedChatAttachment } from '../../api/types'
 const chatStore = useChatStore()
 const providerStore = useProviderStore()
 
-defineProps<{
-  floating?: boolean
-}>()
-
 function getDraftStorageKey(conversationId: string | null, agentId: string | null): string {
   const scope = conversationId ? `conversation:${conversationId}` : `new:${agentId || 'default'}`
   return `${SK_CHAT_DRAFT_PREFIX}${scope}`
@@ -105,6 +101,9 @@ const audioInputUnsupported = computed(() =>
 )
 const attachmentsProcessing = computed(() => attachedFiles.value.some(file => file.status === 'processing'))
 const hasAttachmentError = computed(() => attachedFiles.value.some(file => file.status === 'error'))
+/** Something is being composed, even if it can't be sent yet. */
+const hasInput = computed(() => Boolean(inputText.value.trim())
+  || attachedImages.value.length > 0 || attachedFiles.value.length > 0 || attachedAudio.value.length > 0)
 const canSend = computed(() => !attachmentsProcessing.value && !hasAttachmentError.value && (!!inputText.value.trim() || attachedAudio.value.length > 0))
 
 async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
@@ -457,18 +456,11 @@ defineExpose({ processFiles, focus, sendSuggestion })
 </script>
 
 <template>
-  <div
-    class="chat-input-bar relative px-4 py-3 flex items-end gap-3 transition-[background-color,border-color] duration-300"
-    :class="floating
-      ? 'border border-transparent bg-transparent'
-      : 'border-t border-x-0 border-b-0 border-theme-800 bg-theme-900'"
-  >
+  <!-- Same chrome whether centered or docked, so the empty→chat transition is
+       only the composer sliding down (driven by ChatView's spacer). -->
+  <div class="chat-input-bar relative px-4 py-3 flex items-end gap-3">
     <!--Placeholder to even out the context ring space so the input is centered-->
-    <div
-      v-if="!floating"
-      class="hidden sm:flex w-10 items-center justify-center"
-    />
-
+    <div class="hidden sm:flex w-10 items-center justify-center" />
 
     <!-- Main input area -->
     <div class="relative max-w-5xl mx-auto flex-1 min-w-0">
@@ -493,9 +485,15 @@ defineExpose({ processFiles, focus, sendSuggestion })
           :key="item.id"
           class="flex items-center gap-2 rounded-lg bg-theme-800 px-2.5 py-2 text-xs"
         >
-          <Icon icon="lucide:list-end" class="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+          <Icon
+            icon="lucide:list-end"
+            class="h-3.5 w-3.5 shrink-0 text-ink-muted"
+          />
           <span class="min-w-0 flex-1 truncate text-theme-200">{{ item.content }}</span>
-          <span v-if="item.attachments.length" class="flex shrink-0 items-center gap-1 text-ink-muted">
+          <span
+            v-if="item.attachments.length"
+            class="flex shrink-0 items-center gap-1 text-ink-muted"
+          >
             <span
               v-for="attachment in item.attachments"
               :key="attachment.id"
@@ -510,14 +508,38 @@ defineExpose({ processFiles, focus, sendSuggestion })
               >×</button>
             </span>
           </span>
-          <button type="button" class="text-ink-muted hover:text-theme-200" title="Edit queued message" @click="editQueued(item.id, item.content)">
-            <Icon icon="lucide:pencil" class="h-3.5 w-3.5" />
+          <button
+            type="button"
+            class="text-ink-muted hover:text-theme-200"
+            title="Edit queued message"
+            @click="editQueued(item.id, item.content)"
+          >
+            <Icon
+              icon="lucide:pencil"
+              class="h-3.5 w-3.5"
+            />
           </button>
-          <button type="button" class="text-accent-fg hover:text-accent-fg" :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'" @click="chatStore.steerQueuedMessage(item.id)">
-            <Icon icon="lucide:corner-up-left" class="h-3.5 w-3.5" />
+          <button
+            type="button"
+            class="text-accent-fg hover:text-accent-fg"
+            :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'"
+            @click="chatStore.steerQueuedMessage(item.id)"
+          >
+            <Icon
+              icon="lucide:corner-up-left"
+              class="h-3.5 w-3.5"
+            />
           </button>
-          <button type="button" class="text-ink-muted hover:text-status-danger" title="Remove queued message" @click="chatStore.removeQueuedMessage(item.id)">
-            <Icon icon="lucide:x" class="h-3.5 w-3.5" />
+          <button
+            type="button"
+            class="text-ink-muted hover:text-status-danger"
+            title="Remove queued message"
+            @click="chatStore.removeQueuedMessage(item.id)"
+          >
+            <Icon
+              icon="lucide:x"
+              class="h-3.5 w-3.5"
+            />
           </button>
         </div>
       </div>
@@ -651,8 +673,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
 
       <!-- Input area: textarea + bottom bar inside a unified container -->
       <div
-        class="chat-composer rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 transition-shadow duration-300"
-        :class="{ 'shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40': floating }"
+        class="chat-composer rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40"
       >
         <input
           ref="fileInputRef"
@@ -677,6 +698,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
         />
         <InputToolbar
           :can-send="canSend"
+          :has-input="hasInput"
           :is-running="chatStore.isConversationLocked"
           :editing-queue="Boolean(editingQueueId)"
           :media-kind="mediaKind"
@@ -695,13 +717,6 @@ defineExpose({ processFiles, focus, sendSuggestion })
           <slot name="leading-actions" />
         </InputToolbar>
       </div>
-
-      <div
-        v-if="floating"
-        class="hidden sm:flex absolute -right-12 bottom-2 w-10 items-center justify-center"
-      >
-        <ContextRing />
-      </div>
     </div>
 
     <FileLibraryModal
@@ -715,12 +730,13 @@ defineExpose({ processFiles, focus, sendSuggestion })
       @add="addLibrarySelection"
     />
 
-    <!-- Context window usage ring — pinned to the far right of the bar -->
-    <div
-      v-if="!floating"
-      class="hidden sm:flex w-10 items-center justify-center"
-    >
-      <ContextRing />
+    <!-- Context window usage ring — pinned to the far right of the bar. The
+         slot keeps its width so the input stays centered; ChatView anchors the
+         ring itself to the column's bottom-right while the composer is centered. -->
+    <div class="context-ring-slot hidden sm:flex w-10 items-center justify-center">
+      <div class="context-ring-anchor flex w-10 justify-center">
+        <ContextRing />
+      </div>
     </div>
   </div>
 </template>

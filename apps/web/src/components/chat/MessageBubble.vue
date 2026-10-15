@@ -51,6 +51,8 @@ const prefs = usePreferencesStore()
 const { logoIconUrl } = useAppBranding()
 
 const thinkingExpanded = ref(prefs.autoExpandSteps)
+/** Thinking is still streaming until the first response text arrives. */
+const isThinking = computed(() => Boolean(props.isStreaming && props.thinking && !props.content))
 const copied = ref(false)
 const isEditing = ref(false)
 const editContent = ref('')
@@ -117,6 +119,7 @@ const renderedContent = computed(() => {
 })
 
 const isUser = computed(() => props.role === 'user')
+const showBubble = computed(() => isUser.value || prefs.aiMessageBubbles)
 // Turn totals are attached to the final reply; intermediate rounds only carry the model.
 const hasTokenUsage = computed(() =>
   props.contextTokens !== undefined || props.promptTokens !== undefined || props.completionTokens !== undefined,
@@ -135,6 +138,16 @@ const hasAssistantImages = computed(() => !isUser.value && Boolean(props.imageDa
 const hasAssistantVideos = computed(() => !isUser.value && Boolean(props.videoDataUrls?.length))
 const hasAssistantAudio = computed(() => !isUser.value && Boolean(props.audioDataUrls?.length))
 const hasAssistantFileArtifacts = computed(() => !isUser.value && Boolean(props.fileArtifacts?.length))
+/** Anything rendered below the thinking block; without it the block is the whole message. */
+const hasOutputAfterThinking = computed(() =>
+  Boolean(props.isError || props.content)
+  || hasAssistantFileArtifacts.value
+  || hasAssistantImages.value
+  || hasAssistantVideos.value
+  || hasAssistantAudio.value
+  || Boolean(props.isStreaming && !isThinking.value)
+  || Boolean(!props.isStreaming && (hasTokenUsage.value || props.stopped))
+)
 const renderedMediaUrls = computed(() => [
   ...(props.imageDataUrls || []),
   ...(props.videoDataUrls || []),
@@ -187,10 +200,12 @@ const imageGridClass = computed(() => {
 
     <!-- Message bubble -->
     <div
-      class="relative md:max-w-[85%] max-w-[90%] rounded-3xl px-5 py-3 text-[15px] wrap-break-word leading-relaxed shadow-sm transition-all"
+      class="relative md:max-w-[85%] max-w-[90%] px-5 py-3 text-[15px] wrap-break-word leading-relaxed transition-all"
       :class="[
-        isUser ? 'chat-user-message bg-user-message text-user-message-text rounded-tr-sm' : 'bg-theme-800/60 border text-theme-200 rounded-tl-sm',
-        isError && !isUser ? 'border-red-500/40' : !isUser ? 'border-theme-700/50' : '',
+        isUser ? 'chat-user-message bg-user-message text-user-message-text rounded-tr-sm' : 'text-theme-200',
+        showBubble ? 'rounded-3xl shadow-sm' : 'bg-transparent',
+        !isUser && showBubble ? 'bg-theme-800/60 border rounded-tl-sm' : '',
+        !isUser && showBubble ? (isError ? 'border-red-500/40' : 'border-theme-700/50') : '',
         isEditing ? 'w-[85%] md:w-[80%]' : ''
       ]"
     >
@@ -247,26 +262,40 @@ const imageGridClass = computed(() => {
       <!-- Thinking block (detailed mode only) -->
       <div
         v-if="!isUser && thinking"
-        class="mb-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 backdrop-blur-sm shadow-sm"
+        data-testid="thinking-block"
+        :class="[
+          { 'mb-3': hasOutputAfterThinking },
+          showBubble ? 'rounded-xl border border-indigo-500/20 bg-indigo-500/5 backdrop-blur-sm shadow-sm' : '',
+        ]"
       >
         <CollapsibleSection
           v-model="thinkingExpanded"
           header-label="Thinking"
-          header-icon="lucide:database"
-          header-class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] rounded-xl transition-colors hover:bg-indigo-500/10"
+          :header-class="`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors ${showBubble ? 'rounded-xl hover:bg-indigo-500/10' : ''}`"
           header-text-class="font-medium text-status-indigo"
           chevron-class="h-3.5 w-3.5 text-indigo-300/70"
           :keyboard-shortcuts="true"
         >
           <template #header-extra>
             <span
-              v-if="isStreaming"
-              class="animate-pulse text-indigo-300"
-            >…</span>
+              v-if="isThinking"
+              class="thinking-dots -ml-1.5 inline-flex text-status-indigo font-medium"
+              role="status"
+              aria-label="Thinking in progress"
+            >
+              <span
+                v-for="dot in 3"
+                :key="dot"
+                class="thinking-dot"
+                :style="{ animationDelay: `${(dot - 1) * 0.15}s` }"
+                aria-hidden="true"
+              >.</span>
+            </span>
           </template>
 
           <div
-            class="border-t border-indigo-500/20 px-3 py-2.5 text-[13px] leading-relaxed text-ink-secondary whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
+            class="px-3 py-2.5 text-[13px] leading-relaxed text-ink-secondary whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
+            :class="showBubble ? 'border-t border-indigo-500/20' : ''"
           >
             {{ thinking }}
           </div>
@@ -499,14 +528,16 @@ const imageGridClass = computed(() => {
 
       <!-- Streaming cursor -->
       <span
-        v-if="isStreaming"
+        v-if="isStreaming && !isThinking"
+        data-testid="streaming-cursor"
         class="inline-block w-2 h-4 bg-theme-400 animate-pulse ml-0.5"
       />
 
       <!-- Message metadata (assistant) -->
       <div
         v-if="!isUser && !isStreaming && (hasTokenUsage || stopped)"
-        class="mt-2 pt-1.5 border-t border-theme-700/50 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted"
+        class="mt-2 pt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted"
+        :class="showBubble ? 'border-t border-theme-700/50' : ''"
       >
         <span
           v-if="stopped"
@@ -560,3 +591,25 @@ const imageGridClass = computed(() => {
     @close="lightboxSrc = null"
   />
 </template>
+
+<style scoped>
+@keyframes thinking-dot-jump {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
+}
+.thinking-dot {
+  display: inline-block;
+  animation: thinking-dot-jump 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dot {
+    animation: none;
+  }
+}
+</style>

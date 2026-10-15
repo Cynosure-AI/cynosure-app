@@ -107,6 +107,22 @@ describe('provider routes', () => {
         expect(getGateway().getLastUsedProviderId()).toBe(second)
     })
 
+    test('disabling a provider keeps it stored and registered, and an edit preserves the choice', async () => {
+        const id = (await app.inject({ method: 'POST', url: '/providers', payload: localProvider })).json().id
+        expect((await app.inject('/providers')).json()[0].enabled).toBe(true)
+
+        expect((await app.inject({ method: 'PUT', url: `/providers/${id}/enabled`, payload: { enabled: 'no' } })).statusCode).toBe(400)
+        expect((await app.inject({ method: 'PUT', url: '/providers/missing/enabled', payload: { enabled: false } })).statusCode).toBe(404)
+        const response = await app.inject({ method: 'PUT', url: `/providers/${id}/enabled`, payload: { enabled: false } })
+
+        expect(response.statusCode).toBe(200)
+        expect((await app.inject('/providers')).json()[0]).toMatchObject({ id, name: 'LM Studio', enabled: false })
+        expect(getGateway().getProvider(id)?.config.enabled).toBe(false)
+
+        await app.inject({ method: 'POST', url: '/providers', payload: { ...localProvider, id, name: 'Renamed', enabled: false } })
+        expect((await app.inject('/providers')).json()[0]).toMatchObject({ name: 'Renamed', enabled: false })
+    })
+
     test('previews the models of an unsaved provider without storing it', async () => {
         modelServer = createServer((req, res) => {
             res.setHeader('content-type', 'application/json')

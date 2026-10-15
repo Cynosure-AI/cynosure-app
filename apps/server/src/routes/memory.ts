@@ -249,21 +249,22 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
   })
 
   app.get('/dream/config', async () => getDreamConfig())
-  app.post<{ Body: { enabled: boolean; providerId: string; model: string } }>('/dream/configure', async (req, reply) => {
+  // An empty providerId turns Dream off; otherwise eligibility is decided per agent and chat.
+  app.post<{ Body: { providerId: string; model: string } }>('/dream/configure', async (req, reply) => {
     const body = req.body
-    if (!body || typeof body.enabled !== 'boolean' || typeof body.providerId !== 'string' || typeof body.model !== 'string') {
-      return reply.status(400).send({ error: 'Dream requires enabled, providerId, and model settings' })
+    if (!body || typeof body.providerId !== 'string' || typeof body.model !== 'string') {
+      return reply.status(400).send({ error: 'Dream requires providerId and model settings' })
     }
     const providerId = body.providerId.trim()
-    const model = body.model.trim()
+    const model = providerId ? body.model.trim() : ''
     const provider = providerId ? getGateway().getProvider(providerId) : undefined
     const resolvedModel = model || provider?.config.defaultModel?.trim()
-    if (body.enabled && (!provider || !resolvedModel)) {
-      return reply.status(400).send({ error: 'Select an available provider and model before enabling Dream Mode' })
+    if (providerId && (!provider || !resolvedModel)) {
+      return reply.status(400).send({ error: 'Select an available provider and model for Dream Mode' })
     }
-    if (!body.enabled) cancelAllDreamRuns()
-    const config = saveDreamConfig({ enabled: body.enabled, providerId, model })
-    if (!body.enabled) await settleDreamWork()
+    if (!providerId) cancelAllDreamRuns()
+    const config = saveDreamConfig({ providerId, model })
+    if (!providerId) await settleDreamWork()
     return config
   })
   app.post<{ Params: { id: string } }>('/dream/runs/:id/cancel', async (req, reply) => {

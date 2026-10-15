@@ -84,7 +84,8 @@ const visibleConversations = computed(() => {
   if (!activeQuery.value && props.agentId !== undefined) {
     for (const conversation of chatStore.conversations) {
       if ((conversation.agentId ?? null) !== props.agentId) continue
-      merged.set(conversation.id, conversation)
+      // Only the sidebar query knows about waits; keep its answer.
+      merged.set(conversation.id, { ...conversation, waitUntil: merged.get(conversation.id)?.waitUntil ?? null })
     }
   }
   return ordered([...merged.values()])
@@ -127,6 +128,7 @@ function mapRow(row: {
   last_read_at: number | null
   created_at: number
   updated_at: number
+  wait_until?: number | null
 }): Conversation {
   return {
     id: row.id,
@@ -137,6 +139,7 @@ function mapRow(row: {
     lastReadAt: row.last_read_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    waitUntil: row.wait_until ?? null,
   }
 }
 
@@ -246,6 +249,15 @@ function formatDate(timestamp: number): string {
     : date.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
+/** Waiting for a scheduled wait to resume it, and not doing anything else meanwhile. */
+function isWaiting(conversation: Conversation): boolean {
+  return Boolean(conversation.waitUntil) && !runningIds.value.has(conversation.id)
+}
+
+function resumeLabel(conversation: Conversation): string {
+  return `Resumes at ${new Date(conversation.waitUntil!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+}
+
 function agentName(conversation: Conversation): string {
   return conversation.agentId ? agentDefs.get(conversation.agentId)?.name || 'Agent' : cyno.name
 }
@@ -313,6 +325,7 @@ onMounted(() => {
       if (event.type === 'transcript-item' && event.item.type === 'message' || event.type === 'title-updated') scheduleRefresh()
     }),
     api.chat.onChannelConversationState(scheduleRefresh),
+    api.chat.onWaitsChanged(scheduleRefresh),
     api.agent.onHITLRequest(scheduleRefresh),
   )
   void load(true)
@@ -375,13 +388,13 @@ onBeforeUnmount(() => {
             :src="agentDefs.get(conversation.agentId)?.iconUrl || ''"
             :alt="`${agentName(conversation)} icon`"
             class="h-full w-full object-cover"
-            :class="{ 'opacity-15': runningIds.has(conversation.id) }"
+            :class="{ 'opacity-15': runningIds.has(conversation.id) || isWaiting(conversation) }"
           >
           <Icon
             v-else
             :icon="conversation.agentId ? 'lucide:bot' : 'lucide:message-square'"
             class="h-3.5 w-3.5"
-            :class="{ 'opacity-15': runningIds.has(conversation.id) }"
+            :class="{ 'opacity-15': runningIds.has(conversation.id) || isWaiting(conversation) }"
           />
           <span
             v-if="runningIds.has(conversation.id)"
@@ -391,6 +404,18 @@ onBeforeUnmount(() => {
             <Icon
               icon="lucide:loader-circle"
               class="h-3.5 w-3.5 animate-spin text-accent-fg drop-shadow-sm"
+            />
+          </span>
+          <span
+            v-else-if="isWaiting(conversation)"
+            class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
+            role="img"
+            :aria-label="`Waiting. ${resumeLabel(conversation)}`"
+            :title="`Waiting. ${resumeLabel(conversation)}`"
+          >
+            <Icon
+              icon="lucide:hourglass"
+              class="h-3.5 w-3.5 text-status-info drop-shadow-sm"
             />
           </span>
           <span
@@ -432,7 +457,14 @@ onBeforeUnmount(() => {
           >
             <span class="truncate">{{ agentName(conversation) }}</span>
             <span>·</span>
-            <span class="shrink-0">{{ formatDate(conversation.updatedAt) }}</span>
+            <span
+              v-if="isWaiting(conversation)"
+              class="shrink-0 text-status-info"
+            >{{ resumeLabel(conversation) }}</span>
+            <span
+              v-else
+              class="shrink-0"
+            >{{ formatDate(conversation.updatedAt) }}</span>
           </span>
         </span>
 
