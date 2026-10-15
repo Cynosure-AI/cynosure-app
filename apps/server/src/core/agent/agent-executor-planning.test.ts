@@ -16,15 +16,16 @@ describe('AgentExecutor planning recovery', () => {
   beforeEach(() => {
     dbHolder.current = new Database(':memory:')
     dbHolder.current.exec(`
-      CREATE TABLE tasks (
+      CREATE TABLE run_plans (
         id TEXT PRIMARY KEY,
-        conversation_id TEXT,
-        status TEXT NOT NULL,
-        definition_json TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running',
+        objective TEXT NOT NULL DEFAULT '',
+        items_json TEXT NOT NULL DEFAULT '[]',
+        current_item_id TEXT,
         result_json TEXT,
-        iterations INTEGER,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER,
+        updated_at INTEGER NOT NULL,
         completed_at INTEGER
       )
     `)
@@ -66,6 +67,42 @@ describe('AgentExecutor planning recovery', () => {
     await expect(executor.run([{ role: 'user', content: 'go' }])).resolves.toMatchObject({ content: 'finished' })
     expect(streamComplete).toHaveBeenCalledTimes(4)
     expect(getPlanningState(run.runId)?.items[0].status).toBe('completed')
+  })
+
+  test('ends the turn without continuation once a wait is scheduled', async () => {
+    const run = createPlanningRun('planning-wait', 'Deploy and verify')
+    applyTodoUpdate(run.runId, { tasks: [{ title: 'Wait for the deploy', status: 'in_progress' }] })
+    const wait: ToolDefinition = {
+      name: 'schedule_wait',
+      description: 'Pauses the conversation',
+      parameters: { type: 'object', properties: {} },
+      timeout: 1_000,
+      execute: async () => ({ success: true, output: '{"jobId":"wait"}' }),
+    }
+    let call = 0
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      call++
+      if (call === 1) {
+        yield { toolCalls: [{ id: 'wait', type: 'function', function: { name: 'schedule_wait', arguments: '{}' } }], done: true }
+        return
+      }
+      yield { content: 'Waiting for the deploy.', done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [wait, ...makePlanningTools(run.runId)],
+      conversationId: 'planning-wait',
+      broadcast: vi.fn(),
+      model: 'test',
+      saveMessages: false,
+      emitEvents: false,
+      planningRunId: run.runId,
+      isPrimaryExecutor: true,
+    })
+
+    await expect(executor.run([{ role: 'user', content: 'go' }])).resolves.toMatchObject({ content: 'Waiting for the deploy.' })
+    expect(streamComplete).toHaveBeenCalledTimes(2)
+    expect(getPlanningState(run.runId)?.items[0].status).toBe('in_progress')
   })
 
   test('refreshes the continuation budget after resumed tool work', async () => {

@@ -9,6 +9,8 @@ export interface ScheduleToolOptions {
     executionConfig?: ConversationExecutionConfig
     /** Jobs created from a project conversation run inside that project. */
     projectId?: string
+    /** The conversation a wait resumes. */
+    conversationId?: string
 }
 
 export const SCHEDULE_TOOL_NAMES = [
@@ -16,7 +18,11 @@ export const SCHEDULE_TOOL_NAMES = [
     'schedule_list',
     'schedule_update',
     'schedule_delete',
+    'schedule_wait',
 ] as const
+
+/** A wait is for short pauses within a task; longer gaps belong in a scheduled job. */
+export const MAX_WAIT_MINUTES = 60
 
 export type ScheduleToolName = (typeof SCHEDULE_TOOL_NAMES)[number]
 
@@ -215,6 +221,7 @@ function updateTool(opts: ScheduleToolOptions): ToolDefinition {
             const scheduler = await import('../../triggers/cron-scheduler.js')
             const existing = scheduler.getCronJob(input.jobId)
             if (!existing || existing.agentId !== ownerAgentId(opts.agentId)) return failure('Scheduled job not found')
+            if (existing.conversationId) return failure('This job is a wait. Call schedule_wait again to change it, or schedule_delete to cancel it.')
 
             let schedule = input.schedule?.trim()
             let oneOff: boolean | undefined = input.schedule ? false : undefined
@@ -271,6 +278,79 @@ function deleteTool(opts: ScheduleToolOptions): ToolDefinition {
     }
 }
 
+function waitTool(opts: ScheduleToolOptions): ToolDefinition {
+    return {
+        name: 'schedule_wait',
+        execution: { readOnly: false },
+        description: `Pause this conversation and continue it automatically later, up to ${MAX_WAIT_MINUTES} minutes from now. Use it to wait for something that takes time, such as a build, a deployment or a rate limit, instead of polling in a loop. After calling it, end your turn with a short note on what you are waiting for; the conversation then resumes with a message containing your note. A conversation has at most one pending wait: calling this again replaces it. The wait is listed with the scheduled jobs and can be cancelled with schedule_delete.`,
+        parameters: {
+            type: 'object',
+            properties: {
+                minutes: {
+                    type: 'integer',
+                    minimum: 1,
+                    maximum: MAX_WAIT_MINUTES,
+                    description: 'How long to wait, in whole minutes. The conversation resumes at the start of the next whole minute after that.',
+                },
+                note: { type: 'string', description: 'What to check or do when the conversation resumes, written as an instruction to yourself.' },
+            },
+            required: ['minutes', 'note'],
+            additionalProperties: false,
+        },
+        timeout: 5_000,
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+        execute: async (params: unknown) => {
+            const contextFailure = requireScheduleContext(opts)
+            if (contextFailure) return contextFailure
+            const conversationId = opts.conversationId
+            if (!conversationId) return failure('schedule_wait is only available inside a conversation.')
+            const input = params as { minutes?: number; note?: string }
+            if (!input.note?.trim()) return failure('note is required')
+            if (!Number.isInteger(input.minutes) || input.minutes! < 1 || input.minutes! > MAX_WAIT_MINUTES) {
+                return failure(`minutes must be a whole number from 1 to ${MAX_WAIT_MINUTES}. Use schedule_create for anything later.`)
+            }
+
+            const { getDb } = await import('../../../db/database.js')
+            const conversation = getDb().prepare('SELECT origin FROM conversations WHERE id = ?').get(conversationId) as { origin: string | null } | undefined
+            if (!conversation) return failure('This conversation no longer exists.')
+            if (conversation.origin === 'channel') {
+                return failure('schedule_wait is not available in messaging channel conversations, because the resumed reply would not be delivered to the channel. Use schedule_create instead.')
+            }
+
+            const scheduler = await import('../../triggers/cron-scheduler.js')
+            try {
+                const { schedule, runAt } = relativeOneOffCronExpression(input.minutes!)
+                const replaced = scheduler.getWaitJobsForConversation(conversationId)
+                for (const job of replaced) {
+                    scheduler.unscheduleCronJob(job.id)
+                    scheduler.deleteCronJob(job.id)
+                }
+                const note = input.note.trim()
+                const job = scheduler.createCronJob({
+                    name: `Wait: ${note.length > 60 ? `${note.slice(0, 59)}…` : note}`,
+                    agentId: ownerAgentId(opts.agentId),
+                    schedule,
+                    prompt: note,
+                    enabled: true,
+                    oneOff: true,
+                    projectId: opts.projectId,
+                    conversationId,
+                })
+                scheduler.scheduleCronJob(job.id)
+                return result({
+                    jobId: job.id,
+                    resumesAt: new Date(runAt).toISOString(),
+                    replacedJobIds: replaced.length ? replaced.map((item) => item.id) : undefined,
+                    serverTime: serverTime(),
+                    next: 'End your turn now with a brief note on what you are waiting for. Do not keep working or wait in this turn.',
+                })
+            } catch (error) {
+                return failure((error as Error).message)
+            }
+        },
+    }
+}
+
 export function makeScheduleTools(opts: ScheduleToolOptions): ToolDefinition[] {
-    return [createTool(opts), listTool(opts), updateTool(opts), deleteTool(opts)]
+    return [createTool(opts), listTool(opts), updateTool(opts), deleteTool(opts), waitTool(opts)]
 }

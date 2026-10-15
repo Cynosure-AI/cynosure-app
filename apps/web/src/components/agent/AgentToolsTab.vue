@@ -22,8 +22,8 @@ const usesSelectionCapRouting = computed(() => props.agent.tools.length > DIRECT
 
 const automaticToolStates = computed(() => ({
   todo_update: {
-    active: props.agent.thinkingEnabled && hasSelectableExecutionTools.value,
-    criteria: 'thinking mode and visible execution tools',
+    active: hasSelectableExecutionTools.value,
+    criteria: 'visible execution tools',
   },
   ...memoryAutomaticToolStates(hasMemoryScope.value),
   attachment_search: {

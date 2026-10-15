@@ -21,6 +21,7 @@ vi.mock('../../api/client', () => ({ api: { chat: {
   listConversationsPaginated: mocks.listConversationsPaginated,
   listProjectConversations: mocks.listProjectConversations,
   onEvent: () => () => {},
+  onWaitsChanged: () => () => {},
 } } }))
 vi.mock('../../stores/chat.store', () => ({ useChatStore: () => ({
   activeConversationId: null, activeProjectId: null, selectConversation: mocks.selectConversation,
@@ -67,6 +68,19 @@ test('shows and clears polled running status without opening the chat', async ()
     expect(mocks.selectConversation).not.toHaveBeenCalled()
     await wrapper.setProps({ activeConversationIds: [] })
     expect(wrapper.find(spinner).exists()).toBe(false)
+  } finally { wrapper.unmount() }
+})
+
+test('shows an hourglass on a waiting chat until it runs again', async () => {
+  mocks.listConversationsPaginated.mockResolvedValue({
+    items: [{ id: 'chat', title: 'Background chat', origin: 'chat', wait_until: Date.now() + 5 * 60_000 }], total: 1,
+  })
+  const wrapper = await render()
+  try {
+    expect(wrapper.find('ul [icon="lucide:hourglass"]').exists()).toBe(true)
+    await wrapper.setProps({ activeConversationIds: ['chat'] })
+    expect(wrapper.find('ul [icon="lucide:hourglass"]').exists()).toBe(false)
+    expect(wrapper.find('ul').find(spinner).exists()).toBe(true)
   } finally { wrapper.unmount() }
 })
 

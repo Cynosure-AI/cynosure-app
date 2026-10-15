@@ -129,13 +129,11 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
     const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
     const responseTools = responseSupportsToolCalls ? prepared.tools : []
-    const effectiveThinkingEnabled = thinkingEnabled ?? (resolvedAgent?.thinkingEnabled !== false)
     const planning = applyPlanningIfToolCapable(
         conversationId,
         userText,
         responseTools,
         prepared.contextBundle.messages,
-        effectiveThinkingEnabled,
     )
 
     return {
@@ -204,12 +202,8 @@ function applyPlanningIfToolCapable(
     objective: string,
     tools: ToolDefinition[],
     contextMessages: ChatMessage[],
-    thinkingEnabled: boolean,
 ): { tools: ToolDefinition[]; contextMessages: ChatMessage[]; runId?: string } {
-    if (!thinkingEnabled) {
-        return { tools, contextMessages }
-    }
-
+    // Planning follows the work, not the reasoning level: any run with execution tools gets the todo list.
     // Project tools are present in every project run; they alone do not warrant a todo list.
     const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name) && !isProjectToolName(tool.name))
     if (!hasVisibleExecutionTool) {

@@ -14,6 +14,7 @@ import ModalDialog from './components/shared/ModalDialog.vue'
 import NotificationToastHost from './components/notifications/NotificationToastHost.vue'
 import CommandPalette from './components/layout/CommandPalette.vue'
 import ServerStartupErrorScreen from './components/status/ServerStartupErrorScreen.vue'
+import WaterRippleField from './components/shared/WaterRippleField.vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
@@ -21,6 +22,7 @@ import { useSidebar } from './composables/useSidebar'
 import { useChatEvents } from './composables/useChatEvents'
 import { isCommandPaletteShortcut, useCommandPalette } from './composables/useCommandPalette'
 import { useServerStartupError } from './composables/useServerStartupError'
+import { useFreshChat } from './composables/useFreshChat'
 
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
@@ -36,6 +38,14 @@ const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
 const router = useRouter()
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
+// The content panel is a breathing water surface the cursor trails through.
+// Every theme shows it on a fresh chat and while the app is still connecting;
+// only Blackwall keeps a fainter version of it behind every other page too.
+const { freshChat } = useFreshChat()
+const showWaterField = computed(() =>
+  !isOnboardingRoute.value && (preferencesStore.theme === 'blackwall' || freshChat.value || !wsConnected.value))
+// It stays quiet on a fresh chat and fainter still everywhere else.
+const waterIntensity = computed(() => freshChat.value || !wsConnected.value ? 0.35 : 0.16)
 const { toggle: toggleCommandPalette, close: closeCommandPalette } = useCommandPalette()
 const { startupError, serverVersion } = useServerStartupError()
 
@@ -247,6 +257,20 @@ onUnmounted(() => {
           ? 'bg-theme-950'
           : 'app-content bg-theme-900 ring-1 ring-black/5 dark:ring-white/10 rounded-xl shadow-2xl ml-2 md:ml-0'"
       >
+        <Transition
+          enter-active-class="transition-opacity duration-700 ease-out"
+          enter-from-class="opacity-0"
+          leave-active-class="transition-opacity duration-500 ease-in"
+          leave-to-class="opacity-0"
+        >
+          <!-- Keyed by theme so a theme switch crossfades to a field in the new accent. -->
+          <WaterRippleField
+            v-if="showWaterField"
+            :key="preferencesStore.theme"
+            :intensity="waterIntensity"
+            class="absolute inset-0 -z-10"
+          />
+        </Transition>
         <RouterView />
       </main>
     </div>

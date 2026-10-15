@@ -19,8 +19,10 @@ import {
 } from "../../../utils/model-pricing";
 import { shortModelLabel } from "../../../utils/model-label";
 
-defineProps<{
+const props = defineProps<{
   canSend: boolean;
+  /** The user has typed or attached something. */
+  hasInput: boolean;
   isRunning: boolean;
   editingQueue: boolean;
   mediaKind?: 'image' | 'video';
@@ -126,7 +128,9 @@ const mobileModelLabel = computed(() => {
   return model ? shortModelLabel(model) : "Default";
 });
 
-const showCancelButton = computed(() => chatStore.activeConversationHasRunningInstance);
+// While a run is active, one button slot shows Stop until the user starts a message, then Queue.
+const showCancelButton = computed(() => chatStore.activeConversationHasRunningInstance && !props.hasInput);
+const showQueueButton = computed(() => props.isRunning && props.hasInput && !props.editingQueue);
 
 function queueMessage(): void {
   emit("send");
@@ -454,26 +458,30 @@ async function toggleMic(): Promise<void> {
       />
     </button>
 
-    <!-- Stop is intentionally separate from message delivery actions. -->
+    <!-- Stop and Queue share a slot: typing turns Stop into Queue, clearing the input brings Stop back. -->
     <button
       v-if="showCancelButton"
       type="button"
-      class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-red-500/60 bg-red-600/15 px-2.5 text-red-300 transition-colors hover:bg-red-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70"
+      class="group/stop inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-red-500/45 bg-red-500/10 px-2.5 text-red-700 transition-colors hover:border-red-600 hover:bg-red-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 dark:border-red-500/70 dark:bg-red-500/25 dark:text-red-100"
       title="Stop the current response"
       aria-label="Stop current response"
       @click="onCancelClick"
     >
-      <Icon
-        icon="lucide:square"
-        class="h-3.5 w-3.5 fill-current"
-      />
+      <!-- A red tint rather than a solid fill keeps Stop clearly apart from a red theme accent while still reading as important.
+           A filled square reads larger than line icons, so a smaller glyph sits in the same 16px box. -->
+      <span class="flex h-4 w-4 items-center justify-center">
+        <Icon
+          icon="mdi:square-rounded"
+          class="h-3.5 w-3.5 text-red-600 transition-colors group-hover/stop:text-white dark:text-red-400"
+        />
+      </span>
       <span class="hidden sm:inline text-xs font-medium">Stop</span>
     </button>
 
     <!-- While running, Queue is the safe default; Steer is the split-button alternative. -->
     <SplitButton
-      v-if="isRunning && !editingQueue"
-      class="h-7"
+      v-if="showQueueButton"
+      class="h-8"
       :disabled="!canSend"
       title="Add this message to the queue"
       primary-label="Queue message for next turn"
@@ -515,7 +523,7 @@ async function toggleMic(): Promise<void> {
       @click="queueMessage"
     >
       <Icon
-        :icon="editingQueue ? 'lucide:check' : 'mdi:send'"
+        :icon="editingQueue ? 'lucide:check' : 'lucide:send-horizontal'"
         class="h-4 w-4"
       />
       <span class="hidden sm:inline text-xs font-medium">{{ editingQueue ? 'Save' : 'Send' }}</span>

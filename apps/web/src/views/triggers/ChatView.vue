@@ -12,6 +12,8 @@ import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../composables/useMcpServers'
+import { useFreshChat } from '../../composables/useFreshChat'
+import { INTRO_PILLS_MS, INTRO_PILL_STAGGER_MS } from '../../components/chat/chatIntro'
 import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
 
 const chatStore = useChatStore()
@@ -105,6 +107,29 @@ const showCenteredComposer = computed(() => {
     !chatStore.loadingMessages &&
     chatStore.messages.length === 0
 })
+
+const { setFreshChat } = useFreshChat()
+watch(showCenteredComposer, setFreshChat, { immediate: true })
+
+// Pills ready with a fresh chat arrive after its intro; ones that load later
+// arrive at once. Each delay is fixed when its pill first renders, so later
+// re-renders cannot shift an animation already underway.
+let introStartedAt = 0
+const pillDelays = new Map<string, number>()
+watch(showCenteredComposer, (centered) => {
+  if (!centered) return
+  introStartedAt = performance.now()
+  pillDelays.clear()
+}, { immediate: true })
+
+function pillDelay(key: string, index: number): string {
+  let delay = pillDelays.get(key)
+  if (delay === undefined) {
+    delay = Math.max(0, INTRO_PILLS_MS - (performance.now() - introStartedAt)) + index * INTRO_PILL_STAGGER_MS
+    pillDelays.set(key, delay)
+  }
+  return `${delay}ms`
+}
 
 const latestAgentChats = computed(() => {
   const agentId = chatStore.activeAgentId
@@ -218,6 +243,7 @@ async function openRecentChat(conversation: Conversation): Promise<void> {
 }
 
 onUnmounted(() => {
+  setFreshChat(false)
   mcpResizeObserver?.disconnect()
   document.removeEventListener('keydown', onChatSearchShortcut)
   const conversationId = chatStore.activeConversationId
@@ -354,7 +380,6 @@ watch(
           <!-- Input bar (full width of chat column) -->
           <InputBar
             ref="inputBarRef"
-            :floating="showCenteredComposer"
             class="order-2 md:order-0"
           >
             <template #leading-actions>
@@ -435,7 +460,7 @@ watch(
               :key="pill.label"
               :to="pill.to"
               class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-accent-500/35 bg-accent-500/10 px-3 py-1.5 text-xs text-accent-fg shadow-sm transition-colors hover:border-accent-500/70 hover:bg-accent-500/20 hover:text-accent-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
-              :style="{ animationDelay: `${120 + index * 80}ms` }"
+              :style="{ animationDelay: pillDelay(pill.label, index) }"
             >
               <Icon
                 :icon="pill.icon"
@@ -448,7 +473,7 @@ watch(
               :key="conversation.id"
               type="button"
               class="recent-agent-chat-pill inline-flex max-w-full items-center gap-1.5 rounded-full border border-theme-700/80 bg-theme-800/70 px-3 py-1.5 text-xs text-ink-secondary shadow-sm transition-colors hover:border-accent-500/50 hover:bg-theme-800 hover:text-theme-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/70"
-              :style="{ animationDelay: `${120 + (onboardingPills.length + index) * 80}ms` }"
+              :style="{ animationDelay: pillDelay(conversation.id, onboardingPills.length + index) }"
               :title="conversation.title"
               @click="openRecentChat(conversation)"
             >
@@ -500,6 +525,18 @@ watch(
 
 .chat-column--empty .composer-spacer {
   flex-grow: 1;
+}
+
+/* While the composer is centered, park the context ring where it will sit once
+   the composer docks (bottom-right of the column, matching the bar's px-4/py-3). */
+.chat-column--empty > :deep(.chat-input-bar) {
+  position: static;
+}
+
+.chat-column--empty :deep(.context-ring-anchor) {
+  position: absolute;
+  right: 1rem;
+  bottom: 0.75rem;
 }
 
 .chat-column--empty > div:first-child {

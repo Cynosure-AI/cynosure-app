@@ -168,7 +168,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, folders:
     const guard = () => {
         controller.signal.throwIfAborted()
         const config = getDreamConfig()
-        if (!config.enabled || config.windowId !== run.window_id) throw new Error('Dream Mode is disabled or its eligibility window changed')
+        if (!config.providerId || config.windowId !== run.window_id) throw new Error('Dream Mode is not configured or its eligibility window changed')
         const current = getDb().prepare('SELECT id, agent_id, execution_config_json, project_id FROM conversations WHERE id = ?').get(conversation.id) as Conversation | undefined
         if (!current || !isDreamEligibleConversation(current) || isActive(conversation.id) || latestSequence(conversation.id) !== input.snapshotSequence) throw new Error('Conversation changed or is no longer eligible during Dream review')
         const allowed = resolveDreamCategories(current)
@@ -258,13 +258,13 @@ async function executeReview(run: DreamRun, conversation: Conversation, folders:
 async function sweep(): Promise<void> {
     const config = getDreamConfig()
     const generation = sweepGeneration
-    if (stopped || !config.enabled) return
+    if (stopped || !config.providerId) return
     const db = getDb()
     const conversations = db.prepare(`SELECT c.id, c.agent_id, c.execution_config_json, c.project_id FROM conversations c
         JOIN messages m ON m.conversation_id = c.id LEFT JOIN dream_message_events e ON e.message_id = m.id WHERE c.origin IN ('chat', 'channel')
         GROUP BY c.id HAVING MAX(m.created_at) <= ? AND MAX(e.sequence) > ? ORDER BY MIN(CASE WHEN e.sequence > ? THEN m.created_at END), c.id`).all(Date.now() - DREAM_IDLE_MS, config.startSequence, config.startSequence) as Conversation[]
     for (const conversation of conversations) {
-        if (generation !== sweepGeneration || stopped || !getDreamConfig().enabled || getDreamConfig().windowId !== config.windowId) return
+        if (generation !== sweepGeneration || stopped || !getDreamConfig().providerId || getDreamConfig().windowId !== config.windowId) return
         if (!isDreamEligibleConversation(conversation)) continue
         if (isActive(conversation.id)) continue
         const folders = resolveDreamCategories(conversation)
@@ -290,7 +290,7 @@ async function sweep(): Promise<void> {
         // A conservative fallback is used when a provider does not publish model context metadata.
         let contextWindow = 16_384
         try { contextWindow = Math.min(32_768, (await getGateway().getModelInfo(model, providerId)).contextLength || contextWindow) } catch { /* optional metadata */ }
-        if (generation !== sweepGeneration || stopped || !getDreamConfig().enabled || getDreamConfig().windowId !== config.windowId) return
+        if (generation !== sweepGeneration || stopped || !getDreamConfig().providerId || getDreamConfig().windowId !== config.windowId) return
         let run = pending
         if (!run) {
             const scope = { assignedFolders: folders, folderFilter: buildMemoryFolderFilter(folders) }

@@ -11,8 +11,10 @@ import { getGateway } from '../gateway/gateway.js'
 import { cancelPostActions, generateTitle } from '../agent/post-execution.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
-import type { ConversationExecutionConfig } from '@shared/types'
-import { parseExecutionConfig } from '../chat/run-config.js'
+import type { ChatRunConfig, ConversationExecutionConfig } from '@shared/types'
+import { parseExecutionConfig, runConfigFromExecutionConfig } from '../chat/run-config.js'
+import { enqueueChatMessage, runNextQueuedMessage, whenChatQueueReady } from '../chat/message-queue.js'
+import { getChatExecutionIdsByConversation } from '../chat/active-executions.js'
 import { cynoExecutionConfig } from '../cyno/cyno-run.js'
 
 type CronNotificationMode = 'always' | 'conditional'
@@ -52,6 +54,7 @@ export interface CronJobRow {
     last_run_at: number | null
     execution_config_json: string
     project_id: string | null
+    conversation_id: string | null
 }
 
 export interface CronJobData {
@@ -70,6 +73,8 @@ export interface CronJobData {
     lastRunAt: number | null
     executionConfig: ConversationExecutionConfig | null
     projectId: string | null
+    /** Set for a wait: the run continues this conversation instead of starting a new one. */
+    conversationId: string | null
 }
 
 export function isValidCronSchedule(schedule: string): boolean {
@@ -102,10 +107,16 @@ function rowToData(row: CronJobRow): CronJobData {
         lastRunAt: row.last_run_at ?? null,
         executionConfig,
         projectId: row.project_id ?? null,
+        conversationId: row.conversation_id ?? null,
     }
 }
 
 // ─── CRUD ──────────────────────────────────────────────────
+
+/** Chat lists show which conversations are waiting; tell them to refetch. */
+function notifyWaitsChanged(): void {
+    broadcast('cron:waits-changed', {})
+}
 
 export function listCronJobs(): CronJobData[] {
     const db = getDb()
@@ -119,15 +130,16 @@ export function getCronJob(id: string): CronJobData | undefined {
     return row ? rowToData(row) : undefined
 }
 
-export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; executionConfig?: ConversationExecutionConfig; projectId?: string | null }): CronJobData {
+export function createCronJob(input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: string; notificationCondition?: string; executionConfig?: ConversationExecutionConfig; projectId?: string | null; conversationId?: string | null }): CronJobData {
     const db = getDb()
     const id = nanoid()
     const now = Date.now()
     const notificationMode = input.notificationMode === 'conditional' ? 'conditional' : 'always'
     // Set lastRunAt to now so missed first runs are caught up after downtime
     db.prepare(
-        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, execution_config_json, project_id, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', JSON.stringify(input.executionConfig ?? {}), input.projectId || null, now, now, now)
+        'INSERT INTO cron_jobs (id, name, agent_id, schedule, prompt, enabled, one_off, output_channel_id, notification_mode, notification_condition, execution_config_json, project_id, conversation_id, created_at, updated_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, input.name || '', input.agentId, input.schedule, input.prompt, input.enabled !== false ? 1 : 0, input.oneOff ? 1 : 0, input.outputChannelId || '', notificationMode, input.notificationCondition || '', JSON.stringify(input.executionConfig ?? {}), input.projectId || null, input.conversationId || null, now, now, now)
+    if (input.conversationId) notifyWaitsChanged()
     return getCronJob(id)!
 }
 
@@ -159,12 +171,15 @@ export function updateCronJob(id: string, input: { name?: string; agentId?: stri
         shouldResetLastRun ? now : existing.last_run_at,
         id
     )
+    if (existing.conversation_id) notifyWaitsChanged()
     return getCronJob(id)
 }
 
 export function deleteCronJob(id: string): boolean {
     const db = getDb()
+    const row = db.prepare('SELECT conversation_id FROM cron_jobs WHERE id = ?').get(id) as { conversation_id: string | null } | undefined
     const result = db.prepare('DELETE FROM cron_jobs WHERE id = ?').run(id)
+    if (row?.conversation_id) notifyWaitsChanged()
     return result.changes > 0
 }
 
@@ -172,6 +187,49 @@ export function getCronJobsForAgent(agentId: string): CronJobData[] {
     const db = getDb()
     const rows = db.prepare('SELECT * FROM cron_jobs WHERE agent_id = ? ORDER BY created_at DESC').all(agentId) as CronJobRow[]
     return rows.map(rowToData)
+}
+
+/** Waits that will resume `conversationId`. */
+export function getWaitJobsForConversation(conversationId: string): CronJobData[] {
+    const rows = getDb().prepare('SELECT * FROM cron_jobs WHERE conversation_id = ? ORDER BY created_at DESC').all(conversationId) as CronJobRow[]
+    return rows.map(rowToData)
+}
+
+/** When each of `conversationIds` that has an active wait will resume. */
+export function getWaitResumeTimes(conversationIds: string[], now = Date.now()): Map<string, number> {
+    const resumeTimes = new Map<string, number>()
+    if (!conversationIds.length) return resumeTimes
+    const wanted = new Set(conversationIds)
+    // Waits are few and short-lived, so read them all rather than binding every listed id.
+    const rows = getDb().prepare(
+        'SELECT conversation_id, schedule FROM cron_jobs WHERE enabled = 1 AND conversation_id IS NOT NULL'
+    ).all() as { conversation_id: string; schedule: string }[]
+    for (const row of rows) {
+        if (!wanted.has(row.conversation_id)) continue
+        try {
+            const resumesAt = CronExpressionParser.parse(row.schedule, { currentDate: new Date(now) }).next().getTime()
+            const earliest = resumeTimes.get(row.conversation_id)
+            if (earliest === undefined || resumesAt < earliest) resumeTimes.set(row.conversation_id, resumesAt)
+        } catch {
+            // An unparsable schedule never fires, so the conversation is not waiting.
+        }
+    }
+    return resumeTimes
+}
+
+/** The pending wait that resumes `conversationId` next, with the note it resumes with. */
+export function getPendingWait(conversationId: string, now = Date.now()): { jobId: string; resumesAt: number; note: string } | null {
+    let pending: { jobId: string; resumesAt: number; note: string } | null = null
+    for (const job of getWaitJobsForConversation(conversationId)) {
+        if (!job.enabled) continue
+        try {
+            const resumesAt = CronExpressionParser.parse(job.schedule, { currentDate: new Date(now) }).next().getTime()
+            if (!pending || resumesAt < pending.resumesAt) pending = { jobId: job.id, resumesAt, note: job.prompt }
+        } catch {
+            // An unparsable schedule never fires, so the conversation is not waiting.
+        }
+    }
+    return pending
 }
 
 function getCronEvaluationContext(conversationId: string, result: AgentExecutorResult): string {
@@ -294,11 +352,52 @@ export function getActiveCronRuns(): ActiveCronRun[] {
 
 // ─── Run a cron job ────────────────────────────────────────
 
+/**
+ * End a wait: post a wake-up message to its conversation, which runs as the
+ * conversation's next turn with the settings it last ran with. A wait fires
+ * once and is then removed.
+ */
+async function resumeConversation(job: CronJobData, scheduledAt: number): Promise<void> {
+    const conversationId = job.conversationId!
+    unscheduleCronJob(job.id)
+    deleteCronJob(job.id)
+
+    const conversation = getDb().prepare('SELECT execution_config_json FROM conversations WHERE id = ?')
+        .get(conversationId) as { execution_config_json: string | null } | undefined
+    if (!conversation) {
+        console.warn(`[cron] Dropping wait "${job.name || job.id}" (${job.id}) because its conversation no longer exists`)
+        return
+    }
+    let run: ChatRunConfig = {}
+    try {
+        run = runConfigFromExecutionConfig(parseExecutionConfig(conversation.execution_config_json))
+    } catch {
+        // Unreadable settings fall back to the conversation's agent or Cyno defaults.
+    }
+
+    await whenChatQueueReady()
+    const content = [
+        `Scheduled wait ended (requested ${new Date(job.createdAt).toISOString()}, due ${new Date(scheduledAt).toISOString()}, resumed ${new Date().toISOString()}).`,
+        job.prompt ? `Continue where you left off: ${job.prompt}` : 'Continue where you left off.',
+    ].join('\n\n')
+    // A turn in progress picks the wake-up up when it finishes; an idle conversation runs it now.
+    const item = await enqueueChatMessage(conversationId, { content, delivery: 'next', run })
+    if (getChatExecutionIdsByConversation(conversationId).length === 0) {
+        void runNextQueuedMessage(conversationId, item.id)
+    }
+}
+
 /** Run one cron turn for a specific job */
 async function runCronJob(jobId: string, opts?: { force?: boolean; scheduledAt?: number }): Promise<void> {
     if (!acceptingRuns) return
     const job = getCronJob(jobId)
     if (!job || (!job.enabled && !opts?.force)) return
+    if (job.conversationId) {
+        await resumeConversation(job, opts?.scheduledAt ?? Date.now()).catch((err) => {
+            console.error(`[cron] Wait "${job.name || job.id}" (${job.id}) could not resume its conversation:`, (err as Error).message)
+        })
+        return
+    }
 
     const runStartedAt = Date.now()
     const scheduledAt = opts?.scheduledAt ?? runStartedAt

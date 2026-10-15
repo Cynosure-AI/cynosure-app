@@ -24,9 +24,9 @@ export function formatRelativeTime(timestamp: number, now = Date.now()): string 
   return new Date(timestamp).toLocaleDateString()
 }
 
-export const TASK_COLUMNS: ReadonlyArray<{ status: ProjectTaskStatus; label: string; icon: string; tone: string }> = [
-  { status: 'todo', label: 'To do', icon: 'lucide:circle', tone: 'text-ink-muted' },
-  { status: 'in_progress', label: 'In progress', icon: 'lucide:circle-dot', tone: 'text-status-info' },
-  { status: 'blocked', label: 'Blocked', icon: 'lucide:circle-alert', tone: 'text-status-warning' },
-  { status: 'done', label: 'Done', icon: 'lucide:circle-check', tone: 'text-status-success' },
+export const TASK_COLUMNS: ReadonlyArray<{ status: ProjectTaskStatus; label: string; icon: string; tone: string; empty: string }> = [
+  { status: 'todo', label: 'To do', icon: 'lucide:circle', tone: 'text-ink-muted', empty: 'Add a task above to get started' },
+  { status: 'in_progress', label: 'In progress', icon: 'lucide:circle-dot', tone: 'text-status-info', empty: 'Drag a task here when work starts' },
+  { status: 'blocked', label: 'Blocked', icon: 'lucide:circle-alert', tone: 'text-status-warning', empty: 'Nothing blocked' },
+  { status: 'done', label: 'Done', icon: 'lucide:circle-check', tone: 'text-status-success', empty: 'Finished tasks land here' },
 ]

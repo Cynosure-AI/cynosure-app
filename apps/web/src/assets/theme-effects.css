@@ -5,6 +5,8 @@
 
 .app-content {
   background: var(--theme-content-background);
+  /* Keeps the water field's negative z-index inside the panel, under every view. */
+  isolation: isolate;
 }
 
 .app-sidebar {

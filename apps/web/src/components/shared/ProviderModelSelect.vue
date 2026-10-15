@@ -34,7 +34,7 @@ const props = withDefaults(
     modelValue: string;
     providers: Pick<
       LLMProviderConfig,
-      "id" | "name" | "type" | "defaultModel"
+      "id" | "name" | "type" | "defaultModel" | "enabled"
     >[];
     modelType?: ModelListType;
     modelTypes?: ModelListType[];
@@ -113,6 +113,11 @@ function cacheKey(providerId: string): string {
 
 const activeModelTypes = computed(() =>
   props.modelTypes?.length ? props.modelTypes : [props.modelType],
+);
+
+/** Disabled providers are hidden, except one that is already selected so a saved choice stays visible. */
+const selectableProviders = computed(() =>
+  props.providers.filter((provider) => provider.enabled !== false || provider.id === props.providerId),
 );
 
 function encode(providerId: string, model: string): string {
@@ -323,11 +328,11 @@ function toggleFavorite(option: SelectOption): void {
   persistFavoriteModels();
 }
 
-async function ensureProviderModels(providerId: string): Promise<void> {
+async function ensureProviderModels(providerId: string, refresh = false): Promise<void> {
   if (!providerId) return;
   const key = cacheKey(providerId);
   const cached = sharedModelCache.get(key);
-  if (cached && Date.now() - cached.fetchedAt < MODEL_CACHE_TTL_MS) {
+  if (!refresh && cached && Date.now() - cached.fetchedAt < MODEL_CACHE_TTL_MS) {
     providerModels.value = {
       ...providerModels.value,
       [providerId]: cached.models,
@@ -343,9 +348,9 @@ async function ensureProviderModels(providerId: string): Promise<void> {
     const results = await Promise.all(
       activeModelTypes.value.map(async (type) => {
         try {
-          return { type, models: await providerStore.listModelItems(providerId, type) };
+          return { type, models: await providerStore.listModelItems(providerId, type, refresh) };
         } catch {
-          const models = await providerStore.listModels(providerId, type);
+          const models = await providerStore.listModels(providerId, type, refresh);
           return { type, models: models.map((id) => ({ id })) };
         }
       }),
@@ -390,7 +395,7 @@ function modelHasMetadata(model: ModelListItem): boolean {
 }
 
 function refreshIncompleteModels(): void {
-  for (const provider of props.providers) {
+  for (const provider of selectableProviders.value) {
     const models = providerModels.value[provider.id] || [];
     const cached = sharedModelCache.get(cacheKey(provider.id));
     if (!models.length || !models.some(modelHasMetadata) ||
@@ -402,9 +407,9 @@ function refreshIncompleteModels(): void {
 }
 
 watch(
-  () => [props.providers.map((p) => p.id).join("|"), activeModelTypes.value.join("+")],
+  () => [selectableProviders.value.map((p) => p.id).join("|"), activeModelTypes.value.join("+")],
   () => {
-    for (const provider of props.providers) {
+    for (const provider of selectableProviders.value) {
       void ensureProviderModels(provider.id);
     }
   },
@@ -415,13 +420,13 @@ watch(
   () => props.refreshKey,
   () => {
     const nextModels = { ...providerModels.value };
-    for (const provider of props.providers) {
+    for (const provider of selectableProviders.value) {
       sharedModelCache.delete(cacheKey(provider.id));
       delete nextModels[provider.id];
     }
     providerModels.value = nextModels;
-    for (const provider of props.providers) {
-      void ensureProviderModels(provider.id);
+    for (const provider of selectableProviders.value) {
+      void ensureProviderModels(provider.id, true);
     }
   },
 );
@@ -459,7 +464,7 @@ const selectedTriggerLabel = computed(() => {
 const groups = computed((): SelectOptionGroup[] => {
   const topOptions: SelectOption[] = [];
   const providerById = new Map(
-    props.providers.map((provider) => [provider.id, provider]),
+    selectableProviders.value.map((provider) => [provider.id, provider]),
   );
 
   if (props.includeDefault) {
@@ -508,11 +513,11 @@ const groups = computed((): SelectOptionGroup[] => {
     });
 
   const visibleProviders = props.hideEmptyProviders
-    ? props.providers.filter((provider) =>
+    ? selectableProviders.value.filter((provider) =>
       loadingByProvider.value[provider.id] ||
       (providerModels.value[provider.id] || []).length > 0 ||
       provider.id === props.providerId)
-    : props.providers;
+    : selectableProviders.value;
 
   const providerGroups: SelectOptionGroup[] = visibleProviders.map(
     (provider) => {

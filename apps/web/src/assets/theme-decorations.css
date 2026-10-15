@@ -380,14 +380,19 @@
   position: absolute;
   inset: 0;
   padding: 1rem 1.5rem;
-  background:
-    /* Keeps the reading area dark so the wall never sits behind text. */
-    radial-gradient(
-      ellipse 52% 46% at 50% 50%,
-      var(--bw-void) 55%,
-      transparent 100%
-    ),
-    var(--bw-wall);
+  background: var(--bw-wall);
+  /* Fades the wall out of the reading area so it never sits behind text, while
+     the water field underneath stays visible. */
+  -webkit-mask-image: radial-gradient(
+    ellipse 52% 46% at 50% 50%,
+    transparent 55%,
+    #000 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 52% 46% at 50% 50%,
+    transparent 55%,
+    #000 100%
+  );
   color: var(--bw-red);
   font-size: 10px;
   line-height: 1.7;
@@ -395,20 +400,25 @@
   white-space: pre;
   pointer-events: none;
 }
-/* Ongoing chats keep the wall in the side margins; it fades to solid black
-   before the message column, so narrow windows simply show black. */
+/* Ongoing chats keep the wall in the side margins; it fades out before the
+   message column, so narrow windows show only the water field. */
 [data-theme="blackwall"] .chat-column:not(.chat-column--empty)::before {
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(
-      90deg,
-      transparent calc(50% - 40rem),
-      var(--bw-void) calc(50% - 32rem) calc(50% + 32rem),
-      transparent calc(50% + 40rem)
-    ),
-    var(--bw-wall);
+  background: var(--bw-wall);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 calc(50% - 40rem),
+    transparent calc(50% - 32rem) calc(50% + 32rem),
+    #000 calc(50% + 40rem)
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 calc(50% - 40rem),
+    transparent calc(50% - 32rem) calc(50% + 32rem),
+    #000 calc(50% + 40rem)
+  );
   opacity: 0.9;
   pointer-events: none;
 }
@@ -459,6 +469,11 @@
       -2px 0 rgba(255, 46, 59, 0.6);
     clip-path: none;
   }
+}
+/* The greeting types behind a terminal block caret. */
+[data-theme="blackwall"] .chat-empty-state {
+  --tw-caret-width: 0.55em;
+  --tw-caret-opacity: 0.75;
 }
 [data-theme="blackwall"] .chat-empty-icon {
   overflow: visible;

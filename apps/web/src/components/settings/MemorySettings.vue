@@ -30,22 +30,20 @@ function showAnySection(ids: string[]): boolean {
   return ids.some(showSection)
 }
 
-const dreamEnabled = ref(false)
 const dreamProviderId = ref('')
 const dreamModel = ref('')
 const dreamSaving = ref(false)
 const dreamLoaded = ref(false)
 const dreamError = ref('')
-const savedDream = ref({ enabled: false, providerId: '', model: '' })
+const savedDream = ref({ providerId: '', model: '' })
 const dreamStatus = ref<SettingsPersistenceState>('idle')
 
 async function loadDreamConfig() {
   try {
     const config = await api.memory.getDreamConfig()
-    dreamEnabled.value = config.enabled
     dreamProviderId.value = config.providerId
     dreamModel.value = config.model
-    savedDream.value = { enabled: config.enabled, providerId: config.providerId, model: config.model }
+    savedDream.value = { providerId: config.providerId, model: config.model }
     dreamLoaded.value = true
   } catch (error) {
     dreamError.value = error instanceof Error ? error.message : 'Could not load Dream settings.'
@@ -56,11 +54,10 @@ async function saveDream() {
   dreamStatus.value = 'saving'
   dreamError.value = ''
   try {
-    const config = await api.memory.configureDream({ enabled: dreamEnabled.value, providerId: dreamProviderId.value, model: dreamModel.value })
-    dreamEnabled.value = config.enabled
+    const config = await api.memory.configureDream({ providerId: dreamProviderId.value, model: dreamModel.value })
     dreamProviderId.value = config.providerId
     dreamModel.value = config.model
-    savedDream.value = { enabled: config.enabled, providerId: config.providerId, model: config.model }
+    savedDream.value = { providerId: config.providerId, model: config.model }
     dreamStatus.value = 'saved'
   } catch (error) {
     dreamError.value = error instanceof Error ? error.message : 'Could not save Dream settings.'
@@ -112,12 +109,12 @@ const rerankDirty = computed(() =>
   curationModel.value !== savedReranker.value.curationModel
 )
 const dreamDirty = computed(() => dreamLoaded.value && (
-  dreamEnabled.value !== savedDream.value.enabled ||
   dreamProviderId.value !== savedDream.value.providerId ||
   dreamModel.value !== savedDream.value.model
 ))
+// No provider means Dream is off, which is always a valid choice.
 const dreamSelectionValid = computed(() => {
-  if (!dreamProviderId.value) return false
+  if (!dreamProviderId.value) return true
   if (dreamModel.value) return true
   return Boolean(providerStore.providers.find(provider => provider.id === dreamProviderId.value)?.defaultModel)
 })
@@ -157,10 +154,11 @@ onUnmounted(() => {
 })
 
 onMounted(async () => {
-  await providerStore.loadProviders()
-  await loadDreamConfig()
-  await loadEmbeddingConfig()
-  await loadRerankerConfig()
+  // Embedding and reranker defaults fall back to the provider list; Dream does not.
+  await Promise.all([
+    loadDreamConfig(),
+    providerStore.loadProviders().then(() => Promise.all([loadEmbeddingConfig(), loadRerankerConfig()])),
+  ])
 })
 
 async function loadEmbeddingConfig() {
@@ -189,7 +187,7 @@ async function loadRerankerConfig() {
   try {
     const config = await api.memory.getRerankerConfig()
     rerankEnabled.value = config.enabled
-    rerankProviderId.value = config.providerId || openRouterProviders.value[0]?.id || ''
+    rerankProviderId.value = config.providerId || openRouterProviders.value.find((provider) => provider.enabled !== false)?.id || ''
     rerankModel.value = config.model
     curationProviderId.value = config.curationProviderId || ''
     curationModel.value = config.curationModel || ''
@@ -201,7 +199,7 @@ async function loadRerankerConfig() {
       curationModel: curationModel.value,
     }
   } catch {
-    rerankProviderId.value = openRouterProviders.value[0]?.id || ''
+    rerankProviderId.value = openRouterProviders.value.find((provider) => provider.enabled !== false)?.id || ''
     savedReranker.value = {
       enabled: rerankEnabled.value,
       providerId: rerankProviderId.value,
@@ -261,7 +259,7 @@ function updateEmbeddingSelection(selection: { providerId: string; model: string
 }
 
 function applyDefaultEmbeddingConfig() {
-  const providerId = providerStore.lastUsedProviderId || providerStore.providers[0]?.id || ''
+  const providerId = providerStore.lastUsedProviderId || providerStore.enabledProviders[0]?.id || ''
   const defaultModel = defaultEmbeddingModelForProviderId(providerId, providerStore.providers)
   if (!providerId || !defaultModel) return
   embProviderId.value = providerId
@@ -547,31 +545,28 @@ function cancelDrop() {
       v-if="showSection('dream-mode')"
       class="p-6 space-y-4 bg-dream-card"
     >
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <h3 class="text-sm font-medium text-gray-200 flex items-center gap-2">
-            <Icon
-              icon="lucide:moon-star"
-              class="w-5 h-5"
-            />
-            Dream Mode
-          </h3>
-          <p class="text-xs text-gray-500 mt-1">
-            Automatically reviews new Cyno chats and conversations from agents that explicitly allow Dreaming to learn useful facts and update memory.
-            Checks every minute after a conversation has been inactive for 5 minutes, while the server is running.
-            Uses model requests and may incur provider costs. Existing history is used only as context.
-          </p>
-        </div>
-        <ToggleSwitch
-          v-model="dreamEnabled"
-          label="Enable Dream Mode"
-          :disabled="!dreamLoaded || dreamSaving || (!dreamEnabled && !dreamSelectionValid)"
-        />
+      <div>
+        <h3 class="text-sm font-medium text-gray-200 flex items-center gap-2">
+          <Icon
+            icon="lucide:moon-star"
+            class="w-5 h-5"
+          />
+          Dream Mode
+        </h3>
+        <p class="text-xs text-gray-500 mt-1">
+          Automatically reviews new conversations to learn useful facts and update memory. Whether a conversation is reviewed follows the
+          Dreaming option of its agent or the default chat, which scheduled runs and projects inherit.
+          Checks every minute after a conversation has been inactive for 5 minutes, while the server is running.
+          Uses model requests and may incur provider costs. Existing history is used only as context.
+        </p>
       </div>
       <ProviderModelSelect
         :provider-id="dreamProviderId"
         :model-value="dreamModel"
         :providers="providerStore.providers"
+        include-default
+        default-label="Off (no Dream model)"
+        default-icon="lucide:circle-off"
         placeholder="Select Dream provider and model"
         dropdown-width="min-w-full"
         @change="(selection) => { dreamProviderId = selection.providerId; dreamModel = selection.model }"
@@ -589,7 +584,7 @@ function cancelDrop() {
           :state="dreamStatus === 'error' ? 'error' : dreamSaving ? 'saving' : dreamDirty ? 'dirty' : dreamStatus"
         />
         <button
-          :disabled="!dreamLoaded || dreamSaving || !dreamDirty || (dreamEnabled && !dreamSelectionValid)"
+          :disabled="!dreamLoaded || dreamSaving || !dreamDirty || !dreamSelectionValid"
           class="ml-auto px-4 py-2 accent-action bg-accent-600 hover:bg-accent-500 disabled:bg-theme-700 disabled:text-ink-muted text-accent-on text-sm rounded-lg"
           @click="saveDream"
         >

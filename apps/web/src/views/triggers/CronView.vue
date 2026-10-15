@@ -491,8 +491,15 @@ onUnmounted(() => {
                 v-else
                 class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-theme-500/20 text-ink-muted"
               >PAUSED</span>
+              <button
+                v-if="job.conversationId"
+                type="button"
+                class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-sky-500/10 text-status-info hover:bg-sky-500/20 transition-colors"
+                title="Resumes its conversation. Click to open it."
+                @click.stop="router.push(`/chat/${encodeURIComponent(job.conversationId)}`)"
+              >Wait</button>
               <span
-                v-if="job.oneOff"
+                v-else-if="job.oneOff"
                 class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/10 text-status-warning"
               >One-off</span>
             </div>

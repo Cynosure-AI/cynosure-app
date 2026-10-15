@@ -39,9 +39,17 @@ export class LLMGateway {
   private lastUsedProviderId: string = ''
   /** Cache model info keyed by "providerId:modelId" — TTL 10 minutes */
   private modelInfoCache = new Map<string, { info: ModelInfo; ts: number }>()
+  /**
+   * Raw provider model lists keyed by provider, list kind and type. Every model
+   * picker asks every provider on mount, so without this each settings page
+   * fans out to the remote /models endpoints. Holds in-flight requests too, so
+   * pickers mounting together share one call.
+   */
+  private modelListCache = new Map<string, ModelListCacheEntry>()
 
   registerProvider(config: LLMProviderConfig): void {
     const provider = this.createProvider(config)
+    this.clearModelListCache(config.id)
     this.providers.set(config.id, provider)
     if (!this.lastUsedProviderId) {
       this.lastUsedProviderId = config.id
@@ -84,6 +92,7 @@ export class LLMGateway {
 
   removeProvider(id: string): void {
     this.providers.delete(id)
+    this.clearModelListCache(id)
     if (this.lastUsedProviderId === id) {
       this.lastUsedProviderId = this.providers.keys().next().value || ''
     }
@@ -138,17 +147,17 @@ export class LLMGateway {
     yield* provider.streamComplete(request)
   }
 
-  async listModels(providerId?: string, type?: ModelListType): Promise<string[]> {
+  async listModels(providerId?: string, type?: ModelListType, options: ModelListOptions = {}): Promise<string[]> {
     const provider = providerId
       ? this.providers.get(providerId)
       : this.getLastUsedProvider()
     if (!provider) throw new Error(`Provider not found`)
     if (type === 'decision' && !supportsDecisionModels(provider)) return []
     if (type === 'transcription' && !supportsTranscription(provider)) return []
-    return provider.listModels(type)
+    return this.cachedModelList(provider, 'ids', type, options, () => provider.listModels(type))
   }
 
-  async listModelItems(providerId?: string, type?: ModelListType): Promise<ModelListItem[]> {
+  async listModelItems(providerId?: string, type?: ModelListType, options: ModelListOptions = {}): Promise<ModelListItem[]> {
     const provider = providerId
       ? this.providers.get(providerId)
       : this.getLastUsedProvider()
@@ -156,8 +165,8 @@ export class LLMGateway {
     if (type === 'decision' && !supportsDecisionModels(provider)) return []
     if (type === 'transcription' && !supportsTranscription(provider)) return []
 
-    const models = await provider.listModelItems(type)
-    if (provider.config.type === 'ollama' || provider.config.type === 'lmstudio' || provider.config.type === 'unsloth') {
+    const models = await this.cachedModelList(provider, 'items', type, options, () => provider.listModelItems(type))
+    if (isLocalProviderType(provider.config.type)) {
       return models
     }
 
@@ -183,6 +192,49 @@ export class LLMGateway {
           : metadata.cost ? pricingFromCost(metadata.cost) : undefined)
       }
     })
+  }
+
+  private async cachedModelList<T extends string | ModelListItem>(
+    provider: BaseLLMProvider,
+    kind: 'ids' | 'items',
+    type: ModelListType | undefined,
+    options: ModelListOptions,
+    load: () => Promise<T[]>
+  ): Promise<T[]> {
+    // Local servers are fast and list whatever is installed right now, so a
+    // freshly pulled model should show up without waiting for a TTL.
+    if (isLocalProviderType(provider.config.type)) return load()
+
+    const key = modelListCacheKey(provider.config.id, kind, type)
+    const cached = this.modelListCache.get(key)
+    if (!options.refresh && cached) {
+      if (!('ts' in cached)) return cached.promise as Promise<T[]>
+      if (Date.now() - cached.ts < MODEL_LIST_CACHE_TTL_MS) return cached.models as T[]
+    }
+
+    const promise = load()
+    const entry: ModelListCacheEntry = { promise }
+    this.modelListCache.set(key, entry)
+    try {
+      const models = await promise
+      // Skip writing back if the provider was re-registered or removed meanwhile,
+      // and do not pin an empty list that may just be a soft provider failure.
+      if (this.modelListCache.get(key) === entry) {
+        if (models.length) this.modelListCache.set(key, { models, ts: Date.now() })
+        else this.modelListCache.delete(key)
+      }
+      return models
+    } catch (err) {
+      if (this.modelListCache.get(key) === entry) this.modelListCache.delete(key)
+      throw err
+    }
+  }
+
+  private clearModelListCache(providerId: string): void {
+    const prefix = `${providerId}\0`
+    for (const key of this.modelListCache.keys()) {
+      if (key.startsWith(prefix)) this.modelListCache.delete(key)
+    }
   }
 
   async listVideoModels(providerId?: string): Promise<VideoGenerationModelInfo[]> {
@@ -288,7 +340,8 @@ export class LLMGateway {
           'transcription'
         ]
         for (const type of listTypes) {
-          listedModel = (await provider.listModelItems(type)).find((model) => model.id === modelId)
+          const models = await this.cachedModelList(provider, 'items', type, {}, () => provider.listModelItems(type))
+          listedModel = models.find((model) => model.id === modelId)
           if (listedModel) break
         }
         if (listedModel) {
@@ -404,6 +457,26 @@ function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>[
 }
 
 /** Decision models (typed judgments instead of text) are an OpenRouter catalog. */
+/** Matches the TTL OpenRouter and Requesty already use for their own model caches. */
+const MODEL_LIST_CACHE_TTL_MS = 10 * 60 * 1000
+
+export interface ModelListOptions {
+  /** Bypass the cached list, for example when the user presses refresh. */
+  refresh?: boolean
+}
+
+type ModelListCacheEntry =
+  | { promise: Promise<Array<string | ModelListItem>> }
+  | { models: Array<string | ModelListItem>; ts: number }
+
+function modelListCacheKey(providerId: string, kind: 'ids' | 'items', type: ModelListType | undefined): string {
+  return `${providerId}\0${kind}\0${type ?? ''}`
+}
+
+function isLocalProviderType(type: LLMProviderConfig['type']): boolean {
+  return type === 'ollama' || type === 'lmstudio' || type === 'unsloth'
+}
+
 function supportsDecisionModels(provider: BaseLLMProvider): boolean {
   return provider.config.type === 'openrouter'
 }

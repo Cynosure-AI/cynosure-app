@@ -219,6 +219,8 @@ export class AgentExecutor {
     private modelAbortController: AbortController | null = null
     /** Output of the model round currently streaming; cleared once the round completes. */
     private roundInProgress: { content: string; thinking: string; images: string[] } | null = null
+    /** A schedule_wait succeeded: open tasks continue when the wait resumes the conversation. */
+    private waitScheduled = false
 
     /** The primary streamId (useful for callers that need it for cancel/error handling). */
     get streamId(): string { return this._streamId }
@@ -999,7 +1001,9 @@ export class AgentExecutor {
             if (isVisibleExecutionTool(tc.function.name)) {
                 this.config.usedToolNames?.add(tc.function.name)
             }
-            results.push(await this.executeSingleToolCall(tc))
+            const result = await this.executeSingleToolCall(tc)
+            if (result.success && this.isWaitToolCall(tc)) this.waitScheduled = true
+            results.push(result)
             this.config.signal?.throwIfAborted()
             if (this.steeringRequested) {
                 for (const skipped of toolCalls.slice(index + 1)) {
@@ -1163,9 +1167,17 @@ export class AgentExecutor {
         else this.config.tools.splice(anchor + 1, 0, ...added)
     }
 
+    private isWaitToolCall(tc: ToolCall): boolean {
+        const tool = this.findToolForCall(tc.function.name)
+        const name = tool ? (tool as ToolDefinition & { originalName?: string }).originalName || tool.name : tc.function.name
+        return name === 'schedule_wait'
+    }
+
     private hasOpenPlanningItems(): boolean {
         const runId = this.config.planningRunId
         if (!runId || !this.config.isPrimaryExecutor) return false
+        // Ending the turn is how a wait starts; the open tasks are still being worked on.
+        if (this.waitScheduled) return false
         const state = getPlanningState(runId)
         if (!state || state.status !== 'running') return false
         return state.items.some((item) => item.status === 'pending' || item.status === 'in_progress')

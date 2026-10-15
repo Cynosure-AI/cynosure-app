@@ -22,6 +22,13 @@ import type { ContentBlock, ConversationExecutionConfig, MessageToolCall } from 
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import { getProject, setConversationProject } from '../core/projects/project-store.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
+import { getPendingWait, getWaitResumeTimes } from '../core/triggers/cron-scheduler.js'
+
+/** Add `wait_until`: when a conversation waiting on schedule_wait resumes, or null. */
+function withWaitResumeTimes<T extends { id: string }>(rows: T[]): Array<T & { wait_until: number | null }> {
+    const resumeTimes = getWaitResumeTimes(rows.map((row) => row.id))
+    return rows.map((row) => ({ ...row, wait_until: resumeTimes.get(row.id) ?? null }))
+}
 
 function escapeSqlLike(value: string): string {
     return value.replace(/[\\%_]/g, (char) => `\\${char}`)
@@ -555,11 +562,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         if (limit !== undefined) {
             const total = (db.prepare(`SELECT COUNT(*) as count FROM conversations ${where}`).get(...params) as { count: number }).count
-            const items = db.prepare(`SELECT *, ${excerpt} FROM conversations ${where} ${orderBy} LIMIT ? OFFSET ?`).all(...params, limit, offset)
-            return { items, total }
+            const items = db.prepare(`SELECT *, ${excerpt} FROM conversations ${where} ${orderBy} LIMIT ? OFFSET ?`).all(...params, limit, offset) as { id: string }[]
+            return { items: withWaitResumeTimes(items), total }
         }
 
-        return db.prepare(`SELECT *, ${excerpt} FROM conversations ${where} ${orderBy}`).all(...params)
+        return withWaitResumeTimes(db.prepare(`SELECT *, ${excerpt} FROM conversations ${where} ${orderBy}`).all(...params) as { id: string }[])
     })
 
     // GET /api/chat/conversations/:id/messages — get messages
@@ -772,6 +779,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         return getLatestPlanningState(req.params.id)
     })
 
+    // GET /api/chat/conversations/:id/wait — the pending schedule_wait that will resume this conversation
+    app.get<{ Params: { id: string } }>('/conversations/:id/wait', async (req) => {
+        return getPendingWait(req.params.id)
+    })
+
     // PATCH /api/chat/conversations/:id/pin — toggle pinned state
     app.patch<{ Params: { id: string }; Body: { pinned: boolean } }>(
         '/conversations/:id/pin',
@@ -818,7 +830,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
         await cleanupConversationArtifactsAndIndexes([req.params.id])
         await invalidateDreamConversation(req.params.id)
-        db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(req.params.id)
+        db.prepare('DELETE FROM run_plans WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
         db.prepare('DELETE FROM conversations WHERE id = ?').run(req.params.id)
@@ -836,7 +848,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             await cleanupConversationArtifactsAndIndexes(ids.map(r => r.id))
             for (const { id } of ids) await invalidateDreamConversation(id)
             for (const { id } of ids) {
-                db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
+                db.prepare('DELETE FROM run_plans WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
@@ -847,7 +859,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             await cleanupConversationArtifactsAndIndexes(allIds.map(r => r.id))
             for (const { id } of allIds) await invalidateDreamConversation(id)
             for (const { id } of allIds) {
-                db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
+                db.prepare('DELETE FROM run_plans WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
                 db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
             }
@@ -916,7 +928,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             await collectOrphanedAttachmentAssets()
             db.prepare('DELETE FROM chat_events WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
-            db.prepare('DELETE FROM tasks WHERE conversation_id = ? AND created_at >= ?')
+            db.prepare('DELETE FROM run_plans WHERE conversation_id = ? AND created_at >= ?')
                 .run(conversationId, row.created_at)
             return { success: true, deleted: result.changes }
         }

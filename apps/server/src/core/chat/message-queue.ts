@@ -55,6 +55,8 @@ const steeringHandlers = new Map<string, () => void>()
 const draining = new Set<string>()
 let runner: QueueRunner | null = null
 let broadcastQueue: BroadcastFn = () => {}
+let markRunnerReady!: () => void
+const runnerReady = new Promise<void>((resolve) => { markRunnerReady = resolve })
 
 function parseJson<T>(value: string | null, fallback: T): T {
   if (!value) return fallback
@@ -284,6 +286,12 @@ export function promoteQueuedMessageToSteering(conversationId: string, id: strin
 export function configureChatQueue(queueRunner: QueueRunner, broadcast: BroadcastFn): void {
   runner = queueRunner
   broadcastQueue = broadcast
+  markRunnerReady()
+}
+
+/** Resolves once the chat routes can run queued messages; scheduled work may start before them. */
+export function whenChatQueueReady(): Promise<void> {
+  return runnerReady
 }
 
 export function registerChatSteeringHandler(conversationId: string, handler: () => void): () => void {

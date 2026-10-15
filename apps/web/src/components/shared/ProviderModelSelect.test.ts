@@ -253,6 +253,29 @@ describe('ProviderModelSelect favorites', () => {
     expect(options.join(' ')).not.toContain('deepseek')
   })
 
+  test('hides disabled providers unless one is already selected', async () => {
+    const store = useProviderStore()
+    store.listModelItems = vi.fn().mockImplementation(async (providerId: string) => [{ id: `${providerId}-model` }])
+    const providers = [
+      { id: 'on', name: 'Enabled', type: 'openai' as const, defaultModel: 'on-model' },
+      { id: 'off', name: 'Disabled', type: 'openai' as const, defaultModel: 'off-model', enabled: false },
+    ]
+    const wrapper = mount(ProviderModelSelect, {
+      props: { providerId: '', modelValue: '', providers },
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+    await wrapper.get('[role="combobox"]').trigger('click')
+    const options = wrapper.findAll('[role="option"]').map(option => option.text()).join(' ')
+    expect(options).toContain('on-model')
+    expect(options).not.toContain('off-model')
+    expect(store.listModelItems).not.toHaveBeenCalledWith('off', expect.anything(), expect.anything())
+
+    await wrapper.setProps({ providerId: 'off', modelValue: 'off-model' })
+    await flushPromises()
+    expect(wrapper.findAll('[role="option"]').map(option => option.text()).join(' ')).toContain('off-model')
+  })
+
   test('colors image pricing green and transcription pricing blue', async () => {
     const store = useProviderStore()
     store.listModelItems = vi.fn().mockImplementation(async (_providerId, type) => {

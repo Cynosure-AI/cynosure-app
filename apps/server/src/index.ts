@@ -56,6 +56,7 @@ import { startToolEmbeddingWarmup } from './core/agent/tool-embedding-warmup.js'
 import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-scheduler.js'
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
+import { ensurePricingLoaded } from './core/model-dev-fetcher.js'
 
 const APP_NAME = 'cynosure-server'
 const APP_VERSION = packageJson.version
@@ -623,6 +624,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   await registerWebUi(app, startedAt)
 
   loadSavedProviders()
+  // Model pickers wait on this index before they can list models, so fetch it
+  // now instead of on the first settings visit. Failures are logged and retried later.
+  void ensurePricingLoaded()
   loadEmbeddingServiceFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })

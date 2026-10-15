@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../../db/database.js'
 
+/** Dream reviews run whenever a provider is configured; agents and chats opt out individually. */
 export interface DreamConfig {
-    enabled: boolean
     providerId: string
     model: string
     windowId: string
@@ -46,12 +46,15 @@ export interface DreamRun {
 }
 export function getDreamConfig(): DreamConfig {
     const row = getDb().prepare("SELECT value_json FROM settings WHERE key = 'dreamMode'").get() as { value_json: string } | undefined
-    return row ? JSON.parse(row.value_json) : { enabled: false, providerId: '', model: '', windowId: '', enabledAt: 0, startSequence: 0 }
+    if (!row) return { providerId: '', model: '', windowId: '', enabledAt: 0, startSequence: 0 }
+    // Configs saved while Dream had its own on/off switch (including restored backups) keep a disabled setup off.
+    const { enabled, ...config } = JSON.parse(row.value_json) as DreamConfig & { enabled?: boolean }
+    return enabled === false ? { ...config, providerId: '', model: '' } : config
 }
-export function saveDreamConfig(input: Pick<DreamConfig, 'enabled' | 'providerId' | 'model'>): DreamConfig {
+export function saveDreamConfig(input: Pick<DreamConfig, 'providerId' | 'model'>): DreamConfig {
     const current = getDreamConfig()
     const config = { ...current, ...input }
-    if (config.enabled && !current.enabled) {
+    if (config.providerId && !current.providerId) {
         config.windowId = randomUUID()
         config.enabledAt = Date.now()
         config.startSequence = (getDb().prepare("SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'dream_message_events'), 0) AS n").get() as { n: number }).n

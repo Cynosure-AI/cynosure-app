@@ -22,6 +22,7 @@ import {
     resolveProjectExecutionContext,
 } from './project-context.js'
 import { makeProjectTools, missingBriefSections } from './project-tools.js'
+import { applyTodoUpdate, closePlanningRun, createPlanningRun, listProjectTaskPlans, listProjectTaskProgress } from '../agent/planning-state.js'
 import { diffBriefRevisions, listBriefRevisions, listProjectTimeline } from './project-history.js'
 import { listEffectiveFileAccessRoots, resolveFileAccessPath, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 import { makeShellTool } from '../tools/builtin/shell-tool.js'
@@ -174,6 +175,49 @@ describe('project execution context', () => {
         expect(broadcast).toHaveBeenCalledWith('project:updated', { id: project.id })
         expect(broadcast).toHaveBeenCalledWith('project:tasks-updated', { projectId: project.id })
     })
+    test('a run that moves a task saves its todo list to the task work log', async () => {
+        const project = createProject({ name: 'Work log', createMemoryFolder: false })
+        insertConversation('worker', project.id)
+        const task = createProjectTask(project.id, { title: 'Write report' })
+        const untouched = createProjectTask(project.id, { title: 'Later' })
+        const tools = Object.fromEntries(makeProjectTools({ projectId: project.id, conversationId: 'worker' }).map((tool) => [tool.name, tool]))
+
+        // No running plan yet: nothing to link.
+        await tools.project_task_update.execute({ taskId: task.id, status: 'in_progress' })
+        expect(listProjectTaskPlans(task.id)).toEqual([])
+
+        const plan = createPlanningRun('worker', 'Write the report')
+        applyTodoUpdate(plan.runId, { tasks: [{ title: 'Gather data', status: 'completed' }, { title: 'Draft', status: 'in_progress' }] })
+        await tools.project_task_update.execute({ taskId: task.id, notes: 'Renaming is not work' })
+        expect(listProjectTaskPlans(task.id)).toEqual([])
+        await tools.project_task_update.execute({ taskId: task.id, status: 'blocked', notes: 'Waiting for numbers' })
+        await tools.project_task_update.execute({ taskId: task.id, status: 'blocked' })
+        closePlanningRun(plan.runId, 'error', { error: 'Waiting for numbers' })
+
+        const log = listProjectTaskPlans(task.id)
+        expect(log).toHaveLength(1)
+        expect(log[0]).toMatchObject({
+            runId: plan.runId,
+            conversationId: 'worker',
+            status: 'error',
+            objective: 'Write the report',
+            items: [
+                { title: 'Gather data', status: 'completed' },
+                { title: 'Draft', status: 'blocked', note: 'Waiting for numbers' },
+            ],
+        })
+        expect(listProjectTaskPlans(untouched.id)).toEqual([])
+        // The board shows the newest run's step count; tasks no run touched have none.
+        expect(Object.fromEntries(listProjectTaskProgress(project.id))).toEqual({
+            [task.id]: { runId: plan.runId, status: 'error', completed: 1, total: 2 },
+        })
+
+        // Deleting the conversation removes its plans from the log.
+        getDb().prepare('DELETE FROM conversations WHERE id = ?').run('worker')
+        expect(listProjectTaskPlans(task.id)).toEqual([])
+        expect(listProjectTaskProgress(project.id).size).toBe(0)
+    })
+
     test('a brief update from a stale view is rejected with the current brief, and the retry succeeds', async () => {
         const project = createProject({ name: 'Race', brief: 'Goal: v1.', createMemoryFolder: false })
         insertConversation('slow', project.id)

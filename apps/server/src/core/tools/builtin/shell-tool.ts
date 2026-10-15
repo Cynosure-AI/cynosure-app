@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process'
 import * as path from 'node:path'
 import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.provider.js'
+import { getDataDir } from '../../data-dir.js'
+import { findBlockedShellCommand } from './shell-guard.js'
 
 const MAX_OUTPUT_BYTES = 128 * 1024
 const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
@@ -16,7 +18,8 @@ export function makeShellTool(options: { defaultCwd?: string } = {}): ToolDefini
         : process.platform === 'android' ? '/system/bin/sh' : '/bin/sh'
     return {
         name: 'shell_execute',
-        description: `Execute a shell command on the Cynosure server host running ${operatingSystem} (${process.platform}), using ${shell}. Write commands for this operating system and shell. Use this for command-line operations such as inspecting files and directories, running scripts or programs, invoking installed CLI tools, managing processes, and performing system-level tasks. Commands run with the permissions and environment of the Cynosure server process and may modify the filesystem or system state.`, parameters: {
+        description: `Execute a shell command on the Cynosure server host running ${operatingSystem} (${process.platform}), using ${shell}. Write commands for this operating system and shell. Use this for command-line operations such as inspecting files and directories, running scripts or programs, invoking installed CLI tools, managing processes, and performing system-level tasks. Commands run with the permissions and environment of the Cynosure server process and may modify the filesystem or system state. Commands that could destroy the system are refused: recursive deletion of the filesystem root, the home directory, system directories, the project or Cynosure's data; formatting or overwriting disks; and shutting down the host. Delete specific paths instead.`,
+        parameters: {
             type: 'object',
             additionalProperties: false,
             required: ['command'],
@@ -57,6 +60,16 @@ export function makeShellTool(options: { defaultCwd?: string } = {}): ToolDefini
             }
             const cwd = path.resolve(defaultCwd ?? process.cwd(), typeof input.cwd === 'string' ? input.cwd : '.')
             const timeoutMs = Number(input.timeoutSeconds ?? DEFAULT_COMMAND_TIMEOUT_SECONDS) * 1000
+            const blocked = findBlockedShellCommand(input.command, {
+                cwd,
+                protectedPaths: [defaultCwd ?? '', process.cwd(), getDataDir()],
+            })
+            if (blocked) {
+                return {
+                    success: false,
+                    output: `Blocked by the shell safety guard: ${blocked}. This command was not run. Do not try to work around the guard; if the user really intends it, ask them to run it themselves.`,
+                }
+            }
             try {
                 signal?.throwIfAborted()
                 return await runCommand(input.command, cwd, timeoutMs, shell, signal)

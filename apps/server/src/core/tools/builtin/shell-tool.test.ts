@@ -111,6 +111,15 @@ describe('built-in shell access', () => {
         } finally { unsubscribe() }
     })
 
+    it('refuses catastrophic commands without running them', async () => {
+        await fs.writeFile(path.join(outside, 'keep.txt'), 'kept')
+        const result = await makeShellTool({ defaultCwd: outside }).execute({ command: 'echo ran > ran.txt; rm -rf .' })
+        expect(result.success).toBe(false)
+        expect(result.output).toContain('Blocked by the shell safety guard')
+        await expect(fs.readFile(path.join(outside, 'keep.txt'), 'utf8')).resolves.toBe('kept')
+        await expect(fs.access(path.join(outside, 'ran.txt'))).rejects.toThrow()
+    })
+
     it('caps command output', async () => {
         await fs.writeFile(path.join(outside, 'large.txt'), 'x'.repeat(256 * 1024))
         const result = await makeShellTool().execute({ command: 'cat large.txt', cwd: outside })

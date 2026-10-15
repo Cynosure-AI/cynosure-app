@@ -163,8 +163,8 @@ const sections: SettingsSection[] = [
     id: 'provider-actions',
     categoryId: 'providers',
     label: 'Provider management',
-    description: 'Add, edit, test, remove, and configure LLM providers.',
-    terms: ['ai', 'llm', 'provider', 'providers', 'add provider', 'edit provider', 'remove provider', 'test connection', 'api key', 'base url', 'default model', 'models', 'openai', 'anthropic', 'google', 'gemini', 'grok', 'lm studio', 'ollama', 'openrouter', 'requesty', 'groq', 'mistral', 'unsloth', 'unsloth studio']
+    description: 'Add, edit, test, enable or disable, remove, and configure LLM providers.',
+    terms: ['ai', 'llm', 'provider', 'providers', 'add provider', 'edit provider', 'remove provider', 'enable provider', 'disable provider', 'hide provider', 'test connection', 'api key', 'base url', 'default model', 'models', 'openai', 'anthropic', 'google', 'gemini', 'grok', 'lm studio', 'ollama', 'openrouter', 'requesty', 'groq', 'mistral', 'unsloth', 'unsloth studio']
   },
   {
     id: 'embedding-model',
@@ -198,7 +198,7 @@ const sections: SettingsSection[] = [
     id: 'dream-mode',
     categoryId: 'memory',
     label: 'Dream Mode',
-    description: 'Review Cyno and opted-in agent conversations to learn and update memory in the background.',
+    description: 'Choose the model that reviews conversations in the background to learn and update memory.',
     terms: ['dream', 'dreaming', 'background', 'learn', 'remember', 'conversations']
   },
   {
@@ -277,6 +277,13 @@ const sections: SettingsSection[] = [
     label: 'Theme',
     description: 'Choose your visual style.',
     terms: ['theme', 'themes', 'visual style', 'dark', 'midnight', 'light', 'blackwall', 'hud', 'scanlines', 'crimson', 'red', 'glyphs', 'gold', 'green', 'cyberpunk', 'emerald', 'industrial', 'amber', 'monochrome', 'palette', 'appearance']
+  },
+  {
+    id: 'ai-message-bubbles',
+    categoryId: 'general',
+    label: 'AI Message Bubbles',
+    description: 'Show backgrounds and borders around AI messages and thinking blocks.',
+    terms: ['chat display', 'ai', 'assistant', 'message bubbles', 'thinking', 'reasoning', 'transparent', 'background', 'border', 'shadow']
   },
   {
     id: 'auto-expand-thinking',

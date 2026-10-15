@@ -46,4 +46,34 @@ describe('MessageBubble', () => {
     expect(wrapper.find('[title="Edit"]').exists()).toBe(false)
     expect(wrapper.find('[title="Retry"]').exists()).toBe(false)
   })
+
+  test.each([
+    { isStreaming: true, content: '', visible: true, cursor: false },
+    { isStreaming: true, content: 'Answer', visible: false, cursor: true },
+    { isStreaming: false, content: 'Answer', visible: false, cursor: false },
+  ])('shows animated thinking dots only while thinking streams (%o)', ({ isStreaming, content, visible, cursor }) => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'assistant', content, thinking: 'Reasoning', isStreaming },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+
+    expect(wrapper.find('.thinking-dots').exists()).toBe(visible)
+    if (visible) expect(wrapper.findAll('.thinking-dot')).toHaveLength(3)
+    expect(wrapper.find('[data-testid="streaming-cursor"]').exists()).toBe(cursor)
+  })
+
+  test.each([
+    { isStreaming: true, content: '', spaced: false },
+    { isStreaming: true, content: 'Answer', spaced: true },
+    { isStreaming: false, content: 'Answer', spaced: true },
+  ])('only spaces the thinking block when output follows it (%o)', ({ isStreaming, content, spaced }) => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'assistant', content, thinking: 'Reasoning', isStreaming },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+
+    expect(wrapper.get('[data-testid="thinking-block"]').classes().includes('mb-3')).toBe(spaced)
+  })
 })

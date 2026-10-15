@@ -252,9 +252,37 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showAnySection(['auto-expand-thinking'])"
+      v-if="showAnySection(['ai-message-bubbles', 'auto-expand-thinking'])"
       label="Chat Display"
     />
+
+    <BaseCard
+      v-if="showSection('ai-message-bubbles')"
+      class="p-5"
+    >
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-theme-900 flex items-center justify-center">
+            <Icon
+              icon="lucide:message-square"
+              class="w-5 h-5 text-ink-secondary"
+            />
+          </div>
+          <div>
+            <h3 class="text-sm font-medium text-theme-200">
+              AI Message Bubbles
+            </h3>
+            <p class="text-xs text-ink-muted mt-0.5">
+              Show backgrounds and borders around AI messages and thinking blocks
+            </p>
+          </div>
+        </div>
+        <ToggleSwitch
+          v-model="prefs.aiMessageBubbles"
+          label="AI message bubbles"
+        />
+      </div>
+    </BaseCard>
 
     <!-- Auto-expand Thinking -->
     <BaseCard

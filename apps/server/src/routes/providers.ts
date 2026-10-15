@@ -60,6 +60,7 @@ export function parseProviderConfig(body: unknown, { requireModel = true } = {})
       supportsStreaming: input.supportsStreaming !== false,
       supportsToolCalls: input.supportsToolCalls !== false,
       supportsVision: input.supportsVision === true,
+      enabled: input.enabled !== false,
     }
   }
 }
@@ -192,6 +193,19 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
     return { success: true }
   })
 
+  // PUT /api/providers/:id/enabled — show or hide a provider's models in selectors without removing it
+  app.put<{ Params: { id: string }; Body: { enabled?: unknown } }>('/:id/enabled', async (req, reply) => {
+    if (typeof req.body?.enabled !== 'boolean') return reply.status(400).send({ error: 'enabled must be a boolean.' })
+    const db = getDb()
+    const row = db.prepare('SELECT config_json FROM providers WHERE id = ?').get(req.params.id) as { config_json: string } | undefined
+    if (!row) return reply.status(404).send({ error: 'Provider not found.' })
+    const config = { ...JSON.parse(row.config_json) as LLMProviderConfig, enabled: req.body.enabled }
+    db.prepare('UPDATE providers SET config_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(config), Date.now(), req.params.id)
+    const provider = gateway.getProvider(req.params.id)
+    if (provider) provider.config.enabled = req.body.enabled
+    return { success: true }
+  })
+
   // GET /api/providers/active — get active provider id
   app.get('/active', async () => {
     return { id: gateway.getLastUsedProviderId() }
@@ -208,12 +222,13 @@ export async function registerProviderRoutes(app: FastifyInstance): Promise<void
   })
 
   // GET /api/providers/:id/models — list models
-  app.get<{ Params: { id: string }; Querystring: { type?: ModelListType; details?: string } }>('/:id/models', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { type?: ModelListType; details?: string; refresh?: string } }>('/:id/models', async (req, reply) => {
     try {
+      const options = { refresh: req.query.refresh === 'true' }
       if (req.query.details === 'true') {
-        return await gateway.listModelItems(req.params.id, req.query.type)
+        return await gateway.listModelItems(req.params.id, req.query.type, options)
       }
-      const models = await gateway.listModels(req.params.id, req.query.type)
+      const models = await gateway.listModels(req.params.id, req.query.type, options)
       return models
     } catch (err) {
       return reply.status(500).send({ error: (err as Error).message })

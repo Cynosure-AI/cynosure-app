@@ -564,6 +564,58 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 28,
+        description: 'Let a scheduled job resume an existing conversation',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(cron_jobs)') as Array<{ name: string }>).map(({ name }) => name))
+            if (!columns.has('conversation_id')) db.exec('ALTER TABLE cron_jobs ADD COLUMN conversation_id TEXT')
+            db.exec('CREATE INDEX IF NOT EXISTS idx_cron_jobs_conversation ON cron_jobs(conversation_id)')
+        },
+    },
+    {
+        version: 29,
+        description: 'Store run todo lists as run_plans and link them to the project tasks they worked on',
+        up: (db) => {
+            // `tasks` held only todo lists, under a name easily mistaken for project_tasks.
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS run_plans (
+                    id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                    status TEXT NOT NULL DEFAULT 'running',
+                    objective TEXT NOT NULL DEFAULT '',
+                    items_json TEXT NOT NULL DEFAULT '[]',
+                    current_item_id TEXT,
+                    result_json TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    completed_at INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS idx_run_plans_conversation ON run_plans(conversation_id, updated_at DESC);
+                CREATE TABLE IF NOT EXISTS run_plan_project_tasks (
+                    plan_id TEXT NOT NULL REFERENCES run_plans(id) ON DELETE CASCADE,
+                    project_task_id TEXT NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+                    linked_at INTEGER NOT NULL,
+                    PRIMARY KEY (plan_id, project_task_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_run_plan_project_tasks_task ON run_plan_project_tasks(project_task_id);
+            `)
+            if (tableExists(db, 'tasks')) {
+                db.prepare(`
+                    INSERT OR IGNORE INTO run_plans (id, conversation_id, status, objective, items_json, current_item_id, result_json, created_at, updated_at, completed_at)
+                    SELECT id, conversation_id, status,
+                        COALESCE(json_extract(definition, '$.objective'), ''),
+                        COALESCE(json_extract(definition, '$.items'), '[]'),
+                        json_extract(definition, '$.currentTaskId'),
+                        result_json, created_at, COALESCE(updated_at, created_at), completed_at
+                    FROM (SELECT *, CASE WHEN json_valid(definition_json) THEN definition_json END AS definition FROM tasks)
+                    WHERE json_extract(definition, '$.type') = 'planning_state'
+                        AND conversation_id IN (SELECT id FROM conversations)
+                `).run()
+                db.exec('DROP TABLE tasks')
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

@@ -186,10 +186,17 @@ const BACKUP_TABLES: Record<string, BackupTable[]> = {
             counted: false,
             prepare: (row, ctx) => (ctx.messageIds.has(String(row.message_id)) ? { ...row, asset_id: row.asset_id || row.id } : null),
         },
+        { table: 'run_plans', counted: false, prepare: inRestoredConversation },
         {
-            table: 'tasks',
+            table: 'run_plan_project_tasks',
             counted: false,
-            prepare: (row, ctx) => (!row.conversation_id || ctx.conversationIds.has(String(row.conversation_id)) ? row : null),
+            // Keep a link only when both its plan and its project task are present after restore.
+            prepare: (row) => (
+                getDb().prepare('SELECT 1 FROM run_plans WHERE id = ?').get(row.plan_id)
+                && getDb().prepare('SELECT 1 FROM project_tasks WHERE id = ?').get(row.project_task_id)
+                    ? row
+                    : null
+            ),
         },
     ],
     usage: [{ table: 'execution_logs' }, { table: 'auxiliary_model_usage' }],
@@ -403,7 +410,7 @@ async function resetConversations(db = getDb()): Promise<void> {
     for (const { id } of conversationIds) await invalidateDreamConversation(id)
     db.prepare('DELETE FROM pending_hitl').run()
     db.prepare('DELETE FROM session_tool_approvals').run()
-    db.prepare('DELETE FROM tasks').run()
+    db.prepare('DELETE FROM run_plans').run()
     db.prepare('DELETE FROM dream_runs').run()
     db.prepare('DELETE FROM chat_events').run()
     db.prepare('DELETE FROM messages').run()
@@ -818,7 +825,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
         const conversations = count('conversations')
         const messages = count('messages')
         const attachments = count('message_attachments')
-        const tasks = count('tasks')
+        const runPlans = count('run_plans')
         const executionLogs = count('execution_logs')
         const auxiliaryModelUsage = count('auxiliary_model_usage')
 
@@ -837,7 +844,7 @@ export async function registerBackupRoutes(app: FastifyInstance, broadcast?: Bro
             },
             conversations: {
                 count: conversations,
-                details: { conversations, messages, attachments, tasks }
+                details: { conversations, messages, attachments, runPlans }
             },
             usage: {
                 count: executionLogs + auxiliaryModelUsage,

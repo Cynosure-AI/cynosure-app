@@ -64,7 +64,7 @@ onMounted(async () => {
   if (!providerStore.providers.length) {
     await providerStore.loadProviders()
   }
-  const provider = providerStore.lastUsedProvider || providerStore.providers[0]
+  const provider = providerStore.lastUsedProvider || providerStore.enabledProviders[0]
   providerId.value = provider?.id || ''
   model.value = provider?.defaultModel || ''
 })

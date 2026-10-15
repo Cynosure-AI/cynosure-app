@@ -6,7 +6,7 @@ import { useProviderLogos } from '../../composables/useProviderLogos'
 const props = withDefaults(
   defineProps<{
     modelValue: string
-    providers: { id: string; name: string; type: string }[]
+    providers: { id: string; name: string; type: string; enabled?: boolean }[]
     /** Prepend an entry with value='' representing "no specific provider" */
     includeDefault?: boolean
     /** Label for the default entry */
@@ -44,7 +44,8 @@ const emit = defineEmits<{
 const { logoUrl } = useProviderLogos()
 
 const groups = computed((): SelectOptionGroup[] => {
-  const providerOptions = props.providers.map((p) => ({
+  // Disabled providers are hidden unless already selected.
+  const providerOptions = props.providers.filter((p) => p.enabled !== false || p.id === props.modelValue).map((p) => ({
     value: p.id,
     label: p.name,
     imgSrc: logoUrl(p.type),

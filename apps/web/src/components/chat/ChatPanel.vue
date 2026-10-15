@@ -13,11 +13,14 @@ import ChatActivityIndicator from '../chat/ChatActivityIndicator.vue'
 import QuickResponses from '../chat/QuickResponses.vue'
 import ContextCompactCard from '../chat/ContextCompactCard.vue'
 import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
+import WaitResumeMarker from '../chat/WaitResumeMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import ToolExecutionList from './ToolExecutionList.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import { useToolPresentation } from '../../composables/useToolPresentation'
 import RichContent from '../shared/RichContent.vue'
+import TypewriterText from '../shared/TypewriterText.vue'
+import { chatIntroTimeline } from './chatIntro'
 import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
@@ -457,6 +460,14 @@ watch(() => chatStore.loadingMessages, (isLoading) => {
 
 const greeting = ref(getGreeting())
 
+// The headline types out first; the subtitle and sub-agents wait for it.
+const CONNECTING_TITLE = 'Initializing…'
+const introTimeline = computed(() => chatIntroTimeline(wsConnected.value ? greeting.value : CONNECTING_TITLE))
+const introStyle = computed(() => ({
+  '--intro-subtitle': `${introTimeline.value.subtitle}ms`,
+  '--intro-agents': `${introTimeline.value.agents}ms`,
+}))
+
 // Scroll to bottom when mounting into an already-loaded conversation
 // (e.g. navigating here after selectConversation was called elsewhere)
 onMounted(() => {
@@ -560,9 +571,10 @@ onMounted(() => {
     <!-- Empty state -->
     <div
       v-else-if="chatStore.messages.length === 0"
-      class="chat-empty-state flex flex-col items-center justify-center h-full text-ink-secondary"
+      class="chat-empty-state relative isolate flex flex-col items-center justify-center h-full text-ink-secondary"
+      :style="introStyle"
     >
-      <div class="chat-empty-icon relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
+      <div class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
         <RouterLink
           v-if="conversationAgentId"
           :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"
@@ -595,26 +607,30 @@ onMounted(() => {
         </RouterLink>
       </div>
       <template v-if="!wsConnected">
-        <Icon
-          icon="lucide:loader-2"
-          class="w-8 h-8 text-ink-muted animate-spin mb-4"
-        />
         <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
-          Initializing…
+          <TypewriterText
+            :text="CONNECTING_TITLE"
+            :start="introTimeline.typeStart"
+            :step="introTimeline.typeStep"
+          />
         </h2>
-        <p class="text-sm mt-2 text-ink-muted max-w-sm text-center">
+        <p class="chat-intro-fade text-sm mt-2 text-ink-muted max-w-sm text-center">
           Connecting to server and loading your data.
         </p>
       </template>
       <template v-else>
         <div class="flex items-center justify-center gap-3">
           <h2 class="text-3xl font-semibold text-theme-200 tracking-tight text-center">
-            {{ greeting }}
+            <TypewriterText
+              :text="greeting"
+              :start="introTimeline.typeStart"
+              :step="introTimeline.typeStep"
+            />
           </h2>
           <RouterLink
             v-if="activeAgentIssues.length"
             :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"
-            class="inline-flex shrink-0 rounded p-1 text-status-warning focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+            class="chat-intro-fade inline-flex shrink-0 rounded p-1 text-status-warning focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
             :title="`Agent health warning\n${activeAgentIssues.join('\n')}\nOpen agent settings to resolve.`"
             :aria-label="`Agent health warning: ${activeAgentIssues.join(', ')}. Open agent settings.`"
           >
@@ -625,12 +641,15 @@ onMounted(() => {
             />
           </RouterLink>
         </div>
-        <p class="text-sm mt-2 text-ink-muted max-w-sm text-center">
+        <p class="chat-intro-fade text-sm mt-2 text-ink-muted max-w-sm text-center">
           Type a message below to begin a new conversation, or choose an agent to assist you.
         </p>
         <TransitionGroup
           tag="div"
           appear
+          appear-from-class=""
+          appear-active-class="chat-intro-pop"
+          appear-to-class=""
           enter-active-class="transition duration-200 ease-out"
           enter-from-class="scale-75 opacity-0"
           enter-to-class="scale-100 opacity-100"
@@ -646,7 +665,7 @@ onMounted(() => {
             v-for="(subAgent, index) in visibleEmptyStateSubAgents"
             :key="subAgent.id"
             :title="subAgent.name"
-            :style="{ transitionDelay: `${index * 50}ms` }"
+            :style="{ transitionDelay: `${index * 50}ms`, '--intro-index': index }"
             class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-theme-700 bg-theme-800 shadow-sm"
           >
             <img
@@ -666,7 +685,7 @@ onMounted(() => {
             :key="'overflow-' + overflowEmptyStateSubAgents.length"
             :title="overflowEmptyStateSubAgentsTitle"
             class="flex h-10 w-10 items-center justify-center rounded-full border border-theme-700 bg-theme-800 text-xs font-medium text-ink-secondary shadow-sm"
-            :style="{ transitionDelay: `${visibleEmptyStateSubAgents.length * 50}ms` }"
+            :style="{ transitionDelay: `${visibleEmptyStateSubAgents.length * 50}ms`, '--intro-index': visibleEmptyStateSubAgents.length }"
             aria-label="Additional assigned sub-agents"
           >
             +{{ overflowEmptyStateSubAgents.length }}
@@ -924,6 +943,12 @@ onMounted(() => {
         </div>
       </template>
 
+      <!-- Pending schedule_wait -->
+      <WaitResumeMarker
+        v-if="chatStore.activeConversationId && !agentStore.isExecuting && !chatStore.isStreaming"
+        :conversation-id="chatStore.activeConversationId"
+      />
+
       <!-- Title generation activity indicator -->
       <ChatActivityIndicator
         v-if="generatingTitle"
@@ -956,3 +981,74 @@ onMounted(() => {
     @close="lightboxSrc = null"
   />
 </template>
+
+<style scoped>
+/* New-chat intro, timed by chatIntro.ts: the icon materializes, the headline
+   types itself out (TypewriterText), then the subtitle and sub-agents follow. */
+@media (prefers-reduced-motion: no-preference) {
+  .chat-intro-icon {
+    animation:
+      chat-intro-materialize 760ms cubic-bezier(0.22, 1, 0.36, 1) both,
+      chat-intro-ping 1100ms 420ms ease-out;
+  }
+
+  .chat-intro-fade {
+    animation: chat-intro-rise 560ms var(--intro-subtitle) cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Only the first appearance waits for the greeting; later additions use the quick enter. */
+  .chat-intro-pop {
+    animation: chat-intro-pop 520ms calc(var(--intro-agents) + var(--intro-index, 0) * 70ms) cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+}
+
+@keyframes chat-intro-materialize {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+    filter: blur(8px);
+  }
+  60% {
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* One ring leaves the icon as it locks in. An outline, so the icon keeps its own shadow. */
+@keyframes chat-intro-ping {
+  from {
+    outline: 1.5px solid color-mix(in srgb, var(--color-accent-500) 60%, transparent);
+    outline-offset: 0;
+  }
+  to {
+    outline: 1.5px solid color-mix(in srgb, var(--color-accent-500) 0%, transparent);
+    outline-offset: 22px;
+  }
+}
+
+@keyframes chat-intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes chat-intro-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+</style>

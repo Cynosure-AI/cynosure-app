@@ -44,7 +44,7 @@ export const BUILTIN_NAMESPACES = {
     scheduling: {
         id: BUILTIN_NAMESPACE_IDS.scheduling,
         label: "Built-In: Scheduling",
-        description: "Create, review, update, and remove scheduled agent tasks.",
+        description: "Create, review, update, and remove scheduled agent tasks, or pause a conversation and resume it later.",
     },
     notifications: {
         id: BUILTIN_NAMESPACE_IDS.notifications,
@@ -89,6 +89,7 @@ function scheduleOptions(ctx: BuiltInHydrationContext) {
         agentId: ctx.agentId || "",
         executionConfig: ctx.scheduleExecutionConfig,
         projectId: ctx.conversationId ? getProjectForConversation(ctx.conversationId)?.id : undefined,
+        conversationId: ctx.conversationId || undefined,
     };
 }
 
@@ -107,6 +108,7 @@ const BUILTIN_TOOL_HYDRATORS = {
     schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[1],
     schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[2],
     schedule_delete: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[3],
+    schedule_wait: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[4],
     memory_search: (ctx: BuiltInHydrationContext) => makeMemorySearchTool({
         folderFilter: ctx.folderFilter,
         assignedFolders: ctx.assignedFolders,

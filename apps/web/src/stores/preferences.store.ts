@@ -5,7 +5,7 @@ import { syncPrefsToElectron } from '@/utils/electron-prefs'
 import { api } from '@/api/client'
 import type { ChatRunSettings, ContextStrategy } from '@shared/types'
 import {
-    SK_THEME, SK_AUTO_EXPAND, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
+    SK_THEME, SK_AUTO_EXPAND, SK_AI_MESSAGE_BUBBLES, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
     SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
     SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
     SK_RECENT_CHAT_FILTER,
@@ -30,6 +30,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if ((theme.value as string) === 'virtualboy') theme.value = 'blackwall'
     if (!THEME_IDS.has(theme.value)) theme.value = 'crimson'
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
+    const aiMessageBubbles = useLocalStorage(SK_AI_MESSAGE_BUBBLES, true)
     const quickResponses = useLocalStorage(SK_QUICK_RESPONSES, false)
     const sidebarCollapsed = ref(false)
     const recentChatFilter = useLocalStorage<RecentChatFilter[]>(SK_RECENT_CHAT_FILTER, ['all'])
@@ -62,7 +63,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, quickResponses, recentChatFilter,
+        [theme, autoExpandSteps, aiMessageBubbles, quickResponses, recentChatFilter,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
             voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
@@ -180,7 +181,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     return {
         userName, userAvatarUrl, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
         migrateLegacyChatRunSettings,
-        theme, autoExpandSteps, quickResponses, sidebarCollapsed, recentChatFilter,
+        theme, autoExpandSteps, aiMessageBubbles, quickResponses, sidebarCollapsed, recentChatFilter,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
         voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel,

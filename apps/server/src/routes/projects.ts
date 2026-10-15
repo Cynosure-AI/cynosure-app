@@ -6,6 +6,7 @@ import {
     deleteProject,
     deleteProjectTask,
     getProject,
+    getProjectTask,
     listProjects,
     listProjectTasks,
     reorderProjects,
@@ -16,12 +17,19 @@ import {
     type UpdateProjectInput,
 } from '../core/projects/project-store.js'
 import { diffBriefRevisions, getBriefRevision, listBriefRevisions, listProjectTimeline } from '../core/projects/project-history.js'
-import type { ProjectTaskStatus } from '@shared/types'
+import { listProjectTaskPlans, listProjectTaskProgress } from '../core/agent/planning-state.js'
+import type { ProjectTaskDto, ProjectTaskStatus } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
 function message(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
+}
+
+/** Board cards show how far the newest run on each task got. */
+function withProgress(projectId: string, tasks: ProjectTaskDto[]): ProjectTaskDto[] {
+    const progress = listProjectTaskProgress(projectId)
+    return tasks.map((task) => ({ ...task, progress: progress.get(task.id) ?? null }))
 }
 
 export async function registerProjectRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
@@ -121,7 +129,7 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
     app.get<{ Params: { id: string }; Querystring: { status?: string } }>('/:id/tasks', async (req, reply) => {
         if (!getProject(req.params.id)) return reply.status(404).send({ error: 'Project not found' })
         const statuses = req.query.status?.split(',').filter(Boolean) as ProjectTaskStatus[] | undefined
-        return listProjectTasks(req.params.id, { statuses })
+        return withProgress(req.params.id, listProjectTasks(req.params.id, { statuses }))
     })
 
     app.post<{ Params: { id: string }; Body: ProjectTaskInput }>('/:id/tasks', async (req, reply) => {
@@ -129,7 +137,7 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
         try {
             const task = createProjectTask(req.params.id, { ...req.body, createdBy: 'user' })
             tasksChanged(req.params.id)
-            return task
+            return { ...task, progress: null }
         } catch (error) {
             return reply.status(400).send({ error: message(error) })
         }
@@ -140,10 +148,16 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
             const task = updateProjectTask(req.params.id, req.params.taskId, req.body ?? {})
             if (!task) return reply.status(404).send({ error: 'Task not found' })
             tasksChanged(req.params.id)
-            return task
+            return withProgress(req.params.id, [task])[0]
         } catch (error) {
             return reply.status(400).send({ error: message(error) })
         }
+    })
+
+    // GET /api/projects/:id/tasks/:taskId/work-log — todo lists of the runs that worked on the task, newest first
+    app.get<{ Params: { id: string; taskId: string } }>('/:id/tasks/:taskId/work-log', async (req, reply) => {
+        if (!getProjectTask(req.params.id, req.params.taskId)) return reply.status(404).send({ error: 'Task not found' })
+        return listProjectTaskPlans(req.params.taskId)
     })
 
     app.delete<{ Params: { id: string; taskId: string } }>('/:id/tasks/:taskId', async (req, reply) => {

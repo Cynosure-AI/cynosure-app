@@ -10,6 +10,7 @@ import {
     setProjectBrief,
     updateProjectTask,
 } from './project-store.js'
+import { linkRunningPlanToProjectTask } from '../agent/planning-state.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -47,6 +48,11 @@ export interface ProjectToolContext {
 
 function changeContext(ctx: ProjectToolContext) {
     return { source: ctx.source ?? 'ai', conversationId: ctx.conversationId, agentId: ctx.agentId } as const
+}
+
+/** A chat run that moves a task is working on it: its todo list joins the task's work log. */
+function linkPlan(ctx: ProjectToolContext, taskId: string): void {
+    if (ctx.conversationId && ctx.source !== 'dream') linkRunningPlanToProjectTask(ctx.conversationId, taskId)
 }
 
 function result(success: boolean, output: unknown): ToolResult {
@@ -148,13 +154,14 @@ export function makeProjectTaskTools(ctx: ProjectToolContext): ToolDefinition[] 
             execute: (params) => guarded(() => {
                 const input = params as { title: string; notes?: string; status?: ProjectTaskStatus }
                 const task = createProjectTask(ctx.projectId, { ...input, conversationId: ctx.conversationId, createdBy: 'agent' }, changeContext(ctx))
+                if (task.status !== 'todo') linkPlan(ctx, task.id)
                 notifyTasks()
                 return result(true, { id: task.id, title: task.title, status: task.status })
             }),
         },
         {
             name: 'project_task_update',
-            description: 'Update a project task: move it between statuses, rename it, or replace its notes. Set in_progress when you start, done when finished, blocked with a note explaining why.',
+            description: 'Update a project task: move it between statuses, rename it, or replace its notes. Set in_progress when you start or resume it (also when it already is), done when finished, blocked with a note explaining why. Each status you set records your current todo list in the task\'s work log.',
             timeout: 5_000,
             execution: { readOnly: false },
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -176,6 +183,7 @@ export function makeProjectTaskTools(ctx: ProjectToolContext): ToolDefinition[] 
                     ...(input.status === 'in_progress' && ctx.conversationId ? { conversationId: ctx.conversationId } : {}),
                 }, changeContext(ctx))
                 if (!task) return result(false, `Task ${taskId} was not found in this project.`)
+                if (input.status) linkPlan(ctx, task.id)
                 notifyTasks()
                 return result(true, { id: task.id, title: task.title, status: task.status })
             }),

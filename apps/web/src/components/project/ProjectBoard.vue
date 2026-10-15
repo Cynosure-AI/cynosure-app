@@ -1,31 +1,57 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { ProjectDto, ProjectTaskDto, ProjectTaskStatus } from '@shared/types'
 import ModalDialog from '../shared/ModalDialog.vue'
 import AgentSelect from '../shared/AgentSelect.vue'
+import ProjectTaskWorkLog from './ProjectTaskWorkLog.vue'
+import { api } from '../../api/client'
 import { useProjectsStore } from '../../stores/projects.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
-import { TASK_COLUMNS } from '../../utils/project-format'
+import { useAgentStore } from '../../stores/agent-runtime.store'
+import { TASK_COLUMNS, formatRelativeTime } from '../../utils/project-format'
 import { taskDraft, useProjectChat } from '../../composables/useProjectChat'
 
 const props = defineProps<{ project: ProjectDto }>()
 
+/** Done only grows; the newest few are what matters on the board. */
+const DONE_PREVIEW_COUNT = 5
+
 const projectsStore = useProjectsStore()
 const agentDefs = useAgentDefinitionsStore()
+const agentStore = useAgentStore()
 const { startProjectChat } = useProjectChat()
 
 const newTitle = ref('')
 const error = ref('')
 const draggingId = ref<string | null>(null)
 const dropStatus = ref<ProjectTaskStatus | null>(null)
+const dropBeforeId = ref<string | null>(null)
+const showAllDone = ref(false)
 const editing = ref<(ProjectTaskDto & { assignee: string }) | null>(null)
+let progressRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let stopPlanningListener: (() => void) | null = null
 
 const tasks = computed(() => projectsStore.tasksByProject[props.project.id] ?? [])
-const columns = computed(() => TASK_COLUMNS.map((column) => ({
-  ...column,
-  tasks: tasks.value.filter((task) => task.status === column.status).sort((a, b) => a.sortOrder - b.sortOrder),
-})))
+const columns = computed(() => TASK_COLUMNS.map((column) => {
+  const all = tasks.value
+    .filter((task) => task.status === column.status)
+    .sort(column.status === 'done' ? byCompletion : (a, b) => a.sortOrder - b.sortOrder)
+  const shown = column.status === 'done' && !showAllDone.value ? all.slice(0, DONE_PREVIEW_COUNT) : all
+  return { ...column, tasks: shown, total: all.length, hidden: all.length - shown.length }
+}))
+
+const editingMeta = computed(() => {
+  const task = editing.value
+  if (!task) return ''
+  const created = `${task.createdBy === 'agent' ? 'Created by an agent' : 'Created'} ${formatRelativeTime(task.createdAt)}`
+  return task.completedAt ? `${created} · completed ${formatRelativeTime(task.completedAt)}` : created
+})
+
+/** Most recently finished first. */
+function byCompletion(a: ProjectTaskDto, b: ProjectTaskDto): number {
+  return (b.completedAt ?? b.updatedAt) - (a.completedAt ?? a.updatedAt)
+}
 
 async function run(action: () => Promise<unknown>): Promise<void> {
   error.value = ''
@@ -49,12 +75,42 @@ function onDragStart(task: ProjectTaskDto, event: DragEvent): void {
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
 }
 
-function onDrop(status: ProjectTaskStatus, beforeTask?: ProjectTaskDto): void {
-  const taskId = draggingId.value
+function onDragOver(status: ProjectTaskStatus, beforeTask?: ProjectTaskDto | null): void {
+  // Gaps between cards keep the last position (undefined) so the marker doesn't flicker.
+  if (beforeTask !== undefined) dropBeforeId.value = beforeTask?.id ?? null
+  else if (dropStatus.value !== status) dropBeforeId.value = null
+  dropStatus.value = status
+}
+
+function onDragLeave(status: ProjectTaskStatus, event: DragEvent): void {
+  // Moving onto a card also fires dragleave; only leaving the column counts.
+  if ((event.currentTarget as Node).contains(event.relatedTarget as Node | null)) return
+  if (dropStatus.value !== status) return
+  dropStatus.value = null
+  dropBeforeId.value = null
+}
+
+function clearDrag(): void {
   draggingId.value = null
   dropStatus.value = null
+  dropBeforeId.value = null
+}
+
+function showsDropMarker(status: ProjectTaskStatus, beforeId: string | null): boolean {
+  // Done is ordered by completion time, so a position there means nothing.
+  return Boolean(draggingId.value) && status !== 'done' && dropStatus.value === status
+    && dropBeforeId.value === beforeId && draggingId.value !== beforeId
+}
+
+function onDrop(status: ProjectTaskStatus, beforeTask?: ProjectTaskDto): void {
+  const taskId = draggingId.value
+  clearDrag()
   const task = tasks.value.find((candidate) => candidate.id === taskId)
   if (!task) return
+  if (status === 'done') {
+    if (task.status !== 'done') moveTask(task, 'done')
+    return
+  }
   const column = columns.value.find((candidate) => candidate.status === status)!.tasks.filter((candidate) => candidate.id !== task.id)
   // Place before the hovered card, or at the end of the column.
   const index = beforeTask ? column.findIndex((candidate) => candidate.id === beforeTask.id) : column.length
@@ -108,14 +164,72 @@ function agentName(agentId: string | null): string | null {
   return agentId ? (agentDefs.get(agentId)?.name ?? null) : null
 }
 
-watch(() => props.project.id, (id) => { void run(() => projectsStore.loadTasks(id)) })
-onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
+/** Notes that open by repeating the title would only show it twice. */
+function notesPreview(task: ProjectTaskDto): string {
+  const notes = task.notes.trim()
+  const title = task.title.trim()
+  if (!notes.toLowerCase().startsWith(title.toLowerCase())) return notes
+  return notes.slice(title.length).replace(/^[\s.:;,–—-]+/, '')
+}
+
+function runState(task: ProjectTaskDto): 'running' | 'awaiting' | null {
+  const conversationId = task.conversationId
+  if (!conversationId) return null
+  if (agentStore.awaitingHITLConvIds.has(conversationId)) return 'awaiting'
+  return agentStore.isConversationExecuting(conversationId) ? 'running' : null
+}
+
+function showsProgress(task: ProjectTaskDto): boolean {
+  return task.status !== 'done' && Boolean(task.progress?.total)
+}
+
+function progressTone(task: ProjectTaskDto): string {
+  if (runState(task)) return 'bg-accent-500'
+  return task.progress?.status === 'error' ? 'bg-status-warning' : 'bg-ink-muted'
+}
+
+function hasFooter(task: ProjectTaskDto): boolean {
+  return task.status !== 'done' || Boolean(task.conversationId) || Boolean(agentName(task.assigneeAgentId))
+}
+
+/** Live run events only cover runs this window saw start; ask the server which task chats are running now. */
+async function loadRunState(): Promise<void> {
+  try {
+    const running = new Set((await api.instances.list()).map((instance) => instance.conversationId))
+    for (const task of tasks.value) {
+      if (task.conversationId) agentStore.setConversationExecutionState(task.conversationId, running.has(task.conversationId))
+    }
+  } catch {
+    // Non-critical; live run events still update the cards.
+  }
+}
+
+async function loadBoard(projectId: string): Promise<void> {
+  await run(() => projectsStore.loadTasks(projectId))
+  await loadRunState()
+}
+
+watch(() => props.project.id, (id) => { void loadBoard(id) })
+onMounted(() => {
+  // Step updates don't touch the task rows, so refresh the cards whose run moved.
+  stopPlanningListener = api.agent.onPlanningStateUpdated((data) => {
+    const runId = (data as { runId?: string } | null)?.runId
+    if (!runId || !tasks.value.some((task) => task.progress?.runId === runId)) return
+    if (progressRefreshTimer) clearTimeout(progressRefreshTimer)
+    progressRefreshTimer = setTimeout(() => { void run(() => projectsStore.loadTasks(props.project.id)) }, 250)
+  })
+  void loadBoard(props.project.id)
+})
+onBeforeUnmount(() => {
+  if (progressRefreshTimer) clearTimeout(progressRefreshTimer)
+  stopPlanningListener?.()
+})
 </script>
 
 <template>
   <div>
     <form
-      class="mb-4 flex gap-2"
+      class="mb-4 flex max-w-2xl gap-2"
       @submit.prevent="addTask"
     >
       <input
@@ -123,7 +237,7 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
         type="text"
         maxlength="200"
         aria-label="New task title"
-        placeholder="Add a task…"
+        placeholder="Add a task to To do…"
         class="min-w-0 flex-1 rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
       >
       <button
@@ -154,8 +268,8 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
         class="flex min-h-40 min-w-0 flex-col rounded-xl border bg-theme-900/60 p-2 transition-colors"
         :class="dropStatus === column.status ? 'border-accent-500/60' : 'border-theme-800'"
         :aria-label="column.label"
-        @dragover.prevent="dropStatus = column.status"
-        @dragleave="dropStatus = dropStatus === column.status ? null : dropStatus"
+        @dragover.prevent="onDragOver(column.status)"
+        @dragleave="onDragLeave(column.status, $event)"
         @drop.prevent="onDrop(column.status)"
       >
         <header class="flex items-center gap-2 px-2 pb-2 pt-1 text-xs font-semibold uppercase tracking-wider text-ink-muted">
@@ -165,18 +279,29 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
             :class="column.tone"
           />
           {{ column.label }}
-          <span class="ml-auto rounded bg-theme-800 px-1.5 py-0.5 text-[10px] font-medium text-ink-secondary">{{ column.tasks.length }}</span>
+          <span class="ml-auto rounded bg-theme-800 px-1.5 py-0.5 text-[10px] font-medium text-ink-secondary">{{ column.total }}</span>
         </header>
 
         <ul class="flex flex-1 flex-col gap-2">
           <li
+            v-if="!column.total"
+            class="rounded-lg border border-dashed px-3 py-6 text-center text-xs transition-colors"
+            :class="dropStatus === column.status ? 'border-accent-500/60 text-ink-secondary' : 'border-theme-700 text-ink-faint'"
+          >
+            {{ column.empty }}
+          </li>
+          <li
             v-for="task in column.tasks"
             :key="task.id"
             draggable="true"
-            class="group cursor-grab rounded-lg border border-theme-700 bg-theme-800 p-2.5 shadow-sm transition hover:border-theme-600 active:cursor-grabbing"
-            :class="{ 'opacity-40': draggingId === task.id }"
+            class="group relative cursor-grab rounded-lg border border-theme-700 bg-theme-800 p-2.5 shadow-sm transition hover:border-theme-600 active:cursor-grabbing"
+            :class="{
+              'opacity-40': draggingId === task.id,
+              'before:absolute before:inset-x-0 before:-top-1.25 before:h-0.5 before:rounded-full before:bg-accent-500': showsDropMarker(column.status, task.id),
+            }"
             @dragstart="onDragStart(task, $event)"
-            @dragend="draggingId = null; dropStatus = null"
+            @dragend="clearDrag"
+            @dragover.prevent.stop="onDragOver(column.status, task)"
             @drop.prevent.stop="onDrop(column.status, task)"
           >
             <button
@@ -189,24 +314,19 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
                 :class="{ 'text-ink-muted line-through': task.status === 'done' }"
               >{{ task.title }}</span>
               <span
-                v-if="task.notes"
-                class="mt-1 line-clamp-2 text-xs text-ink-muted [overflow-wrap:anywhere]"
-              >{{ task.notes }}</span>
+                v-if="notesPreview(task)"
+                class="mt-1 line-clamp-2 text-xs [overflow-wrap:anywhere]"
+                :class="task.status === 'done' ? 'text-ink-faint' : 'text-ink-muted'"
+              >{{ notesPreview(task) }}</span>
             </button>
-            <div class="mt-2 flex items-center gap-1.5 text-[11px] text-ink-faint">
-              <span
-                v-if="task.createdBy === 'agent'"
-                class="inline-flex items-center gap-1"
-                title="Created by an agent"
-              >
-                <Icon
-                  icon="lucide:sparkles"
-                  class="h-3 w-3"
-                />
-              </span>
+            <div
+              v-if="hasFooter(task)"
+              class="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-ink-muted"
+            >
               <span
                 v-if="agentName(task.assigneeAgentId)"
                 class="inline-flex min-w-0 items-center gap-1"
+                :title="`Assigned to ${agentName(task.assigneeAgentId)}`"
               >
                 <Icon
                   icon="lucide:bot"
@@ -217,17 +337,43 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
               <RouterLink
                 v-if="task.conversationId"
                 :to="{ name: 'conversation', params: { conversationId: task.conversationId } }"
-                class="inline-flex items-center gap-1 hover:text-theme-200"
-                title="Open the chat working on this task"
+                class="-mx-1 inline-flex shrink-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-theme-700 hover:text-theme-200"
+                :class="{ 'text-accent-fg': runState(task) === 'running', 'text-status-warning': runState(task) === 'awaiting' }"
+                :title="runState(task) === 'awaiting' ? 'The chat on this task is waiting for your approval' : 'Open the chat working on this task'"
               >
+                <span
+                  v-if="runState(task) === 'running'"
+                  class="relative flex h-1.5 w-1.5"
+                >
+                  <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-400 opacity-75" />
+                  <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-500" />
+                </span>
                 <Icon
-                  icon="lucide:message-square"
+                  v-else
+                  :icon="runState(task) === 'awaiting' ? 'lucide:hand' : 'lucide:message-square'"
                   class="h-3 w-3"
                 />
+                {{ runState(task) === 'running' ? 'Working' : runState(task) === 'awaiting' ? 'Needs approval' : 'Chat' }}
               </RouterLink>
-              <span class="ml-auto flex gap-0.5 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+              <span
+                v-if="showsProgress(task)"
+                class="inline-flex shrink-0 items-center gap-1.5 tabular-nums"
+                :title="`${task.progress!.completed} of ${task.progress!.total} steps done in the latest run`"
+              >
+                <span class="h-1 w-10 overflow-hidden rounded-full bg-theme-700">
+                  <span
+                    class="block h-full rounded-full transition-[width]"
+                    :class="progressTone(task)"
+                    :style="{ width: `${(task.progress!.completed / task.progress!.total) * 100}%` }"
+                  />
+                </span>
+                {{ task.progress!.completed }}/{{ task.progress!.total }}
+              </span>
+              <span
+                v-if="task.status !== 'done'"
+                class="ml-auto flex shrink-0 gap-0.5 text-ink-faint transition-colors group-hover:text-ink-muted"
+              >
                 <button
-                  v-if="task.status !== 'done'"
                   type="button"
                   class="rounded p-1 hover:bg-theme-700 hover:text-theme-200"
                   :aria-label="`Start a chat for ${task.title}`"
@@ -240,7 +386,6 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
                   />
                 </button>
                 <button
-                  v-if="task.status !== 'done'"
                   type="button"
                   class="rounded p-1 hover:bg-theme-700 hover:text-theme-200"
                   :aria-label="`Mark ${task.title} done`"
@@ -255,7 +400,33 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
               </span>
             </div>
           </li>
+          <!-- Dropping below the last card puts the task at the end. -->
+          <li
+            aria-hidden="true"
+            class="relative min-h-4 flex-1"
+            @dragover.prevent.stop="onDragOver(column.status, null)"
+            @drop.prevent.stop="onDrop(column.status)"
+          >
+            <span
+              v-if="column.total && showsDropMarker(column.status, null)"
+              class="absolute inset-x-0 -top-1.25 h-0.5 rounded-full bg-accent-500"
+            />
+          </li>
         </ul>
+
+        <button
+          v-if="column.status === 'done' && column.total > DONE_PREVIEW_COUNT"
+          type="button"
+          class="mt-1 inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-ink-muted hover:bg-theme-800 hover:text-theme-200"
+          :aria-expanded="showAllDone"
+          @click="showAllDone = !showAllDone"
+        >
+          <Icon
+            :icon="showAllDone ? 'lucide:chevron-up' : 'lucide:chevron-down'"
+            class="h-3.5 w-3.5"
+          />
+          {{ showAllDone ? 'Show fewer' : `+${column.hidden} more` }}
+        </button>
       </section>
     </div>
 
@@ -272,6 +443,9 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
         class="space-y-4"
         @submit.prevent="saveEditor"
       >
+        <p class="text-xs text-ink-muted">
+          {{ editingMeta }}
+        </p>
         <div>
           <label
             for="task-title"
@@ -335,33 +509,45 @@ onMounted(() => { void run(() => projectsStore.loadTasks(props.project.id)) })
           </div>
         </div>
       </form>
+      <ProjectTaskWorkLog
+        v-if="editing"
+        class="mt-4"
+        :project-id="project.id"
+        :task-id="editing.id"
+      />
       <template #actions>
-        <button
-          type="button"
-          class="mr-auto rounded-lg px-3 py-2 text-sm text-status-danger hover:bg-status-danger/10"
-          @click="deleteEditing"
-        >
-          Delete
-        </button>
-        <button
-          v-if="editing && editing.status !== 'done'"
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-theme-700 px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
-          @click="editing && startTaskChat(editing)"
-        >
-          <Icon
-            icon="lucide:play"
-            class="h-3.5 w-3.5"
-          />
-          Start chat
-        </button>
-        <button
-          type="submit"
-          form="edit-task-form"
-          class="rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on hover:bg-accent-400"
-        >
-          Save
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="mr-auto inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-2 text-sm text-status-danger hover:bg-status-danger/10"
+            @click="deleteEditing"
+          >
+            <Icon
+              icon="lucide:trash-2"
+              class="h-3.5 w-3.5"
+            />
+            Delete
+          </button>
+          <button
+            v-if="editing && editing.status !== 'done'"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-theme-700 px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
+            @click="editing && startTaskChat(editing)"
+          >
+            <Icon
+              icon="lucide:play"
+              class="h-3.5 w-3.5"
+            />
+            Start chat
+          </button>
+          <button
+            type="submit"
+            form="edit-task-form"
+            class="rounded-lg border border-transparent accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on hover:bg-accent-400"
+          >
+            Save
+          </button>
+        </div>
       </template>
     </ModalDialog>
   </div>
