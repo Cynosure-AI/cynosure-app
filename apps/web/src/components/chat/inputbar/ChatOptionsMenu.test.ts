@@ -61,7 +61,6 @@ describe('ChatOptionsMenu', () => {
   test.each([
     { agentId: 'agent-1', field: 'Tools', label: 'Tools (MCPs)' },
     { agentId: null, field: 'Memory folders', label: 'Memories' },
-    { agentId: 'agent-1', field: 'System prompt', label: 'System Prompt' },
     { agentId: null, field: 'Automatic memory', label: 'Automatic Memories' },
     { agentId: null, field: 'Automatic tool routing', label: 'Automatic Tools' },
   ])('colors the $label icon and label when $field differs from the preset', async ({ agentId, field, label }) => {
@@ -94,6 +93,7 @@ describe('ChatOptionsMenu', () => {
     expect(menu.textContent).toContain('Files')
     expect(menu.textContent).toContain('Subagents')
     expect(menu.textContent).not.toContain('Reasoning')
+    expect(menu.textContent).not.toContain('System Prompt')
     const files = [...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Files')!
     files.click()
     await flushPromises()

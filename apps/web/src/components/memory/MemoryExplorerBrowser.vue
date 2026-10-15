@@ -3,6 +3,7 @@ import { Icon } from "@iconify/vue";
 import type { MemoryFileStatus, MemoryFolder } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
 import type { DocumentRow, ExplorerRow, GlobalDocumentRow } from "./memory-file-explorer-types";
+import { OPT_IN_MEMORY_FOLDER_HINT } from "../../utils/memory-folder-selection";
 
 defineProps<{
   searchQuery: string;
@@ -187,14 +188,18 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         @click.stop="emit('toggleGridSelection', rowForFolder(folder), $event)"
       >
       <Icon
-        :icon="folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder'"
-        class="mb-3 h-8 w-8"
-        :class="folder.autoMemoryExcluded ? 'text-status-danger' : 'text-status-warning'"
+        icon="lucide:folder"
+        class="mb-3 h-8 w-8 text-status-warning"
       />
       <span
         class="w-full truncate text-sm font-medium text-theme-200"
         :title="folder.name"
       >{{ folder.name }}</span>
+      <span
+        v-if="folder.autoMemoryExcluded"
+        class="mt-1 rounded border border-theme-600 px-1.5 text-[10px] leading-4 text-ink-secondary"
+        :title="OPT_IN_MEMORY_FOLDER_HINT"
+      >Opt-in</span>
       <span class="mt-1 text-xs text-ink-faint sm:text-sm">{{ folder.fileCount }} file{{ folder.fileCount !== 1 ? 's' : '' }}</span>
       <span
         class="mt-2 inline-flex items-center gap-1 text-xs sm:text-sm"
@@ -294,9 +299,9 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     <template #col-name="{ item }">
       <div class="flex min-w-0 items-center gap-3">
         <Icon
-          :icon="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'lucide:folder-x' : 'lucide:folder' : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+          :icon="item.kind === 'folder' ? 'lucide:folder' : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
           class="h-5 w-5 shrink-0"
-          :class="item.kind === 'folder' ? item.folder.autoMemoryExcluded ? 'text-status-danger' : 'text-status-warning' : item.supported ? 'text-ink-secondary' : 'text-ink-faint'"
+          :class="item.kind === 'folder' ? 'text-status-warning' : item.supported ? 'text-ink-secondary' : 'text-ink-faint'"
         />
         <div class="min-w-0">
           <div
@@ -309,6 +314,11 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
               class="h-3.5 w-3.5 shrink-0"
               aria-label="Updated by a dream within the last 24 hours"
             /> {{ item.name }}
+            <span
+              v-if="item.kind === 'folder' && item.folder.autoMemoryExcluded"
+              class="shrink-0 rounded border border-theme-600 px-1 text-[10px] font-normal leading-4 text-ink-secondary"
+              :title="OPT_IN_MEMORY_FOLDER_HINT"
+            >Opt-in</span>
           </div>
           <div class="mt-0.5 truncate text-[11px] text-ink-faint">
             <template v-if="item.kind === 'folder'">

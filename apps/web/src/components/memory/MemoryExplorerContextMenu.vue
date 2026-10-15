@@ -2,6 +2,7 @@
 import { Icon } from "@iconify/vue";
 import type { MemoryFileStatus, MemoryFolder } from "../../api/types";
 import type { ExplorerContextMenu } from "./memory-file-explorer-types";
+import { OPT_IN_MEMORY_FOLDER_HINT } from "../../utils/memory-folder-selection";
 
 defineProps<{
   menu: ExplorerContextMenu | null;
@@ -73,14 +74,16 @@ const emit = defineEmits<{
           type="button"
           class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
           role="menuitem"
+          :title="menu.folder.autoMemoryExcluded
+            ? 'Agents and chats with All Memory can read this folder again.'
+            : OPT_IN_MEMORY_FOLDER_HINT"
           @click="emit('toggleAutoMemoryExclusion', menu.folder); emit('close')"
         >
           <Icon
-            :icon="menu.folder.autoMemoryExcluded ? 'lucide:folder-check' : 'lucide:folder-x'"
+            :icon="menu.folder.autoMemoryExcluded ? 'lucide:folder-check' : 'lucide:folder-minus'"
             class="h-3.5 w-3.5"
-            :class="menu.folder.autoMemoryExcluded ? 'text-status-success' : 'text-orange-400'"
           />
-          {{ menu.folder.autoMemoryExcluded ? 'Include in Auto Memory Router' : 'Exclude from Auto Memory Router' }}
+          {{ menu.folder.autoMemoryExcluded ? 'Include in All Memory' : 'Make opt-in (leave out of All Memory)' }}
         </button>
         <button
           type="button"

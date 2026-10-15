@@ -7,7 +7,7 @@ import type { AgentDefinition, MemoryFolder } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import BaseCard from '../shared/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
-import { allMemoryFolderSelectionIds, isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../utils/memory-folder-selection'
+import MemoryFolderPicker from '../memory/MemoryFolderPicker.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
 const emit = defineEmits<{ update: [field: string, value: unknown] }>()
@@ -17,140 +17,24 @@ const agentHealth = useAgentHealthStore()
 // --- Memory Folders ---
 const allSpaces = ref<MemoryFolder[]>([])
 const spacesLoading = ref(false)
-const collapsedFolders = ref<Set<string>>(new Set())
 
-const assignedIds = computed(() => new Set(props.agent.memoryFolders ?? []))
-const rootFolder = computed(() => allSpaces.value.find(space => space.isUncategorized))
-const rootSelected = computed(() => Boolean(rootFolder.value && assignedIds.value.has(rootFolder.value.id)))
-
-const assignedFolders = computed(() =>
-  allSpaces.value.filter(s => assignedIds.value.has(s.id))
-)
-const effectiveAssignedCount = computed(() => allSpaces.value.filter(isSelected).length)
 const missingFolderIds = computed(() => agentHealth.validate(props.agent).memoryFolders)
-
-const visibleSpaces = computed(() =>
-  allSpaces.value.filter((space) => {
-    if (space.isUncategorized) return true
-    const parts = (space.folderPath || '').split('/')
-    for (let i = 1; i < parts.length; i++) {
-      if (collapsedFolders.value.has(parts.slice(0, i).join('/'))) return false
-    }
-    return true
-  })
-)
 
 async function loadFolders() {
   spacesLoading.value = true
   try {
     const spaces = await api.memoryFolders.list()
-    allSpaces.value = [...spaces].sort((a, b) => {
-      if (a.isUncategorized) return -1
-      if (b.isUncategorized) return 1
-      return (a.folderPath || '').localeCompare(b.folderPath || '')
-    })
+    allSpaces.value = spaces
     agentHealth.memoryFolderIds = new Set(spaces.map(space => space.id))
-    collapseFoldersWithChildren(allSpaces.value)
   } catch (err) {
     console.error('[memory] Failed to load spaces:', err)
   }
   spacesLoading.value = false
 }
 
-function collapseFoldersWithChildren(spaces: MemoryFolder[]) {
-  const pathsWithChildren = new Set<string>()
-  const paths = spaces
-    .map((space) => space.folderPath || '')
-    .filter(Boolean)
-
-  for (const path of paths) {
-    const parts = path.split('/')
-    for (let i = 1; i < parts.length; i++) {
-      pathsWithChildren.add(parts.slice(0, i).join('/'))
-    }
-  }
-
-  collapsedFolders.value = pathsWithChildren
-}
-
-function toggleSpace(folderId: string) {
-  const space = allSpaces.value.find((candidate) => candidate.id === folderId)
-  if (!space) return
-
-  const current = new Set(props.agent.memoryFolders ?? [])
-  const scopedIds = memoryFolderScopeIds(space)
-
-  if (space.isUncategorized) {
-    current.clear()
-    if (!rootSelected.value) current.add(space.id)
-  } else if (rootSelected.value && isAutoExcludedMemoryFolder(space)) {
-    if (current.has(folderId)) {
-      for (const id of scopedIds) current.delete(id)
-    } else {
-      for (const id of scopedIds) current.add(id)
-    }
-  } else if (rootSelected.value) {
-    current.clear()
-    for (const id of scopedIds) current.add(id)
-  } else if (current.has(folderId)) {
-    for (const id of scopedIds) current.delete(id)
-  } else {
-    for (const id of scopedIds) current.add(id)
-  }
-
-  emit('update', 'memoryFolders', Array.from(current))
-}
-
-function selectAll() {
-  emit('update', 'memoryFolders', allMemoryFolderSelectionIds(allSpaces.value))
-}
-
-function isSelected(space: MemoryFolder): boolean {
-  return isMemoryFolderSelected(space, assignedIds.value, rootSelected.value)
-}
-
-function folderDepth(space: MemoryFolder): number {
-  if (space.isUncategorized) return 0
-  return Math.max(1, (space.folderPath || '').split('/').filter(Boolean).length)
-}
-
-function deselectAll() {
-  emit('update', 'memoryFolders', [])
-}
-
 function removeMissingFolders() {
   const missingIds = new Set(missingFolderIds.value)
   emit('update', 'memoryFolders', (props.agent.memoryFolders ?? []).filter(id => !missingIds.has(id)))
-}
-
-function memoryFolderScopeIds(space: MemoryFolder): string[] {
-  if (space.isUncategorized) return [space.id]
-  const prefix = space.folderPath ? `${space.folderPath}/` : ''
-  return allSpaces.value
-    .filter((candidate) => candidate.id === space.id || Boolean(prefix && candidate.folderPath?.startsWith(prefix)))
-    .map((candidate) => candidate.id)
-}
-
-function hasChildren(space: MemoryFolder): boolean {
-  const prefix = space.folderPath ? `${space.folderPath}/` : ''
-  return allSpaces.value.some((candidate) => space.isUncategorized ? Boolean(candidate.folderPath) : candidate.folderPath?.startsWith(prefix))
-}
-
-function isPartiallySelected(space: MemoryFolder): boolean {
-  if (space.isUncategorized || !hasChildren(space)) return false
-  // Show partial icon whenever children are selected but the parent itself is not
-  if (assignedIds.value.has(space.id)) return false
-  const prefix = `${space.folderPath}/`
-  const directChildren = allSpaces.value.filter(c => c.folderPath?.startsWith(prefix))
-  return directChildren.some(c => assignedIds.value.has(c.id))
-}
-
-function toggleCollapsed(space: MemoryFolder) {
-  const key = space.folderPath || ''
-  const next = new Set(collapsedFolders.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  collapsedFolders.value = next
 }
 
 function goToMemory() {
@@ -253,7 +137,7 @@ onMounted(() => loadFolders())
         </div>
       </div>
       <p class="text-xs text-ink-muted mb-3">
-        Select memory folders to give this agent access to shared knowledge.
+        Select memory folders to give this agent access to shared knowledge. A folder always includes its subfolders.
       </p>
 
       <div
@@ -299,120 +183,12 @@ onMounted(() => loadFolders())
         </div>
       </div>
 
-      <!-- Count + select all/none -->
-      <div
-        v-if="allSpaces.length > 0"
-        class="mb-2 flex items-center justify-between text-xs"
-      >
-        <span class="text-ink-muted">
-          {{ effectiveAssignedCount === allSpaces.length ? 'All memory selected' : `${effectiveAssignedCount}/${allSpaces.length} selected` }}
-        </span>
-        <div class="flex items-center gap-3">
-          <button
-            v-if="effectiveAssignedCount < allSpaces.length"
-            class="text-accent-fg hover:text-accent-fg transition-colors"
-            @click="selectAll"
-          >
-            Select all
-          </button>
-          <button
-            v-if="assignedFolders.length > 0"
-            class="text-ink-secondary hover:text-theme-200 transition-colors"
-            @click="deselectAll"
-          >
-            Deselect all
-          </button>
-        </div>
-      </div>
-
-      <!-- Unified folder list -->
-      <div class="rounded-lg border border-theme-700 overflow-hidden">
-        <div
-          v-if="spacesLoading"
-          class="text-sm text-ink-muted text-center py-6"
-        >
-          <Icon
-            icon="lucide:loader-2"
-            class="w-4 h-4 animate-spin mx-auto mb-2"
-          />
-          Loading folders…
-        </div>
-        <div
-          v-else-if="allSpaces.length === 0"
-          class="text-center py-6"
-        >
-          <Icon
-            icon="lucide:database"
-            class="w-8 h-8 text-theme-700 mx-auto mb-2"
-          />
-          <p class="text-sm text-ink-muted">
-            No memory folders found
-          </p>
-        </div>
-        <div
-          v-else
-          class="overflow-y-auto "
-        >
-          <div
-            v-for="space in visibleSpaces"
-            :key="space.id"
-            class="flex items-center gap-2 w-full px-3 py-2.5 border-b border-theme-800 last:border-0 cursor-pointer transition-colors"
-            :data-folder-depth="folderDepth(space)"
-            :class="isSelected(space)
-              ? 'bg-accent-600/10 hover:bg-accent-600/15'
-              : isPartiallySelected(space)
-                ? 'bg-accent-600/8 hover:bg-accent-600/12'
-                : 'hover:bg-theme-800/60'"
-            @click="toggleSpace(space.id)"
-          >
-            <!-- Indent spacer -->
-            <span
-              v-if="folderDepth(space) > 0"
-              :style="{ width: `${folderDepth(space) * 12}px` }"
-              class="shrink-0 self-stretch border-r border-theme-700/60"
-              aria-hidden="true"
-            />
-            <!-- Chevron: always rendered to keep all rows aligned -->
-            <button
-              class="p-0.5 shrink-0 text-ink-muted hover:text-theme-200 transition-colors"
-              :class="{ 'invisible pointer-events-none': space.isUncategorized || !hasChildren(space) }"
-              @click.stop="toggleCollapsed(space)"
-            >
-              <Icon
-                icon="lucide:chevron-down"
-                class="w-3.5 h-3.5 transition-transform"
-                :class="{ '-rotate-90': collapsedFolders.has(space.folderPath || '') }"
-              />
-            </button>
-            <div class="w-7 h-7 rounded-lg bg-theme-800 flex items-center justify-center shrink-0">
-              <Icon
-                :icon="space.isUncategorized ? 'lucide:hard-drive' : 'lucide:folder'"
-                class="w-3.5 h-3.5"
-                :class="isSelected(space) || isPartiallySelected(space) ? 'text-accent-fg' : 'text-ink-muted'"
-              />
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="text-sm text-theme-200 truncate">
-                {{ space.isUncategorized ? 'All Memory' : space.name }}
-              </div>
-              <div class="text-[11px] text-ink-muted">
-                {{ space.isUncategorized ? 'Includes Uncategorized and standard folders' : `${space.fileCount} doc${space.fileCount !== 1 ? 's' : ''}` }}
-              </div>
-            </div>
-            <Icon
-              v-if="isSelected(space) && !isPartiallySelected(space)"
-              icon="mdi:check-circle"
-              class="w-4 h-4 text-accent-fg shrink-0"
-            />
-
-            <Icon
-              v-else-if="isPartiallySelected(space)"
-              icon="mdi:minus-circle"
-              class="w-4 h-4 text-accent-fg shrink-0"
-            />
-          </div>
-        </div>
-      </div>
+      <MemoryFolderPicker
+        :folders="allSpaces"
+        :model-value="agent.memoryFolders ?? []"
+        :loading="spacesLoading"
+        @update:model-value="emit('update', 'memoryFolders', $event)"
+      />
     </BaseCard>
   </div>
 </template>

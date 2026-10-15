@@ -84,23 +84,24 @@ describe('AgentMemoryTab', () => {
     ])
   })
 
-  test('presents the root grant as All Memory and selects its indented descendants', async () => {
+  test('presents the root grant as All Memory and its descendants as included', async () => {
     const wrapper = mount(AgentMemoryTab, { props: { agent } })
     await flushPromises()
 
     const actions = wrapper.findAll('button')
-    const deselectAll = actions.find(button => button.text().trim() === 'Deselect all')
+    const clear = actions.find(button => button.text().trim() === 'Clear')
     expect(wrapper.text()).toContain('All Memory')
-    expect(wrapper.text()).toContain('Includes Uncategorized and standard folders')
-    expect(wrapper.text()).toContain('All memory selected')
+    expect(wrapper.text()).toContain('Every folder, including new ones')
+    expect(wrapper.text()).toContain('All folders readable')
     expect(actions.some(button => button.text().trim() === 'Select all')).toBe(false)
-    expect(deselectAll).toBeDefined()
+    expect(clear).toBeDefined()
 
-    const research = wrapper.get('[data-folder-depth="1"]')
-    expect(research.classes()).toContain('bg-accent-600/10')
+    const research = wrapper.get('[data-folder-id="research"]')
+    expect(research.attributes('data-state')).toBe('inherited')
+    expect(research.text()).toContain('Included via All Memory')
     expect(research.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
 
-    await deselectAll!.trigger('click')
+    await clear!.trigger('click')
     expect(wrapper.emitted('update')).toContainEqual(['memoryFolders', []])
   })
 

@@ -117,6 +117,10 @@ const renderedContent = computed(() => {
 })
 
 const isUser = computed(() => props.role === 'user')
+// Turn totals are attached to the final reply; intermediate rounds only carry the model.
+const hasTokenUsage = computed(() =>
+  props.contextTokens !== undefined || props.promptTokens !== undefined || props.completionTokens !== undefined,
+)
 const formattedCreatedAt = computed(() => {
   if (props.createdAt === undefined) return ''
   return new Intl.DateTimeFormat(undefined, {
@@ -501,7 +505,7 @@ const imageGridClass = computed(() => {
 
       <!-- Message metadata (assistant) -->
       <div
-        v-if="!isUser && !isStreaming && (model || promptTokens || stopped)"
+        v-if="!isUser && !isStreaming && (hasTokenUsage || stopped)"
         class="mt-2 pt-1.5 border-t border-theme-700/50 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted"
       >
         <span
@@ -515,9 +519,9 @@ const imageGridClass = computed(() => {
           />
           Stopped
         </span>
-        <span v-if="model">{{ model }}</span>
+        <span v-if="model && hasTokenUsage">{{ model }}</span>
         <span
-          v-if="contextTokens || promptTokens || completionTokens"
+          v-if="hasTokenUsage"
           :title="`Context: ${contextTokens?.toLocaleString() ?? '–'} tokens (actual window usage)\nAccumulated: ${((promptTokens ?? 0) + (completionTokens ?? 0)).toLocaleString()} tokens (total API consumption across all rounds)\nPrompt (input): ${promptTokens?.toLocaleString() ?? '–'}\nCompletion (output): ${completionTokens?.toLocaleString() ?? '–'}`"
         >
           {{ contextTokens?.toLocaleString() ?? '–' }} / {{ ((promptTokens ?? 0) + (completionTokens ?? 0)).toLocaleString() }} tokens

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CSSProperties } from 'vue'
-import type { MemoryFolder } from '../../../api/types'
 import type { ToolInfo } from '../../../stores/agent-runtime.store'
 import { onClickOutside } from '@vueuse/core'
 import { Icon } from '@iconify/vue'
@@ -14,8 +13,8 @@ import ProjectIcon from '../../project/ProjectIcon.vue'
 import { useRouter } from 'vue-router'
 import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
 import { getToolNamespaceIcon } from '../../../utils/tool-namespace-icons'
-import { isAutoExcludedMemoryFolder, isMemoryFolderSelected } from '../../../utils/memory-folder-selection'
-import SystemPromptModal from '../modals/SystemPromptModal.vue'
+import { memoryFolderScopeSummary } from '../../../utils/memory-folder-selection'
+import MemoryFolderPicker from '../../memory/MemoryFolderPicker.vue'
 
 const emit = defineEmits<{ attach: []; browseLibrary: [] }>()
 const chatStore = useChatStore()
@@ -31,9 +30,7 @@ const menu = ref<HTMLElement | null>(null)
 const open = ref(false)
 const panel = ref<Panel>('main')
 const search = ref('')
-const folderPath = ref<string | null>(null)
 const toolNamespace = ref<string | null>(null)
-const showSystemPrompt = ref(false)
 const menuStyle = ref<CSSProperties>({})
 const brokenMcpIcons = ref<Set<string>>(new Set())
 
@@ -43,7 +40,6 @@ const entries = [
   { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:brain' },
   { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users' },
   { id: 'project', label: 'Project', detail: 'Run this chat inside a project', icon: 'lucide:folder-kanban' },
-  { id: 'prompt', label: 'System Prompt', detail: 'View and edit system prompt', icon: 'lucide:scroll-text' },
 ] as const
 const selectableTools = computed(() => agentStore.availableTools.filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name))))
 const toolGroups = computed(() => {
@@ -66,16 +62,9 @@ const activeTools = computed(() => {
     : group.tools.filter(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query))
 })
 const visibleAgents = computed(() => agentDefs.agents.filter(agent => `${agent.name} ${agent.internalName || ''} ${agent.description || ''}`.toLowerCase().includes(search.value.toLowerCase().trim())))
-const folders = computed(() => chatStore.memoryFolders)
-const folderSet = computed(() => new Set(chatStore.sessionMemoryFolderIds))
-const rootFolder = computed(() => folders.value.find(folder => folder.isUncategorized))
-const rootSelected = computed(() => !!rootFolder.value && folderSet.value.has(rootFolder.value.id))
-const activeFolder = computed(() => folders.value.find(folder => folder.folderPath === folderPath.value))
-const visibleFolders = computed(() => {
-  const query = search.value.toLowerCase().trim()
-  if (query) return folders.value.filter(folder => `${folder.name} ${folder.description} ${folder.folderPath}`.toLowerCase().includes(query))
-  return folders.value.filter(folder => (folder.isUncategorized && folderPath.value === null) || (!folder.isUncategorized && parentPath(folder) === folderPath.value))
-})
+const memoryScopeSummary = computed(() => chatStore.memoryFolders.length
+  ? memoryFolderScopeSummary(chatStore.memoryFolders, chatStore.sessionMemoryFolderIds)
+  : '')
 const activeProject = computed(() => projectsStore.get(chatStore.activeProjectId))
 const visibleProjects = computed(() => {
   const query = search.value.toLowerCase().trim()
@@ -103,40 +92,13 @@ function entryChanged(id: string): boolean {
     case 'tools': return changedFields.value.has('Tools')
     case 'memory': return changedFields.value.has('Memory folders')
     case 'agents': return changedFields.value.has('Sub-agents')
-    case 'prompt': return changedFields.value.has('System prompt')
     case 'project': return Boolean(activeProject.value)
     default: return false
   }
 }
 
-function parentPath(folder: MemoryFolder): string | null {
-  if (folder.isUncategorized) return null
-  if (folder.parentFolderPath !== undefined) return folder.parentFolderPath || null
-  const parts = folder.folderPath.split('/').filter(Boolean)
-  return parts.length > 1 ? parts.slice(0, -1).join('/') : null
-}
-function hasChildren(folder: MemoryFolder): boolean {
-  return folders.value.some(item => !item.isUncategorized && parentPath(item) === folder.folderPath)
-}
-function folderSelected(folder: MemoryFolder): boolean {
-  return isMemoryFolderSelected(folder, folderSet.value, rootSelected.value)
-}
-function toggleFolder(folder: MemoryFolder): void {
-  const selected = new Set(chatStore.sessionMemoryFolderIds)
-  const scope = folder.isUncategorized ? [folder.id] : folders.value.filter(item => item.id === folder.id || item.folderPath.startsWith(`${folder.folderPath}/`)).map(item => item.id)
-  if (folder.isUncategorized) {
-    selected.clear()
-    if (!rootSelected.value) selected.add(folder.id)
-  } else if (rootSelected.value && isAutoExcludedMemoryFolder(folder)) {
-    const remove = selected.has(folder.id)
-    scope.forEach(id => remove ? selected.delete(id) : selected.add(id))
-  } else if (rootSelected.value) {
-    const remaining = folders.value.filter(item => !item.isUncategorized && folderSelected(item) && !scope.includes(item.id)).map(item => item.id)
-    selected.clear()
-    remaining.forEach(id => selected.add(id))
-  } else if (selected.has(folder.id)) scope.forEach(id => selected.delete(id))
-  else scope.forEach(id => selected.add(id))
-  chatStore.sessionMemoryFolderIds.splice(0, chatStore.sessionMemoryFolderIds.length, ...selected)
+function setMemoryFolders(ids: string[]): void {
+  chatStore.sessionMemoryFolderIds.splice(0, chatStore.sessionMemoryFolderIds.length, ...ids)
   chatStore.sessionMemorySelectionInitialized = true
   chatStore.markOverridesModified()
 }
@@ -193,22 +155,14 @@ function navigate(next: Panel): void {
     void projectsStore.ensureLoaded().catch(() => undefined)
   }
 }
-function selectEntry(id: string): void {
-  if (id === 'prompt') {
-    close()
-    showSystemPrompt.value = true
-  } else navigate(id as Panel)
-}
 function close(): void {
   open.value = false
   panel.value = 'main'
   search.value = ''
-  folderPath.value = null
   toolNamespace.value = null
 }
 function back(): void {
-  if (panel.value === 'memory' && folderPath.value) folderPath.value = activeFolder.value ? parentPath(activeFolder.value) : null
-  else if (panel.value === 'tools' && toolNamespace.value) toolNamespace.value = null
+  if (panel.value === 'tools' && toolNamespace.value) toolNamespace.value = null
   else navigate('main')
   search.value = ''
 }
@@ -297,7 +251,7 @@ onBeforeUnmount(() => {
             class="h-4 w-4"
           />
         </button>
-        <span class="text-xs font-semibold">{{ panel === 'tools' && toolNamespace ? toolGroups.find(group => group.id === toolNamespace)?.label : panel === 'memory' && activeFolder ? activeFolder.name : entries.find(item => item.id === panel)?.label }}</span>
+        <span class="text-xs font-semibold">{{ panel === 'tools' && toolNamespace ? toolGroups.find(group => group.id === toolNamespace)?.label : entries.find(item => item.id === panel)?.label }}</span>
       </div>
       <div
         v-if="panel !== 'main' && panel !== 'files'"
@@ -326,7 +280,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left hover:bg-theme-800 focus-visible:bg-theme-800 focus-visible:outline-none"
-              @click="selectEntry(entry.id)"
+              @click="navigate(entry.id)"
             >
               <Icon
                 :icon="entry.icon"
@@ -341,6 +295,10 @@ onBeforeUnmount(() => {
                 v-if="entry.id === 'project' && activeProject"
                 class="max-w-32 truncate text-[11px] text-ink-muted"
               >{{ activeProject.name }}</span>
+              <span
+                v-else-if="entry.id === 'memory' && memoryScopeSummary"
+                class="max-w-32 truncate text-[11px] text-ink-muted"
+              >{{ memoryScopeSummary }}</span>
               <Icon
                 icon="lucide:chevron-right"
                 class="h-4 w-4 text-ink-muted"
@@ -505,38 +463,14 @@ onBeforeUnmount(() => {
           </template>
         </template>
         <template v-else-if="panel === 'memory'">
-          <div
-            v-for="folder in visibleFolders"
-            :key="folder.id"
-            class="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-theme-800"
-          >
-            <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-2"><input
-              type="checkbox"
-              class="h-4 w-4 accent-accent-500"
-              :checked="folderSelected(folder)"
-              @change="toggleFolder(folder)"
-            ><Icon
-              icon="lucide:folder"
-              class="h-4 w-4 text-ink-secondary"
-            /><span class="min-w-0"><span class="block truncate text-xs">{{ folder.isUncategorized ? 'All Memory' : folder.name }}</span><span class="block text-[10px] text-ink-muted">{{ folder.isUncategorized ? 'Uncategorized and standard folders' : `${folder.fileCount} documents` }}</span></span></label><button
-              v-if="hasChildren(folder)"
-              type="button"
-              class="rounded p-1 hover:bg-theme-700"
-              :aria-label="`Open ${folder.name}`"
-              @click="folderPath = folder.folderPath; search = ''"
-            >
-              <Icon
-                icon="lucide:chevron-right"
-                class="h-4 w-4"
-              />
-            </button>
-          </div>
-          <div
-            v-if="!visibleFolders.length"
-            class="px-3 py-5 text-center text-xs text-ink-muted"
-          >
-            No memory folders found
-          </div>
+          <MemoryFolderPicker
+            :folders="chatStore.memoryFolders"
+            :model-value="chatStore.sessionMemoryFolderIds"
+            :search="search"
+            max-height=""
+            class="px-1 pt-1"
+            @update:model-value="setMemoryFolders"
+          />
         </template>
         <template v-else-if="panel === 'project'">
           <button
@@ -636,9 +570,4 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </Teleport>
-  <SystemPromptModal
-    v-model="showSystemPrompt"
-    :system-prompt="chatStore.sessionSystemPrompt"
-    @update:system-prompt="(value: string) => { chatStore.sessionSystemPrompt = value; chatStore.markOverridesModified() }"
-  />
 </template>
