@@ -69,6 +69,66 @@ describe('AgentExecutor planning recovery', () => {
     expect(getPlanningState(run.runId)?.items[0].status).toBe('completed')
   })
 
+  test('a goal run cannot end without a todo list', async () => {
+    const run = createPlanningRun('planning-goal', 'Ship the release')
+    const prompts: string[] = []
+    let call = 0
+    const streamComplete = vi.fn((request: { messages: Array<{ content: unknown }> }) => (async function* (): AsyncIterable<StreamChunk> {
+      call++
+      prompts.push(String(request.messages.at(-1)?.content))
+      if (call === 2) {
+        yield {
+          toolCalls: [{
+            id: 'plan',
+            type: 'function',
+            function: { name: 'todo_update', arguments: '{"tasks":[{"title":"Ship it","status":"completed"}]}' },
+          }],
+          done: true,
+        }
+        return
+      }
+      yield { content: call === 3 ? 'shipped' : 'done already', done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: makePlanningTools(run.runId, { goal: true }),
+      conversationId: 'planning-goal',
+      broadcast: vi.fn(),
+      model: 'test',
+      saveMessages: false,
+      emitEvents: false,
+      planningRunId: run.runId,
+      planningGoal: true,
+      isPrimaryExecutor: true,
+    })
+
+    await expect(executor.run([{ role: 'user', content: '/goal Ship the release' }])).resolves.toMatchObject({ content: 'shipped' })
+    expect(streamComplete).toHaveBeenCalledTimes(3)
+    expect(prompts[1]).toContain('has no task list yet')
+    expect(getPlanningState(run.runId)?.items[0].status).toBe('completed')
+  })
+
+  test('a run without a goal may end without a todo list', async () => {
+    const run = createPlanningRun('planning-no-goal', 'Answer')
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      yield { content: 'answered', done: true }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: makePlanningTools(run.runId),
+      conversationId: 'planning-no-goal',
+      broadcast: vi.fn(),
+      model: 'test',
+      saveMessages: false,
+      emitEvents: false,
+      planningRunId: run.runId,
+      isPrimaryExecutor: true,
+    })
+
+    await expect(executor.run([{ role: 'user', content: 'hi' }])).resolves.toMatchObject({ content: 'answered' })
+    expect(streamComplete).toHaveBeenCalledTimes(1)
+  })
+
   test('ends the turn without continuation once a wait is scheduled', async () => {
     const run = createPlanningRun('planning-wait', 'Deploy and verify')
     applyTodoUpdate(run.runId, { tasks: [{ title: 'Wait for the deploy', status: 'in_progress' }] })

@@ -205,10 +205,11 @@ function handleSlashSubmit(): boolean {
     showSlashNotice(command.unavailable, true)
     return true
   }
+  if (command.sendsMessage && input.args.trim()) return false
   // A known command must never reach the model by accident; Escape first to send it as text.
   showSlashNotice(input.args.trim()
     ? `No match for “${input.args.trim()}” in /${command.name}`
-    : `/${command.name} needs ${command.hint ? `a ${command.hint}` : 'an argument'}`, true)
+    : `/${command.name} needs ${command.hint ? `${/^[aeiou]/i.test(command.hint) ? 'an' : 'a'} ${command.hint}` : 'an argument'}`, true)
   return true
 }
 

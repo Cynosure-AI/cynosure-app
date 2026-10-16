@@ -5,10 +5,13 @@ import {
     buildPlanningStateContext,
     getLatestPlanningState,
     resumeOrCreatePlanningRun,
+    startGoalPlanningRun,
     type PlanningState,
 } from '../planning-state.js'
 import {
+    buildGoalContext,
     makePlanningTools,
+    parseGoalObjective,
     PLANNING_SYSTEM_PROMPT,
 } from '../../tools/builtin/planning-tools.js'
 import { isVisibleExecutionTool } from '../../tools/tool-policy.js'
@@ -28,6 +31,8 @@ export interface PlannedExecution {
     hasSubAgents: boolean
     evidence: ContextEvidence[]
     planningRunId?: string
+    /** The run was started with `/goal`: it cannot end without a finished todo list. */
+    planningGoal?: boolean
     chatAgentName?: string
     chatAgentIconUrl?: string | null
 }
@@ -129,11 +134,16 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
     const responseProvider = prepared.providerId || gateway.getLastUsedProvider().config.id
     const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(prepared.model, responseProvider)
     const responseTools = responseSupportsToolCalls ? prepared.tools : []
+    const goal = parseGoalObjective(userText)
+    if (goal && !responseSupportsToolCalls) {
+        throw new Error(`/goal needs a model that supports tool calls; ${prepared.model} does not.`)
+    }
     const planning = applyPlanningIfToolCapable(
         conversationId,
-        userText,
+        goal ?? userText,
         responseTools,
         prepared.contextBundle.messages,
+        Boolean(goal),
     )
 
     return {
@@ -145,6 +155,7 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
         hasSubAgents: prepared.hasSubAgents,
         evidence: prepared.contextBundle.evidence,
         planningRunId: planning.runId,
+        planningGoal: Boolean(goal && planning.runId),
         chatAgentName: resolvedAgent?.name,
         chatAgentIconUrl: resolvedAgent?.iconUrl || null,
     }
@@ -202,23 +213,30 @@ function applyPlanningIfToolCapable(
     objective: string,
     tools: ToolDefinition[],
     contextMessages: ChatMessage[],
+    goal = false,
 ): { tools: ToolDefinition[]; contextMessages: ChatMessage[]; runId?: string } {
     // Planning follows the work, not the reasoning level: any run with execution tools gets the todo list.
     // Project tools are present in every project run; they alone do not warrant a todo list.
+    // A goal is tracked by the todo list itself, so it gets one even without execution tools.
     const hasVisibleExecutionTool = tools.some((tool) => isVisibleExecutionTool(tool.name) && !isProjectToolName(tool.name))
-    if (!hasVisibleExecutionTool) {
+    if (!hasVisibleExecutionTool && !goal) {
         return { tools, contextMessages }
     }
 
     const previousPlanning = getLatestPlanningState(conversationId)
-    const planning = resumeOrCreatePlanningRun(conversationId, objective)
-    const planningContext = buildPlanningTurnContext(planning, previousPlanning)
+    const planning = goal
+        ? startGoalPlanningRun(conversationId, objective)
+        : resumeOrCreatePlanningRun(conversationId, objective)
+    const planningContext = [
+        goal ? buildGoalContext(objective) : null,
+        buildPlanningTurnContext(planning, previousPlanning),
+    ].filter(Boolean).join('\n\n')
     // The instructions are static and belong in the system prompt; the todo
     // list changes between turns, so it travels as turn-local context.
     const withInstructions = appendSystemContext(contextMessages, PLANNING_SYSTEM_PROMPT)
 
     return {
-        tools: [...tools, ...makePlanningTools(planning.runId)],
+        tools: [...tools, ...makePlanningTools(planning.runId, { goal })],
         contextMessages: planningContext
             ? [...withInstructions, {
                 role: 'user',

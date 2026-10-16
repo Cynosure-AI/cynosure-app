@@ -206,6 +206,14 @@ export function useSlashCommands(actions: SlashCommandActions) {
         : [],
     })
     list.push({
+      name: 'goal',
+      description: 'Keep working until every task for this goal is done',
+      icon: 'lucide:target',
+      group: 'Chat',
+      hint: 'objective',
+      sendsMessage: true,
+    })
+    list.push({
       name: 'attach',
       aliases: ['upload'],
       description: 'Upload files from your device',
