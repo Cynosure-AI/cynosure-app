@@ -311,6 +311,28 @@ export function getGreeting(
   return pick(HOURLY_GREETINGS[hour] ?? FALLBACK_GREETINGS, random)
 }
 
+/** Lines for an incognito chat: off the record, a little conspiratorial. */
+export const INCOGNITO_GREETINGS = [
+  'Sneaky, are we?',
+  'Let’s lurk in the dark.',
+  'Off the record.',
+  'This never happened.',
+  'What happens here, stays here.',
+  'Your secret’s safe with me.',
+  'Going dark.',
+  'Lights off. Let’s talk.',
+  'Hush. Ask away.',
+  'Incognito. Who’s asking?',
+  'Leave no history.',
+  'Speak freely.',
+]
+
+/** Pick an incognito line, never repeating `previous` so a re-toggle always changes. */
+export function getIncognitoGreeting(previous?: string, random: () => number = Math.random): string {
+  const options = INCOGNITO_GREETINGS.filter((greeting) => greeting !== previous)
+  return pick(options, random)
+}
+
 /** Greetings tied to a specific calendar date; empty on ordinary days. */
 export function occasionGreetings(date: Date, southernHemisphere: boolean): string[] {
   const year = date.getFullYear()

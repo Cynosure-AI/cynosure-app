@@ -24,7 +24,7 @@ import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
-import { getGreeting } from '../../utils/greetings'
+import { getGreeting, getIncognitoGreeting } from '../../utils/greetings'
 import { useCynoStore } from '../../stores/cyno.store'
 
 const props = withDefaults(defineProps<{
@@ -454,11 +454,27 @@ watch(() => chatStore.loadingMessages, (isLoading) => {
 
 // ─── Time-based greeting ────────────────────────────────────
 
-const greeting = ref(getGreeting())
+const introGreeting = getGreeting()
+const greeting = ref(introGreeting)
 
-// The headline types out first; the subtitle and sub-agents wait for it.
+// The headline types out first; the subtitle and sub-agents wait for it. The
+// timeline stays on the first greeting, so a re-typed one cannot re-delay them.
 const CONNECTING_TITLE = 'Initializing…'
-const introTimeline = computed(() => chatIntroTimeline(wsConnected.value ? greeting.value : CONNECTING_TITLE))
+const introTimeline = computed(() => chatIntroTimeline(wsConnected.value ? introGreeting : CONNECTING_TITLE))
+
+// Toggling incognito re-types the headline: a conspiratorial line going dark,
+// the original greeting coming back. Each change remounts the typewriter.
+const greetingRetypes = ref(0)
+const RETYPE_START_MS = 80
+const greetingTimeline = computed(() => greetingRetypes.value
+  ? { start: RETYPE_START_MS, step: chatIntroTimeline(greeting.value).typeStep }
+  : { start: introTimeline.value.typeStart, step: introTimeline.value.typeStep })
+
+watch(() => chatStore.activeIsTemporary, (incognito) => {
+  if (chatStore.messages.length) return
+  greeting.value = incognito ? getIncognitoGreeting(greeting.value) : introGreeting
+  greetingRetypes.value++
+})
 const introStyle = computed(() => ({
   '--intro-subtitle': `${introTimeline.value.subtitle}ms`,
   '--intro-agents': `${introTimeline.value.agents}ms`,
@@ -638,11 +654,15 @@ onMounted(() => {
       </template>
       <template v-else>
         <div class="flex items-center justify-center gap-3">
-          <h2 class="text-3xl font-semibold text-theme-200 tracking-tight text-center">
+          <h2
+            class="text-3xl font-semibold tracking-tight text-center transition-colors duration-300"
+            :class="chatStore.activeIsTemporary ? 'chat-incognito-greeting text-theme-300' : 'text-theme-200'"
+          >
             <TypewriterText
+              :key="greetingRetypes"
               :text="greeting"
-              :start="introTimeline.typeStart"
-              :step="introTimeline.typeStep"
+              :start="greetingTimeline.start"
+              :step="greetingTimeline.step"
             />
           </h2>
           <RouterLink
@@ -1016,6 +1036,13 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Incognito whispers its headline: slanted, a touch looser, with a fainter caret. */
+.chat-incognito-greeting {
+  font-style: italic;
+  letter-spacing: 0.005em;
+  --tw-caret-opacity: 0.55;
+}
+
 /* New-chat intro, timed by chatIntro.ts: the icon materializes, the headline
    types itself out (TypewriterText), then the subtitle and sub-agents follow. */
 @media (prefers-reduced-motion: no-preference) {
