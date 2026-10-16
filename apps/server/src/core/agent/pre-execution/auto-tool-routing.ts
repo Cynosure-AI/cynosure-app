@@ -5,7 +5,7 @@ import { MCP_CANDIDATE_COUNT, routeTools, routeToolsLexically, shouldRouteTools,
 import type { LLMGateway } from '../../gateway/gateway.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../../tools/tool-registry.js'
-import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, ROUTER_TURN_CHAR_LIMIT, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
+import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, recentToolCallNames, ROUTER_TURN_CHAR_LIMIT, runRoutingPhase, selectRoutingCandidates } from './routing-kernel.js'
 
 const TOOLSET_SELECTION_TOOL_NAME = 'select_toolsets'
 const TOOLSET_DESCRIPTION_CHAR_LIMIT = 1_200
@@ -26,6 +26,8 @@ export interface ApplyAutoToolRoutingInput {
     usedToolNames?: Set<string>
     /** Toolsets already chosen by task-context planning; skips the separate toolset selector call. */
     plannedToolsetIds?: string[]
+    /** userQuery stands without the conversation; tool ranking then skips recent turns. */
+    standaloneQuery?: boolean
     /** Extra metadata to merge into emitted EventBus events (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
     signal?: AbortSignal
@@ -55,9 +57,13 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
         preferredToolNames,
         usedToolNames,
         plannedToolsetIds,
+        standaloneQuery,
         eventMeta,
         signal,
     } = input
+    // Recent turns resolve a follow-up for ranking, but they also pull it
+    // toward the previous turn's tools; a planned query needs no such help.
+    const contextWindowTurns = standaloneQuery ? 0 : undefined
 
     const protectedNames = collectProtectedToolNames(recentMessages || [], preferredToolNames, usedToolNames)
     // Discovery must see the complete configured catalogue. Behavior hints
@@ -109,6 +115,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
                 mcpMetadata,
                 preferredToolNames,
                 usedToolNames,
+                contextWindowTurns,
                 onStatus: (status, message) => emitToolRoutingStatus(conversationId, taskId, status, message, eventMeta),
             }) : []
             let routedTools: ToolDefinition[] = [
@@ -145,6 +152,7 @@ export async function applyAutoToolRouting(input: ApplyAutoToolRoutingInput): Pr
                 mcpMetadata,
                 preferredToolNames,
                 usedToolNames,
+                contextWindowTurns,
             })
             emitToolRoutingSelection(
                 conversationId,
@@ -268,10 +276,8 @@ function collectProtectedToolNames(
     for (const usedToolName of usedToolNames || []) {
         names.add(usedToolName)
     }
-    for (const message of recentMessages) {
-        for (const call of message.toolCalls || []) {
-            names.add(call.function.name)
-        }
+    for (const name of recentToolCallNames(recentMessages)) {
+        names.add(name)
     }
 
     return names

@@ -258,6 +258,11 @@ export class MemoryParser {
     topK: number = 5,
     filter?: string,
     onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void,
+    opts: {
+      /** Extra queries that widen the search. Their hits are fused with the
+       * main query's, and the fused pool is reranked once against `query`. */
+      expansions?: string[]
+    } = {},
   ): Promise<RetrievedChunk[]> {
     const options = getMemoryRetrievalOptions()
     const embedder = getEmbeddingService()
@@ -265,13 +270,16 @@ export class MemoryParser {
     const reranker = getMemoryReranker()
 
     onStatus?.('rag')
-    const { vector, profileFingerprint } = await embedder.embedQuery(query, { instruct: options.queryInstructions })
+    const queries = [...new Set([query, ...(opts.expansions || [])].map((text) => text.trim()).filter(Boolean))]
     const candidateCount = reranker.getCandidateCount(topK)
-    const [denseCandidates, lexicalCandidates] = await Promise.all([
-      ragStore.search(tableName, vector, candidateCount, filter, profileFingerprint),
-      ragStore.lexicalSearch(tableName, query, candidateCount, filter, profileFingerprint),
-    ])
-    const results = fuseRetrievalChannels([denseCandidates, lexicalCandidates], candidateCount)
+    const channels = (await Promise.all(queries.map(async (text) => {
+      const { vector, profileFingerprint } = await embedder.embedQuery(text, { instruct: options.queryInstructions })
+      return Promise.all([
+        ragStore.search(tableName, vector, candidateCount, filter, profileFingerprint),
+        ragStore.lexicalSearch(tableName, text, candidateCount, filter, profileFingerprint),
+      ])
+    }))).flat()
+    const results = fuseRetrievalChannels(channels, candidateCount)
       .filter((result) => isRetrievableChunk(result.text))
     onStatus?.('rag', { candidateCount: results.length, candidates: results })
     const reranking = reranker.getConfig().enabled && results.length > 1

@@ -18,6 +18,8 @@ export interface TaskContext {
     toolSearchQuery?: string
     /** Toolsets the tool router should search; absent when planning did not choose any. */
     toolsetIds?: string[]
+    /** The request rewritten to stand without the conversation; ranks memory retrieval. */
+    memoryQuery?: string
     memorySearchQueries: string[]
 }
 
@@ -63,6 +65,7 @@ export async function buildTaskContext(input: BuildTaskContextInput): Promise<Ta
                             ...enabledQueryInstructions(input.enabledModes),
                             'The original request is always searched separately. Generate only complementary expansions.',
                             'Keep expansions in the request language and preserve exact names, quoted phrases, identifiers, relationship terms, and constraints.',
+                            'Queries are searched without the conversation, so make each one self-contained: replace references to earlier turns (pronouns, "that one", "the same for X") with what they refer to.',
                             'Never broaden a specific relationship or operation into generic related topics.',
                             'toolSearchQuery must describe only capabilities required to perform the request, not nouns merely mentioned in it.',
                             'Assess external tools and memory independently. It is valid for neither to be required.',
@@ -147,6 +150,10 @@ function buildTaskContextTool(enabledModes: BuildTaskContextInput['enabledModes'
             description: 'False when stored user or project context is unlikely to help answer the request.',
         }
         required.push('requiresMemory')
+        properties.memoryQuery = {
+            type: 'string',
+            description: 'When memory is required, the current request as one self-contained search query in its original language, with references to earlier turns replaced by what they refer to. Repeat the request when it already stands alone; omit when requiresMemory is false.',
+        }
         properties.memorySearchQueries = {
             type: 'array',
             description: 'When memory is required, zero to two compact retrieval expansions in the original language. Do not repeat the original request; omit when no useful expansion exists.',
@@ -179,6 +186,7 @@ function parseTaskContextArguments(
         const parsed = JSON.parse(raw) as {
             toolSearchQuery?: unknown
             toolsetIds?: unknown
+            memoryQuery?: unknown
             memorySearchQueries?: unknown
             requiresTools?: unknown
             requiresMemory?: unknown
@@ -195,8 +203,11 @@ function parseTaskContextArguments(
         const plannedToolsetIds = requiresTools && toolsetIds.length
             ? parseCandidateIds(parsed.toolsetIds, toolsetIds, MCP_CANDIDATE_COUNT)
             : null
+        const memoryQuery = requiresMemory && typeof parsed.memoryQuery === 'string'
+            ? parsed.memoryQuery.trim().slice(0, MAX_ROUTER_QUERY_LENGTH)
+            : ''
         const memorySearchQueries = requiresMemory
-            ? normalizeMemoryQueries(Array.isArray(parsed.memorySearchQueries) ? parsed.memorySearchQueries : [], originalRequest)
+            ? normalizeMemoryQueries(Array.isArray(parsed.memorySearchQueries) ? parsed.memorySearchQueries : [], [originalRequest, memoryQuery])
             : []
 
         return {
@@ -204,6 +215,7 @@ function parseTaskContextArguments(
             requiresMemory,
             toolSearchQuery: toolSearchQuery || undefined,
             toolsetIds: plannedToolsetIds?.length ? plannedToolsetIds : undefined,
+            memoryQuery: memoryQuery || undefined,
             memorySearchQueries,
         }
     } catch {
@@ -217,11 +229,12 @@ function memoryUserInstructions(userName?: string): string[] {
     return name ? [`The user is named ${JSON.stringify(name)}. When a memory request concerns the user themself, phrase one memory search query with that name.`] : []
 }
 
-function normalizeMemoryQueries(values: unknown[], originalRequest: string): string[] {
+function normalizeMemoryQueries(values: unknown[], searchedQueries: string[]): string[] {
+    const searched = new Set(searchedQueries.map((query) => query.trim()))
     return values
         .filter((value): value is string => typeof value === 'string')
         .map((value) => value.trim().slice(0, MAX_ROUTER_QUERY_LENGTH))
-        .filter((value) => Boolean(value) && value !== originalRequest.trim())
+        .filter((value) => Boolean(value) && !searched.has(value))
         .filter((value, index, all) => all.indexOf(value) === index)
         .slice(0, MAX_MEMORY_EXPANSIONS)
 }
@@ -243,7 +256,7 @@ function enabledQueryInstructions(modes: BuildTaskContextInput['enabledModes']):
             ? '- requiresTools: whether external capabilities are needed. If true, optionally provide toolSearchQuery describing the required capabilities, services, filesystems, APIs, or operations.'
             : '',
         modes.memories
-            ? '- requiresMemory: whether stored user or project context is likely to help. If true, optionally provide memorySearchQueries with up to two precise alternative searches that complement the unchanged original request.'
+            ? '- requiresMemory: whether stored user or project context is likely to help. If true, provide memoryQuery and optionally memorySearchQueries with up to two precise alternative searches that complement it.'
             : '',
     ].filter(Boolean)
 }
@@ -291,6 +304,7 @@ function emitTaskContextSelection(
                 requiresMemory: context?.requiresMemory,
                 toolSearchQuery: context?.toolSearchQuery,
                 toolsetIds: context?.toolsetIds,
+                memoryQuery: context?.memoryQuery,
                 memorySearchQueries: context?.memorySearchQueries,
                 emptyReason,
                 content: emptyReason ? taskContextEmptyContent(emptyReason) : undefined,

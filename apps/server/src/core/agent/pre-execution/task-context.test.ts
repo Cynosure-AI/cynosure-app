@@ -83,6 +83,32 @@ describe('task context cancellation', () => {
         expect(result?.memorySearchQueries).toEqual(['specific preference', 'related decision'])
     })
 
+    test('returns the standalone memory query and drops expansions that repeat it', async () => {
+        const complete = vi.fn().mockResolvedValue({
+            toolCalls: [{
+                function: {
+                    name: 'set_task_context',
+                    arguments: JSON.stringify({
+                        requiresMemory: true,
+                        memoryQuery: 'Welches Schmerzmittel verträgt Mama nicht?',
+                        memorySearchQueries: ['Welches Schmerzmittel verträgt Mama nicht?', 'Mama Medikamente Unverträglichkeit'],
+                    }),
+                }
+            }]
+        })
+        const result = await buildTaskContext({
+            conversationId: 'conversation', gateway: { complete } as unknown as LLMGateway,
+            userQuery: 'Und welches Schmerzmittel verträgt sie nicht?',
+            recentMessages: [{ role: 'user', content: 'Wann hat meine Mama Geburtstag?' }],
+            enabledModes: { tools: false, memories: true },
+        })
+        expect(result).toMatchObject({
+            memoryQuery: 'Welches Schmerzmittel verträgt Mama nicht?',
+            memorySearchQueries: ['Mama Medikamente Unverträglichkeit'],
+        })
+        expect(complete.mock.calls[0][0].tools[0].parameters.properties.memoryQuery).toMatchObject({ type: 'string' })
+    })
+
     test('can independently skip both automatic tools and automatic memory', async () => {
         const complete = vi.fn().mockResolvedValue({
             toolCalls: [{

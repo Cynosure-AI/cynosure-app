@@ -1,7 +1,7 @@
 import { getEventBus } from '../../telemetry/event-bus.js'
 import { recordAuxiliaryModelUsage, type AuxiliaryUsageKind } from '../../usage-metering.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
-import type { ChatMessage } from '../../gateway/providers/base.provider.js'
+import { isTurnLocalContextMessage, type ChatMessage } from '../../gateway/providers/base.provider.js'
 import type { ChatEventDraft } from '@shared/types'
 
 export interface RoutingContext {
@@ -19,6 +19,7 @@ export function messageContentForRouter(content: ChatMessage['content']): string
 export const ROUTER_TURN_CHAR_LIMIT = 500
 
 export function recentConversationBlock(messages: ChatMessage[], turnCharLimit: number, windowSize = 5): string {
+    if (windowSize <= 0) return ''
     const recent = messages.filter(({ role }) => role === 'user' || role === 'assistant').slice(-windowSize)
     if (!recent.length) return ''
     const context = recent.map(({ role, content }) => `${role}: ${messageContentForRouter(content).slice(0, turnCharLimit)}`).join('\n')
@@ -28,6 +29,22 @@ export function recentConversationBlock(messages: ChatMessage[], turnCharLimit: 
 export function routerQuery(context: RoutingContext, turnCharLimit: number, windowSize = 5): string {
     const history = recentConversationBlock(context.recentMessages, turnCharLimit, windowSize)
     return history ? `${history}\n\nCurrent request: ${context.query}` : context.query
+}
+
+/**
+ * Tools called within the last few user turns. Older calls stay offered
+ * through the conversation's sticky toolset; pinning every tool a long
+ * conversation ever called would only grow the list past that cap.
+ */
+export function recentToolCallNames(messages: ChatMessage[], turns = 5): Set<string> {
+    const names = new Set<string>()
+    let userTurns = 0
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i]
+        for (const call of message.toolCalls || []) names.add(call.function.name)
+        if (message.role === 'user' && !isTurnLocalContextMessage(message) && ++userTurns >= turns) break
+    }
+    return names
 }
 
 /** An explicit empty list is valid; a list containing only unknown IDs is not. */

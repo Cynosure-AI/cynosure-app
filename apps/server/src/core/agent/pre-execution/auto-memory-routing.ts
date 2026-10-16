@@ -26,7 +26,11 @@ export interface ApplyAutoMemoryRoutingInput {
     enabled: boolean
     conversationId: string
     userQuery?: string
-    /** Original request first, followed by complementary retrieval expansions. */
+    /** The request rewritten by task-context planning so it stands without the
+     * conversation. It ranks the candidates and replaces the search query that
+     * folds in recent turns. */
+    standaloneQuery?: string
+    /** Complementary retrieval expansions; they widen the search but do not rank. */
     retrievalQueries?: string[]
     recentMessages?: ChatMessage[]
     gateway: LLMGateway
@@ -56,6 +60,7 @@ interface MemoryPipelineStats {
     duplicateCount: number
     weakCount: number
     relativeScoreThreshold: number
+    absoluteScoreThreshold: number
     searchMatches: Array<{
         name: string
         content: string
@@ -78,6 +83,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         enabled,
         conversationId,
         userQuery,
+        standaloneQuery,
         retrievalQueries: plannedQueries,
         recentMessages = [],
         gateway,
@@ -100,47 +106,60 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
         run: async () => {
             emitMemoryRoutingStatus(conversationId, taskId, eventMeta)
             const primaryQuery = userQuery?.trim() || ''
-            const contextualQuery = routerQuery({ query: primaryQuery, recentMessages }, RETRIEVAL_TURN_CHAR_LIMIT)
-            const retrievalQueries = Array.from(new Set([
+            const resolvedQuery = standaloneQuery?.trim() || ''
+            // A follow-up such as "and her address?" only ranks well once its
+            // references are resolved. Without a planned rewrite, recent turns
+            // widen the search, but the request as written still ranks: a query
+            // full of earlier turns would rank the previous topic highest.
+            const rankingQuery = resolvedQuery || primaryQuery
+            const searchQueries = Array.from(new Set([
+                rankingQuery,
                 primaryQuery,
                 ...(plannedQueries || []),
-                contextualQuery,
+                resolvedQuery ? '' : routerQuery({ query: primaryQuery, recentMessages }, RETRIEVAL_TURN_CHAR_LIMIT),
             ].map((query) => query?.trim() || '').filter(Boolean)))
             const options = getMemoryRetrievalOptions()
-            // A larger curation pool needs every query to contribute enough candidates.
-            const retrievalCount = Math.max(AUTO_MEMORY_RETRIEVAL_RESULT_COUNT, options.curationPool - 2)
+            const retrievalCount = Math.max(AUTO_MEMORY_RETRIEVAL_RESULT_COUNT, options.curationPool)
             const rerankerConfig = getMemoryReranker().getConfig()
             const rerankerEnabled = rerankerConfig.enabled
             const curator = rerankerEnabled ? null : await resolveMemoryCurator(gateway, rerankerConfig, { providerId, model })
             let pipelineStage = 0
-            const retrievalStats: MemoryRetrievalStatusDetails[] = retrievalQueries.map(() => ({}))
+            const retrievalStats: MemoryRetrievalStatusDetails[] = []
             const reportRetrievalStage = (stage: 'rag' | 'reranking') => {
                 const nextStage = stage === 'rag' ? 1 : 2
                 if (nextStage <= pipelineStage) return
                 pipelineStage = nextStage
                 emitMemoryPipelineStatus(conversationId, taskId, stage === 'rag' ? 'searching-memory' : 'reranking-memory', eventMeta)
             }
-            let retrievalResults = await Promise.all(
-                retrievalQueries.map((query, queryIndex) => aggregator.aggregate(query, {
+            // One search over every query, reranked once, so scores stay comparable.
+            const retrieve = (query: string, expansions: string[] = []) => {
+                const stats: MemoryRetrievalStatusDetails = {}
+                retrievalStats.push(stats)
+                return aggregator.aggregate(query, {
                     agentId,
                     folderIds: memoryFolderIds,
                     permanentTopK: retrievalCount,
+                    expansions,
                     onStatus: (stage, details) => {
                         reportRetrievalStage(stage)
-                        if (details?.candidateCount !== undefined) retrievalStats[queryIndex].candidateCount = details.candidateCount
-                        if (details?.resultCount !== undefined) retrievalStats[queryIndex].resultCount = details.resultCount
-                        if (details?.candidates) retrievalStats[queryIndex].candidates = details.candidates
+                        if (details?.candidateCount !== undefined) stats.candidateCount = details.candidateCount
+                        if (details?.resultCount !== undefined) stats.resultCount = details.resultCount
+                        if (details?.candidates) stats.candidates = details.candidates
                     },
-                })),
-            )
+                })
+            }
+            let queryCount = searchQueries.length
+            let retrievalResults = [await retrieve(rankingQuery, searchQueries.slice(1))]
             emitMemoryPipelineStatus(conversationId, taskId, 'filtering-memory', eventMeta)
             let fusedCandidates = fuseAutoMemoryResults(retrievalResults)
             let candidates = filterAutoMemoryCandidates(fusedCandidates, options)
-            let pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled)
+            let pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled, queryCount, options)
             signal?.throwIfAborted()
 
             if (!candidates.permanent.length) {
-                emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'none-found', 'retrieval', pipelineStats)
+                // Matches that all scored below the floor were found but are not relevant.
+                const emptyReason = fusedCandidates.permanent.length ? 'none-relevant' : 'none-found'
+                emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, emptyReason, 'retrieval', pipelineStats)
                 return null
             }
 
@@ -170,24 +189,12 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             // One bounded corrective pass: do not inject merely related evidence
             // when the verifier says the current pool cannot answer the request.
             const correctiveQuery = selection?.answerable === false ? selection.correctiveQuery?.trim() : ''
-            if (correctiveQuery && !retrievalQueries.includes(correctiveQuery)) {
-                const correctedStats: MemoryRetrievalStatusDetails = {}
-                const corrected = await aggregator.aggregate(correctiveQuery, {
-                    agentId,
-                    folderIds: memoryFolderIds,
-                    permanentTopK: retrievalCount,
-                    onStatus: (stage, details) => {
-                        reportRetrievalStage(stage)
-                        if (details?.candidateCount !== undefined) correctedStats.candidateCount = details.candidateCount
-                        if (details?.resultCount !== undefined) correctedStats.resultCount = details.resultCount
-                        if (details?.candidates) correctedStats.candidates = details.candidates
-                    },
-                })
-                retrievalResults = [...retrievalResults, corrected]
-                retrievalStats.push(correctedStats)
+            if (correctiveQuery && !searchQueries.includes(correctiveQuery)) {
+                retrievalResults = [...retrievalResults, await retrieve(correctiveQuery)]
+                queryCount += 1
                 fusedCandidates = fuseAutoMemoryResults(retrievalResults)
                 candidates = filterAutoMemoryCandidates(fusedCandidates, options)
-                pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled)
+                pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled, queryCount, options)
                 emitMemoryRoutingSelection(
                     conversationId,
                     taskId,
@@ -260,6 +267,8 @@ function buildMemoryPipelineStats(
     fused: AggregatedMemory,
     filtered: AggregatedMemory,
     rerankerEnabled: boolean,
+    queryCount: number,
+    options: Pick<MemoryRetrievalOptions, 'minRerankerScore'>,
 ): MemoryPipelineStats {
     const returnedCount = results.reduce((count, result) => count + result.permanent.length, 0)
     const searchCandidateCount = retrievalStats.reduce((count, stats, index) => (
@@ -275,7 +284,7 @@ function buildMemoryPipelineStats(
     }))).permanent.slice(0, AUTO_MEMORY_RETRIEVAL_RESULT_COUNT)
 
     return {
-        queryCount: results.length,
+        queryCount,
         searchCandidateCount,
         rerankerInputCount: rerankerEnabled ? searchCandidateCount : 0,
         rerankerOutputCount: rerankerEnabled ? rerankerOutputCount : 0,
@@ -286,6 +295,7 @@ function buildMemoryPipelineStats(
         weakCount: Math.max(0, uniqueCount - filteredCount),
         // Zero means the tail was cut by rank, not by a relative score.
         relativeScoreThreshold: rerankerEnabled ? MIN_RELATIVE_RERANKER_SCORE : 0,
+        absoluteScoreThreshold: rerankerEnabled ? options.minRerankerScore : 0,
         searchMatches: preRerankerMatches.map((memory) => {
             const visibleMatch = memoryMatch(memory)
             return {
@@ -537,9 +547,9 @@ function formatMemoryCandidate(candidate: RetrievedChunk, id: string, documentCo
 }
 
 /** Fused rank order is the only signal shared by dense and lexical hits; keep the top of it for curation. */
-function filterAutoMemoryCandidates(memory: AggregatedMemory, options: Pick<MemoryRetrievalOptions, 'curationPool'>): AggregatedMemory {
+function filterAutoMemoryCandidates(memory: AggregatedMemory, options: Pick<MemoryRetrievalOptions, 'curationPool' | 'minRerankerScore'>): AggregatedMemory {
     const permanent = hasRerankerScores(memory.permanent)
-        ? filterWeakRerankerMatches(memory.permanent)
+        ? filterWeakRerankerMatches(memory.permanent, options.minRerankerScore)
         : memory.permanent.slice(0, options.curationPool)
     return { permanent }
 }
@@ -548,9 +558,9 @@ function hasRerankerScores(candidates: RetrievedChunk[]): boolean {
     return candidates.length > 0 && candidates.every((candidate) => Number.isFinite(candidate.rerankerScore))
 }
 
-/** Merge the original and expanded queries into one ranked list. Reranker
- * scores are comparable across queries; otherwise only each query's rank order
- * is, because a lexical-only hit has no similarity score to compare. */
+/** Merge the main and corrective retrievals into one ranked list. Reranker
+ * scores are comparable across them; otherwise only each one's rank order is,
+ * because a lexical-only hit has no similarity score to compare. */
 function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
     const ranked = new Map<string, { chunk: RetrievedChunk; rankScore: number }>()
     for (const result of results) {
@@ -577,12 +587,14 @@ function fuseAutoMemoryResults(results: AggregatedMemory[]): AggregatedMemory {
     return { permanent }
 }
 
-/** Remove the weak tail relative to the best reranker score. Candidates arrive sorted. */
-function filterWeakRerankerMatches(candidates: RetrievedChunk[]): RetrievedChunk[] {
-    if (candidates.length <= 1) return candidates
-    const best = candidates[0].rerankerScore!
-    if (!(best > 0)) return candidates
-    return candidates.filter((candidate) => candidate.rerankerScore! >= best * MIN_RELATIVE_RERANKER_SCORE)
+/** Remove matches below the absolute floor, then the tail relative to the best
+ * match. The floor keeps a pool with no real match from injecting its least
+ * bad chunks; the relative cut keeps a strong pool from padding with weak ones.
+ * Candidates arrive sorted. */
+function filterWeakRerankerMatches(candidates: RetrievedChunk[], minScore: number): RetrievedChunk[] {
+    const best = candidates[0]?.rerankerScore ?? 0
+    const threshold = Math.max(minScore, best > 0 ? best * MIN_RELATIVE_RERANKER_SCORE : 0)
+    return candidates.filter((candidate) => candidate.rerankerScore! >= threshold)
 }
 
 function memoryLabel(chunk: RetrievedChunk): string {

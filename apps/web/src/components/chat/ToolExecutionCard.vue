@@ -514,7 +514,7 @@ const taskContext = computed(() => {
 
   return {
     toolQuery: visibleText(parsed.toolSearchQuery) ?? visibleText(parsed.toolQuery) ?? '',
-    memoryQuery: memorySearchQueries[0] ?? visibleText(parsed.memoryQuery) ?? '',
+    memoryQuery: visibleText(parsed.memoryQuery) ?? memorySearchQueries[0] ?? '',
     content: visibleText(parsed.content) ?? '',
     emptyReason: visibleText(parsed.emptyReason) ?? '',
   }

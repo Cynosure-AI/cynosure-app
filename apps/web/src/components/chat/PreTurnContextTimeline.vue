@@ -37,6 +37,7 @@ type MemoryPipelineStats = {
   duplicateCount: number
   weakCount: number
   relativeScoreThreshold: number
+  absoluteScoreThreshold?: number
   searchMatches?: Array<{
     name: string
     content: string
@@ -116,18 +117,19 @@ function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label:
   if (status === 'reranking-memory' && stats.rerankerInputCount > 0) {
     return {
       label: `Reranked ${stats.rerankerInputCount} candidates down to ${plural(stats.rerankerOutputCount, 'match', 'matches')}`,
-      summary: `A reranker rescored candidates by relevance; the top matches from each of the ${plural(stats.queryCount, 'query', 'queries')} advance (duplicates removed next)`,
+      summary: `A reranker rescored the fused candidates of ${plural(stats.queryCount, 'query', 'queries')} against the request; the top matches advance`,
     }
   }
   if (status === 'filtering-memory') {
     const threshold = Math.round(stats.relativeScoreThreshold * 100)
+    const floor = Math.round((stats.absoluteScoreThreshold ?? 0) * 100)
     // A zero threshold means the tail was cut by fused rank rather than by score.
     const dropped = threshold > 0
-      ? `dropped for scoring below ${threshold}% of the strongest match`
+      ? `dropped for scoring below ${floor > 0 ? `${floor}% or ` : ''}${threshold}% of the strongest match`
       : 'dropped as lower-ranked matches'
     return {
       label: `Fused ${plural(stats.returnedCount, 'match', 'matches')} into ${plural(stats.uniqueCount, 'unique match', 'unique matches')}, kept ${stats.filteredCount}`,
-      summary: `${plural(stats.duplicateCount, 'match', 'matches')} appeared in multiple queries and were deduplicated; ${plural(stats.weakCount, 'more result', 'more results')} ${dropped}`,
+      summary: `${plural(stats.duplicateCount, 'duplicate match', 'duplicate matches')} removed; ${plural(stats.weakCount, 'more result', 'more results')} ${dropped}`,
     }
   }
   return undefined
@@ -209,9 +211,9 @@ const cards = computed<ContextCard[]>(() => {
   const channelQueries: Record<Channel, string[]> = {
     tools: [stringValue(taskContextArgs.toolSearchQuery) ?? stringValue(taskContextArgs.toolQuery)].filter((query): query is string => Boolean(query)),
     memory: [...new Set([
+      ...(stringValue(taskContextArgs.memoryQuery) ? [stringValue(taskContextArgs.memoryQuery)!] : []),
       ...stringValues(taskContextArgs.memorySearchQueries),
       ...stringValues(taskContextArgs.memoryQueries),
-      ...(stringValue(taskContextArgs.memoryQuery) ? [stringValue(taskContextArgs.memoryQuery)!] : []),
     ])],
   }
   const latestMemoryStats = [...props.steps].reverse()

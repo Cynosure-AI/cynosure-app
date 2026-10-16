@@ -71,7 +71,7 @@ const DATA=__DATA__;
 const KEY='memeval-review-'+DATA.map(c=>c.id).join('').length;let st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}prog()};
 const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const label={single:'Direkt',paraphrase:'Paraphrase',crosslang:'Andere Sprache',multi:'Zwei Chunks',noanswer:'Keine Antwort erwartet',real:'Echter Turn','real-noanswer':'Echter Turn ohne Memory-Bedarf'};
+const label={single:'Direkt',paraphrase:'Paraphrase',crosslang:'Andere Sprache',multi:'Zwei Chunks',followup:'Folgefrage',noanswer:'Keine Antwort erwartet',real:'Echter Turn','real-noanswer':'Echter Turn ohne Memory-Bedarf'};
 function hl(text,quote){let h=esc(text);const q=esc((quote||'').trim());if(q.length>3)h=h.split(q).join('<mark>'+q+'</mark>');return h}
 function render(){document.getElementById('list').innerHTML=DATA.map((c,i)=>{const s=st[c.id]||{};const neg=c.type.includes('noanswer');return '<div class="card '+(s.v||'')+'" id="c'+i+'" data-i="'+i+'">'+
 '<div class="tag">'+(i+1)+'/'+DATA.length+' · '+(label[c.type]||c.type)+' · '+esc(c.id)+'</div><div class="q">'+esc(c.query)+'</div>'+

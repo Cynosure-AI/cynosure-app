@@ -88,6 +88,7 @@ const results = await mapLimit(job.cases, job.concurrency, async (item): Promise
       enabled: true,
       conversationId,
       userQuery: item.query,
+      standaloneQuery: plan?.memoryQuery,
       retrievalQueries: plan ? [item.query, ...plan.memorySearchQueries] : undefined,
       recentMessages,
       gateway,

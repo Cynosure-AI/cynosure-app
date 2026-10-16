@@ -37,8 +37,8 @@ describe('PreTurnContextTimeline', () => {
           {
             iteration: 0, taskId: 'memory', status: 'selecting-memory', timestamp: 140,
             toolCalls: [
-              { name: 'lower', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'lower.md', matchScore: .62, content: 'A lower-scoring excerpt.', pipelineStats: { queryCount: 2, searchCandidateCount: 40, rerankerInputCount: 40, rerankerOutputCount: 16, returnedCount: 16, uniqueCount: 12, filteredCount: 7, duplicateCount: 4, weakCount: 5, relativeScoreThreshold: .65 } }) },
-              { name: 'best', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'best.md', matchScore: .94, content: 'The strongest matching memory excerpt.', pipelineStats: { queryCount: 2, searchCandidateCount: 40, rerankerInputCount: 40, rerankerOutputCount: 16, returnedCount: 16, uniqueCount: 12, filteredCount: 7, duplicateCount: 4, weakCount: 5, relativeScoreThreshold: .65 } }) },
+              { name: 'lower', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'lower.md', matchScore: .62, content: 'A lower-scoring excerpt.', pipelineStats: { queryCount: 2, searchCandidateCount: 40, rerankerInputCount: 40, rerankerOutputCount: 16, returnedCount: 16, uniqueCount: 12, filteredCount: 7, duplicateCount: 4, weakCount: 5, relativeScoreThreshold: .65, absoluteScoreThreshold: .1 } }) },
+              { name: 'best', arguments: JSON.stringify({ type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', sourceFile: 'best.md', matchScore: .94, content: 'The strongest matching memory excerpt.', pipelineStats: { queryCount: 2, searchCandidateCount: 40, rerankerInputCount: 40, rerankerOutputCount: 16, returnedCount: 16, uniqueCount: 12, filteredCount: 7, duplicateCount: 4, weakCount: 5, relativeScoreThreshold: .65, absoluteScoreThreshold: .1 } }) },
             ],
           },
         ],
@@ -57,7 +57,7 @@ describe('PreTurnContextTimeline', () => {
     expect(text).toContain('Hybrid search found 40 candidates')
     expect(text).toContain('Reranked 40 candidates down to 16 matches')
     expect(text).toContain('Fused 16 matches into 12 unique matches, kept 7')
-    expect(text).toContain('4 matches appeared in multiple queries and were deduplicated; 5 more results dropped for scoring below 65% of the strongest match')
+    expect(text).toContain('4 duplicate matches removed; 5 more results dropped for scoring below 10% or 65% of the strongest match')
     expect(text).toContain('Selected top 2 memories')
     expect(text).not.toContain('Found 2 memory matches')
     expect(text).not.toContain('Selecting the highest-ranked memories')

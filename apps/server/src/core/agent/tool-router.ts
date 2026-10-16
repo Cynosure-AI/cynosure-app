@@ -12,7 +12,7 @@ import {
     type RouterEmbeddingScope,
 } from './router-embedding-cache.js'
 import type { ChatMessage, RegistryAwareToolDefinition, ToolDefinition } from '../gateway/providers/base.provider.js'
-import { routerQuery } from './pre-execution/routing-kernel.js'
+import { recentToolCallNames, routerQuery } from './pre-execution/routing-kernel.js'
 import type { ToolNamespaceMetadata } from '../tools/tool-registry.js'
 import { compactToolDescription } from '../tools/tool-description.js'
 
@@ -529,19 +529,7 @@ function collectStickyToolNames(
     recentMessages: ChatMessage[],
     usedToolNames?: Set<string>,
 ): Set<string> {
-    const names = new Set<string>()
-
-    for (const usedToolName of usedToolNames || []) {
-        names.add(usedToolName)
-    }
-
-    for (const message of recentMessages) {
-        for (const call of message.toolCalls || []) {
-            names.add(call.function.name)
-        }
-    }
-
-    return names
+    return new Set([...(usedToolNames || []), ...recentToolCallNames(recentMessages)])
 }
 
 function countPreferredTools(tools: Array<{ name: string }>, preferredToolNames?: Set<string>): number {

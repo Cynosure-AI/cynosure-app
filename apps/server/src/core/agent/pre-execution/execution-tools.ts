@@ -27,6 +27,8 @@ export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     scheduleExecutionConfig?: ConversationExecutionConfig
     /** Toolsets already chosen by task-context planning. */
     plannedToolsetIds?: string[]
+    /** userQuery already resolves the conversation, so routing should not fold in recent turns. */
+    standaloneRoutingQuery?: boolean
 }
 
 export interface ResolvedExecutionTools {
@@ -60,6 +62,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         suppressAutoTools = false,
         scheduleExecutionConfig,
         plannedToolsetIds,
+        standaloneRoutingQuery,
     } = input
 
     const autoRoutingEnabled = isToolRoutingEnabled(preset, autoToolRouting)
@@ -96,6 +99,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
             preferredToolNames: preferredToolNames.length ? new Set(preferredToolNames) : undefined,
             usedToolNames,
             plannedToolsetIds,
+            standaloneQuery: standaloneRoutingQuery,
             eventMeta,
             signal,
         }) as RegistryAwareToolDefinition[]

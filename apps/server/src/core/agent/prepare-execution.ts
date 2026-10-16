@@ -245,6 +245,8 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         resolvedProviderId: taskContextRouter.providerId,
         resolvedModel: taskContextRouter.model,
         userQuery: toolRoutingQuery,
+        // The planned capability query already resolves the conversation.
+        standaloneRoutingQuery: Boolean(taskContext?.toolSearchQuery),
         suppressAutoTools: taskContext?.requiresTools === false,
         plannedToolsetIds: taskContext?.toolsetIds,
         scheduleExecutionConfig,
@@ -253,6 +255,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         gateway,
         providerId: taskContextRouter.providerId,
         model: taskContextRouter.model,
+        standaloneQuery: taskContext?.memoryQuery,
         retrievalQueries: memoryRoutingQueries,
         suppressAutoMemory: taskContext?.requiresMemory === false,
     }), attachmentPreparation])

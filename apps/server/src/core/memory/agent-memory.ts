@@ -229,8 +229,9 @@ export class AgentMemory {
         topK: number = 3,
         filter?: string,
         onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void,
+        opts?: { expansions?: string[] },
     ): Promise<RetrievedChunk[]> {
-        return this.parser.retrieve(getActivePermanentMemoryTableName(), query, topK, filter || undefined, onStatus)
+        return this.parser.retrieve(getActivePermanentMemoryTableName(), query, topK, filter || undefined, onStatus, opts)
     }
 
     getDocumentReference(folderId: string, fileName: string): MemoryDocumentReference | undefined {

@@ -255,6 +255,24 @@ describe('automatic tool routing', () => {
         expect(result.map(({ name }) => name)).toEqual(['browser_snapshot', 'expand_available_toolset'])
     })
 
+    test('ranks a planned standalone query without folding in recent turns', async () => {
+        const tools = Array.from({ length: 10 }, (_, index) => namespacedTool(`mail_${index}`, 'mcp:mail', 'Mail MCP'))
+        routerMocks.route.mockResolvedValue([])
+
+        await applyAutoToolRouting({
+            enabled: true,
+            conversationId: 'conversation-standalone-tools',
+            userQuery: 'send the same summary to Markus\nsend an email',
+            recentMessages: [{ role: 'user', content: 'Summarize the call notes' }],
+            gateway: { complete: vi.fn() } as unknown as LLMGateway,
+            tools,
+            plannedToolsetIds: ['mcp:mail'],
+            standaloneQuery: true,
+        })
+
+        expect(routerMocks.route).toHaveBeenCalledWith(expect.objectContaining({ contextWindowTurns: 0 }))
+    })
+
     test('ranks only larger selected toolsets when small and large toolsets are selected together', async () => {
         const small = [namespacedTool('small_a', 'mcp:small', 'Small'), namespacedTool('small_b', 'mcp:small', 'Small')]
         const large = Array.from({ length: 10 }, (_, index) => namespacedTool(`large_${index}`, 'mcp:large', 'Large'))

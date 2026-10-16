@@ -104,7 +104,7 @@ describe('automatic memory routing visibility', () => {
         expect(result).toBe('strong')
     })
 
-    test('uses the default result count for each retrieval query', async () => {
+    test('fills the curation pool from one retrieval', async () => {
         memoryMocks.aggregate.mockResolvedValue({ permanent: [] })
 
         await applyAutoMemoryRouting({
@@ -114,10 +114,10 @@ describe('automatic memory routing visibility', () => {
             gateway: {} as LLMGateway,
         })
 
-        // Each query contributes enough candidates to fill the curation pool.
+        expect(memoryMocks.aggregate).toHaveBeenCalledOnce()
         expect(memoryMocks.aggregate).toHaveBeenCalledWith(
             expect.any(String),
-            expect.objectContaining({ permanentTopK: Math.max(10, DEFAULT_MEMORY_RETRIEVAL_OPTIONS.curationPool - 2) }),
+            expect.objectContaining({ permanentTopK: Math.max(10, DEFAULT_MEMORY_RETRIEVAL_OPTIONS.curationPool) }),
         )
     })
 
@@ -181,13 +181,9 @@ describe('automatic memory routing visibility', () => {
             denseScore,
             scoreType: 'reranker' as const,
         })
-        memoryMocks.aggregate
-            .mockResolvedValueOnce({
-                permanent: [candidate('medium', 0.6, 0.95), candidate('weak', 0.4, 0.99)],
-            })
-            .mockResolvedValueOnce({
-                permanent: [candidate('best', 0.8, 0.3), candidate('medium', 0.55, 0.95)],
-            })
+        memoryMocks.aggregate.mockResolvedValue({
+            permanent: [candidate('medium', 0.6, 0.95), candidate('best', 0.8, 0.3), candidate('weak', 0.4, 0.99)],
+        })
         memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => (
             memory.permanent.map(({ id }) => id).join(',')
         ))
@@ -285,30 +281,7 @@ describe('automatic memory routing visibility', () => {
         expect(prompt).not.toContain('score=')
     })
 
-    test('ranks chunks found by several queries above single-query matches', async () => {
-        const chunk = (id: string, denseScore: number) => ({ id, text: id, source: 'memory', sourceFile: `${id}.md`, chunkIndex: 0, score: 0.01, denseScore, scoreType: 'fusion' as const })
-        memoryMocks.aggregate
-            .mockResolvedValueOnce({ permanent: [chunk('only-first', 0.9), chunk('shared', 0.5)] })
-            .mockResolvedValueOnce({ permanent: [chunk('shared', 0.5), chunk('only-second', 0.8)] })
-        const complete = vi.fn().mockResolvedValue({ toolCalls: [{ function: {
-            name: 'select_memory_context',
-            arguments: JSON.stringify({ memoryIds: [], answerable: true }),
-        } }] })
-
-        await applyAutoMemoryRouting({
-            enabled: true,
-            conversationId: 'conversation-rank-fusion',
-            userQuery: 'deployment',
-            retrievalQueries: ['deployment', 'release process'],
-            gateway: { complete } as unknown as LLMGateway,
-        })
-
-        const prompt = String(complete.mock.calls[0][0].messages[1].content)
-        const order = ['shared', 'only-first', 'only-second'].map((id) => prompt.indexOf(`source=${id}.md`))
-        expect(order).toEqual([...order].sort((a, b) => a - b))
-    })
-
-    test('always searches the original request before complementary expansions', async () => {
+    test('searches the original request and its expansions in one retrieval ranked by the request', async () => {
         memoryMocks.aggregate.mockResolvedValue({ permanent: [] })
 
         await applyAutoMemoryRouting({
@@ -319,10 +292,63 @@ describe('automatic memory routing visibility', () => {
             gateway: {} as LLMGateway,
         })
 
-        expect(memoryMocks.aggregate.mock.calls.map(([query]) => query)).toEqual([
-            'Was weißt du über meine beste Freundin?',
-            'Informationen über enge persönliche Beziehungen',
-        ])
+        expect(memoryMocks.aggregate).toHaveBeenCalledOnce()
+        expect(memoryMocks.aggregate).toHaveBeenCalledWith('Was weißt du über meine beste Freundin?', expect.objectContaining({
+            expansions: ['Informationen über enge persönliche Beziehungen'],
+        }))
+    })
+
+    test('ranks a follow-up by its standalone rewrite instead of folding in recent turns', async () => {
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [] })
+        const recentMessages = [
+            { role: 'user' as const, content: 'Wann hat meine Mama Geburtstag?' },
+            { role: 'assistant' as const, content: 'Am 14. März.' },
+        ]
+
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-follow-up',
+            userQuery: 'Und welches Schmerzmittel verträgt sie nicht?',
+            standaloneQuery: 'Welches Schmerzmittel verträgt Mama nicht?',
+            recentMessages,
+            gateway: {} as LLMGateway,
+        })
+        await applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-follow-up-unplanned',
+            userQuery: 'Und welches Schmerzmittel verträgt sie nicht?',
+            recentMessages,
+            gateway: {} as LLMGateway,
+        })
+
+        const [planned, unplanned] = memoryMocks.aggregate.mock.calls as Array<[string, { expansions: string[] }]>
+        expect(planned[0]).toBe('Welches Schmerzmittel verträgt Mama nicht?')
+        expect(planned[1].expansions).toEqual(['Und welches Schmerzmittel verträgt sie nicht?'])
+        // Without a rewrite, recent turns only widen the search.
+        expect(unplanned[0]).toBe('Und welches Schmerzmittel verträgt sie nicht?')
+        expect(unplanned[1].expansions).toEqual([expect.stringContaining('Recent conversation:')])
+    })
+
+    test('injects nothing when no reranked match reaches the absolute floor', async () => {
+        rerankerConfigMock.enabled = true
+        const candidate = (id: string, rerankerScore: number) => ({
+            id, text: id, source: 'memory', sourceFile: `${id}.md`, score: rerankerScore, rerankerScore, scoreType: 'reranker' as const,
+        })
+        // Close to each other, so only the floor can tell they are all unrelated.
+        memoryMocks.aggregate.mockResolvedValue({ permanent: [candidate('a', 0.06), candidate('b', 0.05)] })
+        const events: Array<Record<string, unknown>> = []
+        captureRoutingEvents(events)
+
+        await expect(applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-floor',
+            userQuery: 'Wie wird das Wetter morgen?',
+            gateway: { complete: vi.fn() } as unknown as LLMGateway,
+        })).resolves.toBeNull()
+
+        expect(memoryMocks.format).not.toHaveBeenCalled()
+        const final = (events.at(-1)!.toolCalls as Array<{ arguments: string }>)[0]
+        expect(JSON.parse(final.arguments)).toMatchObject({ emptyReason: 'none-relevant' })
     })
 
     test('runs one corrective retrieval when candidates do not directly answer the request', async () => {

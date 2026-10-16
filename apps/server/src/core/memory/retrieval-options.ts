@@ -12,6 +12,8 @@ export interface MemoryRetrievalOptions {
     curatorDocumentContext: boolean
     /** Fused candidates the LLM curator sees. */
     curationPool: number
+    /** Reranker relevance (0-1) a chunk needs to be injected without LLM curation. */
+    minRerankerScore: number
 }
 
 // memory:eval 2026-10-02 (personal memory, LLM curation, planner on; vs. all off and pool 12):
@@ -19,10 +21,14 @@ export interface MemoryRetrievalOptions {
 // document context +6/-3. Planner keywords were neutral and injected more on
 // no-answer questions, so they were removed. A document-title channel hurt
 // first-place hits on both datasets and was removed.
+// minRerankerScore is not measured yet: 0.1 sits below the scores rerankers
+// give a chunk that answers the query and above those they give unrelated
+// chunks. Sweep it with `--conditions name=reranker:on+minRerankerScore:<n>`.
 export const DEFAULT_MEMORY_RETRIEVAL_OPTIONS: Readonly<MemoryRetrievalOptions> = {
     queryInstructions: true,
     curatorDocumentContext: true,
     curationPool: 20,
+    minRerankerScore: 0.1,
 }
 
 /** Settings key for evaluation overrides; absent in normal installs. */

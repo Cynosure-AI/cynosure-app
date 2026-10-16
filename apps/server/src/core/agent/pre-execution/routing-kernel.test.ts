@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
 import { getEventBus } from '../../telemetry/event-bus.js'
-import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, routerQuery, runRoutingPhase } from './routing-kernel.js'
+import { emitRoutingDecision, parseCandidateIds, recentConversationBlock, recentToolCallNames, routerQuery, runRoutingPhase } from './routing-kernel.js'
 
 describe('routing kernel', () => {
     test('formats only recent user and assistant text with consistent limits', () => {
@@ -14,6 +14,27 @@ describe('routing kernel', () => {
         expect(recentConversationBlock(messages, 6)).toBe('Recent conversation:\nuser: longer\nassistant: [multi')
         expect(routerQuery({ query: 'next', recentMessages: messages }, 6))
             .toBe('Recent conversation:\nuser: longer\nassistant: [multi\n\nCurrent request: next')
+    })
+
+    test('leaves the conversation out of a query with an empty window', () => {
+        const messages = [{ role: 'user' as const, content: 'earlier' }]
+        expect(recentConversationBlock(messages, 100, 0)).toBe('')
+        expect(routerQuery({ query: 'next', recentMessages: messages }, 100, 0)).toBe('next')
+    })
+
+    test('collects tool calls from the last few user turns only', () => {
+        const call = (name: string) => ({ id: name, type: 'function' as const, function: { name, arguments: '{}' } })
+        const messages = [
+            { role: 'user' as const, content: 'first' },
+            { role: 'assistant' as const, content: '', toolCalls: [call('old_tool')] },
+            { role: 'user' as const, content: 'second' },
+            { role: 'assistant' as const, content: '', toolCalls: [call('mid_tool')] },
+            { role: 'user' as const, content: 'memory', metadata: { contextKind: 'retrieved-memory' } },
+            { role: 'user' as const, content: 'third' },
+            { role: 'assistant' as const, content: '', toolCalls: [call('new_tool')] },
+        ]
+        expect([...recentToolCallNames(messages, 2)]).toEqual(['new_tool', 'mid_tool'])
+        expect([...recentToolCallNames(messages, 3)].sort()).toEqual(['mid_tool', 'new_tool', 'old_tool'])
     })
 
     test('distinguishes valid empty selections from unknown candidate IDs', () => {

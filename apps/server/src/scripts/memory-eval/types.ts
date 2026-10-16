@@ -1,6 +1,6 @@
 import type { MemoryRetrievalOptions } from '../../core/memory/retrieval-options.js'
 
-export type EvalCaseType = 'single' | 'paraphrase' | 'crosslang' | 'multi' | 'overview' | 'aggregation' | 'temporal' | 'disambiguation' | 'noanswer' | 'real' | 'real-noanswer'
+export type EvalCaseType = 'single' | 'paraphrase' | 'crosslang' | 'multi' | 'overview' | 'aggregation' | 'temporal' | 'disambiguation' | 'followup' | 'noanswer' | 'real' | 'real-noanswer'
 
 /** Evidence that answers a case. Matched by quote (survives re-chunking); the
  * file narrows short quotes that could occur in several documents. */

@@ -2373,6 +2373,401 @@
    "createdAt": 0,
    "answer": "Tobias Brandner, 4 years older, Linz-Urfahr, married to Mira, kids Emil and Ida; now at Fronius in Wels",
    "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fu-mama-ibu",
+   "type": "followup",
+   "group": "fx-fu-mama-ibu",
+   "query": "Und welches Schmerzmittel verträgt sie nicht?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wann hat meine Mama Geburtstag?"
+    },
+    {
+     "role": "assistant",
+     "content": "Deine Mama Ingrid hat am 14. März Geburtstag."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Verträgt kein Ibuprofen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ibuprofen (Magen); sie nimmt Paracetamol",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fu-mama-keys",
+   "type": "followup",
+   "group": "fx-fu-mama-keys",
+   "query": "Wer hat dort die Ersatzschlüssel?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wo genau wohnt Mama?"
+    },
+    {
+     "role": "assistant",
+     "content": "Sie wohnt in Leoben, Kerpelystraße 12."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Ingrid Brandner - Mama.md",
+     "quote": "Nachbarin Frau Hölzl im ersten Stock"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Die Nachbarin Frau Hölzl im ersten Stock",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fu-nik-open",
+   "type": "followup",
+   "group": "fx-fu-nik-open",
+   "query": "Ab wann hat er morgens offen?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wo hat Nikola seine Praxis?"
+    },
+    {
+     "role": "assistant",
+     "content": "Nikolas Praxis ist in der Heinrichstraße in Graz-Geidorf."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Nikola Petrović - Kletterpartner.md",
+     "quote": "er hat ab 7:30 offen"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ab 7:30",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fu-stw-shipping",
+   "type": "followup",
+   "group": "fx-fu-stw-shipping",
+   "query": "Und ab welchem Bestellwert ist der Versand dort gratis?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wie hoch ist das Budget für den Steirerwerk-Relaunch?"
+    },
+    {
+     "role": "assistant",
+     "content": "Das Budget ist mit 18.400 € gedeckelt, das sind 216 Stunden."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Steirerwerk Shop-Relaunch.md",
+     "quote": "Versandkostenfrei ab 79 € Bestellwert"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Ab 79 €",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-fu-aig-widget",
+   "type": "followup",
+   "group": "fx-fu-aig-widget",
+   "query": "Welches Terminbuchungs-Widget nutzen die eigentlich?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Was kostet die Wartung der Aigner-Website im Monat?"
+    },
+    {
+     "role": "assistant",
+     "content": "Die Wartung kostet 45 € pro Monat."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Praxis Dr. Aigner Website.md",
+     "quote": "Widget von \"MediBook\""
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "MediBook",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-fu-bb-pro",
+   "type": "followup",
+   "group": "fx-fu-bb-pro",
+   "query": "And what would the paid version cost?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "How many beta testers does Bergbuch have?"
+    },
+    {
+     "role": "assistant",
+     "content": "Bergbuch has a closed beta with 212 testers."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Bergbuch App.md",
+     "quote": "\"Bergbuch Pro\" for 2,99 € per month"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "2,99 € per month",
+   "folder": "02_Projekte"
+  },
+  {
+   "id": "fx-fu-auto-pickerl",
+   "type": "followup",
+   "group": "fx-fu-auto-pickerl",
+   "query": "Und wann ist beim Auto das Pickerl fällig?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wo sind meine Winterreifen eingelagert?"
+    },
+    {
+     "role": "assistant",
+     "content": "Die Winterreifen sind bei Reifen Kainz in Graz-Straßgang eingelagert."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Auto.md",
+     "quote": "fällig im März 2027"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "März 2027",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-fu-kreta-flight",
+   "type": "followup",
+   "group": "fx-fu-kreta-flight",
+   "query": "Um wie viel Uhr geht der Flug dorthin?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wie heißt die Unterkunft auf Kreta?"
+    },
+    {
+     "role": "assistant",
+     "content": "Ihr wohnt in der Villa Thalassa."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Reise Kreta 2026.md",
+     "quote": "Abflug 4.10. um 6:10 in Graz"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "6:10 am 4. Oktober",
+   "folder": "03_Persoenlich"
+  },
+  {
+   "id": "fx-fu-back-test",
+   "type": "followup",
+   "group": "fx-fu-back-test",
+   "query": "Wann wurde das zuletzt per Restore getestet?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wann laufen die Backups?"
+    },
+    {
+     "role": "assistant",
+     "content": "Die Backups laufen jede Nacht um 02:00 per systemd-Timer."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Backups.md",
+     "quote": "Letzter Restore-Test am 14. Juni 2026"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "14. Juni 2026",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-fu-tob-gift",
+   "type": "followup",
+   "group": "fx-fu-tob-gift",
+   "query": "Und was wünscht er sich zum Geburtstag?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wie heißt die Coverband von Tobias?"
+    },
+    {
+     "role": "assistant",
+     "content": "Seine Coverband heißt \"Donaublech\"."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Tobias Brandner - Bruder.md",
+     "quote": "guten Drehmomentschlüssel"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Einen guten Drehmomentschlüssel",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fu-stw-budgetowner",
+   "type": "followup",
+   "group": "fx-fu-stw-budgetowner",
+   "query": "Über wen laufen bei denen die Budgetfragen?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wann ist der wöchentliche Status-Call mit Markus?"
+    },
+    {
+     "role": "assistant",
+     "content": "Der Status-Call mit Markus ist montags um 9:00 und dauert 30 Minuten."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Markus Hofer - Steirerwerk.md",
+     "quote": "über die Geschäftsführerin Renate Pölzl"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Über die Geschäftsführerin Renate Pölzl",
+   "folder": "01_Kontakte"
+  },
+  {
+   "id": "fx-fu-shift-backups",
+   "type": "followup",
+   "group": "fx-fu-shift-backups",
+   "query": "Ganz was anderes: Wann laufen eigentlich meine Backups?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wann hat meine Mama Geburtstag?"
+    },
+    {
+     "role": "assistant",
+     "content": "Deine Mama Ingrid hat am 14. März Geburtstag."
+    }
+   ],
+   "gold": [
+    {
+     "file": "Backups.md",
+     "quote": "jede Nacht um 02:00 per systemd-Timer"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "Jede Nacht um 02:00",
+   "folder": "07_Technik"
+  },
+  {
+   "id": "fx-fu-shift-rent",
+   "type": "followup",
+   "group": "fx-fu-shift-rent",
+   "query": "Andere Frage: Wie viel Miete zahle ich ab Oktober?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wie heißt die Unterkunft auf Kreta?"
+    },
+    {
+     "role": "assistant",
+     "content": "Ihr wohnt in der Villa Thalassa."
+    }
+   ],
+   "gold": [
+    {
+     "file": "2026-08-21 Log.md",
+     "quote": "Mieterhöhung auf 935 € warm ab 1. Oktober 2026"
+    }
+   ],
+   "goldMode": "any",
+   "createdAt": 0,
+   "answer": "935 € warm",
+   "folder": "04_Logs"
+  },
+  {
+   "id": "fx-fu-noans-weather",
+   "type": "noanswer",
+   "group": "fx-fu-noans-weather",
+   "query": "Wie wird das Wetter morgen in Graz?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wann hat meine Mama Geburtstag?"
+    },
+    {
+     "role": "assistant",
+     "content": "Deine Mama Ingrid hat am 14. März Geburtstag."
+    }
+   ],
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-fu-noans-joke",
+   "type": "noanswer",
+   "group": "fx-fu-noans-joke",
+   "query": "Erzähl mir einen kurzen Witz über Programmierer.",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wie hoch ist das Budget für den Steirerwerk-Relaunch?"
+    },
+    {
+     "role": "assistant",
+     "content": "Das Budget ist mit 18.400 € gedeckelt, das sind 216 Stunden."
+    }
+   ],
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
+  },
+  {
+   "id": "fx-fu-noans-math",
+   "type": "noanswer",
+   "group": "fx-fu-noans-math",
+   "query": "Wie viel sind 15 % von 240?",
+   "recentMessages": [
+    {
+     "role": "user",
+     "content": "Wie heißt die Unterkunft auf Kreta?"
+    },
+    {
+     "role": "assistant",
+     "content": "Ihr wohnt in der Villa Thalassa."
+    }
+   ],
+   "gold": [],
+   "goldMode": "any",
+   "createdAt": 0
   }
  ]
 }

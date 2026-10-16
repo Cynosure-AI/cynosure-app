@@ -12,6 +12,8 @@ export type ResolveMemoryContextInput = Pick<PrepareExecutionInput,
     /** Router provider and model used for memory curation. */
     providerId?: string
     model?: string
+    /** The request rewritten to stand without the conversation; it ranks retrieval. */
+    standaloneQuery?: string
     /** Original request plus optional same-language retrieval expansions. */
     retrievalQueries?: string[]
     /** Skip retrieval when task-context planning determined stored context cannot help. */
@@ -54,6 +56,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         autoMemory,
         memoryFolderOverrides,
         userQuery,
+        standaloneQuery,
         retrievalQueries,
         recentMessages,
         eventMeta,
@@ -69,6 +72,7 @@ export async function resolveMemoryContext(input: ResolveMemoryContextInput): Pr
         enabled: true,
         conversationId,
         userQuery,
+        standaloneQuery,
         retrievalQueries,
         recentMessages,
         gateway,

@@ -3,7 +3,7 @@
 A fictional memory install for `memory:eval --dataset fixture`. Everything here is invented, so it can live in the repository and be shared.
 
 - `corpus/` — 40 Markdown notes of "Lena Brandner", a freelance web developer in Graz, laid out like real memory folders (contacts, projects, personal, logs, recipes, hobbies, tech). Mostly German, some English.
-- `dataset.json` — 146 hand-written questions with verbatim gold quotes.
+- `dataset.json` — 165 hand-written questions with verbatim gold quotes.
 
 The corpus deliberately contains what single-fact lookups miss:
 
@@ -14,7 +14,8 @@ The corpus deliberately contains what single-fact lookups miss:
 | `aggregation` | Facts collected from three or four notes |
 | `temporal` | A value later overridden by a log entry (rate, rent, employer, a debt) |
 | `disambiguation` | Near-identical names (Sophie Lindner vs. Sophia Lindtner) |
-| `noanswer` | Plausible questions the notes cannot answer, plus off-topic requests |
+| `followup` | A request that names its subject only through the previous turn ("und wann hat sie offen?"), or that switches topic mid-conversation |
+| `noanswer` | Plausible questions the notes cannot answer, plus off-topic requests, some of them after an unrelated earlier turn |
 
 Three documents span several chunks, and their later sections avoid naming the subject ("der Kunde", "sie"). Contextual chunk summaries are meant to resolve exactly those.
 

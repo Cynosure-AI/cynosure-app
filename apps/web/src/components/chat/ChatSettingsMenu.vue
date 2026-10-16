@@ -23,9 +23,12 @@ const newAgentDescription = ref('')
 const savingAgent = ref(false)
 
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
-const systemPromptChanged = computed(() => (
-  chatStore.activeAgentId ? chatStore.agentOverrideFields : chatStore.cynoOverrideFields
-).includes('System prompt'))
+const hasProjectOverride = computed(() => Boolean(!chatStore.activeConversationId && chatStore.activeProjectId))
+const changedFields = computed(() => {
+  const fields = chatStore.activeAgentId ? chatStore.agentOverrideFields : chatStore.cynoOverrideFields
+  return hasProjectOverride.value ? [...fields, 'Project'] : fields
+})
+const systemPromptChanged = computed(() => changedFields.value.includes('System prompt'))
 const canSaveAsAgent = computed(() => (
   chatStore.selectedToolNames.length > 0 ||
   chatStore.sessionSubAgentIds.length > 0 ||
@@ -34,7 +37,7 @@ const canSaveAsAgent = computed(() => (
 ))
 const hasCustomConfig = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && chatStore.hasCynoOverrides
-) || Boolean(!chatStore.activeConversationId && chatStore.activeProjectId))
+) || hasProjectOverride.value)
 const canShowSaveAction = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && canSaveAsAgent.value
 ))
@@ -215,10 +218,10 @@ async function saveAsNewAgent(): Promise<void> {
         class="mx-3 my-1 border-t border-theme-800"
       />
       <p
-        v-if="hasOverrides && chatStore.agentOverrideFields.length"
+        v-if="changedFields.length"
         class="px-3 py-1.5 text-[10px] leading-relaxed text-ink-muted"
       >
-        Changed: {{ chatStore.agentOverrideFields.join(', ') }}
+        Changed: {{ changedFields.join(', ') }}
       </p>
       <button
         v-if="hasOverrides"

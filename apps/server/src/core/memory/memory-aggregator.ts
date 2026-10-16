@@ -29,6 +29,8 @@ export class MemoryAggregator {
       agentId?: string
       folderIds?: string[]
       permanentTopK?: number
+      /** Extra queries searched alongside `query`; `query` alone ranks the results. */
+      expansions?: string[]
       /** Optional live progress for automatic pre-turn memory retrieval. */
       onStatus?: (stage: 'rag' | 'reranking', details?: MemoryRetrievalStatusDetails) => void
     }
@@ -72,7 +74,9 @@ export class MemoryAggregator {
       spaceFilter = buildMemoryFolderFilter(scopedSpaces)
     }
 
-    const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter, opts?.onStatus).catch(() => [])
+    const permanent = await permanentMem.recall(query, opts?.permanentTopK ?? 3, spaceFilter, opts?.onStatus, {
+      expansions: opts?.expansions,
+    }).catch(() => [])
 
     // Deduplicate exact normalized chunks. Prefix-only deduplication can merge
     // unrelated chunks that happen to begin with the same heading/template.
