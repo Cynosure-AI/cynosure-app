@@ -22,7 +22,7 @@ import type { ContentBlock, ConversationExecutionConfig, MessageToolCall } from 
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import { getProject, setConversationProject } from '../core/projects/project-store.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
-import { cancelCronRunsByConversation, getPendingWait, getWaitResumeTimes } from '../core/triggers/cron-scheduler.js'
+import { cancelCronRunsByConversation, deleteCronJob, getPendingWait, getWaitJobsForConversation, getWaitResumeTimes, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { cancelChatExecutionByConversation } from '../core/chat/active-executions.js'
 import { pauseChatQueue } from '../core/chat/message-queue.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
@@ -880,6 +880,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         cancelChatExecutionByConversation(id)
         cancelCronRunsByConversation(id)
         cancelPostActions(id)
+        // A pending wait would otherwise sit in the schedule until it fires on nothing.
+        for (const job of getWaitJobsForConversation(id)) {
+            unscheduleCronJob(job.id)
+            deleteCronJob(job.id)
+        }
         await deleteConversationById(id)
         await collectOrphanedAttachmentAssets()
         return { success: true, discarded: true }

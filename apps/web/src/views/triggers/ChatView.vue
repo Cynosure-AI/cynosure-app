@@ -318,7 +318,7 @@ watch(
     <div class="flex flex-1 min-h-0 relative">
       <!-- Chat column: panel + input bar -->
       <div
-        class="chat-column relative flex flex-col flex-1 min-w-0"
+        class="chat-column relative isolate flex flex-col flex-1 min-w-0"
         :class="{ 'chat-column--empty': showCenteredComposer }"
         @dragenter="onDragEnter"
         @dragleave="onDragLeave"
@@ -505,6 +505,21 @@ watch(
           />
         </template>
 
+        <!-- Incognito dims the whole new-chat view, centered composer included.
+             Last child: the empty layout sizes the column's first child. -->
+        <Transition
+          enter-from-class="opacity-0"
+          enter-active-class="transition-opacity duration-300 ease-out"
+          leave-to-class="opacity-0"
+          leave-active-class="transition-opacity duration-300 ease-in"
+        >
+          <div
+            v-if="showCenteredComposer && chatStore.activeIsTemporary"
+            class="chat-incognito-vignette pointer-events-none absolute inset-0 -z-10"
+            aria-hidden="true"
+          />
+        </Transition>
+
         <div
           v-if="isDragOver"
           class="absolute inset-0 z-50 flex items-center justify-center bg-theme-900/80 border-2 border-dashed border-accent-500 rounded-lg pointer-events-none"
@@ -527,6 +542,10 @@ watch(
 </template>
 
 <style scoped>
+.chat-incognito-vignette {
+  background: radial-gradient(ellipse at center, transparent 35%, color-mix(in oklab, var(--color-theme-950) 55%, transparent) 100%);
+}
+
 .chat-column > :deep(.chat-input-bar) {
   flex: 0 0 auto;
 }

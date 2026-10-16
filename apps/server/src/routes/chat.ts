@@ -137,6 +137,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   async function executeSend(conversationId: string, request: QueuedExecutionRequest): Promise<boolean> {
     const initialConversation = getDb().prepare('SELECT agent_id FROM conversations WHERE id = ?')
       .get(conversationId) as { agent_id: string | null } | undefined
+    // A send that lands after its chat was deleted (such as a discarded
+    // incognito chat) has nothing to run in and nothing that could stop it.
+    if (!initialConversation) return false
     const initialAgentId = initialConversation?.agent_id || null
     const initialAgent = initialAgentId ? getAgent(initialAgentId) : null
     const abortController = new AbortController()

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb, getDb } from '../db/database.js'
 import { purgeTemporaryConversations, registerConversationRoutes } from './conversations.js'
+import { createCronJob, getWaitJobsForConversation } from '../core/triggers/cron-scheduler.js'
 
 describe('incognito conversations', () => {
     let directory = ''
@@ -76,6 +77,19 @@ describe('incognito conversations', () => {
 
         expect(db.prepare('SELECT id FROM conversations ORDER BY id').all()).toEqual([{ id: 'saved' }])
         expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 0 })
+    })
+
+    test('discard removes waits that would resume the incognito chat', async () => {
+        const db = getDb()
+        db.prepare("INSERT INTO conversations (id, title, temporary, created_at, updated_at) VALUES ('incognito', 'Secret', 1, 1, 1)").run()
+        createCronJob({ agentId: '', schedule: '0 0 1 1 *', prompt: 'check back', oneOff: true, conversationId: 'incognito' })
+        expect(getWaitJobsForConversation('incognito')).toHaveLength(1)
+
+        await withApp(async (app) => {
+            await app.inject({ method: 'POST', url: '/api/chat/conversations/incognito/discard' })
+        })
+
+        expect(getWaitJobsForConversation('incognito')).toEqual([])
     })
 
     test('the startup purge removes only incognito chats', async () => {

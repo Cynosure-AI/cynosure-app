@@ -568,7 +568,6 @@ onMounted(() => {
     <div
       v-else-if="chatStore.messages.length === 0"
       class="chat-empty-state relative isolate flex flex-col items-center justify-center h-full text-ink-secondary"
-      :class="{ 'chat-empty-incognito': chatStore.activeIsTemporary }"
       :style="introStyle"
     >
       <div class="relative mb-6">
@@ -1017,17 +1016,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Incognito dims the room around the intro so the mode reads at a glance. */
-.chat-empty-incognito::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 35%, color-mix(in oklab, var(--color-theme-950) 55%, transparent) 100%);
-  transition: opacity 300ms ease;
-}
-
 /* New-chat intro, timed by chatIntro.ts: the icon materializes, the headline
    types itself out (TypewriterText), then the subtitle and sub-agents follow. */
 @media (prefers-reduced-motion: no-preference) {
