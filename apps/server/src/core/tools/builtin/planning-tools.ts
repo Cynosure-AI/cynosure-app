@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
-import { applyTodoUpdate } from '../../agent/planning-state.js'
+import { applyTodoUpdate, MAX_TASKS } from '../../agent/planning-state.js'
 
 const PLANNING_TOOL_NAMES = new Set([
   'todo_update',
@@ -32,7 +32,7 @@ export function makePlanningTools(runId: string): ToolDefinition[] {
           objective: { type: 'string', description: 'Optional short statement of the overall user goal.' },
           tasks: {
             type: 'array',
-            maxItems: 24,
+            maxItems: MAX_TASKS,
             description: 'Complete current list, including finished and pending tasks. An empty list clears it.',
             items: {
               type: 'object',
