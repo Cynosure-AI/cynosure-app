@@ -27,7 +27,7 @@ import type { ToolBehaviorAnnotations } from './core/gateway/providers/base.prov
 
 import { registerAgentDefinitionRoutes } from './routes/agents.js'
 import { registerChatRoutes } from './routes/chat.js'
-import { registerConversationRoutes } from './routes/conversations.js'
+import { purgeTemporaryConversations, registerConversationRoutes } from './routes/conversations.js'
 import { registerMemoryRoutes } from './routes/memory.js'
 import { registerMcpRoutes, loadSavedMcpServers } from './routes/mcp/index.js'
 import { registerProviderRoutes, loadSavedProviders } from './routes/providers.js'
@@ -636,6 +636,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   // No execution survives a restart, so leftover queue items would sit as
   // 'pending' with nothing to drain them. Pause them so the UI offers Resume.
   pauseAllChatQueuesOnStartup()
+  // Incognito chats whose tab closed before discarding them are abandoned.
+  await purgeTemporaryConversations().catch((err) => console.warn('[chat] Temporary chat cleanup failed; will retry on next start:', err))
 
   // Start filesystem watchers for all existing memory folders
   startMemoryFolderWatchers()

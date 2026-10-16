@@ -205,6 +205,22 @@ describe('Dream worker', () => {
         await settleDreamWork()
         expect(listDreamRuns().map(run => run.conversation_id).sort()).toEqual(['channel', 'free-chat'])
     })
+
+    test('skips incognito chats until they are saved', async () => {
+        enable()
+        conversation('incognito')
+        getDb().prepare("UPDATE conversations SET temporary = 1 WHERE id = 'incognito'").run()
+        message('incognito-m', 'incognito')
+        vi.setSystemTime(Date.now() + DREAM_IDLE_MS)
+        stop = startDreamWorker(broadcast)
+        await settleDreamWork()
+        expect(listDreamRuns()).toEqual([])
+
+        getDb().prepare("UPDATE conversations SET temporary = 0 WHERE id = 'incognito'").run()
+        await sweepDream()
+        await settleDreamWork()
+        expect(listDreamRuns().map(run => run.conversation_id)).toEqual(['incognito'])
+    })
     test('treats Free Chat as eligible and requires explicit agent opt-in', () => {
         mocks.agent.mockImplementation((id: string) => id === 'enabled' ? { dreamingEnabled: true } : { dreamingEnabled: false })
         expect(isDreamEligibleConversation({ agent_id: null })).toBe(true)

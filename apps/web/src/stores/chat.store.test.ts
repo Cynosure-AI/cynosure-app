@@ -47,7 +47,7 @@ test('a chat started in a project is created in it, and moving it updates the se
   await store.startNewChat({ projectId: 'project-1' })
   expect(store.activeProjectId).toBe('project-1')
   await store.createConversation()
-  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, 'project-1')
+  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, 'project-1', false)
   expect(store.conversations[0].projectId).toBe('project-1')
 
   await store.setConversationProject(null)
@@ -57,4 +57,52 @@ test('a chat started in a project is created in it, and moving it updates the se
 
   await store.startNewChat()
   expect(store.activeProjectId).toBeNull()
+})
+
+test('an incognito chat is created temporary and discarded when New Chat leaves it', async () => {
+  const create = vi.spyOn(api.chat, 'createConversation').mockResolvedValue({
+    id: 'incognito', title: 'New Chat', agentId: null, maWorkspaceId: null, projectId: null, origin: 'chat', temporary: true, createdAt: 1, updatedAt: 1,
+  })
+  const discard = vi.spyOn(api.chat, 'discardConversation').mockResolvedValue()
+  vi.spyOn(api.chat, 'discardStagedAttachments').mockResolvedValue({ success: true })
+  const store = useChatStore()
+  await flushPromises()
+
+  store.setIncognito(true)
+  expect(store.activeIsTemporary).toBe(true)
+  await store.createConversation()
+  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, null, true)
+  expect(store.activeIsTemporary).toBe(true)
+
+  // Toggling is only for the empty new chat.
+  store.setIncognito(false)
+  expect(store.activeIsTemporary).toBe(true)
+
+  await store.startNewChat()
+  expect(discard).toHaveBeenCalledExactlyOnceWith('incognito')
+  expect(store.conversations.some((conversation) => conversation.id === 'incognito')).toBe(false)
+  expect(store.activeConversationId).toBeNull()
+  expect(store.activeIsTemporary).toBe(false)
+})
+
+test('saving an incognito chat keeps it and refreshes the history', async () => {
+  vi.spyOn(api.chat, 'createConversation').mockResolvedValue({
+    id: 'incognito', title: 'New Chat', agentId: null, maWorkspaceId: null, projectId: null, origin: 'chat', temporary: true, createdAt: 1, updatedAt: 1,
+  })
+  const save = vi.spyOn(api.chat, 'saveConversation').mockResolvedValue({ success: true })
+  const discard = vi.spyOn(api.chat, 'discardConversation').mockResolvedValue()
+  vi.spyOn(api.chat, 'discardStagedAttachments').mockResolvedValue({ success: true })
+  const store = useChatStore()
+  await flushPromises()
+
+  store.setIncognito(true)
+  await store.createConversation()
+  const revision = store.conversationListRevision
+  await store.saveActiveConversation()
+  expect(save).toHaveBeenCalledWith('incognito')
+  expect(store.activeIsTemporary).toBe(false)
+  expect(store.conversationListRevision).toBe(revision + 1)
+
+  await store.startNewChat()
+  expect(discard).not.toHaveBeenCalled()
 })

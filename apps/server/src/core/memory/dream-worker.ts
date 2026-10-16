@@ -174,7 +174,7 @@ async function executeReview(run: DreamRun, conversation: Conversation, folders:
         controller.signal.throwIfAborted()
         const config = getDreamConfig()
         if (!config.providerId || config.windowId !== run.window_id) throw new Error('Dream Mode is not configured or its eligibility window changed')
-        const current = getDb().prepare('SELECT id, agent_id, execution_config_json, project_id FROM conversations WHERE id = ?').get(conversation.id) as Conversation | undefined
+        const current = getDb().prepare('SELECT id, agent_id, execution_config_json, project_id FROM conversations WHERE id = ? AND temporary = 0').get(conversation.id) as Conversation | undefined
         if (!current || !isDreamEligibleConversation(current) || isActive(conversation.id) || latestSequence(conversation.id) !== input.snapshotSequence) throw new Error('Conversation changed or is no longer eligible during Dream review')
         const allowed = resolveDreamCategories(current)
         if (!folders.every(folder => allowed.some(candidate => candidate.id === folder.id))) throw new Error('Conversation memory scope changed')
@@ -267,7 +267,7 @@ async function sweep(): Promise<void> {
     if (stopped || !config.providerId) return
     const db = getDb()
     const conversations = db.prepare(`SELECT c.id, c.agent_id, c.execution_config_json, c.project_id FROM conversations c
-        JOIN messages m ON m.conversation_id = c.id LEFT JOIN dream_message_events e ON e.message_id = m.id WHERE c.origin IN ('chat', 'channel')
+        JOIN messages m ON m.conversation_id = c.id LEFT JOIN dream_message_events e ON e.message_id = m.id WHERE c.origin IN ('chat', 'channel') AND c.temporary = 0
         GROUP BY c.id HAVING MAX(m.created_at) <= ? AND MAX(e.sequence) > ? ORDER BY MIN(CASE WHEN e.sequence > ? THEN m.created_at END), c.id`).all(Date.now() - DREAM_IDLE_MS, config.startSequence, config.startSequence) as Conversation[]
     for (const conversation of conversations) {
         if (generation !== sweepGeneration || stopped || !getDreamConfig().providerId || getDreamConfig().windowId !== config.windowId) return

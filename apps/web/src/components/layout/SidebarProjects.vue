@@ -241,6 +241,7 @@ watch(
   [
     () => chatStore.activeProjectId,
     () => chatStore.activeConversationId,
+    () => chatStore.conversationListRevision,
   ],
   refreshChats,
 )
