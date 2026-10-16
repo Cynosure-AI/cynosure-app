@@ -14,8 +14,9 @@ import {
   readFileAttachmentText,
   type FileAttachmentArtifact,
 } from '../artifacts/file-artifacts.js'
-import { deleteConversationAttachmentChunks, indexConversationAttachment, persistMessageFileAttachments, reuseConversationAttachment } from '../artifacts/attachment-rag.js'
-import { releaseStagedChatAttachments, takeStagedChatAttachments } from '../artifacts/staged-attachments.js'
+import { collectOrphanedAttachmentAssets, indexConversationAttachment, persistMessageFileAttachments, reuseConversationAttachment } from '../artifacts/attachment-rag.js'
+import { releaseAttachmentAsset } from '../artifacts/attachment-asset-references.js'
+import { commitStagedChatAttachments, takeStagedChatAttachments } from '../artifacts/staged-attachments.js'
 import type {
   ChatQueueRequest,
   ChatQueueStateDto,
@@ -129,17 +130,24 @@ async function stageRequest(conversationId: string, request: ChatQueueRequest): 
   const audio = request.audioDataUrls?.length
     ? (await materializeAudioArtifacts(request.audioDataUrls, conversationId)).map(item => item.url)
     : []
-  const files = request.files?.length
-    ? [
-        ...takeStagedChatAttachments(conversationId, request.files.flatMap(file => file.stagedId ? [file.stagedId] : [])),
-        ...(await Promise.all(request.files.flatMap(file => file.existingAttachmentId ? [reuseConversationAttachment(conversationId, file.existingAttachmentId)] : [])))
-          .filter((file): file is NonNullable<typeof file> => Boolean(file)),
-        ...await materializeFileAttachments(request.files.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string').map(file => ({ name: file.name, content: file.content! })), conversationId),
-      ]
-    : []
-  for (const file of files) if (file.chunkCount === undefined) file.chunkCount = await indexConversationAttachment(conversationId, file)
-  await releaseStagedChatAttachments(conversationId, request.files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || [], false)
-  return { images, audio, files }
+  const files: FileAttachmentArtifact[] = []
+  try {
+    if (request.files?.length) {
+      files.push(...takeStagedChatAttachments(conversationId, request.files.flatMap(file => file.stagedId ? [file.stagedId] : [])))
+      files.push(...(await Promise.all(request.files.flatMap(file => file.existingAttachmentId ? [reuseConversationAttachment(conversationId, file.existingAttachmentId)] : [])))
+        .filter((file): file is NonNullable<typeof file> => Boolean(file)))
+      files.push(...await materializeFileAttachments(request.files.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string').map(file => ({ name: file.name, content: file.content! })), conversationId))
+    }
+    for (const file of files) if (file.chunkCount === undefined) file.chunkCount = await indexConversationAttachment(conversationId, file)
+    return { images, audio, files }
+  } catch (error) {
+    for (const file of files) releaseAttachmentAsset(file)
+    throw error
+  }
+}
+
+function commitQueueAttachments(conversationId: string, request: ChatQueueRequest): void {
+  commitStagedChatAttachments(conversationId, request.files?.flatMap(file => file.stagedId ? [file.stagedId] : []) || [])
 }
 
 export async function enqueueChatMessage(conversationId: string, request: ChatQueueRequest): Promise<QueuedChatMessageDto> {
@@ -150,19 +158,24 @@ export async function enqueueChatMessage(conversationId: string, request: ChatQu
   const active = getChatExecutionIdsByConversation(conversationId).length > 0
   const alreadyPaused = rows(conversationId).some(row => row.status === 'paused')
   const status = request.delivery === 'steer' || (active && !alreadyPaused) ? 'pending' : 'paused'
-  db.prepare(`
-    INSERT INTO queued_chat_messages (
-      id, conversation_id, content, delivery, status, position, run_json,
-      image_urls_json, audio_urls_json, file_artifacts_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id, conversationId, request.content, request.delivery, status, nextPosition(conversationId),
-    JSON.stringify(request.run || {}),
-    staged.images.length ? JSON.stringify(staged.images) : null,
-    staged.audio.length ? JSON.stringify(staged.audio) : null,
-    staged.files.length ? JSON.stringify(staged.files) : null,
-    now, now,
-  )
+  try {
+    db.prepare(`
+      INSERT INTO queued_chat_messages (
+        id, conversation_id, content, delivery, status, position, run_json,
+        image_urls_json, audio_urls_json, file_artifacts_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, conversationId, request.content, request.delivery, status, nextPosition(conversationId),
+      JSON.stringify(request.run || {}),
+      staged.images.length ? JSON.stringify(staged.images) : null,
+      staged.audio.length ? JSON.stringify(staged.audio) : null,
+      staged.files.length ? JSON.stringify(staged.files) : null,
+      now, now,
+    )
+  } finally {
+    for (const file of staged.files) releaseAttachmentAsset(file)
+  }
+  commitQueueAttachments(conversationId, request)
   const dto = rowToDto(db.prepare('SELECT * FROM queued_chat_messages WHERE id = ?').get(id) as QueueRow)
   notify(conversationId)
   if (request.delivery === 'steer') {
@@ -189,17 +202,22 @@ export async function replaceQueuedChatMessage(
     files: [...rowFiles(existing), ...additions.files],
   }
   const now = Date.now()
-  getDb().prepare(`
-    UPDATE queued_chat_messages SET content = ?, delivery = ?, run_json = ?, image_urls_json = ?,
-      audio_urls_json = ?, file_artifacts_json = ?, updated_at = ?
-    WHERE id = ? AND conversation_id = ?
-  `).run(
-    request.content, request.delivery, JSON.stringify(request.run || {}),
-    staged.images.length ? JSON.stringify(staged.images) : null,
-    staged.audio.length ? JSON.stringify(staged.audio) : null,
-    staged.files.length ? JSON.stringify(staged.files) : null,
-    now, id, conversationId,
-  )
+  try {
+    getDb().prepare(`
+      UPDATE queued_chat_messages SET content = ?, delivery = ?, run_json = ?, image_urls_json = ?,
+        audio_urls_json = ?, file_artifacts_json = ?, updated_at = ?
+      WHERE id = ? AND conversation_id = ?
+    `).run(
+      request.content, request.delivery, JSON.stringify(request.run || {}),
+      staged.images.length ? JSON.stringify(staged.images) : null,
+      staged.audio.length ? JSON.stringify(staged.audio) : null,
+      staged.files.length ? JSON.stringify(staged.files) : null,
+      now, id, conversationId,
+    )
+  } finally {
+    for (const file of additions.files) releaseAttachmentAsset(file)
+  }
+  commitQueueAttachments(conversationId, request)
   notify(conversationId)
   return rowToDto(getDb().prepare('SELECT * FROM queued_chat_messages WHERE id = ?').get(id) as QueueRow)
 }
@@ -212,13 +230,11 @@ function cleanupRowArtifacts(row: QueueRow): void {
   ]
   const paths = [
     ...urls.map(extractFilePathFromFileUrl).filter((path): path is string => Boolean(path)),
-    ...files.filter(file => !file.assetId).flatMap(file => [file.originalPath, file.textPath]),
   ]
   for (const path of paths) {
     try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
   }
-  const ownedAssetIds = files.filter(file => !file.assetId).map(file => file.id)
-  if (ownedAssetIds.length) void deleteConversationAttachmentChunks(row.conversation_id, ownedAssetIds)
+  if (files.length) void collectOrphanedAttachmentAssets(files.map(file => file.assetId || file.id))
 }
 
 export function deleteQueuedChatMessage(conversationId: string, id: string): boolean {
@@ -226,8 +242,8 @@ export function deleteQueuedChatMessage(conversationId: string, id: string): boo
     'SELECT * FROM queued_chat_messages WHERE id = ? AND conversation_id = ?'
   ).get(id, conversationId) as QueueRow | undefined
   if (!row) return false
-  cleanupRowArtifacts(row)
   getDb().prepare('DELETE FROM queued_chat_messages WHERE id = ?').run(id)
+  cleanupRowArtifacts(row)
   notify(conversationId)
   return true
 }
@@ -256,7 +272,6 @@ export function deleteQueuedChatAttachment(conversationId: string, id: string, a
     if (file) removed = { ...row, image_urls_json: null, audio_urls_json: null, file_artifacts_json: JSON.stringify([file]) }
   }
   if (!removed) return false
-  cleanupRowArtifacts(removed)
   db.prepare(`
     UPDATE queued_chat_messages SET image_urls_json = ?, audio_urls_json = ?, file_artifacts_json = ?, updated_at = ?
     WHERE id = ? AND conversation_id = ?
@@ -266,6 +281,7 @@ export function deleteQueuedChatAttachment(conversationId: string, id: string, a
     files.length ? JSON.stringify(files) : null,
     Date.now(), id, conversationId,
   )
+  cleanupRowArtifacts(removed)
   notify(conversationId)
   return true
 }

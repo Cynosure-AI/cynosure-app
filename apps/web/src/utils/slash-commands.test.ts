@@ -1,0 +1,88 @@
+import { describe, expect, test, vi } from 'vitest'
+import { findSlashCommand, parseSlashInput, rankSlashArgs, slashName, slashSuggestions, type SlashCommand } from './slash-commands'
+
+const commands: SlashCommand[] = [
+  { name: 'new', aliases: ['clear'], description: 'Start a new chat', icon: 'x', group: 'Chat', run: vi.fn() },
+  {
+    name: 'think',
+    aliases: ['reasoning'],
+    description: 'Set the reasoning level',
+    icon: 'x',
+    group: 'Settings',
+    hint: 'level',
+    args: query => rankSlashArgs([
+      { key: 'low', label: 'Low', value: 'low', run: vi.fn() },
+      { key: 'high', label: 'High', value: 'high', run: vi.fn() },
+    ], query),
+  },
+  { name: 'auto-memory', description: 'Retrieve relevant memories automatically', icon: 'x', group: 'Settings', run: vi.fn() },
+  { name: 'memory', description: 'Turn a memory folder on or off', icon: 'x', group: 'Settings', args: () => [] },
+]
+
+describe('parseSlashInput', () => {
+  test('reads the command name and argument', () => {
+    expect(parseSlashInput('/think high')).toEqual({ name: 'think', args: 'high', hasArgs: true })
+    expect(parseSlashInput('/Think')).toEqual({ name: 'think', args: '', hasArgs: false })
+    expect(parseSlashInput('/')).toEqual({ name: '', args: '', hasArgs: false })
+  })
+
+  test('ignores text that is not a command', () => {
+    expect(parseSlashInput('hello /think')).toBeNull()
+    expect(parseSlashInput('/etc/hosts is broken')).toBeNull()
+    expect(parseSlashInput('/think\nmore')).toBeNull()
+  })
+})
+
+describe('slashSuggestions', () => {
+  test('lists every command for a bare slash, in definition order', () => {
+    expect(slashSuggestions(commands, '/').map(option => option.label)).toEqual(['/new', '/think', '/auto-memory', '/memory'])
+  })
+
+  test('ranks an exact name above partial matches', () => {
+    expect(slashSuggestions(commands, '/memory').map(option => option.label)).toEqual(['/memory', '/auto-memory'])
+  })
+
+  test('matches aliases', () => {
+    expect(slashSuggestions(commands, '/reason')[0].label).toBe('/think')
+    expect(findSlashCommand(commands, 'clear')?.name).toBe('new')
+  })
+
+  test('commands with arguments complete instead of running', () => {
+    const [think] = slashSuggestions(commands, '/think')
+    expect(think.run).toBeUndefined()
+    expect(think.complete).toBe('/think ')
+    expect(slashSuggestions(commands, '/new')[0].complete).toBe('/new')
+  })
+
+  test('shows argument options after a space, with their completion text', () => {
+    const options = slashSuggestions(commands, '/think ')
+    expect(options.map(option => option.label)).toEqual(['Low', 'High'])
+    expect(options[1].complete).toBe('/think high')
+    expect(options[1].key).toBe('think:high')
+    expect(slashSuggestions(commands, '/think  HI ').map(option => option.label)).toEqual(['High'])
+  })
+
+  test('an unavailable command offers only itself, even with an argument', () => {
+    const blocked: SlashCommand[] = [{ ...commands[1], unavailable: 'Not now.' }]
+    for (const text of ['/think', '/think high']) {
+      const options = slashSuggestions(blocked, text)
+      expect(options).toHaveLength(1)
+      expect(options[0]).toMatchObject({ label: '/think', unavailable: 'Not now.', complete: '/think' })
+    }
+  })
+
+  test('has no suggestions for unknown commands or commands without arguments', () => {
+    expect(slashSuggestions(commands, '/nothing')).toEqual([])
+    expect(slashSuggestions(commands, '/nothing here')).toEqual([])
+    expect(slashSuggestions(commands, '/new chat')).toEqual([])
+    expect(slashSuggestions(commands, 'plain text')).toEqual([])
+  })
+})
+
+describe('slashName', () => {
+  test('turns a label into a command name', () => {
+    expect(slashName('GitHub')).toBe('github')
+    expect(slashName('  Google Drive (beta) ')).toBe('google-drive-beta')
+    expect(slashName('???')).toBe('')
+  })
+})

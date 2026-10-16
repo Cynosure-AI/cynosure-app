@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
+import { customAlphabet } from 'nanoid'
 import { closeDb, getDb } from '../../db/database.js'
 import {
     BriefConflictError,
@@ -29,6 +30,13 @@ import { makeShellTool } from '../tools/builtin/shell-tool.js'
 import { isSystemAutoApprovedTool } from '../tools/tool-policy.js'
 
 vi.mock('../memory/memory-folder-watcher.js', () => ({ watchMemoryFolder: vi.fn(), stopWatchingMemoryFolder: vi.fn() }))
+vi.mock('nanoid', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('nanoid')>()
+    return { ...actual, customAlphabet: vi.fn((...args: Parameters<typeof actual.customAlphabet>) => vi.fn(actual.customAlphabet(...args))) }
+})
+
+// The store creates this generator once, when its module loads.
+const taskIdGenerator = vi.mocked(customAlphabet).mock.results[0].value
 
 let sandbox: string
 let previousDataDir: string | undefined
@@ -116,6 +124,36 @@ describe('project store', () => {
         expect(() => updateProjectTask(project.id, task.id, { status: 'later' as never })).toThrow(/Status/)
         expect(() => createProjectTask(project.id, { title: '  ' })).toThrow(/title/)
     })
+
+    test('new task IDs are short and retry collisions across projects', () => {
+        const firstProject = createProject({ name: 'First', createMemoryFolder: false })
+        const secondProject = createProject({ name: 'Second', createMemoryFolder: false })
+        const first = createProjectTask(firstProject.id, { title: 'First task' })
+        expect(first.id).toMatch(/^[a-z0-9]{6}$/)
+
+        taskIdGenerator.mockReturnValueOnce(first.id).mockReturnValueOnce('abc123')
+        const second = createProjectTask(secondProject.id, { title: 'Second task' })
+        expect(second.id).toBe('abc123')
+        expect(listProjectTasks(firstProject.id)[0].id).toBe(first.id)
+        expect(listProjectTasks(secondProject.id)[0].id).toBe(second.id)
+    })
+
+    test('existing long task IDs still work with project tools and work logs', async () => {
+        const project = createProject({ name: 'Legacy', createMemoryFolder: false })
+        const task = createProjectTask(project.id, { title: 'Existing task' })
+        const legacyId = 'dJ5smhkyyUWiThk7KDXvc'
+        getDb().prepare('UPDATE project_tasks SET id = ? WHERE id = ?').run(legacyId, task.id)
+        insertConversation('legacy-worker', project.id)
+        const plan = createPlanningRun('legacy-worker', 'Finish existing task')
+        const tools = Object.fromEntries(makeProjectTools({ projectId: project.id, conversationId: 'legacy-worker' }).map((tool) => [tool.name, tool]))
+
+        const listed = JSON.parse((await tools.project_task_list.execute({})).output as string)
+        expect(listed[0].id).toBe(legacyId)
+        expect((await tools.project_task_update.execute({ taskId: legacyId, status: 'in_progress' })).success).toBe(true)
+        expect((await tools.project_task_update.execute({ taskId: legacyId, status: 'done' })).success).toBe(true)
+        expect(listProjectTasks(project.id)[0]).toMatchObject({ id: legacyId, status: 'done' })
+        expect(listProjectTaskPlans(legacyId)[0].runId).toBe(plan.runId)
+    })
 })
 
 describe('project execution context', () => {
@@ -168,7 +206,13 @@ describe('project execution context', () => {
         expect(getProject(project.id)?.briefUpdatedAt).toBeTypeOf('number')
 
         const created = JSON.parse((await tools.project_task_create.execute({ title: 'Follow up', notes: 'Call the vendor' })).output as string)
-        expect(listProjectTasks(project.id)[0]).toMatchObject({ title: 'Follow up', createdBy: 'agent', conversationId: 'conv' })
+        // The creating chat is not the one working on the task until it starts it.
+        expect(listProjectTasks(project.id)[0]).toMatchObject({ title: 'Follow up', createdBy: 'agent', conversationId: null })
+        const started = JSON.parse((await tools.project_task_create.execute({ title: 'Start now', status: 'in_progress' })).output as string)
+        expect(listProjectTasks(project.id).find((task) => task.id === started.id)?.conversationId).toBe('conv')
+        expect((await tools.project_task_update.execute({ taskId: started.id, status: 'done' })).success).toBe(true)
+        expect((await tools.project_task_update.execute({ taskId: created.id, status: 'in_progress' })).success).toBe(true)
+        expect(listProjectTasks(project.id).find((task) => task.id === created.id)?.conversationId).toBe('conv')
         expect((await tools.project_task_update.execute({ taskId: created.id, status: 'done' })).success).toBe(true)
         expect(JSON.parse((await tools.project_task_list.execute({})).output as string)).toEqual([])
         expect((await tools.project_task_update.execute({ taskId: 'missing', status: 'done' })).success).toBe(false)

@@ -21,6 +21,7 @@ import type { SubAgentAssignment } from '../agents/agent-store.js'
 import { isCyno, type ExecutionPreset } from './execution-preset.js'
 import type { ChatMessage, RegistryAwareToolDefinition } from '../gateway/providers/base.provider.js'
 import { getUserSettings } from '../user-settings.js'
+import { buildUserContextPrompt, userMemoryFilingHint } from './pre-execution/user-context.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { MEMORY_WRITE_TOOL_NAMES } from '../tools/builtin/memory-tools.js'
 import { mergeProjectMemoryScope, resolveProjectExecutionContext } from '../projects/project-context.js'
@@ -91,6 +92,8 @@ export interface PrepareExecutionInput {
     scheduleSelectedToolKeys?: string[]
     thinkingEnabled?: boolean
     reasoningEffort?: ReasoningEffort
+    /** Include the user's standing instructions in the system prompt (default: true). */
+    includeUserInstructions?: boolean
 }
 
 export interface ContextBundle {
@@ -157,6 +160,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
 
     const gateway = getGateway()
     const toolRegistry = getToolRegistry()
+    const userSettings = getUserSettings()
 
     const providerModel = resolveProviderAndModel({
         gateway,
@@ -210,7 +214,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         userQuery: input.userQuery,
         recentMessages: input.recentMessages,
         enabledModes: autoModes,
-        userName: getUserSettings().name,
+        userName: userSettings.name,
         toolsets: buildToolsetCandidates(
             routingCandidateTools,
             toolRegistry.getNamespaceMetadataForTools(routingCandidateTools),
@@ -257,11 +261,11 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         basePrompt: preset.systemPrompt,
         overridePrompt: systemPromptOverride,
         suffix: toolLayer.tools.some(tool => MEMORY_WRITE_TOOL_NAMES.includes((tool.originalName ?? tool.name) as never))
-            ? [systemPromptSuffix, MEMORY_STEWARDSHIP_PROMPT].filter(Boolean).join('\n')
+            ? [systemPromptSuffix, MEMORY_STEWARDSHIP_PROMPT, userMemoryFilingHint(userSettings.name)].filter(Boolean).join('\n')
             : systemPromptSuffix,
         subAgents: toolLayer.effectiveSubAgents,
         smartTagContext: {
-            userName: getUserSettings().name,
+            userName: userSettings.name,
             agentId: preset.id,
             agentName: preset.name,
             agentInternalName: preset.internalName,
@@ -270,6 +274,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
             conversationId,
             selectedMemFolderNames: resolveSelectedMemoryFolderNames(preset.id, memoryFolderOverrides),
         },
+        userContext: buildUserContextPrompt(userSettings, { includeInstructions: input.includeUserInstructions !== false }),
     })
 
     const systemMessages = [

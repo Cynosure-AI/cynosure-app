@@ -549,6 +549,21 @@ export const useChatStore = defineStore('chat', () => {
     resetStreaming()
   }
 
+  /**
+   * Summarise the active chat now. The summary card arrives through the usual
+   * compact events; the context ring is cleared until the next reply measures it.
+   */
+  async function compactConversation(): Promise<{ compactedMessageCount: number; model: string }> {
+    const conversationId = activeConversationId.value
+    if (!conversationId) throw new Error('There is nothing to compact yet.')
+    const result = await api.chat.compact(conversationId, {
+      providerId: resolvedModelProvider.value?.providerId || undefined,
+      model: resolvedModelProvider.value?.model || undefined,
+    })
+    if (activeConversationId.value === conversationId) streaming.lastUsage.value = null
+    return result
+  }
+
   /** Move the active chat into a project (or out of one); a new chat applies it on creation. */
   async function setConversationProject(projectId: string | null): Promise<void> {
     const conversationId = activeConversationId.value
@@ -558,6 +573,11 @@ export const useChatStore = defineStore('chat', () => {
       if (conversation) conversation.projectId = projectId
     }
     activeProjectId.value = projectId
+  }
+
+  function resetToDefaults(): void {
+    agentConfig.resetToDefaults()
+    if (!activeConversationId.value) activeProjectId.value = null
   }
 
   async function deleteAllConversations(allConversations = false): Promise<void> {
@@ -862,7 +882,7 @@ export const useChatStore = defineStore('chat', () => {
     markOverridesModified: agentConfig.markOverridesModified,
     setSelectedToolNames: agentConfig.setSelectedToolNames,
     resetAgentOverrides: agentConfig.resetAgentOverrides,
-    resetToDefaults: agentConfig.resetToDefaults,
+    resetToDefaults,
     applyOverridesToAgent: agentConfig.applyOverridesToAgent,
     setActiveAgent,
     setSessionModel: agentConfig.setSessionModel,
@@ -880,6 +900,7 @@ export const useChatStore = defineStore('chat', () => {
     pinConversation,
     renameConversation,
     startNewChat,
+    compactConversation,
     setConversationProject,
     handlePostAction,
     handleQuickResponses,

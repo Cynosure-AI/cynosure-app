@@ -8,6 +8,8 @@ export interface ResolveSystemPromptInput {
     suffix?: string
     subAgents?: SubAgentAssignment[]
     smartTagContext?: PromptSmartTagContext
+    /** User profile section, appended after smart tags resolve so user text is never rewritten. */
+    userContext?: string
 }
 
 export async function resolveSystemPromptMessages(input: ResolveSystemPromptInput): Promise<ChatMessage[]> {
@@ -17,6 +19,7 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
         suffix,
         subAgents,
         smartTagContext,
+        userContext,
     } = input
 
     let effectiveSystemPrompt = overridePrompt ?? basePrompt ?? ''
@@ -31,6 +34,10 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
     }
 
     effectiveSystemPrompt = resolvePromptSmartTags(effectiveSystemPrompt, smartTagContext ?? {})
+
+    if (userContext) {
+        effectiveSystemPrompt = appendPrompt(effectiveSystemPrompt, userContext, '\n\n')
+    }
 
     return effectiveSystemPrompt ? [{ role: 'system', content: effectiveSystemPrompt }] : []
 }

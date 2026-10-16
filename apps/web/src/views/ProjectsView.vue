@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
@@ -9,6 +9,7 @@ import ProjectIcon from '../components/project/ProjectIcon.vue'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { DEFAULT_PROJECT_ICON, PROJECT_COLORS, formatRelativeTime } from '../utils/project-format'
 import { useCynoStore } from '../stores/cyno.store'
+import type { ProjectDto } from '@shared/types'
 
 const cyno = useCynoStore()
 
@@ -22,6 +23,9 @@ const createOpen = ref(false)
 const creating = ref(false)
 const createError = ref('')
 const draft = ref<ProjectDraft>(emptyDraft())
+const openMenuId = ref<string | null>(null)
+const pendingDelete = ref<ProjectDto | null>(null)
+const actionError = ref('')
 
 const visibleProjects = computed(() => projectsStore.projects.filter((project) => project.archived === showArchived.value))
 const archivedCount = computed(() => projectsStore.projects.filter((project) => project.archived).length)
@@ -78,13 +82,62 @@ function agentName(agentId: string | null): string {
   return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : cyno.name
 }
 
+function toggleMenu(projectId: string): void {
+  openMenuId.value = openMenuId.value === projectId ? null : projectId
+}
+
+function closeMenu(): void {
+  openMenuId.value = null
+}
+
+function closeMenuOnEscape(event: KeyboardEvent): void {
+  if (event.key === 'Escape') closeMenu()
+}
+
+function editProject(project: ProjectDto): void {
+  closeMenu()
+  void router.push({ name: 'project-detail', params: { id: project.id }, query: { tab: 'settings' } })
+}
+
+async function runAction(action: () => Promise<unknown>): Promise<void> {
+  actionError.value = ''
+  try {
+    await action()
+  } catch (cause) {
+    actionError.value = cause instanceof Error ? cause.message : String(cause)
+  }
+}
+
+function toggleArchived(project: ProjectDto): void {
+  closeMenu()
+  void runAction(() => projectsStore.update(project.id, { archived: !project.archived }))
+}
+
+function requestDelete(project: ProjectDto): void {
+  closeMenu()
+  pendingDelete.value = project
+}
+
+async function confirmDelete(): Promise<void> {
+  const project = pendingDelete.value
+  pendingDelete.value = null
+  if (project) await runAction(() => projectsStore.remove(project.id))
+}
+
 watch(() => route.query.new, (value) => {
   if (value) openCreate()
 }, { immediate: true })
 
 onMounted(() => {
+  document.addEventListener('click', closeMenu)
+  document.addEventListener('keydown', closeMenuOnEscape)
   void projectsStore.load()
   if (!agentDefs.loaded) void agentDefs.load()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeMenu)
+  document.removeEventListener('keydown', closeMenuOnEscape)
 })
 </script>
 
@@ -153,84 +206,178 @@ onMounted(() => {
         </p>
       </div>
 
+      <p
+        v-if="actionError"
+        role="alert"
+        class="mb-4 text-sm text-status-danger"
+      >
+        {{ actionError }}
+      </p>
+
       <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <RouterLink
+        <div
           v-for="project in visibleProjects"
           :key="project.id"
-          :to="{ name: 'project-detail', params: { id: project.id } }"
-          class="group relative flex flex-col overflow-hidden rounded-xl border border-theme-700 bg-theme-800/70 p-4 transition-colors hover:border-theme-600 hover:bg-theme-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          class="group relative"
         >
-          <span
-            class="absolute inset-x-0 top-0 h-1"
-            :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
-            aria-hidden="true"
-          />
-          <div class="flex items-center gap-3">
-            <ProjectIcon
-              :project="project"
-              tile
-              class="h-9 w-9"
+          <RouterLink
+            :to="{ name: 'project-detail', params: { id: project.id } }"
+            class="relative flex h-full flex-col overflow-hidden rounded-xl border border-theme-700 bg-theme-800/70 p-4 transition-colors hover:border-theme-600 hover:bg-theme-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          >
+            <span
+              class="absolute inset-x-0 top-0 h-1"
+              :style="{ backgroundColor: project.color || 'var(--color-accent-500)' }"
+              aria-hidden="true"
             />
-            <h2 class="min-w-0 flex-1 truncate text-base font-semibold text-theme-100">
-              {{ project.name }}
-            </h2>
-            <Icon
-              v-if="project.rootPath"
-              icon="lucide:folder-code"
-              class="h-4 w-4 shrink-0 text-ink-muted"
-              :title="project.rootPath"
-            />
-          </div>
-          <p class="mt-1 line-clamp-2 min-h-10 text-sm text-ink-muted">
-            {{ project.description || project.brief || 'No description' }}
-          </p>
-          <dl class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
-            <div class="flex items-center gap-1">
-              <dt class="sr-only">
-                Chats
-              </dt>
-              <Icon
-                icon="lucide:message-square"
-                class="h-3.5 w-3.5"
+            <div class="flex items-center gap-3">
+              <ProjectIcon
+                :project="project"
+                tile
+                class="h-9 w-9"
               />
-              <dd>{{ project.conversationCount ?? 0 }}</dd>
+              <h2 class="min-w-0 flex-1 truncate pr-8 text-base font-semibold text-theme-100">
+                {{ project.name }}
+              </h2>
             </div>
-            <div class="flex items-center gap-1">
-              <dt class="sr-only">
-                Open tasks
-              </dt>
-              <Icon
-                icon="lucide:square-kanban"
-                class="h-3.5 w-3.5"
-              />
-              <dd>{{ project.openTaskCount ?? 0 }} open</dd>
-            </div>
-            <div class="flex items-center gap-1">
-              <dt class="sr-only">
-                Default agent
-              </dt>
-              <Icon
-                icon="lucide:bot"
-                class="h-3.5 w-3.5"
-              />
-              <dd class="max-w-28 truncate">
-                {{ agentName(project.defaultAgentId) }}
-              </dd>
-            </div>
-            <div
-              v-if="project.lastActivityAt"
-              class="ml-auto"
+            <p class="mt-1 line-clamp-2 min-h-10 text-sm text-ink-muted">
+              {{ project.description || project.brief || 'No description' }}
+            </p>
+            <dl class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+              <div class="flex items-center gap-1">
+                <dt class="sr-only">
+                  Chats
+                </dt>
+                <Icon
+                  icon="lucide:message-square"
+                  class="h-3.5 w-3.5"
+                />
+                <dd>{{ project.conversationCount ?? 0 }}</dd>
+              </div>
+              <div class="flex items-center gap-1">
+                <dt class="sr-only">
+                  Open tasks
+                </dt>
+                <Icon
+                  icon="lucide:square-kanban"
+                  class="h-3.5 w-3.5"
+                />
+                <dd>{{ project.openTaskCount ?? 0 }} open</dd>
+              </div>
+              <div class="flex items-center gap-1">
+                <dt class="sr-only">
+                  Default agent
+                </dt>
+                <Icon
+                  icon="lucide:bot"
+                  class="h-3.5 w-3.5"
+                />
+                <dd class="max-w-28 truncate">
+                  {{ agentName(project.defaultAgentId) }}
+                </dd>
+              </div>
+              <div
+                v-if="project.lastActivityAt"
+                class="ml-auto"
+              >
+                <dt class="sr-only">
+                  Last activity
+                </dt>
+                <dd>{{ formatRelativeTime(project.lastActivityAt) }}</dd>
+              </div>
+            </dl>
+          </RouterLink>
+
+          <!-- Quick actions; a sibling of the card link so its buttons are not nested in it -->
+          <div class="absolute right-3 top-5">
+            <button
+              type="button"
+              class="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted opacity-0 transition hover:bg-theme-700 hover:text-theme-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 group-hover:opacity-100 max-md:opacity-100"
+              :class="{ 'bg-theme-700 text-theme-100 opacity-100': openMenuId === project.id }"
+              :aria-label="`${project.name} options`"
+              aria-haspopup="menu"
+              :aria-expanded="openMenuId === project.id"
+              @click.stop="toggleMenu(project.id)"
             >
-              <dt class="sr-only">
-                Last activity
-              </dt>
-              <dd>{{ formatRelativeTime(project.lastActivityAt) }}</dd>
+              <Icon
+                icon="lucide:ellipsis-vertical"
+                class="h-4 w-4"
+              />
+            </button>
+            <div
+              v-if="openMenuId === project.id"
+              role="menu"
+              class="absolute right-0 top-8 z-30 w-40 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+              @click.stop
+            >
+              <button
+                type="button"
+                role="menuitem"
+                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                @click="editProject(project)"
+              >
+                <Icon
+                  icon="lucide:pencil"
+                  class="h-3.5 w-3.5"
+                /> Edit
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                @click="toggleArchived(project)"
+              >
+                <Icon
+                  :icon="project.archived ? 'lucide:archive-restore' : 'lucide:archive'"
+                  class="h-3.5 w-3.5"
+                /> {{ project.archived ? 'Restore' : 'Archive' }}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
+                @click="requestDelete(project)"
+              >
+                <Icon
+                  icon="lucide:trash-2"
+                  class="h-3.5 w-3.5"
+                /> Delete
+              </button>
             </div>
-          </dl>
-        </RouterLink>
+          </div>
+        </div>
       </div>
     </main>
 
+
+    <ModalDialog
+      :show="Boolean(pendingDelete)"
+      :title="`Delete ${pendingDelete?.name ?? 'project'}?`"
+      icon="lucide:trash-2"
+      icon-color="red"
+      @close="pendingDelete = null"
+    >
+      <p class="text-sm text-theme-300">
+        The project and its {{ pendingDelete?.openTaskCount ?? 0 }} open tasks are removed. Its {{ pendingDelete?.conversationCount ?? 0 }} chats stay in your chat list, and the memory folder stays in Memory.
+      </p>
+      <template #actions>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-lg px-3 py-2 text-sm text-theme-300 hover:bg-theme-800"
+            @click="pendingDelete = null"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-status-danger px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
+            @click="confirmDelete"
+          >
+            Delete project
+          </button>
+        </div>
+      </template>
+    </ModalDialog>
 
     <ModalDialog
       :show="createOpen"

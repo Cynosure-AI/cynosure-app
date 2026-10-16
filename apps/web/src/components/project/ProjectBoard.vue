@@ -5,6 +5,7 @@ import type { ProjectDto, ProjectTaskDto, ProjectTaskStatus } from '@shared/type
 import ModalDialog from '../shared/ModalDialog.vue'
 import AgentSelect from '../shared/AgentSelect.vue'
 import ProjectTaskWorkLog from './ProjectTaskWorkLog.vue'
+import ProjectTaskContextMenu, { type TaskContextMenu } from './ProjectTaskContextMenu.vue'
 import { api } from '../../api/client'
 import { useProjectsStore } from '../../stores/projects.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
@@ -29,6 +30,7 @@ const dropStatus = ref<ProjectTaskStatus | null>(null)
 const dropBeforeId = ref<string | null>(null)
 const showAllDone = ref(false)
 const editing = ref<(ProjectTaskDto & { assignee: string }) | null>(null)
+const contextMenu = ref<TaskContextMenu | null>(null)
 let progressRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let stopPlanningListener: (() => void) | null = null
 
@@ -70,6 +72,7 @@ function addTask(): void {
 }
 
 function onDragStart(task: ProjectTaskDto, event: DragEvent): void {
+  contextMenu.value = null
   draggingId.value = task.id
   event.dataTransfer?.setData('text/plain', task.id)
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
@@ -147,7 +150,27 @@ function deleteEditing(): void {
   const task = editing.value
   if (!task) return
   editing.value = null
+  deleteTask(task)
+}
+
+function deleteTask(task: ProjectTaskDto): void {
   void run(() => projectsStore.removeTask(props.project.id, task.id))
+}
+
+function assignTask(task: ProjectTaskDto, assigneeAgentId: string | null): void {
+  if (task.assigneeAgentId === assigneeAgentId) return
+  void run(() => projectsStore.updateTask(props.project.id, task.id, { assigneeAgentId }))
+}
+
+function openContextMenu(task: ProjectTaskDto, event: MouseEvent): void {
+  // The context-menu key reports no pointer position; open at the card instead.
+  const fromKeyboard = event.clientX === 0 && event.clientY === 0
+  const card = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  contextMenu.value = {
+    task,
+    x: fromKeyboard ? card.left + 12 : event.clientX,
+    y: fromKeyboard ? card.top + 12 : event.clientY,
+  }
 }
 
 function startTaskChat(task: ProjectTaskDto & { assignee?: string }): void {
@@ -162,6 +185,10 @@ function startTaskChat(task: ProjectTaskDto & { assignee?: string }): void {
 
 function agentName(agentId: string | null): string | null {
   return agentId ? (agentDefs.get(agentId)?.name ?? null) : null
+}
+
+function agentIconUrl(agentId: string | null): string | null {
+  return agentId ? (agentDefs.get(agentId)?.iconUrl || null) : null
 }
 
 /** Notes that open by repeating the title would only show it twice. */
@@ -290,116 +317,135 @@ onBeforeUnmount(() => {
           >
             {{ column.empty }}
           </li>
+
           <li
             v-for="task in column.tasks"
             :key="task.id"
             draggable="true"
-            class="group relative cursor-grab rounded-lg border border-theme-700 bg-theme-800 p-2.5 shadow-sm transition hover:border-theme-600 active:cursor-grabbing"
+            class="group relative flex cursor-grab rounded-lg border border-theme-700 bg-theme-800 shadow-sm transition hover:border-theme-600 active:cursor-grabbing"
             :class="{
               'opacity-40': draggingId === task.id,
               'before:absolute before:inset-x-0 before:-top-1.25 before:h-0.5 before:rounded-full before:bg-accent-500': showsDropMarker(column.status, task.id),
             }"
+            @contextmenu.prevent="openContextMenu(task, $event)"
             @dragstart="onDragStart(task, $event)"
             @dragend="clearDrag"
             @dragover.prevent.stop="onDragOver(column.status, task)"
             @drop.prevent.stop="onDrop(column.status, task)"
           >
-            <button
-              type="button"
-              class="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
-              @click="openEditor(task)"
-            >
-              <span
-                class="block text-sm text-theme-200"
-                :class="{ 'text-ink-muted line-through': task.status === 'done' }"
-              >{{ task.title }}</span>
-              <span
-                v-if="notesPreview(task)"
-                class="mt-1 line-clamp-2 text-xs [overflow-wrap:anywhere]"
-                :class="task.status === 'done' ? 'text-ink-faint' : 'text-ink-muted'"
-              >{{ notesPreview(task) }}</span>
-            </button>
-            <div
-              v-if="hasFooter(task)"
-              class="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-ink-muted"
-            >
-              <span
-                v-if="agentName(task.assigneeAgentId)"
-                class="inline-flex min-w-0 items-center gap-1"
-                :title="`Assigned to ${agentName(task.assigneeAgentId)}`"
+            <!-- Main task content -->
+            <div class="min-w-0 flex-1 p-2.5">
+              <button
+                type="button"
+                class="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                @click="openEditor(task)"
               >
-                <Icon
-                  icon="lucide:bot"
-                  class="h-3 w-3 shrink-0"
-                />
-                <span class="truncate">{{ agentName(task.assigneeAgentId) }}</span>
-              </span>
+                <span
+                  class="block text-sm text-theme-200"
+                  :class="{ 'text-ink-muted line-through': task.status === 'done' }"
+                >{{ task.title }}</span>
+                <span
+                  v-if="notesPreview(task)"
+                  class="mt-1 line-clamp-2 text-xs [overflow-wrap:anywhere]"
+                  :class="task.status === 'done' ? 'text-ink-faint' : 'text-ink-muted'"
+                >{{ notesPreview(task) }}</span>
+              </button>
+
+              <!-- Agent and progress metadata -->
+              <div
+                v-if="hasFooter(task) && (agentName(task.assigneeAgentId) || showsProgress(task))"
+                class="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-ink-muted"
+              >
+                <span
+                  v-if="agentName(task.assigneeAgentId)"
+                  class="inline-flex min-w-0 items-center gap-1"
+                  :title="`Assigned to ${agentName(task.assigneeAgentId)}`"
+                >
+                  <img
+                    v-if="agentIconUrl(task.assigneeAgentId)"
+                    :src="agentIconUrl(task.assigneeAgentId)!"
+                    :alt="`${agentName(task.assigneeAgentId)} icon`"
+                    class="h-3 w-3 shrink-0 rounded object-cover"
+                  >
+                  <Icon
+                    v-else
+                    icon="lucide:bot"
+                    class="h-3 w-3 shrink-0"
+                  />
+                  <span class="truncate">{{ agentName(task.assigneeAgentId) }}</span>
+                </span>
+
+                <span
+                  v-if="showsProgress(task)"
+                  class="inline-flex shrink-0 items-center gap-1.5 tabular-nums"
+                  :title="`${task.progress!.completed} of ${task.progress!.total} steps done in the latest run`"
+                >
+                  <span class="h-1 w-10 overflow-hidden rounded-full bg-theme-700">
+                    <span
+                      class="block h-full rounded-full transition-[width]"
+                      :class="progressTone(task)"
+                      :style="{ width: `${(task.progress!.completed / task.progress!.total) * 100}%` }"
+                    />
+                  </span>
+                  {{ task.progress!.completed }}/{{ task.progress!.total }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Right-side chat action bar: fixed 48px -->
+            <div
+              v-if="task.conversationId || task.status !== 'done'"
+              class="flex w-12 shrink-0 flex-col self-stretch rounded-r-lg border-l border-theme-700 bg-theme-900/40"
+            >
+              <!-- Open existing chat -->
               <RouterLink
                 v-if="task.conversationId"
                 :to="{ name: 'conversation', params: { conversationId: task.conversationId } }"
-                class="-mx-1 inline-flex shrink-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-theme-700 hover:text-theme-200"
-                :class="{ 'text-accent-fg': runState(task) === 'running', 'text-status-warning': runState(task) === 'awaiting' }"
-                :title="runState(task) === 'awaiting' ? 'The chat on this task is waiting for your approval' : 'Open the chat working on this task'"
+                class="inline-flex min-h-10 w-full flex-1 items-center justify-center rounded-tr-lg text-ink-secondary transition-colors hover:bg-theme-700 hover:text-theme-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
+                :class="{
+                  'text-accent-fg': runState(task) === 'running',
+                  'text-status-warning': runState(task) === 'awaiting',
+                }"
+                :aria-label="`Open chat for ${task.title}`"
+                :title="runState(task) === 'awaiting'
+                  ? 'The chat on this task is waiting for your approval'
+                  : 'Open the chat working on this task'"
               >
                 <span
                   v-if="runState(task) === 'running'"
-                  class="relative flex h-1.5 w-1.5"
+                  class="relative flex h-2 w-2"
                 >
                   <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-400 opacity-75" />
-                  <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-500" />
+                  <span class="relative inline-flex h-2 w-2 rounded-full bg-accent-500" />
                 </span>
                 <Icon
                   v-else
                   :icon="runState(task) === 'awaiting' ? 'lucide:hand' : 'lucide:message-square'"
-                  class="h-3 w-3"
+                  class="h-4 w-4"
                 />
-                {{ runState(task) === 'running' ? 'Working' : runState(task) === 'awaiting' ? 'Needs approval' : 'Chat' }}
               </RouterLink>
-              <span
-                v-if="showsProgress(task)"
-                class="inline-flex shrink-0 items-center gap-1.5 tabular-nums"
-                :title="`${task.progress!.completed} of ${task.progress!.total} steps done in the latest run`"
-              >
-                <span class="h-1 w-10 overflow-hidden rounded-full bg-theme-700">
-                  <span
-                    class="block h-full rounded-full transition-[width]"
-                    :class="progressTone(task)"
-                    :style="{ width: `${(task.progress!.completed / task.progress!.total) * 100}%` }"
-                  />
-                </span>
-                {{ task.progress!.completed }}/{{ task.progress!.total }}
-              </span>
-              <span
+
+              <!-- Start new chat -->
+              <button
                 v-if="task.status !== 'done'"
-                class="ml-auto flex shrink-0 gap-0.5 text-ink-faint transition-colors group-hover:text-ink-muted"
+                type="button"
+                class="inline-flex min-h-10 w-full flex-1 items-center justify-center rounded-br-lg text-accent-fg transition-colors hover:bg-accent-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
+                :class="{
+                  'border-t border-theme-700': task.conversationId,
+                  'rounded-tr-lg': !task.conversationId,
+                }"
+                :aria-label="`Start a chat for ${task.title}`"
+                title="Start a chat for this task"
+                @click="startTaskChat(task)"
               >
-                <button
-                  type="button"
-                  class="rounded p-1 hover:bg-theme-700 hover:text-theme-200"
-                  :aria-label="`Start a chat for ${task.title}`"
-                  title="Start a chat for this task"
-                  @click="startTaskChat(task)"
-                >
-                  <Icon
-                    icon="lucide:play"
-                    class="h-3 w-3"
-                  />
-                </button>
-                <button
-                  type="button"
-                  class="rounded p-1 hover:bg-theme-700 hover:text-theme-200"
-                  :aria-label="`Mark ${task.title} done`"
-                  title="Mark done"
-                  @click="moveTask(task, 'done')"
-                >
-                  <Icon
-                    icon="lucide:check"
-                    class="h-3 w-3"
-                  />
-                </button>
-              </span>
+                <Icon
+                  icon="lucide:play"
+                  class="h-4 w-4"
+                />
+              </button>
             </div>
           </li>
+
           <!-- Dropping below the last card puts the task at the end. -->
           <li
             aria-hidden="true"
@@ -429,6 +475,16 @@ onBeforeUnmount(() => {
         </button>
       </section>
     </div>
+
+    <ProjectTaskContextMenu
+      :menu="contextMenu"
+      :agents="agentDefs.agents"
+      @close="contextMenu = null"
+      @run="startTaskChat"
+      @assign="assignTask"
+      @done="moveTask($event, 'done')"
+      @delete="deleteTask"
+    />
 
     <ModalDialog
       :show="Boolean(editing)"

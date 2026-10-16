@@ -4,7 +4,6 @@ import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useAgentHealthStore } from '../../stores/agent-health.store'
-import { usePreferencesStore } from '../../stores/preferences.store'
 import { wsConnected } from '../../api/http'
 import MessageBubble from '../chat/MessageBubble.vue'
 import ToolExecutionCard from '../chat/ToolExecutionCard.vue'
@@ -40,7 +39,6 @@ const chatStore = useChatStore()
 const route = useRoute()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
-const prefs = usePreferencesStore()
 const agentHealth = useAgentHealthStore()
 const forkError = ref('')
 async function forkMessage(messageId: string): Promise<void> {
@@ -235,11 +233,9 @@ function scrollMainToBottomIfNear(): void {
 
 const generatingTitle = computed(() => chatStore.activePostActions.has('generating-title'))
 const generatingQuickResponses = computed(() =>
-  prefs.quickResponses
-    && !agentStore.isExecuting
-    && chatStore.activePostActions.has('generating-quick-responses'),
+  !agentStore.isExecuting && chatStore.activePostActions.has('generating-quick-responses'),
 )
-const visibleQuickResponses = computed(() => prefs.quickResponses ? chatStore.activeQuickResponses : [])
+const visibleQuickResponses = computed(() => chatStore.activeQuickResponses)
 
 // ─── Unified timeline ───────────────────────────────────────
 
@@ -641,9 +637,7 @@ onMounted(() => {
             />
           </RouterLink>
         </div>
-        <p class="chat-intro-fade text-sm mt-2 text-ink-muted max-w-sm text-center">
-          Type a message below to begin a new conversation, or choose an agent to assist you.
-        </p>
+
         <TransitionGroup
           tag="div"
           appear

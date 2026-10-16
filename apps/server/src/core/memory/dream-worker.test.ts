@@ -31,6 +31,7 @@ vi.mock('../tools/builtin/memory-tools.js', () => {
     }
 })
 import { closeDb, getDb } from '../../db/database.js'
+import { saveUserSettings } from '../user-settings.js'
 import { getDreamConfig, saveDreamConfig, listDreamRuns, buildDreamBatch, type DreamInput } from './dream-store.js'
 import { startDreamWorker, sweepDream, settleDreamWork, settleDreamRun, cancelDreamRun, cancelAllDreamRuns, invalidateDreamConversation, DREAM_IDLE_MS, DREAM_SWEEP_MS, DREAM_RETRY_BASE_MS, resolveDreamCategories, isDreamEligibleConversation } from './dream-worker.js'
 
@@ -129,6 +130,19 @@ describe('Dream worker', () => {
         await vi.advanceTimersByTimeAsync(DREAM_SWEEP_MS)
         expect(mocks.run).toHaveBeenCalledTimes(1)
         expect(broadcast).toHaveBeenCalledWith('memory:dream-updated', expect.objectContaining({ status: 'completed' }))
+    })
+    test('tells the reviewer who the user is so their statements are filed under their name', async () => {
+        saveUserSettings({ name: 'Andi' })
+        conversation()
+        enable()
+        message()
+        stop = startDreamWorker(broadcast)
+        await settleDreamWork()
+        await vi.advanceTimersByTimeAsync(DREAM_IDLE_MS)
+        await settleDreamWork()
+        const [system, user] = mocks.run.mock.calls[0][1] as ChatMessage[]
+        expect(system.content).toContain('People/Andi')
+        expect(JSON.parse(user.content as string)).toMatchObject({ user: { name: 'Andi' } })
     })
     test('resolves a provider-only selection to its default model when creating a run', async () => {
         conversation()

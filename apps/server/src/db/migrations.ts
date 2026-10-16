@@ -616,6 +616,58 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 30,
+        description: 'Detect duplicate attachment uploads by content hash',
+        up: (db) => {
+            const columns = db.pragma('table_info(attachment_assets)') as Array<{ name: string }>
+            if (!columns.some(({ name }) => name === 'content_hash')) {
+                db.exec('ALTER TABLE attachment_assets ADD COLUMN content_hash TEXT')
+            }
+            db.exec('CREATE INDEX IF NOT EXISTS idx_attachment_assets_content_hash ON attachment_assets(content_hash)')
+            db.exec('CREATE INDEX IF NOT EXISTS idx_attachment_assets_unhashed_size ON attachment_assets(size_bytes) WHERE content_hash IS NULL')
+            db.exec('CREATE INDEX IF NOT EXISTS idx_message_attachments_asset ON message_attachments(asset_id)')
+            // Before deduplication, drafts and queue items could own files without
+            // an asset row. Register them so reuse and reference cleanup include them.
+            db.exec(`
+                INSERT OR IGNORE INTO attachment_assets
+                    (id, name, original_path, text_path, size_bytes, text_bytes, chunk_count, metadata_json, created_at)
+                SELECT COALESCE(json_extract(artifact, '$.assetId'), json_extract(artifact, '$.id')),
+                    json_extract(artifact, '$.name'), json_extract(artifact, '$.originalPath'),
+                    json_extract(artifact, '$.textPath'), COALESCE(json_extract(artifact, '$.sizeBytes'), 0),
+                    COALESCE(json_extract(artifact, '$.textBytes'), 0), json_extract(artifact, '$.chunkCount'),
+                    artifact, created_at
+                FROM (
+                    SELECT artifact_json AS artifact, created_at FROM staged_chat_attachments
+                    UNION ALL
+                    SELECT f.value AS artifact, q.created_at FROM queued_chat_messages q, json_each(q.file_artifacts_json) f
+                )
+                WHERE json_valid(artifact)
+                    AND json_extract(artifact, '$.originalPath') IS NOT NULL
+                    AND json_extract(artifact, '$.textPath') IS NOT NULL
+            `)
+        },
+    },
+    {
+        version: 31,
+        description: 'Unlink project tasks from the chat that only created them',
+        up: (db) => {
+            // Agent-created tasks used to record their creating chat as the one working on them.
+            // Keep the link only when that chat set the task in_progress; tasks whose creation
+            // predates the timeline keep theirs, since their history cannot tell the two apart.
+            db.exec(`
+                UPDATE project_tasks SET conversation_id = NULL
+                WHERE conversation_id IS NOT NULL
+                    AND EXISTS (SELECT 1 FROM project_events e WHERE e.task_id = project_tasks.id AND e.kind = 'task_created')
+                    AND NOT EXISTS (
+                        SELECT 1 FROM project_events e
+                        WHERE e.task_id = project_tasks.id
+                            AND e.to_status = 'in_progress'
+                            AND e.conversation_id = project_tasks.conversation_id
+                    )
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

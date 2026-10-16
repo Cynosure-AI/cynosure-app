@@ -40,8 +40,8 @@ const selectedIds = defineModel<string[]>("selectedIds", { required: true });
 
 const emit = defineEmits<{
   openGlobalResult: [file: GlobalDocumentRow];
-  openFolder: [folder: MemoryFolder];
-  openDocument: [fileName: string];
+  openFolder: [folder: MemoryFolder, event?: MouseEvent | KeyboardEvent];
+  openDocument: [fileName: string, event?: MouseEvent | KeyboardEvent];
   openContextMenu: [kind: "folder" | "document", event: MouseEvent, item: MemoryFolder | MemoryFileStatus];
   toggleGridSelection: [item: ExplorerRow, event: MouseEvent];
   folderDragOver: [folder: MemoryFolder, event: DragEvent];
@@ -49,14 +49,18 @@ const emit = defineEmits<{
   folderDrop: [folder: MemoryFolder, event: DragEvent];
   documentDragStart: [event: DragEvent, fileName: string];
   documentDragEnd: [];
-  rowClick: [item: ExplorerRow];
+  rowClick: [item: ExplorerRow, event: MouseEvent | KeyboardEvent];
   rowContextMenu: [item: ExplorerRow, event: MouseEvent];
   rowDragStart: [item: ExplorerRow, event: DragEvent];
   rowDragOver: [item: ExplorerRow, event: DragEvent];
   rowDragLeave: [item: ExplorerRow, event: DragEvent];
   rowDrop: [item: ExplorerRow, event: DragEvent];
   visibleItemsChange: [items: ExplorerRow[]];
+  newFile: [];
+  upload: [];
 }>();
+
+const NO_PREVIEW_HINT = "This file type can't be opened here. Right-click for other actions.";
 
 function onRowContextMenu(item: ExplorerRow, event: MouseEvent): void {
   emit("rowContextMenu", item, event);
@@ -151,9 +155,42 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
 
   <div
     v-else-if="files.length === 0 && childFolders.length === 0 && !filesLoading"
-    class="rounded-xl border border-table-border bg-table-surface py-10 text-center text-sm text-ink-muted"
+    class="rounded-xl border border-dashed border-table-border bg-table-surface px-4 py-10 text-center"
   >
-    No files in this folder yet. Upload files to get started.
+    <Icon
+      icon="lucide:folder-open"
+      class="mx-auto mb-3 h-8 w-8 text-ink-faint"
+    />
+    <p class="text-sm text-theme-300">
+      This folder is empty
+    </p>
+    <p class="mt-1 text-xs text-ink-muted">
+      Create a note, upload files, or drop files anywhere here.
+    </p>
+    <div class="mt-4 flex flex-wrap justify-center gap-2">
+      <button
+        type="button"
+        class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover"
+        @click="emit('newFile')"
+      >
+        <Icon
+          icon="lucide:file-plus-2"
+          class="h-4 w-4 text-accent-fg"
+        />
+        New file
+      </button>
+      <button
+        type="button"
+        class="flex items-center gap-2 rounded-lg border border-theme-700/70 bg-control-surface px-3 py-1.5 text-sm text-theme-300 transition-colors hover:bg-table-hover"
+        @click="emit('upload')"
+      >
+        <Icon
+          icon="lucide:upload"
+          class="h-4 w-4"
+        />
+        Upload
+      </button>
+    </div>
   </div>
 
   <div
@@ -171,9 +208,8 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         highlightedFolderId === folder.id || selectedFolders.has(folder.id) ? 'bg-table-selected' : '',
         dropTargetFolderId === folder.id ? 'bg-table-selected ring-1 ring-inset ring-accent-500/60' : '',
       ]"
-      @click="emit('openFolder', folder)"
-      @keydown.enter="emit('openFolder', folder)"
-      @dblclick="emit('openFolder', folder)"
+      @click="emit('openFolder', folder, $event)"
+      @keydown.enter="emit('openFolder', folder, $event)"
       @contextmenu="emit('openContextMenu', 'folder', $event, folder)"
       @dragover="emit('folderDragOver', folder, $event)"
       @dragleave="emit('folderDragLeave', folder, $event)"
@@ -218,11 +254,11 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
       :draggable="true"
       role="button"
       tabindex="0"
-      class="group relative flex min-w-0 min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg px-2 py-3 text-center transition-colors hover:bg-table-hover"
-      :class="[selectedFiles.has(file.fileName) ? 'bg-table-selected' : '', !file.supported ? 'opacity-50' : '']"
-      @click="emit('openDocument', file.fileName)"
-      @dblclick="emit('openDocument', file.fileName)"
-      @keydown.enter="emit('openDocument', file.fileName)"
+      class="group relative flex min-w-0 min-h-40 flex-col items-center justify-center rounded-lg px-2 py-3 text-center transition-colors hover:bg-table-hover"
+      :class="[selectedFiles.has(file.fileName) ? 'bg-table-selected' : '', !file.supported ? 'opacity-50' : '', file.textDirect ? 'cursor-pointer' : 'cursor-default']"
+      :title="file.textDirect ? undefined : NO_PREVIEW_HINT"
+      @click="emit('openDocument', file.fileName, $event)"
+      @keydown.enter="emit('openDocument', file.fileName, $event)"
       @contextmenu="emit('openContextMenu', 'document', $event, file)"
       @dragstart.stop="emit('documentDragStart', $event, file.fileName)"
       @dragend="emit('documentDragEnd')"
@@ -280,14 +316,14 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     :row-selectable="isRowSelectable"
     :row-clickable="true"
     :row-draggable="(item) => item.kind === 'file'"
-    :row-class="(item) => item.kind === 'folder' ? (dropTargetFolderId === item.folder.id ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/60' : 'cursor-pointer') : !item.supported ? 'opacity-50' : 'cursor-pointer'"
+    :row-class="(item) => item.kind === 'folder' ? (dropTargetFolderId === item.folder.id ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/60' : 'cursor-pointer') : !item.supported ? 'opacity-50' : item.textDirect ? 'cursor-pointer' : ''"
     :pagination="true"
     :page-size="30"
     pagination-position="both"
     initial-sort-key="name"
     initial-sort-direction="asc"
     empty-message="No folders or files here yet."
-    @row-click="emit('rowClick', $event)"
+    @row-click="(item, event) => emit('rowClick', item, event)"
     @row-contextmenu="onRowContextMenu"
     @row-dragstart="onRowDragStart"
     @row-dragover="onRowDragOver"
@@ -303,7 +339,10 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
           class="h-5 w-5 shrink-0"
           :class="item.kind === 'folder' ? 'text-status-warning' : item.supported ? 'text-ink-secondary' : 'text-ink-faint'"
         />
-        <div class="min-w-0">
+        <div
+          class="min-w-0"
+          :title="item.kind === 'file' && !item.textDirect ? NO_PREVIEW_HINT : undefined"
+        >
           <div
             class="flex items-center gap-1 truncate text-sm font-medium"
             :class="item.kind === 'file' && hasRecentDreamUpdate(item) ? 'text-status-warning' : 'text-theme-200'"

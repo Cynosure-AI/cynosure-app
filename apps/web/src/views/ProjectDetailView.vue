@@ -7,6 +7,7 @@ import BaseCard from '../components/shared/BaseCard.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import ProjectBoard from '../components/project/ProjectBoard.vue'
 import ProjectTimeline from '../components/project/ProjectTimeline.vue'
+import ProjectMemoryTab from '../components/project/ProjectMemoryTab.vue'
 import ProjectIcon from '../components/project/ProjectIcon.vue'
 import ProjectForm, { type ProjectDraft } from '../components/project/ProjectForm.vue'
 import RichContent from '../components/shared/RichContent.vue'
@@ -23,7 +24,7 @@ import { useCynoStore } from '../stores/cyno.store'
 
 const cyno = useCynoStore()
 
-type ProjectTab = 'overview' | 'chats' | 'board' | 'timeline' | 'settings'
+type ProjectTab = 'overview' | 'chats' | 'board' | 'memories' | 'timeline' | 'settings'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,17 +50,19 @@ const error = ref('')
 const confirmDelete = ref(false)
 
 const memoryFolder = computed(() => chatStore.memoryFolders.find((folder) => folder.id === project.value?.memoryFolderId))
+const memoryFileCount = computed(() => (memoryFolder.value?.fileCount ?? 0) + (memoryFolder.value?.descendantFileCount ?? 0))
 const tabs = computed<TabDef<ProjectTab>[]>(() => [
   { value: 'overview', label: 'Overview', icon: 'lucide:layout-dashboard' },
   { value: 'board', label: 'Board', icon: 'lucide:square-kanban', badge: project.value?.openTaskCount || undefined, badgeTitle: `${project.value?.openTaskCount ?? 0} open tasks` },
   { value: 'chats', label: 'Chats', icon: 'lucide:message-square', badge: project.value?.conversationCount || undefined },
+  { value: 'memories', label: 'Memories', icon: 'lucide:brain', badge: memoryFolder.value ? memoryFileCount.value || undefined : undefined, badgeTitle: `${memoryFileCount.value} memory files` },
   { value: 'timeline', label: 'Timeline', icon: 'lucide:history' },
   { value: 'settings', label: 'Settings', icon: 'lucide:settings' },
 ])
 
 function tabFromQuery(): ProjectTab {
   const tab = route.query.tab
-  return tab === 'chats' || tab === 'board' || tab === 'timeline' || tab === 'settings' ? tab : 'overview'
+  return tab === 'chats' || tab === 'board' || tab === 'memories' || tab === 'timeline' || tab === 'settings' ? tab : 'overview'
 }
 
 function agentIconUrl(agentId: string | null): string | null {
@@ -170,7 +173,8 @@ function newChat(): void {
 
 watch(activeTab, (tab) => {
   if (tab === 'settings') settingsDraft.value = toDraft()
-  void router.replace({ query: { ...route.query, tab: tab === 'overview' ? undefined : tab } })
+  // The open memory subfolder only means something on the Memories tab.
+  void router.replace({ query: { ...route.query, tab: tab === 'overview' ? undefined : tab, folder: tab === 'memories' ? route.query.folder : undefined } })
 })
 
 watch(projectId, () => {
@@ -406,13 +410,15 @@ onBeforeUnmount(stopWaitUpdates)
                 <div class="text-[11px] text-ink-faint">
                   Lasting facts and knowledge; agents add to it automatically
                 </div>
-                <RouterLink
+                <button
                   v-if="memoryFolder"
-                  :to="{ name: 'memory-folders', params: { section: 'documents' }, query: { folder: memoryFolder.id } }"
-                  class="block truncate text-theme-200 hover:text-accent-fg"
+                  type="button"
+                  class="block max-w-full truncate text-left text-theme-200 hover:text-accent-fg"
+                  :title="`Browse ${memoryFolder.folderPath || memoryFolder.name}`"
+                  @click="activeTab = 'memories'"
                 >
                   {{ memoryFolder.folderPath || memoryFolder.name }}
-                </RouterLink>
+                </button>
                 <div
                   v-else
                   class="text-ink-faint"
@@ -563,6 +569,13 @@ onBeforeUnmount(stopWaitUpdates)
       <ProjectBoard
         v-else-if="activeTab === 'board'"
         :project="project"
+      />
+
+      <!-- Memories -->
+      <ProjectMemoryTab
+        v-else-if="activeTab === 'memories'"
+        :project="project"
+        @open-settings="activeTab = 'settings'"
       />
 
       <!-- Timeline -->

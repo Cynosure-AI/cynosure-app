@@ -1,7 +1,7 @@
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, resolveHomeConversation, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
 import { getCynoProfile } from '../../cyno/cyno-profile.js'
 import { findDeliveryConversation, recordChannelDeliveries } from '../channel-delivery.js'
@@ -20,6 +20,8 @@ import {
 export interface TelegramConfig {
     botToken: string
     allowedAgentIds?: string[]
+    /** Hours without a user message after which a chat starts over; 0 never. */
+    sessionIdleHours?: number
     /** Numeric Telegram user IDs permitted to use this bot. Empty means deny all. */
     allowedUserIds?: Array<string | number>
 }
@@ -230,6 +232,7 @@ export class TelegramChannel implements ChannelProvider {
     channelId: string
     broadcast: BroadcastFn
     allowedAgentIds: string[]
+    sessionIdleMs: number
     allowedUserIds: ReadonlySet<string>
     readonly channelType = 'telegram'
     activeExecutions = new Map<string, ActiveChannelExecutionEntry>()
@@ -262,6 +265,7 @@ export class TelegramChannel implements ChannelProvider {
         this.botToken = config.botToken
         this.broadcast = broadcast
         this.allowedAgentIds = config.allowedAgentIds ?? []
+        this.sessionIdleMs = sessionIdleMsFromConfig(config)
         this.allowedUserIds = new Set(normalizeTelegramUserIds(config.allowedUserIds))
     }
 
@@ -356,10 +360,10 @@ export class TelegramChannel implements ChannelProvider {
         return messageIds.map(String)
     }
 
-    homeConversation(target: string): { conversationId: string; agentId: string } | null {
+    homeConversation(target: string, create: boolean): { conversationId: string; agentId: string } | null {
         const chatId = parseInt(target, 10)
         if (isNaN(chatId) || !isTelegramUserAllowed(this.allowedUserIds, chatId)) return null
-        return resolveHomeConversation(this, chatId)
+        return create ? resolveHomeConversation(this, chatId) : findHomeConversation(this, chatId)
     }
 
     // ─── Polling ──────────────────────────────────────────────

@@ -162,8 +162,8 @@ const imageGridClass = computed(() => {
 
 <template>
   <div
-    class="flex items-end gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
-    :class="isUser ? 'justify-end' : 'justify-start'"
+    class="relative flex items-end justify-center gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
+    :class="isUser ? 'md:justify-end' : 'md:justify-start'"
   >
     <!-- Avatar -->
     <div
@@ -202,9 +202,9 @@ const imageGridClass = computed(() => {
     <div
       class="relative md:max-w-[85%] max-w-[90%] px-5 py-3 text-[15px] wrap-break-word leading-relaxed transition-all"
       :class="[
-        isUser ? 'chat-user-message bg-user-message text-user-message-text rounded-tr-sm' : 'text-theme-200',
-        showBubble ? 'rounded-3xl shadow-sm' : 'bg-transparent',
-        !isUser && showBubble ? 'bg-theme-800/60 border rounded-tl-sm' : '',
+        isUser ? 'chat-user-message bg-user-message text-user-message-text md:rounded-tr-sm' : 'text-theme-200 max-md:w-full max-md:max-w-full',
+        showBubble ? 'rounded-3xl shadow-sm' : 'bg-transparent max-md:px-0',
+        !isUser && showBubble ? 'bg-theme-800/60 border md:rounded-tl-sm' : '',
         !isUser && showBubble ? (isError ? 'border-red-500/40' : 'border-theme-700/50') : '',
         isEditing ? 'w-[85%] md:w-[80%]' : ''
       ]"
@@ -580,7 +580,7 @@ const imageGridClass = computed(() => {
       v-if="formattedCreatedAt"
       data-testid="message-row-time"
       :datetime="createdAtIso"
-      class="mb-1 shrink-0 text-[10px] leading-none tabular-nums text-ink-muted opacity-0 transition-opacity group-hover/msg:opacity-100"
+      class="mb-1 shrink-0 text-[10px] leading-none tabular-nums text-ink-muted opacity-0 transition-opacity group-hover/msg:opacity-100 max-md:absolute max-md:bottom-0.5 max-md:left-1/2 max-md:mb-0 max-md:-translate-x-1/2"
     >
       {{ formattedCreatedAt }}
     </time>

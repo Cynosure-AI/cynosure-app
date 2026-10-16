@@ -3,13 +3,15 @@ import type { Interaction, Message } from 'discord.js'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { parseHITLActionId, resolveChannelHITL, resolveHomeConversation, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
 import { sendLongMessage, dataUrlToBuffer, extractAttachments, type DiscordSendChannel } from './discord.api.js'
 
 export interface DiscordConfig {
     botToken: string
     allowedAgentIds?: string[]
+    /** Hours without a user message after which a chat starts over; 0 never. */
+    sessionIdleHours?: number
     /** Discord user IDs permitted to use this bot, in servers and DMs. Empty means deny all. */
     allowedUserIds?: string[]
 }
@@ -158,6 +160,7 @@ export class DiscordChannel implements ChannelProvider {
     channelId: string
     broadcast: BroadcastFn
     allowedAgentIds: string[]
+    sessionIdleMs: number
     allowedUserIds: ReadonlySet<string>
     readonly channelType = 'discord'
     activeExecutions = new Map<string, ActiveChannelExecutionEntry>()
@@ -185,6 +188,7 @@ export class DiscordChannel implements ChannelProvider {
         this.botToken = config.botToken
         this.broadcast = broadcast
         this.allowedAgentIds = config.allowedAgentIds ?? []
+        this.sessionIdleMs = sessionIdleMsFromConfig(config)
         this.allowedUserIds = new Set(normalizeDiscordUserIds(config.allowedUserIds))
         this.client = new Client({
             intents: [
@@ -287,7 +291,8 @@ export class DiscordChannel implements ChannelProvider {
         }
     }
 
-    homeConversation(target: string): { conversationId: string; agentId: string } | null {
-        return target ? resolveHomeConversation(this, target) : null
+    homeConversation(target: string, create: boolean): { conversationId: string; agentId: string } | null {
+        if (!target) return null
+        return create ? resolveHomeConversation(this, target) : findHomeConversation(this, target)
     }
 }

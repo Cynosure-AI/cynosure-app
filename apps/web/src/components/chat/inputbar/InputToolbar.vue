@@ -34,6 +34,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   attach: [];
   browseLibrary: [];
+  browseProject: [];
   send: [];
   steer: [];
   cancelEdit: [];
@@ -199,6 +200,7 @@ async function toggleMic(): Promise<void> {
     <ChatOptionsMenu
       @attach="emit('attach')"
       @browse-library="emit('browseLibrary')"
+      @browse-project="emit('browseProject')"
     />
 
     <slot />

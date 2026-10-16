@@ -14,6 +14,7 @@ import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
 import type { ActivityItem, AgentInstance } from "../../api/types";
 import { Icon } from "@iconify/vue";
+import { useMediaQuery } from "@vueuse/core";
 import { useSidebar } from "../../composables/useSidebar";
 import { useAppBranding } from "../../composables/useAppBranding";
 import { commandPaletteShortcutLabel, useCommandPalette } from "../../composables/useCommandPalette";
@@ -31,7 +32,10 @@ const chatStore = useChatStore();
 const memoryJobsStore = useMemoryJobsStore();
 const preferencesStore = usePreferencesStore();
 const { recentChatFilter } = storeToRefs(preferencesStore);
-const { close: closeSidebar, sidebarCollapsed, toggleCollapse } = useSidebar();
+const { close: closeSidebar, sidebarCollapsed: collapsePreference, toggleCollapse } = useSidebar();
+// The collapsed rail only exists on md+; the mobile drawer always renders full width.
+const isDesktop = useMediaQuery("(min-width: 768px)");
+const sidebarCollapsed = computed(() => collapsePreference.value && isDesktop.value);
 const { logoIconUrl, logoTextUrl } = useAppBranding();
 const { open: openCommandPalette } = useCommandPalette();
 

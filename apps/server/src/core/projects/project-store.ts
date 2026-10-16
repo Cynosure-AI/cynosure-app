@@ -1,6 +1,6 @@
 import { existsSync, realpathSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { nanoid } from 'nanoid'
+import { customAlphabet, nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { ensureMemoryFolderPath, ensureMemoryRoot, makeChildFolderPath } from '../memory/memory-folder-directories.js'
 import type { ProjectDto, ProjectTaskDto, ProjectTaskStatus } from '@shared/types'
@@ -299,6 +299,18 @@ export function setConversationProject(conversationId: string, projectId: string
 
 // ─── Tasks ─────────────────────────────────────────────────
 
+const generateTaskId = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 6)
+
+/** Short IDs are easier to copy into tool calls; check across all projects. */
+function newTaskId(): string {
+    const exists = getDb().prepare('SELECT 1 FROM project_tasks WHERE id = ?')
+    let id: string
+    do {
+        id = generateTaskId()
+    } while (exists.get(id))
+    return id
+}
+
 function assertStatus(status: string | undefined): ProjectTaskStatus | undefined {
     if (status === undefined) return undefined
     if (!PROJECT_TASK_STATUSES.includes(status as ProjectTaskStatus)) {
@@ -327,7 +339,7 @@ export function createProjectTask(projectId: string, input: ProjectTaskInput & {
     if (!title) throw new Error('Task title is required.')
     const status = assertStatus(input.status) ?? 'todo'
     const sortOrder = input.sortOrder ?? ((db.prepare('SELECT MAX(sort_order) AS n FROM project_tasks WHERE project_id = ? AND status = ?').get(projectId, status) as { n: number | null }).n ?? 0) + 1
-    const id = nanoid()
+    const id = newTaskId()
     const now = Date.now()
     db.prepare(`INSERT INTO project_tasks (id, project_id, title, notes, status, sort_order, assignee_agent_id, conversation_id, created_by, created_at, updated_at, completed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(

@@ -10,7 +10,8 @@ defineProps<{
   runningJobCount: number;
   selectedCount: number;
   rowCount: number;
-  filteredFileCount: number;
+  /** Folders and supported files, which is what "Select all" selects. */
+  selectableCount: number;
   allSelected: boolean;
   spaceCount: number;
   selectedFolderCount: number;
@@ -38,7 +39,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="mb-2 flex items-center justify-between">
+  <div class="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
     <div class="text-xs text-ink-muted">
       <template v-if="searching">
         {{ resultCount }} result{{ resultCount !== 1 ? "s" : "" }} in {{ folderName || "this folder" }} and subfolders
@@ -62,7 +63,7 @@ const emit = defineEmits<{
           class="px-2 py-1 text-xs text-ink-secondary hover:text-theme-200"
           @click="emit('selectAll')"
         >
-          Select all {{ filteredFileCount }}
+          Select all {{ selectableCount }}
         </button>
       </template>
       <div
@@ -103,6 +104,7 @@ const emit = defineEmits<{
         type="button"
         :disabled="filesLoading"
         class="px-2 py-1.5 text-xs text-ink-secondary hover:text-theme-200"
+        title="Refresh"
         aria-label="Refresh documents"
         @click="emit('refresh')"
       >
@@ -126,7 +128,7 @@ const emit = defineEmits<{
         class="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-ink-secondary transition-colors hover:bg-theme-800 hover:text-theme-200"
         @click="emit('selectAll')"
       >
-        Select all {{ rowCount }}
+        Select all {{ selectableCount }}
       </button>
       <button
         v-if="spaceCount > 1"

@@ -10,11 +10,19 @@ import ProjectChip from './inputbar/ProjectChip.vue'
 import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
+import ProjectFilePickerModal from './modals/ProjectFilePickerModal.vue'
+import ModelSelectorModal from './modals/ModelSelectorModal.vue'
+import SystemPromptModal from './modals/SystemPromptModal.vue'
+import SlashCommandMenu from './inputbar/SlashCommandMenu.vue'
+import { useSlashCommands } from '../../composables/useSlashCommands'
+import { findSlashCommand, parseSlashInput, slashSuggestions, type SlashOption } from '../../utils/slash-commands'
 import { api } from '../../api/client'
-import type { StagedChatAttachment } from '../../api/types'
+import type { ProjectFileContent, StagedChatAttachment } from '../../api/types'
+import { useProjectsStore } from '../../stores/projects.store'
 
 const chatStore = useChatStore()
 const providerStore = useProviderStore()
+const projectsStore = useProjectsStore()
 
 function getDraftStorageKey(conversationId: string | null, agentId: string | null): string {
   const scope = conversationId ? `conversation:${conversationId}` : `new:${agentId || 'default'}`
@@ -58,6 +66,14 @@ const mediaSettings = computed<MediaGenerationSettings | null>({
 })
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
+const showProjectFiles = ref(false)
+const activeProject = computed(() => projectsStore.get(chatStore.activeProjectId))
+const projectSourcePrefix = computed(() => `project:${chatStore.activeProjectId}:`)
+/** Project-relative paths of project files already in the draft. */
+const attachedProjectPaths = computed(() =>
+  [...attachedImages.value, ...attachedFiles.value, ...attachedAudio.value].flatMap((item) =>
+    item.sourceId?.startsWith(projectSourcePrefix.value) ? [item.sourceId.slice(projectSourcePrefix.value.length)] : []),
+)
 const liveCleanups: Array<() => void> = []
 const cancelledStageClientIds = new Set<string>()
 const discardedStageIds = new Set<string>()
@@ -106,7 +122,98 @@ const hasInput = computed(() => Boolean(inputText.value.trim())
   || attachedImages.value.length > 0 || attachedFiles.value.length > 0 || attachedAudio.value.length > 0)
 const canSend = computed(() => !attachmentsProcessing.value && !hasAttachmentError.value && (!!inputText.value.trim() || attachedAudio.value.length > 0))
 
+// ─── Slash commands ──────────────────
+const showModelSelector = ref(false)
+const showSystemPrompt = ref(false)
+const { commands: slashCommands, prepare: prepareSlashCommands } = useSlashCommands({
+  attachFiles: () => openFilePicker(),
+  browseLibrary: () => { showFileLibrary.value = true },
+  chooseModel: () => { showModelSelector.value = true },
+  editSystemPrompt: () => { showSystemPrompt.value = true },
+})
+const slashMenuId = 'chat-slash-commands'
+const slashMenuRef = ref<InstanceType<typeof SlashCommandMenu> | null>(null)
+/** Composer text the user dismissed the menu for with Escape; it may then be sent as a message. */
+const slashDismissedFor = ref<string | null>(null)
+const slashIndex = ref(0)
+const slashOptions = computed(() =>
+  slashDismissedFor.value === inputText.value ? [] : slashSuggestions(slashCommands.value, inputText.value)
+)
+const slashOpen = computed(() => slashOptions.value.length > 0)
+const activeSlashIndex = computed(() => Math.min(slashIndex.value, slashOptions.value.length - 1))
+const slashNotice = ref<{ text: string; error: boolean } | null>(null)
+let slashNoticeTimer: number | null = null
+
+watch(inputText, () => { slashIndex.value = 0 })
+watch(() => inputText.value.startsWith('/'), (typing) => {
+  if (typing) prepareSlashCommands()
+}, { immediate: true })
+
+function showSlashNotice(text: string, error = false): void {
+  slashNotice.value = { text, error }
+  if (slashNoticeTimer !== null) window.clearTimeout(slashNoticeTimer)
+  slashNoticeTimer = window.setTimeout(() => { slashNotice.value = null }, error ? 4_000 : 2_500)
+}
+
+function moveSlashSelection(step: number): void {
+  const count = slashOptions.value.length
+  slashIndex.value = (activeSlashIndex.value + step + count) % count
+}
+
+function completeSlashOption(option: SlashOption): void {
+  if (option.complete) inputText.value = option.complete
+  nextTick(() => {
+    const el = textareaRef.value
+    el?.focus()
+    el?.setSelectionRange(inputText.value.length, inputText.value.length)
+  })
+}
+
+async function selectSlashOption(option: SlashOption): Promise<void> {
+  if (option.unavailable) {
+    inputText.value = ''
+    persistDraft(draftStorageKey.value, '')
+    showSlashNotice(option.unavailable, true)
+    return
+  }
+  if (!option.run) {
+    completeSlashOption(option)
+    return
+  }
+  inputText.value = ''
+  persistDraft(draftStorageKey.value, '')
+  try {
+    const message = await option.run()
+    if (message) showSlashNotice(message)
+  } catch (err) {
+    showSlashNotice((err as Error).message || 'Command failed', true)
+  }
+  textareaRef.value?.focus()
+}
+
+/** Run the highlighted command, or explain why a typed command was not sent. Returns true when handled. */
+function handleSlashSubmit(): boolean {
+  if (slashOpen.value) {
+    void selectSlashOption(slashOptions.value[activeSlashIndex.value])
+    return true
+  }
+  if (slashDismissedFor.value === inputText.value) return false
+  const input = parseSlashInput(inputText.value.trim())
+  const command = input ? findSlashCommand(slashCommands.value, input.name) : undefined
+  if (!input || !command) return false
+  if (command.unavailable) {
+    showSlashNotice(command.unavailable, true)
+    return true
+  }
+  // A known command must never reach the model by accident; Escape first to send it as text.
+  showSlashNotice(input.args.trim()
+    ? `No match for “${input.args.trim()}” in /${command.name}`
+    : `/${command.name} needs ${command.hint ? `a ${command.hint}` : 'an argument'}`, true)
+  return true
+}
+
 async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
+  if (handleSlashSubmit()) return
   const content = inputText.value.trim()
   if (!content && !attachedAudio.value.length) return
   const images = attachedImages.value.map((i) => i.url)
@@ -171,6 +278,16 @@ function addLibrarySelection(selection: {
   }
   for (const audio of selection.audio) {
     if (!existing.has(audio.id)) attachedAudio.value.push({ url: audio.url, name: audio.name, sourceId: audio.id })
+  }
+}
+
+function addProjectFiles(files: ProjectFileContent[]): void {
+  for (const file of files) {
+    const sourceId = `${projectSourcePrefix.value}${file.name}`
+    if (attachedProjectPaths.value.includes(file.name)) continue
+    if (file.kind === 'image') attachedImages.value.push({ url: file.content, name: file.name, sourceId })
+    else if (file.kind === 'audio') attachedAudio.value.push({ url: file.content, name: file.name, sourceId })
+    else void stageFile(file.name, file.content, sourceId)
   }
 }
 
@@ -351,7 +468,25 @@ function removeAudio(idx: number): void {
 }
 
 function onKeydown(e: KeyboardEvent): void {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (slashOpen.value && !e.isComposing) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      moveSlashSelection(e.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+    if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault()
+      completeSlashOption(slashOptions.value[activeSlashIndex.value])
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      slashDismissedFor.value = inputText.value
+      return
+    }
+  }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault()
     void send('next')
   }
@@ -432,6 +567,7 @@ onBeforeUnmount(() => {
   persistDraft(draftStorageKey.value, inputText.value)
   for (const cleanup of liveCleanups) cleanup()
   if (stagedPollTimer !== null) window.clearTimeout(stagedPollTimer)
+  if (slashNoticeTimer !== null) window.clearTimeout(slashNoticeTimer)
 })
 
 function onTranscription(text: string): void {
@@ -673,7 +809,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
 
       <!-- Input area: textarea + bottom bar inside a unified container -->
       <div
-        class="chat-composer rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40"
+        class="chat-composer relative rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40"
       >
         <input
           ref="fileInputRef"
@@ -684,14 +820,41 @@ defineExpose({ processFiles, focus, sendSuggestion })
           @change="handleFileSelect"
         >
 
+        <SlashCommandMenu
+          v-if="slashOpen"
+          :id="slashMenuId"
+          ref="slashMenuRef"
+          :options="slashOptions"
+          :active-index="activeSlashIndex"
+          :grouped="inputText.trim() === '/'"
+          @select="selectSlashOption"
+          @hover="slashIndex = $event"
+        />
+        <div
+          v-else-if="slashNotice"
+          role="status"
+          class="absolute bottom-full left-0 z-30 mb-2 flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-lg"
+          :class="slashNotice.error ? 'border-red-500/40 bg-theme-900 text-status-danger' : 'border-theme-700 bg-theme-900 text-theme-200'"
+        >
+          <Icon
+            :icon="slashNotice.error ? 'lucide:circle-alert' : 'lucide:check'"
+            class="h-3.5 w-3.5 shrink-0"
+            :class="slashNotice.error ? '' : 'text-accent-fg'"
+          />
+          <span class="truncate">{{ slashNotice.text }}</span>
+        </div>
+
         <textarea
           id="chat-textarea"
           ref="textareaRef"
           v-model="inputText"
-          :placeholder="editingQueueId ? 'Edit queued message…' : chatStore.isConversationLocked ? 'Queue a message…' : 'Type a message...'"
+          :placeholder="editingQueueId ? 'Edit queued message…' : chatStore.isConversationLocked ? 'Queue a message…' : 'Type a message, or / for commands'"
           rows="1"
           class="w-full bg-transparent text-theme-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder:text-ink-muted"
           aria-label="Type a message"
+          aria-autocomplete="list"
+          :aria-controls="slashOpen ? slashMenuId : undefined"
+          :aria-activedescendant="slashOpen ? slashMenuRef?.optionId(activeSlashIndex) : undefined"
           @keydown="onKeydown"
           @input="autoResize"
           @paste="onPaste"
@@ -707,6 +870,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           :media-settings="mediaSettings"
           @attach="openFilePicker"
           @browse-library="showFileLibrary = true"
+          @browse-project="showProjectFiles = true"
           @send="send('next')"
           @steer="send('steer')"
           @cancel-edit="cancelQueueEdit"
@@ -728,6 +892,20 @@ defineExpose({ processFiles, focus, sendSuggestion })
       ]"
       @close="showFileLibrary = false"
       @add="addLibrarySelection"
+    />
+    <ProjectFilePickerModal
+      :show="showProjectFiles"
+      :project-id="activeProject?.rootPath ? activeProject.id : null"
+      :project-name="activeProject?.name"
+      :already-selected-paths="attachedProjectPaths"
+      @close="showProjectFiles = false"
+      @add="addProjectFiles"
+    />
+    <ModelSelectorModal v-model="showModelSelector" />
+    <SystemPromptModal
+      v-model="showSystemPrompt"
+      :system-prompt="chatStore.sessionSystemPrompt"
+      @update:system-prompt="(value: string) => { chatStore.sessionSystemPrompt = value; chatStore.markOverridesModified() }"
     />
 
     <!-- Context window usage ring — pinned to the far right of the bar. The

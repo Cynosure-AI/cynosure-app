@@ -16,6 +16,7 @@ import {
     type ProjectTaskInput,
     type UpdateProjectInput,
 } from '../core/projects/project-store.js'
+import { ProjectFileError, listProjectFolder, readProjectFile, searchProjectFiles } from '../core/projects/project-files.js'
 import { diffBriefRevisions, getBriefRevision, listBriefRevisions, listProjectTimeline } from '../core/projects/project-history.js'
 import { listProjectTaskPlans, listProjectTaskProgress } from '../core/agent/planning-state.js'
 import type { ProjectTaskDto, ProjectTaskStatus } from '@shared/types'
@@ -86,6 +87,33 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
         if (!deleteProject(req.params.id)) return reply.status(404).send({ error: 'Project not found' })
         projectChanged(req.params.id)
         return { success: true }
+    })
+
+    // ─── Project directory files ───────────────────────────
+
+    // GET /api/projects/:id/files?path=<folder>&q=<search> — browse or search the project directory
+    app.get<{ Params: { id: string }; Querystring: { path?: string; q?: string; showHidden?: string } }>('/:id/files', async (req, reply) => {
+        const project = getProject(req.params.id)
+        if (!project) return reply.status(404).send({ error: 'Project not found' })
+        const showHidden = req.query.showHidden === 'true'
+        try {
+            return req.query.q?.trim()
+                ? await searchProjectFiles(project.rootPath, req.query.q, showHidden)
+                : await listProjectFolder(project.rootPath, req.query.path, showHidden)
+        } catch (error) {
+            return reply.status(error instanceof ProjectFileError ? error.statusCode : 400).send({ error: message(error) })
+        }
+    })
+
+    // GET /api/projects/:id/files/content?path=<file> — a project file, ready to attach to a chat
+    app.get<{ Params: { id: string }; Querystring: { path?: string } }>('/:id/files/content', async (req, reply) => {
+        const project = getProject(req.params.id)
+        if (!project) return reply.status(404).send({ error: 'Project not found' })
+        try {
+            return await readProjectFile(project.rootPath, req.query.path ?? '')
+        } catch (error) {
+            return reply.status(error instanceof ProjectFileError ? error.statusCode : 400).send({ error: message(error) })
+        }
     })
 
     // ─── History ───────────────────────────────────────────

@@ -153,7 +153,12 @@ export function makeProjectTaskTools(ctx: ProjectToolContext): ToolDefinition[] 
             },
             execute: (params) => guarded(() => {
                 const input = params as { title: string; notes?: string; status?: ProjectTaskStatus }
-                const task = createProjectTask(ctx.projectId, { ...input, conversationId: ctx.conversationId, createdBy: 'agent' }, changeContext(ctx))
+                // Creating a task is not working on it: the chat is only linked when it starts the task right away.
+                const task = createProjectTask(ctx.projectId, {
+                    ...input,
+                    ...(input.status === 'in_progress' && ctx.conversationId ? { conversationId: ctx.conversationId } : {}),
+                    createdBy: 'agent',
+                }, changeContext(ctx))
                 if (task.status !== 'todo') linkPlan(ctx, task.id)
                 notifyTasks()
                 return result(true, { id: task.id, title: task.title, status: task.status })

@@ -1,6 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
 import { nanoid } from 'nanoid'
+import { createHash } from 'node:crypto'
+import { getDb } from '../../db/database.js'
+import type { Database } from 'better-sqlite3'
+import { releaseAttachmentAsset, retainAttachmentAsset } from './attachment-asset-references.js'
 import { getAppDataDir } from '../data-dir.js'
 import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 
@@ -48,13 +52,71 @@ export async function materializeFileAttachment(
     file: FileAttachmentInput,
     conversationId: string,
 ): Promise<FileAttachmentArtifact> {
+    const db = getDb()
+    const { buffer, text } = decodeAttachmentContent(file)
+    const contentHash = createHash('sha256').update(buffer).digest('hex')
+    const existing = findAttachmentAsset(db, contentHash, buffer.byteLength)
+    if (existing) return retainAttachmentAsset(db, { ...existing, id: nanoid(), name: file.name })
+
+    let pending = pendingMaterializations.get(db)
+    if (!pending) pendingMaterializations.set(db, pending = new Map())
+    let job = pending.get(contentHash)
+    const created = !job
+    if (!job) {
+        job = createAttachmentAsset(file, conversationId, buffer, text, contentHash)
+        pending.set(contentHash, job)
+    }
+    let artifact: FileAttachmentArtifact | undefined
+    try {
+        artifact = await job
+        return retainAttachmentAsset(db, { ...artifact, id: created ? artifact.id : nanoid(), assetId: artifact.id, name: file.name })
+    } finally {
+        if (pending.get(contentHash) === job) {
+            pending.delete(contentHash)
+            // The creation lease covers the gap before callers establish their own leases.
+            if (artifact) releaseAttachmentAsset(artifact)
+        }
+    }
+}
+
+const pendingMaterializations = new WeakMap<Database, Map<string, Promise<FileAttachmentArtifact>>>()
+
+interface AttachmentAssetRow {
+    id: string; name: string; original_path: string; text_path: string
+    size_bytes: number; text_bytes: number; chunk_count: number | null; content_hash: string | null
+}
+
+function findAttachmentAsset(db: Database, contentHash: string, sizeBytes: number): FileAttachmentArtifact | undefined {
+    // Hash older assets lazily, so existing uploads participate without a startup file scan.
+    const rows = db.prepare(`SELECT * FROM attachment_assets
+        WHERE content_hash = ? OR (content_hash IS NULL AND size_bytes = ?)
+        ORDER BY chunk_count IS NULL, created_at`).all(contentHash, sizeBytes) as AttachmentAssetRow[]
+    for (const row of rows) {
+        if (!existsSync(row.original_path) || !existsSync(row.text_path)) continue
+        let hash = row.content_hash
+        if (!hash) {
+            try { hash = createHash('sha256').update(readFileSync(row.original_path)).digest('hex') }
+            catch { continue }
+            db.prepare('UPDATE attachment_assets SET content_hash = ? WHERE id = ?').run(hash, row.id)
+        }
+        if (hash !== contentHash) continue
+        return {
+            id: row.id, assetId: row.id, name: row.name, originalPath: row.original_path,
+            textPath: row.text_path, sizeBytes: row.size_bytes, textBytes: row.text_bytes,
+            chunkCount: row.chunk_count ?? undefined,
+        }
+    }
+}
+
+async function createAttachmentAsset(
+    file: FileAttachmentInput, conversationId: string, buffer: Buffer, text: string, contentHash: string,
+): Promise<FileAttachmentArtifact> {
     const dir = getConversationFilesDir(conversationId)
     const id = nanoid()
     const filename = safeFilename(file.name)
     const originalPath = join(dir, filename)
     const textPath = join(dir, `${filename}.parsed.md`)
 
-    const { buffer, text } = decodeAttachmentContent(file)
     let extractedText = text
 
     if (isParseableDocument(file.name) && file.content.startsWith('data:')) {
@@ -65,17 +127,26 @@ export async function materializeFileAttachment(
         }
     }
 
-    writeFileSync(originalPath, buffer)
-    writeFileSync(textPath, extractedText, 'utf8')
+    try {
+        writeFileSync(originalPath, buffer)
+        writeFileSync(textPath, extractedText, 'utf8')
+        getDb().prepare(`INSERT INTO attachment_assets
+            (id, name, original_path, text_path, size_bytes, text_bytes, content_hash, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(id, file.name, originalPath, textPath, buffer.byteLength, Buffer.byteLength(extractedText, 'utf8'), contentHash, Date.now())
+    } catch (error) {
+        for (const path of [originalPath, textPath]) rmSync(path, { force: true })
+        throw error
+    }
 
-    return {
+    return retainAttachmentAsset(getDb(), {
         name: file.name,
         id,
         originalPath,
         textPath,
         sizeBytes: buffer.byteLength,
         textBytes: Buffer.byteLength(extractedText, 'utf8'),
-    }
+    })
 }
 
 export async function materializeFileAttachments(
@@ -83,10 +154,15 @@ export async function materializeFileAttachments(
     conversationId: string,
 ): Promise<FileAttachmentArtifact[]> {
     const artifacts: FileAttachmentArtifact[] = []
-    for (const file of files) {
-        artifacts.push(await materializeFileAttachment(file, conversationId))
+    try {
+        for (const file of files) {
+            artifacts.push(await materializeFileAttachment(file, conversationId))
+        }
+        return artifacts
+    } catch (error) {
+        for (const artifact of artifacts) releaseAttachmentAsset(artifact)
+        throw error
     }
-    return artifacts
 }
 
 export function readFileAttachmentText(attachment: Partial<FileAttachmentArtifact> & { content?: string }): string | null {

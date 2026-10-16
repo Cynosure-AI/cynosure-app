@@ -11,12 +11,13 @@ import { useMcpServers } from '../../../composables/useMcpServers'
 import { useProjectsStore } from '../../../stores/projects.store'
 import ProjectIcon from '../../project/ProjectIcon.vue'
 import { useRouter } from 'vue-router'
-import { isAutoManagedBuiltInToolName, isBuiltInNamespaceId } from '../../../utils/internal-tools'
+import { isBuiltInNamespaceId } from '../../../utils/internal-tools'
+import { groupSelectableTools, toolGroupSelectionState, withToolGroup, type ToolGroup } from '../../../utils/tool-groups'
 import { getToolNamespaceIcon } from '../../../utils/tool-namespace-icons'
 import { memoryFolderScopeSummary } from '../../../utils/memory-folder-selection'
 import MemoryFolderPicker from '../../memory/MemoryFolderPicker.vue'
 
-const emit = defineEmits<{ attach: []; browseLibrary: [] }>()
+const emit = defineEmits<{ attach: []; browseLibrary: []; browseProject: [] }>()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
@@ -41,17 +42,10 @@ const entries = [
   { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users' },
   { id: 'project', label: 'Project', detail: 'Run this chat inside a project', icon: 'lucide:folder-kanban' },
 ] as const
-const selectableTools = computed(() => agentStore.availableTools.filter(tool => !(isBuiltInNamespaceId(tool.namespace.id) && isAutoManagedBuiltInToolName(tool.name))))
 const toolGroups = computed(() => {
-  const groups = new Map<string, { id: string; label: string; tools: ToolInfo[] }>()
-  for (const tool of selectableTools.value) {
-    const existing = groups.get(tool.namespace.id)
-    if (existing) existing.tools.push(tool)
-    else groups.set(tool.namespace.id, { id: tool.namespace.id, label: tool.namespace.label, tools: [tool] })
-  }
   const query = search.value.toLowerCase().trim()
-  return [...groups.values()].filter(group => !query || group.label.toLowerCase().includes(query) || group.tools.some(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query)))
-    .sort((a, b) => Number(isBuiltInNamespaceId(b.id)) - Number(isBuiltInNamespaceId(a.id)) || a.label.localeCompare(b.label))
+  return groupSelectableTools(agentStore.availableTools)
+    .filter(group => !query || group.label.toLowerCase().includes(query) || group.tools.some(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(query)))
 })
 const activeTools = computed(() => {
   const group = toolGroups.value.find(item => item.id === toolNamespace.value)
@@ -108,21 +102,14 @@ function toggleTool(tool: ToolInfo): void {
   else selected.add(tool.key)
   chatStore.setSelectedToolNames([...selected])
 }
-function groupSelected(group: { tools: ToolInfo[] }): boolean {
-  return group.tools.length > 0 && group.tools.every(tool => chatStore.selectedToolNames.includes(tool.key))
+function groupSelected(group: ToolGroup): boolean {
+  return toolGroupSelectionState(group, chatStore.selectedToolNames) === true
 }
-function groupSelectionState(group: { tools: ToolInfo[] }): boolean | 'mixed' {
-  if (groupSelected(group)) return true
-  return group.tools.some(tool => chatStore.selectedToolNames.includes(tool.key)) ? 'mixed' : false
+function groupSelectionState(group: ToolGroup): boolean | 'mixed' {
+  return toolGroupSelectionState(group, chatStore.selectedToolNames)
 }
-function toggleGroup(group: { tools: ToolInfo[] }): void {
-  const selected = new Set(chatStore.selectedToolNames)
-  const shouldSelect = !groupSelected(group)
-  for (const tool of group.tools) {
-    if (shouldSelect) selected.add(tool.key)
-    else selected.delete(tool.key)
-  }
-  chatStore.setSelectedToolNames([...selected])
+function toggleGroup(group: ToolGroup): void {
+  chatStore.setSelectedToolNames(withToolGroup(group, chatStore.selectedToolNames, !groupSelected(group)))
 }
 function namespaceIcon(namespaceId: string): string | null {
   if (!namespaceId.startsWith('mcp:') || brokenMcpIcons.value.has(namespaceId)) return null
@@ -189,10 +176,11 @@ async function toggle(): Promise<void> {
   await nextTick()
   updatePosition()
 }
-function pickFile(kind: 'attach' | 'browseLibrary'): void {
+function pickFile(kind: 'attach' | 'browseLibrary' | 'browseProject'): void {
   close()
   if (kind === 'attach') emit('attach')
-  else emit('browseLibrary')
+  else if (kind === 'browseLibrary') emit('browseLibrary')
+  else emit('browseProject')
 }
 onClickOutside(root, close, { ignore: [menu] })
 onMounted(() => {
@@ -236,23 +224,21 @@ onBeforeUnmount(() => {
       aria-label="Chat options"
       @keydown.esc.stop.prevent="panel === 'main' ? close() : back()"
     >
-      <div
+      <button
         v-if="panel !== 'main'"
-        class="flex items-center gap-2 border-b border-theme-700 px-2 py-2"
+        type="button"
+        class="flex w-full shrink-0 items-center gap-2 border-b border-theme-700 px-2 py-2 text-left transition-colors hover:bg-theme-800 focus-visible:bg-theme-800 focus-visible:outline-none"
+        :aria-label="panel === 'tools' && toolNamespace ? 'Back to tools' : 'Back to chat options'"
+        @click="back"
       >
-        <button
-          type="button"
-          class="rounded-lg p-1.5 hover:bg-theme-800"
-          aria-label="Back to chat options"
-          @click="back"
-        >
+        <span class="p-1.5">
           <Icon
             icon="lucide:chevron-left"
             class="h-4 w-4"
           />
-        </button>
+        </span>
         <span class="text-xs font-semibold">{{ panel === 'tools' && toolNamespace ? toolGroups.find(group => group.id === toolNamespace)?.label : entries.find(item => item.id === panel)?.label }}</span>
-      </div>
+      </button>
       <div
         v-if="panel !== 'main' && panel !== 'files'"
         class="border-b border-theme-800 p-2"
@@ -379,6 +365,17 @@ onBeforeUnmount(() => {
               icon="lucide:library"
               class="h-5 w-5"
             /><span class="flex-1"><span class="block text-sm">Select from library</span><span class="block text-[11px] text-ink-muted">Reuse a previous attachment</span></span>
+          </button>
+          <button
+            v-if="activeProject?.rootPath"
+            type="button"
+            class="flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left hover:bg-theme-800"
+            @click="pickFile('browseProject')"
+          >
+            <Icon
+              icon="lucide:folder-open"
+              class="h-5 w-5"
+            /><span class="min-w-0 flex-1"><span class="block text-sm">From project folder</span><span class="block truncate text-[11px] text-ink-muted">Attach a file from {{ activeProject.name }}</span></span>
           </button>
         </template>
         <template v-else-if="panel === 'tools'">

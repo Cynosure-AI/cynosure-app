@@ -6,13 +6,14 @@ import type {
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
-  ModelListItem, StagedChatAttachment,
+  ModelListItem, StagedChatAttachment, ProjectFileContent, ProjectFileListing,
   VideoGenerationJob,
   VideoGenerationModelInfo,
   ImageGenerationModelInfo,
   VideoGenerationRequest,
   TranscriptionRequest,
   TranscriptionResponse,
+  UserProfile,
 } from './types'
 import type { WsHandler } from './http'
 import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
@@ -80,9 +81,8 @@ export const api = {
     update: (changes: Partial<Omit<CynoProfile, 'updatedAt'>>) => put<CynoProfileView>('/api/cyno', changes),
   },
   userSettings: {
-    get: () => get<{ name: string; avatarUrl: string | null }>('/api/user-settings'),
-    update: (profile: { name: string; avatarUrl: string | null }) =>
-      put<{ name: string; avatarUrl: string | null }>('/api/user-settings', profile),
+    get: () => get<UserProfile>('/api/user-settings'),
+    update: (profile: Partial<UserProfile>) => put<UserProfile>('/api/user-settings', profile),
   },
   provider: {
     list: () => get<LLMProviderConfig[]>('/api/providers'),
@@ -228,18 +228,16 @@ export const api = {
       post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/${encodeURIComponent(queueId)}/steer`),
     runNextQueued: (conversationId: string) =>
       post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/queue/run-next`),
+    compact: (conversationId: string, model: { providerId?: string; model?: string }) =>
+      post<{ messageId: string; compactedMessageCount: number; model: string }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/compact`, model),
     getRunSettings: () =>
       get<{ settings: ChatRunSettings; saved: boolean }>('/api/chat/run-settings'),
     updateRunSettings: (settings: Partial<ChatRunSettings>) =>
       put<{ settings: ChatRunSettings; saved: boolean }>('/api/chat/run-settings', settings),
-    getAttachmentConfig: () =>
-      get<{ inlineAttachmentTextLimit: number }>('/api/chat/attachment-config'),
     getMessageAttachments: (conversationId: string, messageId: string) =>
       get<ChatResendAttachments>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/attachments`
       ),
-    updateAttachmentConfig: (inlineAttachmentTextLimit: number) =>
-      post<{ success: boolean; inlineAttachmentTextLimit: number }>('/api/chat/attachment-config', { inlineAttachmentTextLimit }),
     truncateFrom: (conversationId: string, messageId: string) =>
       post<{ success: boolean; deleted: number }>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/truncate`,
@@ -544,6 +542,17 @@ export const api = {
       get<{ segments: ProjectDiffSegment[] }>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}/diff${fromId ? `?from=${encodeURIComponent(fromId)}` : ''}`),
     restoreBriefRevision: (id: string, revisionId: string) =>
       post<ProjectDto>(`/api/projects/${encodeURIComponent(id)}/brief/revisions/${encodeURIComponent(revisionId)}/restore`),
+    /** Browse a folder of the project directory, or search it by path when `query` is given. */
+    listFiles: (id: string, opts: { path?: string; query?: string; showHidden?: boolean } = {}) => {
+      const params = new URLSearchParams()
+      if (opts.path) params.set('path', opts.path)
+      if (opts.query?.trim()) params.set('q', opts.query.trim())
+      if (opts.showHidden) params.set('showHidden', 'true')
+      const qs = params.toString()
+      return get<ProjectFileListing>(`/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`)
+    },
+    readFile: (id: string, path: string) =>
+      get<ProjectFileContent>(`/api/projects/${encodeURIComponent(id)}/files/content?path=${encodeURIComponent(path)}`),
     onUpdated: (cb: (data: { id: string }) => void) => onWsEvent('project:updated', cb as WsHandler),
     onTasksUpdated: (cb: (data: { projectId: string }) => void) => onWsEvent('project:tasks-updated', cb as WsHandler),
   },

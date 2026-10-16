@@ -39,6 +39,9 @@ const dlgAppToken = ref('')
 const dlgEnabled = ref(true)
 const dlgAllowedAgentIds = ref<string[]>([])
 const dlgAllowedUserIds = ref('')
+/** Matches the server default for channels saved without the setting. */
+const DEFAULT_SESSION_IDLE_HOURS = 4
+const dlgSessionIdleHours = ref<number | ''>(DEFAULT_SESSION_IDLE_HOURS)
 const draftBaseline = ref('')
 const showDiscardConfirm = ref(false)
 
@@ -129,6 +132,7 @@ const serializedDraft = computed(() => JSON.stringify({
   enabled: dlgEnabled.value,
   allowedAgentIds: dlgAllowedAgentIds.value,
   allowedUserIds: dlgAllowedUserIds.value,
+  sessionIdleHours: dlgSessionIdleHours.value,
 }))
 const isDirty = computed(() => !loading.value && serializedDraft.value !== draftBaseline.value)
 
@@ -141,6 +145,7 @@ function populateFields(ch: ChannelDefinition) {
   dlgAllowedUserIds.value = Array.isArray(ch.config.allowedUserIds)
     ? ch.config.allowedUserIds.map(String).join(', ')
     : ''
+  dlgSessionIdleHours.value = typeof ch.config.sessionIdleHours === 'number' ? ch.config.sessionIdleHours : DEFAULT_SESSION_IDLE_HOURS
   dlgEnabled.value = ch.enabled
   testResult.value = null
   draftBaseline.value = serializedDraft.value
@@ -164,6 +169,10 @@ function buildConfig(): Record<string, unknown> {
   if (dlgAllowedAgentIds.value.length > 0) {
     config.allowedAgentIds = dlgAllowedAgentIds.value
   }
+  const idleHours = Number(dlgSessionIdleHours.value)
+  config.sessionIdleHours = dlgSessionIdleHours.value !== '' && Number.isFinite(idleHours) && idleHours >= 0
+    ? idleHours
+    : DEFAULT_SESSION_IDLE_HOURS
   return config
 }
 
@@ -481,6 +490,36 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
             :options="agentOptions"
             placeholder="All agents"
           />
+        </BaseCard>
+
+        <!-- Conversations -->
+        <BaseCard class="p-5">
+          <div class="flex items-center gap-2 mb-1">
+            <Icon
+              icon="lucide:message-square-dashed"
+              class="w-4 h-4 text-accent-fg"
+            />
+            <h3 class="text-sm font-medium text-theme-200">
+              Conversations
+            </h3>
+          </div>
+          <p class="text-xs text-ink-muted leading-relaxed mb-4">
+            A chat ends on its own after this many hours without a message from you, so old topics don't carry into new ones.
+            Reply to an earlier message to pick that conversation back up. Set 0 to keep chats until <span class="font-mono text-ink-secondary">/new</span>.
+          </p>
+          <label
+            for="channel-session-idle-hours"
+            class="block text-xs text-ink-secondary mb-1.5"
+          >Start a new chat after (hours idle)</label>
+          <input
+            id="channel-session-idle-hours"
+            v-model.number="dlgSessionIdleHours"
+            type="number"
+            min="0"
+            step="0.5"
+            inputmode="decimal"
+            class="w-32 bg-theme-900 border border-theme-700 text-theme-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
+          >
         </BaseCard>
 
         <!-- Status & Connection -->

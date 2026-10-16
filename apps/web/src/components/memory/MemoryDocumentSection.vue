@@ -12,6 +12,8 @@ const props = defineProps<{
   selectedFolder: MemoryFolder | null;
   activeView?: "folder" | "recent" | "trash";
   focusFile?: string;
+  /** Confines the explorer to this folder and its subfolders. */
+  rootFolderId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -35,7 +37,8 @@ function navigateToFolder(folderId: string): void {
 }
 
 function navigateHome(): void {
-  const root = props.spaces.find(space => space.isUncategorized) || props.spaces[0];
+  const root = props.spaces.find(space => space.id === props.rootFolderId)
+    || props.spaces.find(space => space.isUncategorized) || props.spaces[0];
   if (root) emit("update:selectedFolderId", root.id);
   emit("select-view", "folder");
   emit("folder-navigation");
@@ -79,7 +82,7 @@ async function onFileDrop(event: DragEvent): Promise<void> {
 </script>
 
 <template>
-  <div class="p-4 sm:p-6 lg:p-8">
+  <div>
     <div
       v-if="(activeView ?? 'folder') === 'folder' && selectedFolderId"
       data-testid="memory-document-drop-zone"
@@ -109,6 +112,7 @@ async function onFileDrop(event: DragEvent): Promise<void> {
         :folder-id="selectedFolderId"
         :spaces="spaces"
         :focus-file="focusFile"
+        :root-folder-id="rootFolderId"
         @edit-space="selectedFolder && emit('edit-folder', selectedFolder)"
         @delete-space="selectedFolder && emit('delete-folder', selectedFolder)"
         @create-folder="emit('create-folder', $event)"

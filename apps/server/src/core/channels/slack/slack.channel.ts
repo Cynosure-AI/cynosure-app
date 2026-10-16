@@ -3,7 +3,7 @@ import type { WebClient } from '@slack/web-api'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { parseHITLActionId, resolveChannelHITL, resolveHomeConversation, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
 import { sendLongSlackMessage, uploadImage, extractAttachments } from './slack.api.js'
 
@@ -11,6 +11,8 @@ export interface SlackConfig {
     botToken: string
     appToken: string
     allowedAgentIds?: string[]
+    /** Hours without a user message after which a chat starts over; 0 never. */
+    sessionIdleHours?: number
 }
 
 export interface PendingHITL {
@@ -164,6 +166,7 @@ export class SlackChannel implements ChannelProvider {
     channelId: string
     broadcast: BroadcastFn
     allowedAgentIds: string[]
+    sessionIdleMs: number
     botUserId?: string
     readonly channelType = 'slack'
     activeExecutions = new Map<string, ActiveChannelExecutionEntry>()
@@ -192,6 +195,7 @@ export class SlackChannel implements ChannelProvider {
         this.appToken = config.appToken
         this.broadcast = broadcast
         this.allowedAgentIds = config.allowedAgentIds ?? []
+        this.sessionIdleMs = sessionIdleMsFromConfig(config)
 
         this.app = new App({
             token: this.botToken,
@@ -289,7 +293,8 @@ export class SlackChannel implements ChannelProvider {
         }
     }
 
-    homeConversation(target: string): { conversationId: string; agentId: string } | null {
-        return target ? resolveHomeConversation(this, target) : null
+    homeConversation(target: string, create: boolean): { conversationId: string; agentId: string } | null {
+        if (!target) return null
+        return create ? resolveHomeConversation(this, target) : findHomeConversation(this, target)
     }
 }

@@ -23,6 +23,7 @@ export type RecentChatFilter = 'all' | 'free' | 'agents' | 'cron' | 'channel'
 export const usePreferencesStore = defineStore('preferences', () => {
     const userName = ref('')
     const userAvatarUrl = ref<string | null>(null)
+    const userInstructions = ref('')
     const userSettingsLoaded = ref(false)
     const userSettingsSaving = ref(false)
     const theme = useLocalStorage<ThemeId>(SK_THEME, 'crimson')
@@ -31,7 +32,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     if (!THEME_IDS.has(theme.value)) theme.value = 'crimson'
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const aiMessageBubbles = useLocalStorage(SK_AI_MESSAGE_BUBBLES, true)
-    const quickResponses = useLocalStorage(SK_QUICK_RESPONSES, false)
     const sidebarCollapsed = ref(false)
     const recentChatFilter = useLocalStorage<RecentChatFilter[]>(SK_RECENT_CHAT_FILTER, ['all'])
     // Migrate the former single-select preference and discard malformed values.
@@ -63,7 +63,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, aiMessageBubbles, quickResponses, recentChatFilter,
+        [theme, autoExpandSteps, aiMessageBubbles, recentChatFilter,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
             voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
@@ -79,6 +79,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
             const settings = await api.userSettings.get()
             userName.value = settings.name
             userAvatarUrl.value = settings.avatarUrl
+            userInstructions.value = settings.instructions ?? ''
         } catch {
             // Non-critical during startup; reconnect will retry with the other stores.
         } finally {
@@ -87,13 +88,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
     }
 
     /**
-     * Chat run settings (titles, context strategy, summarization model) now
-     * live on the server. Copy choices made in this browser once, then drop them.
+     * Chat run settings (titles, quick responses, context strategy,
+     * summarization model) now live on the server. Copy choices made in this
+     * browser once, then drop them.
      */
     async function migrateLegacyChatRunSettings() {
         const read = (key: string) => localStorage.getItem(key)
         const legacyKeys = [SK_GENERATE_TITLE, SK_TITLE_PROVIDER, SK_TITLE_MODEL, SK_CONTEXT_STRATEGY,
-            SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL]
+            SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL, SK_QUICK_RESPONSES]
         if (!legacyKeys.some((key) => read(key) !== null)) return
 
         const legacy: Partial<ChatRunSettings> = {}
@@ -105,9 +107,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
         // Sliding window was the stored default, so only a different choice was deliberate.
         const strategy = read(SK_CONTEXT_STRATEGY)
         if (strategy && strategy !== 'sliding-window') legacy.contextStrategy = strategy as ContextStrategy
+        // Quick responses moved later than the rest, so no server value can predate an opt-in here.
+        const quickResponses = read(SK_QUICK_RESPONSES) === 'true' ? { generateQuickResponses: true } : {}
         try {
             const { saved } = await api.chat.getRunSettings()
-            if (!saved && Object.keys(legacy).length) await api.chat.updateRunSettings(legacy)
+            const changes = saved ? quickResponses : { ...legacy, ...quickResponses }
+            if (Object.keys(changes).length) await api.chat.updateRunSettings(changes)
             legacyKeys.forEach((key) => localStorage.removeItem(key))
             syncPrefsToElectron()
         } catch {
@@ -121,9 +126,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
             const settings = await api.userSettings.update({
                 name: userName.value,
                 avatarUrl: userAvatarUrl.value,
+                // Until the profile has loaded the local value is a placeholder that would erase the saved one.
+                ...(userSettingsLoaded.value ? { instructions: userInstructions.value } : {}),
             })
             userName.value = settings.name
             userAvatarUrl.value = settings.avatarUrl
+            userInstructions.value = settings.instructions ?? ''
         } finally {
             userSettingsSaving.value = false
         }
@@ -179,9 +187,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
     }
 
     return {
-        userName, userAvatarUrl, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
+        userName, userAvatarUrl, userInstructions, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
         migrateLegacyChatRunSettings,
-        theme, autoExpandSteps, aiMessageBubbles, quickResponses, sidebarCollapsed, recentChatFilter,
+        theme, autoExpandSteps, aiMessageBubbles, sidebarCollapsed, recentChatFilter,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
         voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel,

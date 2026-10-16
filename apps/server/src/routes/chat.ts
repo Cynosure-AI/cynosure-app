@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
-import { applyContextStrategy } from '../core/agent/context-compactor.js'
+import { applyContextStrategy, compactConversationNow, NothingToCompactError } from '../core/agent/context-compactor.js'
 import { getToolRegistry } from '../core/tools/tool-registry.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 import { AgentExecutor, MAIN_AGENT_MAX_ROUNDS } from '../core/agent/agent-executor.js'
@@ -21,6 +21,7 @@ import { getChannelManager } from '../core/channels/channel-manager.js'
 import { cancelCronRunsByConversation } from '../core/triggers/cron-scheduler.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, toFileUrl } from '../core/artifacts/image-artifacts.js'
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
+import { releaseAttachmentAsset } from '../core/artifacts/attachment-asset-references.js'
 import { commitStagedChatAttachments, discardStagedChatAttachments, listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import {
@@ -34,7 +35,7 @@ import {
 } from '../core/chat/active-executions.js'
 import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { shouldGenerateConversationTitle } from '../core/chat/conversation-title.js'
-import { getChatAttachmentConfig, saveChatAttachmentConfig } from '../core/chat/attachment-settings.js'
+import { resolveInlineAttachmentTextLimit } from '../core/chat/attachment-context.js'
 import { getChatRunSettings, readChatRunSettings, saveChatRunSettings } from '../core/chat/chat-run-settings.js'
 import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsHint, insertTurnLocalContext, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
 import { resolveRunSettings } from '../core/agent/run-settings.js'
@@ -120,21 +121,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     return { events: listChatEvents(db, req.params.id, after, limit), latestSequence }
   })
 
-  // GET /api/chat/attachment-config — get attachment context settings
-  app.get('/attachment-config', async () => {
-    return getChatAttachmentConfig()
-  })
-
-  // POST /api/chat/attachment-config — update attachment context settings
-  app.post<{ Body: { inlineAttachmentTextLimit: number } }>('/attachment-config', async (req, reply) => {
-    const rawLimit = req.body.inlineAttachmentTextLimit
-    if (!Number.isFinite(Number(rawLimit))) {
-      return reply.status(400).send({ error: 'inlineAttachmentTextLimit must be a number' })
-    }
-    const { inlineAttachmentTextLimit } = saveChatAttachmentConfig({ inlineAttachmentTextLimit: rawLimit })
-    return { success: true, inlineAttachmentTextLimit }
-  })
-
   // GET /api/chat/run-settings — chat behavior shared by every client, channel, and scheduled run
   app.get('/run-settings', async () => {
     return readChatRunSettings()
@@ -181,6 +167,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       startedAt: Date.now(),
     }, abortController)
 
+    const acquiredAttachments: object[] = []
     const outcome = await withConversationLock(conversationId, async () => {
       abortController.signal.throwIfAborted()
       const { content, messageId: providedMsgId, imageDataUrls, audioDataUrls, files } = request
@@ -196,7 +183,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         providerOverride,
         allowedTools,
         systemPrompt,
-        generateQuickResponses: generateQuickResponsesPref,
         subAgents: reqSubAgents,
         memoryFolderIds: reqMemoryFolderIds,
         thinkingEnabled: reqThinkingEnabled,
@@ -210,7 +196,14 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       cancelPostActions(conversationId)
       clearQuickResponses(conversationId, broadcast)
       const db = getDb()
-      const inlineAttachmentTextLimit = getChatAttachmentConfig(db).inlineAttachmentTextLimit
+      const inlineAttachmentTextLimit = await resolveInlineAttachmentTextLimit({
+        gateway,
+        baseProviderId: initialAgent?.providerId,
+        baseModel: initialAgent?.model,
+        providerOverride,
+        modelOverride: model,
+        maxContextTokens: initialAgent?.maxContextTokens && initialAgent.maxContextTokens > 0 ? initialAgent.maxContextTokens : null,
+      })
       const toolRegistry = getToolRegistry()
 
       // Persist user-uploaded images as file artifacts and keep only file URLs in DB.
@@ -246,11 +239,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       const reusedAttachments = request.stagedFileArtifacts ? [] : (await Promise.all(
         (files || []).flatMap(file => file.existingAttachmentId ? [reuseConversationAttachment(conversationId, file.existingAttachmentId)] : []),
       )).filter((file): file is NonNullable<typeof file> => Boolean(file))
+      acquiredAttachments.push(...reusedAttachments)
       const unstagedFiles = files?.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string')
         .map(file => ({ name: file.name, content: file.content! })) || []
       const storedFileAttachments = request.stagedFileArtifacts
         ? request.stagedFileArtifacts
         : [...preprocessedAttachments, ...reusedAttachments, ...(unstagedFiles.length ? await materializeFileAttachments(unstagedFiles, conversationId) : [])]
+      acquiredAttachments.push(...storedFileAttachments)
       abortController.signal.throwIfAborted()
       if (!request.stagedFileArtifacts) {
         for (const attachment of storedFileAttachments.slice(preprocessedAttachments.length + reusedAttachments.length)) {
@@ -536,7 +531,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             completionTokens: media.completionTokens || null,
             contextTokens: media.contextTokens || null,
           })
-          if (generateQuickResponsesPref === true) {
+          if (getChatRunSettings(db).generateQuickResponses) {
             void generateQuickResponses({
               conversationId, messageId: assistant.id, userMessage: normalizedContent,
               assistantResponse: media.content, broadcast, providerId: responseProvider,
@@ -562,30 +557,27 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         }
 
         // Apply the configured context strategy (compact or trim) to fit the model's context window
-        let contextStrategy: ContextStrategy | undefined
-        let initialContextEstimate: number | undefined
-        if (contextWindow) {
-          const fitted = await applyContextStrategy({
-            messages,
-            historyRows,
-            filteredRows,
-            contextWindow,
-            tools,
-            thinkingEnabled: settings.thinkingEnabled,
-            reasoningEffort: settings.reasoningEffort,
-            gateway,
-            providerId,
-            responseModel,
-            conversationId,
-            db,
-            broadcast,
-            signal: abortController.signal,
-          })
-          abortController.signal.throwIfAborted()
-          messages = fitted.messages
-          initialContextEstimate = fitted.initialContextEstimate
-          contextStrategy = fitted.strategy
-        }
+        // (without a known window, only a recorded compaction is applied)
+        const fitted = await applyContextStrategy({
+          messages,
+          historyRows,
+          filteredRows,
+          contextWindow,
+          tools,
+          thinkingEnabled: settings.thinkingEnabled,
+          reasoningEffort: settings.reasoningEffort,
+          gateway,
+          providerId,
+          responseModel,
+          conversationId,
+          db,
+          broadcast,
+          signal: abortController.signal,
+        })
+        abortController.signal.throwIfAborted()
+        messages = fitted.messages
+        const initialContextEstimate: number | undefined = fitted.initialContextEstimate
+        const contextStrategy: ContextStrategy | undefined = fitted.strategy
 
         executor = new AgentExecutor({
           gateway,
@@ -638,7 +630,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           contextTokens: result.contextTokens, startedAt: result.usage ? now : undefined,
         })
 
-        if (generateQuickResponsesPref === true) {
+        if (getChatRunSettings(db).generateQuickResponses) {
           void generateQuickResponses({
             conversationId,
             messageId: assistant.id,
@@ -701,7 +693,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         return { streamId }
       }
       throw err
-    }).finally(() => unregisterActiveChatExecution(executionId)) // end withConversationLock
+    }).finally(() => {
+      for (const attachment of acquiredAttachments) releaseAttachmentAsset(attachment)
+      unregisterActiveChatExecution(executionId)
+    }) // end withConversationLock
     return 'completed' in outcome && outcome.completed === true
   }
 
@@ -802,6 +797,59 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       : reply.status(404).send({ error: 'Queued message not found' }),
   )
 
+  // POST /api/chat/conversations/:id/compact — summarise the conversation now (the /compact command)
+  app.post<{ Params: { id: string }; Body: { providerId?: string; model?: string } | undefined }>(
+    '/conversations/:id/compact',
+    async (req, reply) => {
+      const conversationId = req.params.id
+      const db = getDb()
+      const conversation = db.prepare('SELECT agent_id FROM conversations WHERE id = ?')
+        .get(conversationId) as { agent_id: string | null } | undefined
+      if (!conversation) return reply.status(404).send({ error: 'Conversation not found.' })
+      if (getChatExecutionIdsByConversation(conversationId).length) {
+        return reply.status(409).send({ error: 'Wait for the current response to finish before compacting.' })
+      }
+
+      // The configured compaction model wins, as for automatic compaction;
+      // otherwise summarise with the model this chat is using.
+      const agent = conversation.agent_id ? getAgent(conversation.agent_id) : null
+      const runSettings = getChatRunSettings(db)
+      const sessionProviderId = req.body?.providerId || agent?.providerId || undefined
+      const providerId = runSettings.compactModel ? runSettings.compactProviderId || sessionProviderId : sessionProviderId
+      const model = runSettings.compactModel || req.body?.model || agent?.model
+        || (providerId ? gateway.getProvider(providerId)?.config.defaultModel : gateway.getLastUsedProvider().config.defaultModel)
+      if (!model) return reply.status(400).send({ error: 'Choose a model before compacting.' })
+
+      try {
+        const inlineAttachmentTextLimit = await resolveInlineAttachmentTextLimit({
+          gateway, providerOverride: providerId, modelOverride: model, maxContextTokens: null,
+        })
+        // Under the conversation lock, a message sent meanwhile waits and then
+        // builds its context from the new summary.
+        const result = await withConversationLock(conversationId, () => compactConversationNow({
+          ...buildConversationHistory({
+            db,
+            conversationId,
+            mainAgentId: conversation.agent_id,
+            inlineAttachmentTextLimit,
+          }),
+          gateway,
+          providerId,
+          model,
+          conversationId,
+          db,
+          broadcast,
+        }))
+        // The last measured context size predates the summary; the next turn measures it again.
+        db.prepare('UPDATE conversations SET last_context_tokens = NULL WHERE id = ?').run(conversationId)
+        return result
+      } catch (err) {
+        if (err instanceof NothingToCompactError) return reply.status(400).send({ error: err.message })
+        return reply.status(502).send({ error: `Compaction failed: ${(err as Error).message}` })
+      }
+    },
+  )
+
   app.post<{ Params: { id: string } }>('/conversations/:id/queue/run-next', async (req) => {
     getDb().prepare(`UPDATE queued_chat_messages SET status = 'pending' WHERE conversation_id = ?`).run(req.params.id)
     void runNextQueuedMessage(req.params.id)
@@ -842,7 +890,11 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.get('/post-actions', async (req) => {
     const { conversationId } = req.query as { conversationId?: string }
     if (conversationId) {
-      return { actions: getActiveActions(conversationId), quickResponses: getQuickResponses(conversationId) }
+      // Suggestions saved before the setting was turned off stay hidden.
+      const quickResponses = getChatRunSettings().generateQuickResponses
+        ? getQuickResponses(conversationId)
+        : { messageId: null, suggestions: [] }
+      return { actions: getActiveActions(conversationId), quickResponses }
     }
     return { actions: getAllActiveActions() }
   })

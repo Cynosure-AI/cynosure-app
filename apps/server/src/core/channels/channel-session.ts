@@ -45,6 +45,17 @@ export interface ChannelSessionState<K extends ChannelTargetId> {
     pendingAttachments: Map<K, ChannelMedia>
     /** Ordered outbound queue of the running turn, so HITL prompts land after tool status lines. */
     conversationSendQueue: Map<string, ConversationSendFn>
+    /** A chat whose last user message is older than this starts over; 0 keeps chats until `new`. */
+    sessionIdleMs: number
+}
+
+/** Default of the `sessionIdleHours` channel setting. */
+export const DEFAULT_SESSION_IDLE_HOURS = 4
+
+/** Idle limit from persisted channel config; a missing or invalid value uses the default. */
+export function sessionIdleMsFromConfig(config: { sessionIdleHours?: unknown }): number {
+    const hours = Number(config.sessionIdleHours ?? DEFAULT_SESSION_IDLE_HOURS)
+    return (Number.isFinite(hours) && hours >= 0 ? hours : DEFAULT_SESSION_IDLE_HOURS) * 3_600_000
 }
 
 /** Agents usable in this channel (all agents when no allow-list is configured). */
@@ -73,11 +84,35 @@ function channelConversationKey<K extends ChannelTargetId>(state: ChannelSession
     return `${state.channelType}:${state.channelId}:${target}`
 }
 
-function findActiveConversation(channelKey: string, agentId: string): string | undefined {
-    const row = getDb()
-        .prepare("SELECT id FROM conversations WHERE origin = 'channel' AND agent_id IS ? AND json_extract(metadata_json, '$.channelKey') = ? AND json_extract(metadata_json, '$.archived') IS NULL")
-        .get(isCyno(agentId) ? null : agentId, channelKey) as { id: string } | undefined
-    return row?.id
+interface ActiveConversation {
+    id: string
+    projectId: string | null
+    /** Last user message, or creation when the user has not written yet. Proactive messages do not count. */
+    lastActiveAt: number
+}
+
+function findActiveConversation(channelKey: string, agentId: string): ActiveConversation | undefined {
+    return getDb()
+        .prepare(`SELECT c.id, c.project_id AS projectId,
+                COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id = c.id AND m.role = 'user'), c.created_at) AS lastActiveAt
+            FROM conversations c
+            WHERE c.origin = 'channel' AND c.agent_id IS ? AND json_extract(c.metadata_json, '$.channelKey') = ? AND json_extract(c.metadata_json, '$.archived') IS NULL`)
+        .get(isCyno(agentId) ? null : agentId, channelKey) as ActiveConversation | undefined
+}
+
+/** The chat has been idle past the channel's limit and no turn of it is still running. */
+function isIdleExpired<K extends ChannelTargetId>(state: ChannelSessionState<K>, conversation: ActiveConversation): boolean {
+    if (state.sessionIdleMs <= 0 || Date.now() - conversation.lastActiveAt <= state.sessionIdleMs) return false
+    for (const entry of state.activeExecutions.values()) {
+        if (entry.exec.conversationId === conversation.id) return false
+    }
+    return true
+}
+
+function archiveConversation<K extends ChannelTargetId>(state: ChannelSessionState<K>, conversationId: string): void {
+    getDb().prepare("UPDATE conversations SET metadata_json = json_set(COALESCE(metadata_json, '{}'), '$.archived', ?), updated_at = ? WHERE id = ?")
+        .run(Date.now(), Date.now(), conversationId)
+    state.conversationTargets.delete(conversationId)
 }
 
 export function getOrCreateChannelConversation<K extends ChannelTargetId>(
@@ -88,7 +123,9 @@ export function getOrCreateChannelConversation<K extends ChannelTargetId>(
 ): string {
     const channelKey = channelConversationKey(state, target)
     const existing = findActiveConversation(channelKey, agentId)
-    if (existing) return existing
+    if (existing && !isIdleExpired(state, existing)) return existing.id
+    // An idle chat ends on its own; the project it worked in carries over.
+    if (existing) archiveConversation(state, existing.id)
 
     const id = nanoid()
     const now = Date.now()
@@ -100,8 +137,8 @@ export function getOrCreateChannelConversation<K extends ChannelTargetId>(
             memoryFolderIds: getAssignedMemoryFolders(agentId).map((space) => space.id),
         })
     getDb().prepare(
-        'INSERT INTO conversations (id, title, agent_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, senderName, cyno ? null : agentId, 'channel', JSON.stringify(executionConfig), JSON.stringify({ channelKey }), now, now)
+        'INSERT INTO conversations (id, title, agent_id, origin, execution_config_json, metadata_json, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, senderName, cyno ? null : agentId, 'channel', JSON.stringify(executionConfig), JSON.stringify({ channelKey }), existing?.projectId ?? null, now, now)
     return id
 }
 
@@ -114,6 +151,21 @@ export function resolveHomeConversation<K extends ChannelTargetId>(
     const conversationId = getOrCreateChannelConversation(state, target, 'Channel chat', agentId)
     state.conversationTargets.set(conversationId, target)
     return { conversationId, agentId }
+}
+
+/**
+ * The target's active conversation with its current agent while it has not
+ * gone idle, without starting one. Proactive messages join this chat only.
+ */
+export function findHomeConversation<K extends ChannelTargetId>(
+    state: ChannelSessionState<K>,
+    target: K,
+): { conversationId: string; agentId: string } | null {
+    const agentId = effectiveAgentId(state, target)
+    const existing = findActiveConversation(channelConversationKey(state, target), agentId)
+    if (!existing || isIdleExpired(state, existing)) return null
+    state.conversationTargets.set(existing.id, target)
+    return { conversationId: existing.id, agentId }
 }
 
 /**
@@ -141,10 +193,7 @@ export function archiveChannelConversation<K extends ChannelTargetId>(
     agentId: string,
 ): void {
     const existing = findActiveConversation(channelConversationKey(state, target), agentId)
-    if (!existing) return
-    getDb().prepare("UPDATE conversations SET metadata_json = json_set(COALESCE(metadata_json, '{}'), '$.archived', ?), updated_at = ? WHERE id = ?")
-        .run(Date.now(), Date.now(), existing)
-    state.conversationTargets.delete(existing)
+    if (existing) archiveConversation(state, existing.id)
 }
 
 /** Cancel all running executions whose conversation belongs to the given target. */

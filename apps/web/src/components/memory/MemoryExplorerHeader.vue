@@ -4,6 +4,8 @@ import { Icon } from "@iconify/vue";
 defineProps<{
   segments: Array<{ label: string; disabled?: boolean }>;
   homeDisabled?: boolean;
+  /** Accessible name of the Home button; defaults to the memory root. */
+  homeLabel?: string;
   canGoBack?: boolean;
   canGoForward?: boolean;
 }>();
@@ -24,8 +26,8 @@ const emit = defineEmits<{
           type="button"
           :disabled="homeDisabled"
           class="flex h-7 w-7 items-center justify-center rounded-md text-accent-fg transition-colors hover:bg-accent-500/10 hover:text-accent-fg disabled:cursor-not-allowed disabled:opacity-30"
-          title="Home"
-          aria-label="Go to memory root"
+          :title="homeLabel || 'Home'"
+          :aria-label="homeLabel || 'Go to memory root'"
           @click="emit('home')"
         >
           <Icon
@@ -89,7 +91,7 @@ const emit = defineEmits<{
     </div>
     <div
       v-if="$slots.actions"
-      class="flex shrink-0 items-center gap-2"
+      class="flex flex-wrap items-center gap-2 lg:shrink-0 lg:flex-nowrap"
     >
       <slot name="actions" />
     </div>

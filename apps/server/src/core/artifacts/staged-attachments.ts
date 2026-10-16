@@ -2,6 +2,7 @@ import { existsSync, rmSync } from 'fs'
 import { getDb } from '../../db/database.js'
 import { deleteConversationAttachmentChunks, indexConversationAttachment } from './attachment-rag.js'
 import { materializeFileAttachment, type FileAttachmentArtifact, type FileAttachmentInput } from './file-artifacts.js'
+import { hasAttachmentAssetReferences, releaseAttachmentAsset } from './attachment-asset-references.js'
 
 export type StagedAttachmentStatus = 'processing' | 'ready' | 'failed'
 
@@ -21,7 +22,7 @@ export interface StagedChatAttachmentState {
 }
 
 type StageUpdate = Omit<StagedChatAttachmentState, 'artifact' | 'createdAt' | 'updatedAt'>
-const activeIndexJobs = new Map<string, AbortController>()
+const activeIndexJobs = new Map<string, { controller: AbortController; assetId: string }>()
 const indexCompletions = new Map<string, Promise<void>>()
 const pendingStages = new Map<string, Set<Promise<StagedChatAttachmentState>>>()
 
@@ -79,13 +80,11 @@ function readStagedRows(conversationId?: string): StagedChatAttachmentState[] {
 function startIndexing(state: StagedChatAttachmentState, onUpdate?: (update: StageUpdate) => void): void {
   if (activeIndexJobs.has(state.id)) return
   const controller = new AbortController()
-  activeIndexJobs.set(state.id, controller)
+  const assetId = state.artifact.assetId || state.artifact.id
+  activeIndexJobs.set(state.id, { controller, assetId })
 
   const completion = (async () => {
     try {
-      // A process may have stopped midway through a previous attempt. Always
-      // rebuild this asset from a clean source-specific slice before resuming.
-      await deleteConversationAttachmentChunks(state.conversationId, [state.artifact.assetId || state.artifact.id])
       const chunkCount = await indexConversationAttachment(state.conversationId, state.artifact, {
         signal: controller.signal,
         throwOnError: true,
@@ -126,7 +125,6 @@ function startIndexing(state: StagedChatAttachmentState, onUpdate?: (update: Sta
         WHERE id = ? AND status = 'processing'
       `).run(state.error, state.updatedAt, state.id)
       if (result.changes > 0) onUpdate?.(publicUpdate(state))
-      await deleteConversationAttachmentChunks(state.conversationId, [state.artifact.assetId || state.artifact.id]).catch(() => undefined)
     } finally {
       activeIndexJobs.delete(state.id)
       indexCompletions.delete(state.id)
@@ -180,9 +178,14 @@ async function materializeAndStage(
       VALUES (?, ?, ?, ?, 'processing', 0, 0, NULL, ?, ?)
     `).run(artifact.id, conversationId, file.clientId || null, JSON.stringify(artifact), now, now)
   } catch (error) {
-    for (const path of [artifact.originalPath, artifact.textPath]) rmSync(path, { force: true })
+    releaseAttachmentAsset(artifact)
+    if (!hasAttachmentAssetReferences(getDb(), artifact.assetId || artifact.id)) {
+      getDb().prepare('DELETE FROM attachment_assets WHERE id = ?').run(artifact.assetId || artifact.id)
+      for (const path of [artifact.originalPath, artifact.textPath]) rmSync(path, { force: true })
+    }
     throw error
   }
+  releaseAttachmentAsset(artifact)
   startIndexing(state, opts?.onUpdate)
   return state
 }
@@ -210,6 +213,7 @@ export function takeStagedChatAttachments(conversationId: string, ids: string[])
 
 /** Release draft references after durable message/queue ownership is established. */
 export function commitStagedChatAttachments(conversationId: string, ids: string[]): void {
+  if (!ids.length) return
   const remove = getDb().prepare('DELETE FROM staged_chat_attachments WHERE id = ? AND conversation_id = ?')
   for (const id of ids) remove.run(id, conversationId)
 }
@@ -225,14 +229,24 @@ export async function releaseStagedChatAttachments(conversationId: string, ids: 
     .map((state) => state.artifact)
   const ownedIds = artifacts.map(artifact => artifact.id)
   const remove = getDb().prepare('DELETE FROM staged_chat_attachments WHERE id = ? AND conversation_id = ?')
-  for (const id of ownedIds) {
-    activeIndexJobs.get(id)?.abort()
-    remove.run(id, conversationId)
-  }
-  // Settle writes and cancellation rollback before the final source deletion.
-  await Promise.all(ownedIds.map(id => indexCompletions.get(id)))
-  await deleteConversationAttachmentChunks(conversationId, artifacts.map((artifact) => artifact.assetId || artifact.id))
+  for (const id of ownedIds) remove.run(id, conversationId)
+  const retiring = new Map<string, FileAttachmentArtifact>()
+  const completions: Array<Promise<void> | undefined> = []
   for (const artifact of artifacts) {
+    const assetId = artifact.assetId || artifact.id
+    if (hasAttachmentAssetReferences(getDb(), assetId)) continue
+    retiring.set(assetId, artifact)
+    getDb().prepare('DELETE FROM attachment_assets WHERE id = ?').run(assetId)
+    for (const [id, job] of activeIndexJobs) {
+      if (job.assetId !== assetId) continue
+      job.controller.abort()
+      completions.push(indexCompletions.get(id))
+    }
+  }
+  // Shared jobs continue for surviving references; only the last release cancels.
+  await Promise.all(completions)
+  await deleteConversationAttachmentChunks(conversationId, [...retiring.keys()])
+  for (const artifact of retiring.values()) {
     for (const path of [artifact.originalPath, artifact.textPath]) {
       try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
     }

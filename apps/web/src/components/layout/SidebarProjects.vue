@@ -9,7 +9,6 @@ import { useChatStore } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProjectsStore } from '../../stores/projects.store'
 import { useProjectChat } from '../../composables/useProjectChat'
-import { SK_SIDEBAR_EXPANDED_PROJECTS } from '../../utils/storage-keys'
 import ProjectIcon from '../project/ProjectIcon.vue'
 
 const MAX_PROJECTS = 8
@@ -35,7 +34,23 @@ const agentStore = useAgentStore()
 const projectsStore = useProjectsStore()
 const { startProjectChat } = useProjectChat()
 
-const expanded = ref<Set<string>>(readExpanded())
+const activeProjectId = computed(() => {
+  if (route.name === 'project-detail' && typeof route.params.id === 'string') return route.params.id
+  if (route.name === 'conversation') return chatStore.activeProjectId
+  return null
+})
+const collapsedProjectId = ref<string | null>(null)
+
+/** The current project's chats open automatically unless manually collapsed. */
+const expanded = computed(() => new Set<string>(
+  activeProjectId.value && activeProjectId.value !== collapsedProjectId.value
+    ? [activeProjectId.value]
+    : [],
+))
+
+watch([() => route.fullPath, activeProjectId], () => {
+  collapsedProjectId.value = null
+})
 const chatsByProject = ref<Record<string, ProjectChats>>({})
 const activityChatsByProject = ref<Record<string, ConversationRow[]>>({})
 
@@ -95,34 +110,6 @@ function isWaiting(chat: ConversationRow): boolean {
 
 function resumeLabel(chat: ConversationRow): string {
   return `Waiting. Resumes at ${new Date(chat.wait_until!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-}
-
-// Expanded state
-function readExpanded(): Set<string> {
-  try {
-    const stored: unknown = JSON.parse(
-      localStorage.getItem(SK_SIDEBAR_EXPANDED_PROJECTS) ?? '[]',
-    )
-
-    return new Set(
-      Array.isArray(stored)
-        ? stored.filter((id): id is string => typeof id === 'string')
-        : [],
-    )
-  } catch {
-    return new Set()
-  }
-}
-
-function saveExpanded(): void {
-  try {
-    localStorage.setItem(
-      SK_SIDEBAR_EXPANDED_PROJECTS,
-      JSON.stringify([...expanded.value]),
-    )
-  } catch {
-    // Persistence is optional
-  }
 }
 
 // Chat data
@@ -201,19 +188,36 @@ function refreshChats(): void {
   }, 200)
 }
 
+// Expand/collapse animation: height runs between 0 and the measured content height.
+function expandHeight(el: Element): void {
+  const list = el as HTMLElement
+  list.style.height = '0px'
+  void list.offsetHeight
+  list.style.height = `${list.scrollHeight}px`
+}
+
+function collapseHeight(el: Element): void {
+  const list = el as HTMLElement
+  list.style.height = `${list.scrollHeight}px`
+  void list.offsetHeight
+  list.style.height = '0px'
+}
+
+function clearHeight(el: Element): void {
+  (el as HTMLElement).style.height = ''
+}
+
 // Navigation and interaction
-function toggleProject(projectId: string): void {
-  const next = new Set(expanded.value)
+function toggleProject(projectId: string, event: MouseEvent): void {
+  if (
+    event.defaultPrevented || event.button !== 0 ||
+    event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ||
+    activeProjectId.value !== projectId
+  ) return
 
-  if (next.has(projectId)) {
-    next.delete(projectId)
-  } else {
-    next.add(projectId)
-    void loadChats(projectId)
-  }
-
-  expanded.value = next
-  saveExpanded()
+  // Handle the current project's toggle before RouterLink navigates.
+  event.preventDefault()
+  collapsedProjectId.value = expanded.value.has(projectId) ? projectId : null
 }
 
 function isProjectActive(projectId: string): boolean {
@@ -241,6 +245,13 @@ watch(
   refreshChats,
 )
 
+// Load chats as a project expands; collapsed projects keep their cached list.
+watch(expanded, (ids, previous) => {
+  for (const id of ids) {
+    if (!previous?.has(id)) void loadChats(id)
+  }
+}, { immediate: true })
+
 watch(
   () => [...new Set([...runningIds.value, ...awaitingIds.value])].sort().join('|'),
   () => void resolveActiveProjects(),
@@ -261,14 +272,7 @@ onMounted(() => {
   )
 
   void projectsStore.ensureLoaded()
-    .then(() => {
-      for (const project of projects.value) {
-        if (expanded.value.has(project.id)) {
-          void loadChats(project.id)
-        }
-      }
-      void resolveActiveProjects()
-    })
+    .then(() => resolveActiveProjects())
     .catch(() => undefined)
 })
 
@@ -298,11 +302,31 @@ onBeforeUnmount(() => {
               ? 'project-row--active text-theme-100'
               : 'text-ink-secondary hover:bg-theme-800 hover:text-theme-100'
           "
+          :aria-current="isProjectActive(project.id) ? 'page' : undefined"
           :aria-expanded="expanded.has(project.id)"
           :title="project.name"
-          @click="toggleProject(project.id)"
+          @click.capture="toggleProject(project.id, $event)"
         >
+          <!-- A collapsed project shows its chats' status in place of its icon. -->
+          <span
+            v-if="!expanded.has(project.id) && awaitingProjectIds.has(project.id)"
+            class="flex h-4 w-4 shrink-0 items-center justify-center"
+            role="img"
+            title="A chat in this project is waiting for your approval"
+            aria-label="A chat in this project is waiting for your approval"
+          >
+            <span class="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+          </span>
+          <Icon
+            v-else-if="!expanded.has(project.id) && runningProjectIds.has(project.id)"
+            icon="lucide:loader-circle"
+            class="h-4 w-4 shrink-0 animate-spin text-accent-fg"
+            role="img"
+            title="A chat in this project is running"
+            aria-label="A chat in this project is running"
+          />
           <ProjectIcon
+            v-else
             :project="project"
             class="h-4 w-4 shrink-0"
           />
@@ -313,20 +337,6 @@ onBeforeUnmount(() => {
           >
             {{ project.name }}
           </span>
-
-          <span
-            v-if="awaitingProjectIds.has(project.id)"
-            class="h-2 w-2 shrink-0 rounded-full bg-amber-400 animate-pulse"
-            title="A chat in this project is waiting for your approval"
-            aria-label="A chat in this project is waiting for your approval"
-          />
-          <Icon
-            v-else-if="!expanded.has(project.id) && runningProjectIds.has(project.id)"
-            icon="lucide:loader-circle"
-            class="h-3 w-3 shrink-0 animate-spin text-accent-fg"
-            title="A chat in this project is running"
-            aria-label="A chat in this project is running"
-          />
         </RouterLink>
 
         <!-- New project chat -->
@@ -344,89 +354,97 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <!-- Recent project chats -->
-      <ul
-        v-if="expanded.has(project.id)"
-        class="mb-1 ml-[1.15rem] space-y-0.5 border-l border-theme-800 pl-2"
+      <!-- Recent project chats; shown once loaded so the list opens to its full height -->
+      <Transition
+        name="project-chats"
+        @enter="expandHeight"
+        @after-enter="clearHeight"
+        @leave="collapseHeight"
+        @after-leave="clearHeight"
       >
-        <li
-          v-for="chat in chatsByProject[project.id]?.items ?? []"
-          :key="chat.id"
+        <ul
+          v-if="expanded.has(project.id) && chatsByProject[project.id]"
+          class="mb-1 ml-[1.15rem] space-y-0.5 border-l border-theme-800 pl-2"
         >
-          <button
-            type="button"
-            class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-theme-800/70"
-            :class="[
-              chat.id === chatStore.activeConversationId
-                ? 'bg-theme-800 text-theme-100'
-                : 'text-theme-300',
-              {
-                'bg-amber-500/20 font-medium text-amber-200 hover:bg-amber-500/25':
-                  awaitingIds.has(chat.id),
-              },
-            ]"
-            :title="chat.title"
-            @click="openChat(chat)"
+          <li
+            v-for="chat in chatsByProject[project.id]?.items ?? []"
+            :key="chat.id"
           >
-            <span
-              v-if="awaitingIds.has(chat.id)"
-              class="h-2 w-2 shrink-0 rounded-full bg-amber-400 animate-pulse"
-              aria-label="Waiting for your approval"
-            />
-            <Icon
-              v-else-if="runningIds.has(chat.id)"
-              icon="lucide:loader-circle"
-              class="h-3 w-3 shrink-0 animate-spin text-accent-fg"
-            />
-            <Icon
-              v-else-if="isWaiting(chat)"
-              icon="lucide:hourglass"
-              class="h-3 w-3 shrink-0 text-status-info"
-              role="img"
-              :aria-label="resumeLabel(chat)"
-              :title="resumeLabel(chat)"
-            />
-            <Icon
-              v-else-if="chat.origin === 'cron'"
-              icon="lucide:calendar-clock"
-              class="h-3 w-3 shrink-0 text-ink-faint"
-            />
+            <button
+              type="button"
+              class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-theme-800/70"
+              :class="[
+                chat.id === chatStore.activeConversationId
+                  ? 'bg-theme-800 text-theme-100'
+                  : 'text-theme-300',
+                {
+                  'bg-amber-500/20 font-medium text-amber-200 hover:bg-amber-500/25':
+                    awaitingIds.has(chat.id),
+                },
+              ]"
+              :title="chat.title"
+              @click="openChat(chat)"
+            >
+              <span
+                v-if="awaitingIds.has(chat.id)"
+                class="h-2 w-2 shrink-0 rounded-full bg-amber-400 animate-pulse"
+                aria-label="Waiting for your approval"
+              />
+              <Icon
+                v-else-if="runningIds.has(chat.id)"
+                icon="lucide:loader-circle"
+                class="h-3 w-3 shrink-0 animate-spin text-accent-fg"
+              />
+              <Icon
+                v-else-if="isWaiting(chat)"
+                icon="lucide:hourglass"
+                class="h-3 w-3 shrink-0 text-status-info"
+                role="img"
+                :aria-label="resumeLabel(chat)"
+                :title="resumeLabel(chat)"
+              />
+              <Icon
+                v-else-if="chat.origin === 'cron'"
+                icon="lucide:calendar-clock"
+                class="h-3 w-3 shrink-0 text-ink-faint"
+              />
 
-            <span class="min-w-0 flex-1 truncate">
-              {{ chat.title }}
-            </span>
-          </button>
-        </li>
+              <span class="min-w-0 flex-1 truncate">
+                {{ chat.title }}
+              </span>
+            </button>
+          </li>
 
-        <!-- Empty state -->
-        <li
-          v-if="
-            chatsByProject[project.id] &&
-              !chatsByProject[project.id].items.length
-          "
-          class="px-2 py-1 text-[11px] text-ink-faint"
-        >
-          No chats yet
-        </li>
-
-        <!-- Additional chats -->
-        <li
-          v-if="
-            (chatsByProject[project.id]?.total ?? 0) > CHATS_PER_PROJECT
-          "
-        >
-          <RouterLink
-            :to="{
-              name: 'project-detail',
-              params: { id: project.id },
-              query: { tab: 'chats' },
-            }"
-            class="block rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:bg-theme-800/70 hover:text-theme-200"
+          <!-- Empty state -->
+          <li
+            v-if="
+              chatsByProject[project.id] &&
+                !chatsByProject[project.id].items.length
+            "
+            class="px-2 py-1 text-[11px] text-ink-faint"
           >
-            All {{ chatsByProject[project.id].total }} chats
-          </RouterLink>
-        </li>
-      </ul>
+            No chats yet
+          </li>
+
+          <!-- Additional chats -->
+          <li
+            v-if="
+              (chatsByProject[project.id]?.total ?? 0) > CHATS_PER_PROJECT
+            "
+          >
+            <RouterLink
+              :to="{
+                name: 'project-detail',
+                params: { id: project.id },
+                query: { tab: 'chats' },
+              }"
+              class="block rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:bg-theme-800/70 hover:text-theme-200"
+            >
+              All {{ chatsByProject[project.id].total }} chats
+            </RouterLink>
+          </li>
+        </ul>
+      </Transition>
     </div>
 
     <!-- Remaining projects -->
@@ -441,6 +459,28 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.project-chats-enter-active,
+.project-chats-leave-active {
+  overflow: hidden;
+  transition:
+    height 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin-bottom 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+
+.project-chats-enter-from,
+.project-chats-leave-to {
+  margin-bottom: 0;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-chats-enter-active,
+  .project-chats-leave-active {
+    transition: none;
+  }
+}
+
 .project-row--active {
   background: var(
     --theme-nav-active-background,

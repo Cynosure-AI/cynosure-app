@@ -44,6 +44,7 @@ function makeState(): ChannelSessionState<string> {
         targetLocks: new Map(),
         pendingAttachments: new Map(),
         conversationSendQueue: new Map(),
+        sessionIdleMs: 0,
     }
 }
 

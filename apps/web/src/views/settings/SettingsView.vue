@@ -143,8 +143,8 @@ const sections: SettingsSection[] = [
     id: 'user-profile',
     categoryId: 'general',
     label: 'User Profile',
-    description: 'Set your name and profile image.',
-    terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username', 'avatar', 'profile image', 'user image']
+    description: 'Set your name, profile image, and the instructions Cyno follows in every chat.',
+    terms: ['name', 'user name', 'profile', 'identity', 'smart tag', 'username', 'avatar', 'profile image', 'user image', 'instructions', 'custom instructions', 'preferences', 'personalization']
   },
   ...(isElectronBuild ? [{
     id: 'autostart',
@@ -207,13 +207,6 @@ const sections: SettingsSection[] = [
     label: 'Context Strategy',
     description: 'Manage conversation history when it exceeds the context window.',
     terms: ['context strategy', 'context window', 'sliding window', 'truncate middle', 'compact', 'summarize', 'summarization', 'no trimming', 'conversation history']
-  },
-  {
-    id: 'attachment-context',
-    categoryId: 'chat',
-    label: 'Attachment Context',
-    description: 'Choose when document attachments switch from inline context to retrieval.',
-    terms: ['attachment context', 'attachments', 'attached files', 'documents', 'inline attachment', 'rag', 'retrieval', 'file context', 'screenshots']
   },
   {
     id: 'enable-voice',

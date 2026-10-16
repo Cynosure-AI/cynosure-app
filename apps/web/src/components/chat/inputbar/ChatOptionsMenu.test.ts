@@ -24,7 +24,10 @@ const chatStore = reactive({
   activeProjectId: null as string | null,
   setConversationProject: vi.fn(async (projectId: string | null) => { chatStore.activeProjectId = projectId }),
 })
-const projects = [{ id: 'project-1', name: 'Garden Planner', description: 'Spring beds', color: '#10b981', archived: false }]
+const projects = [
+  { id: 'project-1', name: 'Garden Planner', description: 'Spring beds', color: '#10b981', archived: false, rootPath: '/srv/garden' },
+  { id: 'project-2', name: 'Reading List', description: '', color: '#6366f1', archived: false, rootPath: '' },
+]
 const projectsStore = reactive({
   activeProjects: projects,
   get: (id: string | null) => projects.find(project => project.id === id),
@@ -105,6 +108,35 @@ describe('ChatOptionsMenu', () => {
     expect(wrapper.emitted('attach')).toHaveLength(1)
     expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
     wrapper.unmount()
+  })
+
+  test.each([
+    { projectId: null, shown: false },
+    { projectId: 'project-2', shown: false },
+    { projectId: 'project-1', shown: true },
+  ])('offers project folder files only when the project has a directory ($projectId)', async ({ projectId, shown }) => {
+    chatStore.activeProjectId = projectId
+    const wrapper = mount(ChatOptionsMenu, {
+      attachTo: document.body,
+      global: { stubs: { SystemPromptModal: true } },
+    })
+    await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
+    await flushPromises()
+    const menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
+    ;([...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Files') as HTMLButtonElement).click()
+    await flushPromises()
+
+    const fromProject = [...menu.querySelectorAll('button')].find(button => button.textContent?.includes('From project folder'))
+    expect(Boolean(fromProject)).toBe(shown)
+    if (fromProject) {
+      expect(fromProject.textContent).toContain('Attach a file from Garden Planner')
+      fromProject.click()
+      await flushPromises()
+      expect(wrapper.emitted('browseProject')).toHaveLength(1)
+      expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
+    }
+    wrapper.unmount()
+    chatStore.activeProjectId = null
   })
 
   test('toggles automatic tools without closing the menu', async () => {

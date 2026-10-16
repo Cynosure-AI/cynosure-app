@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { materializeFileAttachment } from './file-artifacts.js'
+import { closeDb } from '../../db/database.js'
 
 describe('file attachments', () => {
     const previousDataDir = process.env.CYNOSURE_DATA_DIR
@@ -14,6 +15,7 @@ describe('file attachments', () => {
     })
 
     afterAll(() => {
+        closeDb()
         if (previousDataDir === undefined) delete process.env.CYNOSURE_DATA_DIR
         else process.env.CYNOSURE_DATA_DIR = previousDataDir
         rmSync(rootDir, { recursive: true, force: true })

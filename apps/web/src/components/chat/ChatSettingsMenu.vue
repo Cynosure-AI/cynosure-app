@@ -34,7 +34,7 @@ const canSaveAsAgent = computed(() => (
 ))
 const hasCustomConfig = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && chatStore.hasCynoOverrides
-))
+) || Boolean(!chatStore.activeConversationId && chatStore.activeProjectId))
 const canShowSaveAction = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && canSaveAsAgent.value
 ))
@@ -64,8 +64,7 @@ async function togglePin(): Promise<void> {
 }
 
 function resetConfig(): void {
-  if (chatStore.activeAgentId) chatStore.resetAgentOverrides()
-  else chatStore.resetToDefaults()
+  chatStore.resetToDefaults()
   menuOpen.value = false
 }
 

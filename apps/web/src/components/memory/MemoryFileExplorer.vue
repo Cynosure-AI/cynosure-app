@@ -31,6 +31,8 @@ const props = defineProps<{
   folderId: string;
   spaces: MemoryFolder[];
   focusFile?: string;
+  /** Confines browsing to this folder and its subfolders: Home, breadcrumbs, and move targets stop here. */
+  rootFolderId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -113,6 +115,21 @@ let globalSearchTimer: number | null = null;
 let globalSearchSequence = 0;
 
 const currentSpace = computed(() => props.spaces.find((s) => s.id === props.folderId));
+const scopeRoot = computed(() => props.rootFolderId ? props.spaces.find((space) => space.id === props.rootFolderId) : undefined);
+/** The folders this explorer may show or move into. */
+const scopedSpaces = computed(() => {
+  const root = scopeRoot.value;
+  if (!root || root.isUncategorized) return props.spaces;
+  return props.spaces.filter((space) => space.id === root.id || space.folderPath.startsWith(`${root.folderPath}/`));
+});
+/** The scope root behaves like the memory root here: it is managed elsewhere, so it cannot be renamed or removed. */
+const currentIsLocked = computed(() => Boolean(currentSpace.value?.isUncategorized || (scopeRoot.value && currentSpace.value?.id === scopeRoot.value.id)));
+const lockedReason = computed(() => currentSpace.value?.isUncategorized ? "memory root" : "folder linked to this project");
+const actionError = ref("");
+
+function reportActionError(action: string, cause: unknown): void {
+  actionError.value = `${action} failed: ${cause instanceof Error ? cause.message : String(cause)}`;
+}
 const childFolders = computed(() => {
   const current = currentSpace.value;
   if (!current) return [];
@@ -125,7 +142,7 @@ const childFolders = computed(() => {
     })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
 });
-const rootFolder = computed(() => props.spaces.find((space) => space.isUncategorized) || props.spaces[0]);
+const rootFolder = computed(() => scopeRoot.value || props.spaces.find((space) => space.isUncategorized) || props.spaces[0]);
 const folderHistory = ref<string[]>([props.folderId]);
 const folderHistoryIndex = ref(0);
 const canNavigateBack = computed(() => folderHistoryIndex.value > 0);
@@ -136,7 +153,7 @@ let pathCopiedTimer: number | null = null;
 const pathSegments = computed(() => {
   const path = currentSpace.value?.directoryPath || "";
   return path.split(/[\\/]+/).filter(Boolean).map((label, index, segments) => {
-    const folderId = props.spaces.find((space) => {
+    const folderId = scopedSpaces.value.find((space) => {
       const candidate = (space.directoryPath || "").split(/[\\/]+/).filter(Boolean);
       return candidate.length === index + 1 && candidate.every((part, partIndex) => part === segments[partIndex]);
     })?.id;
@@ -193,7 +210,16 @@ function setExplorerView(view: "list" | "grid"): void {
   localStorage.setItem(EXPLORER_VIEW_KEY, view);
 }
 
-function openFolder(folder: MemoryFolder): void {
+/**
+ * Items open on a single click. The second click of a double-click lands on whatever now sits
+ * under the pointer in the folder that just opened, and must not open that too.
+ */
+function isRepeatClick(event?: MouseEvent | KeyboardEvent): boolean {
+  return event instanceof MouseEvent && event.detail > 1;
+}
+
+function openFolder(folder: MemoryFolder, event?: MouseEvent | KeyboardEvent): void {
+  if (isRepeatClick(event)) return;
   contextMenu.value = null;
   emit("navigateFolder", folder.id);
 }
@@ -203,8 +229,9 @@ function openDocumentRow(file: DocumentRow): void {
   openEditorModal(file.fileName);
 }
 
-function openExplorerRow(item: ExplorerRow): void {
-  if (item.kind === "folder") openFolder(item.folder);
+function openExplorerRow(item: ExplorerRow, event?: MouseEvent | KeyboardEvent): void {
+  if (isRepeatClick(event)) return;
+  if (item.kind === "folder") openFolder(item.folder, event);
   else openDocumentRow(item);
 }
 
@@ -395,6 +422,7 @@ const allFilteredSelected = computed(
   },
 );
 const selectedItemCount = computed(() => selectedFiles.value.size + selectedFolders.value.size);
+const selectableRowCount = computed(() => documentRows.value.filter(isExplorerRowSelectable).length);
 
 const supportedFiles = computed(() => files.value.filter((f) => f.supported));
 const needsAttentionCount = computed(
@@ -676,9 +704,9 @@ async function resolveSelectedFileGroups(targetFile?: MemoryFileStatus): Promise
 }
 
 const moveTargetSpaces = computed(() => {
-  if (moveContextFile.value) return props.spaces.filter((candidate) => candidate.id !== props.folderId);
+  if (moveContextFile.value) return scopedSpaces.value.filter((candidate) => candidate.id !== props.folderId);
   const selected = props.spaces.filter((folder) => selectedFolders.value.has(folder.id));
-  return props.spaces.filter((candidate) => candidate.id !== props.folderId && !selected.some((folder) =>
+  return scopedSpaces.value.filter((candidate) => candidate.id !== props.folderId && !selected.some((folder) =>
     candidate.id === folder.id || Boolean(folder.folderPath && candidate.folderPath.startsWith(`${folder.folderPath}/`)),
   ));
 });
@@ -706,8 +734,9 @@ async function deleteSelectedFiles(targetFile?: MemoryFileStatus) {
     }
     files.value = files.value.filter((file) => !deleted.has(file.fileName));
     emit("spacesChanged");
-  } catch {
-    /* error */
+  } catch (cause) {
+    reportActionError("Remove", cause);
+    void loadFiles();
   }
   deleting.value = false;
 }
@@ -727,8 +756,8 @@ async function forgetSelectedMemories(targetFile?: MemoryFileStatus) {
     await loadFiles();
     await loadJobs();
     emit("spacesChanged");
-  } catch {
-    /* error */
+  } catch (cause) {
+    reportActionError("Dropping the index", cause);
   }
   forgettingMemories.value = false;
 }
@@ -762,8 +791,9 @@ async function moveSelectedFiles(targetFolderId: string) {
     showMoveDialog.value = false;
     moveContextFile.value = null;
     emit("spacesChanged");
-  } catch {
-    /* error */
+  } catch (cause) {
+    reportActionError("Move", cause);
+    void loadFiles();
   }
   moving.value = false;
 }
@@ -785,8 +815,8 @@ async function moveDocumentsToFolder(targetFolderId: string, sourceFiles: string
     await api.memoryFolders.moveDocuments(props.folderId, sourceFiles, targetFolderId);
     files.value = files.value.filter((f) => !sourceFiles.includes(f.fileName));
     emit("spacesChanged");
-  } catch {
-    /* error */
+  } catch (cause) {
+    reportActionError("Move", cause);
   }
 }
 
@@ -1011,6 +1041,7 @@ watch(
     searchQuery.value = "";
     highlightedFolderId.value = null;
     contextMenu.value = null;
+    actionError.value = "";
     page.value = 0;
     await Promise.all([loadFiles(), loadJobs()]);
     if (props.folderId === folderId && props.focusFile) openEditorModal(props.focusFile);
@@ -1081,6 +1112,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
     <MemoryExplorerHeader
       :segments="pathSegments.map((segment) => ({ label: segment.label, disabled: segment.folderId === folderId }))"
       :home-disabled="!rootFolder || rootFolder.id === folderId"
+      :home-label="scopeRoot ? `Go to ${scopeRoot.name}` : undefined"
       :can-go-back="canNavigateBack"
       :can-go-forward="canNavigateForward"
       @home="navigateHome"
@@ -1103,9 +1135,9 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </button>
         <button
           type="button"
-          :disabled="currentSpace?.isUncategorized"
-          :title="currentSpace?.isUncategorized ? 'Cannot edit memory root' : 'Edit folder'"
-          :aria-label="currentSpace?.isUncategorized ? 'Memory root cannot be edited' : `Edit ${currentSpace?.name || 'folder'}`"
+          :disabled="currentIsLocked"
+          :title="currentIsLocked ? `Cannot edit the ${lockedReason}` : 'Edit folder'"
+          :aria-label="currentSpace?.isUncategorized ? 'Memory root cannot be edited' : currentIsLocked ? `The ${lockedReason} cannot be edited here` : `Edit ${currentSpace?.name || 'folder'}`"
           class="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200 disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('editSpace')"
         >
@@ -1116,9 +1148,9 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
         </button>
         <button
           type="button"
-          :disabled="currentSpace?.isUncategorized"
-          :title="currentSpace?.isUncategorized ? 'Cannot remove Uncategorized' : 'Remove folder'"
-          :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : `Remove ${currentSpace?.name || 'folder'}`"
+          :disabled="currentIsLocked"
+          :title="currentIsLocked ? `Cannot remove the ${lockedReason}` : 'Remove folder'"
+          :aria-label="currentSpace?.isUncategorized ? 'Uncategorized memory cannot be removed' : currentIsLocked ? `The ${lockedReason} cannot be removed here` : `Remove ${currentSpace?.name || 'folder'}`"
           class="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-30"
           @click="emit('deleteSpace')"
         >
@@ -1219,6 +1251,29 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @dismiss-all-failures="dismissAllFailures"
     />
 
+    <div
+      v-if="actionError"
+      role="alert"
+      class="mb-3 flex items-start gap-2 rounded-lg border border-status-danger/20 bg-status-danger/10 px-3 py-2 text-xs text-status-danger"
+    >
+      <Icon
+        icon="lucide:circle-alert"
+        class="mt-0.5 h-3.5 w-3.5 shrink-0"
+      />
+      <span class="min-w-0 flex-1 break-words">{{ actionError }}</span>
+      <button
+        type="button"
+        class="shrink-0 rounded px-1.5 py-0.5 transition-colors hover:bg-red-500/10"
+        aria-label="Dismiss error"
+        @click="actionError = ''"
+      >
+        <Icon
+          icon="lucide:x"
+          class="h-3.5 w-3.5"
+        />
+      </button>
+    </div>
+
     <MemoryExplorerToolbar
       :view="explorerView"
       :searching="Boolean(searchQuery.trim())"
@@ -1229,9 +1284,9 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :running-job-count="runningJobs.length"
       :selected-count="selectedItemCount"
       :row-count="documentRows.length"
-      :filtered-file-count="filteredFiles.length"
+      :selectable-count="selectableRowCount"
       :all-selected="allFilteredSelected"
-      :space-count="spaces.length"
+      :space-count="scopedSpaces.length"
       :selected-folder-count="selectedFolders.size"
       :can-index="selectedSearchIndexFiles.length > 0"
       :index-idle-count="selectedSearchIndexIdleCount"
@@ -1283,7 +1338,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :search-index-progress="searchIndexProgress"
       @open-global-result="openGlobalResult"
       @open-folder="openFolder"
-      @open-document="openEditorModal"
+      @open-document="(fileName, event) => !isRepeatClick(event) && openEditorModal(fileName)"
       @open-context-menu="openContextMenu"
       @toggle-grid-selection="toggleGridSelection"
       @folder-drag-over="onFolderDocumentDragOver"
@@ -1298,11 +1353,13 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @row-drag-leave="dragLeaveExplorerRow"
       @row-drop="dropOnExplorerRow"
       @visible-items-change="visibleDocumentRows = $event"
+      @new-file="openNewFileDialog"
+      @upload="fileInput?.click()"
     />
 
     <MemoryExplorerContextMenu
       :menu="contextMenu"
-      :space-count="spaces.length"
+      :space-count="scopedSpaces.length"
       @close="closeContextMenu"
       @open-folder="openFolder"
       @create-folder="emit('createFolder', $event)"

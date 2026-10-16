@@ -32,7 +32,7 @@ export async function ensureOversizedAttachmentsIndexed(input: EnsureAttachmentI
 
     const summaries: AttachmentIndexSummary[] = []
     for (const attachment of oversized) {
-        let chunkCount = attachment.chunkCount || await countConversationAttachmentChunks(conversationId, attachment.id)
+        let chunkCount = attachment.chunkCount || await countConversationAttachmentChunks(conversationId, attachment.assetId || attachment.id)
         let status: AttachmentIndexSummary['status'] = chunkCount > 0 ? 'already-indexed' : 'not-indexed'
 
         if (chunkCount <= 0) {

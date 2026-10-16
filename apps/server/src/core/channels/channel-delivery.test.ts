@@ -5,7 +5,10 @@ import { join } from 'node:path'
 import { closeDb, getDb } from '../../db/database.js'
 import { createAgent } from '../agents/agent-store.js'
 import { findDeliveryConversation, persistProactiveMessage, recordChannelDeliveries } from './channel-delivery.js'
-import { resolveContinuedConversation, resolveHomeConversation, type ChannelSessionState } from './channel-session.js'
+import {
+    archiveChannelConversation, DEFAULT_SESSION_IDLE_HOURS, findHomeConversation, resolveContinuedConversation, resolveHomeConversation, sessionIdleMsFromConfig, type ChannelSessionState,
+} from './channel-session.js'
+import { createProject, getProjectForConversation, setConversationProject } from '../projects/project-store.js'
 import { CYNO_AGENT_ID } from '../agent/execution-preset.js'
 
 let directory: string
@@ -25,12 +28,22 @@ function conversation(id: string, agentId: string | null = null): string {
     return id
 }
 
-function state(agentId: string, allowedAgentIds: string[] = []): ChannelSessionState<number> {
+function state(agentId: string, allowedAgentIds: string[] = [], sessionIdleMs = 0): ChannelSessionState<number> {
     return {
         channelType: 'telegram', channelId: 'tg', agentId, broadcast: vi.fn(), allowedAgentIds,
         activeExecutions: new Map(), agentOverride: new Map(), lastUsedAgent: new Map(), conversationTargets: new Map(),
-        targetLocks: new Map(), pendingAttachments: new Map(), conversationSendQueue: new Map(),
+        targetLocks: new Map(), pendingAttachments: new Map(), conversationSendQueue: new Map(), sessionIdleMs,
     }
+}
+
+const HOUR = 3_600_000
+
+/** Backdate a chat and give it one user message `hoursAgo`. */
+function userWroteHoursAgo(conversationId: string, hoursAgo: number): void {
+    const at = Date.now() - hoursAgo * HOUR
+    getDb().prepare('UPDATE conversations SET created_at = ? WHERE id = ?').run(at - HOUR, conversationId)
+    getDb().prepare("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, 'user', 'Hi', ?)")
+        .run(`m-${conversationId}-${at}`, conversationId, at)
 }
 
 describe('channel deliveries', () => {
@@ -91,5 +104,62 @@ describe('continued conversations', () => {
         conversation('free-run')
         expect(resolveContinuedConversation(state('x'), 'free-run')).toEqual({ conversationId: 'free-run', agentId: CYNO_AGENT_ID })
         expect(resolveContinuedConversation(state('x'), 'missing')).toBeNull()
+    })
+})
+
+describe('idle chats', () => {
+    test('a chat idle past the limit starts over in the same project; a recent one continues', () => {
+        const session = state(CYNO_AGENT_ID, [], 4 * HOUR)
+        const first = resolveHomeConversation(session, 42).conversationId
+        const project = createProject({ name: 'Laundry', createMemoryFolder: false })
+        setConversationProject(first, project.id)
+
+        userWroteHoursAgo(first, 3)
+        expect(resolveHomeConversation(session, 42).conversationId).toBe(first)
+
+        session.sessionIdleMs = 2 * HOUR
+        const next = resolveHomeConversation(session, 42).conversationId
+        expect(next).not.toBe(first)
+        expect(getProjectForConversation(next)?.id).toBe(project.id)
+        const archived = getDb().prepare("SELECT json_extract(metadata_json, '$.archived') AS archived FROM conversations WHERE id = ?").get(first) as { archived: number | null }
+        expect(archived.archived).toEqual(expect.any(Number))
+    })
+
+    test('proactive messages do not keep a chat alive, and deliveries never start or revive one', () => {
+        const session = state(CYNO_AGENT_ID, [], 4 * HOUR)
+        const home = resolveHomeConversation(session, 42).conversationId
+        expect(findHomeConversation(session, 42)?.conversationId).toBe(home)
+
+        userWroteHoursAgo(home, 30)
+        persistProactiveMessage({ broadcast: session.broadcast, conversationId: home, agentId: null, content: '**Briefing:**\nNews' })
+        expect(findHomeConversation(session, 42)).toBeNull()
+
+        archiveChannelConversation(session, 42, CYNO_AGENT_ID)
+        expect(findHomeConversation(session, 42)).toBeNull()
+        expect(getDb().prepare("SELECT COUNT(*) AS n FROM conversations WHERE origin = 'channel'").get()).toEqual({ n: 1 })
+    })
+
+    test('a chat with a running turn does not expire; a zero limit keeps chats until new', () => {
+        const session = state(CYNO_AGENT_ID, [], HOUR)
+        const home = resolveHomeConversation(session, 42).conversationId
+        userWroteHoursAgo(home, 2)
+        session.activeExecutions.set('exec', {
+            exec: { id: 'exec', channelId: 'tg', agentId: CYNO_AGENT_ID, conversationId: home, model: null, startedAt: 0 },
+            controller: new AbortController(),
+        })
+        expect(resolveHomeConversation(session, 42).conversationId).toBe(home)
+
+        const unlimited = state(CYNO_AGENT_ID)
+        const kept = resolveHomeConversation(unlimited, 7).conversationId
+        userWroteHoursAgo(kept, 24 * 30)
+        expect(resolveHomeConversation(unlimited, 7).conversationId).toBe(kept)
+    })
+
+    test('the idle limit comes from channel config, defaulting when missing or invalid', () => {
+        expect(sessionIdleMsFromConfig({})).toBe(DEFAULT_SESSION_IDLE_HOURS * HOUR)
+        expect(sessionIdleMsFromConfig({ sessionIdleHours: 12 })).toBe(12 * HOUR)
+        expect(sessionIdleMsFromConfig({ sessionIdleHours: 0 })).toBe(0)
+        expect(sessionIdleMsFromConfig({ sessionIdleHours: -1 })).toBe(DEFAULT_SESSION_IDLE_HOURS * HOUR)
+        expect(sessionIdleMsFromConfig({ sessionIdleHours: 'soon' })).toBe(DEFAULT_SESSION_IDLE_HOURS * HOUR)
     })
 })

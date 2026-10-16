@@ -70,9 +70,10 @@ export interface ChannelProvider {
     sendNotification?(target: string, text: string): Promise<string[] | void>
 
     /**
-     * The target's active conversation with the channel's current agent,
-     * created on demand. Proactive messages are saved there so the agent
-     * knows what it sent when the user answers.
+     * The target's active conversation with the channel's current agent, so
+     * the agent knows what it sent when the user answers. Without `create`
+     * only a chat that has not gone idle is returned; with it, one is started
+     * when there is none.
      */
-    homeConversation?(target: string): { conversationId: string; agentId: string } | null
+    homeConversation?(target: string, create: boolean): { conversationId: string; agentId: string } | null
 }

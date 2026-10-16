@@ -15,8 +15,11 @@ const prefs = usePreferencesStore()
 const onboardingStore = useOnboardingStore()
 const router = useRouter()
 const nameSaveError = ref('')
+const instructionsSaveError = ref('')
 const profileStatus = ref<SettingsPersistenceState>('idle')
 const lastSavedName = ref(prefs.userName)
+const lastSavedInstructions = ref(prefs.userInstructions)
+const MAX_INSTRUCTIONS_LENGTH = 4000
 const props = withDefaults(defineProps<{
   visibleSections?: string[]
 }>(), {
@@ -50,6 +53,22 @@ async function saveName() {
   }
 }
 
+async function saveInstructions() {
+  if (prefs.userInstructions === lastSavedInstructions.value) return
+  instructionsSaveError.value = ''
+  profileStatus.value = 'saving'
+  try {
+    await prefs.saveUserProfile()
+    lastSavedName.value = prefs.userName
+    lastSavedInstructions.value = prefs.userInstructions
+    profileStatus.value = 'saved'
+  } catch {
+    prefs.userInstructions = lastSavedInstructions.value
+    instructionsSaveError.value = 'Could not save your instructions.'
+    profileStatus.value = 'error'
+  }
+}
+
 async function updateAvatar(value: string | null) {
   nameSaveError.value = ''
   const previous = prefs.userAvatarUrl
@@ -67,7 +86,9 @@ async function updateAvatar(value: string | null) {
 }
 
 watch(() => prefs.userSettingsLoaded, (loaded) => {
-  if (loaded) lastSavedName.value = prefs.userName
+  if (!loaded) return
+  lastSavedName.value = prefs.userName
+  lastSavedInstructions.value = prefs.userInstructions
 }, { immediate: true })
 
 const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; surface: string; accent: string; text: string } }[] = [
@@ -91,53 +112,9 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
 
     <BaseCard
       v-if="showSection('user-profile')"
-      class="p-5"
+      class="divide-y divide-theme-800 px-5"
     >
-      <label
-        class="flex items-start gap-3"
-        for="settings-user-name"
-      >
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-900">
-          <Icon
-            icon="lucide:user-round"
-            class="h-5 w-5 text-ink-secondary"
-          />
-        </span>
-        <span class="min-w-0 flex-1">
-          <span class="block text-sm font-medium text-theme-200">Your name</span>
-          <span class="mt-0.5 block text-xs text-ink-muted">
-            Agents can reference this value with the <code
-              v-pre
-              class="text-accent-fg"
-            >{{userName}}</code> smart tag.
-          </span>
-          <span class="mt-3 flex items-center gap-2">
-            <input
-              id="settings-user-name"
-              v-model="prefs.userName"
-              type="text"
-              maxlength="100"
-              :disabled="prefs.userSettingsSaving"
-              autocomplete="name"
-              placeholder="How should agents address you?"
-              class="w-full max-w-md rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 outline-none transition placeholder:text-ink-faint focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
-              @change="saveName"
-              @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
-            >
-            <Icon
-              v-if="prefs.userSettingsSaving"
-              icon="lucide:loader-2"
-              class="h-4 w-4 animate-spin text-ink-muted"
-            />
-          </span>
-          <span
-            v-if="nameSaveError"
-            class="mt-2 block text-xs text-status-danger"
-          >{{ nameSaveError }}</span>
-        </span>
-      </label>
-
-      <div class="mt-5 border-t border-theme-800 pt-5">
+      <div class="py-5">
         <IconUpload
           :icon-url="prefs.userAvatarUrl"
           fallback-icon="lucide:user-round"
@@ -149,9 +126,72 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
           </template>
         </IconUpload>
       </div>
+
+      <div class="py-5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label
+            for="settings-user-name"
+            class="text-sm font-medium text-theme-200"
+          >What should Cyno call you?</label>
+          <span class="flex items-center gap-2 sm:w-72">
+            <input
+              id="settings-user-name"
+              v-model="prefs.userName"
+              type="text"
+              maxlength="100"
+              :disabled="prefs.userSettingsSaving"
+              autocomplete="name"
+              placeholder="Your name"
+              class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-100 outline-none transition placeholder:text-ink-faint focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+              @change="saveName"
+              @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+            >
+          </span>
+        </div>
+        <p
+          v-if="nameSaveError"
+          class="mt-2 text-xs text-status-danger"
+        >
+          {{ nameSaveError }}
+        </p>
+      </div>
+
+      <div class="py-5">
+        <label
+          for="settings-user-instructions"
+          class="block text-sm font-medium text-theme-200"
+        >Instructions for Cyno</label>
+        <p class="mt-1 text-xs leading-5 text-ink-muted">
+          Cyno and your agents follow these in every chat, so you don't have to repeat them,
+          for example how you like things explained or how long answers should be.
+        </p>
+        <textarea
+          id="settings-user-instructions"
+          v-model="prefs.userInstructions"
+          rows="4"
+          :maxlength="MAX_INSTRUCTIONS_LENGTH"
+          :disabled="!prefs.userSettingsLoaded"
+          placeholder="e.g. Keep explanations short and precise"
+          class="mt-3 block w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm leading-6 text-theme-100 outline-none transition placeholder:text-ink-faint focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+          @change="saveInstructions"
+        />
+        <div class="mt-1.5 flex items-start justify-between gap-3">
+          <p
+            v-if="instructionsSaveError"
+            class="text-xs text-status-danger"
+          >
+            {{ instructionsSaveError }}
+          </p>
+          <span
+            v-if="prefs.userInstructions.length > MAX_INSTRUCTIONS_LENGTH * 0.8"
+            class="ml-auto text-xs tabular-nums text-ink-faint"
+          >{{ prefs.userInstructions.length }} / {{ MAX_INSTRUCTIONS_LENGTH }}</span>
+        </div>
+      </div>
+
       <div
         v-if="profileStatus === 'saving' || profileStatus === 'error'"
-        class="mt-4 flex justify-end"
+        class="flex justify-end py-4"
       >
         <SettingsPersistenceStatus
           mode="auto"

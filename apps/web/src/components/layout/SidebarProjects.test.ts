@@ -2,19 +2,20 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import { beforeEach, expect, test, vi } from 'vitest'
 import SidebarProjects from './SidebarProjects.vue'
-import { SK_SIDEBAR_EXPANDED_PROJECTS } from '../../utils/storage-keys'
 
 const mocks = vi.hoisted(() => ({
   selectConversation: vi.fn(),
   listConversationsPaginated: vi.fn(),
   listProjectConversations: vi.fn(),
 }))
+const route = reactive({ name: 'projects' as string, params: {} as Record<string, string> })
+const chatStore = reactive({ activeConversationId: null as string | null, activeProjectId: null as string | null, selectConversation: mocks.selectConversation })
 const agentStore = reactive({
   liveExecutionConversationIds: [] as string[],
   awaitingHITLConvIds: new Set<string>(),
 })
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ name: 'projects', params: {} }),
+  useRoute: () => route,
   useRouter: () => ({ push: vi.fn() }),
 }))
 vi.mock('../../api/client', () => ({ api: { chat: {
@@ -23,9 +24,7 @@ vi.mock('../../api/client', () => ({ api: { chat: {
   onEvent: () => () => {},
   onWaitsChanged: () => () => {},
 } } }))
-vi.mock('../../stores/chat.store', () => ({ useChatStore: () => ({
-  activeConversationId: null, activeProjectId: null, selectConversation: mocks.selectConversation,
-}) }))
+vi.mock('../../stores/chat.store', () => ({ useChatStore: () => chatStore }))
 vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => agentStore }))
 vi.mock('../../stores/projects.store', () => ({ useProjectsStore: () => ({
   activeProjects: [{ id: 'project', name: 'Project', updatedAt: 1 }],
@@ -38,12 +37,23 @@ vi.mock('../../composables/useProjectChat', () => ({
 beforeEach(() => {
   agentStore.liveExecutionConversationIds = []
   agentStore.awaitingHITLConvIds = new Set()
-  localStorage.setItem(SK_SIDEBAR_EXPANDED_PROJECTS, JSON.stringify(['project']))
+  openProjectPage()
+  chatStore.activeProjectId = null
   mocks.listConversationsPaginated.mockResolvedValue({
     items: [{ id: 'chat', title: 'Background chat', origin: 'chat' }], total: 1,
   })
   mocks.listProjectConversations.mockResolvedValue([])
 })
+
+function openProjectPage(): void {
+  route.name = 'project-detail'
+  route.params = { id: 'project' }
+}
+
+function leaveProject(): void {
+  route.name = 'projects'
+  route.params = {}
+}
 
 async function render(props: { activeConversationIds?: string[]; awaitingConversationIds?: string[] } = {}) {
   const wrapper = mount(SidebarProjects, { props, global: { stubs: {
@@ -96,12 +106,12 @@ test('preserves live execution status and prioritizes approval indicators', asyn
 })
 
 test('shows existing activity on a collapsed project without expanding or selecting a chat', async () => {
-  localStorage.setItem(SK_SIDEBAR_EXPANDED_PROJECTS, '[]')
+  leaveProject()
   const wrapper = await render({ activeConversationIds: ['chat'] })
   try {
     expect(wrapper.find(projectSpinner).exists()).toBe(true)
+    expect(wrapper.find('project-icon-stub').exists()).toBe(false)
     expect(wrapper.find('ul').exists()).toBe(false)
-    expect(wrapper.find('a').attributes('aria-expanded')).toBe('false')
     expect(mocks.selectConversation).not.toHaveBeenCalled()
     expect(mocks.listProjectConversations).not.toHaveBeenCalled()
 
@@ -111,7 +121,7 @@ test('shows existing activity on a collapsed project without expanding or select
 })
 
 test('discovers activity that starts after a project was mounted collapsed', async () => {
-  localStorage.setItem(SK_SIDEBAR_EXPANDED_PROJECTS, '[]')
+  leaveProject()
   const wrapper = await render()
   try {
     expect(mocks.listConversationsPaginated).not.toHaveBeenCalled()
@@ -126,7 +136,7 @@ test('discovers activity that starts after a project was mounted collapsed', asy
 })
 
 test('keeps approval visible over running activity on a collapsed project', async () => {
-  localStorage.setItem(SK_SIDEBAR_EXPANDED_PROJECTS, '[]')
+  leaveProject()
   const wrapper = await render({ activeConversationIds: ['chat'], awaitingConversationIds: ['chat'] })
   try {
     expect(wrapper.find(projectApproval).exists()).toBe(true)
@@ -138,7 +148,7 @@ test('keeps approval visible over running activity on a collapsed project', asyn
 })
 
 test('finds running chats outside the recent list and shows project status only while collapsed', async () => {
-  localStorage.setItem(SK_SIDEBAR_EXPANDED_PROJECTS, '[]')
+  leaveProject()
   const recentChats = Array.from({ length: 5 }, (_, index) => ({ id: `recent-${index}`, title: 'Recent chat' }))
   mocks.listConversationsPaginated.mockResolvedValue({ items: recentChats, total: 7 })
   mocks.listProjectConversations.mockResolvedValue([...recentChats, { id: 'older-chat' }, { id: 'other-chat' }])
@@ -147,12 +157,14 @@ test('finds running chats outside the recent list and shows project status only 
     expect(wrapper.find(projectSpinner).exists()).toBe(true)
     expect(mocks.listProjectConversations).toHaveBeenCalledWith('project')
 
-    await wrapper.find('a').trigger('click')
+    openProjectPage()
     await flushPromises()
     expect(wrapper.findAll('li')).toHaveLength(6)
     expect(wrapper.find(projectSpinner).exists()).toBe(false)
+    expect(wrapper.find('project-icon-stub').exists()).toBe(true)
 
-    await wrapper.find('a').trigger('click')
+    leaveProject()
+    await flushPromises()
     expect(wrapper.find('ul').exists()).toBe(false)
     expect(wrapper.find(projectSpinner).exists()).toBe(true)
 
@@ -160,5 +172,29 @@ test('finds running chats outside the recent list and shows project status only 
     expect(wrapper.find(projectSpinner).exists()).toBe(true)
     await wrapper.setProps({ activeConversationIds: [] })
     expect(wrapper.find(projectSpinner).exists()).toBe(false)
+  } finally { wrapper.unmount() }
+})
+
+test('expands only while the project page or one of its chats is open', async () => {
+  leaveProject()
+  const wrapper = await render()
+  try {
+    expect(wrapper.find('ul').exists()).toBe(false)
+    expect(mocks.listConversationsPaginated).not.toHaveBeenCalled()
+
+    openProjectPage()
+    await flushPromises()
+    expect(wrapper.find('ul').text()).toContain('Background chat')
+    expect(wrapper.find('a').attributes('aria-current')).toBe('page')
+
+    route.name = 'conversation'
+    route.params = { conversationId: 'chat' }
+    chatStore.activeProjectId = 'project'
+    await flushPromises()
+    expect(wrapper.find('ul').exists()).toBe(true)
+
+    chatStore.activeProjectId = 'other-project'
+    await flushPromises()
+    expect(wrapper.find('ul').exists()).toBe(false)
   } finally { wrapper.unmount() }
 })

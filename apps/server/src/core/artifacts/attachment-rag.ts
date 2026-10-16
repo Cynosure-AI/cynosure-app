@@ -11,6 +11,14 @@ import { basename, join, sep } from 'path'
 import { getAppDataDir } from '../data-dir.js'
 import { MAX_CHUNK_READ } from '../runtime-limits.js'
 import { nanoid } from 'nanoid'
+import { hasAttachmentAssetReferences, releaseAttachmentAsset, retainAttachmentAsset } from './attachment-asset-references.js'
+
+interface AttachmentIndexJob {
+    promise: Promise<number>
+    listeners: Set<(current: number, total: number) => void>
+    progress?: [number, number]
+}
+const attachmentIndexJobs = new Map<string, AttachmentIndexJob>()
 
 export const CONVERSATION_ATTACHMENTS_TABLE = 'conversation_attachments'
 const ATTACHMENT_ASSET_SPACE_ID = 'attachment-assets'
@@ -28,21 +36,51 @@ export async function indexConversationAttachment(
     attachment: FileAttachmentArtifact,
     opts?: { signal?: AbortSignal; onProgress?: (current: number, total: number) => void; throwOnError?: boolean },
 ): Promise<number> {
-    const text = readFileAttachmentText(attachment)
-    if (!text?.trim()) return 0
-
+    const assetId = attachment.assetId || attachment.id
+    const key = `${getAppDataDir()}:${assetId}`
+    let job = attachmentIndexJobs.get(key)
+    if (!job) {
+        const next: AttachmentIndexJob = { promise: Promise.resolve(0), listeners: new Set() }
+        next.promise = (async () => {
+            const row = getDb().prepare('SELECT chunk_count FROM attachment_assets WHERE id = ?').get(assetId) as { chunk_count: number | null } | undefined
+            if (row?.chunk_count != null) {
+                const count = await getRAGStore().countBySource(CONVERSATION_ATTACHMENTS_TABLE, assetId)
+                if (count === row.chunk_count) return count
+            }
+            const text = readFileAttachmentText(attachment)
+            if (!text?.trim()) {
+                updateConversationAttachmentChunkCount(assetId, 0)
+                return 0
+            }
+            // Remove partial writes from an interrupted attempt before rebuilding.
+            await deleteConversationAttachmentChunks(conversationId, [assetId])
+            const chunkCount = await getMemoryParser().ingest(CONVERSATION_ATTACHMENTS_TABLE, text, {
+                source: 'conversation_attachment', sourceFile: assetId, folderId: ATTACHMENT_ASSET_SPACE_ID,
+            }, {
+                signal: opts?.signal,
+                onProgress: (current, total) => {
+                    next.progress = [current, total]
+                    for (const listener of next.listeners) listener(current, total)
+                },
+            })
+            updateConversationAttachmentChunkCount(assetId, chunkCount)
+            return chunkCount
+        })().finally(() => { attachmentIndexJobs.delete(key) })
+        attachmentIndexJobs.set(key, next)
+        job = next
+    }
+    if (opts?.onProgress) {
+        job.listeners.add(opts.onProgress)
+        if (job.progress) opts.onProgress(...job.progress)
+    }
     try {
-        const chunkCount = await getMemoryParser().ingest(CONVERSATION_ATTACHMENTS_TABLE, text, {
-            source: 'conversation_attachment',
-            sourceFile: attachment.assetId || attachment.id,
-            folderId: ATTACHMENT_ASSET_SPACE_ID,
-        }, opts)
-        updateConversationAttachmentChunkCount(attachment.assetId || attachment.id, chunkCount)
-        return chunkCount
+        return await job.promise
     } catch (err) {
         console.warn('[attachment-rag] Failed to index attachment:', err instanceof Error ? err.message : err)
         if (opts?.throwOnError) throw err
         return 0
+    } finally {
+        if (opts?.onProgress) job.listeners.delete(opts.onProgress)
     }
 }
 
@@ -52,7 +90,7 @@ export async function reuseConversationAttachment(
 ): Promise<FileAttachmentArtifact | null> {
     void targetConversationId
     const row = getDb().prepare(`
-        SELECT a.id, a.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
+        SELECT a.id, ma.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
         FROM message_attachments ma JOIN attachment_assets a ON a.id = ma.asset_id
         WHERE ma.id = ? AND ma.kind = 'file'
     `).get(sourceAttachmentId) as {
@@ -60,7 +98,7 @@ export async function reuseConversationAttachment(
         size_bytes: number | null; text_bytes: number | null; chunk_count: number | null;
     } | undefined
     if (!row?.original_path || !row.text_path || !existsSync(row.original_path) || !existsSync(row.text_path)) return null
-    return {
+    return retainAttachmentAsset(getDb(), {
         id: nanoid(),
         assetId: row.id,
         name: row.name,
@@ -69,7 +107,7 @@ export async function reuseConversationAttachment(
         sizeBytes: row.size_bytes ?? 0,
         textBytes: row.text_bytes ?? 0,
         chunkCount: row.chunk_count ?? 0,
-    }
+    })
 }
 
 function updateConversationAttachmentChunkCount(attachmentId: string, chunkCount: number): void {
@@ -170,16 +208,23 @@ export async function deleteConversationAttachmentIndexes(conversationIds: strin
     await collectOrphanedAttachmentAssets()
 }
 
-export async function collectOrphanedAttachmentAssets(): Promise<number> {
+export async function collectOrphanedAttachmentAssets(assetIds?: string[]): Promise<number> {
+    if (assetIds?.length === 0) return 0
     const db = getDb()
     const rows = db.prepare(`SELECT a.id, a.original_path, a.text_path FROM attachment_assets a
-        LEFT JOIN message_attachments ma ON ma.asset_id = a.id WHERE ma.id IS NULL`).all() as Array<{ id: string; original_path: string; text_path: string }>
+        WHERE NOT EXISTS (SELECT 1 FROM message_attachments ma WHERE ma.asset_id = a.id)
+        ${assetIds ? `AND a.id IN (${assetIds.map(() => '?').join(',')})` : ''}`
+    ).all(...(assetIds ?? [])) as Array<{ id: string; original_path: string; text_path: string }>
+    let collected = 0
     for (const row of rows) {
+        if (hasAttachmentAssetReferences(db, row.id)) continue
+        // Remove discovery before yielding, so a new upload cannot reuse a retiring asset.
+        db.prepare('DELETE FROM attachment_assets WHERE id = ?').run(row.id)
         await getRAGStore().deleteByFilter(CONVERSATION_ATTACHMENTS_TABLE, lanceDbEqFilter('sourceFile', row.id))
         for (const path of [row.original_path, row.text_path]) try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
-        db.prepare('DELETE FROM attachment_assets WHERE id = ?').run(row.id)
+        collected++
     }
-    return rows.length
+    return collected
 }
 
 /** Move conversation-owned files into canonical storage before their owner is deleted. */
@@ -240,12 +285,13 @@ export function persistMessageFileAttachments(
             createdAt,
             assetId,
         )
+        releaseAttachmentAsset(attachment)
     }
 }
 
 export function listConversationFileAttachments(db: Database, conversationId: string): FileAttachmentArtifact[] {
     const rows = db.prepare(`
-        SELECT ma.id, ma.asset_id, a.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
+        SELECT ma.id, ma.asset_id, ma.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
         FROM message_attachments ma JOIN attachment_assets a ON a.id = ma.asset_id
         WHERE ma.conversation_id = ? AND ma.kind = 'file' ORDER BY ma.created_at ASC
     `).all(conversationId) as {
@@ -269,7 +315,7 @@ export function listConversationFileAttachments(db: Database, conversationId: st
 
 export function listConversationFileAttachmentsByMessage(db: Database, conversationId: string): Map<string, FileAttachmentArtifact[]> {
     const rows = db.prepare(`
-        SELECT ma.message_id, ma.id, ma.asset_id, a.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
+        SELECT ma.message_id, ma.id, ma.asset_id, ma.name, a.original_path, a.text_path, a.size_bytes, a.text_bytes, a.chunk_count
         FROM message_attachments ma JOIN attachment_assets a ON a.id = ma.asset_id
         WHERE ma.conversation_id = ? AND ma.kind = 'file' ORDER BY ma.created_at ASC
     `).all(conversationId) as {

@@ -12,14 +12,21 @@ export const MEMORY_CHUNK_OVERLAP_TOKENS: number = 64
 /** Hybrid-search candidates sent to the reranker when reranking is enabled. */
 export const RERANKER_CANDIDATE_COUNT: number = 50
 
+/**
+ * Attachment text up to this share of the model's context window is sent
+ * inline; larger files are retrieved by search. Sizes are bytes of text.
+ */
 export const ATTACHMENT_TEXT_LIMITS: Readonly<{
   minInlineTextLimit: number
   maxInlineTextLimit: number
+  /** Used when the model's context window is unknown. */
   defaultInlineTextLimit: number
+  inlineContextShare: number
 }> = {
   minInlineTextLimit: 2_000,
   maxInlineTextLimit: 500_000,
   defaultInlineTextLimit: 24_000,
+  inlineContextShare: 0.1,
 }
 
 export const MAX_CHUNK_READ: number = 20

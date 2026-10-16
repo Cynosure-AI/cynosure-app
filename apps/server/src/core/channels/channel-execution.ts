@@ -6,7 +6,7 @@ import { interruptPlanningRun } from '../agent/planning-state.js'
 import { cancelPostActions } from '../agent/post-execution.js'
 import { applyContextStrategy } from '../agent/context-compactor.js'
 import { getEventBus } from '../telemetry/event-bus.js'
-import { getChatAttachmentConfig } from '../chat/attachment-settings.js'
+import { resolveContextWindow } from '../chat/attachment-context.js'
 import { buildConversationHistory, type BuiltChatHistory } from '../chat/message-history.js'
 import type { RunSettings } from '../agent/run-settings.js'
 import type { AgentExecutorResult } from '../agent/agent-executor.js'
@@ -128,14 +128,8 @@ export function finishChannelExecution(input: {
     })
 }
 
-export function buildChannelHistory(conversationId: string, agentId: string | null): BuiltChatHistory {
-    const db = getDb()
-    return buildConversationHistory({
-        db,
-        conversationId,
-        mainAgentId: agentId,
-        inlineAttachmentTextLimit: getChatAttachmentConfig(db).inlineAttachmentTextLimit,
-    })
+export function buildChannelHistory(conversationId: string, agentId: string | null, inlineAttachmentTextLimit: number): BuiltChatHistory {
+    return buildConversationHistory({ db: getDb(), conversationId, mainAgentId: agentId, inlineAttachmentTextLimit })
 }
 
 export async function materializeChannelInputImages(
@@ -181,20 +175,13 @@ export async function applyChannelContextLimit(input: {
     broadcast: BroadcastFn
     signal?: AbortSignal
 }): Promise<{ messages: ChatMessage[]; contextWindow?: number; initialContextEstimate?: number; strategy?: ContextStrategy }> {
-    let contextWindow: number | undefined
-    try {
-        const info = await input.gateway.getModelInfo(input.planned.responseModel, input.planned.responseProvider)
-        contextWindow = info.contextLength
-    } catch { /* model metadata is best-effort */ }
-
-    const maxContextTokens = input.settings.maxContextTokens
-    if (maxContextTokens !== null) {
-        contextWindow = contextWindow
-            ? Math.min(contextWindow, maxContextTokens)
-            : maxContextTokens
-    }
-    if (!contextWindow) return { messages: input.messages }
-
+    const contextWindow = await resolveContextWindow({
+        gateway: input.gateway,
+        providerId: input.planned.responseProvider,
+        model: input.planned.responseModel,
+        maxContextTokens: input.settings.maxContextTokens,
+    })
+    // Without a known window, only a recorded compaction is applied.
     const fitted = await applyContextStrategy({
         messages: input.messages,
         historyRows: input.history.historyRows,

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   ingest: vi.fn().mockResolvedValue(1),
   retrieve: vi.fn().mockResolvedValue([{ text: 'Another chat', sourceFile: 'other-asset' }]),
   deleteByFilter: vi.fn().mockResolvedValue(undefined),
+  countBySource: vi.fn().mockResolvedValue(1),
 }))
 vi.mock('../memory/parser.js', () => ({ getMemoryParser: () => mocks }))
 vi.mock('../memory/rag.js', () => ({ getRAGStore: () => mocks }))

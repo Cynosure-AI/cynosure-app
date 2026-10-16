@@ -20,12 +20,34 @@ function tableNames(db: Database.Database): string[] {
 }
 
 describe('schema migrations', () => {
+    test('registers legacy draft and queue files for content deduplication', () => {
+        const db = memoryDb()
+        applySchemaMigrations(db)
+        db.exec('DROP INDEX idx_attachment_assets_content_hash; DROP INDEX idx_attachment_assets_unhashed_size; ALTER TABLE attachment_assets DROP COLUMN content_hash')
+        db.pragma('user_version = 29')
+        db.prepare('INSERT INTO conversations (id, created_at, updated_at) VALUES (?, 1, 1)').run('chat')
+        const draft = { id: 'draft', name: 'draft.txt', originalPath: '/draft.txt', textPath: '/draft.md', sizeBytes: 5, textBytes: 5, chunkCount: 1 }
+        const queued = { ...draft, id: 'queued', assetId: 'shared-asset' }
+        db.prepare('INSERT INTO staged_chat_attachments (id, conversation_id, artifact_json, created_at) VALUES (?, ?, ?, 1)')
+            .run(draft.id, 'chat', JSON.stringify(draft))
+        db.prepare('INSERT INTO queued_chat_messages (id, conversation_id, content, position, file_artifacts_json, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 1, 1)')
+            .run('queue', 'chat', '', JSON.stringify([queued]))
+
+        expect(applySchemaMigrations(db).applied).toEqual([30, 31])
+        expect(db.prepare('SELECT id, chunk_count, content_hash FROM attachment_assets ORDER BY id').all()).toEqual([
+            { id: 'draft', chunk_count: 1, content_hash: null },
+            { id: 'shared-asset', chunk_count: 1, content_hash: null },
+        ])
+        expect(applySchemaMigrations(db).applied).toEqual([])
+        db.close()
+    })
+
     test('a fresh database is created at the current schema version', () => {
         const db = memoryDb()
         const result = applySchemaMigrations(db)
 
         expect(result.from).toBe(0)
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         expect(result.to).toBe(SCHEMA_VERSION)
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('execution_steps')
@@ -51,9 +73,35 @@ describe('schema migrations', () => {
         const now = Date.now()
         db.prepare('INSERT INTO agents (id, name, tools_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
             .run('agent', 'Agent', JSON.stringify(['builtin:notifications::notify_user']), now, now)
-        expect(applySchemaMigrations(db).applied).toEqual([15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(applySchemaMigrations(db).applied).toEqual([15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         expect((db.prepare('SELECT tools_json FROM agents').get() as { tools_json: string }).tools_json)
             .toBe(JSON.stringify(['builtin:utility::notify_user']))
+        db.close()
+    })
+
+    test('unlinks project tasks from the chat that only created them', () => {
+        const db = memoryDb()
+        applySchemaMigrations(db)
+        db.pragma('user_version = 30')
+        db.prepare("INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p', 'Project', 1, 1)").run()
+        const task = db.prepare("INSERT INTO project_tasks (id, project_id, title, status, conversation_id, created_by, created_at, updated_at) VALUES (?, 'p', ?, ?, ?, 'agent', 1, 1)")
+        const event = db.prepare("INSERT INTO project_events (id, project_id, kind, task_id, to_status, source, conversation_id, created_at) VALUES (?, 'p', ?, ?, ?, 'ai', ?, 1)")
+        task.run('created-only', 'Created only', 'todo', 'creator')
+        event.run('e1', 'task_created', 'created-only', 'todo', 'creator')
+        task.run('started-later', 'Started later', 'in_progress', 'creator')
+        event.run('e2', 'task_created', 'started-later', 'todo', 'creator')
+        event.run('e3', 'task_updated', 'started-later', 'in_progress', 'creator')
+        task.run('created-started', 'Created started', 'in_progress', 'creator')
+        event.run('e4', 'task_created', 'created-started', 'in_progress', 'creator')
+        task.run('before-timeline', 'Before timeline', 'todo', 'creator')
+
+        expect(applySchemaMigrations(db).applied).toEqual([31])
+        expect(db.prepare('SELECT id, conversation_id FROM project_tasks ORDER BY id').all()).toEqual([
+            { id: 'before-timeline', conversation_id: 'creator' },
+            { id: 'created-only', conversation_id: null },
+            { id: 'created-started', conversation_id: 'creator' },
+            { id: 'started-later', conversation_id: 'creator' },
+        ])
         db.close()
     })
 
@@ -74,7 +122,7 @@ describe('schema migrations', () => {
         insert.run('other-type', 'chat', 'running', '{"type":"something_else"}', null, 1, 1)
         insert.run('corrupt', 'chat', 'running', '{broken', null, 1, 1)
 
-        expect(applySchemaMigrations(db).applied).toEqual([29])
+        expect(applySchemaMigrations(db).applied).toEqual([29, 30, 31])
         expect(tableNames(db)).not.toContain('tasks')
         expect(db.prepare('SELECT * FROM run_plans').all()).toEqual([{
             id: 'plan',
@@ -186,7 +234,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         expect(getUserVersion(db)).toBe(SCHEMA_VERSION)
         expect(tableNames(db)).not.toContain('obsolete_table')
         expect(tableNames(db)).toContain('agents')
@@ -198,7 +246,7 @@ describe('schema migrations', () => {
         // An empty file has no user tables, so it is treated as brand new.
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(result.applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         db.close()
     })
 
@@ -223,7 +271,7 @@ describe('schema migrations', () => {
 
         const result = applySchemaMigrations(db)
 
-        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(result.applied).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         expect((db.prepare("SELECT tools_json FROM agents WHERE id = 'agent-1'").get() as { tools_json: string }).tools_json)
             .toContain('builtin:utility::notify_user')
         expect((db.prepare("SELECT execution_config_json FROM conversations WHERE id = 'conversation-1'").get() as { execution_config_json: string }).execution_config_json)
@@ -249,7 +297,7 @@ describe('schema migrations', () => {
         db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('notify_user_in_app', 1)
         db.prepare('INSERT INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)')
             .run('chat', 'notify_user_in_app', 1)
-        expect(applySchemaMigrations(db).applied).toEqual([14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(applySchemaMigrations(db).applied).toEqual([14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         const agent = db.prepare('SELECT tools_json FROM agents').get() as { tools_json: string }
         expect(JSON.parse(agent.tools_json)).toEqual(['builtin:utility::notify_user', 'builtin:utility::manage_mcp'])
         for (const table of ['conversations', 'cron_jobs']) {
@@ -276,7 +324,7 @@ describe('schema migrations', () => {
         db.prepare('INSERT INTO tool_approvals (tool_name, auto_approve) VALUES (?, ?)').run('built_in_files__file_create_directory', 0)
         db.prepare('INSERT INTO session_tool_approvals (conversation_id, tool_name, created_at) VALUES (?, ?, ?)').run('conversation-1', 'file_merge', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(applySchemaMigrations(db).applied).toEqual([13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         const agent = db.prepare('SELECT tools_json FROM agents WHERE id = ?').get('agent-1') as { tools_json: string }
         expect(JSON.parse(agent.tools_json)).toEqual([
             'builtin:files::directory_list', 'builtin:files::directory_create', 'builtin:files::directory_merge',
@@ -304,7 +352,7 @@ describe('schema migrations', () => {
         insert.run('archive-child', '2024', '/memory/Archive/2024', now)
         insert.run('ordinary', 'Projects', '/memory/Projects', now)
 
-        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+        expect(applySchemaMigrations(db).applied).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
         const rows = db.prepare('SELECT id, auto_memory_excluded FROM memory_folders ORDER BY id').all() as Array<{
             id: string
             auto_memory_excluded: number

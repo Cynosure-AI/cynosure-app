@@ -24,6 +24,15 @@ describe('chat run settings', () => {
         db.close()
     })
 
+    test('keeps quick responses off until turned on, also for settings saved before the option existed', () => {
+        const db = settingsDb()
+        db.prepare('INSERT INTO settings VALUES (?, ?)').run('chatRunSettings', JSON.stringify({ generateTitle: false }))
+        expect(getChatRunSettings(db).generateQuickResponses).toBe(false)
+        expect(saveChatRunSettings({ generateQuickResponses: true }, db)).toMatchObject({ generateTitle: false, generateQuickResponses: true })
+        expect(saveChatRunSettings({ generateQuickResponses: 'yes' }, db).generateQuickResponses).toBe(true)
+        db.close()
+    })
+
     test('falls back to defaults for a malformed row', () => {
         const db = settingsDb()
         db.prepare('INSERT INTO settings VALUES (?, ?)').run('chatRunSettings', '{broken')

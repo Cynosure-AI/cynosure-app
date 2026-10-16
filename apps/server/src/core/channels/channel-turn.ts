@@ -27,6 +27,7 @@ import {
     effectiveAgentId, getOrCreateChannelConversation, resolveContinuedConversation, withTargetLock, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ChannelTargetId,
 } from './channel-session.js'
 import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
+import { resolveInlineAttachmentTextLimit } from '../chat/attachment-context.js'
 
 const CONTENT_EDIT_INTERVAL_MS = 1500
 const STREAMING_CURSOR = ' ▍'
@@ -194,13 +195,6 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
     })
 
     const cyno = isCyno(agentId)
-    const history = buildChannelHistory(conversationId, cyno ? null : agentId)
-    let messages: ChatMessage[] = history.messages
-    if (hasAttachments && messages.length > 0) {
-        const lastIdx = messages.length - 1
-        messages[lastIdx] = { ...messages[lastIdx], content: multimodalContent(displayText, media) }
-    }
-
     const agent = cyno ? null : getAgent(agentId)
     if (!cyno && !agent) {
         if (statusMsg !== null) await transport.edit(statusMsg, '⚠️ Agent not found.')
@@ -210,6 +204,18 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
     // Cyno runs without an agent, with the settings of its profile.
     const cynoConfig = agent ? undefined : cynoExecutionConfig()
     const settings = resolveRunSettings(agent, cynoConfig)
+    const inlineAttachmentTextLimit = await resolveInlineAttachmentTextLimit({
+        gateway: getGateway(), baseProviderId: agent?.providerId, baseModel: agent?.model,
+        providerOverride: settings.plan.providerOverride, modelOverride: settings.plan.modelOverride,
+        maxContextTokens: settings.maxContextTokens,
+    })
+
+    const history = buildChannelHistory(conversationId, cyno ? null : agentId, inlineAttachmentTextLimit)
+    let messages: ChatMessage[] = history.messages
+    if (hasAttachments && messages.length > 0) {
+        const lastIdx = messages.length - 1
+        messages[lastIdx] = { ...messages[lastIdx], content: multimodalContent(displayText, media) }
+    }
     const identity = agent
         ? { id: agent.id, name: agent.name, iconUrl: agent.iconUrl || null, model: agent.model || null }
         : { id: CYNO_AGENT_ID, name: getCynoProfile().name, iconUrl: null, model: cynoConfig!.model || null }
@@ -230,7 +236,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         planned = await planExecution({
             resolvedAgent: agent, conversationId, broadcast: state.broadcast, abortSignal: execAbort.signal,
             gateway: getGateway(), toolRegistry: getToolRegistry(), messages, userText,
-            run: settings.plan,
+            run: { ...settings.plan, inlineAttachmentTextLimit },
         })
         updateChannelExecution(state.activeExecutions, streamId, { model: planned.responseModel, planningRunId: planned.planningRunId })
         if (execAbort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')

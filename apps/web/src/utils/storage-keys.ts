@@ -44,7 +44,6 @@ export const SK_SIDEBAR_COLLAPSED = 'sidebar-collapsed'
 export const SK_ACTIVE_AGENT = 'cy-active-agent'
 export const SK_ACTIVITY_LOG_FILTERS = 'cy-activity-log-filters'
 export const SK_RECENT_CHAT_FILTER = 'cy-recent-chat-filter'
-export const SK_SIDEBAR_EXPANDED_PROJECTS = 'cy-sidebar-expanded-projects'
 export const SK_CHAT_DRAFT_PREFIX = 'cy-chat-draft:'
 
 /**
@@ -55,7 +54,6 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_THEME,
     SK_AUTO_EXPAND,
     SK_AI_MESSAGE_BUBBLES,
-    SK_QUICK_RESPONSES,
     SK_AUTO_ROUTER_PROVIDER,
     SK_AUTO_ROUTER_MODEL,
     SK_PROVIDER_MODEL_FAVORITES,
@@ -66,7 +64,6 @@ export const ELECTRON_SYNCED_KEYS = [
     SK_AGENT_CATEGORIES,
     SK_MA_CATEGORIES,
     SK_RECENT_CHAT_FILTER,
-    SK_SIDEBAR_EXPANDED_PROJECTS,
     SK_WHISPER_MODEL,
     SK_WHISPER_ENABLED,
     SK_WHISPER_QUANTIZATION,

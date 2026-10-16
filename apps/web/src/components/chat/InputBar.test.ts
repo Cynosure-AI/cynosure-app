@@ -1,9 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import InputBar from './InputBar.vue'
 import { api } from '../../api/client'
+import { rankSlashArgs, type SlashCommand } from '../../utils/slash-commands'
 
 const chatStore = reactive({
   activeConversationId: 'conversation-1' as string | null,
@@ -22,13 +23,27 @@ const chatStore = reactive({
   steerQueuedMessage: vi.fn(),
   runNextQueuedMessage: vi.fn(),
   createConversation: vi.fn<() => Promise<string>>(),
+  activeProjectId: null as string | null,
 })
+const projects = [{ id: 'project-1', name: 'Garden Planner', rootPath: '/srv/garden' }]
 
 vi.mock('../../stores/chat.store', () => ({
   useChatStore: () => chatStore,
 }))
+vi.mock('../../stores/projects.store', () => ({
+  useProjectsStore: () => ({ get: (id: string | null) => projects.find(project => project.id === id) }),
+}))
 vi.mock('../../stores/provider.store', () => ({
   useProviderStore: () => ({ providers: [{ id: 'p1', type: 'openrouter' }] }),
+}))
+
+const slashRuns = {
+  autoMemory: vi.fn(() => 'Automatic memories off'),
+  think: vi.fn((level: string) => `Reasoning: ${level}`),
+}
+const slashCommands = ref<SlashCommand[]>([])
+vi.mock('../../composables/useSlashCommands', () => ({
+  useSlashCommands: () => ({ commands: slashCommands, prepare: vi.fn() }),
 }))
 
 function mountInputBar(attachTo?: Element) {
@@ -40,6 +55,9 @@ function mountInputBar(attachTo?: Element) {
         ContextRing: true,
         HoverTooltip: true,
         FileLibraryModal: true,
+        ProjectFilePickerModal: true,
+        ModelSelectorModal: true,
+        SystemPromptModal: true,
       },
     },
   })
@@ -228,6 +246,39 @@ describe('InputBar drafts', () => {
     )
   })
 
+  test('stages project folder files and adds project images to the draft', async () => {
+    chatStore.activeProjectId = 'project-1'
+    const stage = vi.spyOn(api.chat, 'stageAttachment').mockResolvedValue({
+      id: 'staged-1', conversationId: 'conversation-1', name: 'src/app.ts', status: 'ready', progressCurrent: 1, progressTotal: 1, chunkCount: 1,
+    })
+    const wrapper = mountInputBar()
+    wrapper.findComponent({ name: 'InputToolbar' }).vm.$emit('browseProject')
+    await flushPromises()
+
+    const picker = wrapper.findComponent({ name: 'ProjectFilePickerModal' })
+    expect(picker.props()).toMatchObject({ show: true, projectId: 'project-1', projectName: 'Garden Planner', alreadySelectedPaths: [] })
+    picker.vm.$emit('add', [
+      { kind: 'file', name: 'src/app.ts', content: 'export const app = 1' },
+      { kind: 'image', name: 'assets/logo.png', content: 'data:image/png;base64,logo' },
+    ])
+    await flushPromises()
+
+    expect(stage).toHaveBeenCalledWith('conversation-1', expect.objectContaining({ name: 'src/app.ts', content: 'export const app = 1' }), expect.anything())
+    expect(picker.props('alreadySelectedPaths')).toEqual(['assets/logo.png', 'src/app.ts'])
+
+    await wrapper.get('textarea').setValue('Review these')
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(chatStore.sendMessage).toHaveBeenCalledWith(
+      'Review these',
+      ['data:image/png;base64,logo'],
+      [{ name: 'src/app.ts', stagedId: 'staged-1' }],
+      undefined,
+      undefined,
+    )
+    chatStore.activeProjectId = null
+  })
+
   test('adds generated image and audio artifacts to the next message', async () => {
     const wrapper = mountInputBar()
     const library = wrapper.findComponent({ name: 'FileLibraryModal' })
@@ -387,6 +438,139 @@ describe('InputBar drafts', () => {
     await flushPromises()
     expect(remove).toHaveBeenCalledWith('conversation-1', 'discarded-1')
     expect(wrapper.text()).not.toContain('discarded.txt')
+    wrapper.unmount()
+  })
+})
+
+describe('InputBar slash commands', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    chatStore.activeConversationId = 'conversation-1'
+    chatStore.isConversationLocked = false
+    chatStore.queuedMessages = []
+    chatStore.sendMessage.mockReset()
+    chatStore.sendMessage.mockResolvedValue()
+    slashRuns.autoMemory.mockClear()
+    slashRuns.think.mockClear()
+    slashCommands.value = [
+      { name: 'auto-memory', description: 'Retrieve relevant memories automatically', icon: 'x', group: 'Settings', run: slashRuns.autoMemory },
+      {
+        name: 'think',
+        description: 'Set the reasoning level',
+        icon: 'x',
+        group: 'Settings',
+        hint: 'level',
+        args: query => rankSlashArgs(['low', 'high'].map(level => ({ key: level, label: level, run: () => slashRuns.think(level) })), query),
+      },
+    ]
+    vi.spyOn(api.chat, 'listStagedAttachments').mockResolvedValue([])
+  })
+
+  function options(wrapper: ReturnType<typeof mountInputBar>): string[] {
+    return wrapper.findAll('[role="option"]').map(option => option.text())
+  }
+
+  test('opens the command menu for a leading slash and filters it', async () => {
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/')
+    expect(options(wrapper)).toHaveLength(2)
+    await textarea.setValue('/auto')
+    expect(options(wrapper)).toHaveLength(1)
+    expect(options(wrapper)[0]).toContain('/auto-memory')
+    await textarea.setValue('hello /auto')
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  test('Enter runs the highlighted command instead of sending, and shows its result', async () => {
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/auto-memory')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(slashRuns.autoMemory).toHaveBeenCalledOnce()
+    expect(chatStore.sendMessage).not.toHaveBeenCalled()
+    expect(textarea.element.value).toBe('')
+    expect(wrapper.get('[role="status"]').text()).toBe('Automatic memories off')
+    wrapper.unmount()
+  })
+
+  test('commands with arguments complete first, then the arrow keys pick an option', async () => {
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/thi')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    expect(textarea.element.value).toBe('/think ')
+    expect(options(wrapper).map(text => text.trim())).toEqual(['low', 'high'])
+    await textarea.trigger('keydown', { key: 'ArrowDown' })
+    expect(wrapper.findAll('[role="option"]')[1].attributes('aria-selected')).toBe('true')
+    expect(textarea.attributes('aria-activedescendant')).toBe(wrapper.findAll('[role="option"]')[1].attributes('id'))
+    await textarea.trigger('keydown', { key: 'Tab' })
+    expect(textarea.element.value).toBe('/think high')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(slashRuns.think).toHaveBeenCalledWith('high')
+    wrapper.unmount()
+  })
+
+  test('a known command with an unmatched argument is not sent to the model', async () => {
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/think banana')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(chatStore.sendMessage).not.toHaveBeenCalled()
+    expect(textarea.element.value).toBe('/think banana')
+    expect(wrapper.get('[role="status"]').text()).toContain('No match for “banana” in /think')
+    wrapper.unmount()
+  })
+
+  test('Escape closes the menu so the text can be sent as a message', async () => {
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/auto-memory')
+    await textarea.trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(slashRuns.autoMemory).not.toHaveBeenCalled()
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('/auto-memory', undefined, undefined, undefined, undefined)
+    wrapper.unmount()
+  })
+
+  test('an unavailable command reports why instead of running or being sent', async () => {
+    const run = vi.fn()
+    slashCommands.value = [{ name: 'stop', description: 'Stop', icon: 'x', group: 'Chat', unavailable: 'Nothing is running.', run }]
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/stop')
+    expect(wrapper.get('[role="option"]').attributes('aria-disabled')).toBe('true')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(run).not.toHaveBeenCalled()
+    expect(chatStore.sendMessage).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="status"]').text()).toBe('Nothing is running.')
+    wrapper.unmount()
+  })
+
+  test('a failing command shows its error', async () => {
+    slashCommands.value = [{ name: 'compact', description: 'Compact', icon: 'x', group: 'Chat', run: async () => { throw new Error('Compaction failed: provider down') } }]
+    const wrapper = mountInputBar()
+    await wrapper.get('textarea').setValue('/compact')
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).toBe('Compaction failed: provider down')
+    wrapper.unmount()
+  })
+
+  test('slash paths and unknown commands are sent as ordinary messages', async () => {
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/etc/hosts looks wrong')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('/etc/hosts looks wrong', undefined, undefined, undefined, undefined)
     wrapper.unmount()
   })
 })

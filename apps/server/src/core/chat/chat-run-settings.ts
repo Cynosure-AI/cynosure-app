@@ -8,6 +8,7 @@ const CONTEXT_STRATEGIES = new Set<ContextStrategy>(['compact', 'sliding-window'
 export const DEFAULT_CHAT_RUN_SETTINGS: ChatRunSettings = {
     contextStrategy: 'compact',
     generateTitle: true,
+    generateQuickResponses: false,
     titleProviderId: '',
     titleModel: '',
     compactProviderId: '',
@@ -44,6 +45,7 @@ function normalizeChatRunSettings(input: unknown, fallback: ChatRunSettings): Ch
             ? value.contextStrategy as ContextStrategy
             : fallback.contextStrategy,
         generateTitle: typeof value.generateTitle === 'boolean' ? value.generateTitle : fallback.generateTitle,
+        generateQuickResponses: typeof value.generateQuickResponses === 'boolean' ? value.generateQuickResponses : fallback.generateQuickResponses,
         titleProviderId: text('titleProviderId'),
         titleModel: text('titleModel'),
         compactProviderId: text('compactProviderId'),

@@ -53,6 +53,23 @@ describe('preferences profile', () => {
     expect(store.userAvatarUrl).toBeNull()
   })
 
+  test('saves instructions with the profile only after the saved profile has loaded', async () => {
+    apiMocks.get.mockResolvedValue({ name: 'Ada', avatarUrl: null, instructions: 'Use allegories.' })
+    apiMocks.update.mockImplementation(async (profile) => ({ name: 'Ada', avatarUrl: null, instructions: 'Use allegories.', ...profile }))
+    const store = usePreferencesStore()
+
+    await store.saveUserProfile()
+    expect(apiMocks.update).toHaveBeenLastCalledWith({ name: '', avatarUrl: null })
+
+    await store.loadUserSettings()
+    expect(store.userInstructions).toBe('Use allegories.')
+    store.userInstructions = 'Keep answers short.'
+    await store.saveUserProfile()
+
+    expect(apiMocks.update).toHaveBeenLastCalledWith({ name: 'Ada', avatarUrl: null, instructions: 'Keep answers short.' })
+    expect(store.userInstructions).toBe('Keep answers short.')
+  })
+
   test('restores and persists the recent chat filter', async () => {
     localStorage.setItem(SK_RECENT_CHAT_FILTER, JSON.stringify(['agents', 'cron']))
     const store = usePreferencesStore()
@@ -101,15 +118,6 @@ describe('preferences profile', () => {
     expect(document.documentElement.dataset.theme).toBe('dark')
   })
 
-  test('keeps experimental quick responses off by default and persists opt-in', async () => {
-    const store = usePreferencesStore()
-    expect(store.quickResponses).toBe(false)
-
-    store.quickResponses = true
-    await nextTick()
-
-    expect(localStorage.getItem(SK_QUICK_RESPONSES)).toBe('true')
-  })
 })
 
 describe('legacy chat run settings', () => {
@@ -142,6 +150,28 @@ describe('legacy chat run settings', () => {
 
     expect(chatMocks.updateRunSettings).not.toHaveBeenCalled()
     expect(localStorage.getItem(SK_COMPACT_MODEL)).toBeNull()
+  })
+
+  test('carries a quick responses opt-in over even when other server settings were saved', async () => {
+    localStorage.setItem(SK_QUICK_RESPONSES, 'true')
+    localStorage.setItem(SK_COMPACT_MODEL, 'gpt-mini')
+    chatMocks.getRunSettings.mockResolvedValue({ saved: true })
+    chatMocks.updateRunSettings.mockResolvedValue({ saved: true })
+
+    await usePreferencesStore().migrateLegacyChatRunSettings()
+
+    expect(chatMocks.updateRunSettings).toHaveBeenCalledWith({ generateQuickResponses: true })
+    expect(localStorage.getItem(SK_QUICK_RESPONSES)).toBeNull()
+  })
+
+  test('drops a quick responses opt-out without writing it, since off is the server default', async () => {
+    localStorage.setItem(SK_QUICK_RESPONSES, 'false')
+    chatMocks.getRunSettings.mockResolvedValue({ saved: true })
+
+    await usePreferencesStore().migrateLegacyChatRunSettings()
+
+    expect(chatMocks.updateRunSettings).not.toHaveBeenCalled()
+    expect(localStorage.getItem(SK_QUICK_RESPONSES)).toBeNull()
   })
 
   test('does nothing without browser values', async () => {

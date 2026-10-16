@@ -219,6 +219,7 @@ export function buildSubAgentTools(options: SubAgentToolOptions): ToolDefinition
             broadcast,
             systemPromptSuffix: '\nYou are a sub-agent continuing a private delegated session. Complete the latest task and report your results clearly.',
             includeSubAgents: false,
+            includeUserInstructions: false,
             autoToolRouting: toolPolicy.autoToolRouting,
             preferredToolKeys: toolPolicy.fixedToolKeys,
             routingToolKeys: toolPolicy.routingToolKeys,

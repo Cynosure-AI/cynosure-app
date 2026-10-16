@@ -1,8 +1,7 @@
 /**
- * Proactive channel messages (scheduled job results, notifications) as part
- * of the user's thread: the text is saved into the target's active
- * conversation, and each sent platform message remembers which conversation
- * a reply to it should continue.
+ * Proactive channel messages (scheduled job results, notifications): the text
+ * joins the target's active chat when there is one, and each sent platform
+ * message remembers which conversation a reply to it should continue.
  */
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'

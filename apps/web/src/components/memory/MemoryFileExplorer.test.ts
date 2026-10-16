@@ -264,6 +264,12 @@ describe('MemoryFileExplorer navigation and search', () => {
     table.vm.$emit('row-click', rows[0], new MouseEvent('click'))
     await flushPromises()
     expect(wrapper.emitted('navigateFolder')).toEqual([['child']])
+    // The second click of a double-click lands on the opened folder's contents and opens nothing.
+    table.vm.$emit('row-click', rows[0], new MouseEvent('click', { detail: 2 }))
+    table.vm.$emit('row-click', rows[1], new MouseEvent('click', { detail: 2 }))
+    await flushPromises()
+    expect(wrapper.emitted('navigateFolder')).toEqual([['child']])
+    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('false:')
 
     table.vm.$emit('row-contextmenu', rows[0], new MouseEvent('contextmenu', { clientX: 20, clientY: 20 }))
     await flushPromises()
@@ -687,5 +693,53 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
 
     expect(mocks.updateFolder).toHaveBeenCalledWith('child', { folderPath: 'archive/Projects' })
+  })
+
+  test('confines Home, breadcrumbs, and move targets to the scope root', async () => {
+    const root = {
+      id: 'root', name: 'Memory', description: '', directoryPath: '/memory',
+      folderPath: '', sortOrder: 0, isUncategorized: true, createdAt: 1, fileCount: 0,
+    }
+    const project = {
+      ...root, id: 'project', name: 'Garden', directoryPath: '/memory/Garden',
+      folderPath: 'Garden', parentFolderPath: null, isUncategorized: false,
+    }
+    const beds = {
+      ...project, id: 'beds', name: 'Beds', directoryPath: '/memory/Garden/Beds',
+      folderPath: 'Garden/Beds', parentFolderPath: 'Garden',
+    }
+    const outside = {
+      ...project, id: 'outside', name: 'Taxes', directoryPath: '/memory/Taxes', folderPath: 'Taxes',
+    }
+    const mountScoped = (folderId: string) => mount(MemoryFileExplorer, {
+      props: { folderId, rootFolderId: 'project', spaces: [root, project, beds, outside] },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          Icon: true, DataTable: true, HoverTooltip: true,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+        },
+      },
+    })
+
+    const inRoot = mountScoped('project')
+    await flushPromises()
+    expect(inRoot.get('[aria-label="Go to Garden"]').attributes('disabled')).toBeDefined()
+    expect(inRoot.get('[aria-label="The folder linked to this project cannot be removed here"]').attributes('disabled')).toBeDefined()
+    inRoot.unmount()
+
+    const inChild = mountScoped('beds')
+    await flushPromises()
+    const breadcrumbs = inChild.get('nav[aria-label="Memory folder path"]')
+    expect(breadcrumbs.text()).toContain('Garden')
+    expect(breadcrumbs.text()).toContain('Beds')
+    expect(breadcrumbs.text()).not.toContain('memory')
+    expect(inChild.get('[aria-label="Remove Beds"]').attributes('disabled')).toBeUndefined()
+
+    const targets = inChild.getComponent({ name: 'MemoryDocumentMoveDialog' }).props('spaces') as Array<{ id: string }>
+    expect(targets.map((folder) => folder.id)).toEqual(['project'])
+
+    await inChild.get('[aria-label="Go to Garden"]').trigger('click')
+    expect(inChild.emitted('navigateFolder')).toContainEqual(['project'])
   })
 })

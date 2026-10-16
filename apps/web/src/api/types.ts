@@ -19,6 +19,13 @@ export interface LLMProviderConfig {
 
 export type ModelListType = 'llm' | 'embedding' | 'image' | 'video' | 'reranker' | 'transcription' | 'decision'
 
+export interface UserProfile {
+  name: string
+  avatarUrl: string | null
+  /** Standing instructions the server adds to every chat run. */
+  instructions: string
+}
+
 export interface ModelPricing {
     prompt?: number
     completion?: number
@@ -324,6 +331,30 @@ export interface StagedChatAttachment {
     progressTotal: number
     chunkCount: number
     error?: string
+}
+
+export interface ProjectFileEntry {
+    name: string
+    /** Path relative to the project directory, with `/` separators. */
+    path: string
+    type: 'directory' | 'file'
+    size?: number
+}
+
+export interface ProjectFileListing {
+    /** Listed folder relative to the project directory; empty for the root. */
+    path: string
+    entries: ProjectFileEntry[]
+    /** Search stopped before covering the whole project. */
+    truncated?: boolean
+}
+
+export interface ProjectFileContent {
+    kind: 'image' | 'audio' | 'file'
+    /** Project-relative path. */
+    name: string
+    /** A data URL for images, audio and parseable documents; UTF-8 text otherwise. */
+    content: string
 }
 
 export interface ActivityItem {

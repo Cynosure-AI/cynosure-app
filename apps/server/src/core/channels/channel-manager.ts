@@ -4,7 +4,6 @@ import { DiscordChannel } from './discord/discord.channel.js'
 import { SlackChannel } from './slack/slack.channel.js'
 import { getDb } from '../../db/database.js'
 import { persistProactiveMessage, recordChannelDeliveries } from './channel-delivery.js'
-import {  } from './channel-session.js'
 import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -166,16 +165,17 @@ class ChannelManager {
     }
 
     /**
-     * Send a proactive message and make it part of the user's thread: the text
-     * is saved into the target's active conversation, and a reply to the sent
-     * message continues `sourceConversationId` (or that thread without one).
-     * Returns false when the message was not sent.
+     * Send a proactive message. A reply to it continues `sourceConversationId`.
+     * The text also joins the user's chat while that chat is still active, so
+     * an answer without a reply has context; it never starts or revives one
+     * unless there is no source to continue. Returns false when the message
+     * was not sent.
      */
     async deliver(channelId: string, target: string, text: string, opts: { sourceConversationId?: string } = {}): Promise<boolean> {
         const messageIds = await this.queueNotification(channelId, target, text)
         if (messageIds === null) return false
         try {
-            const home = this.providers.get(channelId)?.homeConversation?.(target) ?? null
+            const home = this.providers.get(channelId)?.homeConversation?.(target, !opts.sourceConversationId) ?? null
             // A notification sent from inside the thread is already part of it.
             if (home && home.conversationId !== opts.sourceConversationId) {
                 persistProactiveMessage({

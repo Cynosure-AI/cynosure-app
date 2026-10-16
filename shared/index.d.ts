@@ -137,6 +137,8 @@ export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 
 export interface ChatRunSettings {
   contextStrategy: ContextStrategy
   generateTitle: boolean
+  /** Suggest up to three user follow-ups after each chat turn. */
+  generateQuickResponses: boolean
   /** Empty provider and model use the conversation's model. */
   titleProviderId: string
   titleModel: string
@@ -168,8 +170,6 @@ export interface ChatRunConfig {
   providerOverride?: string
   allowedTools?: string[]
   systemPrompt?: string
-  /** Experimental: generate up to three suggested user follow-ups after a turn. */
-  generateQuickResponses?: boolean
   subAgents?: SubAgentAssignmentDto[]
   memoryFolderIds?: string[]
   thinkingEnabled?: boolean

@@ -2,7 +2,6 @@ import { type Ref } from 'vue'
 import { api } from '../api/client'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
-import { usePreferencesStore } from '../stores/preferences.store'
 import type { SubAgentAssignment } from '../api/types'
 import type { DisplayMessage } from '../stores/chat.store'
 import type { ChatStreamingState } from './useChatStreaming'
@@ -100,7 +99,6 @@ export function useChatMessages(
     ): ChatSendRequest {
         const agentDefs = useAgentDefinitionsStore()
         const activeAgent = activeAgentId.value ? agentDefs.get(activeAgentId.value) : null
-        const prefs = usePreferencesStore()
         return {
             content,
             messageId: msgId,
@@ -112,7 +110,6 @@ export function useChatMessages(
                 providerOverride: agentConfig.sessionProviderOverride.value || undefined,
                 allowedTools: agentConfig.selectedToolNames.value,
                 systemPrompt: agentConfig.sessionSystemPrompt.value || activeAgent?.systemPrompt || undefined,
-                generateQuickResponses: prefs.quickResponses,
                 subAgents: buildSubAgentAssignments(activeAgentId.value, [...agentConfig.sessionSubAgentIds.value]),
                 memoryFolderIds: agentConfig.sessionMemorySelectionInitialized.value ? [...agentConfig.sessionMemoryFolderIds.value] : undefined,
                 thinkingEnabled: agentConfig.sessionThinkingEnabled.value,
