@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
             >
               {{ job.prompt }}
             </div>
-            <div class="mt-1 flex items-center gap-1 text-[10px] opacity-75">
+            <div class="mt-1 flex items-center gap-1 text-[11px] font-medium tabular-nums text-accent-fg">
               <Icon
                 icon="lucide:clock-3"
                 class="h-3 w-3 shrink-0"

@@ -808,9 +808,11 @@ defineExpose({ processFiles, focus, sendSuggestion })
         </div>
       </div>
 
-      <!-- Input area: textarea + bottom bar inside a unified container -->
+      <!-- Input area: textarea + bottom bar inside a unified container.
+           Incognito dashes the border: this chat is only temporary. -->
       <div
-        class="chat-composer relative rounded-xl border border-theme-700 bg-theme-800 focus-within:ring-1 focus-within:ring-accent-500 shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40"
+        class="chat-composer relative rounded-xl border bg-theme-800 transition-colors duration-300 focus-within:ring-1 focus-within:ring-accent-500 shadow-xl shadow-theme-600/20 dark:shadow-2xl dark:shadow-black/40"
+        :class="chatStore.activeIsTemporary ? 'chat-composer--temporary border-dashed border-theme-500' : 'border-theme-700'"
       >
         <input
           ref="fileInputRef"

@@ -115,6 +115,17 @@
   border-color: transparent;
 }
 
+/* Incognito: the outline becomes a real dashed border, so the shadow keeps only its glow. */
+[data-theme="blackwall"] .chat-composer.chat-composer--temporary {
+  border-color: var(--bw-line);
+  box-shadow: 0 0 20px rgba(255, 46, 59, 0.12);
+}
+
+[data-theme="blackwall"] .chat-composer.chat-composer--temporary:focus-within {
+  border-color: rgba(255, 46, 59, 0.75);
+  box-shadow: 0 0 26px rgba(255, 46, 59, 0.22);
+}
+
 [data-theme="blackwall"] .chat-user-message {
   border-color: var(--bw-line);
   box-shadow: inset 0 0 0 1px var(--bw-line), 0 0 12px rgba(255, 46, 59, 0.1);
