@@ -79,7 +79,7 @@ describe('dayPartOf', () => {
 
 describe('getIncognitoGreeting', () => {
   test('picks an incognito line other than the one just shown', () => {
-    expect(INCOGNITO_GREETINGS).toContain('Sneaky, are we?')
+    expect(INCOGNITO_GREETINGS).toContain('Identity: redacted.')
     const first = getIncognitoGreeting(undefined, () => 0)
     expect(first).toBe(INCOGNITO_GREETINGS[0])
     expect(getIncognitoGreeting(first, () => 0)).toBe(INCOGNITO_GREETINGS[1])

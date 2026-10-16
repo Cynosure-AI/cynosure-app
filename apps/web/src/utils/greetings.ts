@@ -313,8 +313,8 @@ export function getGreeting(
 
 /** Lines for an incognito chat: off the record, a little conspiratorial. */
 export const INCOGNITO_GREETINGS = [
-  'Sneaky, are we?',
-  'Let’s lurk in the dark.',
+  'Identity: redacted.',
+  'Careful. Curiosity is a dangerous thing.',
   'Off the record.',
   'This never happened.',
   'What happens here, stays here.',
