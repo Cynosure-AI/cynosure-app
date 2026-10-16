@@ -308,6 +308,8 @@ export interface ConversationDto {
   maWorkspaceId: string | null
   projectId: string | null
   origin: string
+  /** An incognito chat: hidden from every list and discarded on leave unless saved. */
+  temporary?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -320,6 +322,8 @@ export interface ConversationMessagesResponse {
   lastContextTokens: number | null
   executionConfig: ConversationExecutionConfig
   conversationProjectId?: string | null
+  /** The conversation is an unsaved incognito chat. */
+  temporary?: boolean
 }
 
 export type ProjectTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done'

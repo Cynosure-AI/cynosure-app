@@ -22,7 +22,11 @@ import type { ContentBlock, ConversationExecutionConfig, MessageToolCall } from 
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import { getProject, setConversationProject } from '../core/projects/project-store.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
-import { getPendingWait, getWaitResumeTimes } from '../core/triggers/cron-scheduler.js'
+import { cancelCronRunsByConversation, getPendingWait, getWaitResumeTimes } from '../core/triggers/cron-scheduler.js'
+import { cancelChatExecutionByConversation } from '../core/chat/active-executions.js'
+import { pauseChatQueue } from '../core/chat/message-queue.js'
+import { cancelPostActions } from '../core/agent/post-execution.js'
+import { getEventBus } from '../core/telemetry/event-bus.js'
 
 /** Add `wait_until`: when a conversation waiting on schedule_wait resumes, or null. */
 function withWaitResumeTimes<T extends { id: string }>(rows: T[]): Array<T & { wait_until: number | null }> {
@@ -103,10 +107,33 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
     await deleteConversationAttachmentIndexes(conversationIds)
 }
 
+/** Delete one conversation with its messages, plans, approvals and files. */
+async function deleteConversationById(id: string): Promise<void> {
+    const db = getDb()
+    await cleanupConversationArtifactsAndIndexes([id])
+    await invalidateDreamConversation(id)
+    db.prepare('DELETE FROM run_plans WHERE conversation_id = ?').run(id)
+    db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(id)
+    db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
+    db.prepare('DELETE FROM conversations WHERE id = ?').run(id)
+}
+
+/**
+ * Delete incognito chats left behind by a closed tab. No run survives a
+ * restart, so every temporary chat is abandoned by the time the server starts.
+ */
+export async function purgeTemporaryConversations(): Promise<void> {
+    const ids = getDb().prepare('SELECT id FROM conversations WHERE temporary = 1').all() as { id: string }[]
+    if (!ids.length) return
+    for (const { id } of ids) await deleteConversationById(id)
+    await collectOrphanedAttachmentAssets()
+}
+
 export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
     // POST /api/chat/conversations — create
-    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; projectId?: string | null; origin?: string; executionConfig?: ConversationExecutionConfig } }>('/conversations', async (req, reply) => {
+    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; projectId?: string | null; origin?: string; executionConfig?: ConversationExecutionConfig; temporary?: boolean } }>('/conversations', async (req, reply) => {
         const { title, agentId, maWorkspaceId, origin, executionConfig } = req.body
+        const temporary = req.body.temporary === true
         const projectId = req.body.projectId || null
         if (projectId && !getProject(projectId)) return reply.status(404).send({ error: 'Project not found' })
         const db = getDb()
@@ -116,9 +143,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const memoryFolderIds = agentId ? getAssignedMemoryFolders(agentId).map((space) => space.id) : []
         const initialExecutionConfig = executionConfig ?? buildInitialExecutionConfig({ agent, memoryFolderIds })
         db.prepare(
-            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, project_id, origin, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, projectId, origin || 'chat', JSON.stringify(initialExecutionConfig), '{}', now, now)
-        return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, projectId, origin: origin || 'chat', createdAt: now, updatedAt: now }
+            'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, project_id, origin, temporary, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, projectId, origin || 'chat', temporary ? 1 : 0, JSON.stringify(initialExecutionConfig), '{}', now, now)
+        return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, projectId, origin: origin || 'chat', temporary, createdAt: now, updatedAt: now }
     })
 
     // POST /api/chat/conversations/:id/fork — clone config and history through one message
@@ -529,7 +556,8 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 ? 'ORDER BY updated_at DESC'
                 : 'ORDER BY pinned DESC, created_at DESC'
 
-        const conditions: string[] = []
+        // Incognito chats stay out of every list until they are saved.
+        const conditions: string[] = ['temporary = 0']
         const params: unknown[] = []
         if (projectId) {
             conditions.push('project_id = ?')
@@ -574,7 +602,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         const db = getDb()
 
         // Fetch conversation-level metadata (context tokens + execution config)
-        const convRow = db.prepare('SELECT agent_id, project_id, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; project_id: string | null; last_context_tokens: number | null; execution_config_json: string } | undefined
+        const convRow = db.prepare('SELECT agent_id, project_id, temporary, last_context_tokens, execution_config_json FROM conversations WHERE id = ?').get(req.params.id) as { agent_id: string | null; project_id: string | null; temporary: number; last_context_tokens: number | null; execution_config_json: string } | undefined
 
         const rows = db
             .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
@@ -636,6 +664,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         return {
             conversationAgentId: convRow?.agent_id ?? null,
             conversationProjectId: convRow?.project_id ?? null,
+            temporary: Boolean(convRow?.temporary),
             latestEventSequence: (db.prepare(`
                 SELECT MAX(sequence) AS sequence FROM chat_events
                 WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
@@ -828,14 +857,32 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         if (row?.pinned) {
             return reply.status(400).send({ error: 'Cannot delete a pinned conversation. Unpin it first.' })
         }
-        await cleanupConversationArtifactsAndIndexes([req.params.id])
-        await invalidateDreamConversation(req.params.id)
-        db.prepare('DELETE FROM run_plans WHERE conversation_id = ?').run(req.params.id)
-        db.prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ?').run(req.params.id)
-        db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.params.id)
-        db.prepare('DELETE FROM conversations WHERE id = ?').run(req.params.id)
+        await deleteConversationById(req.params.id)
         await collectOrphanedAttachmentAssets()
         return { success: true }
+    })
+
+    // POST /api/chat/conversations/:id/save — keep an incognito chat in the history
+    app.post<{ Params: { id: string } }>('/conversations/:id/save', async (req, reply) => {
+        const result = getDb().prepare('UPDATE conversations SET temporary = 0, updated_at = ? WHERE id = ?').run(Date.now(), req.params.id)
+        if (!result.changes) return reply.status(404).send({ error: 'Conversation not found' })
+        return { success: true }
+    })
+
+    // POST /api/chat/conversations/:id/discard — stop and delete an incognito chat.
+    // A POST so a closing tab can still send it with fetch keepalive.
+    app.post<{ Params: { id: string } }>('/conversations/:id/discard', async (req) => {
+        const id = req.params.id
+        const row = getDb().prepare('SELECT temporary FROM conversations WHERE id = ?').get(id) as { temporary: number } | undefined
+        if (!row?.temporary) return { success: true, discarded: false }
+        pauseChatQueue(id)
+        getEventBus().emit('hitl:clear-conversation', { conversationId: id })
+        cancelChatExecutionByConversation(id)
+        cancelCronRunsByConversation(id)
+        cancelPostActions(id)
+        await deleteConversationById(id)
+        await collectOrphanedAttachmentAssets()
+        return { success: true, discarded: true }
     })
 
     // DELETE /api/chat/conversations — delete all conversations (optionally filtered by agent), skips pinned

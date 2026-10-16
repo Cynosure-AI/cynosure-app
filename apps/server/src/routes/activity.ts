@@ -423,7 +423,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
                      ORDER BY m.created_at DESC
                      LIMIT 1) AS last_user_message
              FROM conversations c
-             WHERE c.origin = 'chat'
+             WHERE c.origin = 'chat' AND c.temporary = 0
              ORDER BY c.updated_at DESC
              LIMIT ?`
         ).all(queryLimit) as {

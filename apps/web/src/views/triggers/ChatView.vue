@@ -136,7 +136,7 @@ const latestAgentChats = computed(() => {
   if (!agentId) return []
 
   return [...chatStore.conversations]
-    .filter(conversation => conversation.agentId === agentId && conversation.origin === 'chat')
+    .filter(conversation => conversation.agentId === agentId && conversation.origin === 'chat' && !conversation.temporary)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 4)
 })
@@ -193,7 +193,17 @@ onMounted(() => {
   mcpResizeObserver = new ResizeObserver(() => { void fitMcpChips() })
   if (mcpChipRow.value) mcpResizeObserver.observe(mcpChipRow.value)
   document.addEventListener('keydown', onChatSearchShortcut)
+  window.addEventListener('pagehide', discardIncognitoOnUnload)
 })
+
+// A closing or reloading tab cannot wait for a response, so send the discard
+// with keepalive. The server purges anything this misses on its next start.
+function discardIncognitoOnUnload(): void {
+  const conversationId = chatStore.activeConversationId
+  if (conversationId && chatStore.activeIsTemporary) {
+    void api.chat.discardConversation(conversationId, { keepalive: true }).catch(() => undefined)
+  }
+}
 
 watch(
   () => agentStore.planningState?.runId,
@@ -246,8 +256,12 @@ onUnmounted(() => {
   setFreshChat(false)
   mcpResizeObserver?.disconnect()
   document.removeEventListener('keydown', onChatSearchShortcut)
+  window.removeEventListener('pagehide', discardIncognitoOnUnload)
   const conversationId = chatStore.activeConversationId
-  if (conversationId) chatStore.markConversationRead(conversationId)
+  // Leaving the chat view ends an incognito chat unless it was saved.
+  if (conversationId && chatStore.activeIsTemporary) void chatStore.discardIfTemporary(conversationId)
+  else if (conversationId) chatStore.markConversationRead(conversationId)
+  chatStore.setIncognito(false)
 })
 
 watch(

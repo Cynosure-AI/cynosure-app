@@ -111,6 +111,33 @@ const activeOrigin = computed(() => {
   return origin && origin !== "chat" ? (originConfig[origin] ?? null) : null;
 });
 
+// Incognito is picked on the empty new chat; once it has messages, Save keeps it.
+const canToggleIncognito = computed(
+  () => !chatStore.activeConversationId && chatStore.messages.length === 0,
+);
+const showSaveChat = computed(
+  () => Boolean(chatStore.activeConversationId) && chatStore.activeIsTemporary,
+);
+const savingChat = ref(false);
+const saveError = ref("");
+
+watch(() => chatStore.activeConversationId, () => {
+  saveError.value = "";
+});
+
+async function saveChat(): Promise<void> {
+  if (savingChat.value) return;
+  savingChat.value = true;
+  saveError.value = "";
+  try {
+    await chatStore.saveActiveConversation();
+  } catch {
+    saveError.value = "Could not save chat. Please try again.";
+  } finally {
+    savingChat.value = false;
+  }
+}
+
 async function newChat(): Promise<void> {
   // A new chat started from a project chat stays in that project.
   await chatStore.startNewChat({ projectId: chatStore.activeProjectId });
@@ -187,6 +214,21 @@ async function newChat(): Promise<void> {
         />
         {{ activeOrigin.label }}
       </span>
+      <span
+        v-if="showSaveChat"
+        class="incognito-badge inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-theme-800 text-theme-300 shrink-0"
+      >
+        <Icon
+          icon="lucide:hat-glasses"
+          class="w-3 h-3"
+        />
+        Incognito
+      </span>
+      <span
+        v-if="saveError"
+        role="alert"
+        class="text-xs text-status-error"
+      >{{ saveError }}</span>
     </div>
 
     <div class="flex-1 sm:hidden" />
@@ -215,6 +257,41 @@ async function newChat(): Promise<void> {
       >
         {{ planningTaskCount > 9 ? '9+' : planningTaskCount }}
       </span>
+    </button>
+
+    <!-- Incognito toggle (empty new chat only) -->
+    <button
+      v-if="canToggleIncognito"
+      type="button"
+      class="incognito-toggle shrink-0 rounded-lg p-1.5 transition-colors"
+      :class="chatStore.activeIsTemporary
+        ? 'bg-accent-500/15 text-accent-fg'
+        : 'text-theme-300 hover:bg-theme-800'"
+      :title="chatStore.activeIsTemporary ? 'Incognito on — this chat will not be saved' : 'Incognito chat — not saved to history'"
+      aria-label="Incognito chat"
+      :aria-pressed="chatStore.activeIsTemporary"
+      @click="chatStore.setIncognito(!chatStore.activeIsTemporary)"
+    >
+      <Icon
+        icon="lucide:hat-glasses"
+        class="h-4 w-4"
+      />
+    </button>
+
+    <!-- Save an incognito chat to the history -->
+    <button
+      v-if="showSaveChat"
+      type="button"
+      class="save-chat shrink-0 rounded-lg p-1.5 text-theme-300 transition-colors hover:bg-theme-800 hover:text-theme-100 disabled:opacity-60"
+      title="Save chat to history"
+      aria-label="Save chat to history"
+      :disabled="savingChat"
+      @click="saveChat"
+    >
+      <Icon
+        icon="lucide:bookmark-plus"
+        class="h-4 w-4"
+      />
     </button>
 
     <!-- New Chat button -->

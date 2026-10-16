@@ -21,6 +21,8 @@ export interface Conversation {
   projectId?: string | null
   origin?: string
   pinned: boolean
+  /** An incognito chat: kept out of every list and discarded on leave unless saved. */
+  temporary?: boolean
   lastReadAt?: number | null
   createdAt: number
   updatedAt: number
@@ -78,6 +80,10 @@ export const useChatStore = defineStore('chat', () => {
   /** Project of the active conversation, or the project a new chat will be created in. */
   const activeProjectId = ref<string | null>(null)
   const draftDiscardRevision = ref(0)
+  /** The empty new chat will be created as an incognito chat. */
+  const incognitoPending = ref(false)
+  /** Bumped when a chat joins the history without changing identity, so lists refetch. */
+  const conversationListRevision = ref(0)
   const messages = ref<DisplayMessage[]>([])
   const mediaGenerationSettings = ref<MediaGenerationSettings | null>(null)
   const loadingMessages = ref(false)
@@ -171,7 +177,9 @@ export const useChatStore = defineStore('chat', () => {
   async function loadConversations(): Promise<void> {
     const agentId = agentConfig.activeAgentId.value
     const rows = await api.chat.listConversations(agentId !== null ? agentId : '')
-    conversations.value = rows.map(
+    // The server never lists incognito chats; keep the open one so its header still resolves.
+    const temporary = conversations.value.filter((conversation) => conversation.temporary)
+    conversations.value = [...temporary, ...rows.map(
       (r) => ({
         id: r.id,
         title: r.title,
@@ -183,7 +191,7 @@ export const useChatStore = defineStore('chat', () => {
         createdAt: r.created_at,
         updatedAt: r.updated_at
       })
-    )
+    )]
   }
 
   async function handleChannelConversationState(data: {
@@ -242,6 +250,7 @@ export const useChatStore = defineStore('chat', () => {
       agentConfig.activeAgentId.value ?? undefined,
       undefined,
       activeProjectId.value,
+      incognitoPending.value,
     )
     conversations.value.unshift({
       id: conv.id,
@@ -250,6 +259,7 @@ export const useChatStore = defineStore('chat', () => {
       projectId: conv.projectId ?? null,
       origin: conv.origin,
       pinned: false,
+      temporary: Boolean(conv.temporary),
       lastReadAt: conv.createdAt,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt
@@ -292,6 +302,9 @@ export const useChatStore = defineStore('chat', () => {
   // ── Conversation CRUD ──
 
   async function selectConversation(id: string, agentIdHint?: string | null): Promise<void> {
+    const previousConversationId = activeConversationId.value
+    if (previousConversationId && previousConversationId !== id) void discardIfTemporary(previousConversationId)
+    incognitoPending.value = false
     activeConversationId.value = id
     agentStore.setActiveViewConversation(id)
     markConversationRead(id)
@@ -307,6 +320,22 @@ export const useChatStore = defineStore('chat', () => {
       // header actions (such as Pin/Unpin) resolve the active conversation.
       await loadConversations()
       if (activeConversationId.value !== id) return
+      // An incognito chat opened by URL is missing from the list the server returns.
+      if (response.temporary && !conversations.value.some((conversation) => conversation.id === id)) {
+        const now = Date.now()
+        conversations.value.unshift({
+          id,
+          title: 'New Chat',
+          agentId: response.conversationAgentId,
+          projectId: response.conversationProjectId ?? null,
+          origin: 'chat',
+          pinned: false,
+          temporary: true,
+          lastReadAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+      }
 
       // Apply conversation-specific execution config immediately after setting
       // the agent, before any async work that could trigger a Vue render tick.
@@ -532,8 +561,13 @@ export const useChatStore = defineStore('chat', () => {
   async function startNewChat(options: { projectId?: string | null } = {}): Promise<void> {
     activeProjectId.value = options.projectId ?? null
     const previousConversationId = activeConversationId.value
+    // Incognito is chosen per chat, so every new chat starts saved.
+    incognitoPending.value = false
     draftDiscardRevision.value++
-    if (previousConversationId) await api.chat.discardStagedAttachments(previousConversationId)
+    if (previousConversationId) {
+      await api.chat.discardStagedAttachments(previousConversationId)
+      await discardIfTemporary(previousConversationId)
+    }
     if (!memoryFolders.value.length) await loadMemoryFolders()
     // Every new chat starts from its selected agent or Cyno's defaults.
     agentConfig.syncAgentBaseline()
@@ -547,6 +581,54 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     agentStore.setActiveViewConversation(null)
     resetStreaming()
+  }
+
+  // ── Incognito chats ──
+
+  /** Whether the open chat, or the empty chat about to be created, is incognito. */
+  const activeIsTemporary = computed(() => {
+    if (!activeConversationId.value) return incognitoPending.value
+    return Boolean(activeConversation.value?.temporary)
+  })
+
+  /** Choose incognito for the empty new chat; an existing chat keeps its kind. */
+  function setIncognito(on: boolean): void {
+    if (activeConversationId.value || messages.value.length) return
+    incognitoPending.value = on
+  }
+
+  /** Keep the open incognito chat in the history. */
+  async function saveActiveConversation(): Promise<void> {
+    const conversation = activeConversation.value
+    if (!conversation?.temporary) return
+    await api.chat.saveConversation(conversation.id)
+    conversation.temporary = false
+    conversationListRevision.value++
+  }
+
+  /**
+   * Delete `id` when it is an unsaved incognito chat. Leaving it is the only
+   * way out, so an open one also resets the view to an empty new chat.
+   */
+  async function discardIfTemporary(id: string | null): Promise<void> {
+    if (!id || !conversations.value.some((conversation) => conversation.id === id && conversation.temporary)) return
+    conversations.value = conversations.value.filter((conversation) => conversation.id !== id)
+    streaming.streamBuffers.delete(id)
+    postActionsMap.delete(id)
+    quickResponsesMap.delete(id)
+    if (activeConversationId.value === id) {
+      activeConversationId.value = null
+      messages.value = []
+      queuedMessages.value = []
+      queuePaused.value = false
+      agentStore.setActiveViewConversation(null)
+      resetStreaming()
+    }
+    try {
+      await api.chat.discardConversation(id)
+    } catch {
+      // The server purges abandoned incognito chats on its next start.
+    }
   }
 
   /**
@@ -714,6 +796,9 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     activeProjectId,
     draftDiscardRevision,
+    incognitoPending,
+    conversationListRevision,
+    activeIsTemporary,
     messages,
     mediaGenerationSettings,
     loadingMessages,
@@ -900,6 +985,9 @@ export const useChatStore = defineStore('chat', () => {
     pinConversation,
     renameConversation,
     startNewChat,
+    setIncognito,
+    saveActiveConversation,
+    discardIfTemporary,
     compactConversation,
     setConversationProject,
     handlePostAction,
