@@ -689,10 +689,6 @@ onMounted(() => {
             v-if="chatStore.activeIsTemporary"
             class="chat-incognito-note mt-2 inline-flex items-center gap-1.5 text-sm text-ink-muted"
           >
-            <Icon
-              icon="lucide:hat-glasses"
-              class="h-4 w-4 text-accent-fg"
-            />
             Incognito chat · won't appear in your history or memory
           </p>
         </Transition>
