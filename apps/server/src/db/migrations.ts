@@ -668,6 +668,14 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 32,
+        description: 'Mark incognito chats as temporary',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(conversations)') as Array<{ name: string }>).map((column) => column.name))
+            if (!columns.has('temporary')) db.exec('ALTER TABLE conversations ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

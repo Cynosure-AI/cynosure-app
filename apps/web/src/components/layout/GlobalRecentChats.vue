@@ -308,6 +308,9 @@ watch(() => chatStore.activeConversationId, (conversationId) => {
 // Moving a chat into or out of a project moves it between the sidebar groups.
 watch(() => chatStore.activeProjectId, scheduleRefresh)
 
+// A saved incognito chat joins the history without changing the active chat.
+watch(() => chatStore.conversationListRevision, scheduleRefresh)
+
 watch(() => props.activeConversationIds.join('|'), scheduleRefresh)
 
 watch(wsConnected, (connected) => {

@@ -108,6 +108,8 @@ export interface AgentExecutorConfig {
     usedToolNames?: Set<string>
     /** Durable planning run for the top-level chat executor. */
     planningRunId?: string
+    /** The run was started with `/goal`: an empty todo list counts as open work. */
+    planningGoal?: boolean
     /** True only for the top-level chat executor that owns conversation-level progress persistence. */
     isPrimaryExecutor?: boolean
     /** Promote durable steering messages into this run at model boundaries. */
@@ -1180,22 +1182,32 @@ export class AgentExecutor {
         if (this.waitScheduled) return false
         const state = getPlanningState(runId)
         if (!state || state.status !== 'running') return false
+        if (this.config.planningGoal && state.items.length === 0) return true
         return state.items.some((item) => item.status === 'pending' || item.status === 'in_progress')
     }
 
     private withOpenPlanRecoveryPrompt(messages: ChatMessage[], assistantContent: string): ChatMessage[] {
+        const runId = this.config.planningRunId
+        const listMissing = this.config.planningGoal && runId && getPlanningState(runId)?.items.length === 0
         return this.maybeTrimContext([
             ...messages,
             { role: 'assistant', content: assistantContent || '' },
             {
                 role: 'user',
-                content: [
-                    '[Orchestrator recovery]',
-                    'Your durable task list still contains pending or in-progress work.',
-                    'Continue the task now. Use the available tools for any remaining work.',
-                    'Before giving the final response, mark every task completed, blocked, or cancelled.',
-                    'Do not merely describe what you will do next.',
-                ].join('\n'),
+                content: (listMissing
+                    ? [
+                        '[Orchestrator recovery]',
+                        'This run is a /goal and has no task list yet.',
+                        'Call todo_update now with tasks that together cover the whole goal, then work through them.',
+                        'Do not merely describe what you will do next.',
+                    ]
+                    : [
+                        '[Orchestrator recovery]',
+                        'Your durable task list still contains pending or in-progress work.',
+                        'Continue the task now. Use the available tools for any remaining work.',
+                        'Before giving the final response, mark every task completed, blocked, or cancelled.',
+                        'Do not merely describe what you will do next.',
+                    ]).join('\n'),
             },
         ])
     }

@@ -42,7 +42,7 @@ interface PlanRow {
 
 const PLAN_COLUMNS = 'id, conversation_id, status, objective, items_json, current_item_id, result_json, created_at, updated_at, completed_at'
 const MAX_OBJECTIVE_LENGTH = 300
-const MAX_TASKS = 24
+export const MAX_TASKS = 16
 const MAX_TASK_TITLE_LENGTH = 120
 const MAX_NOTE_LENGTH = 180
 
@@ -203,7 +203,18 @@ export function interruptPlanningRun(
   return state
 }
 
-export function applyTodoUpdate(runId: string, params: unknown): { success: boolean; output: string } {
+/** Start a fresh plan for a `/goal`; a plan still running in the conversation is cancelled. */
+export function startGoalPlanningRun(conversationId: string, objective: string): PlanningState {
+  const running = getLatestPlanningState(conversationId)
+  if (running?.status === 'running') closePlanningRun(running.runId, 'cancelled', { error: 'Replaced by a new goal.' })
+  return createPlanningRun(conversationId, objective)
+}
+
+export function applyTodoUpdate(
+  runId: string,
+  params: unknown,
+  options: { requireCloseNote?: boolean } = {},
+): { success: boolean; output: string } {
   const payload = (params && typeof params === 'object' && !Array.isArray(params) ? params : {}) as {
     objective?: string
     tasks?: Array<{ title?: string; status?: string; note?: string }>
@@ -211,6 +222,12 @@ export function applyTodoUpdate(runId: string, params: unknown): { success: bool
   if (!Array.isArray(payload.tasks)) return { success: false, output: '`tasks` must be an array.' }
   const current = getPlanningState(runId)
   if (!current) return { success: false, output: 'Planning run not found.' }
+  if (options.requireCloseNote) {
+    const unexplained = payload.tasks.find((task) => (task.status === 'blocked' || task.status === 'cancelled') && !cleanNote(task.note))
+    if (unexplained) {
+      return { success: false, output: `Task ${JSON.stringify(unexplained.title ?? '')} is ${unexplained.status}; give the reason in its note.` }
+    }
+  }
   return payload.tasks.length === 0 ? clearTodoList(current) : setTodoList(current, payload.tasks, payload.objective)
 }
 

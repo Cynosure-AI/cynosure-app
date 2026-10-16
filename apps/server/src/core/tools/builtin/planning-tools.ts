@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
-import { applyTodoUpdate } from '../../agent/planning-state.js'
+import { applyTodoUpdate, MAX_TASKS } from '../../agent/planning-state.js'
 
 const PLANNING_TOOL_NAMES = new Set([
   'todo_update',
@@ -13,11 +13,29 @@ export const PLANNING_SYSTEM_PROMPT = [
   'For simple one-step answers, skip the todo list.',
 ].join('\n')
 
+const GOAL_COMMAND = /^\/goal(?:\s+([\s\S]*))?$/i
+
+/** The objective of a message sent as `/goal <objective>`, or null for any other message. */
+export function parseGoalObjective(text: string): string | null {
+  const objective = GOAL_COMMAND.exec(text.trim())?.[1]?.trim()
+  return objective || null
+}
+
+export function buildGoalContext(objective: string): string {
+  return [
+    'Goal mode: the user sent this message with /goal. The objective below is fixed; do not narrow or redefine it.',
+    `goal=${objective}`,
+    'Before using any other tool, call todo_update with tasks that together cover the whole goal.',
+    'This run cannot end while the list is empty or still has pending or in-progress tasks.',
+    'Mark a task blocked or cancelled only when it truly cannot be done, and give the reason in its note.',
+  ].join('\n')
+}
+
 export function isPlanningToolName(name: string): boolean {
   return PLANNING_TOOL_NAMES.has(name)
 }
 
-export function makePlanningTools(runId: string): ToolDefinition[] {
+export function makePlanningTools(runId: string, options: { goal?: boolean } = {}): ToolDefinition[] {
   return [
     {
       name: 'todo_update',
@@ -32,7 +50,7 @@ export function makePlanningTools(runId: string): ToolDefinition[] {
           objective: { type: 'string', description: 'Optional short statement of the overall user goal.' },
           tasks: {
             type: 'array',
-            maxItems: 24,
+            maxItems: MAX_TASKS,
             description: 'Complete current list, including finished and pending tasks. An empty list clears it.',
             items: {
               type: 'object',
@@ -48,7 +66,7 @@ export function makePlanningTools(runId: string): ToolDefinition[] {
         },
         required: ['tasks'],
       },
-      execute: async (params) => applyTodoUpdate(runId, params),
+      execute: async (params) => applyTodoUpdate(runId, params, { requireCloseNote: options.goal }),
     },
   ]
 }

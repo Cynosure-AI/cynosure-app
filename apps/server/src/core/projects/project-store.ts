@@ -87,9 +87,9 @@ export interface ProjectTaskInput {
 }
 
 const PROJECT_STATS_SQL = `
-    (SELECT COUNT(*) FROM conversations c WHERE c.project_id = p.id) AS conversation_count,
+    (SELECT COUNT(*) FROM conversations c WHERE c.project_id = p.id AND c.temporary = 0) AS conversation_count,
     (SELECT COUNT(*) FROM project_tasks t WHERE t.project_id = p.id AND t.status != 'done') AS open_task_count,
-    (SELECT MAX(c.updated_at) FROM conversations c WHERE c.project_id = p.id) AS last_activity_at`
+    (SELECT MAX(c.updated_at) FROM conversations c WHERE c.project_id = p.id AND c.temporary = 0) AS last_activity_at`
 
 function rowToProject(row: ProjectRow): ProjectDto {
     return {

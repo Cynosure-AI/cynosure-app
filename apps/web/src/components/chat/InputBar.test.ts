@@ -539,6 +539,25 @@ describe('InputBar slash commands', () => {
     wrapper.unmount()
   })
 
+  test('a command that sends a message completes, then sends the whole text', async () => {
+    slashCommands.value = [{ name: 'goal', description: 'Work toward a goal', icon: 'x', group: 'Chat', hint: 'objective', sendsMessage: true }]
+    const wrapper = mountInputBar()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('/go')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    expect(textarea.element.value).toBe('/goal ')
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(chatStore.sendMessage).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="status"]').text()).toBe('/goal needs an objective')
+    await textarea.setValue('/goal Fix the build')
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('/goal Fix the build', undefined, undefined, undefined, undefined)
+    wrapper.unmount()
+  })
+
   test('an unavailable command reports why instead of running or being sent', async () => {
     const run = vi.fn()
     slashCommands.value = [{ name: 'stop', description: 'Stop', icon: 'x', group: 'Chat', unavailable: 'Nothing is running.', run }]

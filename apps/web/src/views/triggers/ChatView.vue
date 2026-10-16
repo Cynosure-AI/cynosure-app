@@ -136,7 +136,7 @@ const latestAgentChats = computed(() => {
   if (!agentId) return []
 
   return [...chatStore.conversations]
-    .filter(conversation => conversation.agentId === agentId && conversation.origin === 'chat')
+    .filter(conversation => conversation.agentId === agentId && conversation.origin === 'chat' && !conversation.temporary)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 4)
 })
@@ -193,7 +193,17 @@ onMounted(() => {
   mcpResizeObserver = new ResizeObserver(() => { void fitMcpChips() })
   if (mcpChipRow.value) mcpResizeObserver.observe(mcpChipRow.value)
   document.addEventListener('keydown', onChatSearchShortcut)
+  window.addEventListener('pagehide', discardIncognitoOnUnload)
 })
+
+// A closing or reloading tab cannot wait for a response, so send the discard
+// with keepalive. The server purges anything this misses on its next start.
+function discardIncognitoOnUnload(): void {
+  const conversationId = chatStore.activeConversationId
+  if (conversationId && chatStore.activeIsTemporary) {
+    void api.chat.discardConversation(conversationId, { keepalive: true }).catch(() => undefined)
+  }
+}
 
 watch(
   () => agentStore.planningState?.runId,
@@ -246,8 +256,12 @@ onUnmounted(() => {
   setFreshChat(false)
   mcpResizeObserver?.disconnect()
   document.removeEventListener('keydown', onChatSearchShortcut)
+  window.removeEventListener('pagehide', discardIncognitoOnUnload)
   const conversationId = chatStore.activeConversationId
-  if (conversationId) chatStore.markConversationRead(conversationId)
+  // Leaving the chat view ends an incognito chat unless it was saved.
+  if (conversationId && chatStore.activeIsTemporary) void chatStore.discardIfTemporary(conversationId)
+  else if (conversationId) chatStore.markConversationRead(conversationId)
+  chatStore.setIncognito(false)
 })
 
 watch(
@@ -304,7 +318,7 @@ watch(
     <div class="flex flex-1 min-h-0 relative">
       <!-- Chat column: panel + input bar -->
       <div
-        class="chat-column relative flex flex-col flex-1 min-w-0"
+        class="chat-column relative isolate flex flex-col flex-1 min-w-0"
         :class="{ 'chat-column--empty': showCenteredComposer }"
         @dragenter="onDragEnter"
         @dragleave="onDragLeave"
@@ -491,6 +505,21 @@ watch(
           />
         </template>
 
+        <!-- Incognito dims the whole new-chat view, centered composer included.
+             Last child: the empty layout sizes the column's first child. -->
+        <Transition
+          enter-from-class="opacity-0"
+          enter-active-class="transition-opacity duration-300 ease-out"
+          leave-to-class="opacity-0"
+          leave-active-class="transition-opacity duration-300 ease-in"
+        >
+          <div
+            v-if="showCenteredComposer && chatStore.activeIsTemporary"
+            class="chat-incognito-vignette pointer-events-none absolute inset-0 -z-10"
+            aria-hidden="true"
+          />
+        </Transition>
+
         <div
           v-if="isDragOver"
           class="absolute inset-0 z-50 flex items-center justify-center bg-theme-900/80 border-2 border-dashed border-accent-500 rounded-lg pointer-events-none"
@@ -513,6 +542,10 @@ watch(
 </template>
 
 <style scoped>
+.chat-incognito-vignette {
+  background: radial-gradient(ellipse at center, transparent 35%, color-mix(in oklab, var(--color-theme-950) 55%, transparent) 100%);
+}
+
 .chat-column > :deep(.chat-input-bar) {
   flex: 0 0 auto;
 }

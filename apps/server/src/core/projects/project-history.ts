@@ -139,7 +139,7 @@ export function listProjectTimeline(projectId: string, options: { limit?: number
         toStatus: row.to_status,
     }))
     const chats = (db.prepare(`SELECT id, title, agent_id, origin, created_at FROM conversations
-        WHERE project_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?`).all(projectId, before, limit) as Array<{
+        WHERE project_id = ? AND temporary = 0 AND created_at < ? ORDER BY created_at DESC LIMIT ?`).all(projectId, before, limit) as Array<{
         id: string; title: string | null; agent_id: string | null; origin: string; created_at: number
     }>).map((row): ProjectTimelineEntry => ({
         kind: 'chat_started',

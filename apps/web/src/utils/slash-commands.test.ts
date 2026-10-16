@@ -79,6 +79,15 @@ describe('slashSuggestions', () => {
   })
 })
 
+describe('commands that send a message', () => {
+  const goal: SlashCommand = { name: 'goal', description: 'Work toward a goal', icon: 'x', group: 'Chat', hint: 'objective', sendsMessage: true }
+
+  test('complete with a space and offer no options for the argument', () => {
+    expect(slashSuggestions([goal], '/go')).toMatchObject([{ label: '/goal', complete: '/goal ' }])
+    expect(slashSuggestions([goal], '/goal Fix the build')).toEqual([])
+  })
+})
+
 describe('slashName', () => {
   test('turns a label into a command name', () => {
     expect(slashName('GitHub')).toBe('github')

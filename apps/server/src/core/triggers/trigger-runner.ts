@@ -127,6 +127,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             agentIconUrl: agent?.iconUrl || null,
             signal,
             planningRunId,
+            planningGoal: planned.planningGoal,
             isPrimaryExecutor: true,
         })
         const result = await executor.run(messages)

@@ -205,10 +205,11 @@ function handleSlashSubmit(): boolean {
     showSlashNotice(command.unavailable, true)
     return true
   }
+  if (command.sendsMessage && input.args.trim()) return false
   // A known command must never reach the model by accident; Escape first to send it as text.
   showSlashNotice(input.args.trim()
     ? `No match for “${input.args.trim()}” in /${command.name}`
-    : `/${command.name} needs ${command.hint ? `a ${command.hint}` : 'an argument'}`, true)
+    : `/${command.name} needs ${command.hint ? `${/^[aeiou]/i.test(command.hint) ? 'an' : 'a'} ${command.hint}` : 'an argument'}`, true)
   return true
 }
 
@@ -848,7 +849,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           id="chat-textarea"
           ref="textareaRef"
           v-model="inputText"
-          :placeholder="editingQueueId ? 'Edit queued message…' : chatStore.isConversationLocked ? 'Queue a message…' : 'Type a message, or / for commands'"
+          :placeholder="editingQueueId ? 'Edit queued message…' : chatStore.isConversationLocked ? 'Queue a message…' : chatStore.activeIsTemporary ? 'Incognito message, or / for commands' : 'Type a message, or / for commands'"
           rows="1"
           class="w-full bg-transparent text-theme-100 px-4 pt-3 pb-2 text-sm resize-none focus:outline-none placeholder:text-ink-muted"
           aria-label="Type a message"

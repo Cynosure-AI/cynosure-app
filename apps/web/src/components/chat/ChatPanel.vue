@@ -24,7 +24,7 @@ import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
-import { getGreeting } from '../../utils/greetings'
+import { getGreeting, getIncognitoGreeting } from '../../utils/greetings'
 import { useCynoStore } from '../../stores/cyno.store'
 
 const props = withDefaults(defineProps<{
@@ -454,11 +454,27 @@ watch(() => chatStore.loadingMessages, (isLoading) => {
 
 // ─── Time-based greeting ────────────────────────────────────
 
-const greeting = ref(getGreeting())
+const introGreeting = getGreeting()
+const greeting = ref(introGreeting)
 
-// The headline types out first; the subtitle and sub-agents wait for it.
+// The headline types out first; the subtitle and sub-agents wait for it. The
+// timeline stays on the first greeting, so a re-typed one cannot re-delay them.
 const CONNECTING_TITLE = 'Initializing…'
-const introTimeline = computed(() => chatIntroTimeline(wsConnected.value ? greeting.value : CONNECTING_TITLE))
+const introTimeline = computed(() => chatIntroTimeline(wsConnected.value ? introGreeting : CONNECTING_TITLE))
+
+// Toggling incognito re-types the headline: a conspiratorial line going dark,
+// the original greeting coming back. Each change remounts the typewriter.
+const greetingRetypes = ref(0)
+const RETYPE_START_MS = 80
+const greetingTimeline = computed(() => greetingRetypes.value
+  ? { start: RETYPE_START_MS, step: chatIntroTimeline(greeting.value).typeStep }
+  : { start: introTimeline.value.typeStart, step: introTimeline.value.typeStep })
+
+watch(() => chatStore.activeIsTemporary, (incognito) => {
+  if (chatStore.messages.length) return
+  greeting.value = incognito ? getIncognitoGreeting(greeting.value) : introGreeting
+  greetingRetypes.value++
+})
 const introStyle = computed(() => ({
   '--intro-subtitle': `${introTimeline.value.subtitle}ms`,
   '--intro-agents': `${introTimeline.value.agents}ms`,
@@ -570,37 +586,59 @@ onMounted(() => {
       class="chat-empty-state relative isolate flex flex-col items-center justify-center h-full text-ink-secondary"
       :style="introStyle"
     >
-      <div class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-20 h-20 mb-6 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border border-white/5 shadow-xl overflow-hidden">
-        <RouterLink
-          v-if="conversationAgentId"
-          :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"
-          :aria-label="`Open ${activeAgentName ?? 'agent'} settings`"
-          class="absolute inset-0 flex items-center justify-center"
+      <div class="relative mb-6">
+        <div
+          class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-20 h-20 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border shadow-xl overflow-hidden"
+          :class="chatStore.activeIsTemporary ? 'border-dashed border-accent-500/50' : 'border-white/5'"
         >
-          <img
-            v-if="activeAgentIconUrl"
-            :src="activeAgentIconUrl"
-            class="w-full h-full object-cover"
-            alt=""
+          <RouterLink
+            v-if="conversationAgentId"
+            :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"
+            :aria-label="`Open ${activeAgentName ?? 'agent'} settings`"
+            class="absolute inset-0 flex items-center justify-center"
           >
-          <Icon
+            <img
+              v-if="activeAgentIconUrl"
+              :src="activeAgentIconUrl"
+              class="w-full h-full object-cover"
+              alt=""
+            >
+            <Icon
+              v-else
+              icon="lucide:bot-message-square"
+              class="w-10 h-10 text-accent-fg"
+            />
+          </RouterLink>
+          <RouterLink
             v-else
-            icon="lucide:bot-message-square"
-            class="w-10 h-10 text-accent-fg"
-          />
-        </RouterLink>
-        <RouterLink
-          v-else
-          :to="{ name: 'cyno', query: { returnTo: route.fullPath } }"
-          :aria-label="`Open ${cyno.name} settings`"
-          class="absolute inset-0 flex items-center justify-center"
-        >
-          <img
-            :src="cyno.iconUrl"
-            class="w-full h-full object-cover"
-            alt=""
+            :to="{ name: 'cyno', query: { returnTo: route.fullPath } }"
+            :aria-label="`Open ${cyno.name} settings`"
+            class="absolute inset-0 flex items-center justify-center"
           >
-        </RouterLink>
+            <img
+              :src="cyno.iconUrl"
+              class="w-full h-full object-cover"
+              alt=""
+            >
+          </RouterLink>
+        </div>
+        <Transition
+          enter-from-class="opacity-0 scale-50"
+          enter-active-class="transition duration-200 ease-out"
+          leave-to-class="opacity-0 scale-50"
+          leave-active-class="transition duration-150 ease-in"
+        >
+          <span
+            v-if="chatStore.activeIsTemporary"
+            class="chat-incognito-badge absolute -bottom-1.5 -right-1.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-theme-900 bg-theme-800 text-accent-fg shadow-lg"
+            title="Incognito chat"
+          >
+            <Icon
+              icon="lucide:hat-glasses"
+              class="h-4 w-4"
+            />
+          </span>
+        </Transition>
       </div>
       <template v-if="!wsConnected">
         <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
@@ -616,11 +654,15 @@ onMounted(() => {
       </template>
       <template v-else>
         <div class="flex items-center justify-center gap-3">
-          <h2 class="text-3xl font-semibold text-theme-200 tracking-tight text-center">
+          <h2
+            class="text-3xl font-semibold tracking-tight text-center transition-colors duration-300"
+            :class="chatStore.activeIsTemporary ? 'chat-incognito-greeting text-theme-300' : 'text-theme-200'"
+          >
             <TypewriterText
+              :key="greetingRetypes"
               :text="greeting"
-              :start="introTimeline.typeStart"
-              :step="introTimeline.typeStep"
+              :start="greetingTimeline.start"
+              :step="greetingTimeline.step"
             />
           </h2>
           <RouterLink
@@ -637,6 +679,23 @@ onMounted(() => {
             />
           </RouterLink>
         </div>
+        <Transition
+          enter-from-class="opacity-0 -translate-y-1"
+          enter-active-class="transition duration-200 ease-out"
+          leave-to-class="opacity-0 -translate-y-1"
+          leave-active-class="transition duration-150 ease-in"
+        >
+          <p
+            v-if="chatStore.activeIsTemporary"
+            class="chat-incognito-note mt-2 inline-flex items-center gap-1.5 text-sm text-ink-muted"
+          >
+            <Icon
+              icon="lucide:hat-glasses"
+              class="h-4 w-4 text-accent-fg"
+            />
+            Incognito chat · won't appear in your history or memory
+          </p>
+        </Transition>
 
         <TransitionGroup
           tag="div"
@@ -977,6 +1036,13 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Incognito whispers its headline: slanted, a touch looser, with a fainter caret. */
+.chat-incognito-greeting {
+  font-style: italic;
+  letter-spacing: 0.005em;
+  --tw-caret-opacity: 0.55;
+}
+
 /* New-chat intro, timed by chatIntro.ts: the icon materializes, the headline
    types itself out (TypewriterText), then the subtitle and sub-agents follow. */
 @media (prefers-reduced-motion: no-preference) {

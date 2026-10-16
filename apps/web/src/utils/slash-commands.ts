@@ -54,6 +54,8 @@ export interface SlashCommand {
   run?: () => SlashResult | Promise<SlashResult>
   /** Argument options for the typed argument text (already trimmed). */
   args?: (query: string) => SlashArgOption[]
+  /** With an argument, the whole text is sent to the model as a message, e.g. `/goal …`. */
+  sendsMessage?: boolean
 }
 
 export interface SlashInput {
@@ -98,7 +100,7 @@ function commandOption(command: SlashCommand): SlashOption {
     state: command.state,
     detail: command.detail,
     unavailable: command.unavailable,
-    complete: command.args && !command.unavailable ? `/${command.name} ` : `/${command.name}`,
+    complete: (command.args || command.sendsMessage) && !command.unavailable ? `/${command.name} ` : `/${command.name}`,
     run: command.run,
   }
 }
@@ -110,7 +112,7 @@ export function slashSuggestions(commands: readonly SlashCommand[], text: string
   if (input.hasArgs) {
     const command = findSlashCommand(commands, input.name)
     if (command?.unavailable) return [commandOption(command)]
-    if (!command?.args) return []
+    if (!command?.args || command.sendsMessage) return []
     return command.args(input.args.trim()).map(({ value, ...option }) => ({
       ...option,
       key: `${command.name}:${option.key}`,

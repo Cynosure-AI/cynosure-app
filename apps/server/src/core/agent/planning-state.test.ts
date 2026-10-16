@@ -17,7 +17,9 @@ import {
   getPlanningState,
   interruptPlanningRun,
   resumeOrCreatePlanningRun,
+  startGoalPlanningRun,
 } from './planning-state.js'
+import { parseGoalObjective } from '../tools/builtin/planning-tools.js'
 
 describe('visible planning state', () => {
   beforeEach(() => {
@@ -162,5 +164,39 @@ describe('visible planning state', () => {
     expect(getLatestPlanningState('other')).toBeNull()
     const replacement = resumeOrCreatePlanningRun('other', 'Recovered')
     expect(replacement.objective).toBe('Recovered')
+  })
+
+  test('a goal replaces the running plan with a fresh one', () => {
+    const previous = createPlanningRun('conversation', 'Old work')
+    applyTodoUpdate(previous.runId, { tasks: [{ title: 'Old task', status: 'in_progress' }] })
+
+    const goal = startGoalPlanningRun('conversation', 'New goal')
+
+    expect(goal.runId).not.toBe(previous.runId)
+    expect(goal.items).toEqual([])
+    expect(getPlanningState(previous.runId)).toMatchObject({ status: 'cancelled', items: [{ status: 'cancelled' }] })
+    expect(getLatestPlanningState('conversation')?.runId).toBe(goal.runId)
+  })
+
+  test('blocked and cancelled tasks need a note when one is required', () => {
+    const run = createPlanningRun('conversation', 'Goal')
+
+    const rejected = applyTodoUpdate(run.runId, { tasks: [{ title: 'Hard part', status: 'cancelled' }] }, { requireCloseNote: true })
+    expect(rejected).toMatchObject({ success: false })
+    expect(rejected.output).toContain('Hard part')
+    expect(getPlanningState(run.runId)?.items).toEqual([])
+
+    expect(applyTodoUpdate(run.runId, {
+      tasks: [{ title: 'Hard part', status: 'blocked', note: 'Needs an API key.' }],
+    }, { requireCloseNote: true }).success).toBe(true)
+    expect(applyTodoUpdate(run.runId, { tasks: [{ title: 'Other', status: 'cancelled' }] }).success).toBe(true)
+  })
+
+  test('reads the objective of a /goal message', () => {
+    expect(parseGoalObjective('/goal  Fix the failing tests ')).toBe('Fix the failing tests')
+    expect(parseGoalObjective('/GOAL ship it\nthen tag it')).toBe('ship it\nthen tag it')
+    expect(parseGoalObjective('/goal')).toBeNull()
+    expect(parseGoalObjective('/goals are nice')).toBeNull()
+    expect(parseGoalObjective('my /goal is x')).toBeNull()
   })
 })

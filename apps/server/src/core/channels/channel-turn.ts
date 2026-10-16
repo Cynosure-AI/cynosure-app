@@ -256,7 +256,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
             maxRounds: MAIN_AGENT_MAX_ROUNDS, thinkingEnabled: settings.thinkingEnabled,
             reasoningEffort: settings.reasoningEffort, streamMode: 'single', signal: execAbort.signal,
             streamId, agentId: agent?.id, agentName: identity.name,
-            agentIconUrl: identity.iconUrl, planningRunId: planned.planningRunId,
+            agentIconUrl: identity.iconUrl, planningRunId: planned.planningRunId, planningGoal: planned.planningGoal,
             contextWindow: context.contextWindow, initialContextEstimate: context.initialContextEstimate,
             contextStrategy: context.strategy, isPrimaryExecutor: true,
         })

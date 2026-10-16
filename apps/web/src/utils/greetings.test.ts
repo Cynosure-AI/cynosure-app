@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { dayPartOf, getGreeting, occasionGreetings, seasonOf } from './greetings'
+import { INCOGNITO_GREETINGS, dayPartOf, getGreeting, getIncognitoGreeting, occasionGreetings, seasonOf } from './greetings'
 
 // Local-time dates; months are zero-based as in the Date constructor.
 const at = (year: number, month: number, day: number, hour: number) => new Date(year, month, day, hour)
@@ -74,5 +74,14 @@ describe('dayPartOf', () => {
     expect([0, 4, 5, 11, 12, 16, 17, 21, 22, 23].map(dayPartOf)).toEqual([
       'night', 'night', 'morning', 'morning', 'afternoon', 'afternoon', 'evening', 'evening', 'night', 'night',
     ])
+  })
+})
+
+describe('getIncognitoGreeting', () => {
+  test('picks an incognito line other than the one just shown', () => {
+    expect(INCOGNITO_GREETINGS).toContain('Sneaky, are we?')
+    const first = getIncognitoGreeting(undefined, () => 0)
+    expect(first).toBe(INCOGNITO_GREETINGS[0])
+    expect(getIncognitoGreeting(first, () => 0)).toBe(INCOGNITO_GREETINGS[1])
   })
 })

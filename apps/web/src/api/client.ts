@@ -127,11 +127,20 @@ export const api = {
   },
 
   chat: {
-    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string, projectId?: string | null) =>
+    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string, projectId?: string | null, temporary?: boolean) =>
       post<ConversationDto>(
         '/api/chat/conversations',
-        { title, agentId, maWorkspaceId, projectId: projectId || undefined }
+        { title, agentId, maWorkspaceId, projectId: projectId || undefined, temporary: temporary || undefined }
       ),
+    saveConversation: (conversationId: string) =>
+      post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/save`),
+    /** Delete an incognito chat. `keepalive` lets the request outlive a closing tab. */
+    discardConversation: async (conversationId: string, options: { keepalive?: boolean } = {}): Promise<void> => {
+      await fetch(`${BASE_URL}/api/chat/conversations/${encodeURIComponent(conversationId)}/discard`, {
+        method: 'POST',
+        keepalive: options.keepalive,
+      })
+    },
     setProject: (conversationId: string, projectId: string | null) =>
       patch<{ success: boolean; projectId: string | null }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/project`, { projectId }),
     listProjectConversations: (projectId: string) =>
