@@ -108,6 +108,16 @@ describe('useSlashCommands', () => {
     expect(findSlashCommand(commands.value, 'reset')?.unavailable).toBeUndefined()
   })
 
+  test('/reset is available in a saved chat that only has a project, since reset removes it', () => {
+    const { commands } = useSlashCommands(actions)
+    chatStore.activeProjectId = 'project-1'
+    try {
+      expect(findSlashCommand(commands.value, 'reset')?.unavailable).toBeUndefined()
+    } finally {
+      chatStore.activeProjectId = null
+    }
+  })
+
   test('/compact summarises the chat, but not while a response runs or before the chat exists', async () => {
     const { commands } = useSlashCommands(actions)
     await expect(findSlashCommand(commands.value, 'compact')?.run?.()).resolves.toBe('Compacted 12 messages')

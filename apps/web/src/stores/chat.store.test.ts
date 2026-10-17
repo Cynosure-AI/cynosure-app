@@ -59,6 +59,28 @@ test('a chat started in a project is created in it, and moving it updates the se
   expect(store.activeProjectId).toBeNull()
 })
 
+test('resetting to defaults takes the chat out of its project, before and after it is created', async () => {
+  vi.spyOn(api.chat, 'createConversation').mockResolvedValue({
+    id: 'new-chat', title: 'New Chat', agentId: null, maWorkspaceId: null, projectId: 'project-1', origin: 'chat', createdAt: 1, updatedAt: 1,
+  })
+  const setProject = vi.spyOn(api.chat, 'setProject').mockResolvedValue({ success: true, projectId: null })
+  vi.spyOn(api.chat, 'discardStagedAttachments').mockResolvedValue({ success: true })
+  const store = useChatStore()
+  await flushPromises()
+
+  await store.startNewChat({ projectId: 'project-1' })
+  await store.resetToDefaults()
+  expect(store.activeProjectId).toBeNull()
+  expect(setProject).not.toHaveBeenCalled()
+
+  await store.startNewChat({ projectId: 'project-1' })
+  await store.createConversation()
+  await store.resetToDefaults()
+  expect(setProject).toHaveBeenCalledWith('new-chat', null)
+  expect(store.activeProjectId).toBeNull()
+  expect(store.conversations[0].projectId).toBeNull()
+})
+
 test('an incognito chat is created temporary and discarded when New Chat leaves it', async () => {
   const create = vi.spyOn(api.chat, 'createConversation').mockResolvedValue({
     id: 'incognito', title: 'New Chat', agentId: null, maWorkspaceId: null, projectId: null, origin: 'chat', temporary: true, createdAt: 1, updatedAt: 1,

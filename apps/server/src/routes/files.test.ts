@@ -95,7 +95,8 @@ describe('file routes', () => {
 
             expect(cached.statusCode).toBe(304)
             const cacheFiles = await readdir(join(process.env.CYNOSURE_DATA_DIR!, 'data', 'cache', 'thumbnails'))
-            expect(cacheFiles).toEqual([`${etag.replaceAll('"', '')}.webp`])
+            const key = etag.replaceAll('"', '')
+            expect(cacheFiles.sort()).toEqual([`${key}.json`, `${key}.webp`])
         })
 
         test('refuses file types it cannot render and unreadable PDFs', async () => {

@@ -143,8 +143,8 @@ export function useSlashCommands(actions: SlashCommandActions) {
 
   const commands = computed<SlashCommand[]>(() => {
     const conversationId = chatStore.activeConversationId
-    const hasCustomConfig = chatStore.hasAgentOverrides || (!chatStore.activeAgentId && chatStore.hasCynoOverrides)
-      || Boolean(!conversationId && chatStore.activeProjectId)
+    const canReset = chatStore.hasAgentOverrides || (!chatStore.activeAgentId && chatStore.hasCynoOverrides)
+      || Boolean(chatStore.activeProjectId)
     const reasoning = chatStore.sessionThinkingEnabled ? chatStore.sessionReasoningEffort : 'off'
     const list: SlashCommand[] = []
 
@@ -367,9 +367,9 @@ export function useSlashCommands(actions: SlashCommandActions) {
       description: 'Reset this chat\'s settings to the defaults',
       icon: 'lucide:rotate-ccw',
       group: 'Settings',
-      unavailable: hasCustomConfig ? undefined : 'Nothing has been changed.',
-      run: () => {
-        chatStore.resetToDefaults()
+      unavailable: canReset ? undefined : 'Nothing has been changed.',
+      run: async () => {
+        await chatStore.resetToDefaults()
         return 'Settings reset to defaults'
       },
     })

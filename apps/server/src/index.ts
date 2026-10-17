@@ -22,6 +22,7 @@ import { DatabaseVersionError } from './db/migrations.js'
 import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
 import { getRAGStore } from './core/memory/rag.js'
 import { removeLegacyMemoryAnalysis } from './core/memory/legacy-analysis-cleanup.js'
+import { pruneDocumentThumbnails } from './core/artifacts/document-thumbnails.js'
 import { getEventBus } from './core/telemetry/event-bus.js'
 import type { ToolBehaviorAnnotations } from './core/gateway/providers/base.provider.js'
 
@@ -631,6 +632,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
   removeLegacyMemoryAnalysis().catch((err) => console.warn('[memory] Legacy analysis cleanup failed; will retry on next start:', err))
+  pruneDocumentThumbnails().catch((err) => console.warn('[files] Thumbnail cache cleanup failed; will retry on next start:', err))
   registerBuiltInTools()
 
   // No execution survives a restart, so leftover queue items would sit as

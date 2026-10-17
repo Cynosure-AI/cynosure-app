@@ -23,11 +23,7 @@ const newAgentDescription = ref('')
 const savingAgent = ref(false)
 
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
-const hasProjectOverride = computed(() => Boolean(!chatStore.activeConversationId && chatStore.activeProjectId))
-const changedFields = computed(() => {
-  const fields = chatStore.activeAgentId ? chatStore.agentOverrideFields : chatStore.cynoOverrideFields
-  return hasProjectOverride.value ? [...fields, 'Project'] : fields
-})
+const changedFields = computed(() => chatStore.activeAgentId ? chatStore.agentOverrideFields : chatStore.cynoOverrideFields)
 const systemPromptChanged = computed(() => changedFields.value.includes('System prompt'))
 const canSaveAsAgent = computed(() => (
   chatStore.selectedToolNames.length > 0 ||
@@ -35,16 +31,19 @@ const canSaveAsAgent = computed(() => (
   chatStore.hasCynoOverrides ||
   chatStore.sessionSystemPrompt.trim().length > 0
 ))
+// A project is where the chat lives, not a settings change, so it doesn't mark the
+// menu as changed. Reset still takes the chat out of it.
 const hasCustomConfig = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && chatStore.hasCynoOverrides
-) || hasProjectOverride.value)
+))
+const canReset = computed(() => hasCustomConfig.value || Boolean(chatStore.activeProjectId))
 const canShowSaveAction = computed(() => hasOverrides.value || (
   !chatStore.activeAgentId && canSaveAsAgent.value
 ))
 const activeConversation = computed(() => chatStore.activeConversation)
 const hasActiveChat = computed(() => Boolean(chatStore.activeConversationId))
 const activeConversationPinned = computed(() => activeConversation.value?.pinned === true)
-const hasAgentActions = computed(() => hasCustomConfig.value || canShowSaveAction.value)
+const hasAgentActions = computed(() => canReset.value || canShowSaveAction.value)
 
 function openSearch(): void {
   menuOpen.value = false
@@ -66,9 +65,9 @@ async function togglePin(): Promise<void> {
   menuOpen.value = false
 }
 
-function resetConfig(): void {
-  chatStore.resetToDefaults()
+async function resetConfig(): Promise<void> {
   menuOpen.value = false
+  await chatStore.resetToDefaults()
 }
 
 async function applyChanges(): Promise<void> {
@@ -240,7 +239,7 @@ async function saveAsNewAgent(): Promise<void> {
 
       <!-- Reset to Defaults — yellow -->
       <button
-        v-if="hasCustomConfig"
+        v-if="canReset"
         type="button"
         role="menuitem"
         class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-amber-300 hover:bg-theme-800"

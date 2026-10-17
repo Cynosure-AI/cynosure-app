@@ -657,9 +657,10 @@ export const useChatStore = defineStore('chat', () => {
     activeProjectId.value = projectId
   }
 
-  function resetToDefaults(): void {
+  /** Restore the agent's default settings and take the chat out of its project. */
+  async function resetToDefaults(): Promise<void> {
     agentConfig.resetToDefaults()
-    if (!activeConversationId.value) activeProjectId.value = null
+    if (activeProjectId.value) await setConversationProject(null)
   }
 
   async function deleteAllConversations(allConversations = false): Promise<void> {
