@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { api } from '../api/client'
 import type { ActivityArtifact, ActivityItem, ConversationUpload } from '../api/types'
+import DocumentTypeArt from '../components/shared/DocumentTypeArt.vue'
 import LibraryPreviewModal from '../components/shared/LibraryPreviewModal.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 import { useCynoStore } from '../stores/cyno.store'
@@ -516,6 +517,13 @@ onUnmounted(() => {
               playsinline
               preload="metadata"
               class="h-full w-full object-cover"
+            />
+            <DocumentTypeArt
+              v-else-if="entry.artifact.kind === 'file'"
+              :ext="entry.artifact.ext"
+              :href="entry.artifact.href"
+              :compact="viewMode === 'list'"
+              class="transition duration-300 group-hover:scale-[1.025]"
             />
             <div
               v-else

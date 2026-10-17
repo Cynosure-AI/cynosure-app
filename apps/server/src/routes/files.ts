@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify'
-import { existsSync, createReadStream, statSync } from 'fs'
+import type { FastifyInstance, FastifyReply } from 'fastify'
+import { existsSync, createReadStream, statSync, type Stats } from 'fs'
 import { basename, resolve, extname, isAbsolute } from 'path'
+import { canRenderDocumentThumbnail, getDocumentThumbnail } from '../core/artifacts/document-thumbnails.js'
 
 const ALLOWED_EXTENSIONS = new Set([
     '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.avif',
@@ -44,33 +45,48 @@ const MIME_TYPES: Record<string, string> = {
     '.zip': 'application/zip'
 }
 
+type ResolvedFile = { resolved: string; ext: string; stat: Stats }
+
+/** Validates the `path` query parameter, sending the error response itself when it fails. */
+function resolveAllowedFile(filePath: unknown, reply: FastifyReply): ResolvedFile | null {
+    if (!filePath || typeof filePath !== 'string') {
+        reply.status(400).send({ error: 'Missing "path" query parameter' })
+        return null
+    }
+
+    // Validate: must be absolute and contain no traversal segments
+    if (!isAbsolute(filePath) || filePath.includes('..')) {
+        reply.status(400).send({ error: 'Invalid file path' })
+        return null
+    }
+    const resolved = resolve(filePath)
+
+    const ext = extname(resolved).toLowerCase()
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+        reply.status(403).send({ error: 'File type not allowed' })
+        return null
+    }
+
+    if (!existsSync(resolved)) {
+        reply.status(404).send({ error: 'File not found' })
+        return null
+    }
+
+    const stat = statSync(resolved)
+    if (!stat.isFile()) {
+        reply.status(400).send({ error: 'Not a file' })
+        return null
+    }
+
+    return { resolved, ext, stat }
+}
+
 export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     app.get('/', async (req, reply) => {
         const { path: filePath, name } = req.query as { path?: string; name?: string }
-
-        if (!filePath || typeof filePath !== 'string') {
-            return reply.status(400).send({ error: 'Missing "path" query parameter' })
-        }
-
-        // Validate: must be absolute and contain no traversal segments
-        if (!isAbsolute(filePath) || filePath.includes('..')) {
-            return reply.status(400).send({ error: 'Invalid file path' })
-        }
-        const resolved = resolve(filePath)
-
-        const ext = extname(resolved).toLowerCase()
-        if (!ALLOWED_EXTENSIONS.has(ext)) {
-            return reply.status(403).send({ error: 'File type not allowed' })
-        }
-
-        if (!existsSync(resolved)) {
-            return reply.status(404).send({ error: 'File not found' })
-        }
-
-        const stat = statSync(resolved)
-        if (!stat.isFile()) {
-            return reply.status(400).send({ error: 'Not a file' })
-        }
+        const file = resolveAllowedFile(filePath, reply)
+        if (!file) return reply
+        const { resolved, ext, stat } = file
 
         const mime = MIME_TYPES[ext] || 'application/octet-stream'
         reply.header('Content-Type', mime)
@@ -84,5 +100,33 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         reply.header('Cache-Control', 'public, max-age=3600')
 
         return reply.send(createReadStream(resolved))
+    })
+
+    app.get('/thumbnail', async (req, reply) => {
+        const { path: filePath } = req.query as { path?: string }
+        const file = resolveAllowedFile(filePath, reply)
+        if (!file) return reply
+        const { resolved, stat } = file
+
+        if (!canRenderDocumentThumbnail(resolved, stat.size)) {
+            return reply.status(415).send({ error: 'No thumbnail available for this file' })
+        }
+
+        let thumbnail
+        try {
+            thumbnail = await getDocumentThumbnail({ path: resolved, sizeBytes: stat.size, modifiedMs: stat.mtimeMs })
+        } catch (error) {
+            req.log.warn({ err: error, path: resolved }, 'Failed to render document thumbnail')
+            return reply.status(422).send({ error: 'Could not render a thumbnail for this file' })
+        }
+
+        // The URL only names the path, so revalidate each time; the ETag tracks file changes.
+        const etag = `"${thumbnail.etag}"`
+        reply.header('ETag', etag)
+        reply.header('Cache-Control', 'private, no-cache')
+        if (req.headers['if-none-match'] === etag) return reply.status(304).send()
+
+        reply.header('Content-Type', 'image/webp')
+        return reply.send(thumbnail.data)
     })
 }

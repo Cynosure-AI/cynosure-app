@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
+import { documentTypeStyle } from '../../utils/document-types'
 import { fileArtifactKey, fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 
 const props = defineProps<{
@@ -42,8 +43,9 @@ function handleClick(event: MouseEvent): void {
       @click="handleClick"
     >
       <Icon
-        icon="lucide:file-text"
-        class="h-3.5 w-3.5 shrink-0 text-accent-fg"
+        :icon="documentTypeStyle(artifact.ext).icon"
+        class="h-3.5 w-3.5 shrink-0"
+        :class="documentTypeStyle(artifact.ext).text"
       />
       <span class="truncate">{{ artifact.label }}</span>
       <span class="shrink-0 rounded bg-theme-700 px-1 py-0.5 text-[9px] text-ink-secondary">{{ artifact.ext }}</span>

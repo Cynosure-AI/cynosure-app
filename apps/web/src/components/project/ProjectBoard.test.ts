@@ -111,15 +111,25 @@ test('cards show live run state and step progress, and skip notes that repeat th
   await flushPromises()
 
   const live = wrapper.get('section[aria-label="In progress"] li[draggable="true"]')
-  expect(live.text()).toContain('Working')
+  const liveChat = live.get('a[aria-label="Open chat for Style the login page"]')
+  expect(liveChat.classes()).toContain('text-accent-fg')
+  expect(liveChat.find('.animate-ping').exists()).toBe(true)
   expect(live.text()).toContain('2/5')
   expect(live.text()).toContain('Use illustrations')
   expect(live.text()).not.toContain('Style the login page. Use')
 
   const idle = wrapper.get('section[aria-label="To do"] li[draggable="true"]')
-  expect(idle.text()).toContain('Chat')
-  expect(idle.text()).not.toContain('Working')
+  const idleChat = idle.get('a[aria-label="Open chat for Sortable headers"]')
+  expect(idleChat.classes()).not.toContain('text-accent-fg')
+  expect(idleChat.find('.animate-ping').exists()).toBe(false)
+  expect(idle.find('button[aria-label="Start a chat for Sortable headers"]').exists()).toBe(true)
   expect(idle.findAll('span.line-clamp-2')).toHaveLength(0)
+
+  mocks.executing.value = new Set(['stale'])
+  await flushPromises()
+  expect(liveChat.find('.animate-ping').exists()).toBe(false)
+  expect(idleChat.find('.animate-ping').exists()).toBe(true)
+  wrapper.unmount()
 })
 
 function contextMenu(): HTMLElement | null {

@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { ActivityArtifact } from '../../api/types'
+import { documentTypeStyle } from '../../utils/document-types'
+import DocumentTypeArt from './DocumentTypeArt.vue'
 import ModalDialog from './ModalDialog.vue'
 
 const props = defineProps<{
@@ -49,7 +51,7 @@ const icon = computed(() => {
   if (props.artifact?.kind === 'image') return 'lucide:image'
   if (props.artifact?.kind === 'video') return 'lucide:film'
   if (props.artifact?.kind === 'audio') return 'lucide:audio-lines'
-  return 'lucide:file-text'
+  return documentTypeStyle(extension.value).icon
 })
 
 const formattedDate = computed(() => props.createdAt
@@ -142,7 +144,15 @@ const formattedDate = computed(() => props.createdAt
           v-else
           class="flex max-w-md flex-col items-center px-8 py-16 text-center"
         >
-          <div class="mb-5 flex h-24 w-24 items-center justify-center rounded-3xl bg-theme-800 text-ink-secondary ring-1 ring-theme-700">
+          <DocumentTypeArt
+            v-if="artifact.kind === 'file'"
+            :ext="extension"
+            class="mb-5 aspect-4/3 h-auto! w-60! rounded-2xl"
+          />
+          <div
+            v-else
+            class="mb-5 flex h-24 w-24 items-center justify-center rounded-3xl bg-theme-800 text-ink-secondary ring-1 ring-theme-700"
+          >
             <Icon
               :icon="icon"
               class="h-11 w-11"

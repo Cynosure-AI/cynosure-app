@@ -33,6 +33,7 @@
     "@lancedb/lancedb": "^0.33.0",
     "@langchain/textsplitters": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@napi-rs/canvas": "^0.1.99",
     "@slack/bolt": "^4.6.0",
     "@slack/web-api": "^7.15.0",
     "adm-zip": "^0.5.16",

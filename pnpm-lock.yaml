@@ -251,6 +251,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.27.1
         version: 1.29.0(@cfworker/json-schema@4.1.1)(supports-color@8.1.1)(zod@4.6.5)
+      '@napi-rs/canvas':
+        specifier: ^0.1.99
+        version: 0.1.99
       '@slack/bolt':
         specifier: ^4.6.0
         version: 4.7.1(@types/express@5.0.6)(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
@@ -6572,7 +6575,6 @@ snapshots:
       '@napi-rs/canvas-linux-x64-musl': 0.1.99
       '@napi-rs/canvas-win32-arm64-msvc': 0.1.99
       '@napi-rs/canvas-win32-x64-msvc': 0.1.99
-    optional: true
 
   '@noble/hashes@1.4.0': {}
 
