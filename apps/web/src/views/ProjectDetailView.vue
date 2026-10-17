@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 import BaseCard from '../components/shared/BaseCard.vue'
+import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import ProjectBoard from '../components/project/ProjectBoard.vue'
 import ProjectTimeline from '../components/project/ProjectTimeline.vue'
@@ -417,16 +418,26 @@ onBeforeUnmount(stopWaitUpdates)
                       aria-hidden="true"
                     />
                   </span>
-                  Memory folder
+                  <span class="inline-flex items-center gap-1.5">
+                    Memory folder
+                    <HoverTooltip>
+                      <Icon
+                        icon="lucide:circle-help"
+                        class="h-3.5 w-3.5 cursor-help text-ink-faint"
+                        role="img"
+                        aria-label="About memory folders"
+                      />
+                      <template #content>
+                        Lasting facts and knowledge; agents add to it automatically
+                      </template>
+                    </HoverTooltip>
+                  </span>
                 </dt>
-                <dd class="mt-1">
-                  <p class="text-xs leading-relaxed text-ink-muted">
-                    Lasting facts and knowledge; agents add to it automatically
-                  </p>
+                <dd class="mt-2">
                   <button
                     v-if="memoryFolder"
                     type="button"
-                    class="mt-2 block w-full rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 text-left font-mono text-xs leading-relaxed text-theme-200 transition-colors [overflow-wrap:anywhere] hover:border-theme-600 hover:text-accent-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                    class="block w-full rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 text-left font-mono text-xs leading-relaxed text-theme-200 transition-colors [overflow-wrap:anywhere] hover:border-theme-600 hover:text-accent-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                     :title="`Browse ${memoryFolder.folderPath || memoryFolder.name}`"
                     @click="activeTab = 'memories'"
                   >
@@ -434,7 +445,7 @@ onBeforeUnmount(stopWaitUpdates)
                   </button>
                   <p
                     v-else
-                    class="mt-2 text-xs text-ink-faint"
+                    class="text-xs text-ink-faint"
                   >
                     None
                   </p>
@@ -467,14 +478,23 @@ onBeforeUnmount(stopWaitUpdates)
                       aria-hidden="true"
                     />
                   </span>
-                  Instructions
+                  <span class="inline-flex items-center gap-1.5">
+                    Instructions
+                    <HoverTooltip>
+                      <Icon
+                        icon="lucide:circle-help"
+                        class="h-3.5 w-3.5 cursor-help text-ink-faint"
+                        role="img"
+                        aria-label="About project instructions"
+                      />
+                      <template #content>
+                        Written by you; followed in every chat of this project
+                      </template>
+                    </HoverTooltip>
+                  </span>
                 </dt>
-                <dd class="mt-1">
-                  <p class="text-xs leading-relaxed text-ink-muted">
-                    Written by you; followed in every chat of this project
-                  </p>
+                <dd class="mt-2">
                   <div
-                    class="mt-2"
                     :class="project.instructions ? 'rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 text-theme-200' : 'text-ink-faint'"
                   >
                     <p class="line-clamp-4 whitespace-pre-wrap text-xs leading-relaxed [overflow-wrap:anywhere]">
