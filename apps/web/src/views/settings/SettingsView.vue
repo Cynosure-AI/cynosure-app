@@ -6,7 +6,8 @@ import ProviderSettings from '../../components/settings/ProviderSettings.vue'
 import MemorySettings from '../../components/settings/MemorySettings.vue'
 import ChatSettings from '../../components/settings/ChatSettings.vue'
 import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
-import GeneralSettings from '../../components/settings/AppearanceSettings.vue'
+import GeneralSettings from '../../components/settings/GeneralSettings.vue'
+import AppearanceSettings from '../../components/settings/AppearanceSettings.vue'
 import DesktopSettings from '../../components/settings/DesktopSettings.vue'
 import FileAccessSettings from '../../components/settings/FileAccessSettings.vue'
 import BackupSettings from '../../components/settings/BackupSettings.vue'
@@ -16,7 +17,7 @@ import ResponsiveSectionLayout from '../../components/shared/ResponsiveSectionLa
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ChannelsView from '../triggers/ChannelsView.vue'
 
-type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'file-access' | 'desktop-application' | 'backup' | 'reset-data' | 'about'
+type SettingsCategoryId = 'providers' | 'memory' | 'chat' | 'speech-to-text' | 'channels' | 'general' | 'appearance' | 'file-access' | 'desktop-application' | 'backup' | 'reset-data' | 'about'
 
 interface SettingsCategory {
   id: SettingsCategoryId
@@ -54,9 +55,16 @@ const categories: SettingsCategory[] = [
   {
     id: 'general',
     label: 'General',
-    description: 'Manage your profile, appearance, chat display preferences, and setup guide access.',
+    description: 'Manage your profile and setup guide access.',
     icon: 'lucide:sliders-horizontal',
     component: GeneralSettings
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    description: 'Choose your theme and how chat messages are displayed.',
+    icon: 'lucide:palette',
+    component: AppearanceSettings
   },
   {
     id: 'chat',
@@ -266,21 +274,21 @@ const sections: SettingsSection[] = [
   },
   {
     id: 'theme',
-    categoryId: 'general',
+    categoryId: 'appearance',
     label: 'Theme',
     description: 'Choose your visual style.',
     terms: ['theme', 'themes', 'visual style', 'dark', 'midnight', 'light', 'blackwall', 'hud', 'scanlines', 'crimson', 'red', 'glyphs', 'gold', 'green', 'cyberpunk', 'emerald', 'industrial', 'amber', 'monochrome', 'palette', 'appearance']
   },
   {
     id: 'ai-message-bubbles',
-    categoryId: 'general',
+    categoryId: 'appearance',
     label: 'AI Message Bubbles',
     description: 'Show backgrounds and borders around AI messages and thinking blocks.',
     terms: ['chat display', 'ai', 'assistant', 'message bubbles', 'thinking', 'reasoning', 'transparent', 'background', 'border', 'shadow']
   },
   {
     id: 'auto-expand-thinking',
-    categoryId: 'general',
+    categoryId: 'appearance',
     label: 'Auto-expand Thinking',
     description: 'Automatically expand thinking and reasoning blocks.',
     terms: ['auto expand thinking', 'thinking', 'reasoning', 'reasoning blocks', 'expand steps']

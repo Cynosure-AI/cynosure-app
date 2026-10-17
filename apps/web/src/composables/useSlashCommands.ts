@@ -38,6 +38,7 @@ const REASONING_LEVELS: Array<{ value: ReasoningEffort | 'off'; label: string; d
 
 const SETTINGS_SECTIONS: Array<{ category: string; label: string; icon: string }> = [
   { category: 'general', label: 'General', icon: 'lucide:settings' },
+  { category: 'appearance', label: 'Appearance', icon: 'lucide:palette' },
   { category: 'chat', label: 'Chat', icon: 'lucide:message-square' },
   { category: 'memory', label: 'Memory', icon: 'lucide:brain' },
   { category: 'speech-to-text', label: 'Voice', icon: 'lucide:mic' },

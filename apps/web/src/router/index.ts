@@ -172,7 +172,7 @@ const router = createRouter({
     },
     {
       path: '/settings/appearance',
-      redirect: { name: 'settings', query: { category: 'general' } }
+      redirect: { name: 'settings', query: { category: 'appearance' } }
     },
     {
       path: '/settings/preferences',
