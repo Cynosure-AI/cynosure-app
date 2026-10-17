@@ -15,6 +15,7 @@ import ContinuationRoundMarker from '../chat/ContinuationRoundMarker.vue'
 import WaitResumeMarker from '../chat/WaitResumeMarker.vue'
 import HITLDialog from '../agent/HITLDialog.vue'
 import ToolExecutionList from './ToolExecutionList.vue'
+import SubAgentDelegationCard from './SubAgentDelegationCard.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import { useToolPresentation } from '../../composables/useToolPresentation'
 import RichContent from '../shared/RichContent.vue'
@@ -23,6 +24,7 @@ import { chatIntroTimeline } from './chatIntro'
 import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
 import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline'
+import { groupDelegations, type DelegationEntry, type DisplayTimelineEntry } from '../../utils/delegation-timeline'
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 import { getGreeting, getIncognitoGreeting } from '../../utils/greetings'
 import { useCynoStore } from '../../stores/cyno.store'
@@ -54,8 +56,8 @@ async function forkMessage(messageId: string): Promise<void> {
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const toolPresentation = useToolPresentation()
 const lightboxSrc = ref<string | null>(null)
-const collapsedSubAgentGroups = reactive(new Set<string>())
-const fullHeightSubAgentGroups = reactive(new Set<string>())
+/** Explicit open/closed choices per sub-agent run; unset runs follow isRunExpanded. */
+const runExpansion = reactive(new Map<string, boolean>())
 const searchInput = ref<HTMLInputElement | null>(null)
 const searchQuery = ref('')
 const currentSearchResultIndex = ref(-1)
@@ -93,12 +95,11 @@ function findSearchMessageElement(messageId: string): HTMLElement | null {
 }
 
 function expandSearchResultContainer(messageId: string): void {
-  for (const entry of unifiedTimeline.value) {
-    if (
-      entry.type === 'sub-agent-group'
-      && entry.entries.some(inner => inner.type === 'message' && inner.msg.id === messageId)
-    ) {
-      collapsedSubAgentGroups.delete(entry.key)
+  for (const delegation of delegationEntries.value) {
+    const run = delegation.runs.find(candidate =>
+      candidate.entries.some(inner => inner.type === 'message' && inner.msg.id === messageId))
+    if (run) {
+      runExpansion.set(run.key, true)
       return
     }
   }
@@ -240,31 +241,45 @@ const visibleQuickResponses = computed(() => chatStore.activeQuickResponses)
 
 // ─── Unified timeline ───────────────────────────────────────
 
-const unifiedTimeline = computed(() => buildChatTimeline(
+const unifiedTimeline = computed<DisplayTimelineEntry[]>(() => groupDelegations(buildChatTimeline(
   chatStore.messages, agentStore.executionSteps,
-))
+)))
+
+const delegationEntries = computed(() =>
+  unifiedTimeline.value.filter((entry): entry is DelegationEntry => entry.type === 'delegation'))
 
 /** Key of the last tool-group entry — only this one can show as "active" */
 const lastToolGroupKey = computed(() => {
   const groups = unifiedTimeline.value.flatMap((entry) => {
     if (entry.type === 'tool-group') return [entry]
-    if (entry.type === 'sub-agent-group') return entry.entries.filter(e => e.type === 'tool-group')
+    if (entry.type === 'delegation') {
+      return [
+        ...(entry.call ? [entry.call] : []),
+        ...entry.runs.flatMap(run => run.entries.filter(e => e.type === 'tool-group')),
+      ]
+    }
     return []
   })
   return groups.reduce<(typeof groups)[number] | null>((latest, group) =>
     !latest || group.ts >= latest.ts ? group : latest, null)?.key ?? null
 })
 
-/** Key of the sub-agent group currently being executed */
-const activeSubAgentGroupKey = computed(() => {
+/** The sub-agent run doing work right now: it is streaming or owns the active tool step. */
+function liveRunKey(delegation: DelegationEntry): string | null {
   if (!agentStore.isExecuting) return null
-  for (const entry of unifiedTimeline.value) {
-    if (entry.type === 'sub-agent-group') {
-      if (entry.entries.some(e => e.key === lastToolGroupKey.value)) return entry.key
-    }
-  }
-  return null
-})
+  return delegation.runs.find(run => run.entries.some(inner =>
+    inner.key === lastToolGroupKey.value || (inner.type === 'message' && inner.msg.isStreaming),
+  ))?.key ?? null
+}
+
+/** A lone run opens while it works; parallel runs stay compact and report through their rows. */
+function isRunExpanded(delegation: DelegationEntry, key: string): boolean {
+  return runExpansion.get(key) ?? delegation.runs.length === 1
+}
+
+function toggleRun(delegation: DelegationEntry, key: string): void {
+  runExpansion.set(key, !isRunExpanded(delegation, key))
+}
 
 function delegationResultLabel(results: Extract<TimelineEntry, { type: 'delegation-result' }>['results']): string {
   if (results.some(result => result.success === false && (result.name === 'spawn_subagent' || result.name === 'continue_subagent'))) {
@@ -275,14 +290,6 @@ function delegationResultLabel(results: Extract<TimelineEntry, { type: 'delegati
   return 'Sub-agent returned'
 }
 
-function toggleSubAgentFullHeight(key: string): void {
-  if (fullHeightSubAgentGroups.has(key)) {
-    fullHeightSubAgentGroups.delete(key)
-  } else {
-    fullHeightSubAgentGroups.add(key)
-  }
-}
-
 function collectFileArtifactsFromText(text: string, seen: Set<string>, artifacts: FileArtifactLink[]): void {
   for (const artifact of fileArtifactLinks(text)) {
     if (seen.has(artifact.href)) continue
@@ -291,16 +298,25 @@ function collectFileArtifactsFromText(text: string, seen: Set<string>, artifacts
   }
 }
 
-function hasLaterToolGroupInTurn(entries: TimelineEntry[], index: number): boolean {
+type AnyTimelineEntry = TimelineEntry | DisplayTimelineEntry
+
+/** The tool card an entry stands for; a delegation stands for its call. */
+function toolGroupOf(entry: AnyTimelineEntry): Extract<TimelineEntry, { type: 'tool-group' }> | null {
+  if (entry.type === 'tool-group') return entry
+  if (entry.type === 'delegation') return entry.call
+  return null
+}
+
+function hasLaterToolGroupInTurn(entries: readonly AnyTimelineEntry[], index: number): boolean {
   for (let i = index + 1; i < entries.length; i++) {
     const entry = entries[i]
     if (entry.type === 'message' && entry.msg.role === 'user') return false
-    if (entry.type === 'tool-group') return true
+    if (toolGroupOf(entry)) return true
   }
   return false
 }
 
-function assistantFileArtifacts(entry: TimelineEntry, entries = unifiedTimeline.value): FileArtifactLink[] {
+function assistantFileArtifacts(entry: AnyTimelineEntry, entries: readonly AnyTimelineEntry[] = unifiedTimeline.value): FileArtifactLink[] {
   if (entry.type !== 'message' || entry.msg.role !== 'assistant' || entry.msg.isStreaming) return []
   const index = entries.findIndex((candidate) => candidate.key === entry.key)
   if (index === -1 || hasLaterToolGroupInTurn(entries, index)) return []
@@ -311,8 +327,9 @@ function assistantFileArtifacts(entry: TimelineEntry, entries = unifiedTimeline.
   for (let i = index - 1; i >= 0; i--) {
     const previous = entries[i]
     if (previous.type === 'message' && previous.msg.role === 'user') break
-    if (previous.type !== 'tool-group') continue
-    for (const step of previous.group.steps) {
+    const group = toolGroupOf(previous)
+    if (!group) continue
+    for (const step of group.group.steps) {
       for (const result of step.results || []) {
         collectFileArtifactsFromText(result.output || '', seen, artifacts)
       }
@@ -324,7 +341,7 @@ function assistantFileArtifacts(entry: TimelineEntry, entries = unifiedTimeline.
 }
 
 /** Keep main and delegated messages consistent, including their artifact timeline. */
-function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, entries = unifiedTimeline.value) {
+function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, entries: readonly AnyTimelineEntry[] = unifiedTimeline.value) {
   const { msg } = entry
   const thinkingClock = msg.thinking ? trackThinking(toRaw(msg)) : undefined
   return {
@@ -355,15 +372,6 @@ function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, 
   }
 }
 
-function toggleSubAgentCollapsed(key: string): void {
-  if (collapsedSubAgentGroups.has(key)) {
-    collapsedSubAgentGroups.delete(key)
-  } else {
-    collapsedSubAgentGroups.add(key)
-    fullHeightSubAgentGroups.delete(key)
-  }
-}
-
 function savedToolRows(entry: Extract<TimelineEntry, { type: 'saved-tool-result' }>) {
   const { msg, call } = entry
   const name = call?.name ?? 'Tool result'
@@ -384,14 +392,15 @@ function savedToolRows(entry: Extract<TimelineEntry, { type: 'saved-tool-result'
 
 // ─── Sub-agent box scroll ───────────────────────────────────
 
-/** Map of sub-agent group key → its scrollable body element. */
+/** Map of sub-agent run key → its scrollable transcript element. */
 const subAgentScrollRefs = new Map<string, HTMLElement>()
 const initializedSubAgentScrolls = new Set<string>()
 
+/** Loaded history opens with every run collapsed. */
 function collapseVisibleSubAgentGroups(): void {
   nextTick(() => {
-    for (const entry of unifiedTimeline.value) {
-      if (entry.type === 'sub-agent-group') collapsedSubAgentGroups.add(entry.key)
+    for (const delegation of delegationEntries.value) {
+      for (const run of delegation.runs) runExpansion.set(run.key, false)
     }
   })
 }
@@ -411,11 +420,12 @@ function registerSubAgentScroll(key: string, el: unknown): void {
 function scrollSubAgentBoxesIfNear(): void {
   const boxesToScroll: HTMLElement[] = []
   const activeKeys = new Set<string>()
-  for (const entry of unifiedTimeline.value) {
-    if (entry.type !== 'sub-agent-group') continue
-    activeKeys.add(entry.key)
-    const el = subAgentScrollRefs.get(entry.key)
-    if (el && isNearScrollBottom(el)) boxesToScroll.push(el)
+  for (const delegation of delegationEntries.value) {
+    for (const run of delegation.runs) {
+      activeKeys.add(run.key)
+      const el = subAgentScrollRefs.get(run.key)
+      if (el && isNearScrollBottom(el)) boxesToScroll.push(el)
+    }
   }
   for (const key of subAgentScrollRefs.keys()) {
     if (!activeKeys.has(key)) {
@@ -448,8 +458,7 @@ watch([
 // When loading finishes the spinner is replaced by rendered messages — scroll then
 watch(() => chatStore.loadingMessages, (isLoading) => {
   if (isLoading) {
-    collapsedSubAgentGroups.clear()
-    fullHeightSubAgentGroups.clear()
+    runExpansion.clear()
     return
   }
   scrollMainToBottom()
@@ -756,144 +765,74 @@ onMounted(() => {
         v-for="entry in unifiedTimeline"
         :key="entry.key"
       >
-        <!-- Sub-agent group: collapsible box for a delegated sub-agent's activity -->
-        <div
-          v-if="entry.type === 'sub-agent-group'"
-          class="mx-3 md:mx-4 my-2"
+        <!-- Delegation: the call, each sub-agent run and what came back, in one card -->
+        <SubAgentDelegationCard
+          v-if="entry.type === 'delegation'"
+          :delegation="entry"
+          :is-executing="agentStore.isExecuting"
+          :live-run-key="liveRunKey(entry)"
+          :is-call-active="agentStore.isExecuting && entry.call?.key === lastToolGroupKey"
+          :is-run-expanded="(key) => isRunExpanded(entry, key)"
+          @toggle-run="(key) => toggleRun(entry, key)"
+          @register-scroll="registerSubAgentScroll"
+          @preview-image="lightboxSrc = $event"
         >
-          <div
-            class="overflow-hidden rounded-2xl border bg-theme-800/25 transition-colors duration-500"
-            :class="activeSubAgentGroupKey === entry.key ? 'border-accent-500/35' : 'border-theme-700/60'"
-          >
-            <!-- Header -->
+          <template #run="{ run }">
             <div
-              role="button"
-              tabindex="0"
-              class="w-full flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-theme-700/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500/60"
-              :aria-expanded="!collapsedSubAgentGroups.has(entry.key)"
-              :aria-label="`${collapsedSubAgentGroups.has(entry.key) ? 'Expand' : 'Collapse'} ${entry.agentName || entry.codename} sub-agent steps`"
-              @click="toggleSubAgentCollapsed(entry.key)"
-              @keydown.enter.self.prevent="toggleSubAgentCollapsed(entry.key)"
-              @keydown.space.self.prevent="toggleSubAgentCollapsed(entry.key)"
+              v-if="run.openingMessage"
+              data-subagent-opening-message
             >
-              <!-- Sub-agent avatar -->
-              <div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-theme-600/60 bg-theme-800">
-                <img
-                  v-if="entry.agentId && agentDefs.get(entry.agentId)?.iconUrl"
-                  :src="agentDefs.get(entry.agentId)!.iconUrl!"
-                  class="w-full h-full object-cover"
-                  alt=""
-                >
-                <Icon
-                  v-else
-                  icon="lucide:bot"
-                  class="w-3.5 h-3.5 text-ink-secondary"
-                />
-              </div>
-              <!-- Agent name + codename -->
-              <div class="flex-1 min-w-0 flex items-baseline gap-1.5">
-                <span class="text-[13px] font-medium text-theme-200 truncate">{{ entry.agentName || entry.codename }}</span>
-                <span
-                  v-if="entry.agentName && entry.agentName !== entry.codename"
-                  class="text-[10px] text-ink-faint truncate shrink-0"
-                >{{ entry.codename }}</span>
-              </div>
-              <!-- Running indicator -->
-              <Icon
-                v-if="activeSubAgentGroupKey === entry.key"
-                icon="svg-spinners:ring-resize"
-                class="w-3.5 h-3.5 text-accent-fg shrink-0"
+              <MessageBubble
+                role="user"
+                :content="run.openingMessage"
+                readonly
+                fork-disabled
               />
-              <!-- Step count badge -->
-              <span class="text-[10px] text-ink-faint tabular-nums shrink-0">
-                {{ entry.entries.length }} step{{ entry.entries.length !== 1 ? 's' : '' }}
-              </span>
-              <button
-                v-if="!collapsedSubAgentGroups.has(entry.key)"
-                class="w-7 h-7 rounded-lg flex items-center justify-center text-ink-faint hover:text-theme-200 hover:bg-theme-700/40 transition-colors shrink-0"
-                :title="fullHeightSubAgentGroups.has(entry.key) ? 'Collapse to compact view' : 'Expand to full height'"
-                @click.stop="toggleSubAgentFullHeight(entry.key)"
-              >
-                <Icon
-                  :icon="fullHeightSubAgentGroups.has(entry.key) ? 'lucide:minimize-2' : 'lucide:maximize-2'"
-                  class="w-3.5 h-3.5"
-                />
-              </button>
-              <!-- Height toggle icon -->
-              <button
-                class="w-7 h-7 rounded-lg flex items-center justify-center text-ink-faint hover:text-theme-200 hover:bg-theme-700/40 transition-colors shrink-0"
-                :title="collapsedSubAgentGroups.has(entry.key) ? 'Expand sub-agent steps' : 'Collapse sub-agent steps'"
-                @click.stop="toggleSubAgentCollapsed(entry.key)"
-              >
-                <Icon
-                  :icon="collapsedSubAgentGroups.has(entry.key) ? 'lucide:chevron-down' : 'lucide:chevron-up'"
-                  class="w-4 h-4"
-                />
-              </button>
             </div>
-            <!-- Body: limited height by default, full height when toggled -->
-            <div
-              v-if="!collapsedSubAgentGroups.has(entry.key)"
-              :ref="(el) => registerSubAgentScroll(entry.key, el)"
-              class="border-t border-theme-700/40 py-2 overflow-y-auto"
-              :class="fullHeightSubAgentGroups.has(entry.key) ? '' : 'max-h-80'"
+            <template
+              v-for="inner in run.entries"
+              :key="inner.key"
             >
               <div
-                v-if="entry.openingMessage"
-                data-subagent-opening-message
+                v-if="inner.type === 'message'"
+                :data-chat-search-message-id="inner.msg.id"
+                :class="{ 'ring-1 ring-inset ring-accent-400/60 rounded-2xl bg-accent-500/5': activeSearchMessageId === inner.msg.id }"
               >
                 <MessageBubble
-                  role="user"
-                  :content="entry.openingMessage"
-                  readonly
-                  fork-disabled
+                  v-bind="messageBubbleProps(inner, run.entries)"
+                  @retry="chatStore.retryFromMessage(inner.msg.id)"
+                  @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
+                  @fork="forkMessage(inner.msg.id)"
                 />
               </div>
-              <template
-                v-for="inner in entry.entries"
-                :key="inner.key"
+              <PreTurnContextTimeline
+                v-else-if="inner.type === 'tool-group' && inner.group.iteration === 0"
+                :steps="inner.group.steps"
+                :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
+              />
+              <ToolExecutionCard
+                v-else-if="inner.type === 'tool-group'"
+                :iteration="inner.group.iteration"
+                :steps="inner.group.steps"
+                :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
+                :delegation-handoff="inner.group.delegationHandoff"
+              />
+              <div
+                v-else-if="inner.type === 'saved-tool-result'"
+                class="px-4 py-1.5"
               >
-                <div
-                  v-if="inner.type === 'message'"
-                  :data-chat-search-message-id="inner.msg.id"
-                  :class="{ 'ring-1 ring-inset ring-accent-400/60 rounded-2xl bg-accent-500/5': activeSearchMessageId === inner.msg.id }"
-                >
-                  <MessageBubble
-                    v-bind="messageBubbleProps(inner, entry.entries)"
-                    @retry="chatStore.retryFromMessage(inner.msg.id)"
-                    @edit="(content) => chatStore.editMessage(inner.msg.id, content)"
-                    @fork="forkMessage(inner.msg.id)"
+                <div class="ml-3 md:ml-12">
+                  <ToolExecutionList
+                    :rows="savedToolRows(inner)"
+                    :is-active="false"
+                    status="Result received"
+                    @preview-image="lightboxSrc = $event"
                   />
                 </div>
-                <PreTurnContextTimeline
-                  v-else-if="inner.type === 'tool-group' && inner.group.iteration === 0"
-                  :steps="inner.group.steps"
-                  :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
-                />
-                <ToolExecutionCard
-                  v-else-if="inner.type === 'tool-group'"
-                  :iteration="inner.group.iteration"
-                  :steps="inner.group.steps"
-                  :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
-                  :delegation-handoff="inner.group.delegationHandoff"
-                />
-                <div
-                  v-else-if="inner.type === 'saved-tool-result'"
-                  class="px-4 py-1.5"
-                >
-                  <div class="ml-3 md:ml-12">
-                    <ToolExecutionList
-                      :rows="savedToolRows(inner)"
-                      :is-active="false"
-                      status="Result received"
-                      @preview-image="lightboxSrc = $event"
-                    />
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </div>
+              </div>
+            </template>
+          </template>
+        </SubAgentDelegationCard>
 
         <!-- Regular message (user / assistant) -->
         <div

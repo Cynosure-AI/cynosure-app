@@ -16,7 +16,7 @@ export type TimelineEntry =
   | { type: 'delegation-result'; results: NonNullable<ExecutionStep['results']>; ts: number; sequence?: number; key: string; isSubAgent?: false }
   | { type: 'saved-tool-result'; msg: DisplayMessage; call: MessageToolCall | null; ts: number; key: string; isSubAgent?: boolean }
   | { type: 'compact-event'; msg: DisplayMessage; ts: number; key: string; isSubAgent?: false }
-  | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; openingMessage: string | null; continued: boolean; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
+  | { type: 'sub-agent-group'; codename: string; agentName: string | null; agentId: string | null; invocationId: string | null; openingMessage: string | null; continued: boolean; entries: TimelineEntry[]; ts: number; key: string; isSubAgent?: false }
 
 export function buildChatTimeline(messages: DisplayMessage[], executionSteps: ExecutionStep[]): TimelineEntry[] {
   const entries: TimelineEntry[] = []
@@ -249,6 +249,7 @@ export function buildChatTimeline(messages: DisplayMessage[], executionSteps: Ex
       codename: codename ?? groupId,
       agentName,
       agentId,
+      invocationId: subAgentGroupIdOf(innerEntries[0]),
       openingMessage: delegation?.content || null,
       continued: delegation?.continued ?? false,
       entries: innerEntries,
