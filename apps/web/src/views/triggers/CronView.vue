@@ -8,7 +8,6 @@ import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
-import DataTable, { type Column } from '../../components/shared/DataTable.vue'
 import AgentSelect from '../../components/shared/AgentSelect.vue'
 import CustomSelect from '../../components/shared/CustomSelect.vue'
 import {
@@ -16,6 +15,7 @@ import {
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
   type CronFrequency
 } from '../../utils/cron-helpers'
+import { groupByNextRun, type ScheduleGroup } from '../../utils/schedule-groups'
 import { useCynoStore } from '../../stores/cyno.store'
 
 const cyno = useCynoStore()
@@ -216,16 +216,6 @@ function matchesCronFilter(job: CronJob, q: string): boolean {
   )
 }
 
-const tableColumns: Column<CronJob>[] = [
-  { key: 'agent', label: 'Agent', width: 'minmax(50px,0.3fr)', sortable: true, sortValue: job => job.agentName, filterValue: job => job.agentName },
-  { key: 'job', label: 'Job', width: 'minmax(0,1.4fr)', sortable: true, sortValue: job => job.name || job.agentName },
-  { key: 'project', label: 'Project', width: 'minmax(0,1fr)', sortable: true, sortValue: projectName },
-  { key: 'schedule', label: 'Schedule', width: 'minmax(0,1.3fr)', sortable: true, sortValue: job => job.nextRunAt ?? Number.MAX_SAFE_INTEGER },
-  { key: 'status', label: 'Status', width: '140px', sortable: true, sortValue: job => job.isRunning ? 2 : job.enabled ? 1 : 0 },
-  { key: 'actions', label: 'Actions', width: '200px' },
-  { key: 'enable', label: 'Enable', width: '72px', sortable: true, sortValue: job => job.enabled },
-]
-
 function openCronJob(job: CronJob) {
   router.push(`/cron/${encodeURIComponent(job.id)}`)
 }
@@ -248,10 +238,31 @@ function formatCountdown(nextRunAt: number | null): string {
   const hours = Math.floor((totalSec % 86400) / 3600)
   const minutes = Math.floor((totalSec % 3600) / 60)
   const seconds = totalSec % 60
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
-  if (minutes > 0) return `${minutes}m ${seconds}s`
-  return `${seconds}s`
+  if (days > 0) return `in ${days}d ${hours}h ${minutes}m`
+  if (hours > 0) return `in ${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `in ${minutes}m ${seconds}s`
+  return `in ${seconds}s`
+}
+
+// ─── Grouping by next run ────────────────────────────────
+
+const jobGroups = computed(() => {
+  const q = cronFilter.value.trim().toLowerCase()
+  const jobs = q ? cronJobs.value.filter(job => matchesCronFilter(job, q)) : cronJobs.value
+  return groupByNextRun(jobs, now.value)
+})
+
+const weekdayFormat = new Intl.DateTimeFormat([], { weekday: 'short' })
+const dayFormat = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric' })
+const timeFormat = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' })
+const rangeFormat = new Intl.DateTimeFormat([], { weekday: 'short', month: 'short', day: 'numeric' })
+
+function groupRange(group: ScheduleGroup<CronJob>): string {
+  if (group.start == null) return ''
+  const first = rangeFormat.format(group.start)
+  if (group.end == null) return `From ${first}`
+  const last = rangeFormat.format(group.end - 1)
+  return first === last ? first : `${first} – ${last}`
 }
 
 async function loadSchedules() {
@@ -383,191 +394,252 @@ onUnmounted(() => {
           </button>
         </BaseCard>
 
-        <DataTable
-          v-else
-          :items="cronJobs"
-          :columns="tableColumns"
-          :filter-text="cronFilter"
-          :filter-predicate="matchesCronFilter"
-          initial-sort-key="enable"
-          initial-sort-direction="desc"
-          :initial-sort-once="true"
-          :row-clickable="true"
-          :empty-message="cronFilter.trim() ? 'No jobs match the current filter' : 'No scheduled jobs'"
-          @row-click="openCronJob"
+        <BaseCard
+          v-else-if="jobGroups.length === 0"
+          class="p-8 text-center text-sm text-ink-muted"
         >
-          <template #col-agent="{ item: job }">
-            <button
-              type="button"
-              class="flex min-w-0 items-center gap-2 text-left hover:text-accent-fg"
-              :title="`Open ${job.agentName} agent details`"
-              :aria-label="`Open ${job.agentName} agent details`"
-              @click.stop="openAgentDetails(job.agentId)"
-            >
-              <span class="w-9 h-9 rounded-full bg-theme-700 flex items-center justify-center shrink-0 overflow-hidden hover:ring-2 hover:ring-accent-500/60 transition-shadow">
-                <img
-                  v-if="job.agentIconUrl || !job.agentId"
-                  :src="job.agentIconUrl || cyno.iconUrl"
-                  :alt="job.agentName"
-                  class="w-full h-full object-cover"
+          No jobs match the current filter
+        </BaseCard>
+
+        <div
+          v-else
+          class="space-y-8"
+        >
+          <section
+            v-for="group in jobGroups"
+            :key="group.key"
+            :aria-labelledby="`schedule-group-${group.key}`"
+          >
+            <div class="mb-3 flex items-center gap-3">
+              <h2
+                :id="`schedule-group-${group.key}`"
+                class="shrink-0 text-sm font-semibold uppercase tracking-[0.14em] text-theme-100"
+              >
+                {{ group.label }}
+              </h2>
+              <span
+                v-if="groupRange(group)"
+                class="shrink-0 rounded-md border border-theme-700 bg-theme-800/60 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-ink-muted"
+              >{{ groupRange(group) }}</span>
+              <span
+                class="h-px flex-1 bg-theme-800"
+                aria-hidden="true"
+              />
+              <span class="shrink-0 text-xs tabular-nums text-ink-faint">{{ group.items.length }}</span>
+            </div>
+
+            <ul class="space-y-2">
+              <li
+                v-for="job in group.items"
+                :key="job.id"
+                class="grid cursor-pointer grid-cols-[4.5rem_2.5rem_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 rounded-xl border border-l-2 border-theme-700/70 bg-theme-900/60 px-4 py-3 transition-colors hover:border-theme-600 hover:bg-theme-800/60 lg:grid-cols-[5rem_2.75rem_minmax(0,1fr)_13rem_9rem_auto_auto]"
+                :class="job.isRunning ? 'border-l-emerald-500/80' : job.enabled ? 'border-l-accent-500/70' : 'border-l-theme-600'"
+                @click="openCronJob(job)"
+              >
+                <!-- When -->
+                <div class="flex h-full flex-col justify-center border-r border-theme-700/70 pr-3 leading-tight">
+                  <template v-if="job.isRunning">
+                    <Icon
+                      icon="lucide:activity"
+                      class="mb-1 h-4 w-4 text-status-success"
+                    />
+                    <span class="text-xs font-semibold uppercase tracking-wider text-status-success">Now</span>
+                  </template>
+                  <template v-else-if="job.enabled && job.nextRunAt">
+                    <span class="text-[11px] font-semibold uppercase tracking-wider text-accent-fg">{{ weekdayFormat.format(job.nextRunAt) }}</span>
+                    <span class="text-sm font-semibold uppercase tabular-nums text-theme-100">{{ dayFormat.format(job.nextRunAt) }}</span>
+                    <span class="text-xs tabular-nums text-ink-muted">{{ timeFormat.format(job.nextRunAt) }}</span>
+                  </template>
+                  <template v-else>
+                    <Icon
+                      :icon="job.enabled ? 'lucide:calendar-off' : 'lucide:pause'"
+                      class="mb-1 h-4 w-4 text-ink-faint"
+                    />
+                    <span class="text-xs font-semibold uppercase tracking-wider text-ink-faint">{{ job.enabled ? 'None' : 'Paused' }}</span>
+                  </template>
+                </div>
+
+                <!-- Agent -->
+                <button
+                  type="button"
+                  class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-theme-700 transition-shadow hover:ring-2 hover:ring-accent-500/60 lg:h-11 lg:w-11"
+                  :class="{ 'opacity-60 grayscale': !job.enabled }"
+                  :title="`Open ${job.agentName} agent details`"
+                  :aria-label="`Open ${job.agentName} agent details`"
+                  @click.stop="openAgentDetails(job.agentId)"
                 >
-                <Icon
-                  v-else
-                  icon="lucide:bot"
-                  class="w-4 h-4 text-ink-secondary"
-                />
-              </span>
-              <!--<span class="truncate text-xs text-theme-300">{{ job.agentName }}</span>-->
-            </button>
-          </template>
+                  <img
+                    v-if="job.agentIconUrl || !job.agentId"
+                    :src="job.agentIconUrl || cyno.iconUrl"
+                    :alt="job.agentName"
+                    class="h-full w-full object-cover"
+                  >
+                  <Icon
+                    v-else
+                    icon="lucide:bot"
+                    class="h-4 w-4 text-ink-secondary"
+                  />
+                </button>
 
-          <template #col-job="{ item: job }">
-            <div class="min-w-0">
-              <div class="font-medium text-theme-100 truncate">
-                {{ job.name || 'Unnamed job' }}
-              </div>
-              <div
-                v-if="job.prompt"
-                class="mt-0.5 text-xs text-ink-muted flex items-center gap-1.5"
-              >
-                <span class="truncate">{{ job.prompt }}</span>
-              </div>
-            </div>
-          </template>
+                <!-- Name, project, instructions -->
+                <div class="min-w-0">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <RouterLink
+                      :to="`/cron/${encodeURIComponent(job.id)}`"
+                      class="truncate font-medium hover:text-accent-fg"
+                      :class="job.enabled ? 'text-theme-100' : 'text-theme-300'"
+                      @click.stop
+                    >
+                      {{ job.name || 'Unnamed job' }}
+                    </RouterLink>
+                    <RouterLink
+                      v-if="projectName(job)"
+                      :to="`/projects/${encodeURIComponent(job.projectId!)}`"
+                      class="flex min-w-0 max-w-[12rem] shrink items-center gap-1 rounded-md bg-theme-800 px-1.5 py-0.5 text-[11px] text-ink-secondary hover:text-accent-fg"
+                      :title="projectName(job)"
+                      @click.stop
+                    >
+                      <Icon
+                        icon="lucide:folder-kanban"
+                        class="h-3 w-3 shrink-0"
+                      />
+                      <span class="truncate">{{ projectName(job) }}</span>
+                    </RouterLink>
+                  </div>
+                  <p
+                    v-if="job.prompt"
+                    class="mt-0.5 truncate text-xs text-ink-muted"
+                  >
+                    {{ job.prompt }}
+                  </p>
+                </div>
 
-          <template #col-project="{ item: job }">
-            <RouterLink
-              v-if="projectName(job)"
-              :to="`/projects/${encodeURIComponent(job.projectId!)}`"
-              class="flex min-w-0 items-center gap-1.5 text-xs text-ink-secondary hover:text-accent-fg"
-              :title="projectName(job)"
-              @click.stop
-            >
-              <Icon
-                icon="lucide:folder-kanban"
-                class="h-3.5 w-3.5 shrink-0"
-              />
-              <span class="truncate">{{ projectName(job) }}</span>
-            </RouterLink>
-            <span
-              v-else
-              class="text-xs text-ink-muted"
-            >—</span>
-          </template>
+                <!-- Below lg this wraps onto a second line; from lg on its children are grid cells. -->
+                <div class="col-span-full flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-theme-800/70 pt-3 lg:contents">
+                  <!-- Schedule -->
+                  <div class="min-w-0 text-xs text-theme-300">
+                    <div class="flex items-center gap-1.5">
+                      <Icon
+                        icon="lucide:clock"
+                        class="h-3.5 w-3.5 shrink-0"
+                        :class="job.enabled ? 'text-status-info' : 'text-ink-muted'"
+                      />
+                      <span class="truncate">{{ cronToHuman(job.schedule) }}</span>
+                    </div>
+                    <div
+                      v-if="job.enabled && job.nextRunAt && !job.isRunning"
+                      class="mt-1 flex items-center gap-1.5 tabular-nums text-status-success/80"
+                    >
+                      <Icon
+                        icon="lucide:timer"
+                        class="h-3.5 w-3.5 shrink-0"
+                      />
+                      {{ formatCountdown(job.nextRunAt) }}
+                    </div>
+                  </div>
 
-          <template #col-schedule="{ item: job }">
-            <div class="text-xs text-theme-300">
-              <div class="flex items-center gap-1.5">
-                <Icon
-                  icon="lucide:clock"
-                  class="w-3 h-3"
-                  :class="job.enabled ? 'text-status-info' : 'text-ink-muted'"
-                />
-                <span>{{ cronToHuman(job.schedule) }}</span>
-              </div>
-              <div
-                v-if="job.enabled && job.nextRunAt && !job.isRunning"
-                class="mt-1 text-status-success/80 tabular-nums"
-              >
-                <Icon
-                  icon="lucide:timer"
-                  class="w-3 h-3 inline -mt-px mr-0.5"
-                />{{ formatCountdown(job.nextRunAt) }}
-              </div>
-            </div>
-          </template>
+                  <!-- Status -->
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span
+                      v-if="job.isRunning"
+                      class="rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wider bg-emerald-500/15 text-status-success ring-1 ring-inset ring-emerald-500/30"
+                    >EXECUTING</span>
+                    <span
+                      v-else-if="job.enabled"
+                      class="rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wider bg-sky-500/15 text-status-info ring-1 ring-inset ring-sky-500/30"
+                    >SCHEDULED</span>
+                    <span
+                      v-else
+                      class="rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-wider bg-theme-500/15 text-ink-muted ring-1 ring-inset ring-theme-500/30"
+                    >PAUSED</span>
+                    <button
+                      v-if="job.conversationId"
+                      type="button"
+                      class="rounded-md px-2 py-0.5 text-[10px] font-medium bg-sky-500/10 text-status-info ring-1 ring-inset ring-sky-500/20 transition-colors hover:bg-sky-500/20"
+                      title="Resumes its conversation. Click to open it."
+                      @click.stop="router.push(`/chat/${encodeURIComponent(job.conversationId)}`)"
+                    >
+                      Wait
+                    </button>
+                    <span
+                      v-else-if="job.oneOff"
+                      class="rounded-md px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-status-warning ring-1 ring-inset ring-amber-500/25"
+                    >One-off</span>
+                  </div>
 
-          <template #col-status="{ item: job }">
-            <div class="flex flex-wrap items-center gap-1.5">
-              <span
-                v-if="job.isRunning"
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-status-success"
-              >EXECUTING</span>
-              <span
-                v-else-if="job.enabled"
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-sky-500/20 text-status-info"
-              >SCHEDULED</span>
-              <span
-                v-else
-                class="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-theme-500/20 text-ink-muted"
-              >PAUSED</span>
-              <button
-                v-if="job.conversationId"
-                type="button"
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-sky-500/10 text-status-info hover:bg-sky-500/20 transition-colors"
-                title="Resumes its conversation. Click to open it."
-                @click.stop="router.push(`/chat/${encodeURIComponent(job.conversationId)}`)"
-              >Wait</button>
-              <span
-                v-else-if="job.oneOff"
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-amber-500/10 text-status-warning"
-              >One-off</span>
-            </div>
-          </template>
+                  <!-- Actions -->
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class="rounded-lg p-1.5 text-ink-secondary transition-colors hover:bg-emerald-500/10 hover:text-status-success disabled:opacity-40"
+                      title="Execute now"
+                      aria-label="Execute now"
+                      :disabled="runningNow.has(job.id) || job.isRunning"
+                      @click.stop="runJobNow(job.id)"
+                    >
+                      <Icon
+                        :icon="runningNow.has(job.id) ? 'lucide:loader-2' : 'lucide:play'"
+                        class="h-4 w-4"
+                        :class="{ 'animate-spin': runningNow.has(job.id) }"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg p-1.5 text-ink-secondary transition-colors hover:bg-theme-700 hover:text-theme-200"
+                      title="Edit"
+                      aria-label="Edit"
+                      @click.stop="openCronJob(job)"
+                    >
+                      <Icon
+                        icon="lucide:pencil"
+                        class="h-4 w-4"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg p-1.5 text-ink-secondary transition-colors hover:bg-sky-500/10 hover:text-status-info disabled:opacity-40"
+                      title="Duplicate scheduled job"
+                      aria-label="Duplicate scheduled job"
+                      :disabled="duplicatingNow.has(job.id)"
+                      @click.stop="duplicateCronJob(job)"
+                    >
+                      <Icon
+                        :icon="duplicatingNow.has(job.id) ? 'lucide:loader-2' : 'lucide:copy-plus'"
+                        class="h-4 w-4"
+                        :class="{ 'animate-spin': duplicatingNow.has(job.id) }"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg p-1.5 text-ink-secondary transition-colors hover:bg-red-500/10 hover:text-status-danger"
+                      title="Delete"
+                      aria-label="Delete"
+                      @click.stop="confirmDeleteCron(job)"
+                    >
+                      <Icon
+                        icon="lucide:trash-2"
+                        class="h-4 w-4"
+                      />
+                    </button>
+                  </div>
+                </div>
 
-          <template #col-actions="{ item: job }">
-            <div class="flex items-center gap-1">
-              <button
-                class="p-1.5 rounded-lg text-ink-secondary hover:text-status-success hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
-                title="Execute now"
-                :disabled="runningNow.has(job.id) || job.isRunning"
-                @click.stop="runJobNow(job.id)"
-              >
-                <Icon
-                  :icon="runningNow.has(job.id) ? 'lucide:loader-2' : 'lucide:play'"
-                  class="w-4 h-4"
-                  :class="{ 'animate-spin': runningNow.has(job.id) }"
-                />
-              </button>
-              <button
-                class="p-1.5 rounded-lg text-ink-secondary hover:text-theme-200 hover:bg-theme-700 transition-colors"
-                title="Edit"
-                @click.stop="openCronJob(job)"
-              >
-                <Icon
-                  icon="lucide:pencil"
-                  class="w-4 h-4"
-                />
-              </button>
-              <button
-                class="p-1.5 rounded-lg text-ink-secondary hover:text-status-info hover:bg-sky-500/10 transition-colors disabled:opacity-40"
-                title="Duplicate scheduled job"
-                :disabled="duplicatingNow.has(job.id)"
-                @click.stop="duplicateCronJob(job)"
-              >
-                <Icon
-                  :icon="duplicatingNow.has(job.id) ? 'lucide:loader-2' : 'lucide:copy-plus'"
-                  class="w-4 h-4"
-                  :class="{ 'animate-spin': duplicatingNow.has(job.id) }"
-                />
-              </button>
-              <button
-                class="p-1.5 rounded-lg text-ink-secondary hover:text-status-danger hover:bg-red-500/10 transition-colors"
-                title="Delete"
-                @click.stop="confirmDeleteCron(job)"
-              >
-                <Icon
-                  icon="lucide:trash-2"
-                  class="w-4 h-4"
-                />
-              </button>
-            </div>
-          </template>
-
-          <template #col-enable="{ item: job }">
-            <div class="flex items-center justify-center">
-              <ToggleSwitch
-                :model-value="job.enabled"
-                :label="job.enabled ? `Pause ${job.name}` : `Enable ${job.name}`"
-                size="sm"
-                color="emerald"
-                :title="job.enabled ? 'Pause scheduled job' : 'Enable scheduled job'"
-                @update:model-value="toggleCronJob(job.id, !job.enabled)"
-                @click.stop
-              />
-            </div>
-          </template>
-        </DataTable>
+                <!-- Enable: top right below lg, last column from lg on -->
+                <div class="col-start-4 row-start-1 flex items-center lg:col-start-auto lg:row-start-auto lg:h-full lg:border-l lg:border-theme-700/70 lg:pl-4">
+                  <ToggleSwitch
+                    :model-value="job.enabled"
+                    :label="job.enabled ? `Pause ${job.name}` : `Enable ${job.name}`"
+                    size="sm"
+                    color="emerald"
+                    :title="job.enabled ? 'Pause scheduled job' : 'Enable scheduled job'"
+                    @update:model-value="toggleCronJob(job.id, !job.enabled)"
+                    @click.stop
+                  />
+                </div>
+              </li>
+            </ul>
+          </section>
+        </div>
       </template>
     </div>
 
@@ -617,7 +689,7 @@ onUnmounted(() => {
               <CustomSelect
                 v-model="dlgFrequencyValue"
                 :groups="frequencyGroups"
-                placeholder="Select a frequencyâ€¦"
+                placeholder="Select a frequency…"
                 placeholder-icon="lucide:calendar-clock"
                 size="sm"
                 class="mb-3"
