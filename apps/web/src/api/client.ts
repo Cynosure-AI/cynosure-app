@@ -16,7 +16,7 @@ import type {
   UserProfile,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto, PiperVoiceDownload, PiperVoiceList, VoiceOutputSettings } from '@shared/types'
 
 export interface ConversationRow {
   id: string
@@ -83,6 +83,28 @@ export const api = {
   userSettings: {
     get: () => get<UserProfile>('/api/user-settings'),
     update: (profile: Partial<UserProfile>) => put<UserProfile>('/api/user-settings', profile),
+  },
+  tts: {
+    getSettings: () => get<VoiceOutputSettings>('/api/tts/settings'),
+    updateSettings: (changes: Partial<VoiceOutputSettings>) => put<VoiceOutputSettings>('/api/tts/settings', changes),
+    voices: () => get<PiperVoiceList>('/api/tts/voices'),
+    download: (voiceId: string) => post<PiperVoiceDownload>(`/api/tts/voices/${encodeURIComponent(voiceId)}/download`),
+    remove: (voiceId: string) => del<{ deleted: boolean }>(`/api/tts/voices/${encodeURIComponent(voiceId)}`),
+    /** Synthesize text (usually one sentence) as WAV; omitted options use the saved voice. */
+    speak: async (text: string, options: { voiceId?: string; speakerId?: number; speed?: number } = {}, signal?: AbortSignal): Promise<Blob> => {
+      const res = await fetch(`${BASE_URL}/api/tts/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, ...options }),
+        signal,
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error || `Speech failed: ${res.statusText || res.status}`)
+      }
+      return res.blob()
+    },
+    onDownloadProgress: (cb: (progress: PiperVoiceDownload) => void) => onWsEvent('tts:download-progress', cb as WsHandler),
   },
   provider: {
     list: () => get<LLMProviderConfig[]>('/api/providers'),

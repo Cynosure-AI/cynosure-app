@@ -11,6 +11,8 @@ import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import type { FileArtifactLink } from '../../utils/file-artifacts'
 import { latestThoughtLine, type ThoughtLine } from '../../utils/thinking-preview'
+import { useVoiceOutputStore } from '../../stores/voice-output.store'
+import { useSpeechPlayer } from '../../composables/useSpeechPlayer'
 
 
 const props = defineProps<{
@@ -137,6 +139,18 @@ const isEditing = ref(false)
 const editContent = ref('')
 const lightboxSrc = ref<string | null>(null)
 const editTextareaRef = ref<HTMLTextAreaElement | null>(null)
+
+const voiceOutput = useVoiceOutputStore()
+const speechPlayer = useSpeechPlayer()
+const speechKey = computed(() => `message:${props.messageId ?? props.createdAt ?? props.content.slice(0, 64)}`)
+const canSpeak = computed(() => props.role === 'assistant' && voiceOutput.canSpeak)
+const speaking = computed(() => speechPlayer.isSpeaking(speechKey.value))
+const speechError = computed(() => speechPlayer.state.errorKey === speechKey.value ? speechPlayer.state.error : '')
+
+function toggleSpeech(): void {
+  if (speaking.value) speechPlayer.stop()
+  else speechPlayer.speak(speechKey.value, props.content)
+}
 
 function copyContent(): void {
   navigator.clipboard.writeText(props.content)
@@ -297,6 +311,7 @@ const imageGridClass = computed(() => {
       <div
         v-if="content && !isStreaming"
         class="msg-actions absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-theme-700/60 bg-theme-900/90 p-0.5 opacity-0 shadow-md shadow-black/20 backdrop-blur-sm transition-all duration-150 translate-y-0.5 group-hover/msg:translate-y-0 group-hover/msg:opacity-100 focus-within:translate-y-0 focus-within:opacity-100"
+        :class="{ 'translate-y-0 opacity-100': speaking }"
       >
         <button
           v-if="isUser && !isEditing && !readonly"
@@ -330,6 +345,21 @@ const imageGridClass = computed(() => {
           <Icon
             icon="lucide:git-fork"
             class="h-3.5 w-3.5"
+          />
+        </button>
+        <button
+          v-if="canSpeak"
+          class="p-1 rounded-md transition-colors hover:bg-theme-700/60 hover:text-theme-100"
+          :class="speaking ? 'text-accent-fg' : speechError ? 'text-status-warning' : 'text-ink-muted'"
+          :title="speaking ? 'Stop reading' : speechError || 'Read aloud'"
+          :aria-label="speaking ? 'Stop reading' : 'Read aloud'"
+          data-testid="read-aloud"
+          @click="toggleSpeech"
+        >
+          <Icon
+            :icon="speaking ? (speechPlayer.state.phase === 'loading' ? 'lucide:loader-circle' : 'lucide:square') : speechError ? 'lucide:volume-x' : 'lucide:volume-2'"
+            class="h-3.5 w-3.5"
+            :class="{ 'animate-spin': speaking && speechPlayer.state.phase === 'loading' }"
           />
         </button>
         <button

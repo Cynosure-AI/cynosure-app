@@ -52,6 +52,7 @@
     "officeparser": "^7.1.0",
     "openai": "^6.27.0",
     "sharp": "^0.34.5",
+    "sherpa-onnx-node": "^1.13.8",
     "unpdf": "^1.8.1",
     "unzipper": "^0.12.5",
     "ws": "^8.18.0",

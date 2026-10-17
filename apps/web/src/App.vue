@@ -5,6 +5,7 @@ import { useChatStore } from './stores/chat.store'
 import { useAgentStore, type HITLRequest } from './stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from './stores/agent-definitions.store'
 import { useCynoStore } from './stores/cyno.store'
+import { useVoiceOutputStore } from './stores/voice-output.store'
 import { usePreferencesStore } from './stores/preferences.store'
 import { useNotificationStore } from './stores/notification.store'
 import { api } from './api/client'
@@ -20,6 +21,7 @@ import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
 import { useSidebar } from './composables/useSidebar'
 import { useChatEvents } from './composables/useChatEvents'
+import { useVoiceAutoRead } from './composables/useVoiceAutoRead'
 import { isCommandPaletteShortcut, useCommandPalette } from './composables/useCommandPalette'
 import { useServerStartupError } from './composables/useServerStartupError'
 import { useFreshChat } from './composables/useFreshChat'
@@ -29,6 +31,7 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const cynoStore = useCynoStore()
+const voiceOutputStore = useVoiceOutputStore()
 const notificationStore = useNotificationStore()
 
 // Initialize preferences early so theme is applied before first render
@@ -84,6 +87,7 @@ async function loadAllStores() {
   chatStore.syncAgentBaseline()
   await agentStore.loadTools()
   await notificationStore.load()
+  await voiceOutputStore.load()
 }
 
 // Reload stores when server connection is (re)established
@@ -142,6 +146,7 @@ onMounted(async () => {
   document.addEventListener('keydown', onGlobalKeydown)
   cleanups.push(() => document.removeEventListener('keydown', onGlobalKeydown))
   cleanups.push(useChatEvents())
+  cleanups.push(useVoiceAutoRead())
 
   if (electron?.onNewChatRequested) {
     cleanups.push(electron.onNewChatRequested(async () => {
