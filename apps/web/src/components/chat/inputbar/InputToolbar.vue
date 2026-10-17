@@ -5,6 +5,7 @@ import { usePreferencesStore } from "../../../stores/preferences.store";
 import { useAgentDefinitionsStore } from "../../../stores/agent-definitions.store";
 import { useProviderStore } from "../../../stores/provider.store";
 import { useWhisper } from "../../../composables/useWhisper";
+import { useSpeechPlayer } from "../../../composables/useSpeechPlayer";
 import { Icon } from "@iconify/vue";
 import HoverTooltip from "../../shared/HoverTooltip.vue";
 import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
@@ -182,12 +183,16 @@ const voiceInputUnavailableReason = computed(() => {
 });
 const voiceInputUnavailable = computed(() => !!voiceInputUnavailableReason.value);
 
+const speechPlayer = useSpeechPlayer();
+
 async function toggleMic(): Promise<void> {
   if (voiceInputUnavailable.value) return;
   if (whisperStatus.value === "recording") {
     const text = await stopRecording();
     if (text) emit("transcription", text);
   } else {
+    // Speaking over Cyno interrupts it.
+    speechPlayer.stop();
     await startRecording(prefs.whisperMicDeviceId || undefined);
   }
 }
@@ -348,6 +353,21 @@ async function toggleMic(): Promise<void> {
         </template>
       </HoverTooltip>
     </div>
+
+    <!-- Stop Cyno speaking -->
+    <button
+      v-if="speechPlayer.state.phase !== 'idle'"
+      class="p-1.5 rounded-lg shrink-0 text-accent-fg hover:bg-theme-700/60 transition-colors"
+      :class="{ 'animate-pulse': speechPlayer.state.phase === 'loading' }"
+      title="Stop speaking (Esc)"
+      aria-label="Stop speaking"
+      @click="speechPlayer.stop()"
+    >
+      <Icon
+        icon="lucide:volume-x"
+        class="h-4 w-4"
+      />
+    </button>
 
     <!-- Mic / voice input button -->
     <HoverTooltip

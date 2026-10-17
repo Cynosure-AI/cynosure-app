@@ -146,6 +146,51 @@ export interface ChatRunSettings {
   compactModel: string
 }
 
+/** When replies are read aloud without pressing the speaker button. */
+export type VoiceAutoRead = 'off' | 'voice' | 'always'
+
+/** Server-wide text-to-speech settings; every client speaks with the same voice. */
+export interface VoiceOutputSettings {
+  enabled: boolean
+  /** Installed Piper voice, such as `en_GB-aru-medium`; empty until one is chosen. */
+  voiceId: string
+  /** Speaker within a multi-speaker voice. */
+  speakerId: number
+  /** Playback rate, 0.5–2. */
+  speed: number
+  autoRead: VoiceAutoRead
+}
+
+export type PiperVoiceQuality = 'x_low' | 'low' | 'medium' | 'high'
+
+export interface PiperVoice {
+  id: string
+  name: string
+  /** Locale such as `en_GB`. */
+  languageCode: string
+  languageName: string
+  countryName: string
+  quality: PiperVoiceQuality
+  numSpeakers: number
+  sizeBytes: number
+  installed: boolean
+}
+
+export interface PiperVoiceDownload {
+  voiceId: string
+  status: 'downloading' | 'done' | 'error'
+  loaded: number
+  total: number
+  error?: string
+}
+
+export interface PiperVoiceList {
+  voices: PiperVoice[]
+  downloads: PiperVoiceDownload[]
+  /** Set when the online catalog could not be loaded; installed voices are still listed. */
+  catalogError?: string
+}
+
 export type ContextEvidenceKind = 'memory-chunk' | 'attachment-chunk'
 export type ContextVerificationStatus = 'verified' | 'ranked-fallback'
 
