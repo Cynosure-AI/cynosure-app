@@ -36,8 +36,13 @@ function statusIcon(row: ExecutionRow): string {
   return props.isActive ? 'svg-spinners:ring-resize' : 'lucide:clock'
 }
 
+// Built-in tools stay neutral; external MCP tools carry the theme accent.
 function tone(row: ExecutionRow): string {
-  return row.internal ? 'text-purple-600 dark:text-purple-300' : 'text-accent-fg'
+  return row.internal ? 'text-theme-200' : 'text-accent-fg'
+}
+
+function isRunning(row: ExecutionRow): boolean {
+  return !row.result && props.isActive && props.status !== 'Denied' && props.status !== 'Awaiting approval'
 }
 </script>
 
@@ -56,7 +61,7 @@ function tone(row: ExecutionRow): string {
           >
             <span
               class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-              :class="row.internal ? 'bg-purple-500/10' : 'bg-accent-500/10'"
+              :class="[row.internal ? 'bg-theme-700/45' : 'bg-accent-500/10', { 'tool-row-icon--running': isRunning(row) }]"
             >
               <ToolNamespaceIcon
                 :src="row.iconUrl"
@@ -71,11 +76,17 @@ function tone(row: ExecutionRow): string {
               :class="tone(row)"
               :title="row.name"
             >{{ row.name }}</span>
-            <span class="hidden shrink-0 text-[11px] text-ink-muted sm:inline">{{ statusLabel(row) }}</span>
+            <span
+              class="hidden shrink-0 text-[11px] text-ink-muted sm:inline"
+              :class="{ 'text-shimmer': isRunning(row) }"
+            >{{ statusLabel(row) }}</span>
             <Icon
               :icon="statusIcon(row)"
               class="h-4 w-4 shrink-0"
-              :class="row.result?.success === true ? 'text-status-success' : row.result?.success === false ? 'text-status-danger' : 'text-ink-muted'"
+              :class="[
+                row.result?.success === true ? 'text-status-success' : row.result?.success === false ? 'text-status-danger' : 'text-ink-muted',
+                { 'tool-row-status--settled': row.result },
+              ]"
               :aria-label="statusLabel(row)"
               role="img"
             />
@@ -108,7 +119,7 @@ function tone(row: ExecutionRow): string {
           />
         </div>
       </template>
-      <div class="space-y-2 border-t border-theme-700/30 px-3 py-3 sm:pl-14">
+      <div class="space-y-2 border-t border-theme-700/30 ">
         <RichContent
           v-if="row.call?.arguments && row.call.arguments !== '{}'"
           :content="row.call.arguments"
@@ -161,3 +172,49 @@ function tone(row: ExecutionRow): string {
     </p>
   </div>
 </template>
+
+<style scoped>
+.tool-row-icon--running {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A thin ring circles the tool's icon while it runs. */
+  .tool-row-icon--running::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(from var(--tool-ring-angle, 0deg), transparent 70%, var(--color-accent-fg));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: tool-ring-spin 1.4s linear infinite;
+  }
+
+  /* The result icon lands with a small pop. */
+  .tool-row-status--settled {
+    animation: tool-status-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+
+@property --tool-ring-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes tool-ring-spin {
+  to {
+    --tool-ring-angle: 360deg;
+  }
+}
+
+@keyframes tool-status-pop {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+}
+</style>

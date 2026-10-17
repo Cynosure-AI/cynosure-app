@@ -58,7 +58,7 @@ describe('ToolExecutionCard', () => {
     const labels = wrapper.findAll('span[title]')
     const builtIn = labels.find((label) => label.text() === 'schedule_list')
     const external = labels.find((label) => label.text() === 'search')
-    expect(builtIn?.classes()).toContain('text-purple-600')
+    expect(builtIn?.classes()).toContain('text-theme-200')
     expect(external?.classes()).toContain('text-accent-fg')
     await wrapper.findAll('img').at(-1)!.trigger('error')
     expect(wrapper.findAll('img')).toHaveLength(0)

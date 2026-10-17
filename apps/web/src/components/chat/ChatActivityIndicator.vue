@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   label: string
   icon?: string
   cancelLabel?: string
@@ -11,12 +12,15 @@ withDefaults(defineProps<{
 })
 
 defineEmits<{ cancel: [] }>()
+
+/** A spinner means work is underway, so the label shimmers along with it. */
+const active = computed(() => props.icon.startsWith('svg-spinners:'))
 </script>
 
 <template>
-  <div class="flex items-center gap-1.5 text-[11px] text-ink-muted" role="status">
+  <div class="chat-activity flex items-center gap-1.5 text-[11px] text-ink-muted" role="status">
     <Icon :icon="icon" class="h-3 w-3 text-accent-fg" />
-    <span>{{ label }}</span>
+    <span :class="{ 'text-shimmer': active }">{{ label }}</span>
     <button
       v-if="cancelLabel"
       type="button"
@@ -29,3 +33,18 @@ defineEmits<{ cancel: [] }>()
     </button>
   </div>
 </template>
+
+<style scoped>
+@media (prefers-reduced-motion: no-preference) {
+  .chat-activity {
+    animation: chat-activity-in 260ms ease-out both;
+  }
+}
+
+@keyframes chat-activity-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+</style>

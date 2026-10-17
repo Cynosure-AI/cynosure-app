@@ -377,6 +377,7 @@ function formatTimestamp(timestamp: number): string {
             <span class="block truncate text-[12px] font-semibold text-theme-200">{{ card.title }}</span>
             <span
               class="block truncate text-[11px] text-ink-secondary"
+              :class="{ 'text-shimmer': card.latest.pending }"
               role="status"
               aria-live="polite"
             >{{
@@ -388,7 +389,7 @@ function formatTimestamp(timestamp: number): string {
           >{{ selectedCountLabel(card) }}</span>
           <Icon
             icon="lucide:chevron-down"
-            class="h-3.5 w-3.5 text-ink-muted transition-transform"
+            class="h-3.5 w-3.5 text-ink-muted transition-transform duration-200"
             :class="{ 'rotate-180': expandedCards.has(card.channel) }"
           />
         </button>
@@ -402,6 +403,7 @@ function formatTimestamp(timestamp: number): string {
             v-for="(result, index) in card.selected"
             :key="`${result.name}-${index}`"
             class="collapsed-result-chip"
+            :style="{ '--chip-index': index }"
             :title="result.name"
           >
             <span class="truncate">{{ result.name }}</span>
@@ -670,6 +672,19 @@ function formatTimestamp(timestamp: number): string {
 
 .tool-title {
   color: var(--color-theme-300);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .collapsed-result-chip {
+    animation: context-chip-in 280ms calc(var(--chip-index, 0) * 45ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes context-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
 }
 
 @media (max-width: 640px) {

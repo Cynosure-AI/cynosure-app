@@ -137,6 +137,61 @@ button:hover {
   cursor: pointer;
 }
 
+/* ── Live activity ── */
+/* A highlight sweeps across in-progress labels ("Thinking", "Working…").
+   The fill turns transparent but `color` stays, so currentColor still works
+   for the base tone and for any icons beside the text. */
+@media (prefers-reduced-motion: no-preference) {
+  .text-shimmer {
+    background-image: linear-gradient(
+      100deg,
+      currentColor 38%,
+      var(--shimmer-peak, var(--color-theme-100)) 50%,
+      currentColor 62%
+    );
+    background-size: 280% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: text-shimmer 2.4s linear infinite;
+  }
+}
+
+@keyframes text-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* The streaming caret rides the end of the last rendered line. The HTML is
+   replaced on every chunk, which restarts the blink: it holds solid while
+   text flows and only blinks when the stream pauses. */
+.msg-markdown--streaming > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+.msg-markdown--streaming > :is(ul, ol):last-child > li:last-child::after,
+.msg-markdown--streaming > blockquote:last-child > p:last-child::after,
+.msg-markdown--streaming > pre:last-child code::after,
+.stream-caret {
+  content: "";
+  display: inline-block;
+  width: var(--stream-caret-width, 0.5em);
+  height: 1.05em;
+  margin-left: 0.15em;
+  vertical-align: -0.15em;
+  border-radius: 1px;
+  background: var(--color-accent-fg);
+  opacity: 0.85;
+  animation: stream-caret-blink 1s steps(1) 0.5s infinite;
+}
+
+@keyframes stream-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 /* ── Shared rendered Markdown ── */
 .msg-markdown {
   overflow-wrap: anywhere;

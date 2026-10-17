@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-v-html -- both HTML producers below escape or sanitize untrusted content. */
-import { computed, ref, nextTick, watch } from 'vue'
+import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { renderMarkdown, handleMarkdownClick } from '../../utils/markdown'
 import { Icon } from '@iconify/vue'
@@ -10,6 +10,7 @@ import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import type { FileArtifactLink } from '../../utils/file-artifacts'
+import { latestThoughtLine, type ThoughtLine } from '../../utils/thinking-preview'
 
 
 const props = defineProps<{
@@ -18,6 +19,9 @@ const props = defineProps<{
   messageId?: string
   createdAt?: number
   thinking?: string
+  /** When this reply started and stopped thinking; only known for replies watched live. */
+  thinkingStartedAt?: number
+  thinkingEndedAt?: number
   imageDataUrls?: string[]
   videoDataUrls?: string[]
   audioDataUrls?: string[]
@@ -53,6 +57,81 @@ const { logoIconUrl } = useAppBranding()
 const thinkingExpanded = ref(prefs.autoExpandSteps)
 /** Thinking is still streaming until the first response text arrives. */
 const isThinking = computed(() => Boolean(props.isStreaming && props.thinking && !props.content))
+const thinkingBodyRef = ref<HTMLElement | null>(null)
+
+// A live clock for the thinking header; it only ticks while thinking streams.
+const now = ref(Date.now())
+let thinkingTimer: ReturnType<typeof setInterval> | undefined
+watch(isThinking, (thinking) => {
+  clearInterval(thinkingTimer)
+  thinkingTimer = undefined
+  if (!thinking) return
+  now.value = Date.now()
+  thinkingTimer = setInterval(() => { now.value = Date.now() }, 1000)
+}, { immediate: true })
+onBeforeUnmount(() => clearInterval(thinkingTimer))
+
+function formatDuration(ms: number): string {
+  const seconds = Math.max(1, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
+const thinkingElapsed = computed(() => {
+  if (!isThinking.value || props.thinkingStartedAt === undefined) return ''
+  return formatDuration(now.value - props.thinkingStartedAt)
+})
+const thinkingLabel = computed(() => {
+  if (isThinking.value) return 'Thinking'
+  if (props.thinkingStartedAt !== undefined && props.thinkingEndedAt !== undefined) {
+    return `Thought for ${formatDuration(props.thinkingEndedAt - props.thinkingStartedAt)}`
+  }
+  return 'Thought process'
+})
+// The newest line of reasoning, shown in the header while it is collapsed.
+// Fast models start many short paragraphs a second, so each one holds for a
+// moment before the newest takes over; a paragraph that is still growing
+// updates in place.
+const THOUGHT_DWELL_MS = 1600 // 1.6s per thought line, so a 3-line thought takes ~5s to fully cycle
+const thinkingPreview = ref<ThoughtLine>()
+let thoughtShownAt = 0
+let thoughtTimer: ReturnType<typeof setTimeout> | undefined
+
+function syncThinkingPreview(): void {
+  clearTimeout(thoughtTimer)
+  thoughtTimer = undefined
+  const next = isThinking.value ? latestThoughtLine(props.thinking!) : undefined
+  const current = thinkingPreview.value
+  if (!next || !current || next.index === current.index) {
+    if (!current && next) thoughtShownAt = Date.now()
+    thinkingPreview.value = next
+    return
+  }
+  const wait = thoughtShownAt + THOUGHT_DWELL_MS - Date.now()
+  if (wait > 0) {
+    thoughtTimer = setTimeout(syncThinkingPreview, wait)
+    return
+  }
+  thinkingPreview.value = next
+  thoughtShownAt = Date.now()
+}
+watch([() => props.thinking, isThinking], syncThinkingPreview, { immediate: true })
+onBeforeUnmount(() => clearTimeout(thoughtTimer))
+
+// Keep the newest reasoning in view while it streams, unless the reader has
+// scrolled up to look at something earlier.
+watch(() => props.thinking, () => {
+  const el = thinkingBodyRef.value
+  if (!el || !isThinking.value) return
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+  if (nearBottom) nextTick(() => { el.scrollTop = el.scrollHeight })
+})
+
+// Fresh messages rise in; history and remounts (a streaming reply swapping to
+// its persisted ID) appear in place.
+const animateIn = props.role === 'user'
+  ? props.createdAt !== undefined && Date.now() - props.createdAt < 3000
+  : Boolean(props.isStreaming && !props.content && !props.thinking)
 const copied = ref(false)
 const isEditing = ref(false)
 const editContent = ref('')
@@ -131,6 +210,11 @@ const formattedCreatedAt = computed(() => {
     minute: '2-digit',
   }).format(props.createdAt)
 })
+const formattedLatency = computed(() => {
+  if (props.latencyMs === undefined || props.latencyMs <= 0) return ''
+  if (props.latencyMs < 10_000) return `${(props.latencyMs / 1000).toFixed(1)}s`
+  return formatDuration(props.latencyMs)
+})
 const createdAtIso = computed(() => props.createdAt === undefined ? '' : new Date(props.createdAt).toISOString())
 const userInitial = computed(() => prefs.userName.trim().charAt(0).toLocaleUpperCase() || 'U')
 const isForkable = computed(() =>  props.role === 'assistant') //Could also include user too though it doesn't make as much sense since user messages are editable
@@ -163,7 +247,7 @@ const imageGridClass = computed(() => {
 <template>
   <div
     class="relative flex items-end justify-center gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
-    :class="isUser ? 'md:justify-end' : 'md:justify-start'"
+    :class="[isUser ? 'md:justify-end' : 'md:justify-start', { 'chat-msg-enter': animateIn, 'chat-msg-enter--user': animateIn && isUser }]"
   >
     <!-- Avatar -->
     <div
@@ -212,33 +296,33 @@ const imageGridClass = computed(() => {
       <!-- Action buttons: copy/fork (all normal messages), retry + edit (user only) -->
       <div
         v-if="content && !isStreaming"
-        class="absolute -top-2 right-1 flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity"
+        class="msg-actions absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 rounded-lg border border-theme-700/60 bg-theme-900/90 p-0.5 opacity-0 shadow-md shadow-black/20 backdrop-blur-sm transition-all duration-150 translate-y-0.5 group-hover/msg:translate-y-0 group-hover/msg:opacity-100 focus-within:translate-y-0 focus-within:opacity-100"
       >
         <button
           v-if="isUser && !isEditing && !readonly"
-          class="p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
+          class="p-1 rounded-md text-ink-muted transition-colors hover:bg-theme-700/60 hover:text-theme-100"
           title="Edit"
           @click="startEditing"
         >
           <Icon
-            icon="mdi:pencil"
+            icon="lucide:pencil"
             class="h-3.5 w-3.5"
           />
         </button>
         <button
           v-if="isUser && !readonly"
-          class="p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
+          class="p-1 rounded-md text-ink-muted transition-colors hover:bg-theme-700/60 hover:text-theme-100"
           title="Retry"
           @click="$emit('retry')"
         >
           <Icon
-            icon="mdi:refresh"
+            icon="lucide:rotate-ccw"
             class="h-3.5 w-3.5"
           />
         </button>
         <button
           v-if="isForkable"
-          class="disabled:opacity-40 disabled:cursor-not-allowed p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
+          class="disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent p-1 rounded-md text-ink-muted transition-colors hover:bg-theme-700/60 hover:text-theme-100"
           :disabled="forkDisabled || !messageId || /^(streaming_|sa_stream_|error_)/.test(messageId)"
           :title="forkDisabled ? 'Wait for the response to finish before forking' : 'Fork'"
           @click="$emit('fork')"
@@ -249,53 +333,104 @@ const imageGridClass = computed(() => {
           />
         </button>
         <button
-          class="p-1 rounded-md bg-theme-700/80 text-ink-secondary hover:text-theme-100 text-[10px]"
+          class="p-1 rounded-md text-ink-muted transition-colors hover:bg-theme-700/60 hover:text-theme-100"
           :title="copied ? 'Copied!' : 'Copy'"
           @click="copyContent"
         >
           <Icon
-            :icon="copied ? 'mdi:check' : 'mdi:content-copy'"
+            :icon="copied ? 'lucide:check' : 'lucide:copy'"
             class="h-3.5 w-3.5"
+            :class="{ 'text-status-success copy-confirm': copied }"
           />
         </button>
       </div>
-      <!-- Thinking block (detailed mode only) -->
+      <!-- Thinking block -->
       <div
         v-if="!isUser && thinking"
         data-testid="thinking-block"
+        class="thinking-block transition-colors duration-500"
         :class="[
           { 'mb-3': hasOutputAfterThinking },
-          showBubble ? 'rounded-xl border border-indigo-500/20 bg-indigo-500/5 backdrop-blur-sm shadow-sm' : '',
+          showBubble ? 'rounded-xl border bg-theme-950/25' : '',
+          showBubble ? (isThinking ? 'border-accent-500/25' : 'border-theme-700/50') : '',
         ]"
       >
         <CollapsibleSection
           v-model="thinkingExpanded"
-          header-label="Thinking"
-          :header-class="`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors ${showBubble ? 'rounded-xl hover:bg-indigo-500/10' : ''}`"
-          header-text-class="font-medium text-status-indigo"
-          chevron-class="h-3.5 w-3.5 text-indigo-300/70"
           :keyboard-shortcuts="true"
         >
-          <template #header-extra>
-            <span
-              v-if="isThinking"
-              class="thinking-dots -ml-1.5 inline-flex text-status-indigo font-medium"
-              role="status"
-              aria-label="Thinking in progress"
+          <template #trigger="{ expanded, toggle, triggerAttrs, onTriggerKeydown }">
+            <button
+              v-bind="triggerAttrs"
+              class="group/think flex w-full min-w-0 items-center gap-2 py-2 text-left text-[13px] transition-colors"
+              :class="showBubble ? 'rounded-xl px-3 hover:bg-theme-700/20' : 'rounded-lg'"
+              @click="toggle"
+              @keydown="onTriggerKeydown"
             >
               <span
-                v-for="dot in 3"
-                :key="dot"
-                class="thinking-dot"
-                :style="{ animationDelay: `${(dot - 1) * 0.15}s` }"
-                aria-hidden="true"
-              >.</span>
-            </span>
+                class="thinking-glyph relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors"
+                :class="isThinking ? 'thinking-glyph--live text-accent-fg' : 'text-ink-faint group-hover/think:text-ink-secondary'"
+              >
+                <Icon
+                  icon="lucide:brain"
+                  class="h-3.5 w-3.5"
+                />
+              </span>
+              <span
+                class="shrink-0 font-medium text-ink-secondary"
+                :class="{ 'text-shimmer': isThinking }"
+              >{{ thinkingLabel }}</span>
+              <span
+                v-if="isThinking"
+                class="thinking-dots -ml-1.5 inline-flex shrink-0 font-medium text-ink-secondary"
+                role="status"
+                aria-label="Thinking in progress"
+              >
+                <span
+                  v-for="dot in 3"
+                  :key="dot"
+                  class="thinking-dot"
+                  :style="{ animationDelay: `${(dot - 1) * 0.15}s` }"
+                  aria-hidden="true"
+                >.</span>
+              </span>
+              <span
+                class="grid min-w-0 flex-1 overflow-hidden text-[12px] text-ink-faint"
+                :title="!expanded ? thinkingPreview?.text : undefined"
+              >
+                <!-- Both lines share one grid cell, so the swap is a crossfade. -->
+                <Transition
+                  enter-active-class="transition duration-500 ease-out"
+                  enter-from-class="opacity-0 translate-y-1.5"
+                  leave-active-class="transition duration-300 ease-in"
+                  leave-to-class="opacity-0 -translate-y-1.5"
+                >
+                  <span
+                    v-if="!expanded && thinkingPreview"
+                    :key="thinkingPreview.index"
+                    class="col-start-1 row-start-1 block truncate"
+                  >{{ thinkingPreview.text }}</span>
+                </Transition>
+              </span>
+              <span
+                v-if="thinkingElapsed"
+                class="shrink-0 text-[11px] tabular-nums text-ink-faint"
+              >{{ thinkingElapsed }}</span>
+              <Icon
+                icon="lucide:chevron-down"
+                class="h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform duration-200"
+                :class="{ 'rotate-180': expanded }"
+              />
+            </button>
           </template>
 
           <div
-            class="px-3 py-2.5 text-[13px] leading-relaxed text-ink-secondary whitespace-pre-wrap max-h-64 overflow-y-auto font-mono"
-            :class="showBubble ? 'border-t border-indigo-500/20' : ''"
+            ref="thinkingBodyRef"
+            class="thinking-body mb-2.5 mt-0.5 max-h-64 overflow-y-auto whitespace-pre-wrap border-l-2 pl-3 pr-2 text-[13px] leading-relaxed text-ink-muted transition-colors duration-500"
+            :class="[
+              showBubble ? 'mx-3' : 'ml-2.5',
+              isThinking ? 'border-accent-500/40' : 'border-theme-700/70',
+            ]"
           >
             {{ thinking }}
           </div>
@@ -453,6 +588,7 @@ const imageGridClass = computed(() => {
       <div
         v-else-if="!isUser && content"
         class="msg-markdown prose dark:prose-invert prose-sm max-w-none"
+        :class="{ 'msg-markdown--streaming': isStreaming && !isThinking }"
         @click="handleMarkdownClick"
         v-html="renderedContent"
       />
@@ -526,17 +662,18 @@ const imageGridClass = computed(() => {
         />
       </div>
 
-      <!-- Streaming cursor -->
+      <!-- Streaming caret before the first answer text; after that it rides the text itself. -->
       <span
-        v-if="isStreaming && !isThinking"
+        v-if="isStreaming && !isThinking && !content && !isError"
         data-testid="streaming-cursor"
-        class="inline-block w-2 h-4 bg-theme-400 animate-pulse ml-0.5"
+        class="stream-caret"
+        aria-hidden="true"
       />
 
       <!-- Message metadata (assistant) -->
       <div
         v-if="!isUser && !isStreaming && (hasTokenUsage || stopped)"
-        class="mt-2 pt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted"
+        class="msg-meta mt-2 pt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-muted"
         :class="showBubble ? 'border-t border-theme-700/50' : ''"
       >
         <span
@@ -550,12 +687,37 @@ const imageGridClass = computed(() => {
           />
           Stopped
         </span>
-        <span v-if="model && hasTokenUsage">{{ model }}</span>
+        <span
+          v-if="model && hasTokenUsage"
+          class="inline-flex min-w-0 items-center gap-1"
+        >
+          <Icon
+            icon="lucide:sparkle"
+            class="h-3 w-3 shrink-0 opacity-70"
+          />
+          <span class="truncate">{{ model }}</span>
+        </span>
         <span
           v-if="hasTokenUsage"
+          class="inline-flex items-center gap-1 tabular-nums"
           :title="`Context: ${contextTokens?.toLocaleString() ?? '–'} tokens (actual window usage)\nAccumulated: ${((promptTokens ?? 0) + (completionTokens ?? 0)).toLocaleString()} tokens (total API consumption across all rounds)\nPrompt (input): ${promptTokens?.toLocaleString() ?? '–'}\nCompletion (output): ${completionTokens?.toLocaleString() ?? '–'}`"
         >
+          <Icon
+            icon="lucide:gauge"
+            class="h-3 w-3 shrink-0 opacity-70"
+          />
           {{ contextTokens?.toLocaleString() ?? '–' }} / {{ ((promptTokens ?? 0) + (completionTokens ?? 0)).toLocaleString() }} tokens
+        </span>
+        <span
+          v-if="formattedLatency"
+          class="inline-flex items-center gap-1 tabular-nums"
+          title="Time from request to finished reply, including tool calls"
+        >
+          <Icon
+            icon="lucide:timer"
+            class="h-3 w-3 shrink-0 opacity-70"
+          />
+          {{ formattedLatency }}
         </span>
       </div>
     </div>
@@ -607,6 +769,81 @@ const imageGridClass = computed(() => {
   display: inline-block;
   animation: thinking-dot-jump 1.2s ease-in-out infinite;
 }
+
+/* Long reasoning fades out under the header instead of cutting off hard. */
+.thinking-body {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 1.25rem);
+  mask-image: linear-gradient(to bottom, transparent, #000 1.25rem);
+  padding-top: 0.5rem;
+  scrollbar-width: thin;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chat-msg-enter {
+    animation: chat-msg-rise 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .chat-msg-enter--user {
+    animation-name: chat-msg-rise-user;
+  }
+
+  /* While thinking, the glyph breathes with a soft accent halo. */
+  .thinking-glyph--live::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--color-accent-500) 18%, transparent);
+    animation: thinking-breathe 1.8s ease-in-out infinite;
+  }
+
+  .copy-confirm {
+    animation: copy-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+
+@keyframes chat-msg-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes chat-msg-rise-user {
+  from {
+    opacity: 0;
+    transform: translate(6px, 8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes thinking-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes copy-pop {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .thinking-dot {
     animation: none;

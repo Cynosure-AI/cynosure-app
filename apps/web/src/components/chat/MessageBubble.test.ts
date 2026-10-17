@@ -1,13 +1,17 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import MessageBubble from './MessageBubble.vue'
 
 describe('MessageBubble', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   function mountMessage(role: 'user' | 'assistant', createdAt: number) {
@@ -48,10 +52,10 @@ describe('MessageBubble', () => {
   })
 
   test.each([
-    { isStreaming: true, content: '', visible: true, cursor: false },
-    { isStreaming: true, content: 'Answer', visible: false, cursor: true },
-    { isStreaming: false, content: 'Answer', visible: false, cursor: false },
-  ])('shows animated thinking dots only while thinking streams (%o)', ({ isStreaming, content, visible, cursor }) => {
+    { isStreaming: true, content: '', visible: true, caret: 'none' },
+    { isStreaming: true, content: 'Answer', visible: false, caret: 'inline' },
+    { isStreaming: false, content: 'Answer', visible: false, caret: 'none' },
+  ])('shows animated thinking dots only while thinking streams (%o)', ({ isStreaming, content, visible, caret }) => {
     const router = createRouter({ history: createMemoryHistory(), routes: [] })
     const wrapper = mount(MessageBubble, {
       props: { role: 'assistant', content, thinking: 'Reasoning', isStreaming },
@@ -60,7 +64,68 @@ describe('MessageBubble', () => {
 
     expect(wrapper.find('.thinking-dots').exists()).toBe(visible)
     if (visible) expect(wrapper.findAll('.thinking-dot')).toHaveLength(3)
-    expect(wrapper.find('[data-testid="streaming-cursor"]').exists()).toBe(cursor)
+    expect(wrapper.find('.msg-markdown--streaming').exists()).toBe(caret === 'inline')
+    expect(wrapper.find('[data-testid="streaming-cursor"]').exists()).toBe(false)
+  })
+
+  test('shows a standalone caret while waiting for the first answer text', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'assistant', content: '', isStreaming: true },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+
+    expect(wrapper.find('[data-testid="streaming-cursor"]').exists()).toBe(true)
+  })
+
+  test.each([
+    { props: { isStreaming: true, content: '', thinkingStartedAt: Date.now() }, label: 'Thinking' },
+    { props: { content: 'Answer', thinkingStartedAt: 1_000, thinkingEndedAt: 13_400 }, label: 'Thought for 12s' },
+    { props: { content: 'Answer' }, label: 'Thought process' },
+  ])('labels the thinking block by phase (%o)', ({ props, label }) => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'assistant', thinking: 'Reasoning', ...props },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+
+    expect(wrapper.get('[data-testid="thinking-block"] button').text()).toContain(label)
+  })
+
+  test('holds each previewed thought for a moment before showing the newest', async () => {
+    vi.useFakeTimers()
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    const first = 'Checking the calendar for conflicts.'
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'assistant', content: '', thinking: first, isStreaming: true },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+    const header = () => wrapper.get('[data-testid="thinking-block"] button')
+    expect(header().text()).toContain(first)
+
+    // The same paragraph keeps growing in place.
+    await wrapper.setProps({ thinking: `${first} Two found` })
+    expect(header().text()).toContain('Two found')
+
+    // A new paragraph waits out the hold; later ones replace it while it waits.
+    await wrapper.setProps({ thinking: `${first} Two found\nMoving the dentist appointment` })
+    await wrapper.setProps({ thinking: `${first} Two found\nMoving the dentist appointment\nDrafting a reply to the clinic` })
+    expect(header().text()).toContain('Two found')
+
+    vi.advanceTimersByTime(1600)
+    await wrapper.vm.$nextTick()
+    expect(header().text()).toContain('Drafting a reply to the clinic')
+    expect(header().text()).not.toContain('dentist')
+  })
+
+  test('shows the reply latency next to token usage', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] })
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'assistant', content: 'Done', model: 'model-x', contextTokens: 10, promptTokens: 8, completionTokens: 4, latencyMs: 4_250 },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+
+    expect(wrapper.get('.msg-meta').text()).toContain('4.3s')
   })
 
   test.each([

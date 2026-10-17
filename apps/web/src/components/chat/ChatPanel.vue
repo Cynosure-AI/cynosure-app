@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onMounted, reactive } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, reactive, toRaw } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
@@ -26,6 +26,7 @@ import { buildChatTimeline, type TimelineEntry } from '../../utils/chat-timeline
 import { fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 import { getGreeting, getIncognitoGreeting } from '../../utils/greetings'
 import { useCynoStore } from '../../stores/cyno.store'
+import { trackThinking } from '../../utils/thinking-clock'
 
 const props = withDefaults(defineProps<{
   searchOpen?: boolean
@@ -325,6 +326,7 @@ function assistantFileArtifacts(entry: TimelineEntry, entries = unifiedTimeline.
 /** Keep main and delegated messages consistent, including their artifact timeline. */
 function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, entries = unifiedTimeline.value) {
   const { msg } = entry
+  const thinkingClock = msg.thinking ? trackThinking(toRaw(msg)) : undefined
   return {
     role: msg.role,
     messageId: msg.id,
@@ -332,6 +334,8 @@ function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, 
     createdAt: msg.createdAt,
     content: msg.content,
     thinking: msg.thinking,
+    thinkingStartedAt: thinkingClock?.startedAt,
+    thinkingEndedAt: thinkingClock?.endedAt,
     imageDataUrls: msg.imageDataUrls,
     videoDataUrls: msg.videoDataUrls,
     audioDataUrls: msg.audioDataUrls,
@@ -757,12 +761,15 @@ onMounted(() => {
           v-if="entry.type === 'sub-agent-group'"
           class="mx-3 md:mx-4 my-2"
         >
-          <div class="rounded-2xl border border-indigo-500/25 bg-indigo-950/10 overflow-hidden">
+          <div
+            class="overflow-hidden rounded-2xl border bg-theme-800/25 transition-colors duration-500"
+            :class="activeSubAgentGroupKey === entry.key ? 'border-accent-500/35' : 'border-theme-700/60'"
+          >
             <!-- Header -->
             <div
               role="button"
               tabindex="0"
-              class="w-full flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-indigo-500/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400/60"
+              class="w-full flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-theme-700/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500/60"
               :aria-expanded="!collapsedSubAgentGroups.has(entry.key)"
               :aria-label="`${collapsedSubAgentGroups.has(entry.key) ? 'Expand' : 'Collapse'} ${entry.agentName || entry.codename} sub-agent steps`"
               @click="toggleSubAgentCollapsed(entry.key)"
@@ -770,7 +777,7 @@ onMounted(() => {
               @keydown.space.self.prevent="toggleSubAgentCollapsed(entry.key)"
             >
               <!-- Sub-agent avatar -->
-              <div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-indigo-500/30 bg-theme-800">
+              <div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden ring-1 ring-theme-600/60 bg-theme-800">
                 <img
                   v-if="entry.agentId && agentDefs.get(entry.agentId)?.iconUrl"
                   :src="agentDefs.get(entry.agentId)!.iconUrl!"
@@ -780,30 +787,30 @@ onMounted(() => {
                 <Icon
                   v-else
                   icon="lucide:bot"
-                  class="w-3.5 h-3.5 text-status-indigo"
+                  class="w-3.5 h-3.5 text-ink-secondary"
                 />
               </div>
               <!-- Agent name + codename -->
               <div class="flex-1 min-w-0 flex items-baseline gap-1.5">
-                <span class="text-[13px] font-medium text-indigo-300 truncate">{{ entry.agentName || entry.codename }}</span>
+                <span class="text-[13px] font-medium text-theme-200 truncate">{{ entry.agentName || entry.codename }}</span>
                 <span
                   v-if="entry.agentName && entry.agentName !== entry.codename"
-                  class="text-[10px] text-status-indigo/50 truncate shrink-0"
+                  class="text-[10px] text-ink-faint truncate shrink-0"
                 >{{ entry.codename }}</span>
               </div>
               <!-- Running indicator -->
               <Icon
                 v-if="activeSubAgentGroupKey === entry.key"
                 icon="svg-spinners:ring-resize"
-                class="w-3.5 h-3.5 text-status-indigo shrink-0"
+                class="w-3.5 h-3.5 text-accent-fg shrink-0"
               />
               <!-- Step count badge -->
-              <span class="text-[10px] text-status-indigo/50 tabular-nums shrink-0">
+              <span class="text-[10px] text-ink-faint tabular-nums shrink-0">
                 {{ entry.entries.length }} step{{ entry.entries.length !== 1 ? 's' : '' }}
               </span>
               <button
                 v-if="!collapsedSubAgentGroups.has(entry.key)"
-                class="w-7 h-7 rounded-lg flex items-center justify-center text-status-indigo/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-ink-faint hover:text-theme-200 hover:bg-theme-700/40 transition-colors shrink-0"
                 :title="fullHeightSubAgentGroups.has(entry.key) ? 'Collapse to compact view' : 'Expand to full height'"
                 @click.stop="toggleSubAgentFullHeight(entry.key)"
               >
@@ -814,7 +821,7 @@ onMounted(() => {
               </button>
               <!-- Height toggle icon -->
               <button
-                class="w-7 h-7 rounded-lg flex items-center justify-center text-status-indigo/50 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors shrink-0"
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-ink-faint hover:text-theme-200 hover:bg-theme-700/40 transition-colors shrink-0"
                 :title="collapsedSubAgentGroups.has(entry.key) ? 'Expand sub-agent steps' : 'Collapse sub-agent steps'"
                 @click.stop="toggleSubAgentCollapsed(entry.key)"
               >
@@ -828,7 +835,7 @@ onMounted(() => {
             <div
               v-if="!collapsedSubAgentGroups.has(entry.key)"
               :ref="(el) => registerSubAgentScroll(entry.key, el)"
-              class="border-t border-indigo-500/15 py-2 overflow-y-auto"
+              class="border-t border-theme-700/40 py-2 overflow-y-auto"
               :class="fullHeightSubAgentGroups.has(entry.key) ? '' : 'max-h-80'"
             >
               <div
@@ -920,7 +927,7 @@ onMounted(() => {
           v-else-if="entry.type === 'delegation-result'"
           class="px-4 py-1.5"
         >
-          <div class="max-w-[80%] ml-3 md:ml-12 flex items-center gap-2 rounded-xl border border-indigo-500/20 bg-indigo-950/10 px-3 py-2 text-xs text-ink-secondary">
+          <div class="max-w-[80%] ml-3 md:ml-12 flex items-center gap-2 rounded-xl border border-theme-700/50 bg-theme-800/30 px-3 py-2 text-xs text-ink-secondary">
             <Icon
               :icon="entry.results.some(result => result.success === false) ? 'lucide:circle-alert' : entry.results.some(result => result.success === undefined) ? 'lucide:circle-help' : 'lucide:check-circle-2'"
               class="w-3.5 h-3.5 shrink-0"

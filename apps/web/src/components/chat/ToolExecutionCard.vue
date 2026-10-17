@@ -85,8 +85,8 @@ const STATUS_META: Record<string, StatusMeta> = {
   'awaiting-approval': { label: 'Awaiting approval', icon: 'lucide:shield-question', color: 'text-status-warning' },
   denied: { label: 'Denied', icon: 'lucide:shield-x', color: 'text-status-danger' },
   executing: FALLBACK_META,
-  'ma-status': { label: 'Orchestrator', icon: 'lucide:network', color: 'text-status-violet' },
-  'ma-subagent-running': { label: 'Sub-agent running', icon: 'lucide:bot', color: 'text-status-indigo' },
+  'ma-status': { label: 'Orchestrator', icon: 'lucide:network', color: 'text-accent-fg' },
+  'ma-subagent-running': { label: 'Sub-agent running', icon: 'lucide:bot', color: 'text-accent-fg' },
   'ma-subagent-done': { label: 'Sub-agent done', icon: 'lucide:check', color: 'text-status-success' },
   'ma-subagent-failed': { label: 'Sub-agent failed', icon: 'lucide:x', color: 'text-status-danger' },
   'ma-done': { label: 'Complete', icon: 'lucide:check-circle-2', color: 'text-status-success' },
@@ -344,7 +344,7 @@ function contextSectionOrder(section: Pick<ContextSection, 'kind'>): number {
 
 function toolChipClass(name: string): string {
   return isBuiltInTool(name)
-    ? 'bg-purple-500/10 text-purple-600 ring-1 ring-purple-400/25 dark:text-purple-300 dark:ring-purple-500/20'
+    ? 'bg-theme-700/40 text-theme-200 ring-1 ring-theme-600/40'
     : 'bg-accent-200/40 text-accent-700 dark:bg-accent-500/10 dark:text-accent-fg'
 }
 
@@ -361,8 +361,8 @@ function toolCallIconClass(call?: ToolCall | null): string {
   if (!call) return 'text-ink-muted'
   if (isAttachmentIndexCall(call)) return 'text-sky-600 dark:text-sky-300'
   if (isTaskContextCall(call)) return 'text-cyan-600 dark:text-cyan-300'
-  if (isBuiltInTool(call.name)) return 'text-purple-500 dark:text-purple-300'
-  return isSubAgentSpawnCall(call.name) ? 'text-status-indigo' : 'text-accent-fg'
+  if (isBuiltInTool(call.name)) return 'text-theme-300'
+  return 'text-accent-fg'
 }
 
 function executionIcon(execution: ToolExecution): string {
@@ -377,13 +377,13 @@ function executionIconClass(execution: ToolExecution): string {
 
 function executionCardClass(execution: ToolExecution | ContextRow): string {
   const tone = isInternalExecution(execution)
-    ? 'bg-purple-50/80 border-purple-300/30 dark:bg-purple-500/5 dark:border-purple-500/20'
+    ? 'bg-theme-800/40 border-theme-700/50'
     : 'bg-accent-500/5 border-accent-500/20'
   return isCandidateRow(execution) ? `${tone} opacity-70` : tone
 }
 
 function executionNameClass(execution: ToolExecution | ContextRow): string {
-  const tone = isInternalExecution(execution) ? 'text-purple-600 dark:text-purple-300' : 'text-accent-fg'
+  const tone = isInternalExecution(execution) ? 'text-theme-200' : 'text-accent-fg'
   return isCandidateRow(execution) ? `${tone} line-through decoration-theme-500/70` : tone
 }
 
@@ -645,7 +645,7 @@ const headerIcon = computed(() => {
 })
 
 const headerIconClass = computed(() => {
-  if (props.delegationHandoff) return 'text-status-indigo'
+  if (props.delegationHandoff) return 'text-accent-fg'
   if (currentPhase.value.label === 'Denied') return 'text-status-danger'
   if (isRoutingWorkPending.value) return 'text-accent-fg'
   if (isTaskContext.value) return 'text-cyan-600 dark:text-cyan-300'
@@ -713,12 +713,12 @@ const hasDisplayableActivity = computed(() =>
 
             <span
               v-if="maContext?.codename"
-              class="text-[10px] text-status-indigo/80 dark:text-status-indigo/80 truncate max-w-16"
+              class="text-[10px] text-ink-muted truncate max-w-16"
               :title="maContext.agentName || maContext.codename"
             >{{ maContext.codename }}</span>
             <span
               v-else-if="maContext?.phase"
-              class="text-[10px] text-status-violet/80"
+              class="text-[10px] text-ink-muted"
             >{{ maContext.phase }}</span>
 
             <div class="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
@@ -738,7 +738,7 @@ const hasDisplayableActivity = computed(() =>
               <template v-else-if="headerToolNames.length">
                 <span
                   v-if="delegationHandoff"
-                  class="text-status-indigo shrink-0"
+                  class="text-accent-fg shrink-0"
                 >Delegation requested</span>
                 <span
                   v-if="isRoutingStatus"
@@ -958,7 +958,7 @@ const hasDisplayableActivity = computed(() =>
 
                   <span
                     v-if="execution.call && subAgentCodenameFromArgs(execution.call.arguments)"
-                    class="ml-1 inline-flex rounded bg-indigo-200/40 px-1.5 py-0.5 text-[10px] text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300"
+                    class="ml-1 inline-flex rounded bg-theme-700/45 px-1.5 py-0.5 text-[10px] text-theme-300"
                   >{{ subAgentCodenameFromArgs(execution.call.arguments) }}</span>
                 </div>
 
