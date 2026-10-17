@@ -82,6 +82,10 @@ function agentName(agentId: string | null): string {
   return agentId ? (agentDefs.get(agentId)?.name ?? 'Unknown agent') : cyno.name
 }
 
+function agentIconUrl(agentId: string | null): string | null {
+  return agentId ? (agentDefs.get(agentId)?.iconUrl || null) : cyno.iconUrl
+}
+
 function toggleMenu(projectId: string): void {
   openMenuId.value = openMenuId.value === projectId ? null : projectId
 }
@@ -267,7 +271,14 @@ onBeforeUnmount(() => {
                 <dt class="sr-only">
                   Default agent
                 </dt>
+                <img
+                  v-if="agentIconUrl(project.defaultAgentId)"
+                  :src="agentIconUrl(project.defaultAgentId)!"
+                  :alt="`${agentName(project.defaultAgentId)} icon`"
+                  class="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
+                >
                 <Icon
+                  v-else
                   icon="lucide:bot"
                   class="h-3.5 w-3.5"
                 />

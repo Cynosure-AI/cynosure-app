@@ -51,6 +51,7 @@ const confirmDelete = ref(false)
 
 const memoryFolder = computed(() => chatStore.memoryFolders.find((folder) => folder.id === project.value?.memoryFolderId))
 const memoryFileCount = computed(() => (memoryFolder.value?.fileCount ?? 0) + (memoryFolder.value?.descendantFileCount ?? 0))
+const defaultAgentIconUrl = computed(() => project.value?.defaultAgentId ? agentIconUrl(project.value.defaultAgentId) : cyno.iconUrl)
 const tabs = computed<TabDef<ProjectTab>[]>(() => [
   { value: 'overview', label: 'Overview', icon: 'lucide:layout-dashboard' },
   { value: 'board', label: 'Board', icon: 'lucide:square-kanban', badge: project.value?.openTaskCount || undefined, badgeTitle: `${project.value?.openTaskCount ?? 0} open tasks` },
@@ -380,97 +381,123 @@ onBeforeUnmount(stopWaitUpdates)
         </BaseCard>
 
         <div class="space-y-4">
-          <BaseCard class="space-y-3 p-5 text-sm">
+          <BaseCard class="min-w-0 p-5 text-sm">
             <h2 class="text-base font-semibold text-theme-100">
               Context for agents
             </h2>
-            <div class="flex items-start gap-2">
-              <Icon
-                icon="lucide:bot"
-                class="mt-0.5 h-4 w-4 shrink-0 text-ink-muted"
-              />
-              <div>
-                <div class="text-ink-muted">
+            <dl class="mt-1 divide-y divide-theme-700/60">
+              <div class="relative py-4 pl-12">
+                <dt class="font-medium text-ink-muted">
+                  <span class="absolute left-0 top-4 flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-theme-700/70 bg-theme-900/60">
+                    <img
+                      v-if="defaultAgentIconUrl"
+                      :src="defaultAgentIconUrl"
+                      alt=""
+                      class="h-full w-full object-cover"
+                    >
+                    <Icon
+                      v-else
+                      icon="lucide:bot"
+                      class="h-5 w-5"
+                      aria-hidden="true"
+                    />
+                  </span>
                   Default agent
-                </div>
-                <div class="text-theme-200">
+                </dt>
+                <dd class="mt-1 break-words text-theme-100">
                   {{ agentName(project.defaultAgentId) }}
-                </div>
+                </dd>
               </div>
-            </div>
-            <div class="flex items-start gap-2">
-              <Icon
-                icon="lucide:database"
-                class="mt-0.5 h-4 w-4 shrink-0 text-ink-muted"
-              />
-              <div class="min-w-0">
-                <div class="text-ink-muted">
+              <div class="relative py-4 pl-12">
+                <dt class="font-medium text-ink-muted">
+                  <span class="absolute left-0 top-4 flex h-9 w-9 items-center justify-center rounded-lg border border-theme-700/70 bg-theme-900/60">
+                    <Icon
+                      icon="lucide:database"
+                      class="h-5 w-5"
+                      aria-hidden="true"
+                    />
+                  </span>
                   Memory folder
-                </div>
-                <div class="text-[11px] text-ink-faint">
-                  Lasting facts and knowledge; agents add to it automatically
-                </div>
-                <button
-                  v-if="memoryFolder"
-                  type="button"
-                  class="block max-w-full truncate text-left text-theme-200 hover:text-accent-fg"
-                  :title="`Browse ${memoryFolder.folderPath || memoryFolder.name}`"
-                  @click="activeTab = 'memories'"
-                >
-                  {{ memoryFolder.folderPath || memoryFolder.name }}
-                </button>
-                <div
-                  v-else
-                  class="text-ink-faint"
-                >
-                  None
-                </div>
+                </dt>
+                <dd class="mt-1">
+                  <p class="text-xs leading-relaxed text-ink-muted">
+                    Lasting facts and knowledge; agents add to it automatically
+                  </p>
+                  <button
+                    v-if="memoryFolder"
+                    type="button"
+                    class="mt-2 block w-full rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 text-left font-mono text-xs leading-relaxed text-theme-200 transition-colors [overflow-wrap:anywhere] hover:border-theme-600 hover:text-accent-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                    :title="`Browse ${memoryFolder.folderPath || memoryFolder.name}`"
+                    @click="activeTab = 'memories'"
+                  >
+                    {{ memoryFolder.folderPath || memoryFolder.name }}
+                  </button>
+                  <p
+                    v-else
+                    class="mt-2 text-xs text-ink-faint"
+                  >
+                    None
+                  </p>
+                </dd>
               </div>
-            </div>
-            <div class="flex items-start gap-2">
-              <Icon
-                icon="lucide:folder-code"
-                class="mt-0.5 h-4 w-4 shrink-0 text-ink-muted"
-              />
-              <div class="min-w-0">
-                <div class="text-ink-muted">
+              <div class="relative py-4 pl-12">
+                <dt class="font-medium text-ink-muted">
+                  <span class="absolute left-0 top-4 flex h-9 w-9 items-center justify-center rounded-lg border border-theme-700/70 bg-theme-900/60">
+                    <Icon
+                      icon="lucide:folder-code"
+                      class="h-5 w-5"
+                      aria-hidden="true"
+                    />
+                  </span>
                   Project folder
-                </div>
-                <div
-                  class="break-all font-mono text-xs"
-                  :class="project.rootPath ? 'text-theme-200' : 'text-ink-faint'"
+                </dt>
+                <dd
+                  class="mt-2 text-xs"
+                  :class="project.rootPath ? 'rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 font-mono leading-relaxed text-theme-200 [overflow-wrap:anywhere]' : 'text-ink-faint'"
                 >
                   {{ project.rootPath || 'None' }}
-                </div>
+                </dd>
               </div>
-            </div>
-            <div class="flex items-start gap-2">
-              <Icon
-                icon="lucide:scroll-text"
-                class="mt-0.5 h-4 w-4 shrink-0 text-ink-muted"
-              />
-              <div class="min-w-0">
-                <div class="text-ink-muted">
+              <div class="relative py-4 pl-12">
+                <dt class="font-medium text-ink-muted">
+                  <span class="absolute left-0 top-4 flex h-9 w-9 items-center justify-center rounded-lg border border-theme-700/70 bg-theme-900/60">
+                    <Icon
+                      icon="lucide:scroll-text"
+                      class="h-5 w-5"
+                      aria-hidden="true"
+                    />
+                  </span>
                   Instructions
-                </div>
-                <div class="text-[11px] text-ink-faint">
-                  Written by you; followed in every chat of this project
-                </div>
-                <p
-                  class="line-clamp-4 whitespace-pre-line text-xs"
-                  :class="project.instructions ? 'text-theme-300' : 'text-ink-faint'"
-                >
-                  {{ project.instructions || 'None' }}
-                </p>
+                </dt>
+                <dd class="mt-1">
+                  <p class="text-xs leading-relaxed text-ink-muted">
+                    Written by you; followed in every chat of this project
+                  </p>
+                  <div
+                    class="mt-2"
+                    :class="project.instructions ? 'rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 text-theme-200' : 'text-ink-faint'"
+                  >
+                    <p class="line-clamp-4 whitespace-pre-wrap text-xs leading-relaxed [overflow-wrap:anywhere]">
+                      {{ project.instructions || 'None' }}
+                    </p>
+                  </div>
+                </dd>
               </div>
+            </dl>
+            <div class="border-t border-theme-700/60 pt-4">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded text-xs font-medium text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                @click="activeTab = 'settings'"
+              >
+                Edit project settings
+                <Icon
+                  icon="lucide:chevron-right"
+                  class="h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </button>
             </div>
-            <button
-              type="button"
-              class="text-xs text-accent-fg hover:underline"
-              @click="activeTab = 'settings'"
-            >
-              Edit project settings
-            </button>
           </BaseCard>
 
           <BaseCard
