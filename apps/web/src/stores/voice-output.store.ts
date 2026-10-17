@@ -68,7 +68,11 @@ export const useVoiceOutputStore = defineStore('voice-output', () => {
     async function remove(voiceId: string): Promise<void> {
         await api.tts.remove(voiceId)
         voices.value = voices.value.map((voice) => voice.id === voiceId ? { ...voice, installed: false } : voice)
-        if (settings.value?.voiceId === voiceId) settings.value = { ...settings.value, voiceId: '', speakerId: 0 }
+        if (settings.value?.voiceId !== voiceId) return
+        // The server cleared the voice; keep Cyno speaking with another installed one.
+        settings.value = { ...settings.value, voiceId: '', speakerId: 0 }
+        const replacement = installedVoices.value[0]
+        if (replacement) await update({ voiceId: replacement.id, speakerId: 0 })
     }
 
     return {
