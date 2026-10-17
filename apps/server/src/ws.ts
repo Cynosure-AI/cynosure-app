@@ -59,6 +59,8 @@ const globalEventNames = new Set([
   // A wait was scheduled or ended. Carries nothing; chat lists refetch to show
   // which conversations are waiting to resume.
   'cron:waits-changed',
+  // Voice downloads belong to the server, not a chat; any open settings page shows them.
+  'tts:download-progress',
 ])
 
 export function addClient(ws: WebSocket): void {
