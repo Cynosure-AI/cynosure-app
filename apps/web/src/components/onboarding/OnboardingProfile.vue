@@ -1,30 +1,28 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
+import OnboardingStepHeader from './OnboardingStepHeader.vue'
 
 const prefs = usePreferencesStore()
+const input = ref<HTMLInputElement | null>(null)
+
+// `autofocus` only applies on page load, not to a step swapped in later.
+onMounted(() => input.value?.focus())
 </script>
 
 <template>
   <div class="flex min-h-full w-full items-center justify-center px-4 py-8">
     <div class="w-full max-w-lg">
-      <div class="mb-6 flex h-12 w-12 items-center justify-center rounded-xl border border-accent-500/25 bg-accent-500/10">
-        <Icon
-          icon="lucide:hand"
-          class="h-5 w-5 text-accent-fg"
-        />
-      </div>
-
-      <h2 class="text-2xl font-bold text-theme-100">
-        What should Cyno call you?
-      </h2>
-      <p class="mt-2 text-sm leading-relaxed text-ink-muted">
-        Add the name you’d like Cyno and your agents to use when speaking with you.
-        You can change it later in Settings.
-      </p>
+      <OnboardingStepHeader
+        icon="lucide:hand"
+        title="What should Cyno call you?"
+      >
+        The name Cyno and your agents use when speaking with you. You can change it later in Settings.
+      </OnboardingStepHeader>
 
       <label
-        class="mt-7 block"
+        class="block"
         for="onboarding-user-name"
       >
         <span class="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-theme-200">
@@ -34,26 +32,34 @@ const prefs = usePreferencesStore()
         <div class="relative">
           <Icon
             icon="lucide:user-round"
-            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+            class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
           />
           <input
             id="onboarding-user-name"
+            ref="input"
             v-model="prefs.userName"
             type="text"
             maxlength="100"
             autocomplete="name"
-            autofocus
+            data-onboarding-enter
             placeholder="What should we call you?"
-            class="w-full rounded-xl border border-theme-700 bg-theme-900/80 py-3 pl-10 pr-3 text-sm text-theme-100 outline-none transition placeholder:text-ink-faint focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+            class="w-full rounded-xl border border-theme-700 bg-theme-900/80 py-3.5 pl-10 pr-3 text-base text-theme-100 outline-none transition placeholder:text-ink-faint focus:border-accent-500 focus:ring-2 focus:ring-accent-500/40"
           >
         </div>
       </label>
 
-      <p class="mt-3 flex items-start gap-2 text-xs leading-5 text-ink-muted">
+      <div class="mt-4 flex items-center gap-3 rounded-xl border border-theme-700/50 bg-theme-900/40 px-4 py-3">
         <Icon
-          icon="lucide:info"
-          class="mt-0.5 h-3.5 w-3.5 shrink-0"
+          icon="lucide:message-circle-heart"
+          class="h-4 w-4 shrink-0 text-accent-fg"
         />
+        <p class="min-w-0 truncate text-sm text-ink-secondary">
+          “Hi <span class="font-medium text-theme-100">{{ prefs.userName.trim() || 'there' }}</span>, how can I help today?”
+        </p>
+      </div>
+
+      <p class="mt-4 text-xs text-ink-faint">
+        Press <kbd class="rounded border border-theme-700 bg-theme-800 px-1.5 py-0.5 font-sans text-[10px] text-ink-secondary">Enter</kbd> to continue.
         Profile images can be added later from Settings → General.
       </p>
     </div>

@@ -1,16 +1,28 @@
 <template>
-  <div class="max-w-2xl mx-auto px-4 py-6 w-full">
-    <div class="mb-6">
-      <h2 class="text-xl font-bold text-theme-100">
-        Set Up Memory
-      </h2>
-      <p class="text-sm text-ink-muted mt-1">
-        Choose which provider Cynosure should use to turn documents and conversations into
-        searchable memory. Cynosure recommends a strong default while leaving the final choice to you.
-      </p>
+  <div class="max-w-2xl mx-auto px-4 py-8 w-full">
+    <OnboardingStepHeader
+      icon="lucide:brain"
+      title="Set Up Memory"
+      optional
+    >
+      Let your agents remember documents and past conversations. We picked a sensible default, so in most cases you can just continue.
+    </OnboardingStepHeader>
+
+    <div class="grid gap-2 sm:grid-cols-3 mb-5">
+      <div
+        v-for="benefit in benefits"
+        :key="benefit.text"
+        class="flex items-center gap-2.5 rounded-xl border border-theme-700/50 bg-theme-900/40 px-3 py-2.5 text-xs text-ink-secondary"
+      >
+        <Icon
+          :icon="benefit.icon"
+          class="h-4 w-4 shrink-0 text-accent-fg"
+        />
+        {{ benefit.text }}
+      </div>
     </div>
 
-    <div class="bg-theme-800/50 border border-theme-700/60 rounded-xl p-5 space-y-4 mb-4">
+    <div class="bg-theme-800/50 border border-theme-700/60 rounded-2xl p-5 space-y-4 mb-4">
       <div>
         <label
           for="onboarding-embedding-provider"
@@ -19,8 +31,8 @@
           Memory embedding provider
         </label>
         <p class="text-xs text-ink-muted mb-3">
-          OpenAI, Google, and OpenRouter have recommended defaults. Other providers are supported
-          when they expose embedding models.
+          OpenAI, Google, and OpenRouter have recommended defaults. Other providers work
+          when they offer embedding models.
         </p>
         <select
           id="onboarding-embedding-provider"
@@ -146,6 +158,7 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useProviderStore } from '../../stores/provider.store'
+import OnboardingStepHeader from './OnboardingStepHeader.vue'
 import { api } from '../../api/client'
 import {
   defaultEmbeddingModelForProviderId,
@@ -153,6 +166,12 @@ import {
 } from '../../utils/embedding-defaults'
 
 const providerStore = useProviderStore()
+
+const benefits = [
+  { icon: 'lucide:file-search', text: 'Search your documents' },
+  { icon: 'lucide:history', text: 'Recall past chats' },
+  { icon: 'lucide:sparkles', text: 'Better, grounded answers' },
+]
 
 const embProviderId = ref('')
 const embModel = ref('')

@@ -59,6 +59,20 @@ export const DEFAULT_PROVIDER_MODELS: Record<ProviderType, string> = {
   unsloth: '',
 }
 
+/** Where to create an API key (hosted providers) or download the server (local providers). */
+export const PROVIDER_HELP_LINKS: Partial<Record<ProviderType, { label: string; url: string }>> = {
+  openai: { label: 'Get an API key', url: 'https://platform.openai.com/api-keys' },
+  anthropic: { label: 'Get an API key', url: 'https://console.anthropic.com/settings/keys' },
+  google: { label: 'Get an API key', url: 'https://aistudio.google.com/apikey' },
+  openrouter: { label: 'Get an API key', url: 'https://openrouter.ai/keys' },
+  requesty: { label: 'Get an API key', url: 'https://app.requesty.ai' },
+  groq: { label: 'Get an API key', url: 'https://console.groq.com/keys' },
+  mistral: { label: 'Get an API key', url: 'https://console.mistral.ai/api-keys' },
+  grok: { label: 'Get an API key', url: 'https://console.x.ai' },
+  ollama: { label: 'Download Ollama', url: 'https://ollama.com/download' },
+  lmstudio: { label: 'Download LM Studio', url: 'https://lmstudio.ai' },
+}
+
 /** Model types a chat provider can serve; used when listing models for a provider. */
 export const RESPONSE_MODEL_TYPES: ModelListType[] = ['llm', 'image', 'video', 'transcription']
 

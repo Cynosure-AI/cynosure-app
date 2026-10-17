@@ -1,24 +1,44 @@
 <template>
-  <div class="max-w-2xl mx-auto px-4 py-6 w-full">
-    <div class="mb-6">
-      <h2 class="text-xl font-bold text-theme-100">
-        Add MCP Tools
-      </h2>
-      <p class="text-sm text-ink-muted mt-1">
-        Extend your agents with installable tools. Everything here is optional and can also be added later from
-        <strong class="text-ink-secondary">MCP Servers</strong> in the workspace menu at the bottom of the sidebar.
-      </p>
-    </div>
+  <div class="max-w-2xl mx-auto px-4 py-8 w-full">
+    <OnboardingStepHeader
+      icon="lucide:blocks"
+      title="Add MCP Tools"
+      optional
+    >
+      Give your agents superpowers like web search or browser control with one click. You can add more anytime from
+      <strong class="text-ink-secondary">MCP Servers</strong> in the workspace menu.
+    </OnboardingStepHeader>
 
     <div
       v-if="registryLoading"
-      class="flex items-center gap-2 text-sm text-ink-muted py-8"
+      class="space-y-3"
+      aria-busy="true"
+      aria-label="Loading recommended MCP servers"
+    >
+      <div
+        v-for="i in 4"
+        :key="i"
+        class="flex items-center gap-4 rounded-xl border border-theme-700/50 bg-theme-800/40 p-4 animate-pulse"
+      >
+        <div class="h-10 w-10 shrink-0 rounded-lg bg-theme-700/60" />
+        <div class="flex-1 space-y-2">
+          <div class="h-3 w-1/3 rounded bg-theme-700/70" />
+          <div class="h-2.5 w-3/4 rounded bg-theme-700/50" />
+        </div>
+        <div class="h-7 w-20 rounded-lg bg-theme-700/50" />
+      </div>
+    </div>
+
+    <div
+      v-if="!registryLoading && installedIds.size"
+      class="mb-3 flex items-center gap-2 text-xs font-medium text-status-success"
+      role="status"
     >
       <Icon
-        icon="lucide:loader-2"
-        class="w-4 h-4 animate-spin"
+        icon="lucide:circle-check"
+        class="h-3.5 w-3.5"
       />
-      Loading recommended MCP servers...
+      {{ installedIds.size }} {{ installedIds.size === 1 ? 'tool' : 'tools' }} installed
     </div>
 
     <div
@@ -35,7 +55,10 @@
       <div
         v-for="mcp in mcpOptions"
         :key="mcp.id"
-        class="bg-theme-800/50 border border-theme-700/60 rounded-xl overflow-hidden"
+        class="rounded-xl overflow-hidden border transition-colors"
+        :class="installedIds.has(mcp.id)
+          ? 'border-emerald-500/25 bg-emerald-500/5'
+          : 'border-theme-700/60 bg-theme-800/50 hover:border-theme-600/70'"
       >
         <div class="flex items-center gap-4 p-4">
           <!-- Icon -->
@@ -68,7 +91,7 @@
                 :class="mcp.badgeClass"
               >{{ mcp.badge }}</span>
             </div>
-            <p class="text-xs text-ink-muted mt-0.5">
+            <p class="text-xs text-ink-muted mt-0.5 line-clamp-2">
               {{ mcp.description }}
             </p>
             <p class="text-[11px] text-ink-faint mt-0.5 font-mono">
@@ -90,7 +113,7 @@
             </div>
             <button
               v-else
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-theme-700 hover:bg-theme-600 disabled:opacity-50 text-theme-300 text-xs font-medium rounded-lg transition-colors"
+              class="flex items-center gap-1.5 px-3 py-1.5 border border-accent-500/40 bg-accent-500/10 hover:bg-accent-500/20 disabled:opacity-50 text-accent-fg text-xs font-medium rounded-lg transition-colors"
               :disabled="loadingId === mcp.id"
               @click="installMcp(mcp)"
             >
@@ -183,6 +206,7 @@ import { api } from '../../api/client'
 import type { McpRegistryServer } from '../../api/types'
 import { useMcpServers } from '../../composables/useMcpServers'
 import { planRemoteHeaders } from '../settings/mcp/registry-remote-headers'
+import OnboardingStepHeader from './OnboardingStepHeader.vue'
 
 const { servers, loadServers } = useMcpServers()
 

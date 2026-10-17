@@ -9,6 +9,7 @@ import IconUpload from '../shared/IconUpload.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import PromptSmartTagPicker from '../shared/PromptSmartTagPicker.vue'
 import { NEW_AGENT_BEHAVIOR } from '../../utils/agent-defaults'
+import OnboardingStepHeader from './OnboardingStepHeader.vue'
 
 interface DraftState {
   hasDraft: boolean
@@ -17,7 +18,42 @@ interface DraftState {
 
 const emit = defineEmits<{
   draftChange: [state: DraftState]
+  created: [name: string]
 }>()
+
+interface AgentTemplate {
+  icon: string
+  name: string
+  description: string
+  systemPrompt: string
+}
+
+const templates: AgentTemplate[] = [
+  {
+    icon: 'lucide:search',
+    name: 'Research Assistant',
+    description: 'Finds, compares, and summarises reliable sources.',
+    systemPrompt: 'You are a careful research assistant. Look for reliable sources, compare them, and say where each fact comes from. Point out where sources disagree or the evidence is thin. Finish with a short summary and suggested next steps.',
+  },
+  {
+    icon: 'lucide:pen-line',
+    name: 'Writing Partner',
+    description: 'Drafts, edits, and polishes your writing.',
+    systemPrompt: 'You are a thoughtful writing partner. Help draft, restructure, and polish text while keeping the author\'s voice. Ask about audience and tone when they are unclear, and briefly explain significant edits.',
+  },
+  {
+    icon: 'lucide:code-xml',
+    name: 'Coding Helper',
+    description: 'Explains, writes, and reviews code.',
+    systemPrompt: 'You are a pragmatic senior software engineer. Write clear, working code that matches the existing style, explain trade-offs briefly, and call out bugs, edge cases, and security issues you notice.',
+  },
+  {
+    icon: 'lucide:calendar-check',
+    name: 'Daily Planner',
+    description: 'Turns goals into clear, realistic plans.',
+    systemPrompt: 'You are an organised personal planner. Break goals into concrete, realistic steps, help prioritise what matters most, and keep plans short and actionable.',
+  },
+]
 
 const agentDefs = useAgentDefinitionsStore()
 const providerStore = useProviderStore()
@@ -40,6 +76,19 @@ const hasDraft = computed(() => Boolean(
   || systemPrompt.value.trim()
 ))
 const valid = computed(() => !hasDraft.value || Boolean(name.value.trim()))
+const activeTemplate = computed(() => templates.find(t => t.name === name.value && t.systemPrompt === systemPrompt.value))
+
+function applyTemplate(template: AgentTemplate): void {
+  if (activeTemplate.value === template) {
+    name.value = ''
+    description.value = ''
+    systemPrompt.value = ''
+    return
+  }
+  name.value = template.name
+  description.value = template.description
+  systemPrompt.value = template.systemPrompt
+}
 
 function insertSystemPromptTag(tag: string): void {
   const input = systemPromptRef.value
@@ -93,6 +142,7 @@ async function createAgent(): Promise<boolean> {
       // while an empty list would switch retrieval off for this agent.
     })
 
+    emit('created', name.value.trim())
     return true
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not create the agent'
@@ -106,22 +156,38 @@ defineExpose({ createAgent })
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-2xl px-4 py-6">
-    <div class="mb-6">
-      <div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent-fg">
-        <Icon
-          icon="lucide:sparkles"
-          class="h-3.5 w-3.5"
-        />
-        One last thing
-      </div>
-      <h2 class="text-xl font-bold text-theme-100">
-        Create your First Agent <span class="font-normal text-ink-muted">(optional)</span>
-      </h2>
-      <p class="mt-1 max-w-2xl text-sm leading-relaxed text-ink-muted">
-        Give your first agent a role and a few instructions. You can fine-tune its tools,
-        memory, and behavior later.
-      </p>
+  <div class="mx-auto w-full max-w-2xl px-4 py-8">
+    <OnboardingStepHeader
+      icon="lucide:bot"
+      title="Create your First Agent"
+      optional
+    >
+      Pick a template to start in one click, or describe your own. You can fine-tune its tools,
+      memory, and behavior later.
+    </OnboardingStepHeader>
+
+    <div class="mb-2 text-xs font-medium uppercase tracking-wider text-ink-muted">
+      Start from a template
+    </div>
+    <div class="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <button
+        v-for="template in templates"
+        :key="template.name"
+        type="button"
+        class="agent-template"
+        :class="{ 'agent-template--active': activeTemplate === template }"
+        :aria-pressed="activeTemplate === template"
+        @click="applyTemplate(template)"
+      >
+        <span class="agent-template-icon">
+          <Icon
+            :icon="activeTemplate === template ? 'lucide:check' : template.icon"
+            class="h-4 w-4"
+          />
+        </span>
+        <span class="text-sm font-medium text-theme-100">{{ template.name }}</span>
+        <span class="text-[11px] leading-4 text-ink-faint">{{ template.description }}</span>
+      </button>
     </div>
 
     <BaseCard class="p-5">
@@ -146,18 +212,6 @@ defineExpose({ createAgent })
       </div>
 
       <div class="border-b border-theme-700/70 py-5">
-        <IconUpload
-          :icon-url="iconUrl"
-          fallback-icon="lucide:bot"
-          @update="iconUrl = $event"
-        >
-          <template #description>
-            Add an optional image so this agent is easy to spot.
-          </template>
-        </IconUpload>
-      </div>
-
-      <div class="border-b border-theme-700/70 py-5">
         <label
           for="onboarding-agent-description"
           class="mb-1.5 block text-sm font-medium text-theme-300"
@@ -165,20 +219,9 @@ defineExpose({ createAgent })
         <textarea
           id="onboarding-agent-description"
           v-model="description"
-          rows="3"
+          rows="2"
           placeholder="What is this agent best at?"
           class="w-full resize-none rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
-        />
-      </div>
-
-      <div class="border-b border-theme-700/70 py-5">
-        <label class="mb-1.5 block text-sm font-medium text-theme-300">Provider / Model</label>
-        <ProviderModelSelect
-          :provider-id="providerId"
-          :model-value="model"
-          :providers="providerStore.providers"
-          placeholder="Use provider default"
-          @change="selection => { providerId = selection.providerId; model = selection.model }"
         />
       </div>
 
@@ -187,21 +230,55 @@ defineExpose({ createAgent })
           <label
             for="onboarding-agent-system-prompt"
             class="block text-sm font-medium text-theme-300"
-          >System prompt</label>
+          >Instructions</label>
           <PromptSmartTagPicker @insert="insertSystemPromptTag" />
         </div>
         <textarea
           id="onboarding-agent-system-prompt"
           ref="systemPromptRef"
           v-model="systemPrompt"
-          rows="7"
+          rows="5"
           placeholder="Describe the role, tone, and boundaries for this agent…"
-          class="w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 font-mono text-sm leading-relaxed text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
+          class="w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2.5 text-sm leading-relaxed text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
         />
         <p class="mt-1.5 text-[11px] text-ink-faint">
           These instructions are added to Cynosure’s built-in agent behavior.
         </p>
       </div>
+
+      <details class="group pt-4">
+        <summary class="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-ink-secondary transition-colors hover:text-theme-200">
+          <Icon
+            icon="lucide:chevron-right"
+            class="h-4 w-4 transition-transform group-open:rotate-90"
+          />
+          More options
+          <span class="font-normal text-ink-faint">· icon and model</span>
+        </summary>
+
+        <div class="border-b border-theme-700/70 py-5">
+          <IconUpload
+            :icon-url="iconUrl"
+            fallback-icon="lucide:bot"
+            @update="iconUrl = $event"
+          >
+            <template #description>
+              Add an optional image so this agent is easy to spot.
+            </template>
+          </IconUpload>
+        </div>
+
+        <div class="pt-5">
+          <label class="mb-1.5 block text-sm font-medium text-theme-300">Provider / Model</label>
+          <ProviderModelSelect
+            :provider-id="providerId"
+            :model-value="model"
+            :providers="providerStore.providers"
+            placeholder="Use provider default"
+            @change="selection => { providerId = selection.providerId; model = selection.model }"
+          />
+        </div>
+      </details>
     </BaseCard>
 
     <div
@@ -217,3 +294,50 @@ defineExpose({ createAgent })
     </div>
   </div>
 </template>
+
+<style scoped>
+.agent-template {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .375rem;
+  padding: .875rem;
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--color-theme-600) 40%, transparent);
+  border-radius: .875rem;
+  background: color-mix(in srgb, var(--color-theme-800) 45%, transparent);
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.agent-template:hover {
+  border-color: color-mix(in srgb, var(--color-theme-500) 60%, transparent);
+  background: color-mix(in srgb, var(--color-theme-800) 75%, transparent);
+}
+
+.agent-template:active {
+  transform: scale(.98);
+}
+
+.agent-template-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  margin-bottom: .25rem;
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+  color: var(--color-accent-fg);
+}
+
+.agent-template--active,
+.agent-template--active:hover {
+  border-color: var(--color-accent-500);
+  background: color-mix(in srgb, var(--color-accent-500) 10%, var(--color-theme-800));
+  box-shadow: 0 0 0 1px var(--color-accent-500);
+}
+
+.agent-template--active .agent-template-icon {
+  background: var(--color-accent-500);
+  color: var(--color-accent-on);
+}
+</style>

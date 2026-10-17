@@ -106,3 +106,51 @@ test('editing keeps the save button disabled until something changes', async () 
   expect(submitButton(wrapper).attributes('disabled')).toBeUndefined()
   expect(wrapper.emitted('dirty-change')?.at(-1)).toEqual([true])
 })
+
+test('with auto-loading, a pasted key is checked once typing settles', async () => {
+  vi.useFakeTimers()
+  try {
+    mocks.previewModels.mockResolvedValue(['gpt-4o', 'gpt-4o-mini'])
+    const wrapper = mountForm({ autoLoadModels: true, hideType: true })
+    expect(wrapper.find('select').exists()).toBe(false)
+    expect(wrapper.get('a[href="https://platform.openai.com/api-keys"]').text()).toContain('Get an API key')
+
+    await wrapper.get('input[type="password"]').setValue('sk-t')
+    await wrapper.get('input[type="password"]').setValue('sk-test')
+    await vi.advanceTimersByTimeAsync(600)
+    await flushPromises()
+
+    expect(mocks.previewModels).toHaveBeenCalledTimes(1)
+    expect(mocks.previewModels).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'sk-test' }), expect.anything())
+    expect(wrapper.get('[role="status"]').text()).toContain('Connected · 2 models available')
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('with auto-loading, a local server that is not running is explained', async () => {
+  vi.useFakeTimers()
+  try {
+    mocks.previewModels.mockRejectedValue(new Error('fetch failed'))
+    const wrapper = mountForm({ autoLoadModels: true, hideType: true, initial: { type: 'ollama' } })
+    await vi.advanceTimersByTimeAsync(600)
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('Could not reach Ollama at http://localhost:11434/v1. Is it running? fetch failed')
+    expect(wrapper.find('a[href="https://ollama.com/download"]').exists()).toBe(true)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('without auto-loading, models are only loaded on request', async () => {
+  vi.useFakeTimers()
+  try {
+    const wrapper = mountForm()
+    await wrapper.get('input[type="password"]').setValue('sk-test')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mocks.previewModels).not.toHaveBeenCalled()
+  } finally {
+    vi.useRealTimers()
+  }
+})

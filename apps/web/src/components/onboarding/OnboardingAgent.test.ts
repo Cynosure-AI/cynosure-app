@@ -61,4 +61,34 @@ describe('OnboardingAgent', () => {
     }))
     expect(vi.mocked(definitions.create).mock.calls[0][0]).not.toHaveProperty('memoryFolders')
   })
+
+  test('a template fills the draft, creates the agent and reports its name', async () => {
+    const definitions = useAgentDefinitionsStore()
+    definitions.create = vi.fn().mockResolvedValue({ id: 'agent-1' } as AgentDefinition)
+    const wrapper = mountStep()
+    const template = wrapper.findAll('button').find(button => button.text().includes('Writing Partner'))!
+
+    await template.trigger('click')
+    expect(template.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.emitted('draftChange')?.at(-1)).toEqual([{ hasDraft: true, valid: true }])
+
+    await expect(wrapper.vm.createAgent()).resolves.toBe(true)
+    expect(definitions.create).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Writing Partner',
+      internalName: 'writing_partner',
+      systemPrompt: expect.stringContaining('writing partner'),
+    }))
+    expect(wrapper.emitted('created')).toEqual([['Writing Partner']])
+  })
+
+  test('choosing the selected template again clears the draft', async () => {
+    const wrapper = mountStep()
+    const template = wrapper.findAll('button').find(button => button.text().includes('Coding Helper'))!
+
+    await template.trigger('click')
+    await template.trigger('click')
+
+    expect(wrapper.get<HTMLInputElement>('#onboarding-agent-name').element.value).toBe('')
+    expect(wrapper.emitted('draftChange')?.at(-1)).toEqual([{ hasDraft: false, valid: true }])
+  })
 })

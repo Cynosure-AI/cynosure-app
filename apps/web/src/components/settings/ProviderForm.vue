@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { api } from '../../api/client'
 import { useProviderLogos } from '../../composables/useProviderLogos'
@@ -8,6 +8,7 @@ import {
   DEFAULT_PROVIDER_BASE_URLS,
   DEFAULT_PROVIDER_MODELS,
   PROVIDER_DISPLAY_NAMES,
+  PROVIDER_HELP_LINKS,
   PROVIDER_OPTIONS,
   RESPONSE_MODEL_TYPES,
   isLocalProvider,
@@ -35,12 +36,18 @@ const props = withDefaults(defineProps<{
   cancellable?: boolean
   /** Keep the submit button disabled until something changed (editing). */
   requireChanges?: boolean
+  /** The provider type is chosen outside the form, e.g. from a picker. */
+  hideType?: boolean
+  /** Load the model list as soon as the credentials allow it, which also checks the key. */
+  autoLoadModels?: boolean
 }>(), {
   initial: undefined,
   saving: false,
   error: '',
   cancellable: false,
   requireChanges: false,
+  hideType: false,
+  autoLoadModels: false,
 })
 
 const emit = defineEmits<{
@@ -82,6 +89,10 @@ const missingBaseUrl = computed(() => local.value && !draft.baseUrl.trim())
 const missingApiKey = computed(() => keyRequired.value && !draft.apiKey.trim())
 const canFetchModels = computed(() => !missingBaseUrl.value && !missingApiKey.value)
 const fetchHint = computed(() => missingBaseUrl.value ? 'Enter the base URL to load models.' : 'Enter an API key to load models.')
+const helpLink = computed(() => PROVIDER_HELP_LINKS[draft.type])
+const connected = computed(() => fetchedModels.value.length > 0 && modelsLoadedFor.value === credentialsKey.value)
+let modelsRequest = 0
+let autoLoadTimer: ReturnType<typeof setTimeout> | undefined
 
 // A model list belongs to the credentials it was loaded with.
 watch(credentialsKey, (key) => {
@@ -89,6 +100,14 @@ watch(credentialsKey, (key) => {
   fetchedModels.value = []
   modelsError.value = ''
 })
+
+watch(credentialsKey, () => {
+  if (!props.autoLoadModels) return
+  clearTimeout(autoLoadTimer)
+  // Wait for typing to settle so a pasted key is checked once.
+  autoLoadTimer = setTimeout(() => void fetchModels(), 600)
+}, { immediate: true })
+onBeforeUnmount(() => clearTimeout(autoLoadTimer))
 
 const modelGroups = computed<SelectOptionGroup[]>(() => {
   const models = draft.defaultModel && !fetchedModels.value.includes(draft.defaultModel)
@@ -105,7 +124,8 @@ function onTypeChange(): void {
 }
 
 async function fetchModels(): Promise<void> {
-  if (!canFetchModels.value || loadingModels.value) return
+  if (!canFetchModels.value) return
+  const request = ++modelsRequest
   const requestedFor = credentialsKey.value
   loadingModels.value = true
   modelsError.value = ''
@@ -115,7 +135,7 @@ async function fetchModels(): Promise<void> {
       baseUrl: providerBaseUrl(draft.type, draft.baseUrl),
       apiKey: draft.apiKey.trim() || undefined,
     }, RESPONSE_MODEL_TYPES)
-    if (requestedFor !== credentialsKey.value) return
+    if (request !== modelsRequest || requestedFor !== credentialsKey.value) return
     fetchedModels.value = models
     modelsLoadedFor.value = requestedFor
     if (models.length === 0) {
@@ -124,11 +144,14 @@ async function fetchModels(): Promise<void> {
       draft.defaultModel = models[0]
     }
   } catch (error) {
-    if (requestedFor !== credentialsKey.value) return
+    if (request !== modelsRequest || requestedFor !== credentialsKey.value) return
     fetchedModels.value = []
-    modelsError.value = `Could not load models: ${error instanceof Error ? error.message : 'unknown error'}`
+    const reason = error instanceof Error ? error.message : 'unknown error'
+    modelsError.value = local.value
+      ? `Could not reach ${PROVIDER_DISPLAY_NAMES[draft.type]} at ${providerBaseUrl(draft.type, draft.baseUrl)}. Is it running? ${reason}`
+      : `Could not load models: ${reason}`
   } finally {
-    loadingModels.value = false
+    if (request === modelsRequest) loadingModels.value = false
   }
 }
 
@@ -155,8 +178,11 @@ const labelClass = 'mb-1.5 block text-xs font-medium text-ink-secondary'
     novalidate
     @submit.prevent="submit"
   >
-    <div class="grid gap-4 sm:grid-cols-2">
-      <div>
+    <div
+      class="grid gap-4"
+      :class="{ 'sm:grid-cols-2': !hideType }"
+    >
+      <div v-if="!hideType">
         <label
           :for="`${fieldId}-type`"
           :class="labelClass"
@@ -211,10 +237,25 @@ const labelClass = 'mb-1.5 block text-xs font-medium text-ink-secondary'
     </div>
 
     <div v-if="local">
-      <label
-        :for="`${fieldId}-base-url`"
-        :class="labelClass"
-      >Server base URL</label>
+      <div class="flex items-baseline justify-between gap-3">
+        <label
+          :for="`${fieldId}-base-url`"
+          :class="labelClass"
+        >Server base URL</label>
+        <a
+          v-if="helpLink"
+          :href="helpLink.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mb-1.5 inline-flex items-center gap-1 text-xs text-accent-fg hover:underline"
+        >
+          {{ helpLink.label }}
+          <Icon
+            icon="lucide:external-link"
+            class="h-3 w-3"
+          />
+        </a>
+      </div>
       <input
         :id="`${fieldId}-base-url`"
         v-model="draft.baseUrl"
@@ -226,16 +267,31 @@ const labelClass = 'mb-1.5 block text-xs font-medium text-ink-secondary'
     </div>
 
     <div>
-      <label
-        :for="`${fieldId}-api-key`"
-        :class="labelClass"
-      >
-        API key
-        <span
-          v-if="!keyRequired"
-          class="font-normal text-ink-faint"
-        >(optional)</span>
-      </label>
+      <div class="flex items-baseline justify-between gap-3">
+        <label
+          :for="`${fieldId}-api-key`"
+          :class="labelClass"
+        >
+          API key
+          <span
+            v-if="!keyRequired"
+            class="font-normal text-ink-faint"
+          >(optional)</span>
+        </label>
+        <a
+          v-if="helpLink && !local"
+          :href="helpLink.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mb-1.5 inline-flex items-center gap-1 text-xs text-accent-fg hover:underline"
+        >
+          {{ helpLink.label }}
+          <Icon
+            icon="lucide:external-link"
+            class="h-3 w-3"
+          />
+        </a>
+      </div>
       <div class="relative">
         <input
           :id="`${fieldId}-api-key`"
@@ -309,6 +365,17 @@ const labelClass = 'mb-1.5 block text-xs font-medium text-ink-secondary'
         role="alert"
       >
         {{ modelsError }}
+      </p>
+      <p
+        v-else-if="connected"
+        class="mt-1.5 flex items-center gap-1.5 text-xs text-status-success"
+        role="status"
+      >
+        <Icon
+          icon="lucide:circle-check"
+          class="h-3.5 w-3.5"
+        />
+        Connected · {{ fetchedModels.length }} {{ fetchedModels.length === 1 ? 'model' : 'models' }} available
       </p>
       <p
         v-else-if="!canFetchModels"

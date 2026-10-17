@@ -5,7 +5,7 @@ test('a new installation can enter and leave onboarding', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/onboarding$/)
   await expect(page.getByRole('heading', { name: /Welcome to Cynosure/i })).toBeVisible()
-  await page.getByRole('button', { name: /^Continue/i }).click()
+  await page.getByRole('button', { name: /^Get started/i }).click()
 
   await expect(page.getByRole('heading', { name: 'What should Cyno call you?' })).toBeVisible()
   await page.getByPlaceholder('What should we call you?').fill('Ada')
