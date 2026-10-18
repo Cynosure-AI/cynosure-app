@@ -371,7 +371,7 @@ const imageGridClass = computed(() => {
                 :class="isThinking ? 'thinking-glyph--live text-accent-fg' : 'text-ink-faint group-hover/think:text-ink-secondary'"
               >
                 <Icon
-                  icon="lucide:brain"
+                  icon="lucide:message-circle-more"
                   class="h-3.5 w-3.5"
                 />
               </span>

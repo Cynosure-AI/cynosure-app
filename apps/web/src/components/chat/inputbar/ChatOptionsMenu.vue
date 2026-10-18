@@ -38,7 +38,7 @@ const brokenMcpIcons = ref<Set<string>>(new Set())
 const entries = [
   { id: 'files', label: 'Files', detail: 'Upload or select from library', icon: 'lucide:paperclip' },
   { id: 'tools', label: 'Tools (MCPs)', detail: 'Enable and configure tools', icon: 'lucide:wrench' },
-  { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:brain' },
+  { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:database' },
   { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users' },
   { id: 'project', label: 'Project', detail: 'Run this chat inside a project', icon: 'lucide:folder-kanban' },
 ] as const
