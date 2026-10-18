@@ -11,7 +11,7 @@ vi.mock('./auto-tool-routing.js', () => ({
 }))
 
 vi.mock('../../tools/built-in-tools.js', () => ({
-    getBuiltInMemoryToolKeys: () => [],
+    getBuiltInMemoryToolKeys: () => ['memory_search', 'memory_create', 'memory_patch', 'memory_delete'].map((name) => `builtin:utility::${name}`),
     getBuiltInToolKey: (name: string) => `builtin:utility::${name}`,
     hydrateBuiltInTools: (tools: RegistryAwareToolDefinition[]) => tools,
     makeSearchAvailableMcpToolsTool: () => ({
@@ -61,12 +61,18 @@ function preset(overrides: Partial<ExecutionPreset> = {}): ExecutionPreset {
     }
 }
 
-function registry() {
+function registry(includeMemory = false) {
     const tools = new Map([
         [manageMcpKey, tool('manage_mcp', manageMcpKey)],
         [readKey, { ...tool('read', readKey), annotations: { readOnlyHint: true } }],
         [writeKey, tool('write', writeKey)],
     ])
+    if (includeMemory) {
+        for (const name of ['memory_search', 'memory_create', 'memory_patch', 'memory_delete']) {
+            const key = `builtin:utility::${name}`
+            tools.set(key, { ...tool(name, key), annotations: { readOnlyHint: name === 'memory_search' } })
+        }
+    }
     return {
         listRegisteredTools: () => [...tools].map(([key, value]) => ({
             key,
@@ -134,6 +140,26 @@ describe('resolveExecutionTools selection', () => {
             readOnlyTools: true,
         }))
         expect(fixed.tools.map(({ name }) => name)).toEqual(['read'])
+    })
+
+    test('keeps memory creation available in Read Only routing and runtime memory tools', async () => {
+        const routed = await resolveExecutionTools(input({
+            toolRegistry: registry(true),
+            preset: preset({ autoToolRouting: true }),
+            autoToolRouting: true,
+            readOnlyTools: true,
+        }))
+        const routerInput = applyAutoToolRouting.mock.calls[0]?.[0] as { tools: RegistryAwareToolDefinition[] }
+        expect(routerInput.tools.map(({ name }) => name)).toEqual(['read', 'memory_search', 'memory_create'])
+        expect(routed.tools.map(({ name }) => name)).toEqual(['read', 'memory_search', 'memory_create'])
+
+        const fixed = await resolveExecutionTools(input({
+            toolRegistry: registry(true),
+            conversationId: 'conversation-2',
+            autoMemory: true,
+            readOnlyTools: true,
+        }))
+        expect(fixed.tools.map(({ name }) => name)).toEqual(['memory_search', 'memory_create'])
     })
 
     test('limits automatic routing candidates to an explicit routing catalogue', async () => {

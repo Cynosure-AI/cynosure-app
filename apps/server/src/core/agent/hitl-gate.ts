@@ -107,7 +107,7 @@ export class HITLGate {
 
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]))
     const annotationsByName = new Map(tools.map((tool) => [tool.name, tool.annotations]))
-    // Read Only chats are offered only read-only tools. This also covers tools
+    // Enforce Read Only tools and its explicit exceptions, including for tools
     // offered before the chat switched to Read Only during a run.
     if (permissionMode === 'read-only') {
       const blocked = toolCalls.filter((tc) => !isReadOnlyModeTool({ name: tc.function.name, annotations: annotationsByName.get(tc.function.name) }))
@@ -115,7 +115,7 @@ export class HITLGate {
         return {
           approved: false,
           denied: true,
-          reason: `This chat is in Read Only mode, so only read-only tools can run (blocked: ${[...new Set(blocked.map((tc) => tc.function.name))].join(', ')})`,
+          reason: `This chat is in Read Only mode, so only read-only tools, project planning, and memory creation can run (blocked: ${[...new Set(blocked.map((tc) => tc.function.name))].join(', ')})`,
         }
       }
     }
@@ -136,6 +136,7 @@ export class HITLGate {
     }
     const needsApproval = toolCalls.filter(
       (tc) => !specificallyApprovedCalls.has(tc.id)
+        && !(permissionMode === 'read-only' && tc.function.name === 'memory_create')
         && !isSystemAutoApprovedTool(tc.function.name)
         && !this.isAutoApproved(tc.function.name, annotationsByName.get(tc.function.name))
         && !sessionSet?.has(tc.function.name)

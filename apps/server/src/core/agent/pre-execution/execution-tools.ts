@@ -30,7 +30,7 @@ export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     plannedToolsetIds?: string[]
     /** userQuery already resolves the conversation, so routing should not fold in recent turns. */
     standaloneRoutingQuery?: boolean
-    /** Offer only read-only tools: the router and tool search never see the others. */
+    /** Offer tools allowed in Read Only mode, including its explicit exceptions. */
     readOnlyTools?: boolean
 }
 
