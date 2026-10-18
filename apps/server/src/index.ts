@@ -663,6 +663,15 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   await app.listen({ port: options.port, host: listenHost })
 
+  console.log(`
+--------------------------------
+   CCCCC  Y   Y  N   N   OOO
+  C        Y Y   NN  N  O   O
+  C         Y    N N N  O   O
+  C         Y    N  NN  O   O
+   CCCCC    Y    N   N   OOO
+--------------------------------
+`)
   console.log(`Cynosure server listening on ${formatListenAddress(options.host, options.port)}`)
 
   let isClosed = false
