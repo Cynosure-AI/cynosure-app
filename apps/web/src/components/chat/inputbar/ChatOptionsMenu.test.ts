@@ -208,7 +208,7 @@ describe('ChatOptionsMenu', () => {
     wrapper.unmount()
   })
 
-  test('selects a project in chat options and dismisses its chip', async () => {
+  test('selects a project in chat options and shows its name in the menu', async () => {
     chatStore.activeProjectId = null
     const wrapper = mount(ChatOptionsMenu, {
       attachTo: document.body,
@@ -225,7 +225,6 @@ describe('ChatOptionsMenu', () => {
     ;([...menu.querySelectorAll('button')].find(button => button.textContent?.includes('Garden Planner')) as HTMLButtonElement).click()
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="project-chip"]').text()).toContain('Garden Planner')
     expect(chatStore.setConversationProject).toHaveBeenCalledWith('project-1')
     expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
     await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
@@ -234,11 +233,6 @@ describe('ChatOptionsMenu', () => {
     const entry = [...menu.querySelectorAll('button')].find(button => button.textContent?.trim().startsWith('Project'))!
     expect(entry.textContent).toContain('Garden Planner')
     await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
-    await wrapper.get('[aria-label="Remove project Garden Planner from this chat"]').trigger('click')
-    await flushPromises()
-    expect(chatStore.setConversationProject).toHaveBeenLastCalledWith(null)
-    expect(wrapper.find('[data-testid="project-chip"]').exists()).toBe(false)
-    expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
     wrapper.unmount()
     chatStore.activeProjectId = null
   })

@@ -24,6 +24,7 @@ const chatStore = reactive({
   runNextQueuedMessage: vi.fn(),
   createConversation: vi.fn<() => Promise<string>>(),
   activeProjectId: null as string | null,
+  setConversationProject: vi.fn(async (projectId: string | null) => { chatStore.activeProjectId = projectId }),
 })
 const projects = [{ id: 'project-1', name: 'Garden Planner', rootPath: '/srv/garden' }]
 
@@ -34,6 +35,7 @@ vi.mock('../../stores/projects.store', () => ({
   useProjectsStore: () => ({
     get: (id: string | null) => projects.find(project => project.id === id),
     ensureLoaded: vi.fn().mockResolvedValue(undefined),
+    load: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 vi.mock('../../stores/provider.store', () => ({
@@ -49,9 +51,11 @@ vi.mock('../../composables/useSlashCommands', () => ({
   useSlashCommands: () => ({ commands: slashCommands, prepare: vi.fn() }),
 }))
 
-function mountInputBar(attachTo?: Element) {
+function mountInputBar(attachTo?: Element, hasSelectionTabs = false) {
   return mount(InputBar, {
     attachTo,
+    props: { hasSelectionTabs },
+    slots: { 'selection-tabs': '<span data-testid="selected-tool">Test tool</span>' },
     global: {
       stubs: {
         InputToolbar: true,
@@ -70,6 +74,8 @@ describe('InputBar drafts', () => {
   beforeEach(() => {
     localStorage.clear()
     chatStore.activeConversationId = 'conversation-1'
+    chatStore.activeProjectId = null
+    chatStore.setConversationProject.mockClear()
     chatStore.draftDiscardRevision = 0
     chatStore.activeAgentId = 'agent-1'
     chatStore.isConversationLocked = false
@@ -87,6 +93,41 @@ describe('InputBar drafts', () => {
       return 'conversation-1'
     })
     vi.spyOn(api.chat, 'listStagedAttachments').mockResolvedValue([])
+  })
+
+  test.each([
+    { project: false, tools: false },
+    { project: true, tools: false },
+    { project: false, tools: true },
+    { project: true, tools: true },
+  ])('shows the shared bottom bar for project=$project tools=$tools', ({ project, tools }) => {
+    chatStore.activeProjectId = project ? 'project-1' : null
+    const wrapper = mountInputBar(undefined, tools)
+    const bar = wrapper.find('[data-testid="composer-tabs"]')
+    expect(bar.exists()).toBe(project || tools)
+    if (!project && !tools) {
+      expect(wrapper.get('.context-ring-slot').classes()).not.toContain('mb-6')
+      wrapper.unmount()
+      return
+    }
+    expect(bar.classes()).toContain(tools ? 'w-full' : 'w-fit')
+    expect(bar.find('[data-testid="project-chip"]').exists()).toBe(project)
+    expect(bar.find('[data-testid="selected-tool"]').exists()).toBe(tools)
+    expect(bar.find('[data-testid="composer-tabs-divider"]').exists()).toBe(project && tools)
+    expect(wrapper.get('.context-ring-slot').classes().includes('mb-6')).toBe(project || tools)
+    wrapper.unmount()
+  })
+
+  test('removes the project from the bottom bar while preserving tools', async () => {
+    chatStore.activeProjectId = 'project-1'
+    const wrapper = mountInputBar(undefined, true)
+    await wrapper.get('[aria-label="Remove project Garden Planner from this chat"]').trigger('click')
+    await flushPromises()
+    expect(chatStore.setConversationProject).toHaveBeenCalledWith(null)
+    expect(wrapper.find('[data-testid="project-chip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="composer-tabs-divider"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="selected-tool"]').isVisible()).toBe(true)
+    wrapper.unmount()
   })
 
   test('restores the latest conversation draft after the composer remounts', async () => {
@@ -251,7 +292,7 @@ describe('InputBar drafts', () => {
 
   test('shows MCP entries below the composer and lifts the context ring to match', async () => {
     const wrapper = mountInputBar(document.body)
-    expect(wrapper.get('[data-testid="composer-tabs"]').isVisible()).toBe(false)
+    expect(wrapper.find('[data-testid="composer-tabs"]').exists()).toBe(false)
     expect(wrapper.get('.context-ring-slot').classes()).not.toContain('mb-6')
 
     await wrapper.setProps({ hasSelectionTabs: true })

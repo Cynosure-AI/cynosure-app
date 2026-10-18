@@ -14,6 +14,8 @@ export interface SelectOption {
   label: string;
   imgSrc?: string | null;
   iconName?: string;
+  /** Optional color classes for the option icon and selected trigger icon. */
+  iconClass?: string;
   tooltip?: string;
   disabled?: boolean;
   /** Small badge shown to the right of the label (e.g. "+3") */
@@ -62,6 +64,8 @@ const props = withDefaults(
     selectedLabel?: string;
     /** Render the trigger like clickable text instead of a boxed form control. */
     bareTrigger?: boolean;
+    /** Optional color classes for the trigger chevron. */
+    chevronClass?: string;
     /** Render only nearby rows in long dropdowns. */
     virtualized?: boolean;
     /**
@@ -84,6 +88,7 @@ const props = withDefaults(
     showSelectedTag: true,
     selectedLabel: undefined,
     bareTrigger: false,
+    chevronClass: "text-ink-muted",
     virtualized: false,
     size: "sm",
   },
@@ -405,7 +410,8 @@ onBeforeUnmount(() =>
         <Icon
           v-else-if="selectedOption?.iconName"
           :icon="selectedOption.iconName"
-          class="w-3.5 h-3.5 text-ink-secondary"
+          class="w-3.5 h-3.5"
+          :class="selectedOption.iconClass || 'text-ink-secondary'"
         />
         <Icon
           v-else
@@ -441,8 +447,8 @@ onBeforeUnmount(() =>
       <!-- Chevron -->
       <Icon
         icon="lucide:chevron-down"
-        class="w-3 h-3 text-ink-muted shrink-0 transition-transform duration-150"
-        :class="{ 'rotate-180': isOpen }"
+        class="w-3 h-3 shrink-0 transition-transform duration-150"
+        :class="[chevronClass, { 'rotate-180': isOpen }]"
       />
     </button>
 
@@ -566,7 +572,7 @@ onBeforeUnmount(() =>
                 v-else-if="opt.iconName"
                 :icon="opt.iconName"
                 class="w-3.5 h-3.5"
-                :class="opt.disabled ? 'text-ink-faint' : 'text-ink-secondary'"
+                :class="opt.disabled ? 'text-ink-faint' : opt.iconClass || 'text-ink-secondary'"
               />
             </span>
 
