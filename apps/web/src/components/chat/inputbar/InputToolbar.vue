@@ -11,6 +11,7 @@ import ProviderModelSelect from "../../shared/ProviderModelSelect.vue";
 import SplitButton from "../../shared/SplitButton.vue";
 import ChatOptionsMenu from "./ChatOptionsMenu.vue";
 import ThinkingModeButton from "./ThinkingModeButton.vue";
+import PermissionModeSelect from "./PermissionModeSelect.vue";
 import ModelSelectorModal from "../modals/ModelSelectorModal.vue";
 import MediaSettingsButton from "./MediaSettingsButton.vue";
 import type { MediaGenerationSettings } from '@shared/types';
@@ -201,7 +202,9 @@ async function toggleMic(): Promise<void> {
       @attach="emit('attach')"
       @browse-library="emit('browseLibrary')"
       @browse-project="emit('browseProject')"
-    />
+    >
+      <PermissionModeSelect />
+    </ChatOptionsMenu>
 
     <slot />
 

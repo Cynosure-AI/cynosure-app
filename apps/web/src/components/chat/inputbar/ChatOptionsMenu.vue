@@ -213,6 +213,7 @@ onBeforeUnmount(() => {
         class="h-5 w-5"
       />
     </button>
+    <slot />
     <span
       v-if="activeProject"
       class="inline-flex min-w-0 max-w-48 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-theme-200"
