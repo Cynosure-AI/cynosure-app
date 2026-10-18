@@ -18,6 +18,7 @@ import ToolExecutionList from './ToolExecutionList.vue'
 import SubAgentDelegationCard from './SubAgentDelegationCard.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import { useToolPresentation } from '../../composables/useToolPresentation'
+import { useStickyScroll } from '../../composables/useStickyScroll'
 import RichContent from '../shared/RichContent.vue'
 import TypewriterText from '../shared/TypewriterText.vue'
 import { chatIntroTimeline } from './chatIntro'
@@ -54,6 +55,13 @@ async function forkMessage(messageId: string): Promise<void> {
 }
 
 const scrollContainer = ref<HTMLDivElement | null>(null)
+const scrollContent = ref<HTMLDivElement | null>(null)
+const {
+  onScroll: onMainScroll,
+  stopFollowing: stopFollowingMain,
+  scrollToBottom: scrollMainToBottom,
+  scrollToBottomIfFollowing: scrollMainToBottomIfFollowing,
+} = useStickyScroll(scrollContainer, scrollContent)
 const toolPresentation = useToolPresentation()
 const lightboxSrc = ref<string | null>(null)
 /** Explicit open/closed choices per sub-agent run; unset runs follow isRunExpanded. */
@@ -106,6 +114,7 @@ function expandSearchResultContainer(messageId: string): void {
 }
 
 function scrollToSearchResult(messageId: string): void {
+  stopFollowingMain()
   expandSearchResultContainer(messageId)
   nextTick(() => {
     findSearchMessageElement(messageId)?.scrollIntoView({
@@ -216,21 +225,6 @@ function isNearScrollBottom(el: HTMLElement, threshold = SCROLL_BOTTOM_THRESHOLD
 
 function scrollElementToBottom(el: HTMLElement): void {
   el.scrollTop = el.scrollHeight
-}
-
-function isMainNearBottom(): boolean {
-  return scrollContainer.value ? isNearScrollBottom(scrollContainer.value) : true
-}
-
-function scrollMainToBottom(): void {
-  nextTick(() => {
-    if (scrollContainer.value) scrollElementToBottom(scrollContainer.value)
-  })
-}
-
-function scrollMainToBottomIfNear(): void {
-  if (!isMainNearBottom()) return
-  scrollMainToBottom()
 }
 
 const generatingTitle = computed(() => chatStore.activePostActions.has('generating-title'))
@@ -446,15 +440,15 @@ watch([
   () => chatStore.messages.at(-1)?.videoDataUrls?.length,
   () => agentStore.executionSteps.length,
 ], () => {
-  scrollMainToBottomIfNear()
+  scrollMainToBottomIfFollowing()
   scrollSubAgentBoxesIfNear()
 })
-watch(() => agentStore.pendingHITL, scrollMainToBottomIfNear)
+watch(() => agentStore.pendingHITL, scrollMainToBottomIfFollowing)
 watch([
   () => chatStore.activeQuickResponses.length,
   generatingQuickResponses,
   generatingTitle,
-], scrollMainToBottomIfNear)
+], scrollMainToBottomIfFollowing)
 // When loading finishes the spinner is replaced by rendered messages — scroll then
 watch(() => chatStore.loadingMessages, (isLoading) => {
   if (isLoading) {
@@ -505,6 +499,7 @@ onMounted(() => {
   <div
     ref="scrollContainer"
     class="flex-1 overflow-y-auto"
+    @scroll="onMainScroll"
   >
     <div
       v-if="forkError"
@@ -759,6 +754,7 @@ onMounted(() => {
     <!-- Unified timeline -->
     <div
       v-else
+      ref="scrollContent"
       class="max-w-5xl mx-auto py-4"
     >
       <template
