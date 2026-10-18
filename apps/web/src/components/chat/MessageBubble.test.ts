@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -25,6 +25,32 @@ describe('MessageBubble', () => {
       },
     })
   }
+
+  test.each([
+    { agentId: undefined, path: '/agents/cyno' },
+    { agentId: null, path: '/agents/cyno' },
+    { agentId: 'custom-agent', path: '/agents/custom-agent' },
+  ])('opens agent details from the avatar for agentId=$agentId', async ({ agentId, path }) => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/chat', component: { template: '<div />' } },
+        { path: '/agents/cyno', name: 'cyno', component: { template: '<div />' } },
+        { path: '/agents/:id', name: 'agent-detail', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/chat')
+    const wrapper = mount(MessageBubble, {
+      props: { role: 'assistant', content: 'Hello', agentId },
+      global: { plugins: [router], stubs: { Icon: true } },
+    })
+
+    await wrapper.get('button[aria-label="Open agent details"]').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe(path)
+    expect(router.currentRoute.value.name).toBe(agentId ? 'agent-detail' : 'cyno')
+  })
 
   test.each(['user', 'assistant'] as const)('shows a time-only row label for %s messages', (role) => {
     const createdAt = new Date(2026, 8, 12, 14, 45).getTime()

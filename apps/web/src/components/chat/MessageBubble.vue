@@ -254,13 +254,12 @@ const imageGridClass = computed(() => {
       v-if="!isUser"
       class="shrink-0 mt-0.5 hidden md:flex flex-col items-center gap-0.5"
     >
-      <div
-        class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-theme-700/50 transition-opacity"
-        :class="[
-          agentIconUrl ? 'bg-theme-800' : 'bg-linear-to-br from-theme-700 to-theme-900 text-theme-300',
-          agentId ? 'cursor-pointer hover:opacity-80' : ''
-        ]"
-        @click="agentId ? router.push(`/agents/${agentId}`) : undefined"
+      <button
+        type="button"
+        aria-label="Open agent details"
+        class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-theme-700/50 transition-opacity cursor-pointer hover:opacity-80"
+        :class="agentIconUrl ? 'bg-theme-800' : 'bg-linear-to-br from-theme-700 to-theme-900 text-theme-300'"
+        @click="router.push(agentId ? `/agents/${agentId}` : '/agents/cyno')"
       >
         <img
           v-if="agentIconUrl"
@@ -274,7 +273,7 @@ const imageGridClass = computed(() => {
           alt="Cynosure"
           class="w-full h-full object-contain"
         >
-      </div>
+      </button>
       <span
         v-if="agentName"
         class="text-[10px] text-ink-muted max-w-15 truncate leading-tight"
