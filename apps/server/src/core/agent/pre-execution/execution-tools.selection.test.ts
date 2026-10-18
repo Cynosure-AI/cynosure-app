@@ -64,7 +64,7 @@ function preset(overrides: Partial<ExecutionPreset> = {}): ExecutionPreset {
 function registry() {
     const tools = new Map([
         [manageMcpKey, tool('manage_mcp', manageMcpKey)],
-        [readKey, tool('read', readKey)],
+        [readKey, { ...tool('read', readKey), annotations: { readOnlyHint: true } }],
         [writeKey, tool('write', writeKey)],
     ])
     return {
@@ -115,6 +115,25 @@ describe('resolveExecutionTools selection', () => {
             preferredToolKeys: [manageMcpKey],
         }))
         expect(enabled.tools.map(({ name }) => name)).toEqual(['manage_mcp', 'read', 'write'])
+    })
+
+    test('offers a Read Only chat only read-only tools, whether routed, pinned or fixed', async () => {
+        const routed = await resolveExecutionTools(input({
+            preset: preset({ autoToolRouting: true }),
+            autoToolRouting: true,
+            preferredToolKeys: [writeKey, manageMcpKey],
+            readOnlyTools: true,
+        }))
+        const routerInput = applyAutoToolRouting.mock.calls[0]?.[0] as { tools: RegistryAwareToolDefinition[] }
+        expect(routerInput.tools.map(({ name }) => name)).toEqual(['read'])
+        expect(routed.tools.map(({ name }) => name)).toEqual(['read'])
+
+        const fixed = await resolveExecutionTools(input({
+            preset: preset({ tools: [readKey, writeKey] }),
+            conversationId: 'conversation-2',
+            readOnlyTools: true,
+        }))
+        expect(fixed.tools.map(({ name }) => name)).toEqual(['read'])
     })
 
     test('limits automatic routing candidates to an explicit routing catalogue', async () => {

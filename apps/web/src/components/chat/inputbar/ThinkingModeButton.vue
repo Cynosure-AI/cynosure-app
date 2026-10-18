@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ReasoningEffort } from '@shared/types'
+import type { PermissionMode, ReasoningEffort } from '@shared/types'
 import { useChatStore } from '../../../stores/chat.store'
 import HoverMenu from '../../shared/HoverMenu.vue'
 import ReasoningSlider from '../../shared/ReasoningSlider.vue'
+import PermissionModeOptions from './PermissionModeOptions.vue'
 
 const chatStore = useChatStore()
 
@@ -95,12 +96,24 @@ const needleAngle = computed(
 const needleColor = computed(
   () => gaugeColors[selectedIndex.value] ?? gaugeColors[0]
 )
+
+const permissionBadge = computed(() => {
+  if (chatStore.permissionMode === 'full') return { mode: 'full', label: 'Full Access', ariaLabel: 'full tool access' }
+  if (chatStore.permissionMode === 'read-only') return { mode: 'read-only', label: 'Read Only', ariaLabel: 'read-only tools' }
+  return null
+})
+
+function setPermissionMode(mode: PermissionMode): void {
+  chatStore.setPermissionMode(mode).catch((err: unknown) => {
+    console.error('[chat] Failed to change tool permissions:', err)
+  })
+}
 </script>
 
 <template>
   <HoverMenu
     placement="above"
-    :max-width="292"
+    :max-width="304"
     :close-delay="240"
   >
     <template #trigger="{ open, toggle }">
@@ -109,8 +122,8 @@ const needleColor = computed(
         class="relative shrink-0 rounded-xl p-2.5 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
         aria-haspopup="dialog"
         :aria-expanded="open"
-        :aria-label="`Reasoning level: ${selectedOption.label}`"
-        :title="`Reasoning: ${selectedOption.label}`"
+        :aria-label="`Reasoning level: ${selectedOption.label}${permissionBadge ? `, ${permissionBadge.ariaLabel}` : ''}`"
+        :title="`Reasoning: ${selectedOption.label}${permissionBadge ? ` · ${permissionBadge.label}` : ''}`"
         @click.stop="toggle"
       >
         <svg
@@ -165,16 +178,40 @@ const needleColor = computed(
             :fill="needleColor"
           />
         </svg>
+        <span
+          v-if="permissionBadge"
+          class="permission-badge"
+          :class="`permission-badge--${permissionBadge.mode}`"
+          aria-hidden="true"
+        >
+          <svg
+            v-if="permissionBadge.mode === 'full'"
+            viewBox="0 0 24 24"
+          >
+            <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+          </svg>
+          <svg
+            v-else
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 5C6.5 5 2.5 12 2.5 12s4 7 9.5 7 9.5-7 9.5-7-4-7-9.5-7zm0 10.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" />
+          </svg>
+        </span>
       </button>
     </template>
 
     <template #content>
       <div
-        class="w-[17rem] px-2 py-1.5"
+        class="w-[18rem] px-2 py-1.5"
         role="dialog"
-        aria-label="Reasoning level"
+        aria-label="Run settings"
         @click.stop
       >
+        <PermissionModeOptions
+          :model-value="chatStore.permissionMode"
+          @update:model-value="setPermissionMode"
+        />
+        <div class="my-3 border-t border-theme-700/50" />
         <ReasoningSlider
           :model-value="selectedLevel"
           :levels="levels"
@@ -186,6 +223,33 @@ const needleColor = computed(
 </template>
 
 <style scoped>
+.permission-badge {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: flex;
+  width: 0.8rem;
+  height: 0.8rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1.5px var(--color-theme-900);
+}
+
+.permission-badge--full {
+  background: #f59e0b;
+}
+
+.permission-badge--read-only {
+  background: #38bdf8;
+}
+
+.permission-badge svg {
+  width: 0.5rem;
+  height: 0.5rem;
+  fill: var(--color-theme-900);
+}
+
 .reasoning-gauge {
   width: 1.35rem;
   height: 1.15rem;

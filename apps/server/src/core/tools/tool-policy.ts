@@ -39,6 +39,15 @@ export function isAnnotationAutoApprovedTool(annotations?: ToolBehaviorAnnotatio
   return annotations?.readOnlyHint === true && annotations.destructiveHint !== true
 }
 
+/**
+ * Tools a Read Only chat may use: tools that declare themselves read-only, and
+ * internal tools, which only touch the run's own state (plans, tool discovery,
+ * memory and attachment reads, delegation to sub-agents that inherit the mode).
+ */
+export function isReadOnlyModeTool(tool: { name: string; annotations?: ToolBehaviorAnnotations }): boolean {
+  return isInternalTool(tool.name) || isAnnotationAutoApprovedTool(tool.annotations)
+}
+
 export function isVisibleExecutionTool(toolName: string): boolean {
   return Boolean(toolName)
 }

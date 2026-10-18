@@ -131,7 +131,13 @@ export interface ChatEventDraft {
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+/**
+ * What a chat's runs may do with tools: only read-only tools (read-only), saved
+ * approval policy (auto), or every tool without asking (full).
+ */
+export type PermissionMode = 'read-only' | 'auto' | 'full'
+
+export type ReasoningEffort ='minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 /** Server-wide chat behavior, shared by the web UI, channels, and scheduled runs. */
 export interface ChatRunSettings {
@@ -324,6 +330,7 @@ export interface ConversationMessagesResponse {
   conversationProjectId?: string | null
   /** The conversation is an unsaved incognito chat. */
   temporary?: boolean
+  permissionMode: PermissionMode
 }
 
 export type ProjectTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done'

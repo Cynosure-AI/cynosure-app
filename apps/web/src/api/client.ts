@@ -16,7 +16,7 @@ import type {
   UserProfile,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, PermissionMode, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
 
 export interface ConversationRow {
   id: string
@@ -127,11 +127,13 @@ export const api = {
   },
 
   chat: {
-    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string, projectId?: string | null, temporary?: boolean) =>
+    createConversation: (title?: string, agentId?: string, maWorkspaceId?: string, projectId?: string | null, temporary?: boolean, permissionMode?: PermissionMode) =>
       post<ConversationDto>(
         '/api/chat/conversations',
-        { title, agentId, maWorkspaceId, projectId: projectId || undefined, temporary: temporary || undefined }
+        { title, agentId, maWorkspaceId, projectId: projectId || undefined, temporary: temporary || undefined, permissionMode }
       ),
+    setPermissionMode: (conversationId: string, mode: PermissionMode) =>
+      put<{ permissionMode: PermissionMode }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/permission-mode`, { mode }),
     saveConversation: (conversationId: string) =>
       post<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/save`),
     /** Delete an incognito chat. `keepalive` lets the request outlive a closing tab. */

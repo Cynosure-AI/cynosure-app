@@ -676,6 +676,21 @@ const MIGRATIONS: SchemaMigration[] = [
             if (!columns.has('temporary')) db.exec('ALTER TABLE conversations ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
         },
     },
+    {
+        version: 33,
+        description: 'Store each chat\'s tool permission mode; the all-tools session approval becomes full access',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(conversations)') as Array<{ name: string }>).map((column) => column.name))
+            if (!columns.has('permission_mode')) {
+                db.exec("ALTER TABLE conversations ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'auto' CHECK(permission_mode IN ('read-only', 'auto', 'full'))")
+            }
+            db.exec(`
+                UPDATE conversations SET permission_mode = 'full'
+                WHERE id IN (SELECT conversation_id FROM session_tool_approvals WHERE tool_name = '*');
+                DELETE FROM session_tool_approvals WHERE tool_name = '*';
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

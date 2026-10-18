@@ -1,8 +1,9 @@
 import type { ToolBehaviorAnnotations, ToolCall, ToolDefinition } from '../gateway/providers/base.provider.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
-import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
+import { isAnnotationAutoApprovedTool, isReadOnlyModeTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
 import { fileToolNeedsFolderApproval, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
+import { getPermissionMode } from '../chat/permission-mode.js'
 
 export interface ApprovalResult {
   approved: boolean
@@ -14,7 +15,6 @@ export class HITLGate {
   private eventBus = getEventBus()
   private pendingByConversation = new Map<string, string>() // taskId → conversationId
   private sessionApprovals = new Map<string, Set<string>>() // conversationId → Set<toolName>
-  private readonly allToolsApproval = '*'
 
   /** Returns the set of conversationIds that currently have a pending HITL request. */
   getPendingConversationIds(): Set<string> {
@@ -102,11 +102,27 @@ export class HITLGate {
     conversationId?: string,
     tools: ToolDefinition[] = []
   ): Promise<ApprovalResult> {
+    const permissionMode = getPermissionMode(conversationId)
+    if (permissionMode === 'full') return { approved: true }
+
+    const toolsByName = new Map(tools.map((tool) => [tool.name, tool]))
+    const annotationsByName = new Map(tools.map((tool) => [tool.name, tool.annotations]))
+    // Read Only chats are offered only read-only tools. This also covers tools
+    // offered before the chat switched to Read Only during a run.
+    if (permissionMode === 'read-only') {
+      const blocked = toolCalls.filter((tc) => !isReadOnlyModeTool({ name: tc.function.name, annotations: annotationsByName.get(tc.function.name) }))
+      if (blocked.length) {
+        return {
+          approved: false,
+          denied: true,
+          reason: `This chat is in Read Only mode, so only read-only tools can run (blocked: ${[...new Set(blocked.map((tc) => tc.function.name))].join(', ')})`,
+        }
+      }
+    }
+
     // A folder card authorizes that file tool invocation. All other calls use
     // the normal tool approval policy.
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
-    const toolsByName = new Map(tools.map((tool) => [tool.name, tool]))
-    const annotationsByName = new Map(tools.map((tool) => [tool.name, tool.annotations]))
     const specificallyApprovedCalls = new Set<string>()
     for (const tc of toolCalls) {
       const tool = toolsByName.get(tc.function.name) as (ToolDefinition & { namespaceId?: string; originalName?: string }) | undefined
@@ -122,7 +138,6 @@ export class HITLGate {
       (tc) => !specificallyApprovedCalls.has(tc.id)
         && !isSystemAutoApprovedTool(tc.function.name)
         && !this.isAutoApproved(tc.function.name, annotationsByName.get(tc.function.name))
-        && !sessionSet?.has(this.allToolsApproval)
         && !sessionSet?.has(tc.function.name)
     )
 
