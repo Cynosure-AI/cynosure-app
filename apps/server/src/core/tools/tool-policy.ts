@@ -40,12 +40,14 @@ export function isAnnotationAutoApprovedTool(annotations?: ToolBehaviorAnnotatio
 }
 
 /**
- * Tools a Read Only chat may use: tools that declare themselves read-only, and
+ * Tools a Read Only chat may use: tools that declare themselves read-only,
  * internal tools, which only touch the run's own state (plans, tool discovery,
- * memory and attachment reads, delegation to sub-agents that inherit the mode).
+ * memory and attachment reads, delegation to sub-agents that inherit the mode),
+ * and project tools, since keeping the brief and task board current is
+ * preparation rather than changing the user's data.
  */
 export function isReadOnlyModeTool(tool: { name: string; annotations?: ToolBehaviorAnnotations }): boolean {
-  return isInternalTool(tool.name) || isAnnotationAutoApprovedTool(tool.annotations)
+  return isSystemAutoApprovedTool(tool.name) || isAnnotationAutoApprovedTool(tool.annotations)
 }
 
 export function isVisibleExecutionTool(toolName: string): boolean {

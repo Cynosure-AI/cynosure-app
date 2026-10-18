@@ -131,4 +131,12 @@ describe('HITLGate permission mode', () => {
     expect(result.approved).toBe(false)
     expect(result.reason).toContain('blocked: shell')
   })
+
+  test('read only still lets the agent keep the project brief and task board current', async () => {
+    const gate = new HITLGate()
+    permissionModes.set('conv-1', 'read-only')
+
+    await expect(gate.requestApproval('task-1', [call('project_brief_update'), call('project_task_create')], undefined, 'conv-1'))
+      .resolves.toEqual({ approved: true })
+  })
 })

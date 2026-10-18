@@ -9,7 +9,7 @@ const modes: Array<{ value: PermissionMode; label: string; description: string; 
   {
     value: 'read-only',
     label: 'Read Only',
-    description: 'Offers only tools declared read-only.',
+    description: 'Offers only read-only tools, plus project planning.',
     icon: 'lucide:eye',
   },
   {
