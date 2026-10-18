@@ -7,6 +7,7 @@ import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
 import ComposerTabs from './inputbar/ComposerTabs.vue'
+import ProjectIcon from '../project/ProjectIcon.vue'
 import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
@@ -20,7 +21,7 @@ import { api } from '../../api/client'
 import type { ProjectFileContent, StagedChatAttachment } from '../../api/types'
 import { useProjectsStore } from '../../stores/projects.store'
 
-defineProps<{ hasSelectionTabs?: boolean }>()
+const props = defineProps<{ hasSelectionTabs?: boolean }>()
 
 const chatStore = useChatStore()
 const providerStore = useProviderStore()
@@ -70,6 +71,23 @@ const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
 const showProjectFiles = ref(false)
 const activeProject = computed(() => projectsStore.get(chatStore.activeProjectId))
+const hasBottomBar = computed(() => Boolean(activeProject.value) || props.hasSelectionTabs)
+const projectRemovalError = ref('')
+const removingProject = ref(false)
+watch(() => chatStore.activeProjectId, () => { projectRemovalError.value = '' })
+async function removeProject(): Promise<void> {
+  projectRemovalError.value = ''
+  removingProject.value = true
+  try {
+    await chatStore.setConversationProject(null)
+    void projectsStore.load().catch(() => undefined)
+  } catch (cause) {
+    projectRemovalError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    removingProject.value = false
+  }
+}
+
 const projectSourcePrefix = computed(() => `project:${chatStore.activeProjectId}:`)
 /** Project-relative paths of project files already in the draft. */
 const attachedProjectPaths = computed(() =>
@@ -883,9 +901,46 @@ defineExpose({ processFiles, focus, sendSuggestion })
           @media-settings="mediaSettings = $event"
         />
       </div>
-      <ComposerTabs v-show="hasSelectionTabs">
+      <ComposerTabs
+        v-if="hasBottomBar"
+        :has-project="Boolean(activeProject)"
+        :has-tools="hasSelectionTabs"
+      >
+        <template #project>
+          <span
+            v-if="activeProject"
+            class="inline-flex h-5 min-w-0 max-w-48 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 text-xs text-theme-200"
+            data-testid="project-chip"
+            :title="`Project: ${activeProject.name}`"
+          >
+            <ProjectIcon
+              :project="activeProject"
+              class="h-3.5 w-3.5 shrink-0"
+            />
+            <span class="truncate">{{ activeProject.name }}</span>
+            <button
+              type="button"
+              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-50"
+              :aria-label="`Remove project ${activeProject.name} from this chat`"
+              :disabled="removingProject"
+              @click="removeProject"
+            >
+              <Icon
+                icon="lucide:x"
+                class="h-3 w-3"
+              />
+            </button>
+          </span>
+        </template>
         <slot name="selection-tabs" />
       </ComposerTabs>
+      <p
+        v-if="projectRemovalError"
+        role="alert"
+        class="mt-1 px-4 text-xs text-status-danger"
+      >
+        {{ projectRemovalError }}
+      </p>
     </div>
 
     <FileLibraryModal
@@ -918,7 +973,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
          ring itself to the column's bottom-right while the composer is centered. -->
     <div
       class="context-ring-slot hidden sm:flex w-10 items-center justify-center"
-      :class="{ 'mb-6': hasSelectionTabs }"
+      :class="{ 'mb-6': hasBottomBar }"
     >
       <div class="context-ring-anchor flex w-10 justify-center">
         <ContextRing />

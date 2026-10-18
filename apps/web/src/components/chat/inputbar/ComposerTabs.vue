@@ -1,9 +1,29 @@
+<script setup lang="ts">
+defineProps<{ hasTools?: boolean; hasProject?: boolean }>()
+</script>
+
 <template>
   <div
     class="composer-tabs relative z-10 ml-4 mt-0.5 flex h-6.5 max-w-[calc(100%-2rem)] items-center px-4 pb-0.5 text-xs text-theme-200"
+    :class="hasTools ? 'w-full' : 'w-fit'"
+    role="group"
+    aria-label="Chat project and selected tools"
     data-testid="composer-tabs"
   >
-    <slot />
+    <div
+      v-if="hasProject"
+      class="flex min-w-0 shrink-0 items-center"
+      :class="hasTools ? 'max-w-[45%]' : 'max-w-full'"
+    >
+      <slot name="project" />
+    </div>
+    <span
+      v-if="hasProject && hasTools"
+      class="mx-2 h-3.5 w-px shrink-0 bg-theme-600"
+      aria-hidden="true"
+      data-testid="composer-tabs-divider"
+    />
+    <slot v-if="hasTools" />
   </div>
 </template>
 
