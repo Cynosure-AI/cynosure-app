@@ -287,7 +287,7 @@ function shouldServeSpa(request: FastifyRequest): boolean {
   return accept.includes('text/html') || accept.includes('*/*')
 }
 
-async function registerWebUi(app: FastifyInstance, startedAt: string, startupError?: StartupError): Promise<void> {
+async function registerWebUi(app: FastifyInstance, startedAt: string, startupError?: StartupError): Promise<boolean> {
   const webDist = resolveWebDist()
 
   app.get('/api', async () => getServerInfo(startedAt, startupError))
@@ -295,7 +295,7 @@ async function registerWebUi(app: FastifyInstance, startedAt: string, startupErr
   if (!webDist) {
     app.get('/', async () => getServerInfo(startedAt, startupError))
     app.log.warn('Web UI dist not found. Build cynosure-web or set CYNOSURE_WEB_DIST to serve the UI at /.')
-    return
+    return false
   }
 
   await app.register(fastifyStatic, {
@@ -316,6 +316,7 @@ async function registerWebUi(app: FastifyInstance, startedAt: string, startupErr
     const html = await readFile(join(webDist, 'index.html'), 'utf8')
     return reply.type('text/html; charset=utf-8').send(html)
   })
+  return true
 }
 
 /** Seed starter folders on first launch, then start filesystem watchers for all memory folders. */
@@ -625,7 +626,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
     }
   })
 
-  await registerWebUi(app, startedAt)
+  const webUiAvailable = await registerWebUi(app, startedAt)
 
   loadSavedProviders()
   // Model pickers wait on this index before they can list models, so fetch it
@@ -663,16 +664,28 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   await app.listen({ port: options.port, host: listenHost })
 
-  console.log(`
---------------------------------
-   CCCCC  Y   Y  N   N   OOO
-  C        Y Y   NN  N  O   O
-  C         Y    N N N  O   O
-  C         Y    N  NN  O   O
-   CCCCC    Y    N   N   OOO
---------------------------------
-`)
-  console.log(`Cynosure server listening on ${formatListenAddress(options.host, options.port)}`)
+  const useColor = Boolean(process.stdout.isTTY)
+    && process.env.TERM !== 'dumb'
+    && process.env.NO_COLOR === undefined
+  const color = (code: number, text: string) => useColor ? `\u001b[${code}m${text}\u001b[0m` : text
+
+  console.log(color(36, String.raw`
+   ____  __   __  _   _    ___    ____    _   _   ____    _____
+  / ___| \ \ / / | \ | |  / _ \  / ___|  | | | | |  _ \  | ____|
+ | |      \ V /  |  \| | | | | | \___ \  | | | | | |_) | |  _|
+ | |___    | |   | |\  | | |_| |  ___) | | |_| | |  _ <  | |___
+  \____|   |_|   |_| \_|  \___/  |____/   \___/  |_| \_\ |_____|
+`) + color(2, `
+  C Y N O S U R E   /   AI workspace   /   v${APP_VERSION}
+  ------------------------------------------------------------
+`))
+  const baseUrl = formatListenAddress(options.host, options.port)
+  console.log(color(32, 'Cynosure server ready'))
+  console.log(webUiAvailable
+    ? `  Web UI:   ${baseUrl}/`
+    : '  Web UI:   unavailable (build cynosure-web or set CYNOSURE_WEB_DIST)')
+  console.log(`  API:      ${baseUrl}/api`)
+  console.log(`  API docs: ${baseUrl}/docs`)
 
   let isClosed = false
 
