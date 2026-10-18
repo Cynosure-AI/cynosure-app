@@ -909,7 +909,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
         <template #project>
           <span
             v-if="activeProject"
-            class="inline-flex h-5 min-w-0 max-w-48 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 text-xs text-theme-200"
+            class="inline-flex h-full min-w-0 max-w-48 items-center gap-1.5 text-xs text-theme-200"
             data-testid="project-chip"
             :title="`Project: ${activeProject.name}`"
           >
