@@ -1,11 +1,11 @@
 import { promises as fs, createWriteStream } from 'node:fs';
 import * as path from 'node:path';
-import { EOL } from 'node:os';
 import sharp from 'sharp';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
 import { z } from 'zod';
 import { listEffectiveFileAccessRoots, resolveFileAccessPath } from './file-access-policy.js';
+import { DEFAULT_READ_LINES, applyFileEdits, compactDiff, fileGlobToRegExp, grepText, renderTextWindow, type ReadWindow } from './file-text.js';
 import type { ToolDefinition, ToolResult, ToolResultContent } from '../../gateway/providers/base.provider.js';
 
 type SortBy = 'name' | 'size' | 'modified';
@@ -24,6 +24,8 @@ interface TreeEntry {
     type: FileEntry['type'];
     size?: number;
     children?: TreeEntry[];
+    /** Children left out once the listing reached its entry limit. */
+    omittedChildren?: number;
 }
 
 const DEFAULT_EXCLUDE_PATTERNS = [
@@ -52,6 +54,13 @@ const DEFAULT_EXCLUDE_PATTERNS = [
 
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: false });
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+const DEFAULT_LIST_LIMIT = 500;
+const MAX_LIST_LIMIT = 2000;
+const DEFAULT_SEARCH_LIMIT = 200;
+const MAX_SEARCH_LIMIT = 1000;
+const DEFAULT_GREP_LIMIT = 100;
+const MAX_GREP_LIMIT = 500;
+const MAX_GREP_FILE_BYTES = 5 * 1024 * 1024;
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
     '.png': 'image/png',
@@ -189,54 +198,83 @@ async function readDirectoryEntries(dir: string, includeSizes = false, sortBy: S
     return sortEntries(result, sortBy);
 }
 
-async function buildTree(dir: string, depth: number, excludePatterns: string[]): Promise<TreeEntry> {
+/** Build a tree breadth-first, so a node budget keeps the top levels complete and cuts deep branches. */
+async function buildTree(dir: string, depth: number, excludePatterns: string[], maxNodes: number): Promise<{ tree: TreeEntry; nodes: number; omitted: number }> {
     const info = await toFileEntry(dir);
-    const node: TreeEntry = {
-        name: info.name || dir,
-        path: info.path,
-        type: info.type,
-        size: info.size,
-    };
-
-    if (info.type !== 'directory' || depth <= 0) return node;
-
-    const children = await fs.readdir(dir, { withFileTypes: true });
-    node.children = [];
-    for (const child of children.sort((a, b) => a.name.localeCompare(b.name))) {
-        const childPath = path.join(dir, child.name);
-        if (shouldExclude(child.name, childPath, excludePatterns)) continue;
-        node.children.push(await buildTree(childPath, depth - 1, excludePatterns));
+    const tree: TreeEntry = { name: info.name || dir, path: info.path, type: info.type, size: info.size };
+    let nodes = 1;
+    let omitted = 0;
+    const queue: Array<{ node: TreeEntry; depth: number }> = info.type === 'directory' ? [{ node: tree, depth }] : [];
+    while (queue.length) {
+        const { node, depth: remaining } = queue.shift()!;
+        if (remaining <= 0) continue;
+        const children = (await fs.readdir(node.path, { withFileTypes: true }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .filter(child => !shouldExclude(child.name, path.join(node.path, child.name), excludePatterns));
+        node.children = [];
+        for (const [index, child] of children.entries()) {
+            if (nodes >= maxNodes) {
+                node.omittedChildren = children.length - index;
+                omitted += children.length - index;
+                break;
+            }
+            const entry = await toFileEntry(path.join(node.path, child.name), child.name);
+            const childNode: TreeEntry = { name: entry.name, path: entry.path, type: entry.type, size: entry.size };
+            node.children.push(childNode);
+            nodes++;
+            if (entry.type === 'directory') queue.push({ node: childNode, depth: remaining - 1 });
+        }
     }
-    return node;
+    return { tree, nodes, omitted };
 }
 
-async function searchFilesRecursive(dir: string, matcher: RegExp, excludePatterns: string[], results: string[]): Promise<void> {
+/** Collect matching paths until `limit + 1` are found, which is enough to report truncation. */
+async function searchFilesRecursive(dir: string, matcher: RegExp, excludePatterns: string[], results: string[], limit: number): Promise<void> {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        if (results.length > limit) return;
         const fullPath = path.join(dir, entry.name);
         if (shouldExclude(entry.name, fullPath, excludePatterns)) continue;
         if (matcher.test(entry.name) || matcher.test(fullPath)) results.push(fullPath);
-        if (entry.isDirectory()) await searchFilesRecursive(fullPath, matcher, excludePatterns, results);
+        if (entry.isDirectory()) await searchFilesRecursive(fullPath, matcher, excludePatterns, results, limit);
     }
 }
 
-function limitText(text: string, head?: number, tail?: number): string {
-    const lines = text.split(/\r?\n/);
-    if (head !== undefined && tail !== undefined) {
-        return [
-            ...lines.slice(0, head),
-            `... omitted ${Math.max(0, lines.length - head - tail)} line(s) ...`,
-            ...lines.slice(Math.max(head, lines.length - tail)),
-        ].join(EOL);
+/** Text files under `start` (or `start` itself), in name order, skipping excluded, binary, and very large files. */
+async function* walkTextFiles(start: string, excludePatterns: string[], fileFilter?: (absPath: string) => boolean): AsyncGenerator<{ path: string; text: string }> {
+    const stats = await fs.stat(start);
+    const pending = stats.isDirectory() ? [start] : [];
+    const readCandidate = async (filePath: string) => {
+        const fileStats = await fs.stat(filePath).catch(() => null);
+        if (!fileStats?.isFile() || fileStats.size > MAX_GREP_FILE_BYTES) return null;
+        const buffer = await fs.readFile(filePath).catch(() => null);
+        if (!buffer || buffer.subarray(0, 8000).includes(0)) return null;
+        return TEXT_DECODER.decode(buffer);
+    };
+    if (!stats.isDirectory()) {
+        const text = await readCandidate(start);
+        if (text !== null) yield { path: start, text };
+        return;
     }
-    if (head !== undefined) return lines.slice(0, head).join(EOL);
-    if (tail !== undefined) return lines.slice(Math.max(0, lines.length - tail)).join(EOL);
-    return text;
+    while (pending.length) {
+        const dir = pending.shift()!;
+        const entries = (await fs.readdir(dir, { withFileTypes: true }).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name));
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (shouldExclude(entry.name, fullPath, excludePatterns)) continue;
+            if (entry.isDirectory()) {
+                pending.push(fullPath);
+                continue;
+            }
+            if (!entry.isFile() || (fileFilter && !fileFilter(fullPath))) continue;
+            const text = await readCandidate(fullPath);
+            if (text !== null) yield { path: fullPath, text };
+        }
+    }
 }
 
-async function readText(absPath: string, head?: number, tail?: number): Promise<string> {
-    const buffer = await fs.readFile(absPath);
-    return limitText(TEXT_DECODER.decode(buffer), head, tail);
+async function readText(absPath: string): Promise<string> {
+    return TEXT_DECODER.decode(await fs.readFile(absPath));
 }
 
 function mimeForPath(filePath: string): string {
@@ -328,22 +366,6 @@ async function createImageCollage(paths: string[], tileSize: number): Promise<{ 
         .toBuffer();
 
     return { data, width, height, files };
-}
-
-function unifiedDiff(original: string, updated: string): string {
-    const before = original.split(/\r?\n/);
-    const after = updated.split(/\r?\n/);
-    const lines = ['--- original', '+++ updated'];
-    const max = Math.max(before.length, after.length);
-    for (let i = 0; i < max; i++) {
-        if (before[i] === after[i]) {
-            lines.push(` ${before[i] ?? ''}`);
-        } else {
-            if (before[i] !== undefined) lines.push(`-${before[i]}`);
-            if (after[i] !== undefined) lines.push(`+${after[i]}`);
-        }
-    }
-    return lines.join('\n');
 }
 
 function errorCode(err: unknown): string | undefined {
@@ -663,7 +685,7 @@ export function makeFileTools(): ToolDefinition[] {
                 if (inputPath === undefined) return jsonResult({ allowedDirectories: listEffectiveFileAccessRoots() });
                 return jsonResult(await toFileEntry(await resolveAllowedPath(inputPath)));
             }),
-        define('directory_list', 'List a directory or return a tree. Common dependency, build, and cache folders are excluded.',
+        define('directory_list', `List a directory or return a tree. Common dependency, build, and cache folders are excluded. Returns at most ${DEFAULT_LIST_LIMIT} entries by default (maxEntries up to ${MAX_LIST_LIMIT}); a tree keeps upper levels complete and marks cut directories with omittedChildren. To find something specific, prefer file_search or file_grep.`,
             z.object({
                 path: pathField,
                 tree: z.boolean().optional(),
@@ -671,31 +693,100 @@ export function makeFileTools(): ToolDefinition[] {
                 includeSizes: z.boolean().optional(),
                 sortBy: z.enum(['name', 'size', 'modified']).optional(),
                 excludePatterns: excludeField,
+                maxEntries: z.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
             }), true, false,
-            async ({ path: inputPath, tree, depth, includeSizes, sortBy, excludePatterns }) => {
+            async ({ path: inputPath, tree, depth, includeSizes, sortBy, excludePatterns, maxEntries }) => {
                 const absPath = await resolveAllowedPath(inputPath);
-                if (tree) return jsonResult(await buildTree(absPath, depth ?? 3, excludePatterns ?? []));
+                const limit = maxEntries ?? DEFAULT_LIST_LIMIT;
+                if (tree) {
+                    const result = await buildTree(absPath, depth ?? 3, excludePatterns ?? [], limit);
+                    const note = result.omitted ? `\n\n[Showing ${result.nodes} entries; ${result.omitted} more were left out (see omittedChildren). List a subdirectory or lower depth for the rest.]` : '';
+                    return textResult(JSON.stringify(result.tree, null, 2) + note);
+                }
                 const entries = await readDirectoryEntries(absPath, includeSizes ?? false, sortBy);
-                return jsonResult(includeSizes ? entries.map(entry => ({ ...entry, sizeHuman: formatBytes(entry.size) })) : entries);
+                const shown = entries.slice(0, limit);
+                const listed = JSON.stringify(includeSizes ? shown.map(entry => ({ ...entry, sizeHuman: formatBytes(entry.size) })) : shown, null, 2);
+                return textResult(entries.length > limit ? `${listed}\n\n[Showing ${limit} of ${entries.length} entries. Use file_search to find specific names.]` : listed);
             }),
-        define('file_search', 'Search file and directory names or paths with a case-insensitive pattern. Supports * and ?.',
-            z.object({ path: pathField, pattern: z.string().min(1), excludePatterns: excludeField }), true, false,
-            async ({ path: inputPath, pattern, excludePatterns }) => {
+        define('file_search', `Find files and directories by name or path with a case-insensitive pattern. Supports * and ?. Returns one path per line, at most ${DEFAULT_SEARCH_LIMIT} by default (maxResults up to ${MAX_SEARCH_LIMIT}). To search inside files, use file_grep.`,
+            z.object({
+                path: pathField,
+                pattern: z.string().min(1),
+                excludePatterns: excludeField,
+                maxResults: z.number().int().min(1).max(MAX_SEARCH_LIMIT).optional(),
+            }), true, false,
+            async ({ path: inputPath, pattern, excludePatterns, maxResults }) => {
+                const limit = maxResults ?? DEFAULT_SEARCH_LIMIT;
                 const results: string[] = [];
-                await searchFilesRecursive(await resolveAllowedPath(inputPath), searchPatternToRegExp(pattern), excludePatterns ?? [], results);
-                return jsonResult(results);
+                await searchFilesRecursive(await resolveAllowedPath(inputPath), searchPatternToRegExp(pattern), excludePatterns ?? [], results, limit);
+                if (!results.length) return textResult(`No files or directories match "${pattern}".`);
+                const listed = results.slice(0, limit).join('\n');
+                return textResult(results.length > limit ? `${listed}\n\n[Showing the first ${limit} matches; more exist. Use a narrower path or pattern.]` : listed);
             }),
-        define('file_read', 'Read one or more text or media files. Text is the default; media, thumbnails, and collage return image content when applicable.',
+        define('file_grep', `Search file contents with a regular expression (JavaScript syntax) and get line numbers to read or edit next. outputMode "content" (default) shows matching lines grouped by file as "<line>: <text>" ("<line>- <text>" for context); "files" lists matching paths; "count" gives matches per file. Results are capped at ${DEFAULT_GREP_LIMIT} by default (maxResults up to ${MAX_GREP_LIMIT}); narrow path, glob, or pattern when truncated. Skips binary files, files over 5 MB, and common dependency and build folders.`,
+            z.object({
+                path: pathField,
+                pattern: z.string().min(1).describe('Regular expression, for example "function\\s+applyPatch" or "TODO|FIXME".'),
+                glob: z.string().min(1).optional().describe('Only search files matching this name or path glob, for example "*.ts", "*.{ts,vue}" or "src/**/*.test.ts".'),
+                ignoreCase: z.boolean().optional(),
+                outputMode: z.enum(['content', 'files', 'count']).optional(),
+                context: z.number().int().min(0).max(10).optional().describe('Lines of context around each match (content mode).'),
+                maxResults: z.number().int().min(1).max(MAX_GREP_LIMIT).optional().describe('Maximum matching lines (content mode) or files (files and count modes).'),
+                excludePatterns: excludeField,
+            }), true, false,
+            async ({ path: inputPath, pattern, glob, ignoreCase, outputMode, context, maxResults, excludePatterns }) => {
+                let regex: RegExp;
+                try { regex = new RegExp(pattern, ignoreCase ? 'i' : ''); }
+                catch (error) { throw new Error(`Invalid regular expression: ${(error as Error).message}`); }
+                const absPath = await resolveAllowedPath(inputPath);
+                const mode = outputMode ?? 'content';
+                const limit = maxResults ?? DEFAULT_GREP_LIMIT;
+                const filter = glob ? fileGlobToRegExp(glob) : undefined;
+                const fileFilter = filter && ((filePath: string) => filter.regex.test(filter.matchPath ? filePath.split(path.sep).join('/') : path.basename(filePath)));
+
+                const sections: string[] = [];
+                let matchedLines = 0;
+                let matchedFiles = 0;
+                let truncated = false;
+                const maxMatchesPerFile = mode === 'files' ? 1 : mode === 'count' ? Number.MAX_SAFE_INTEGER : undefined;
+                for await (const file of walkTextFiles(absPath, excludePatterns ?? [], fileFilter)) {
+                    // Once content mode is full, a zero budget still reports whether another match exists.
+                    const block = grepText(file.text, regex, mode === 'content' ? context ?? 0 : 0, maxMatchesPerFile ?? limit - matchedLines);
+                    if (!block.matches.length) {
+                        if (block.more) { truncated = true; break; }
+                        continue;
+                    }
+                    if (mode !== 'content' && matchedFiles >= limit) { truncated = true; break; }
+                    matchedFiles++;
+                    if (mode === 'files') sections.push(file.path);
+                    else if (mode === 'count') sections.push(`${file.path}: ${block.matches.length}`);
+                    else {
+                        sections.push([file.path, ...block.lines.map(line => `  ${line}`)].join('\n'));
+                        matchedLines += block.matches.length;
+                        if (block.more) { truncated = true; break; }
+                    }
+                }
+                if (!sections.length) return textResult(`No matches for /${pattern}/${glob ? ` in ${glob} files` : ''}.`);
+                const summary = mode === 'content'
+                    ? `${matchedLines} matching line(s) in ${matchedFiles} file(s)`
+                    : `${matchedFiles} matching file(s)`;
+                const note = truncated ? `\n\n[Results stopped at ${limit}. Narrow path, glob, or pattern, or raise maxResults.]` : '';
+                return textResult(`${summary}${truncated ? ' shown' : ''}:\n\n${sections.join(mode === 'content' ? '\n\n' : '\n')}${note}`);
+            }),
+        define('file_read', 'Read one or more text or media files. Text is the default; media, thumbnails, and collage return image content when applicable. Text comes back as numbered lines, "<line>\\t<text>"; the number and tab are not part of the file, so leave them out of file_edit oldText. A read returns at most 2000 lines; use offset (1-based line) and limit to read a range, for example around a file_grep match. head and tail read the first or last lines.',
             z.object({
                 path: pathField.optional(),
                 paths: z.array(pathField).min(1).max(100).optional(),
                 mode: z.enum(['text', 'media', 'thumbnails', 'collage']).optional(),
+                offset: z.number().int().positive().optional().describe('First line to read, 1-based.'),
+                limit: z.number().int().positive().optional().describe('Number of lines to read (default and maximum 2000 per read).'),
+                lineNumbers: z.boolean().optional().describe('Prefix lines with their numbers (default true).'),
                 head: z.number().int().positive().optional(),
                 tail: z.number().int().positive().optional(),
                 size: z.number().int().min(32).max(1024).optional(),
                 tileSize: z.number().int().min(160).max(512).optional(),
             }), true, false,
-            async ({ path: inputPath, paths, mode, head, tail, size, tileSize }) => {
+            async ({ path: inputPath, paths, mode, offset, limit, lineNumbers, head, tail, size, tileSize }) => {
                 if ((inputPath === undefined) === (paths === undefined)) throw new Error('Provide exactly one of path or paths.');
                 const requestedPaths = inputPath === undefined ? paths! : [inputPath];
                 const readMode = mode ?? 'text';
@@ -739,10 +830,11 @@ export function makeFileTools(): ToolDefinition[] {
                     }
                     return { success: true, output: output.join('\n'), content, imageDataUrls };
                 }
+                const window: ReadWindow = { offset, limit: limit === undefined ? undefined : Math.min(limit, DEFAULT_READ_LINES), lineNumbers, head, tail };
                 const files = [];
                 for (const filePath of requestedPaths) {
                     const absPath = await resolveAllowedPath(filePath);
-                    files.push({ path: absPath, content: await readText(absPath, head, tail) });
+                    files.push({ path: absPath, content: renderTextWindow(await readText(absPath), window) });
                 }
                 return textResult(files.length === 1 ? files[0].content : JSON.stringify(files, null, 2));
             }),
@@ -754,23 +846,39 @@ export function makeFileTools(): ToolDefinition[] {
                 await fs.writeFile(absPath, content, { encoding: 'utf8', flag: overwrite ? 'w' : 'wx' });
                 return textResult(`Wrote file: ${absPath}`);
             }),
-        define('file_edit', 'Apply ordered, exact text replacements to a UTF-8 file. Preview only by default; set dryRun: false to save.',
+        define('file_edit', 'Edit a UTF-8 text file with exact text replacements and save it. Each oldText must match exactly one place in the file: copy it from file_read output without the line-number prefix and include a few surrounding lines to make it unique, or set replaceAll to change every match. Edits apply in order and atomically: if any edit does not match, nothing is saved and the result says why (with line numbers to re-read). The file\'s line endings are kept. Returns a compact diff. Set dryRun: true to preview without saving.',
             z.object({
                 path: pathField,
-                edits: z.array(z.object({ oldText: z.string().min(1), newText: z.string(), replaceAll: z.boolean().optional() })).min(1),
+                edits: z.array(z.object({
+                    oldText: z.string().min(1).describe('Exact text to replace, unique in the file unless replaceAll is set.'),
+                    newText: z.string().describe('Replacement text; empty deletes oldText.'),
+                    replaceAll: z.boolean().optional(),
+                })).min(1),
                 dryRun: z.boolean().optional(),
             }), false, true,
             async ({ path: inputPath, edits, dryRun }) => {
                 const absPath = await resolveAllowedPath(inputPath);
-                const original = await readText(absPath);
-                let updated = original;
-                for (const edit of edits) {
-                    if (!updated.includes(edit.oldText)) throw new Error(`oldText not found: ${edit.oldText.slice(0, 80)}`);
-                    updated = edit.replaceAll ? updated.split(edit.oldText).join(edit.newText) : updated.replace(edit.oldText, edit.newText);
+                let original = await readText(absPath);
+                let applied = applyFileEdits(original, edits);
+                if (applied.status === 'success' && !dryRun) {
+                    // Another writer may have changed the file meanwhile; re-apply to
+                    // the latest text through the same unique-match rules.
+                    const latest = await readText(absPath);
+                    if (latest !== original) {
+                        original = latest;
+                        applied = applyFileEdits(original, edits);
+                    }
                 }
-                const previewOnly = dryRun ?? true;
-                if (!previewOnly) await fs.writeFile(absPath, updated, 'utf8');
-                return textResult(`${previewOnly ? 'Dry run only.' : `Edited file: ${absPath}`}\n\n${unifiedDiff(original, updated)}`);
+                if (applied.status === 'conflict') {
+                    const { status, reason, editIndex, matchCount, lines, message } = applied;
+                    const result = { status, reason, editIndex, matchCount, ...(lines ? { lines } : {}), message };
+                    return { success: false, output: JSON.stringify(result), error: message, structuredContent: result };
+                }
+                if (!dryRun) await fs.writeFile(absPath, applied.content, 'utf8');
+                const header = dryRun
+                    ? `Dry run only, nothing saved. ${applied.replacements} replacement(s) would change ${absPath}:`
+                    : `Edited ${absPath} (${applied.replacements} replacement(s)):`;
+                return textResult(`${header}\n\n${compactDiff(absPath, original, applied.content)}`);
             }),
         define('directory_create', 'Create a directory and any missing parent directories.',
             z.object({ path: pathField }), false, true,

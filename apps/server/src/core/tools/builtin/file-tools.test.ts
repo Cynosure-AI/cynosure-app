@@ -54,6 +54,7 @@ describe('native file tools', () => {
             file_info: {},
             directory_list: { path: root },
             file_search: { path: root, pattern: '*.txt' },
+            file_grep: { path: root, pattern: 'hello', glob: '*.txt' },
             file_read: { path: path.join(root, 'one.txt') },
             file_write: { path: path.join(root, 'one.txt'), content: 'test' },
             file_edit: { path: path.join(root, 'one.txt'), edits: [{ oldText: 'a', newText: 'b' }] },
@@ -91,14 +92,87 @@ describe('native file tools', () => {
         expect(listFileAccessRoots()).toEqual([root]);
         const writeResult = await call('file_write', { path: file, content: 'hello world\n' });
         expect(writeResult.success, writeResult.output).toBe(true);
-        expect((await call('file_read', { path: file })).output).toBe('hello world\n');
+        expect((await call('file_read', { path: file })).output).toBe('1\thello world');
+        expect((await call('file_read', { path: file, lineNumbers: false })).output).toBe('hello world\n');
         expect((await call('file_write', { path: file, content: 'oops' })).success).toBe(false);
         const edit = { path: file, edits: [{ oldText: 'world', newText: 'Cynosure' }] };
-        expect((await call('file_edit', edit)).output).toContain('Dry run only.');
+        expect((await call('file_edit', { ...edit, dryRun: true })).output).toContain('Dry run only');
         expect(await fs.readFile(file, 'utf8')).toBe('hello world\n');
-        expect((await call('file_edit', { ...edit, dryRun: false })).success).toBe(true);
+        const saved = await call('file_edit', edit);
+        expect(saved.success, saved.output).toBe(true);
+        expect(saved.output).toContain('+hello Cynosure');
+        expect(await fs.readFile(file, 'utf8')).toBe('hello Cynosure\n');
         expect((await call('file_search', { path: root, pattern: '*.txt' })).output).toContain(file);
         expect((await call('directory_list', { path: path.dirname(file) })).output).toContain('one.txt');
+    });
+
+    it('reads a numbered line range and says how to continue', async () => {
+        const file = path.join(root, 'long.txt');
+        await fs.writeFile(file, Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join('\n') + '\n');
+
+        const output = (await call('file_read', { path: file, offset: 10, limit: 3 })).output;
+
+        expect(output).toBe('10\tline 10\n11\tline 11\n12\tline 12\n\n[Showing lines 10-12 of 30. Use offset: 13 to continue.]');
+        expect((await call('file_read', { path: file, tail: 2 })).output).toContain('29\tline 29\n30\tline 30');
+    });
+
+    it('greps file contents with line numbers, globs, context, and a result cap', async () => {
+        await fs.mkdir(path.join(root, 'src'));
+        await fs.mkdir(path.join(root, 'node_modules'));
+        await fs.writeFile(path.join(root, 'src', 'a.ts'), 'const alpha = 1\nfunction applyPatch() {}\nconst beta = 2\n');
+        await fs.writeFile(path.join(root, 'src', 'b.vue'), '<script>applyPatch()</script>\n');
+        await fs.writeFile(path.join(root, 'src', 'c.md'), 'applyPatch is documented here\n');
+        await fs.writeFile(path.join(root, 'node_modules', 'dep.ts'), 'applyPatch()\n');
+        await fs.writeFile(path.join(root, 'src', 'blob.bin'), Buffer.from([0, 1, 2, 97, 112, 112, 108, 121, 80, 97, 116, 99, 104]));
+
+        const content = (await call('file_grep', { path: root, pattern: 'applyPatch', glob: '*.{ts,vue}', context: 1 })).output;
+        expect(content).toContain('2 matching line(s) in 2 file(s)');
+        expect(content).toContain(`${path.join(root, 'src', 'a.ts')}\n  1- const alpha = 1\n  2: function applyPatch() {}\n  3- const beta = 2`);
+        expect(content).toContain('1: <script>applyPatch()</script>');
+        expect(content).not.toContain('node_modules');
+        expect(content).not.toContain('c.md');
+
+        const files = (await call('file_grep', { path: root, pattern: 'APPLYPATCH', ignoreCase: true, outputMode: 'files' })).output;
+        expect(files).toContain('3 matching file(s)');
+        expect(files).not.toContain('blob.bin');
+
+        const capped = (await call('file_grep', { path: root, pattern: 'applyPatch', maxResults: 1 })).output;
+        expect(capped).toContain('1 matching line(s) in 1 file(s) shown');
+        expect(capped).toContain('[Results stopped at 1.');
+        expect((await call('file_grep', { path: root, pattern: 'missingName' })).output).toContain('No matches');
+        expect((await call('file_grep', { path: root, pattern: '(' })).success).toBe(false);
+    });
+
+    it('caps file search and directory listings with a note', async () => {
+        for (let index = 0; index < 5; index++) await fs.writeFile(path.join(root, `note-${index}.txt`), '');
+
+        const search = (await call('file_search', { path: root, pattern: 'note-*', maxResults: 2 })).output;
+        expect(search.split('\n').filter(line => line.startsWith(root))).toHaveLength(2);
+        expect(search).toContain('more exist');
+
+        const list = (await call('directory_list', { path: root, maxEntries: 3 })).output;
+        expect(list).toContain('[Showing 3 of 5 entries.');
+
+        const tree = (await call('directory_list', { path: root, tree: true, maxEntries: 3 })).output;
+        expect(tree).toContain('"omittedChildren": 3');
+    });
+
+    it('refuses ambiguous or missing edits without saving any of them', async () => {
+        const file = path.join(root, 'code.ts');
+        const original = 'function a() {\n  return 1\n}\n\nfunction b() {\n  return 1\n}\n';
+        await fs.writeFile(file, original);
+
+        const ambiguous = await call('file_edit', { path: file, edits: [{ oldText: 'function a', newText: 'function first' }, { oldText: '  return 1', newText: '  return 2' }] });
+        expect(ambiguous.success).toBe(false);
+        expect(ambiguous.structuredContent).toMatchObject({ status: 'conflict', reason: 'ambiguous_context', editIndex: 1, matchCount: 2, lines: [2, 6] });
+        expect(await fs.readFile(file, 'utf8')).toBe(original);
+
+        const missing = await call('file_edit', { path: file, edits: [{ oldText: 'function b() {\n  return 3', newText: 'x' }] });
+        expect(missing.structuredContent).toMatchObject({ reason: 'expected_context_not_found', lines: [5] });
+
+        const all = await call('file_edit', { path: file, edits: [{ oldText: 'return 1', newText: 'return 2', replaceAll: true }] });
+        expect(all.output).toContain('2 replacement(s)');
+        expect(await fs.readFile(file, 'utf8')).toBe(original.replaceAll('return 1', 'return 2'));
     });
 
     it('creates and merges directories through their directory tools', async () => {
@@ -148,7 +222,7 @@ describe('native file tools', () => {
             await preflightFileToolAccess({ toolName: 'file_read', arguments: { path: target }, conversationId: 'conversation-test' });
             const result = await call('file_read', { path: target });
             expect(result.success, result.output).toBe(true);
-            expect(result.output).toBe('approved');
+            expect(result.output).toBe('1\tapproved');
             expect(listFileAccessRoots()).toContain(outside);
         } finally {
             unsubscribe();
@@ -203,7 +277,7 @@ describe('native file tools', () => {
             const call: ToolCall = { id: 'read', type: 'function', function: { name: 'file_read', arguments: JSON.stringify({ path: target }) } };
             const result = await (executor as unknown as { executeSingleToolCall: (call: ToolCall) => Promise<{ success: boolean; output: string }> }).executeSingleToolCall(call);
             expect(result.success, result.output).toBe(true);
-            expect(result.output).toBe('read after approval');
+            expect(result.output).toBe('1\tread after approval');
         } finally {
             unsubscribe();
         }
