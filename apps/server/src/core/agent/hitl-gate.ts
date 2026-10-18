@@ -3,6 +3,7 @@ import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
 import { isAnnotationAutoApprovedTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
 import { fileToolNeedsFolderApproval, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
+import type { PermissionMode } from '@shared/types'
 
 export interface ApprovalResult {
   approved: boolean
@@ -188,6 +189,23 @@ export class HITLGate {
       set.add(name)
       stmt.run(conversationId, name, now)
     }
+  }
+
+  /** Full access is the conversation's session approval for all tools. */
+  getPermissionMode(conversationId: string): PermissionMode {
+    return this.getSessionApprovals(conversationId).has(this.allToolsApproval) ? 'full' : 'auto'
+  }
+
+  /** Switch a conversation between saved tool policy (auto) and running every tool without asking (full). */
+  setPermissionMode(conversationId: string, mode: PermissionMode): void {
+    if (mode === 'full') {
+      this.addSessionApproval(conversationId, [this.allToolsApproval])
+      return
+    }
+    this.getSessionApprovals(conversationId).delete(this.allToolsApproval)
+    getDb()
+      .prepare('DELETE FROM session_tool_approvals WHERE conversation_id = ? AND tool_name = ?')
+      .run(conversationId, this.allToolsApproval)
   }
 
   /** Clear all session approvals for a conversation. */

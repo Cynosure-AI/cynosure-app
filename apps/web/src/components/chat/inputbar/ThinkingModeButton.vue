@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ReasoningEffort } from '@shared/types'
+import type { PermissionMode, ReasoningEffort } from '@shared/types'
 import { useChatStore } from '../../../stores/chat.store'
 import HoverMenu from '../../shared/HoverMenu.vue'
 import ReasoningSlider from '../../shared/ReasoningSlider.vue'
+import PermissionModeOptions from './PermissionModeOptions.vue'
 
 const chatStore = useChatStore()
 
@@ -95,12 +96,20 @@ const needleAngle = computed(
 const needleColor = computed(
   () => gaugeColors[selectedIndex.value] ?? gaugeColors[0]
 )
+
+const fullAccess = computed(() => chatStore.permissionMode === 'full')
+
+function setPermissionMode(mode: PermissionMode): void {
+  chatStore.setPermissionMode(mode).catch((err: unknown) => {
+    console.error('[chat] Failed to change tool permissions:', err)
+  })
+}
 </script>
 
 <template>
   <HoverMenu
     placement="above"
-    :max-width="292"
+    :max-width="304"
     :close-delay="240"
   >
     <template #trigger="{ open, toggle }">
@@ -109,8 +118,8 @@ const needleColor = computed(
         class="relative shrink-0 rounded-xl p-2.5 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
         aria-haspopup="dialog"
         :aria-expanded="open"
-        :aria-label="`Reasoning level: ${selectedOption.label}`"
-        :title="`Reasoning: ${selectedOption.label}`"
+        :aria-label="`Reasoning level: ${selectedOption.label}${fullAccess ? ', full tool access' : ''}`"
+        :title="`Reasoning: ${selectedOption.label}${fullAccess ? ' · Full Access' : ''}`"
         @click.stop="toggle"
       >
         <svg
@@ -165,16 +174,30 @@ const needleColor = computed(
             :fill="needleColor"
           />
         </svg>
+        <span
+          v-if="fullAccess"
+          class="full-access-badge"
+          aria-hidden="true"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+          </svg>
+        </span>
       </button>
     </template>
 
     <template #content>
       <div
-        class="w-[17rem] px-2 py-1.5"
+        class="w-[18rem] px-2 py-1.5"
         role="dialog"
-        aria-label="Reasoning level"
+        aria-label="Run settings"
         @click.stop
       >
+        <PermissionModeOptions
+          :model-value="chatStore.permissionMode"
+          @update:model-value="setPermissionMode"
+        />
+        <div class="my-3 border-t border-theme-700/50" />
         <ReasoningSlider
           :model-value="selectedLevel"
           :levels="levels"
@@ -186,6 +209,26 @@ const needleColor = computed(
 </template>
 
 <style scoped>
+.full-access-badge {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: flex;
+  width: 0.8rem;
+  height: 0.8rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #f59e0b;
+  box-shadow: 0 0 0 1.5px var(--color-theme-900);
+}
+
+.full-access-badge svg {
+  width: 0.5rem;
+  height: 0.5rem;
+  fill: var(--color-theme-900);
+}
+
 .reasoning-gauge {
   width: 1.35rem;
   height: 1.15rem;

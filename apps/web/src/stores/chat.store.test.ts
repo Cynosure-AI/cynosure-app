@@ -47,7 +47,7 @@ test('a chat started in a project is created in it, and moving it updates the se
   await store.startNewChat({ projectId: 'project-1' })
   expect(store.activeProjectId).toBe('project-1')
   await store.createConversation()
-  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, 'project-1', false)
+  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, 'project-1', false, undefined)
   expect(store.conversations[0].projectId).toBe('project-1')
 
   await store.setConversationProject(null)
@@ -93,7 +93,7 @@ test('an incognito chat is created temporary and discarded when New Chat leaves 
   store.setIncognito(true)
   expect(store.activeIsTemporary).toBe(true)
   await store.createConversation()
-  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, null, true)
+  expect(create).toHaveBeenCalledWith(undefined, undefined, undefined, null, true, undefined)
   expect(store.activeIsTemporary).toBe(true)
 
   // Toggling is only for the empty new chat.

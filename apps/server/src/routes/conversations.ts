@@ -18,7 +18,8 @@ import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, p
 import { discardStagedChatAttachments, listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
-import type { ContentBlock, ConversationExecutionConfig, MessageToolCall } from '@shared/types'
+import type { ContentBlock, ConversationExecutionConfig, MessageToolCall, PermissionMode } from '@shared/types'
+import { getHITLGate } from '../core/agent/hitl-gate.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import { getProject, setConversationProject } from '../core/projects/project-store.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
@@ -131,7 +132,7 @@ export async function purgeTemporaryConversations(): Promise<void> {
 
 export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
     // POST /api/chat/conversations — create
-    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; projectId?: string | null; origin?: string; executionConfig?: ConversationExecutionConfig; temporary?: boolean } }>('/conversations', async (req, reply) => {
+    app.post<{ Body: { title?: string; agentId?: string; maWorkspaceId?: string; projectId?: string | null; origin?: string; executionConfig?: ConversationExecutionConfig; temporary?: boolean; permissionMode?: PermissionMode } }>('/conversations', async (req, reply) => {
         const { title, agentId, maWorkspaceId, origin, executionConfig } = req.body
         const temporary = req.body.temporary === true
         const projectId = req.body.projectId || null
@@ -145,6 +146,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         db.prepare(
             'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, project_id, origin, temporary, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, projectId, origin || 'chat', temporary ? 1 : 0, JSON.stringify(initialExecutionConfig), '{}', now, now)
+        if (req.body.permissionMode === 'full') getHITLGate().setPermissionMode(id, 'full')
         return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, projectId, origin: origin || 'chat', temporary, createdAt: now, updatedAt: now }
     })
 
@@ -673,6 +675,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 .get(req.params.id) as { sequence: number | null }).sequence ?? 0,
             lastContextTokens: convRow?.last_context_tokens ?? null,
             executionConfig,
+            permissionMode: getHITLGate().getPermissionMode(req.params.id),
             messages: rows.map((row) => {
                 let agentName: string | undefined
                 let agentIconUrl: string | null | undefined
@@ -811,6 +814,17 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     // GET /api/chat/conversations/:id/wait — the pending schedule_wait that will resume this conversation
     app.get<{ Params: { id: string } }>('/conversations/:id/wait', async (req) => {
         return getPendingWait(req.params.id)
+    })
+
+    // PUT /api/chat/conversations/:id/permission-mode — run tools by saved policy (auto) or without asking (full)
+    app.put<{ Params: { id: string }; Body: { mode: PermissionMode } }>('/conversations/:id/permission-mode', async (req, reply) => {
+        const { mode } = req.body ?? {}
+        if (mode !== 'auto' && mode !== 'full') return reply.status(400).send({ error: 'mode must be auto or full' })
+        if (!getDb().prepare('SELECT 1 FROM conversations WHERE id = ?').get(req.params.id)) {
+            return reply.status(404).send({ error: 'Conversation not found' })
+        }
+        getHITLGate().setPermissionMode(req.params.id, mode)
+        return { permissionMode: mode }
     })
 
     // PATCH /api/chat/conversations/:id/pin — toggle pinned state

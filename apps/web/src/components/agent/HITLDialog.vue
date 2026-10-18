@@ -67,6 +67,8 @@ function approveSession(): void {
 
 function approveAllToolsSession(): void {
   showApproveDropdown.value = false
+  // The server records this as the chat's full access mode.
+  if (agentStore.pendingHITL?.conversationId === chatStore.activeConversationId) chatStore.permissionMode = 'full'
   agentStore.respondHITL(true, undefined, 'session', ['*'])
   resetState()
 }

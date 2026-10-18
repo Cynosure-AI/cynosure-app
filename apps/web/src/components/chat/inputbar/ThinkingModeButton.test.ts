@@ -8,6 +8,10 @@ vi.mock('../../../stores/chat.store', async () => {
   const store = reactive({
     sessionThinkingEnabled: true,
     sessionReasoningEffort: 'medium',
+    permissionMode: 'auto' as 'auto' | 'full',
+    async setPermissionMode(mode: 'auto' | 'full') {
+      store.permissionMode = mode
+    },
     setSessionReasoningEffort(effort: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') {
       store.sessionThinkingEnabled = effort !== 'off'
       if (effort !== 'off') store.sessionReasoningEffort = effort
@@ -21,6 +25,7 @@ describe('ThinkingModeButton', () => {
     const chatStore = useChatStore()
     chatStore.sessionThinkingEnabled = true
     chatStore.sessionReasoningEffort = 'medium'
+    chatStore.permissionMode = 'auto'
   })
 
   afterEach(() => {
@@ -52,6 +57,30 @@ describe('ThinkingModeButton', () => {
     expect(chatStore.sessionReasoningEffort).toBe('max')
     expect(slider!.getAttribute('aria-valuetext')).toBe('Maximum')
     expect(wrapper.get('button').attributes('aria-label')).toBe('Reasoning level: Maximum')
+
+    wrapper.unmount()
+  })
+
+  test('switches the chat to full access and marks the trigger', async () => {
+    const wrapper = mount(ThinkingModeButton, {
+      attachTo: document.body,
+      global: {
+        stubs: { Icon: true },
+      },
+    })
+    const chatStore = useChatStore()
+
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.find('.full-access-badge').exists()).toBe(false)
+    const options = document.body.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+    expect(options[0]?.getAttribute('aria-checked')).toBe('true')
+
+    await new DOMWrapper(options[1]!).trigger('click')
+
+    expect(chatStore.permissionMode).toBe('full')
+    expect(options[1]?.getAttribute('aria-checked')).toBe('true')
+    expect(wrapper.find('.full-access-badge').exists()).toBe(true)
+    expect(wrapper.get('button').attributes('aria-label')).toBe('Reasoning level: Medium, full tool access')
 
     wrapper.unmount()
   })

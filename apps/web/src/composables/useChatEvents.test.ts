@@ -73,7 +73,7 @@ test('navigation restores distinct tool rounds and continues the current live re
   emit(7, { type: 'stream-reset', streamId: 'execution', scope: 'main' })
   emit(8, { type: 'content-delta', streamId: 'execution', scope: 'main', block: { type: 'text', text: 'Final' } })
   vi.spyOn(api.chat, 'getMessages').mockResolvedValue({
-    messages: [first, second], conversationAgentId: null, latestEventSequence: 6, lastContextTokens: null,
+    messages: [first, second], conversationAgentId: null, latestEventSequence: 6, lastContextTokens: null, permissionMode: 'auto',
     executionConfig: {
       allowedTools: [], subAgents: [], memoryFolderIds: [], systemPrompt: '', model: '', providerId: '',
       thinkingEnabled: false, reasoningEffort: 'medium', autoToolRouting: false, autoMemory: false,

@@ -4,7 +4,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
-import type { ChatQueueDelivery, MessageToolCall, ContextEvidence, MediaGenerationSettings, QueuedChatMessageDto } from '@shared/types'
+import type { ChatQueueDelivery, MessageToolCall, ContextEvidence, MediaGenerationSettings, PermissionMode, QueuedChatMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
 import { useProviderStore } from './provider.store'
@@ -82,6 +82,8 @@ export const useChatStore = defineStore('chat', () => {
   const draftDiscardRevision = ref(0)
   /** The empty new chat will be created as an incognito chat. */
   const incognitoPending = ref(false)
+  /** Tool approval for the active chat, or for the empty new chat once it is created. */
+  const permissionMode = ref<PermissionMode>('auto')
   /** Bumped when a chat joins the history without changing identity, so lists refetch. */
   const conversationListRevision = ref(0)
   const messages = ref<DisplayMessage[]>([])
@@ -251,6 +253,7 @@ export const useChatStore = defineStore('chat', () => {
       undefined,
       activeProjectId.value,
       incognitoPending.value,
+      permissionMode.value === 'full' ? 'full' : undefined,
     )
     conversations.value.unshift({
       id: conv.id,
@@ -342,6 +345,7 @@ export const useChatStore = defineStore('chat', () => {
       // This prevents a flash where the agent defaults are briefly shown.
       const cfg = response.executionConfig
       agentConfig.restoreConversationConfig(cfg)
+      permissionMode.value = response.permissionMode ?? 'auto'
 
       const lastContextTokens = response.lastContextTokens
       messages.value = response.messages.map((item) => toDisplayMessage(item))
@@ -583,6 +587,36 @@ export const useChatStore = defineStore('chat', () => {
     resetStreaming()
   }
 
+  // ── Tool permissions ──
+
+  // Full access is granted per chat; every new chat starts on auto.
+  watch(activeConversationId, (id) => {
+    if (!id) permissionMode.value = 'auto'
+  })
+
+  /** Switch the active chat between saved tool policy (auto) and running every tool without asking (full). */
+  async function setPermissionMode(mode: PermissionMode): Promise<void> {
+    const conversationId = activeConversationId.value
+    const previous = permissionMode.value
+    permissionMode.value = mode
+    if (!conversationId) return
+    try {
+      await api.chat.setPermissionMode(conversationId, mode)
+    } catch (err) {
+      if (activeConversationId.value === conversationId) permissionMode.value = previous
+      throw err
+    }
+    if (mode !== 'full') return
+    // Full access also answers the tool requests this chat is waiting on.
+    // Folder access cards still need their own answer.
+    while (
+      agentStore.pendingHITL?.conversationId === conversationId
+      && !agentStore.pendingHITL.toolCalls.some((toolCall) => toolCall.fileAccess)
+    ) {
+      await agentStore.respondHITL(true, undefined, 'session', ['*'])
+    }
+  }
+
   // ── Incognito chats ──
 
   /** Whether the open chat, or the empty chat about to be created, is incognito. */
@@ -798,6 +832,8 @@ export const useChatStore = defineStore('chat', () => {
     activeProjectId,
     draftDiscardRevision,
     incognitoPending,
+    permissionMode,
+    setPermissionMode,
     conversationListRevision,
     activeIsTemporary,
     messages,
