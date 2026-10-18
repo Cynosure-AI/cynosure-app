@@ -11,6 +11,7 @@ import type { ToolRegistry } from '../../tools/tool-registry.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
+import { isReadOnlyModeTool } from '../../tools/tool-policy.js'
 
 export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     | 'preset' | 'conversationId' | 'broadcast' | 'userQuery' | 'recentMessages' | 'usedToolNames'
@@ -29,6 +30,8 @@ export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     plannedToolsetIds?: string[]
     /** userQuery already resolves the conversation, so routing should not fold in recent turns. */
     standaloneRoutingQuery?: boolean
+    /** Offer only read-only tools: the router and tool search never see the others. */
+    readOnlyTools?: boolean
 }
 
 export interface ResolvedExecutionTools {
@@ -63,19 +66,21 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         scheduleExecutionConfig,
         plannedToolsetIds,
         standaloneRoutingQuery,
+        readOnlyTools = false,
     } = input
 
+    const permitted = (candidates: RegistryAwareToolDefinition[]) => readOnlyTools ? candidates.filter(isReadOnlyModeTool) : candidates
     const autoRoutingEnabled = isToolRoutingEnabled(preset, autoToolRouting)
-    const candidateTools = autoRoutingEnabled
+    const candidateTools = permitted(autoRoutingEnabled
         ? resolveRoutingCandidateTools({ preset, toolRegistry, preferredToolKeys, routingToolKeys })
-        : toolRegistry.resolveForExecution(preset.tools || [])
+        : toolRegistry.resolveForExecution(preset.tools || []))
     let tools: RegistryAwareToolDefinition[]
     if (!autoRoutingEnabled) {
         tools = candidateTools
     } else if (suppressAutoTools) {
         // Task-context planning judged that no tools are needed. Keep the pinned
         // tools plus the discovery tool so a wrong judgement stays recoverable.
-        const fixedTools = toolRegistry.resolveForExecution(preferredToolKeys ?? [])
+        const fixedTools = permitted(toolRegistry.resolveForExecution(preferredToolKeys ?? []))
         const searchTool = makeSearchAvailableMcpToolsTool({
             allTools: candidateTools,
             mcpMetadata: toolRegistry.getNamespaceMetadataForTools(candidateTools),
@@ -85,7 +90,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         tools = stabilizeRoutedTools(stickyKey, [...fixedTools, searchTool as RegistryAwareToolDefinition], candidateTools)
         tools = withRecordedToolSearch(stickyKey, tools, candidateTools, toolRegistry)
     } else {
-        const preferredToolNames = toolRegistry.resolveForExecution(preferredToolKeys ?? []).map((tool) => tool.name)
+        const preferredToolNames = permitted(toolRegistry.resolveForExecution(preferredToolKeys ?? [])).map((tool) => tool.name)
         const routedTools = await applyAutoToolRouting({
             enabled: true,
             conversationId,
@@ -109,7 +114,7 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
     }
 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memoryFolderOverrides)) {
-        const memoryTools = toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys())
+        const memoryTools = permitted(toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys()))
         tools = dedupeToolsByName([...memoryTools, ...tools])
     }
 

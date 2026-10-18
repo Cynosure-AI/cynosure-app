@@ -25,6 +25,8 @@ import { buildUserContextPrompt, userMemoryFilingHint } from './pre-execution/us
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { MEMORY_WRITE_TOOL_NAMES } from '../tools/builtin/memory-tools.js'
 import { mergeProjectMemoryScope, resolveProjectExecutionContext } from '../projects/project-context.js'
+import { getPermissionMode } from '../chat/permission-mode.js'
+import { isReadOnlyModeTool } from '../tools/tool-policy.js'
 
 const MEMORY_STEWARDSHIP_PROMPT = `When maintaining memory, treat canonical files as the source of truth and retrieval chunks as search-only indexes. Search before creating, patch matching files instead of duplicating facts or appending change logs, and include enough unchanged context for every patch hunk to resolve uniquely. Use Title Case paths such as People/<Person>, Projects/<Project>, Organizations/<Organization>, or Topics/<Topic>. Keep related information together in coherent files; chunk boundaries are not editing boundaries. Use Uncategorized only when no clear category exists.`
 
@@ -161,6 +163,8 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
     const gateway = getGateway()
     const toolRegistry = getToolRegistry()
     const userSettings = getUserSettings()
+    // Sub-agents share the conversation id, so they run under the chat's mode too.
+    const readOnlyTools = getPermissionMode(conversationId) === 'read-only'
 
     const providerModel = resolveProviderAndModel({
         gateway,
@@ -204,7 +208,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
             toolRegistry,
             preferredToolKeys: input.preferredToolKeys,
             routingToolKeys: input.routingToolKeys,
-        })
+        }).filter((tool) => !readOnlyTools || isReadOnlyModeTool(tool))
         : []
     const taskContext = await buildTaskContext({
         conversationId,
@@ -250,6 +254,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         suppressAutoTools: taskContext?.requiresTools === false,
         plannedToolsetIds: taskContext?.toolsetIds,
         scheduleExecutionConfig,
+        readOnlyTools,
     }), resolveMemoryContext({
         ...input,
         gateway,
@@ -285,11 +290,12 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         ...(project?.stateMessage ? [project.stateMessage] : []),
         ...memoryContext.messages,
     ]
-    const projectToolNames = new Set(project?.tools.map((tool) => tool.name))
+    const projectTools = (project?.tools ?? []).filter((tool) => !readOnlyTools || isReadOnlyModeTool(tool))
+    const projectToolNames = new Set(projectTools.map((tool) => tool.name))
 
     return {
         tools: project
-            ? [...toolLayer.tools.filter((tool) => !projectToolNames.has(tool.name)), ...project.tools]
+            ? [...toolLayer.tools.filter((tool) => !projectToolNames.has(tool.name)), ...projectTools]
             : toolLayer.tools,
         providerId: providerModel.providerId,
         model: providerModel.model,

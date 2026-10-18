@@ -97,7 +97,11 @@ const needleColor = computed(
   () => gaugeColors[selectedIndex.value] ?? gaugeColors[0]
 )
 
-const fullAccess = computed(() => chatStore.permissionMode === 'full')
+const permissionBadge = computed(() => {
+  if (chatStore.permissionMode === 'full') return { mode: 'full', label: 'Full Access', ariaLabel: 'full tool access' }
+  if (chatStore.permissionMode === 'read-only') return { mode: 'read-only', label: 'Read Only', ariaLabel: 'read-only tools' }
+  return null
+})
 
 function setPermissionMode(mode: PermissionMode): void {
   chatStore.setPermissionMode(mode).catch((err: unknown) => {
@@ -118,8 +122,8 @@ function setPermissionMode(mode: PermissionMode): void {
         class="relative shrink-0 rounded-xl p-2.5 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500 text-theme-500 hover:text-theme-300"
         aria-haspopup="dialog"
         :aria-expanded="open"
-        :aria-label="`Reasoning level: ${selectedOption.label}${fullAccess ? ', full tool access' : ''}`"
-        :title="`Reasoning: ${selectedOption.label}${fullAccess ? ' · Full Access' : ''}`"
+        :aria-label="`Reasoning level: ${selectedOption.label}${permissionBadge ? `, ${permissionBadge.ariaLabel}` : ''}`"
+        :title="`Reasoning: ${selectedOption.label}${permissionBadge ? ` · ${permissionBadge.label}` : ''}`"
         @click.stop="toggle"
       >
         <svg
@@ -175,12 +179,22 @@ function setPermissionMode(mode: PermissionMode): void {
           />
         </svg>
         <span
-          v-if="fullAccess"
-          class="full-access-badge"
+          v-if="permissionBadge"
+          class="permission-badge"
+          :class="`permission-badge--${permissionBadge.mode}`"
           aria-hidden="true"
         >
-          <svg viewBox="0 0 24 24">
+          <svg
+            v-if="permissionBadge.mode === 'full'"
+            viewBox="0 0 24 24"
+          >
             <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+          </svg>
+          <svg
+            v-else
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 5C6.5 5 2.5 12 2.5 12s4 7 9.5 7 9.5-7 9.5-7-4-7-9.5-7zm0 10.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" />
           </svg>
         </span>
       </button>
@@ -209,7 +223,7 @@ function setPermissionMode(mode: PermissionMode): void {
 </template>
 
 <style scoped>
-.full-access-badge {
+.permission-badge {
   position: absolute;
   top: 0.3rem;
   right: 0.3rem;
@@ -219,11 +233,18 @@ function setPermissionMode(mode: PermissionMode): void {
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  background: #f59e0b;
   box-shadow: 0 0 0 1.5px var(--color-theme-900);
 }
 
-.full-access-badge svg {
+.permission-badge--full {
+  background: #f59e0b;
+}
+
+.permission-badge--read-only {
+  background: #38bdf8;
+}
+
+.permission-badge svg {
   width: 0.5rem;
   height: 0.5rem;
   fill: var(--color-theme-900);

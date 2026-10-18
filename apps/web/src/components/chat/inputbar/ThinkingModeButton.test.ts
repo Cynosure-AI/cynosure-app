@@ -8,8 +8,8 @@ vi.mock('../../../stores/chat.store', async () => {
   const store = reactive({
     sessionThinkingEnabled: true,
     sessionReasoningEffort: 'medium',
-    permissionMode: 'auto' as 'auto' | 'full',
-    async setPermissionMode(mode: 'auto' | 'full') {
+    permissionMode: 'auto' as 'read-only' | 'auto' | 'full',
+    async setPermissionMode(mode: 'read-only' | 'auto' | 'full') {
       store.permissionMode = mode
     },
     setSessionReasoningEffort(effort: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') {
@@ -61,7 +61,7 @@ describe('ThinkingModeButton', () => {
     wrapper.unmount()
   })
 
-  test('switches the chat to full access and marks the trigger', async () => {
+  test('switches the chat between permission modes and marks the trigger', async () => {
     const wrapper = mount(ThinkingModeButton, {
       attachTo: document.body,
       global: {
@@ -71,16 +71,22 @@ describe('ThinkingModeButton', () => {
     const chatStore = useChatStore()
 
     await wrapper.get('button').trigger('click')
-    expect(wrapper.find('.full-access-badge').exists()).toBe(false)
+    expect(wrapper.find('.permission-badge').exists()).toBe(false)
     const options = document.body.querySelectorAll<HTMLButtonElement>('[role="radio"]')
-    expect(options[0]?.getAttribute('aria-checked')).toBe('true')
+    expect([...options].map((option) => option.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false'])
 
-    await new DOMWrapper(options[1]!).trigger('click')
+    await new DOMWrapper(options[2]!).trigger('click')
 
     expect(chatStore.permissionMode).toBe('full')
-    expect(options[1]?.getAttribute('aria-checked')).toBe('true')
-    expect(wrapper.find('.full-access-badge').exists()).toBe(true)
+    expect(options[2]?.getAttribute('aria-checked')).toBe('true')
+    expect(wrapper.find('.permission-badge--full').exists()).toBe(true)
     expect(wrapper.get('button').attributes('aria-label')).toBe('Reasoning level: Medium, full tool access')
+
+    await new DOMWrapper(options[0]!).trigger('click')
+
+    expect(chatStore.permissionMode).toBe('read-only')
+    expect(wrapper.find('.permission-badge--read-only').exists()).toBe(true)
+    expect(wrapper.get('button').attributes('aria-label')).toBe('Reasoning level: Medium, read-only tools')
 
     wrapper.unmount()
   })

@@ -19,7 +19,7 @@ import { discardStagedChatAttachments, listStagedChatAttachments } from '../core
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
 import type { ContentBlock, ConversationExecutionConfig, MessageToolCall, PermissionMode } from '@shared/types'
-import { getHITLGate } from '../core/agent/hitl-gate.js'
+import { getPermissionMode, isPermissionMode, setPermissionMode } from '../core/chat/permission-mode.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import { getProject, setConversationProject } from '../core/projects/project-store.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
@@ -146,7 +146,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         db.prepare(
             'INSERT INTO conversations (id, title, agent_id, ma_workspace_id, project_id, origin, temporary, execution_config_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).run(id, title || 'New Chat', agentId || null, maWorkspaceId || null, projectId, origin || 'chat', temporary ? 1 : 0, JSON.stringify(initialExecutionConfig), '{}', now, now)
-        if (req.body.permissionMode === 'full') getHITLGate().setPermissionMode(id, 'full')
+        if (isPermissionMode(req.body.permissionMode)) setPermissionMode(id, req.body.permissionMode)
         return { id, title: title || 'New Chat', agentId: agentId || null, maWorkspaceId: maWorkspaceId || null, projectId, origin: origin || 'chat', temporary, createdAt: now, updatedAt: now }
     })
 
@@ -675,7 +675,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 .get(req.params.id) as { sequence: number | null }).sequence ?? 0,
             lastContextTokens: convRow?.last_context_tokens ?? null,
             executionConfig,
-            permissionMode: getHITLGate().getPermissionMode(req.params.id),
+            permissionMode: getPermissionMode(req.params.id),
             messages: rows.map((row) => {
                 let agentName: string | undefined
                 let agentIconUrl: string | null | undefined
@@ -816,14 +816,14 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         return getPendingWait(req.params.id)
     })
 
-    // PUT /api/chat/conversations/:id/permission-mode — run tools by saved policy (auto) or without asking (full)
+    // PUT /api/chat/conversations/:id/permission-mode — read-only tools only, saved approval policy (auto), or every tool without asking (full)
     app.put<{ Params: { id: string }; Body: { mode: PermissionMode } }>('/conversations/:id/permission-mode', async (req, reply) => {
         const { mode } = req.body ?? {}
-        if (mode !== 'auto' && mode !== 'full') return reply.status(400).send({ error: 'mode must be auto or full' })
+        if (!isPermissionMode(mode)) return reply.status(400).send({ error: 'mode must be read-only, auto or full' })
         if (!getDb().prepare('SELECT 1 FROM conversations WHERE id = ?').get(req.params.id)) {
             return reply.status(404).send({ error: 'Conversation not found' })
         }
-        getHITLGate().setPermissionMode(req.params.id, mode)
+        setPermissionMode(req.params.id, mode)
         return { permissionMode: mode }
     })
 

@@ -24,6 +24,14 @@ vi.mock('../../db/database.js', () => ({
   }),
 }))
 
+const { permissionModes } = vi.hoisted(() => ({
+  permissionModes: new Map<string, 'read-only' | 'auto' | 'full'>(),
+}))
+
+vi.mock('../chat/permission-mode.js', () => ({
+  getPermissionMode: (conversationId?: string) => (conversationId && permissionModes.get(conversationId)) || 'auto',
+}))
+
 import { HITLGate } from './hitl-gate.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 
@@ -96,32 +104,31 @@ describe('HITLGate annotation defaults', () => {
 })
 
 describe('HITLGate permission mode', () => {
+  const call = (name: string) => ({ id: `call-${name}`, type: 'function' as const, function: { name, arguments: '{}' } })
+
   beforeEach(() => {
     approvalRows.clear()
-    sessionRows.clear()
+    permissionModes.clear()
   })
 
   test('full access runs every tool in that conversation without asking', async () => {
     const gate = new HITLGate()
-    const toolCalls = [{ id: 'call-1', type: 'function' as const, function: { name: 'shell', arguments: '{}' } }]
+    permissionModes.set('conv-1', 'full')
 
-    expect(gate.getPermissionMode('conv-1')).toBe('auto')
-    gate.setPermissionMode('conv-1', 'full')
-
-    expect(gate.getPermissionMode('conv-1')).toBe('full')
-    expect(gate.getPermissionMode('conv-2')).toBe('auto')
-    await expect(gate.requestApproval('task-1', toolCalls, undefined, 'conv-1')).resolves.toEqual({ approved: true })
+    await expect(gate.requestApproval('task-1', [call('shell')], undefined, 'conv-1')).resolves.toEqual({ approved: true })
   })
 
-  test('switching back to auto keeps tool-specific session approvals', () => {
+  test('read only refuses tools that are not declared read-only, without asking', async () => {
     const gate = new HITLGate()
-    gate.addSessionApproval('conv-1', ['shell'])
-    gate.setPermissionMode('conv-1', 'full')
+    permissionModes.set('conv-1', 'read-only')
+    const tools = [
+      { name: 'mcp_read', description: '', parameters: {}, timeout: 1_000, execute: async () => ({ success: true, output: '' }), annotations: { readOnlyHint: true } },
+      { name: 'shell', description: '', parameters: {}, timeout: 1_000, execute: async () => ({ success: true, output: '' }), annotations: { readOnlyHint: false, destructiveHint: true } },
+    ]
 
-    gate.setPermissionMode('conv-1', 'auto')
-
-    expect(gate.getPermissionMode('conv-1')).toBe('auto')
-    expect(new HITLGate().getPermissionMode('conv-1')).toBe('auto')
-    expect(sessionRows.has('conv-1:shell')).toBe(true)
+    await expect(gate.requestApproval('task-1', [call('mcp_read')], undefined, 'conv-1', tools)).resolves.toEqual({ approved: true })
+    const result = await gate.requestApproval('task-2', [call('mcp_read'), call('shell')], undefined, 'conv-1', tools)
+    expect(result.approved).toBe(false)
+    expect(result.reason).toContain('blocked: shell')
   })
 })

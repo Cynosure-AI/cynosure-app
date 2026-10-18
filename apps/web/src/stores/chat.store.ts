@@ -253,7 +253,7 @@ export const useChatStore = defineStore('chat', () => {
       undefined,
       activeProjectId.value,
       incognitoPending.value,
-      permissionMode.value === 'full' ? 'full' : undefined,
+      permissionMode.value === 'auto' ? undefined : permissionMode.value,
     )
     conversations.value.unshift({
       id: conv.id,
@@ -594,7 +594,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!id) permissionMode.value = 'auto'
   })
 
-  /** Switch the active chat between saved tool policy (auto) and running every tool without asking (full). */
+  /** Set what the active chat's runs may do with tools: read-only tools, saved policy (auto), or every tool (full). */
   async function setPermissionMode(mode: PermissionMode): Promise<void> {
     const conversationId = activeConversationId.value
     const previous = permissionMode.value

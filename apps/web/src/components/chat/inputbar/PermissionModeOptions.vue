@@ -7,6 +7,12 @@ const emit = defineEmits<{ 'update:modelValue': [value: PermissionMode] }>()
 
 const modes: Array<{ value: PermissionMode; label: string; description: string; icon: string }> = [
   {
+    value: 'read-only',
+    label: 'Read Only',
+    description: 'Offers only tools declared read-only.',
+    icon: 'lucide:eye',
+  },
+  {
     value: 'auto',
     label: 'Auto',
     description: 'Runs safe tools and asks before the rest.',
@@ -76,6 +82,10 @@ const modes: Array<{ value: PermissionMode; label: string; description: string; 
   transition:
     border-color 140ms ease,
     background-color 140ms ease;
+}
+
+.permission-option--read-only {
+  --option-color: #38bdf8;
 }
 
 .permission-option--full {

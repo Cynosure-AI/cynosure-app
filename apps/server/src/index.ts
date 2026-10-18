@@ -20,6 +20,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { closeDb, getDb, getDbPath } from './db/database.js'
 import { DatabaseVersionError } from './db/migrations.js'
 import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
+import { setPermissionMode } from './core/chat/permission-mode.js'
 import { getRAGStore } from './core/memory/rag.js'
 import { removeLegacyMemoryAnalysis } from './core/memory/legacy-analysis-cleanup.js'
 import { pruneDocumentThumbnails } from './core/artifacts/document-thumbnails.js'
@@ -459,7 +460,9 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
           }
 
           if (approvalType === 'session' && conversationId && toolNames?.length) {
-            getHITLGate().addSessionApproval(conversationId, toolNames)
+            // Allowing all tools for the session is the chat's full access mode.
+            if (toolNames.includes('*')) setPermissionMode(conversationId, 'full')
+            else getHITLGate().addSessionApproval(conversationId, toolNames)
           }
 
           resolver({ approved, reason })

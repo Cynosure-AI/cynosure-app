@@ -131,8 +131,11 @@ export interface ChatEventDraft {
 
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
-/** How a chat's tool calls are approved: saved tool policy (auto) or every tool without asking (full). */
-export type PermissionMode = 'auto' | 'full'
+/**
+ * What a chat's runs may do with tools: only read-only tools (read-only), saved
+ * approval policy (auto), or every tool without asking (full).
+ */
+export type PermissionMode = 'read-only' | 'auto' | 'full'
 
 export type ReasoningEffort ='minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
