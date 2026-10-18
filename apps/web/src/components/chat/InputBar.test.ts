@@ -31,7 +31,10 @@ vi.mock('../../stores/chat.store', () => ({
   useChatStore: () => chatStore,
 }))
 vi.mock('../../stores/projects.store', () => ({
-  useProjectsStore: () => ({ get: (id: string | null) => projects.find(project => project.id === id) }),
+  useProjectsStore: () => ({
+    get: (id: string | null) => projects.find(project => project.id === id),
+    ensureLoaded: vi.fn().mockResolvedValue(undefined),
+  }),
 }))
 vi.mock('../../stores/provider.store', () => ({
   useProviderStore: () => ({ providers: [{ id: 'p1', type: 'openrouter' }] }),
@@ -244,6 +247,19 @@ describe('InputBar drafts', () => {
       undefined,
       undefined,
     )
+  })
+
+  test('shows MCP entries below the composer and lifts the context ring to match', async () => {
+    const wrapper = mountInputBar(document.body)
+    expect(wrapper.get('[data-testid="composer-tabs"]').isVisible()).toBe(false)
+    expect(wrapper.get('.context-ring-slot').classes()).not.toContain('mb-6')
+
+    await wrapper.setProps({ hasSelectionTabs: true })
+    const tab = wrapper.get('[data-testid="composer-tabs"]')
+    expect(tab.isVisible()).toBe(true)
+    expect(tab.element.previousElementSibling?.classList.contains('chat-composer')).toBe(true)
+    expect(wrapper.get('.context-ring-slot').classes()).toContain('mb-6')
+    wrapper.unmount()
   })
 
   test('stages project folder files and adds project images to the draft', async () => {

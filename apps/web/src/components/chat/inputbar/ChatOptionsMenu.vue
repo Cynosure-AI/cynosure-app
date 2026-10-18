@@ -184,6 +184,7 @@ function pickFile(kind: 'attach' | 'browseLibrary' | 'browseProject'): void {
 }
 onClickOutside(root, close, { ignore: [menu] })
 onMounted(() => {
+  void projectsStore.ensureLoaded().catch(() => undefined)
   window.addEventListener('resize', updatePosition)
   window.addEventListener('scroll', updatePosition, true)
 })
@@ -196,11 +197,11 @@ onBeforeUnmount(() => {
 <template>
   <span
     ref="root"
-    class="inline-flex shrink-0"
+    class="inline-flex min-w-0 items-center gap-1"
   >
     <button
       type="button"
-      class="flex h-8 w-8 items-center justify-center rounded-full border border-theme-700 text-theme-300 transition-colors hover:border-theme-500 hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-theme-700 text-theme-300 transition-colors hover:border-theme-500 hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
       :class="open ? 'bg-theme-700 text-theme-100' : ''"
       aria-label="Add and configure chat options"
       aria-haspopup="dialog"
@@ -212,6 +213,29 @@ onBeforeUnmount(() => {
         class="h-5 w-5"
       />
     </button>
+    <span
+      v-if="activeProject"
+      class="inline-flex min-w-0 max-w-48 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-theme-200"
+      data-testid="project-chip"
+      :title="activeProject.name"
+    >
+      <ProjectIcon
+        :project="activeProject"
+        class="h-3.5 w-3.5 shrink-0"
+      />
+      <span class="truncate">{{ activeProject.name }}</span>
+      <button
+        type="button"
+        class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-theme-700 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+        :aria-label="`Remove project ${activeProject.name} from this chat`"
+        @click="chooseProject(null)"
+      >
+        <Icon
+          icon="lucide:x"
+          class="h-3 w-3"
+        />
+      </button>
+    </span>
   </span>
 
   <Teleport to="body">

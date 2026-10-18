@@ -39,6 +39,7 @@
   --theme-sidebar-shadow: 12px 0 40px rgba(0,0,0,.14);
   --theme-composer-background: linear-gradient(180deg, #1d2330, #191e29);
   --theme-composer-shadow: 0 12px 36px rgba(0,0,0,.22);
+  --theme-composer-tab-background: #191e29;
   --theme-nav-active-background: linear-gradient(90deg, rgba(79,168,255,.14), rgba(39,136,245,.035));
   --theme-selection-background: rgba(79,168,255,.28);
   --theme-scrollbar-thumb: #343c4c;

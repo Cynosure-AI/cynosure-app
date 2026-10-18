@@ -60,6 +60,7 @@
   --theme-sidebar-shadow: 8px 0 28px rgba(46, 91, 145, .06);
   --theme-composer-background: rgba(255, 255, 255, .92);
   --theme-composer-shadow: 0 12px 36px rgba(53, 101, 158, .12);
+  --theme-composer-tab-line: rgba(173, 197, 226, .62);
   --theme-nav-active-color: #075be5;
   --theme-nav-active-background: linear-gradient(90deg, rgba(24, 112, 248, .13), rgba(24, 112, 248, .045));
   --theme-nav-active-shadow: inset 2px 0 0 #1769f5;

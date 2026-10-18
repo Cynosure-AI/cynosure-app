@@ -394,9 +394,10 @@ watch(
           <!-- Input bar (full width of chat column) -->
           <InputBar
             ref="inputBarRef"
+            :has-selection-tabs="selectedMcpNamespaces.length > 0"
             class="order-2 md:order-0"
           >
-            <template #leading-actions>
+            <template #selection-tabs>
               <div
                 ref="mcpChipRow"
                 class="relative min-w-0 flex-1 overflow-hidden"
@@ -421,18 +422,18 @@ watch(
                     :class="{ 'invisible absolute': index >= visibleMcpCount }"
                     :title="mcp.name"
                     :style="{ transitionDelay: `${index * 50}ms` }"
-                    class="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-theme-200 shadow-sm"
+                    class="group inline-flex shrink-0 items-center gap-1.5 px-1 text-xs text-theme-200"
                   >
                     <img
                       v-if="mcp.iconUrl"
                       :src="mcp.iconUrl"
                       :alt="mcp.name"
-                      class="h-4 w-4 shrink-0 rounded-full object-cover"
+                      class="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
                     >
                     <Icon
                       v-else
                       :icon="getToolNamespaceIcon(mcp.id)"
-                      class="h-4 w-4 shrink-0 text-ink-secondary"
+                      class="h-3.5 w-3.5 shrink-0 text-ink-secondary"
                     />
                     <span class="max-w-32 truncate">{{ mcp.name }}</span>
                     <button
@@ -450,7 +451,7 @@ watch(
                   <button
                     v-if="hiddenMcpNamespaces.length"
                     type="button"
-                    class="inline-flex shrink-0 items-center rounded-full border border-theme-700 bg-theme-800 px-2 py-1 text-xs text-ink-secondary hover:text-theme-100"
+                    class="inline-flex shrink-0 items-center px-2 text-xs text-ink-secondary hover:text-theme-100"
                     :title="hiddenMcpTitle"
                     :aria-label="`${hiddenMcpNamespaces.length} more MCPs: ${hiddenMcpTitle}`"
                   >

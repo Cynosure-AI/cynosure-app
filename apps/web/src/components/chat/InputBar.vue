@@ -6,7 +6,7 @@ import type { MediaGenerationSettings } from '@shared/types'
 import { SK_CHAT_DRAFT_PREFIX } from '../../utils/storage-keys'
 import { Icon } from '@iconify/vue'
 import InputToolbar from './inputbar/InputToolbar.vue'
-import ProjectChip from './inputbar/ProjectChip.vue'
+import ComposerTabs from './inputbar/ComposerTabs.vue'
 import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
@@ -19,6 +19,8 @@ import { findSlashCommand, parseSlashInput, slashSuggestions, type SlashOption }
 import { api } from '../../api/client'
 import type { ProjectFileContent, StagedChatAttachment } from '../../api/types'
 import { useProjectsStore } from '../../stores/projects.store'
+
+defineProps<{ hasSelectionTabs?: boolean }>()
 
 const chatStore = useChatStore()
 const providerStore = useProviderStore()
@@ -879,11 +881,11 @@ defineExpose({ processFiles, focus, sendSuggestion })
           @cancel-edit="cancelQueueEdit"
           @transcription="onTranscription"
           @media-settings="mediaSettings = $event"
-        >
-          <ProjectChip />
-          <slot name="leading-actions" />
-        </InputToolbar>
+        />
       </div>
+      <ComposerTabs v-show="hasSelectionTabs">
+        <slot name="selection-tabs" />
+      </ComposerTabs>
     </div>
 
     <FileLibraryModal
@@ -914,7 +916,10 @@ defineExpose({ processFiles, focus, sendSuggestion })
     <!-- Context window usage ring — pinned to the far right of the bar. The
          slot keeps its width so the input stays centered; ChatView anchors the
          ring itself to the column's bottom-right while the composer is centered. -->
-    <div class="context-ring-slot hidden sm:flex w-10 items-center justify-center">
+    <div
+      class="context-ring-slot hidden sm:flex w-10 items-center justify-center"
+      :class="{ 'mb-6': hasSelectionTabs }"
+    >
       <div class="context-ring-anchor flex w-10 justify-center">
         <ContextRing />
       </div>

@@ -70,6 +70,10 @@
   --theme-sidebar-background: var(--color-theme-950);
   --theme-composer-background: var(--color-theme-800);
   --theme-composer-shadow: none;
+  /* Project tab under the composer: its fill continues the composer's bottom edge. */
+  --theme-composer-tab-background: var(--theme-composer-background);
+  --theme-composer-tab-line: var(--color-theme-700);
+  --theme-composer-tab-focus-line: var(--color-accent-500);
   --theme-nav-active-color: var(--color-theme-100);
   --theme-nav-active-background: color-mix(in srgb, var(--color-accent-500) 10%, var(--color-theme-800));
   --theme-nav-active-shadow: inset 3px 0 0 var(--color-accent-500);

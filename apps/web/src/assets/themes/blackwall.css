@@ -86,6 +86,9 @@
     linear-gradient(var(--bw-red), var(--bw-red)) bottom right / 32px 2px no-repeat,
     #0b0b0e;
   --theme-composer-shadow: 0 0 0 1px var(--bw-line), 0 0 20px rgba(255, 46, 59, 0.12);
+  --theme-composer-tab-background: #0b0b0e;
+  --theme-composer-tab-line: var(--bw-line);
+  --theme-composer-tab-focus-line: rgba(255, 46, 59, 0.75);
   --theme-heading-shadow: none;
   --theme-heading-transform: uppercase;
   --theme-heading-spacing: .1em;

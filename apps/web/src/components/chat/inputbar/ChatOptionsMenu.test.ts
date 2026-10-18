@@ -208,22 +208,24 @@ describe('ChatOptionsMenu', () => {
     wrapper.unmount()
   })
 
-  test('assigns a project and shows it on the menu entry', async () => {
+  test('selects a project in chat options and dismisses its chip', async () => {
     chatStore.activeProjectId = null
     const wrapper = mount(ChatOptionsMenu, {
       attachTo: document.body,
       global: { stubs: { SystemPromptModal: true, Icon: { template: '<i />' } } },
     })
+    expect(wrapper.find('[data-testid="project-chip"]').exists()).toBe(false)
     await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
+    await flushPromises()
+    const mainMenu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
+    ;([...mainMenu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Project') as HTMLButtonElement).click()
     await flushPromises()
 
     let menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
-    ;([...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Project') as HTMLButtonElement).click()
-    await flushPromises()
-    menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
     ;([...menu.querySelectorAll('button')].find(button => button.textContent?.includes('Garden Planner')) as HTMLButtonElement).click()
     await flushPromises()
 
+    expect(wrapper.get('[data-testid="project-chip"]').text()).toContain('Garden Planner')
     expect(chatStore.setConversationProject).toHaveBeenCalledWith('project-1')
     expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
     await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
@@ -231,6 +233,12 @@ describe('ChatOptionsMenu', () => {
     menu = document.querySelector('[aria-label="Chat options"]') as HTMLElement
     const entry = [...menu.querySelectorAll('button')].find(button => button.textContent?.trim().startsWith('Project'))!
     expect(entry.textContent).toContain('Garden Planner')
+    await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
+    await wrapper.get('[aria-label="Remove project Garden Planner from this chat"]').trigger('click')
+    await flushPromises()
+    expect(chatStore.setConversationProject).toHaveBeenLastCalledWith(null)
+    expect(wrapper.find('[data-testid="project-chip"]').exists()).toBe(false)
+    expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
     wrapper.unmount()
     chatStore.activeProjectId = null
   })
