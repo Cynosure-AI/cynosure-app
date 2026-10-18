@@ -653,11 +653,9 @@ function cancelDrop() {
 </template>
 
 <style scoped>
-.bg-dream-card
-{
-  background: url("../../assets/img/settings/bg-dream.png") no-repeat center center;
+.bg-dream-card {
+  background: url("../../assets/img/settings/bg-dream.svg") no-repeat center;
   background-size: cover;
-  background-position: center center;
 }
 
 /*
