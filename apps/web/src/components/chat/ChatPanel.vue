@@ -596,7 +596,7 @@ onMounted(() => {
     >
       <div class="relative mb-6">
         <div
-          class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-20 h-20 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border shadow-xl overflow-hidden"
+          class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-20 h-20 bg-theme-900 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border shadow-xl overflow-hidden"
           :class="chatStore.activeIsTemporary ? 'border-dashed border-accent-500/50' : 'border-white/5'"
         >
           <RouterLink
