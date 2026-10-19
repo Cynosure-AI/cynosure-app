@@ -198,3 +198,41 @@ test('expands only while the project page or one of its chats is open', async ()
     expect(wrapper.find('ul').exists()).toBe(false)
   } finally { wrapper.unmount() }
 })
+
+test('allows navigation to the project overview from a conversation in that project', async () => {
+  route.name = 'conversation'
+  route.params = { conversationId: 'chat' }
+  chatStore.activeProjectId = 'project'
+  const wrapper = await render()
+  try {
+    const link = wrapper.get('a')
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link.element.dispatchEvent(click)
+    await flushPromises()
+
+    // RouterLink can navigate only if the capture handler leaves the click unhandled.
+    expect(click.defaultPrevented).toBe(false)
+    expect(link.attributes('aria-expanded')).toBe('true')
+    expect(link.attributes('aria-current')).toBeUndefined()
+  } finally { wrapper.unmount() }
+})
+
+test('toggles the project chat list when already on its overview', async () => {
+  const wrapper = await render()
+  try {
+    const link = wrapper.get('a')
+    expect(link.attributes('aria-expanded')).toBe('true')
+
+    const collapse = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link.element.dispatchEvent(collapse)
+    await flushPromises()
+    expect(collapse.defaultPrevented).toBe(true)
+    expect(link.attributes('aria-expanded')).toBe('false')
+
+    const expand = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link.element.dispatchEvent(expand)
+    await flushPromises()
+    expect(expand.defaultPrevented).toBe(true)
+    expect(link.attributes('aria-expanded')).toBe('true')
+  } finally { wrapper.unmount() }
+})

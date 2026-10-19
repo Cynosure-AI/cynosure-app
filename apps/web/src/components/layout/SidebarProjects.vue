@@ -212,10 +212,10 @@ function toggleProject(projectId: string, event: MouseEvent): void {
   if (
     event.defaultPrevented || event.button !== 0 ||
     event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ||
-    activeProjectId.value !== projectId
+    !isProjectActive(projectId)
   ) return
 
-  // Handle the current project's toggle before RouterLink navigates.
+  // Toggle only on the overview; project conversations still need this link to navigate back.
   event.preventDefault()
   collapsedProjectId.value = expanded.value.has(projectId) ? projectId : null
 }
