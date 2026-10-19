@@ -6,7 +6,6 @@ import { useChatStore } from '../../stores/chat.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useProviderStore } from '../../stores/provider.store'
 import ModalDialog from '../shared/ModalDialog.vue'
-import SystemPromptModal from './modals/SystemPromptModal.vue'
 
 const emit = defineEmits<{ search: [] }>()
 
@@ -16,7 +15,6 @@ const providerStore = useProviderStore()
 const router = useRouter()
 
 const menuOpen = ref(false)
-const showSystemPrompt = ref(false)
 const saveModalOpen = ref(false)
 const newAgentName = ref('')
 const newAgentDescription = ref('')
@@ -24,7 +22,6 @@ const savingAgent = ref(false)
 
 const hasOverrides = computed(() => chatStore.hasAgentOverrides)
 const changedFields = computed(() => chatStore.activeAgentId ? chatStore.agentOverrideFields : chatStore.cynoOverrideFields)
-const systemPromptChanged = computed(() => changedFields.value.includes('System prompt'))
 const canSaveAsAgent = computed(() => (
   chatStore.selectedToolNames.length > 0 ||
   chatStore.sessionSubAgentIds.length > 0 ||
@@ -48,11 +45,6 @@ const hasAgentActions = computed(() => canReset.value || canShowSaveAction.value
 function openSearch(): void {
   menuOpen.value = false
   emit('search')
-}
-
-function openSystemPrompt(): void {
-  menuOpen.value = false
-  showSystemPrompt.value = true
 }
 
 async function togglePin(): Promise<void> {
@@ -197,25 +189,6 @@ async function saveAsNewAgent(): Promise<void> {
       <div class="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
         Agent
       </div>
-      <button
-        type="button"
-        role="menuitem"
-        title="View and edit system prompt"
-        class="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-theme-800"
-        :class="systemPromptChanged ? 'text-accent-fg' : 'text-theme-300'"
-        @click="openSystemPrompt"
-      >
-        <Icon
-          icon="lucide:scroll-text"
-          class="h-4 w-4"
-          :class="systemPromptChanged ? 'text-accent-fg' : 'text-ink-muted'"
-        />
-        System Prompt
-      </button>
-      <div
-        role="separator"
-        class="mx-3 my-1 border-t border-theme-800"
-      />
       <p
         v-if="changedFields.length"
         class="px-3 py-1.5 text-[10px] leading-relaxed text-ink-muted"
@@ -281,12 +254,6 @@ async function saveAsNewAgent(): Promise<void> {
       @click="menuOpen = false"
     />
   </div>
-
-  <SystemPromptModal
-    v-model="showSystemPrompt"
-    :system-prompt="chatStore.sessionSystemPrompt"
-    @update:system-prompt="(value: string) => { chatStore.sessionSystemPrompt = value; chatStore.markOverridesModified() }"
-  />
 
   <ModalDialog
     :show="saveModalOpen"

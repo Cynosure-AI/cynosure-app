@@ -32,6 +32,10 @@
   opacity: .62;
 }
 
+.accent-action.header-save-action:disabled {
+  opacity: .3;
+}
+
 :where(h1, h2) {
   text-shadow: var(--theme-heading-shadow);
   text-transform: var(--theme-heading-transform);

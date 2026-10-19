@@ -333,7 +333,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             >Unsaved changes</span>
             <button
               type="button"
-              class="rounded-lg accent-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-ink-muted"
+              class="rounded-lg accent-action header-save-action bg-accent-600 px-4 py-2 text-sm font-medium text-accent-on transition-colors enabled:hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-theme-700 disabled:text-ink-muted"
               :disabled="saving || !isDirty || !dlgGeneratedExpr.trim()"
               @click="save"
             >

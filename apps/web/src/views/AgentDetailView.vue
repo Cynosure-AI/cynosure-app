@@ -268,7 +268,7 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
               type="button"
               data-testid="save-agent"
               :disabled="!canSave"
-              class="inline-flex items-center gap-2 rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-40"
+              class="inline-flex items-center gap-2 rounded-lg accent-action header-save-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors enabled:hover:bg-accent-400 disabled:cursor-not-allowed"
               @click="save"
             >
               <Icon

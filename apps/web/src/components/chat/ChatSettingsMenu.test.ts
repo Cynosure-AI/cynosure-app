@@ -34,7 +34,7 @@ beforeEach(() => {
 function render() {
   return mount(ChatSettingsMenu, {
     attachTo: document.body,
-    global: { stubs: { Icon: true, ModalDialog: true, SystemPromptModal: true } },
+    global: { stubs: { Icon: true, ModalDialog: true } },
   })
 }
 
