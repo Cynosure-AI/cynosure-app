@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../api/client', () => ({ api: { memoryFolders: { list: mocks.listFolders } } }))
 vi.mock('vue-router', () => ({
+  onBeforeRouteLeave: vi.fn(),
+  onBeforeRouteUpdate: vi.fn(),
   useRoute: () => mocks.route,
   useRouter: () => ({
     push: mocks.push,

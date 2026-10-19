@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import type { Component } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useAgentHealthStore } from '../stores/agent-health.store'
 import { useChatStore } from '../stores/chat.store'
@@ -13,6 +13,7 @@ import AgentToolsTab from '../components/agent/AgentToolsTab.vue'
 import AgentMemoryTab from '../components/agent/AgentMemoryTab.vue'
 import AgentSubAgentsTab from '../components/agent/AgentSubAgentsTab.vue'
 import AgentAdvancedTab from '../components/agent/AgentAdvancedTab.vue'
+import ModalDialog from '../components/shared/ModalDialog.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 
 type AgentSectionId = 'general' | 'tools' | 'sub-agents' | 'memory' | 'advanced'
@@ -54,8 +55,30 @@ const cynoAgent = computed<AgentDefinition | null>(() => {
     sortOrder: 0, favorite: false, createdAt: 0, updatedAt: profile.updatedAt,
   }
 })
-const agent = computed(() => isCyno.value ? cynoAgent.value : agentDefs.get(agentId.value))
-const CYNO_FIELDS = new Set(['name', 'iconUrl', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled'])
+const savedAgent = computed(() => isCyno.value ? cynoAgent.value : agentDefs.get(agentId.value))
+const draft = ref<Partial<AgentDefinition>>({})
+const agent = computed(() => savedAgent.value ? { ...savedAgent.value, ...draft.value } : null)
+const changes = computed(() => Object.fromEntries(Object.entries(draft.value)
+  .filter(([field, value]) => JSON.stringify(value) !== JSON.stringify(savedAgent.value?.[field as keyof AgentDefinition]))) as Partial<AgentDefinition>)
+const isDirty = computed(() => Object.keys(changes.value).length > 0)
+const saving = ref(false)
+const saveError = ref('')
+const validationError = computed(() => {
+  if (!agent.value?.name.trim()) return 'Name is required.'
+  const limit = agent.value.maxContextTokens
+  if (!isCyno.value && limit != null && (!Number.isSafeInteger(limit) || limit < 2048)) return 'Context limit must be at least 2,048 whole tokens.'
+  return ''
+})
+const canSave = computed(() => isDirty.value && !validationError.value && !saving.value)
+const showUnsavedDialog = ref(false)
+let resolveLeave: ((leave: boolean) => void) | null = null
+
+watch(() => [isCyno.value, agentId.value], () => {
+  draft.value = {}
+  saveError.value = ''
+  activeSectionId.value = 'general'
+})
+const CYNO_FIELDS = new Set(['name', 'iconUrl', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled', 'thinkingEnabled', 'reasoningEffort'])
 const headerIconUrl = computed(() => agent.value?.iconUrl || (isCyno.value ? cyno.iconUrl : null))
 const activeSection = computed(() => sections.find(section => section.id === activeSectionId.value) || sections[0])
 const returnToChat = computed(() => {
@@ -83,27 +106,82 @@ onMounted(async () => {
   }
 })
 
-async function updateField(field: string, value: unknown) {
-  if (isCyno.value) {
-    if (CYNO_FIELDS.has(field)) await cyno.update({ [field]: value })
-    return
-  }
-  if (agent.value) {
-    await agentDefs.update(agentId.value, { [field]: value })
+function updateField(field: string, value: unknown): void {
+  if (saving.value || !agent.value || (isCyno.value && !CYNO_FIELDS.has(field))) return
+  draft.value = { ...draft.value, [field]: value }
+  saveError.value = ''
+}
+
+function updateReasoning(enabled: boolean, effort: AgentDefinition['reasoningEffort']): void {
+  updateField('thinkingEnabled', enabled)
+  updateField('reasoningEffort', effort)
+}
+
+async function save(): Promise<boolean> {
+  if (!canSave.value || !agent.value) return false
+  saving.value = true
+  saveError.value = ''
+  try {
+    const payload = { ...changes.value }
+    if (payload.name !== undefined) payload.name = payload.name.trim()
+    if (isCyno.value) await cyno.update(payload)
+    else await agentDefs.update(agentId.value, payload)
+    draft.value = {}
+    return true
+  } catch (error) {
+    saveError.value = `Changes were not saved: ${error instanceof Error ? error.message : String(error)}`
+    return false
+  } finally {
+    saving.value = false
   }
 }
 
-async function updateReasoning(enabled: boolean, effort: AgentDefinition['reasoningEffort']) {
-  if (isCyno.value) {
-    await cyno.update({ thinkingEnabled: enabled, reasoningEffort: effort })
-    return
-  }
-  if (agent.value) {
-    await agentDefs.update(agentId.value, { thinkingEnabled: enabled, reasoningEffort: effort })
-  }
+function confirmLeave(): boolean | Promise<boolean> {
+  if (saving.value) return false
+  if (!isDirty.value) return true
+  resolveLeave?.(false)
+  showUnsavedDialog.value = true
+  return new Promise((resolve) => { resolveLeave = resolve })
 }
+
+function finishLeave(leave: boolean): void {
+  if (saving.value) return
+  showUnsavedDialog.value = false
+  const resolve = resolveLeave
+  resolveLeave = null
+  resolve?.(leave)
+}
+
+function discardAndLeave(): void {
+  if (saving.value) return
+  draft.value = {}
+  saveError.value = ''
+  finishLeave(true)
+}
+
+async function saveAndLeave(): Promise<void> {
+  if (await save()) finishLeave(true)
+}
+
+onBeforeRouteLeave(() => confirmLeave())
+onBeforeRouteUpdate((to, from) => {
+  if (to.name !== from.name || to.params.id !== from.params.id) return confirmLeave()
+  return true
+})
+
+function beforeUnload(event: BeforeUnloadEvent): void {
+  if (!isDirty.value && !saving.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', beforeUnload)
+  resolveLeave?.(false)
+})
 
 async function goToChat() {
+  if (!await confirmLeave()) return
   await chatStore.setActiveAgent(isCyno.value ? null : agentId.value)
   await router.push({ name: 'triggers-chat' })
 }
@@ -189,17 +267,34 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
             <span>{{ returnToChat ? 'Chat' : 'Agents' }}</span>
           </button>
 
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center gap-2 rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-400"
-            @click="goToChat"
-          >
-            <Icon
-              icon="lucide:message-circle"
-              class="h-4 w-4"
-            />
-            <span>Go to chat</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="save-agent"
+              :disabled="!canSave"
+              class="inline-flex items-center gap-2 rounded-lg accent-action bg-accent-500 px-3 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-40"
+              @click="save"
+            >
+              <Icon
+                :icon="saving ? 'lucide:loader-2' : 'lucide:save'"
+                class="h-4 w-4"
+                :class="{ 'animate-spin': saving }"
+              />
+              {{ saving ? 'Saving…' : 'Save' }}
+            </button>
+            <button
+              type="button"
+              :disabled="saving"
+              class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-theme-800 px-3 py-2 text-sm font-semibold text-theme-200 transition-colors hover:bg-theme-700 disabled:opacity-40"
+              @click="goToChat"
+            >
+              <Icon
+                icon="lucide:message-circle"
+                class="h-4 w-4"
+              />
+              <span>Go to chat</span>
+            </button>
+          </div>
         </div>
 
         <div class="mt-2 flex min-w-0 items-center gap-3">
@@ -267,15 +362,78 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
             </div>
           </div>
 
-          <component
-            :is="activeSection.component"
-            :agent="agent"
-            :cyno="isCyno"
-            @update="updateField"
-            @update-reasoning="updateReasoning"
-          />
+          <p
+            v-if="saveError"
+            role="alert"
+            class="mb-4 text-sm text-status-danger"
+          >
+            {{ saveError }}
+          </p>
+          <p
+            v-else-if="isDirty && validationError"
+            role="alert"
+            class="mb-4 text-sm text-status-warning"
+          >
+            {{ validationError }}
+          </p>
+          <fieldset
+            :disabled="saving"
+            class="min-w-0"
+          >
+            <component
+              :is="activeSection.component"
+              :agent="agent"
+              :cyno="isCyno"
+              @update="updateField"
+              @update-reasoning="updateReasoning"
+            />
+          </fieldset>
         </section>
       </div>
     </main>
+    <ModalDialog
+      :show="showUnsavedDialog"
+      title="Unsaved agent settings"
+      icon="lucide:save"
+      @close="finishLeave(false)"
+    >
+      <p class="text-sm text-ink-secondary">
+        Save your changes before leaving?
+      </p>
+      <p
+        v-if="saveError || validationError"
+        role="alert"
+        class="mt-3 text-sm text-status-danger"
+      >
+        {{ saveError || validationError }}
+      </p>
+      <template #actions>
+        <button
+          type="button"
+          data-testid="save-and-leave"
+          :disabled="!canSave"
+          class="rounded-lg accent-action bg-accent-500 px-4 py-2 text-sm font-medium text-accent-on disabled:opacity-40"
+          @click="saveAndLeave"
+        >
+          {{ saving ? 'Saving…' : 'Save' }}
+        </button>
+        <button
+          type="button"
+          :disabled="saving"
+          class="rounded-lg bg-theme-800 px-4 py-2 text-sm text-theme-200 disabled:opacity-40"
+          @click="finishLeave(false)"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          :disabled="saving"
+          class="rounded-lg px-4 py-2 text-sm text-status-danger hover:bg-theme-800 disabled:opacity-40"
+          @click="discardAndLeave"
+        >
+          Discard
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>

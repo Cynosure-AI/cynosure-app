@@ -112,7 +112,7 @@ onMounted(() =>
           :value="agent.name"
           type="text"
           class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          @change="
+          @input="
             emit('update', 'name', ($event.target as HTMLInputElement).value)
           "
         >
@@ -128,7 +128,7 @@ onMounted(() =>
           type="text"
           placeholder="auto-generated from name"
           class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 font-mono placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
-          @change="
+          @input="
             emit('update', 'internalName', ($event.target as HTMLInputElement).value)
           "
         >
@@ -139,7 +139,7 @@ onMounted(() =>
         <textarea
           :value="agent.description"
           class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none h-20"
-          @change="
+          @input="
             emit(
               'update',
               'description',
@@ -254,14 +254,13 @@ onMounted(() =>
         placeholder="Optional system instructions..."
         class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500 resize-none font-mono min-h-64"
         style="field-sizing: content"
-        @change="
+        @input="
           emit(
             'update',
             'systemPrompt',
             ($event.target as HTMLTextAreaElement).value,
-          )
+          ); autoResize($event)
         "
-        @input="autoResize"
       />
     </BaseCard>
   </div>
