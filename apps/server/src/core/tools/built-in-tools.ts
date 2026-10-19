@@ -9,7 +9,7 @@ import {
 } from "../memory/memory-folder-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
-import { makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
+import { filterSchedulingTools, makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import { makeManageMcpTool } from "./builtin/manage-mcp.js";
 import { makeFileTools } from "./builtin/file-tools.js";
 import { makeShellTool } from "./builtin/shell-tool.js";
@@ -239,7 +239,7 @@ export function hydrateBuiltInTools(
         scheduleExecutionConfig: ctx.scheduleExecutionConfig,
     };
 
-    return tools.map((t) => {
+    return filterSchedulingTools(tools, ctx.conversationId).map((t) => {
         const metadata = {
             registryKey: t.registryKey,
             originalName: t.originalName,

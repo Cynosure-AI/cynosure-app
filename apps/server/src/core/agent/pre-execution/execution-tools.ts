@@ -12,6 +12,7 @@ import type { ConversationExecutionConfig } from '@shared/types'
 import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
 import { isReadOnlyModeTool } from '../../tools/tool-policy.js'
+import { filterSchedulingTools } from '../../tools/builtin/schedule-tools.js'
 
 export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     | 'preset' | 'conversationId' | 'broadcast' | 'userQuery' | 'recentMessages' | 'usedToolNames'
@@ -69,7 +70,10 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
         readOnlyTools = false,
     } = input
 
-    const permitted = (candidates: RegistryAwareToolDefinition[]) => readOnlyTools ? candidates.filter(isReadOnlyModeTool) : candidates
+    const permitted = (candidates: RegistryAwareToolDefinition[]) => {
+        const available = filterSchedulingTools(candidates, conversationId)
+        return readOnlyTools ? available.filter(isReadOnlyModeTool) : available
+    }
     const autoRoutingEnabled = isToolRoutingEnabled(preset, autoToolRouting)
     const candidateTools = permitted(autoRoutingEnabled
         ? resolveRoutingCandidateTools({ preset, toolRegistry, preferredToolKeys, routingToolKeys })

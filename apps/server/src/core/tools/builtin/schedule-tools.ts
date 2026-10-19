@@ -1,8 +1,9 @@
-import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
+import type { RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import { CronExpressionParser } from 'cron-parser'
 import type { ConversationExecutionConfig } from '@shared/types'
 import { isCyno } from '../../agent/execution-preset.js'
 import { describeCurrentDate } from '../../agent/pre-execution/prompt-smart-tags.js'
+import { getDb } from '../../../db/database.js'
 
 export interface ScheduleToolOptions {
     agentId: string
@@ -32,6 +33,19 @@ export function isScheduleToolName(name?: string | null): name is ScheduleToolNa
     return Boolean(name && SCHEDULE_TOOL_NAME_SET.has(name))
 }
 
+function isTemporaryConversation(conversationId?: string): boolean {
+    if (!conversationId) return false
+    const conversation = getDb().prepare('SELECT temporary FROM conversations WHERE id = ?')
+        .get(conversationId) as { temporary: number } | undefined
+    return Boolean(conversation?.temporary)
+}
+
+export function filterSchedulingTools(tools: RegistryAwareToolDefinition[], conversationId: string): RegistryAwareToolDefinition[] {
+    const isSchedulingTool = (tool: RegistryAwareToolDefinition) => isScheduleToolName(tool.originalName ?? tool.name)
+    if (!tools.some(isSchedulingTool) || !isTemporaryConversation(conversationId)) return tools
+    return tools.filter(tool => !isSchedulingTool(tool))
+}
+
 function ownerAgentId(agentId: string): string {
     return isCyno({ id: agentId }) ? '' : agentId
 }
@@ -41,6 +55,9 @@ function hasScheduleContext(opts: ScheduleToolOptions): boolean {
 }
 
 function requireScheduleContext(opts: ScheduleToolOptions): ReturnType<typeof failure> | undefined {
+    if (isTemporaryConversation(opts.conversationId)) {
+        return failure('Scheduling tools are not available in temporary chats. Save this chat before using scheduling tools.')
+    }
     return hasScheduleContext(opts)
         ? undefined
         : failure('Scheduling tools require either an agent or Cyno\'s chat settings.')
@@ -310,7 +327,6 @@ function waitTool(opts: ScheduleToolOptions): ToolDefinition {
                 return failure(`minutes must be a whole number from 1 to ${MAX_WAIT_MINUTES}. Use schedule_create for anything later.`)
             }
 
-            const { getDb } = await import('../../../db/database.js')
             const conversation = getDb().prepare('SELECT origin FROM conversations WHERE id = ?').get(conversationId) as { origin: string | null } | undefined
             if (!conversation) return failure('This conversation no longer exists.')
             if (conversation.origin === 'channel') {
