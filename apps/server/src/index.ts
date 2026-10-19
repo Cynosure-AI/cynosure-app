@@ -49,6 +49,7 @@ import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { registerCynoRoutes } from './routes/cyno.js'
 import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { registerProjectRoutes } from './routes/projects.js'
+import { registerTtsRoutes } from './routes/tts.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat, startToolRegistryUpdates } from './ws.js'
 import { executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
 import { pauseAllChatQueuesOnStartup } from './core/chat/message-queue.js'
@@ -615,6 +616,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerCynoRoutes, { prefix: '/api/cyno' })
   app.register(registerModelFavoritesRoutes, { prefix: '/api/model-favorites' })
   app.register(async (instance) => registerProjectRoutes(instance, broadcast), { prefix: '/api/projects' })
+  app.register(async (instance) => registerTtsRoutes(instance, broadcast), { prefix: '/api/tts' })
 
   app.get('/api/health', async () => {
     return {

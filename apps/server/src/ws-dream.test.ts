@@ -28,6 +28,19 @@ test('project brief and board updates reach clients without conversation subscri
     }
 })
 
+test('voice download progress reaches settings pages without conversation subscriptions', () => {
+    const client = Object.assign(new EventEmitter(), { OPEN: 1, readyState: 1, send: vi.fn() })
+    const socket = client as unknown as WebSocket
+    addClient(socket)
+    try {
+        const progress = { voiceId: 'en_GB-aru-medium', status: 'downloading', loaded: 1, total: 10 }
+        broadcast('tts:download-progress', progress)
+        expect(client.send).toHaveBeenCalledWith(JSON.stringify({ event: 'tts:download-progress', data: progress }))
+    } finally {
+        removeClient(socket)
+    }
+})
+
 test('registry changes reach chat menus and coalesce a batch of discoveries', async () => {
     const { ToolRegistry } = await import('./core/tools/tool-registry.js')
     const registry = new ToolRegistry()
