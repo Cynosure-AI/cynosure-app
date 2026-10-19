@@ -5,7 +5,7 @@ import { Icon } from '@iconify/vue'
 import ProviderSettings from '../../components/settings/ProviderSettings.vue'
 import MemorySettings from '../../components/settings/MemorySettings.vue'
 import ChatSettings from '../../components/settings/ChatSettings.vue'
-import SpeechToTextSettings from '../../components/settings/SpeechToTextSettings.vue'
+import VoiceSettings from '../../components/settings/VoiceSettings.vue'
 import GeneralSettings from '../../components/settings/GeneralSettings.vue'
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue'
 import DesktopSettings from '../../components/settings/DesktopSettings.vue'
@@ -83,9 +83,9 @@ const categories: SettingsCategory[] = [
   {
     id: 'speech-to-text',
     label: 'Voice',
-    description: 'Manage voice input, Whisper model downloads, language, quantization, and microphone selection.',
+    description: 'Talk to your agents with Whisper voice input, and choose the voice that reads replies aloud.',
     icon: 'lucide:mic',
-    component: SpeechToTextSettings
+    component: VoiceSettings
   },
   {
     id: 'providers',
@@ -264,6 +264,27 @@ const sections: SettingsSection[] = [
     label: 'How it works',
     description: 'Learn how local Whisper transcription works.',
     terms: ['how it works', 'local', 'browser', 'web worker', 'webassembly', 'privacy', 'audio data']
+  },
+  {
+    id: 'voice-output',
+    categoryId: 'speech-to-text',
+    label: 'Speak Replies',
+    description: 'Read replies aloud, automatically after voice messages or always.',
+    terms: ['speak', 'read aloud', 'text to speech', 'tts', 'voice output', 'auto read', 'speaker', 'audio reply', 'vorlesen']
+  },
+  {
+    id: 'voice-output-voice',
+    categoryId: 'speech-to-text',
+    label: 'Voice',
+    description: 'Choose the voice, speaker, and speed used to read replies.',
+    terms: ['voice', 'piper', 'speaker', 'speed', 'rate', 'test voice', 'sound']
+  },
+  {
+    id: 'voice-library',
+    categoryId: 'speech-to-text',
+    label: 'Voice Library',
+    description: 'Listen to and download Piper voices in many languages.',
+    terms: ['voice library', 'piper', 'download voice', 'languages', 'german voice', 'english voice', 'sample']
   },
   {
     id: 'channel-management',
