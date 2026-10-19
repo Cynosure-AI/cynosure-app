@@ -8,6 +8,7 @@ import { useSpeechPlayer } from '../../composables/useSpeechPlayer'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import CustomSelect from '../shared/CustomSelect.vue'
 import BaseCard from '../shared/BaseCard.vue'
+import ModalDialog from '../shared/ModalDialog.vue'
 import type { SelectOptionGroup } from '../shared/CustomSelect.vue'
 import SettingsSubheading from './SettingsSubheading.vue'
 
@@ -148,12 +149,31 @@ async function download(voiceId: string): Promise<void> {
   }
 }
 
-async function remove(voiceId: string): Promise<void> {
-  actionError.value = ''
+const voiceToDelete = ref<PiperVoice | null>(null)
+const deleting = ref(false)
+const deleteError = ref('')
+/** The voice Cyno switches to when the active one is deleted. */
+const replacementVoice = computed(() => voiceToDelete.value?.id === voice.settings?.voiceId
+  ? voice.installedVoices.find((entry) => entry.id !== voiceToDelete.value?.id) ?? null
+  : null)
+
+function askDelete(entry: PiperVoice): void {
+  deleteError.value = ''
+  voiceToDelete.value = entry
+}
+
+async function confirmDelete(): Promise<void> {
+  if (!voiceToDelete.value) return
+  deleting.value = true
+  deleteError.value = ''
   try {
-    await voice.remove(voiceId)
+    if (player.state.key === 'voice-test') player.stop()
+    await voice.remove(voiceToDelete.value.id)
+    voiceToDelete.value = null
   } catch (err) {
-    actionError.value = err instanceof Error ? err.message : String(err)
+    deleteError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -444,7 +464,7 @@ onBeforeUnmount(() => {
                 class="p-1.5 rounded-md text-ink-muted hover:text-status-danger hover:bg-theme-700/60 transition-colors"
                 :title="`Delete ${voiceTitle(entry)}`"
                 :aria-label="`Delete ${voiceTitle(entry)}`"
-                @click="remove(entry.id)"
+                @click="askDelete(entry)"
               >
                 <Icon
                   icon="lucide:trash-2"
@@ -482,5 +502,56 @@ onBeforeUnmount(() => {
         </li>
       </ul>
     </BaseCard>
+
+    <ModalDialog
+      :show="voiceToDelete !== null"
+      title="Delete voice?"
+      icon="lucide:trash-2"
+      icon-color="red"
+      layer="nested"
+      @close="voiceToDelete = null"
+    >
+      <p class="text-sm leading-relaxed text-ink-secondary">
+        <span class="font-medium text-theme-100">{{ voiceToDelete ? voiceTitle(voiceToDelete) : '' }}</span>
+        ({{ voiceToDelete ? formatSize(voiceToDelete.sizeBytes) : '' }}) will be removed from the server. You can download it again from the voice library.
+      </p>
+      <p
+        v-if="voiceToDelete?.id === voice.settings?.voiceId"
+        class="mt-3 text-sm leading-relaxed text-ink-secondary"
+      >
+        <template v-if="replacementVoice">
+          {{ cyno.name }} will speak with <span class="font-medium text-theme-100">{{ voiceTitle(replacementVoice) }}</span> instead.
+        </template>
+        <template v-else>
+          It is the only installed voice, so {{ cyno.name }} will stop speaking until you download another.
+        </template>
+      </p>
+      <p
+        v-if="deleteError"
+        class="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs text-status-danger"
+        role="alert"
+      >
+        {{ deleteError }}
+      </p>
+      <template #actions>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500 disabled:cursor-wait disabled:opacity-60"
+          :disabled="deleting"
+          data-testid="confirm-delete-voice"
+          @click="confirmDelete"
+        >
+          {{ deleting ? 'Deleting…' : 'Delete voice' }}
+        </button>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+          :disabled="deleting"
+          @click="voiceToDelete = null"
+        >
+          Cancel
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>
