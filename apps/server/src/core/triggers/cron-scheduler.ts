@@ -195,6 +195,14 @@ export function getWaitJobsForConversation(conversationId: string): CronJobData[
     return rows.map(rowToData)
 }
 
+/** Cancel the scheduled continuation when the user resumes the conversation early. */
+export function cancelConversationWait(conversationId: string): void {
+    for (const job of getWaitJobsForConversation(conversationId)) {
+        unscheduleCronJob(job.id)
+        deleteCronJob(job.id)
+    }
+}
+
 /** When each of `conversationIds` that has an active wait will resume. */
 export function getWaitResumeTimes(conversationIds: string[], now = Date.now()): Map<string, number> {
     const resumeTimes = new Map<string, number>()

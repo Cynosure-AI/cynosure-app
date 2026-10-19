@@ -11,6 +11,7 @@ beforeEach(() => {
   vi.spyOn(api.chat, 'subscribeLiveConversations').mockImplementation(() => {})
   vi.spyOn(api.chat, 'markConversationRead').mockResolvedValue(undefined)
   vi.spyOn(api.chat, 'listConversations').mockResolvedValue([])
+  vi.spyOn(api.chat, 'getPendingWait').mockResolvedValue(null)
   vi.spyOn(api.chat, 'getPostActions').mockResolvedValue({ actions: [], quickResponses: { messageId: null, suggestions: [] } })
   vi.spyOn(api.chat, 'getQueue').mockResolvedValue({ conversationId: 'conversation', items: [], paused: false })
   vi.spyOn(api.chat, 'getEvents').mockResolvedValue({ events: [], latestSequence: 0 })
@@ -111,4 +112,31 @@ test('joins a sub-agent tool-round transcript to its per-round stream', () => {
   } finally {
     stop()
   }
+})
+
+
+test('refreshes the persisted wait when the scheduler changes it and removes the listener on cleanup', async () => {
+  let waitsChanged!: () => void
+  const unsubscribe = vi.fn()
+  vi.spyOn(api.chat, 'onWaitsChanged').mockImplementation(callback => {
+    waitsChanged = callback
+    return unsubscribe
+  })
+  const store = useChatStore()
+  store.activeConversationId = 'conversation'
+  await store.loadPendingWait()
+  const { stop } = listen()
+  const wait = { jobId: 'wait', resumesAt: Date.now() + 300_000, note: 'Check the build' }
+  vi.mocked(api.chat.getPendingWait).mockResolvedValue(wait)
+  waitsChanged()
+  await Promise.resolve()
+  expect(store.pendingWait).toEqual(wait)
+  expect(store.isConversationLocked).toBe(true)
+
+  vi.mocked(api.chat.getPendingWait).mockResolvedValue(null)
+  waitsChanged()
+  await Promise.resolve()
+  expect(store.isConversationLocked).toBe(false)
+  stop()
+  expect(unsubscribe).toHaveBeenCalledOnce()
 })

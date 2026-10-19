@@ -2,7 +2,7 @@ import { useAgentHealthStore } from './agent-health.store'
 import { useCynoStore } from './cyno.store'
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { api } from '../api/client'
+import { api, type PendingWait } from '../api/client'
 import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
 import type { ChatQueueDelivery, MessageToolCall, ContextEvidence, MediaGenerationSettings, PermissionMode, QueuedChatMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
@@ -99,6 +99,25 @@ export const useChatStore = defineStore('chat', () => {
   const memoryFolders = ref<MemoryFolder[]>([])
   const queuedMessages = ref<QueuedChatMessageDto[]>([])
   const queuePaused = ref(false)
+  const pendingWait = ref<PendingWait | null>(null)
+  let waitRequestId = 0
+
+  async function loadPendingWait(): Promise<void> {
+    const conversationId = activeConversationId.value
+    const requestId = ++waitRequestId
+    if (!conversationId) return
+    try {
+      const wait = await api.chat.getPendingWait(conversationId)
+      if (requestId === waitRequestId && activeConversationId.value === conversationId) pendingWait.value = wait
+    } catch {
+      // Keep the last known wait until the next refresh.
+    }
+  }
+
+  watch(activeConversationId, () => {
+    pendingWait.value = null
+    void loadPendingWait()
+  }, { flush: 'sync' })
   const postActionsMap = new Map<string, Set<string>>()
   const postActionsTrigger = ref(0)
   const quickResponsesMap = new Map<string, { messageId: string | null; suggestions: string[] }>()
@@ -159,7 +178,7 @@ export const useChatStore = defineStore('chat', () => {
     const convId = activeConversationId.value
     return Boolean(convId && (agentStore.isConversationExecuting(convId) || agentStore.awaitingHITLConvIds.has(convId)))
   })
-  const isConversationLocked = computed(() => activeConversationHasRunningInstance.value)
+  const isConversationLocked = computed(() => activeConversationHasRunningInstance.value || Boolean(pendingWait.value))
 
   async function syncConversationRunState(conversationId: string): Promise<void> {
     try {
@@ -843,6 +862,8 @@ export const useChatStore = defineStore('chat', () => {
     memoryFolders,
     queuedMessages,
     queuePaused,
+    pendingWait,
+    loadPendingWait,
     activeConversation,
     activePostActions,
     activeQuickResponses,

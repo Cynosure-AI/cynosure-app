@@ -1,28 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { Icon } from '@iconify/vue'
-import { api, type PendingWait } from '../../api/client'
-import { wsConnected } from '../../api/http'
+import { useChatStore } from '../../stores/chat.store'
 
-const props = defineProps<{
-  conversationId: string
-}>()
-
-const wait = ref<PendingWait | null>(null)
+const { pendingWait: wait } = storeToRefs(useChatStore())
 const now = ref(Date.now())
-let requestToken = 0
 let clock: ReturnType<typeof setInterval> | undefined
-let unsubscribe: (() => void) | undefined
-
-async function load(): Promise<void> {
-  const token = ++requestToken
-  try {
-    const pending = await api.chat.getPendingWait(props.conversationId)
-    if (token === requestToken) wait.value = pending
-  } catch {
-    // Keep the last known wait until the next change notification
-  }
-}
 
 const remaining = computed(() => {
   if (!wait.value) return ''
@@ -35,25 +19,12 @@ const resumeTime = computed(() =>
   wait.value ? new Date(wait.value.resumesAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
 )
 
-watch(() => props.conversationId, () => {
-  wait.value = null
-  void load()
-})
-
-watch(wsConnected, (connected) => {
-  if (connected) void load()
-})
-
 onMounted(() => {
-  unsubscribe = api.chat.onWaitsChanged(() => void load())
   clock = setInterval(() => { now.value = Date.now() }, 15_000)
-  void load()
 })
 
 onBeforeUnmount(() => {
-  requestToken++
   if (clock) clearInterval(clock)
-  unsubscribe?.()
 })
 </script>
 

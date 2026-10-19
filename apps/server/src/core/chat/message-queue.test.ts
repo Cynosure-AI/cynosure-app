@@ -1,9 +1,13 @@
 import Database from 'better-sqlite3'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-const state = vi.hoisted(() => ({ db: null as Database.Database | null }))
+const state = vi.hoisted(() => ({ db: null as Database.Database | null, waiting: false, active: false }))
+vi.mock('../triggers/cron-scheduler.js', () => ({
+  getPendingWait: () => state.waiting ? { jobId: 'wait' } : null,
+  cancelConversationWait: vi.fn(() => { state.waiting = false }),
+}))
 vi.mock('../../db/database.js', () => ({ getDb: () => state.db }))
-vi.mock('./active-executions.js', () => ({ getChatExecutionIdsByConversation: () => [] }))
+vi.mock('./active-executions.js', () => ({ getChatExecutionIdsByConversation: () => state.active ? ['execution'] : [] }))
 vi.mock('../artifacts/image-artifacts.js', () => ({
   artifactFileUrlToDataUrl: (url: string) => url,
   extractFilePathFromFileUrl: () => null,
@@ -37,6 +41,8 @@ function request(content: string) {
 
 describe('persistent chat queue', () => {
   beforeEach(() => {
+    state.waiting = false
+    state.active = false
     state.db?.close()
     state.db = new Database(':memory:')
     state.db.exec(`
@@ -73,8 +79,10 @@ describe('persistent chat queue', () => {
     expect(promoteQueuedMessageToSteering('conversation', queued.id)).toBe(true)
     expect(handler).toHaveBeenCalled()
 
+    state.waiting = true // A tool can schedule a wait before the steering is consumed.
     const messages = await takeSteeringMessages('conversation', 'stream')
 
+    expect(state.waiting).toBe(false)
     expect(messages).toEqual([{ role: 'user', content: 'change direction' }])
     expect(getChatQueueState('conversation').items).toEqual([])
     expect(state.db!.prepare('SELECT role, content FROM messages').get()).toEqual({
@@ -97,6 +105,60 @@ describe('persistent chat queue', () => {
     await runNextQueuedMessage('conversation')
 
     expect(executed).toEqual(['first', 'second'])
+    expect(getChatQueueState('conversation').items).toEqual([])
+  })
+
+  test('keeps messages pending throughout a scheduled wait and drains them on resume', async () => {
+    state.waiting = true
+    const executed: string[] = []
+    configureChatQueue(async (conversationId, queued) => {
+      executed.push(queued.content)
+      markQueuedMessagePromoted(conversationId, queued.messageId!)
+      return true
+    }, () => {})
+    await enqueueChatMessage('conversation', request('after the wait'))
+    expect(getChatQueueState('conversation').paused).toBe(false)
+    await runNextQueuedMessage('conversation')
+    expect(executed).toEqual([])
+
+    state.waiting = false
+    await runNextQueuedMessage('conversation')
+    expect(executed).toEqual(['after the wait'])
+  })
+
+  test('holds the rest of a queue when a completed turn schedules another wait', async () => {
+    const executed: string[] = []
+    configureChatQueue(async (conversationId, queued) => {
+      executed.push(queued.content)
+      markQueuedMessagePromoted(conversationId, queued.messageId!)
+      state.waiting = true
+      return true
+    }, () => {})
+    state.active = true
+    await enqueueChatMessage('conversation', request('first'))
+    await enqueueChatMessage('conversation', request('second'))
+    state.active = false
+    await runNextQueuedMessage('conversation')
+    expect(executed).toEqual(['first'])
+    expect(getChatQueueState('conversation').items.map(item => item.content)).toEqual(['second'])
+  })
+
+  test.each(['new', 'existing'])('steering a %s message cancels an idle wait and runs immediately', async (kind) => {
+    state.waiting = true
+    const execute = vi.fn(async (conversationId: string, queued: { messageId?: string }) => {
+      expect(state.waiting).toBe(false)
+      markQueuedMessagePromoted(conversationId, queued.messageId!)
+      return true
+    })
+    configureChatQueue(execute, () => {})
+    if (kind === 'new') {
+      await enqueueChatMessage('conversation', { ...request('resume now'), delivery: 'steer' })
+    } else {
+      const item = await enqueueChatMessage('conversation', request('resume now'))
+      promoteQueuedMessageToSteering('conversation', item.id)
+    }
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1))
+    expect(state.waiting).toBe(false)
     expect(getChatQueueState('conversation').items).toEqual([])
   })
 

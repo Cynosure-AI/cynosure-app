@@ -8,6 +8,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(api.chat, 'subscribeLiveConversations').mockImplementation(() => {})
   vi.spyOn(api.memoryFolders, 'list').mockResolvedValue([])
+  vi.spyOn(api.chat, 'getPendingWait').mockResolvedValue(null)
 })
 
 test('New Chat notifies the composer and waits for draft cleanup before leaving the conversation', async () => {
@@ -127,4 +128,32 @@ test('saving an incognito chat keeps it and refreshes the history', async () => 
 
   await store.startNewChat()
   expect(discard).not.toHaveBeenCalled()
+})
+
+
+test('restores the queue UI from a persisted wait and clears it when the wait ends', async () => {
+  const wait = { jobId: 'wait-1', resumesAt: Date.now() + 300_000, note: 'Check the build' }
+  vi.mocked(api.chat.getPendingWait).mockResolvedValue(wait)
+  const store = useChatStore()
+  store.activeConversationId = 'waiting-chat'
+  await flushPromises()
+  expect(store.pendingWait).toEqual(wait)
+  expect(store.activeConversationHasRunningInstance).toBe(false)
+  expect(store.isConversationLocked).toBe(true)
+
+  vi.mocked(api.chat.getPendingWait).mockResolvedValue(null)
+  await store.loadPendingWait()
+  expect(store.isConversationLocked).toBe(false)
+})
+
+test('ignores a wait response after switching conversations', async () => {
+  let resolve!: (wait: { jobId: string; resumesAt: number; note: string }) => void
+  vi.mocked(api.chat.getPendingWait).mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  const store = useChatStore()
+  store.activeConversationId = 'waiting-chat'
+  store.activeConversationId = 'other-chat'
+  resolve({ jobId: 'old-wait', resumesAt: Date.now() + 300_000, note: 'Old chat' })
+  await flushPromises()
+  expect(store.pendingWait).toBeNull()
+  expect(store.isConversationLocked).toBe(false)
 })

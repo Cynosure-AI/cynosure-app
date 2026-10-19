@@ -1,3 +1,4 @@
+import { getPendingWait } from '../core/triggers/cron-scheduler.js'
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { getGateway } from '../core/gateway/gateway.js'
@@ -712,6 +713,10 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     Params: { id: string }
     Body: ChatSendRequest
   }>('/conversations/:id/send', async (req) => {
+    if (getPendingWait(req.params.id)) {
+      await enqueueChatMessage(req.params.id, { ...req.body, delivery: 'next' })
+      return { success: true }
+    }
     const completed = await executeSend(req.params.id, req.body)
     if (completed) void runNextQueuedMessage(req.params.id)
     else pauseChatQueue(req.params.id)

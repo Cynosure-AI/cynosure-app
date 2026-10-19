@@ -25,6 +25,7 @@ import type {
   QueuedChatAttachment,
   QueuedChatMessageDto,
 } from '@shared/types'
+import { cancelConversationWait, getPendingWait } from '../triggers/cron-scheduler.js'
 import { getChatExecutionIdsByConversation } from './active-executions.js'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from './transcript.js'
 
@@ -157,7 +158,7 @@ export async function enqueueChatMessage(conversationId: string, request: ChatQu
   const now = Date.now()
   const active = getChatExecutionIdsByConversation(conversationId).length > 0
   const alreadyPaused = rows(conversationId).some(row => row.status === 'paused')
-  const status = request.delivery === 'steer' || (active && !alreadyPaused) ? 'pending' : 'paused'
+  const status = request.delivery === 'steer' || ((active || getPendingWait(conversationId)) && !alreadyPaused) ? 'pending' : 'paused'
   try {
     db.prepare(`
       INSERT INTO queued_chat_messages (
@@ -179,6 +180,7 @@ export async function enqueueChatMessage(conversationId: string, request: ChatQu
   const dto = rowToDto(db.prepare('SELECT * FROM queued_chat_messages WHERE id = ?').get(id) as QueueRow)
   notify(conversationId)
   if (request.delivery === 'steer') {
+    cancelConversationWait(conversationId)
     const handler = steeringHandlers.get(conversationId)
     if (handler) handler()
     else if (!active) void runNextQueuedMessage(conversationId, id)
@@ -292,6 +294,7 @@ export function promoteQueuedMessageToSteering(conversationId: string, id: strin
     WHERE id = ? AND conversation_id = ?
   `).run(Date.now(), id, conversationId)
   if (!result.changes) return false
+  cancelConversationWait(conversationId)
   notify(conversationId)
   const handler = steeringHandlers.get(conversationId)
   if (handler) handler()
@@ -337,6 +340,7 @@ export async function runNextQueuedMessage(conversationId: string, preferredId?:
     ? db.prepare('SELECT * FROM queued_chat_messages WHERE id = ? AND conversation_id = ?').get(preferredId, conversationId) as QueueRow | undefined
     : db.prepare(`SELECT * FROM queued_chat_messages WHERE conversation_id = ? AND status = 'pending' ORDER BY position, created_at LIMIT 1`).get(conversationId) as QueueRow | undefined
   if (!candidate) return
+  if (candidate.delivery !== 'steer' && getPendingWait(conversationId)) return
   draining.add(conversationId)
   db.prepare(`UPDATE queued_chat_messages SET status = 'pending' WHERE conversation_id = ?`).run(conversationId)
   try {
@@ -373,6 +377,7 @@ export async function takeSteeringMessages(conversationId: string, streamId: str
     ORDER BY position, created_at
     LIMIT 1
   `).all(conversationId) as QueueRow[]
+  if (steeringRows.length) cancelConversationWait(conversationId)
   const promoted: ChatMessage[] = []
   for (const row of steeringRows) {
     const images = parseJson<string[]>(row.image_urls_json, [])

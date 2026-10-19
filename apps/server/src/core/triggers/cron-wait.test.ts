@@ -11,7 +11,7 @@ const queue = vi.hoisted(() => ({
 }))
 vi.mock('../chat/message-queue.js', () => queue)
 
-import { getCronJob, getPendingWait, getWaitResumeTimes, listCronJobs, startCronScheduler, stopCronScheduler, triggerCronJobNow } from './cron-scheduler.js'
+import { cancelConversationWait, getCronJob, getPendingWait, getWaitResumeTimes, listCronJobs, startCronScheduler, stopCronScheduler, triggerCronJobNow } from './cron-scheduler.js'
 import { makeScheduleTools } from '../tools/builtin/schedule-tools.js'
 
 const savedConfig = {
@@ -72,6 +72,17 @@ describe('schedule_wait', () => {
         expect(getWaitResumeTimes(['chat-1'])).toEqual(new Map())
         expect(getPendingWait('chat-1')).toBeNull()
         expect(broadcast).toHaveBeenCalledWith('cron:waits-changed', {})
+    })
+
+    test('cancels the scheduled continuation when a conversation is resumed early', async () => {
+        const created = await waitTool('chat-1').execute({ minutes: 5, note: 'Check the build' })
+        const jobId = JSON.parse(created.output).jobId
+        cancelConversationWait('chat-1')
+        expect(getCronJob(jobId)).toBeUndefined()
+        expect(getPendingWait('chat-1')).toBeNull()
+        triggerCronJobNow(jobId)
+        await new Promise(resolve => setImmediate(resolve))
+        expect(queue.enqueueChatMessage).not.toHaveBeenCalled()
     })
 
     test('rejects waits longer than an hour, outside a conversation, and in channel conversations', async () => {

@@ -937,7 +937,6 @@ onMounted(() => {
       <!-- Pending schedule_wait -->
       <WaitResumeMarker
         v-if="chatStore.activeConversationId && !agentStore.isExecuting && !chatStore.isStreaming"
-        :conversation-id="chatStore.activeConversationId"
       />
 
       <!-- Title generation activity indicator -->

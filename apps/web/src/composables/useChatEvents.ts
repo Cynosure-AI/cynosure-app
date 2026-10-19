@@ -191,11 +191,16 @@ export function useChatEvents(): () => void {
   }, { flush: 'sync' })
 
   const stopConnectionWatch = watch(wsConnected, (connected) => {
-    if (connected) void resumeChatEvents()
+    if (connected) {
+      void resumeChatEvents()
+      void chatStore.loadPendingWait()
+    }
   })
+  const unsubscribeWaits = api.chat.onWaitsChanged(() => void chatStore.loadPendingWait())
   const unsubscribe = api.chat.onEvent(receiveChatEvent)
   return () => {
     unsubscribe()
+    unsubscribeWaits()
     stopConnectionWatch()
     stopCursorWatch()
     stopLoadingWatch()
