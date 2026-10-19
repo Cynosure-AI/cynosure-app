@@ -670,6 +670,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const color = (code: number, text: string) => useColor ? `\u001b[${code}m${text}\u001b[0m` : text
 
   console.log(color(36, String.raw`
+  ------------------------------------------------------------
    ____  __   __  _   _    ___    ____    _   _   ____    _____
   / ___| \ \ / / | \ | |  / _ \  / ___|  | | | | |  _ \  | ____|
  | |      \ V /  |  \| | | | | | \___ \  | | | | | |_) | |  _|
