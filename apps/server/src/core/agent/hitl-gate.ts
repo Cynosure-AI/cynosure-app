@@ -115,7 +115,7 @@ export class HITLGate {
         return {
           approved: false,
           denied: true,
-          reason: `This chat is in Read Only mode, so only read-only tools, project planning, and memory creation can run (blocked: ${[...new Set(blocked.map((tc) => tc.function.name))].join(', ')})`,
+          reason: `This chat is in Read Only mode, so only read-only tools and project planning can run (blocked: ${[...new Set(blocked.map((tc) => tc.function.name))].join(', ')})`,
         }
       }
     }
@@ -136,7 +136,6 @@ export class HITLGate {
     }
     const needsApproval = toolCalls.filter(
       (tc) => !specificallyApprovedCalls.has(tc.id)
-        && !(permissionMode === 'read-only' && tc.function.name === 'memory_create')
         && !isSystemAutoApprovedTool(tc.function.name)
         && !this.isAutoApproved(tc.function.name, annotationsByName.get(tc.function.name))
         && !sessionSet?.has(tc.function.name)

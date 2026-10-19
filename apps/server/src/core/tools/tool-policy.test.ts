@@ -8,9 +8,9 @@ describe('tool approval policy', () => {
         expect(isSystemAutoApprovedTool('memory_patch')).toBe(false)
     })
 
-    test('allows additive memory creation in Read Only mode but blocks patch and delete', () => {
+    test('blocks memory creation, patch, and delete in Read Only mode', () => {
         const annotations = { readOnlyHint: false, destructiveHint: false }
-        expect(isReadOnlyModeTool({ name: 'memory_create', annotations })).toBe(true)
+        expect(isReadOnlyModeTool({ name: 'memory_create', annotations })).toBe(false)
         expect(isReadOnlyModeTool({ name: 'memory_patch', annotations })).toBe(false)
         expect(isReadOnlyModeTool({ name: 'memory_delete', annotations: { readOnlyHint: false, destructiveHint: true } })).toBe(false)
     })

@@ -140,7 +140,7 @@ describe('HITLGate permission mode', () => {
       .resolves.toEqual({ approved: true })
   })
 
-  test('read only allows memory creation without requesting approval', async () => {
+  test('read only blocks memory creation without requesting approval', async () => {
     const gate = new HITLGate()
     permissionModes.set('conv-1', 'read-only')
     const request = vi.fn()
@@ -148,14 +148,14 @@ describe('HITLGate permission mode', () => {
 
     try {
       await expect(gate.requestApproval('task-1', [call('memory_create')], undefined, 'conv-1'))
-        .resolves.toEqual({ approved: true })
+        .resolves.toEqual({ approved: false, denied: true, reason: expect.stringContaining('blocked: memory_create') })
       expect(request).not.toHaveBeenCalled()
     } finally {
       unsubscribe()
     }
   })
 
-  test.each(['memory_patch', 'memory_delete'])('read only blocks %s even with saved approval', async (name) => {
+  test.each(['memory_create', 'memory_patch', 'memory_delete'])('read only blocks %s even with saved approval', async (name) => {
     const gate = new HITLGate()
     permissionModes.set('conv-1', 'read-only')
     approvalRows.set(name, 1)

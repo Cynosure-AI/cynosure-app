@@ -12,7 +12,7 @@ const modeColors: Record<PermissionMode, string> = {
 const groups = [{
   label: 'Permissions',
   options: [
-    { value: 'read-only', label: 'Read Only', iconName: 'lucide:eye', iconClass: modeColors['read-only'], tooltip: 'Offers read-only tools, project planning, and creation of new memory entries.' },
+    { value: 'read-only', label: 'Read Only', iconName: 'lucide:eye', iconClass: modeColors['read-only'], tooltip: 'Offers read-only tools and project planning.' },
     { value: 'auto', label: 'Auto', iconName: 'lucide:shield-check', iconClass: modeColors.auto, tooltip: 'Runs safe tools and asks before the rest.' },
     { value: 'full', label: 'Full Access', iconName: 'lucide:zap', iconClass: modeColors.full, tooltip: 'Runs every tool in this chat without asking.' },
   ],
