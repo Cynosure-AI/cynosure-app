@@ -6,6 +6,7 @@
   "description": "Cynosure monorepo — server, web UI, and Electron desktop app",
   "scripts": {
     "dev:server": "pnpm --filter cynosure-server dev",
+    "dev:interactive": "pnpm --filter cynosure-server dev:interactive",
     "dev:web": "pnpm --filter cynosure-web dev",
     "dev:electron": "pnpm --filter cynosure-desktop dev",
     "dev": "concurrently --names server,web --prefix-colors blue,green \"pnpm dev:server\" \"pnpm dev:web\"",

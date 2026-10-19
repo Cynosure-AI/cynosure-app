@@ -50,6 +50,22 @@ Then open:
 
 Add a model provider in the app's settings to start chatting. Provider availability and required credentials depend on the models and services you choose.
 
+To run the server with an interactive terminal for Cyno:
+
+```bash
+npm run dev:interactive
+# or: pnpm dev:interactive
+```
+
+The API and built web UI remain available. Type a message to chat using Cyno's
+configured profile; terminal conversations are saved in the regular chat history.
+Use `/help` for commands, `/status` for server health, `/new` for a fresh chat,
+`/stop` to cancel a reply, and `/approve [task-id]` or `/deny [task-id]` for tool
+requests. Approvals apply once. `/exit`, Ctrl+C, or Ctrl+D shut down the server.
+Unlike `dev:server`, this script does not watch files: the `tsx` watcher uses
+terminal input to restart the process. Restart the script after code changes.
+For a built server, use `node apps/server/dist/index.js --interactive` (or `-i`).
+
 ## Desktop app
 
 The Electron app packages the web interface and server together. Build a package for your platform with:

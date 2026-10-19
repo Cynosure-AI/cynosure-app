@@ -49,7 +49,7 @@ import { registerUserSettingsRoutes } from './routes/user-settings.js'
 import { registerCynoRoutes } from './routes/cyno.js'
 import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { registerProjectRoutes } from './routes/projects.js'
-import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat, startToolRegistryUpdates } from './ws.js'
+import { addClient, broadcast as broadcastToClients, setClientConversationSubscriptions, startHeartbeat, startToolRegistryUpdates } from './ws.js'
 import { executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
 import { pauseAllChatQueuesOnStartup } from './core/chat/message-queue.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
@@ -59,6 +59,8 @@ import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-sche
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 import { ensurePricingLoaded } from './core/model-dev-fetcher.js'
+import { startInteractiveConsole } from './cli/interactive-console.js'
+import { cynoExecutionConfig } from './core/cyno/cyno-run.js'
 
 const APP_NAME = 'cynosure-server'
 const APP_VERSION = packageJson.version
@@ -85,6 +87,7 @@ interface CliOptions {
   host?: string
   port?: number
   dataDir?: string
+  interactive: boolean
   showHelp: boolean
   showVersion: boolean
 }
@@ -96,6 +99,7 @@ interface StartServerOptions {
 }
 
 interface RunningServer {
+  startInteractive?: (shutdown: () => void) => void
   close: () => Promise<void>
 }
 
@@ -137,6 +141,7 @@ function parsePort(value: string, source: string): number {
 
 function parseCliArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
+    interactive: false,
     showHelp: false,
     showVersion: false
   }
@@ -159,6 +164,11 @@ function parseCliArgs(argv: string[]): CliOptions {
 
     if (arg === '--version' || arg === '-v') {
       options.showVersion = true
+      continue
+    }
+
+    if (arg === '--interactive' || arg === '-i') {
+      options.interactive = true
       continue
     }
 
@@ -213,6 +223,7 @@ Options:
   --host <host>          Bind to a specific host (default: env HOST or all interfaces)
   --port <port>          Bind to a specific port (default: env PORT or ${DEFAULT_PORT})
   --data-dir <path>      Override CYNOSURE_DATA_DIR for SQLite, LanceDB, and logs
+  -i, --interactive     Chat with Cyno and control the server from this terminal
 
 Examples:
   ${executable}
@@ -419,7 +430,21 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   })
   await app.register(fastifySwaggerUi, { routePrefix: '/docs' })
 
+  let interactiveConsole: ReturnType<typeof startInteractiveConsole> | undefined
+  const broadcast = (event: string, data: unknown) => {
+    broadcastToClients(event, data)
+    interactiveConsole?.receive(event, data)
+  }
   const pendingHITLResolvers = new Map<string, (result: ApprovalResult) => void>()
+  const resolveApproval = (taskId: string, result: ApprovalResult): boolean => {
+    const resolver = pendingHITLResolvers.get(taskId)
+    if (!resolver) return false
+    resolver(result)
+    pendingHITLResolvers.delete(taskId)
+    getHITLGate().clearExternalRequest(taskId)
+    getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(taskId)
+    return true
+  }
 
   // WebSocket route
   app.register(async (wsApp) => {
@@ -466,11 +491,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
             else getHITLGate().addSessionApproval(conversationId, toolNames)
           }
 
-          resolver({ approved, reason })
-          pendingHITLResolvers.delete(taskId)
-          getHITLGate().clearExternalRequest(taskId)
-          // Remove from persistence now that it is resolved
-          getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(taskId)
+          resolveApproval(taskId, { approved, reason })
         } catch {
           // Ignore malformed messages.
         }
@@ -690,11 +711,25 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   let isClosed = false
 
   return {
+    startInteractive: (shutdown) => {
+      interactiveConsole = startInteractiveConsole({
+        configuration: cynoExecutionConfig,
+        approve: (taskId, approved) => resolveApproval(taskId, { approved, denied: !approved }),
+        shutdown,
+        request: async (method, url, body) => {
+          const response = await app.inject({ method, url, ...(body ? { payload: body } : {}) })
+          const data = response.json()
+          if (response.statusCode >= 400) throw new Error(data.error || data.message || `HTTP ${response.statusCode}`)
+          return data
+        },
+      })
+    },
     close: async () => {
       if (isClosed) {
         return
       }
       isClosed = true
+      await interactiveConsole?.close()
 
       clearInterval(heartbeat)
       removeRegistryListener()
@@ -753,7 +788,7 @@ async function runCli(): Promise<void> {
   })
 
   let shuttingDown = false
-  const shutdown = async (signal: NodeJS.Signals) => {
+  const shutdown = async (signal: NodeJS.Signals | 'console exit') => {
     if (shuttingDown) {
       return
     }
@@ -775,6 +810,14 @@ async function runCli(): Promise<void> {
   process.once('SIGTERM', () => {
     void shutdown('SIGTERM')
   })
+
+  if (options.interactive) {
+    if (!runtime.startInteractive) {
+      console.error('Interactive console unavailable because server startup failed.')
+    } else {
+      runtime.startInteractive(() => { void shutdown('console exit') })
+    }
+  }
 }
 
 process.on('uncaughtException', (error) => {
