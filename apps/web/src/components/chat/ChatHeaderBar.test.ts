@@ -37,7 +37,7 @@ function render() {
   return mount(ChatHeaderBar, {
     attachTo: document.body,
     props: { hasPlanningTasks: false, taskListOpen: false, planningTaskCount: 0 },
-    global: { stubs: { AgentSelect: true, ChatSettingsMenu: true, ChatSchedulesPopover: true } },
+    global: { stubs: { AgentSelect: true, ChatSettingsMenu: true } },
   })
 }
 
