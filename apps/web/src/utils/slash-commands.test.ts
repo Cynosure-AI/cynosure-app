@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { findSlashCommand, parseSlashInput, rankSlashArgs, slashName, slashSuggestions, type SlashCommand } from './slash-commands'
+import { composerCommandAt, findSlashCommand, parseSlashInput, rankSlashArgs, slashName, slashSuggestions, type SlashCommand } from './slash-commands'
 
 const commands: SlashCommand[] = [
   { name: 'new', aliases: ['clear'], description: 'Start a new chat', icon: 'x', group: 'Chat', run: vi.fn() },
@@ -93,5 +93,25 @@ describe('slashName', () => {
     expect(slashName('GitHub')).toBe('github')
     expect(slashName('  Google Drive (beta) ')).toBe('google-drive-beta')
     expect(slashName('???')).toBe('')
+  })
+})
+
+
+describe('composerCommandAt', () => {
+  test('finds inline commands after text and line breaks', () => {
+    expect(composerCommandAt('hello /think high')).toMatchObject({ name: 'think', args: 'high', start: 6, end: 17 })
+    expect(composerCommandAt('hello\n/agent Research')).toMatchObject({ name: 'agent', args: 'Research', start: 6 })
+    expect(slashSuggestions(commands, 'hello /think high')[0].label).toBe('High')
+  })
+
+  test('uses the cursor and replaces the rest of a partially edited word', () => {
+    expect(composerCommandAt('hello /think later', 10)).toMatchObject({ text: '/thi', start: 6, end: 12 })
+    expect(composerCommandAt('hello', -1)).toBeNull()
+  })
+
+  test('ignores email addresses, URLs, paths, and earlier lines', () => {
+    for (const text of ['hello @researcher', 'user@example.com', 'https://example.com', '/etc/hosts', 'text/think', '/think\nhello']) {
+      expect(composerCommandAt(text)).toBeNull()
+    }
   })
 })

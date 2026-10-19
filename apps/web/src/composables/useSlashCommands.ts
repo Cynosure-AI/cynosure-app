@@ -70,6 +70,7 @@ export function useSlashCommands(actions: SlashCommandActions) {
 
   /** Load the lists that argument suggestions draw from. Safe to call repeatedly. */
   function prepare(): void {
+    if (!agentDefs.loaded) void agentDefs.load().catch(() => undefined)
     if (!chatStore.memoryFolders.length) void chatStore.loadMemoryFolders()
     if (!servers.value.length) void loadServers().catch(() => undefined)
     void projectsStore.ensureLoaded().catch(() => undefined)

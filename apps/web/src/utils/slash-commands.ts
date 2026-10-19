@@ -73,6 +73,22 @@ export function parseSlashInput(text: string): SlashInput | null {
   return { name: match[1].toLowerCase(), args: match[3] ?? '', hasArgs: match[2] !== undefined }
 }
 
+/** Find the command being edited, including in a multiline draft. */
+export function composerCommandAt(text: string, caret = text.length) {
+  if (caret < 0) return null
+  const before = text.slice(0, caret)
+  const triggers = [...before.matchAll(/(?:^|\s)(\/)/g)]
+  const trigger = triggers.at(-1)
+  if (!trigger) return null
+  const start = trigger.index! + trigger[0].length - 1
+  const token = before.slice(start)
+  const input = parseSlashInput(token)
+  if (!input) return null
+  // Replace the rest of the current word when completing in its middle.
+  const end = caret + (/^[^\s]*/.exec(text.slice(caret))?.[0].length ?? 0)
+  return { ...input, start, end, text: token }
+}
+
 export function findSlashCommand(commands: readonly SlashCommand[], name: string): SlashCommand | undefined {
   const wanted = name.toLowerCase()
   return commands.find(command => command.name === wanted || command.aliases?.includes(wanted))
@@ -107,7 +123,7 @@ function commandOption(command: SlashCommand): SlashOption {
 
 /** The menu options for the current composer text; empty when it is not a command. */
 export function slashSuggestions(commands: readonly SlashCommand[], text: string): SlashOption[] {
-  const input = parseSlashInput(text)
+  const input = composerCommandAt(text)
   if (!input) return []
   if (input.hasArgs) {
     const command = findSlashCommand(commands, input.name)

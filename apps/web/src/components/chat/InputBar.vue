@@ -16,7 +16,7 @@ import ModelSelectorModal from './modals/ModelSelectorModal.vue'
 import SystemPromptModal from './modals/SystemPromptModal.vue'
 import SlashCommandMenu from './inputbar/SlashCommandMenu.vue'
 import { useSlashCommands } from '../../composables/useSlashCommands'
-import { findSlashCommand, parseSlashInput, slashSuggestions, type SlashOption } from '../../utils/slash-commands'
+import { findSlashCommand, composerCommandAt, slashSuggestions, type SlashOption } from '../../utils/slash-commands'
 import { api } from '../../api/client'
 import type { ProjectFileContent, StagedChatAttachment } from '../../api/types'
 import { useProjectsStore } from '../../stores/projects.store'
@@ -156,16 +156,22 @@ const slashMenuRef = ref<InstanceType<typeof SlashCommandMenu> | null>(null)
 /** Composer text the user dismissed the menu for with Escape; it may then be sent as a message. */
 const slashDismissedFor = ref<string | null>(null)
 const slashIndex = ref(0)
+const composerCaret = ref(inputText.value.length)
+const activeCommand = computed(() => composerCommandAt(inputText.value, composerCaret.value))
+function updateComposerCaret(): void {
+  const el = textareaRef.value
+  if (el) composerCaret.value = el.selectionStart === el.selectionEnd ? el.selectionStart : -1
+}
 const slashOptions = computed(() =>
-  slashDismissedFor.value === inputText.value ? [] : slashSuggestions(slashCommands.value, inputText.value)
+  slashDismissedFor.value === inputText.value || !activeCommand.value ? [] : slashSuggestions(slashCommands.value, activeCommand.value.text)
 )
 const slashOpen = computed(() => slashOptions.value.length > 0)
 const activeSlashIndex = computed(() => Math.min(slashIndex.value, slashOptions.value.length - 1))
 const slashNotice = ref<{ text: string; error: boolean } | null>(null)
 let slashNoticeTimer: number | null = null
 
-watch(inputText, () => { slashIndex.value = 0 })
-watch(() => inputText.value.startsWith('/'), (typing) => {
+watch(inputText, () => { slashIndex.value = 0; composerCaret.value = inputText.value.length }, { flush: 'sync' })
+watch(() => Boolean(activeCommand.value), (typing) => {
   if (typing) prepareSlashCommands()
 }, { immediate: true })
 
@@ -180,19 +186,27 @@ function moveSlashSelection(step: number): void {
   slashIndex.value = (activeSlashIndex.value + step + count) % count
 }
 
-function completeSlashOption(option: SlashOption): void {
-  if (option.complete) inputText.value = option.complete
+/** Only consume the command at the cursor, preserving the rest of the draft. */
+function replaceActiveCommand(replacement: string): void {
+  const command = activeCommand.value
+  if (!command) return
+  const caret = command.start + replacement.length
+  inputText.value = inputText.value.slice(0, command.start) + replacement + inputText.value.slice(command.end)
+  composerCaret.value = caret
+  persistDraft(draftStorageKey.value, inputText.value)
   nextTick(() => {
-    const el = textareaRef.value
-    el?.focus()
-    el?.setSelectionRange(inputText.value.length, inputText.value.length)
+    textareaRef.value?.focus()
+    textareaRef.value?.setSelectionRange(caret, caret)
   })
+}
+
+function completeSlashOption(option: SlashOption): void {
+  if (option.complete) replaceActiveCommand(option.complete)
 }
 
 async function selectSlashOption(option: SlashOption): Promise<void> {
   if (option.unavailable) {
-    inputText.value = ''
-    persistDraft(draftStorageKey.value, '')
+    replaceActiveCommand('')
     showSlashNotice(option.unavailable, true)
     return
   }
@@ -200,8 +214,7 @@ async function selectSlashOption(option: SlashOption): Promise<void> {
     completeSlashOption(option)
     return
   }
-  inputText.value = ''
-  persistDraft(draftStorageKey.value, '')
+  replaceActiveCommand('')
   try {
     const message = await option.run()
     if (message) showSlashNotice(message)
@@ -218,7 +231,7 @@ function handleSlashSubmit(): boolean {
     return true
   }
   if (slashDismissedFor.value === inputText.value) return false
-  const input = parseSlashInput(inputText.value.trim())
+  const input = activeCommand.value
   const command = input ? findSlashCommand(slashCommands.value, input.name) : undefined
   if (!input || !command) return false
   if (command.unavailable) {
@@ -849,7 +862,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           ref="slashMenuRef"
           :options="slashOptions"
           :active-index="activeSlashIndex"
-          :grouped="inputText.trim() === '/'"
+          :grouped="activeCommand?.text === '/'"
           @select="selectSlashOption"
           @hover="slashIndex = $event"
         />
@@ -879,7 +892,10 @@ defineExpose({ processFiles, focus, sendSuggestion })
           :aria-controls="slashOpen ? slashMenuId : undefined"
           :aria-activedescendant="slashOpen ? slashMenuRef?.optionId(activeSlashIndex) : undefined"
           @keydown="onKeydown"
-          @input="autoResize"
+          @input="updateComposerCaret(); autoResize()"
+          @click="updateComposerCaret"
+          @keyup="updateComposerCaret"
+          @select="updateComposerCaret"
           @paste="onPaste"
         />
         <InputToolbar

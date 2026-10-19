@@ -44,7 +44,8 @@ const servers = ref([{ id: 'gh', icon_url: 'https://example.test/gh.png' }])
 
 vi.mock('../stores/chat.store', () => ({ useChatStore: () => chatStore }))
 vi.mock('../stores/agent-runtime.store', () => ({ useAgentStore: () => agentStore }))
-vi.mock('../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ agents: [] }) }))
+const agentDefs = reactive({ loaded: true, load: vi.fn(async () => undefined), agents: [{ id: 'research', name: 'Research Assistant', internalName: 'researcher', description: 'Find answers', iconUrl: null }] })
+vi.mock('../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => agentDefs }))
 vi.mock('../stores/projects.store', () => ({
   useProjectsStore: () => ({ activeProjects: [], get: () => undefined, ensureLoaded: vi.fn(async () => undefined), load: vi.fn() }),
 }))
@@ -82,6 +83,20 @@ describe('useSlashCommands', () => {
     expect(off.label).toBe('Off')
     expect(off.run?.()).toBe('GitHub tools off')
     expect(chatStore.selectedToolNames).toEqual([])
+  })
+
+  test('/agent lists subagents and toggles the session selection', () => {
+    chatStore.sessionSubAgentIds = []
+    const { commands } = useSlashCommands(actions)
+    expect(findSlashCommand(commands.value, 'agent')).toBeDefined()
+    expect(slashSuggestions(commands.value, '@research')).toEqual([])
+    const [agent] = slashSuggestions(commands.value, '/agent Research')
+    expect(agent).toMatchObject({ label: 'Research Assistant', state: 'off', complete: '/agent Research Assistant' })
+    expect(agent.run?.()).toBe('Subagent Research Assistant on')
+    expect(chatStore.sessionSubAgentIds).toEqual(['research'])
+    expect(slashSuggestions(commands.value, '/subagent Research')[0].state).toBe('on')
+    slashSuggestions(commands.value, '/agent Research')[0].run?.()
+    expect(chatStore.sessionSubAgentIds).toEqual([])
   })
 
   test('/tools lists every toolset, including built-ins', () => {
