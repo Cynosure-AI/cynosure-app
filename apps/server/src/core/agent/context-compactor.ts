@@ -15,6 +15,13 @@ import { messageContentJson, publishChatEvent } from '../chat/transcript.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
+const compactingConversations = new Set<string>()
+
+/** Live state for history snapshots, including manual and automatic compaction. */
+export function isConversationCompacting(conversationId: string): boolean {
+    return compactingConversations.has(conversationId)
+}
+
 /**
  * Sentinel prefix used to identify compact event markers stored in the DB.
  * These system messages are UI-only and must never be forwarded to an LLM.
@@ -166,42 +173,47 @@ async function recordCompaction(input: {
 }): Promise<{ messageId: string; summary: string }> {
     const { toSummarize, model, signal, db, conversationId, broadcast } = input
 
-    // Notify the UI so it can show a loading card while summarisation runs
-    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'compact-start' } })
-
-    let summary: string
+    compactingConversations.add(conversationId)
     try {
-        summary = await summarizeConversation(toSummarize, input.gateway, input.providerId, model, signal)
-    } catch (err) {
-        if (!signal?.aborted && (err as Error).name !== 'AbortError') {
-            publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'compact-error', error: String(err) } })
+        // Notify the UI so it can show a loading card while summarisation runs
+        publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'compact-start' } })
+
+        let summary: string
+        try {
+            summary = await summarizeConversation(toSummarize, input.gateway, input.providerId, model, signal)
+        } catch (err) {
+            if (!signal?.aborted && (err as Error).name !== 'AbortError') {
+                publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: { type: 'compact-error', error: String(err) } })
+            }
+            throw err
         }
-        throw err
-    }
 
-    // Persist the compact event as a sentinel system message in the DB
-    signal?.throwIfAborted()
-    const messageId = nanoid()
-    const createdAt = Date.now()
-    const compactData: CompactEventData = {
-        summary,
-        compactedMessageCount: toSummarize.length,
-        model,
-        createdAt,
-        compactedThroughMessageId: input.compactedThrough?.id ?? input.previous?.compactedThroughMessageId,
-        compactedThroughCreatedAt: input.compactedThrough?.created_at ?? input.previous?.compactedThroughCreatedAt,
-    }
-    const content = `${COMPACT_EVENT_PREFIX}${JSON.stringify(compactData)}`
-    db.prepare(
-        'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(messageId, conversationId, 'system', content, messageContentJson({ id: messageId, content }), createdAt)
+        // Persist the compact event as a sentinel system message in the DB
+        signal?.throwIfAborted()
+        const messageId = nanoid()
+        const createdAt = Date.now()
+        const compactData: CompactEventData = {
+            summary,
+            compactedMessageCount: toSummarize.length,
+            model,
+            createdAt,
+            compactedThroughMessageId: input.compactedThrough?.id ?? input.previous?.compactedThroughMessageId,
+            compactedThroughCreatedAt: input.compactedThrough?.created_at ?? input.previous?.compactedThroughCreatedAt,
+        }
+        const content = `${COMPACT_EVENT_PREFIX}${JSON.stringify(compactData)}`
+        db.prepare(
+            'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(messageId, conversationId, 'system', content, messageContentJson({ id: messageId, content }), createdAt)
 
-    // Notify the UI so it can render the completed compact event card
-    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: {
-        type: 'compact-event', messageId, summary,
-        compactedMessageCount: toSummarize.length, model,
-    } })
-    return { messageId, summary }
+        // Notify the UI so it can render the completed compact event card
+        publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: {
+            type: 'compact-event', messageId, summary,
+            compactedMessageCount: toSummarize.length, model,
+        } })
+        return { messageId, summary }
+    } finally {
+        compactingConversations.delete(conversationId)
+    }
 }
 
 // ─── Public API ────────────────────────────────────────────

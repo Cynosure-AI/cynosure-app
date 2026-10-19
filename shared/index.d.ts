@@ -321,6 +321,8 @@ export interface ConversationDto {
 }
 
 export interface ConversationMessagesResponse {
+  /** A summary is currently being generated for this conversation. */
+  compactionInProgress?: boolean
   conversationAgentId: string | null
   messages: MessageItem[]
   /** Highest persisted message event included in this snapshot; later stream events must replay. */

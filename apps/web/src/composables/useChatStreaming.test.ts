@@ -410,3 +410,13 @@ describe('restoring a running conversation', () => {
     ])
   })
 })
+
+
+test('a replayed compaction result clears the banner even when the result is already in history', () => {
+  const { messages, streaming } = setup()
+  const result = { conversationId: 'conversation', messageId: 'summary', summary: 'Summary', compactedMessageCount: 2, model: 'model', createdAt: 1 }
+  streaming.handleCompactEvent(result)
+  streaming.handleCompactStart({ conversationId: 'conversation' })
+  streaming.handleCompactEvent(result)
+  expect(messages.value.map(message => message.id)).toEqual(['summary'])
+})

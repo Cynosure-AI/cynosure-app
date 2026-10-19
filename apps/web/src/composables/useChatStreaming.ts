@@ -990,11 +990,11 @@ export function useChatStreaming(
 
     function handleCompactEvent(data: { conversationId: string; messageId: string; summary: string; compactedMessageCount: number; model: string; createdAt: number }): void {
         if (data.conversationId !== activeConversationId.value) return
-        // Avoid duplicates (e.g. if page reloads and event re-fires)
-        if (messages.value.some(m => m.id === data.messageId)) return
-        // Remove any pending compact placeholder
+        // Clear the pending card even when history already includes the result.
         const pendingIdx = messages.value.findIndex(m => m.id === `compact-pending-${data.conversationId}`)
         if (pendingIdx !== -1) messages.value.splice(pendingIdx, 1)
+        // Avoid duplicates (e.g. if page reloads and event re-fires)
+        if (messages.value.some(m => m.id === data.messageId)) return
         messages.value.push({
             id: data.messageId,
             role: 'system',

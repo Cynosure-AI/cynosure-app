@@ -140,3 +140,42 @@ test('refreshes the persisted wait when the scheduler changes it and removes the
   stop()
   expect(unsubscribe).toHaveBeenCalledOnce()
 })
+
+
+test.each(['compact-event', 'compact-error'] as const)('reopening a compacting chat restores its banner until %s', async (terminalEvent) => {
+  const store = useChatStore()
+  store.activeConversationId = 'conversation'
+  const { emit, stop } = listen()
+  const snapshot = {
+    messages: [], conversationAgentId: null, latestEventSequence: 0, lastContextTokens: null, permissionMode: 'auto' as const,
+    executionConfig: {
+      allowedTools: [], subAgents: [], memoryFolderIds: [], systemPrompt: '', model: '', providerId: '',
+      thinkingEnabled: false, reasoningEffort: 'medium' as const, autoToolRouting: false, autoMemory: false,
+    },
+  }
+  const getMessages = vi.spyOn(api.chat, 'getMessages').mockImplementation(async (id) => ({
+    ...snapshot, compactionInProgress: id === 'conversation',
+  }))
+  try {
+    emit(1, { type: 'compact-start' })
+    expect(store.messages.map(item => item.id)).toEqual(['compact-pending-conversation'])
+    await store.selectConversation('other')
+    expect(store.messages).toEqual([])
+    await store.selectConversation('conversation')
+    expect(store.messages.map(item => item.id)).toEqual(['compact-pending-conversation'])
+    // The already-consumed start event will not replay; the snapshot restores it.
+    emit(1, { type: 'compact-start' })
+    expect(store.messages).toHaveLength(1)
+    emit(2, terminalEvent === 'compact-error'
+      ? { type: 'compact-error', error: 'Provider failed' }
+      : { type: 'compact-event', messageId: 'summary', summary: 'Summary', compactedMessageCount: 2, model: 'model' })
+    expect(store.messages.some(item => item.id === 'compact-pending-conversation')).toBe(false)
+    expect(store.messages).toHaveLength(terminalEvent === 'compact-error' ? 0 : 1)
+    getMessages.mockResolvedValue(snapshot)
+    await store.selectConversation('other')
+    await store.selectConversation('conversation')
+    expect(store.messages).toEqual([])
+  } finally {
+    stop()
+  }
+})

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
+import { isConversationCompacting } from '../core/agent/context-compactor.js'
 import { getLatestPlanningState } from '../core/agent/planning-state.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { nanoid } from 'nanoid'
@@ -673,6 +674,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                   AND json_extract(event_json, '$.item.type') = 'message'
             `)
                 .get(req.params.id) as { sequence: number | null }).sequence ?? 0,
+            compactionInProgress: isConversationCompacting(req.params.id),
             lastContextTokens: convRow?.last_context_tokens ?? null,
             executionConfig,
             permissionMode: getPermissionMode(req.params.id),

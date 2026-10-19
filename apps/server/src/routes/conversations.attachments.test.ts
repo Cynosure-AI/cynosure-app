@@ -8,6 +8,8 @@ import { materializeAudioArtifacts, materializeImageArtifacts } from '../core/ar
 import { materializeFileAttachments } from '../core/artifacts/file-artifacts.js'
 import { persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import { registerConversationRoutes } from './conversations.js'
+import { compactConversationNow } from '../core/agent/context-compactor.js'
+import type { LLMGateway } from '../core/gateway/gateway.js'
 import { shouldGenerateConversationTitle } from '../core/chat/conversation-title.js'
 
 describe('conversation message attachment resolution', () => {
@@ -354,4 +356,42 @@ describe('conversation message attachment resolution', () => {
         expect(response.statusCode).toBe(400)
         expect(response.json()).toEqual({ error: 'Video artifacts cannot currently be used as chat context' })
     })
+})
+
+
+test.each([false, true])('message snapshots expose active compaction and clear it after settlement (failure: %s)', async (failure) => {
+    const directory = await mkdtemp(join(tmpdir(), 'cynosure-compaction-snapshot-'))
+    process.env.CYNOSURE_DATA_DIR = directory
+    const db = getDb()
+    db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('compacting', 'Chat', 1, 1)
+    const app = Fastify()
+    await app.register(registerConversationRoutes, { prefix: '/api/chat' })
+    let settle!: () => void
+    const gateway = { complete: () => new Promise((resolve, reject) => {
+        settle = () => failure ? reject(new Error('Provider failed')) : resolve({ content: 'Summary' })
+    }) } as unknown as LLMGateway
+    const run = compactConversationNow({
+        messages: [{ role: 'user', content: 'Earlier request' }], historyRows: [],
+        filteredRows: [{ id: 'user', role: 'user', content: 'Earlier request', tool_calls_json: null, tool_call_id: null, created_at: 1 }],
+        gateway, providerId: undefined, model: 'model', conversationId: 'compacting', db, broadcast: () => {},
+    })
+    const outcome = run.catch(error => error)
+    try {
+        const active = await app.inject({ method: 'GET', url: '/api/chat/conversations/compacting/messages' })
+        expect(active.statusCode, active.body).toBe(200)
+        expect(active.json().compactionInProgress).toBe(true)
+        const other = await app.inject({ method: 'GET', url: '/api/chat/conversations/other/messages' })
+        expect(other.json().compactionInProgress).toBe(false)
+        settle()
+        await outcome
+        const finished = await app.inject({ method: 'GET', url: '/api/chat/conversations/compacting/messages' })
+        expect(finished.json().compactionInProgress).toBe(false)
+    } finally {
+        settle()
+        await outcome
+        await app.close()
+        closeDb()
+        delete process.env.CYNOSURE_DATA_DIR
+        await rm(directory, { recursive: true, force: true })
+    }
 })

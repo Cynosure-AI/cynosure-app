@@ -8,6 +8,7 @@ import {
     COMPACT_EVENT_PREFIX,
     compactConversationNow,
     NothingToCompactError,
+    isConversationCompacting,
     type CompactHistoryRow,
 } from './context-compactor.js'
 
@@ -72,9 +73,11 @@ describe('compact context replay', () => {
             gateway: { complete } as unknown as LLMGateway, providerId: undefined, responseModel: 'model',
             conversationId: 'conversation', db, broadcast: vi.fn(), signal: controller.signal,
         })
+        expect(isConversationCompacting('conversation')).toBe(true)
         controller.abort()
 
         await expect(run).rejects.toMatchObject({ name: 'AbortError' })
+        expect(isConversationCompacting('conversation')).toBe(false)
         expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 0 })
     })
 
@@ -203,6 +206,7 @@ describe('manual compaction', () => {
         })).rejects.toThrow('provider down')
         const events = broadcast.mock.calls.map(([, data]) => (data as { payload: { type: string } }).payload.type)
         expect(events).toEqual(['compact-start', 'compact-error'])
+        expect(isConversationCompacting('conversation')).toBe(false)
         expect(db.prepare('SELECT COUNT(*) AS count FROM messages').get()).toEqual({ count: 0 })
     })
 })

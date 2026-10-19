@@ -368,6 +368,9 @@ export const useChatStore = defineStore('chat', () => {
 
       const lastContextTokens = response.lastContextTokens
       messages.value = response.messages.map((item) => toDisplayMessage(item))
+      // Pending compaction cards are transient, so saved messages alone cannot
+      // restore them after navigation or a reload.
+      if (response.compactionInProgress) streaming.handleCompactStart({ conversationId: id })
       const lastSubAgentMessage = [...messages.value].reverse().find(
         (message) => message.maInvocationId && message.role === 'assistant' && message.promptTokens != null
       )
