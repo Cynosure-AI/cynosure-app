@@ -636,81 +636,108 @@ defineExpose({ processFiles, focus, sendSuggestion })
     <div class="relative max-w-5xl mx-auto flex-1 min-w-0">
       <div
         v-if="chatStore.queuedMessages?.length"
-        class="mb-2 space-y-1.5 rounded-xl border border-theme-700 bg-theme-900/90 p-2"
+        class="mb-3 rounded-xl border border-theme-700 bg-theme-800 p-2"
         aria-label="Queued messages"
       >
-        <div class="flex items-center justify-between px-1 text-[11px] text-ink-muted">
-          <span>{{ chatStore.queuedMessages?.length }} queued</span>
+        <div class="mb-1.5 flex min-h-7 items-center justify-between gap-2 px-2 text-xs text-ink-secondary">
+          <span class="flex items-center gap-2">
+            <Icon
+              icon="lucide:list-end"
+              class="h-4 w-4 text-ink-muted"
+            />
+            <span class="font-medium">Queued messages</span>
+            <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-theme-700/60 px-1.5 text-[11px] tabular-nums text-theme-200">{{ chatStore.queuedMessages.length }}</span>
+          </span>
           <button
             v-if="!chatStore.isConversationLocked"
             type="button"
-            class="text-accent-fg hover:text-accent-fg"
+            class="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 font-medium text-accent-fg transition-colors hover:bg-accent-500/10 focus-visible:outline-2 focus-visible:outline-accent-500"
             @click="chatStore.runNextQueuedMessage()"
           >
+            <Icon
+              icon="lucide:play"
+              class="h-3.5 w-3.5"
+            />
             Run next
           </button>
         </div>
-        <div
-          v-for="item in chatStore.queuedMessages"
-          :key="item.id"
-          class="flex items-center gap-2 rounded-lg bg-theme-800 px-2.5 py-2 text-xs"
-        >
-          <Icon
-            icon="lucide:list-end"
-            class="h-3.5 w-3.5 shrink-0 text-ink-muted"
-          />
-          <span class="min-w-0 flex-1 truncate text-theme-200">{{ item.content }}</span>
-          <span
-            v-if="item.attachments.length"
-            class="flex shrink-0 items-center gap-1 text-ink-muted"
+        <div class="max-h-52 space-y-1.5 overflow-y-auto overscroll-contain">
+          <div
+            v-for="(item, index) in chatStore.queuedMessages"
+            :key="item.id"
+            class="flex items-start gap-2 rounded-lg bg-theme-900/60 px-2 py-2 text-sm"
           >
-            <span
-              v-for="attachment in item.attachments"
-              :key="attachment.id"
-              class="inline-flex max-w-28 items-center gap-0.5 rounded bg-theme-700 px-1.5 py-0.5"
-            >
-              <span class="truncate">{{ attachment.name }}</span>
+            <span class="flex h-8 w-5 shrink-0 items-center justify-center text-[11px] tabular-nums text-ink-muted">{{ index + 1 }}</span>
+            <div class="min-w-0 flex-1 py-1.5">
+              <span
+                v-if="item.content"
+                class="line-clamp-2 break-words leading-5 text-theme-200"
+                :title="item.content"
+              >{{ item.content }}</span>
+              <span
+                v-if="item.attachments.length"
+                class="flex flex-wrap items-center gap-1 text-xs text-ink-secondary"
+                :class="item.content ? 'mt-1.5' : ''"
+              >
+                <span
+                  v-for="attachment in item.attachments"
+                  :key="attachment.id"
+                  class="inline-flex max-w-full items-center gap-1 rounded-md bg-theme-700/60 pl-2 pr-1 py-0.5"
+                >
+                  <span class="truncate">{{ attachment.name }}</span>
+                  <button
+                    type="button"
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-theme-700 hover:text-status-danger focus-visible:outline-2 focus-visible:outline-accent-500"
+                    :aria-label="`Remove ${attachment.name}`"
+                    @click.stop="chatStore.removeQueuedAttachment(item.id, attachment.id)"
+                  >
+                    <Icon
+                      icon="lucide:x"
+                      class="h-3.5 w-3.5"
+                    />
+                  </button>
+                </span>
+              </span>
+            </div>
+            <div class="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                class="hover:text-status-danger"
-                :aria-label="`Remove ${attachment.name}`"
-                @click.stop="chatStore.removeQueuedAttachment(item.id, attachment.id)"
-              >×</button>
-            </span>
-          </span>
-          <button
-            type="button"
-            class="text-ink-muted hover:text-theme-200"
-            title="Edit queued message"
-            @click="editQueued(item.id, item.content)"
-          >
-            <Icon
-              icon="lucide:pencil"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-          <button
-            type="button"
-            class="text-accent-fg hover:text-accent-fg"
-            :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'"
-            @click="chatStore.steerQueuedMessage(item.id)"
-          >
-            <Icon
-              icon="lucide:corner-up-left"
-              class="h-3.5 w-3.5"
-            />
-          </button>
-          <button
-            type="button"
-            class="text-ink-muted hover:text-status-danger"
-            title="Remove queued message"
-            @click="chatStore.removeQueuedMessage(item.id)"
-          >
-            <Icon
-              icon="lucide:x"
-              class="h-3.5 w-3.5"
-            />
-          </button>
+                class="flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-theme-700/60 hover:text-theme-100 focus-visible:outline-2 focus-visible:outline-accent-500"
+                title="Edit queued message"
+                aria-label="Edit queued message"
+                @click="editQueued(item.id, item.content)"
+              >
+                <Icon
+                  icon="lucide:pencil"
+                  class="h-4 w-4"
+                />
+              </button>
+              <button
+                type="button"
+                class="flex h-8 w-8 items-center justify-center rounded-lg text-accent-fg transition-colors hover:bg-accent-500/10 focus-visible:outline-2 focus-visible:outline-accent-500"
+                :title="chatStore.isConversationLocked ? 'Steer now' : 'Run now'"
+                :aria-label="chatStore.isConversationLocked ? 'Steer now' : 'Run now'"
+                @click="chatStore.steerQueuedMessage(item.id)"
+              >
+                <Icon
+                  icon="lucide:corner-up-left"
+                  class="h-4 w-4"
+                />
+              </button>
+              <button
+                type="button"
+                class="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-red-500/10 hover:text-status-danger focus-visible:outline-2 focus-visible:outline-accent-500"
+                title="Remove queued message"
+                aria-label="Remove queued message"
+                @click="chatStore.removeQueuedMessage(item.id)"
+              >
+                <Icon
+                  icon="lucide:x"
+                  class="h-4 w-4"
+                />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <!-- Attached images preview -->
