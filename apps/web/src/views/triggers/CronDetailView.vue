@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from "vue";
-import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { api } from "../../api/client";
 import type {
   AgentDefinition,
@@ -214,7 +214,7 @@ async function loadJob() {
 }
 
 async function save() {
-  if (!job.value) return;
+  if (!job.value || saving.value || !isDirty.value) return;
   const expr = dlgGeneratedExpr.value;
   if (!expr.trim()) return;
 
@@ -222,7 +222,7 @@ async function save() {
   saveError.value = "";
   saveMessage.value = "";
   try {
-    await api.cronJobs.update(jobId.value, {
+    const updated = await api.cronJobs.update(jobId.value, {
       name: cronName.value.trim(),
       // Jobs saved from a chat keep that chat's settings; others run as an agent or as Cyno ('').
       ...(!job.value.executionConfig ? { agentId: cronAgentId.value } : {}),
@@ -235,17 +235,17 @@ async function save() {
       notificationCondition: cronNotificationCondition.value,
       projectId: cronProjectId.value || null,
     });
+    // The update response is authoritative; a second list request could fail after a successful save.
+    const selectedAgent = allAgents.value.find(agent => agent.id === updated.agentId);
+    const sameAgent = updated.agentId === job.value.agentId;
+    job.value = {
+      ...job.value, ...updated,
+      agentName: sameAgent ? job.value.agentName : selectedAgent?.name ?? (updated.agentId ? '' : cyno.name),
+      agentIconUrl: sameAgent ? job.value.agentIconUrl : selectedAgent?.iconUrl ?? null,
+    };
+    populateFields(job.value);
     saveMessage.value = "Saved";
     setTimeout(() => (saveMessage.value = ""), 2000);
-
-    const jobs = await api.cronJobs.list();
-    const found = jobs.find((j) => j.id === jobId.value);
-    if (found) {
-      job.value = found;
-      populateFields(found);
-    } else {
-      savedSnapshot.value = editableSnapshot.value;
-    }
   } catch (error) {
     saveError.value = `Changes were not saved: ${error instanceof Error ? error.message : "unknown error"}`;
   } finally {
@@ -254,11 +254,14 @@ async function save() {
 }
 
 onBeforeRouteLeave((to) => {
+  if (saving.value) return false;
   if (allowLeave || !isDirty.value) return true;
   pendingLeave = to.fullPath;
   showDiscardConfirm.value = true;
   return false;
 });
+
+onBeforeRouteUpdate(() => !saving.value);
 
 function keepEditing() {
   pendingLeave = null;
@@ -266,6 +269,7 @@ function keepEditing() {
 }
 
 function discardAndLeave() {
+  if (saving.value) return;
   const target = pendingLeave;
   showDiscardConfirm.value = false;
   pendingLeave = null;
@@ -274,6 +278,13 @@ function discardAndLeave() {
   void router.push(target);
 }
 
+function beforeUnload(event: BeforeUnloadEvent): void {
+  if (!isDirty.value && !saving.value) return;
+  event.preventDefault();
+  event.returnValue = '';
+}
+onMounted(() => window.addEventListener('beforeunload', beforeUnload));
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
 onMounted(loadJob);
 watch(cronPrompt, resizePrompt, { immediate: true });
 </script>
@@ -289,6 +300,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-300"
+            :disabled="saving"
             aria-label="Back to scheduled jobs"
             @click="router.push('/cron')"
           >
@@ -302,10 +314,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div class="flex items-center gap-2">
               <span class="text-sm text-theme-300">Enabled</span>
               <ToggleSwitch
-                v-model="cronEnabled"
+                :model-value="cronEnabled"
+                :disabled="saving"
                 label="Enable scheduled job"
                 size="md"
                 color="emerald"
+                @update:model-value="!saving && (cronEnabled = $event)"
               />
             </div>
             <span
@@ -332,6 +346,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           <button
             type="button"
             class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-sky-500/20 to-indigo-500/20 transition-shadow hover:ring-2 hover:ring-accent-500/60"
+            :disabled="saving"
             :title="`Open ${job.agentName} agent details`"
             :aria-label="`Open ${job.agentName} agent details`"
             @click="router.push(job.agentId ? `/agents/${job.agentId}` : { name: 'cyno' })"
@@ -414,9 +429,12 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           Try again
         </button>
       </div>
-      <div
+      <fieldset
         v-else-if="job"
-        class="grid gap-4 lg:grid-cols-2 lg:items-start"
+        :disabled="saving"
+        :inert="saving"
+        :aria-busy="saving"
+        class="min-w-0 grid gap-4 lg:grid-cols-2 lg:items-start"
       >
         <div class="min-w-0 space-y-4">
           <!-- Identity: Name + Agent -->
@@ -443,13 +461,14 @@ watch(cronPrompt, resizePrompt, { immediate: true });
               <label class="block text-xs text-ink-secondary mb-1.5">Agent</label>
               <AgentSelect
                 v-if="!job.executionConfig"
-                v-model="cronAgentId"
+                :model-value="cronAgentId"
                 :agents="allAgents"
                 include-default
                 :default-label="cyno.name"
                 :default-img-src="cyno.iconUrl"
                 agents-group-label="Agents"
                 placeholder="Select an agent…"
+                @update:model-value="!saving && (cronAgentId = $event)"
               />
               <div
                 v-else
@@ -465,8 +484,9 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             <div>
               <label class="block text-xs text-ink-secondary mb-1.5">Project</label>
               <CustomSelect
-                v-model="cronProjectId"
+                :model-value="cronProjectId"
                 :groups="projectOptions"
+                @update:model-value="!saving && (cronProjectId = $event)"
               />
               <p class="mt-1.5 text-xs text-ink-faint">
                 Runs start inside the project, with its instructions, brief, tasks, memory folder, and project folder.
@@ -534,7 +554,8 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                           ? 'text-accent-fg bg-accent-500/10'
                           : 'text-theme-300 hover:text-theme-100'
                       "
-                      @click="dlgFrequency = opt.value; close()"
+                      :disabled="saving"
+                      @click="if (!saving) { dlgFrequency = opt.value; close() }"
                     >
                       <Icon
                         :icon="opt.icon"
@@ -761,11 +782,13 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 </p>
               </div>
               <ToggleSwitch
-                v-model="cronOneOff"
+                :model-value="cronOneOff"
+                :disabled="saving"
                 label="Disable after first successful run"
                 size="md"
                 color="amber"
                 class="mt-0.5"
+                @update:model-value="!saving && (cronOneOff = $event)"
               />
             </div>
           </BaseCard>
@@ -855,7 +878,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             />
           </BaseCard>
         </div>
-      </div>
+      </fieldset>
     </main>
 
     <ModalDialog
@@ -874,14 +897,14 @@ watch(cronPrompt, resizePrompt, { immediate: true });
           class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500"
           @click="discardAndLeave"
         >
-          Discard changes
+          Discard
         </button>
         <button
           type="button"
           class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
           @click="keepEditing"
         >
-          Keep editing
+          Continue editing
         </button>
       </template>
     </ModalDialog>

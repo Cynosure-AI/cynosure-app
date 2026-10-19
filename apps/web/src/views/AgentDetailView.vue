@@ -159,10 +159,6 @@ function discardAndLeave(): void {
   finishLeave(true)
 }
 
-async function saveAndLeave(): Promise<void> {
-  if (await save()) finishLeave(true)
-}
-
 onBeforeRouteLeave(() => confirmLeave())
 onBeforeRouteUpdate((to, from) => {
   if (to.name !== from.name || to.params.id !== from.params.id) return confirmLeave()
@@ -393,45 +389,28 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
     </main>
     <ModalDialog
       :show="showUnsavedDialog"
-      title="Unsaved agent settings"
-      icon="lucide:save"
+      title="Discard unsaved changes?"
+      icon="lucide:triangle-alert"
+      icon-color="amber"
       @close="finishLeave(false)"
     >
-      <p class="text-sm text-ink-secondary">
-        Save your changes before leaving?
-      </p>
-      <p
-        v-if="saveError || validationError"
-        role="alert"
-        class="mt-3 text-sm text-status-danger"
-      >
-        {{ saveError || validationError }}
+      <p class="text-sm leading-relaxed text-ink-secondary">
+        This agent has changes that have not been saved.
       </p>
       <template #actions>
         <button
           type="button"
-          data-testid="save-and-leave"
-          :disabled="!canSave"
-          class="rounded-lg accent-action bg-accent-500 px-4 py-2 text-sm font-medium text-accent-on disabled:opacity-40"
-          @click="saveAndLeave"
-        >
-          {{ saving ? 'Saving…' : 'Save' }}
-        </button>
-        <button
-          type="button"
-          :disabled="saving"
-          class="rounded-lg bg-theme-800 px-4 py-2 text-sm text-theme-200 disabled:opacity-40"
-          @click="finishLeave(false)"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          :disabled="saving"
-          class="rounded-lg px-4 py-2 text-sm text-status-danger hover:bg-theme-800 disabled:opacity-40"
+          class="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500"
           @click="discardAndLeave"
         >
           Discard
+        </button>
+        <button
+          type="button"
+          class="w-full rounded-xl bg-theme-800 px-4 py-3 text-sm font-medium text-theme-200 transition hover:bg-theme-700"
+          @click="finishLeave(false)"
+        >
+          Continue editing
         </button>
       </template>
     </ModalDialog>

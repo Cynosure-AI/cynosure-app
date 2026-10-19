@@ -97,7 +97,7 @@ describe('agent settings explicit save', () => {
     await name().setValue('Unsaved')
     const cancelled = router.push('/agents')
     await flushPromises()
-    dialogButton('Cancel').click()
+    dialogButton('Continue editing').click()
     await cancelled
     expect(router.currentRoute.value.path).toBe('/agents/one')
     expect(name().element).toHaveProperty('value', 'Unsaved')
@@ -110,41 +110,45 @@ describe('agent settings explicit save', () => {
     expect(mocks.update).not.toHaveBeenCalled()
   })
 
-  test('saves before switching to another agent and initializes its own draft', async () => {
-    const { router, name } = await setup()
+  test('continuing editing allows saving in the header before switching agents', async () => {
+    const { wrapper, router, name } = await setup()
     await name().setValue('Saved first')
     const navigation = router.push('/agents/two')
     await flushPromises()
-    dialogButton('Save').click()
+    expect([...document.querySelectorAll('[role="dialog"] button')].map(button => button.textContent?.trim()))
+      .toEqual(['Discard', 'Continue editing'])
+    dialogButton('Continue editing').click()
     await navigation
+    expect(router.currentRoute.value.path).toBe('/agents/one')
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
     await flushPromises()
     expect(mocks.update).toHaveBeenCalledWith('one', { name: 'Saved first' })
-    expect(router.currentRoute.value.path).toBe('/agents/two')
+    await router.push('/agents/two')
+    await flushPromises()
     expect(name().element).toHaveProperty('value', 'Second agent')
   })
 
-  test('a failed save retains the draft and keeps the exit dialog open for retry', async () => {
-    const { router, name } = await setup()
+  test('a failed header save retains the draft and allows retrying', async () => {
+    const { wrapper, name } = await setup()
     mocks.update.mockRejectedValueOnce(new Error('Connection lost'))
     await name().setValue('Keep this draft')
-    const navigation = router.push('/agents')
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
     await flushPromises()
-    dialogButton('Save').click()
-    await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/agents/one')
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Connection lost')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Connection lost')
     expect(name().element).toHaveProperty('value', 'Keep this draft')
-    dialogButton('Save').click()
-    await navigation
-    expect(router.currentRoute.value.path).toBe('/agents')
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
+    await flushPromises()
+    expect(mocks.update).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-testid="save-agent"]').attributes('disabled')).toBeDefined()
   })
 
-  test('blocks saving invalid drafts in the exit dialog but allows discarding them', async () => {
+  test('allows discarding invalid drafts without offering to save in the dialog', async () => {
     const { router, name } = await setup()
     await name().setValue('')
     const navigation = router.push('/agents')
     await flushPromises()
-    expect(dialogButton('Save').disabled).toBe(true)
+    expect([...document.querySelectorAll('[role="dialog"] button')].map(button => button.textContent?.trim()))
+      .toEqual(['Discard', 'Continue editing'])
     dialogButton('Discard').click()
     await navigation
     expect(mocks.update).not.toHaveBeenCalled()
