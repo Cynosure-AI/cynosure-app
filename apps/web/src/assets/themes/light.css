@@ -52,8 +52,6 @@
   --theme-glow-strong: 0 0 0 3px rgba(30, 111, 245, .16);
   --theme-shell-background: linear-gradient(135deg, #e7f0fb 0%, #f7faff 50%, #eaf3fd 100%);
   --theme-content-background:
-    radial-gradient(circle at 100% 1%, transparent 0 17rem, rgba(151, 197, 251, .12) 17.1rem 17.2rem, transparent 17.3rem 20rem, rgba(151, 197, 251, .1) 20.1rem 20.2rem, transparent 20.3rem),
-    radial-gradient(circle at 100% 100%, transparent 0 14rem, rgba(139, 189, 250, .14) 14.1rem 14.2rem, transparent 14.3rem 17rem, rgba(139, 189, 250, .1) 17.1rem 17.2rem, transparent 17.3rem),
     radial-gradient(ellipse at 50% 45%, rgba(255, 255, 255, .98) 0%, rgba(246, 250, 255, .88) 48%, rgba(232, 242, 254, .72) 100%);
   --theme-sidebar-background: linear-gradient(180deg, rgba(246, 250, 255, .98), rgba(234, 243, 253, .96));
   --theme-sidebar-border: rgba(147, 174, 207, .34);
