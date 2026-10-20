@@ -3,6 +3,7 @@ import { useAgentStore } from '../stores/agent-runtime.store'
 import { useMcpServers } from './useMcpServers'
 import { isBuiltInNamespaceId, isInternalToolName } from '../utils/internal-tools'
 import { getToolNamespaceIcon } from '../utils/tool-namespace-icons'
+import { DEFAULT_PROJECT_ICON } from '../utils/project-format'
 
 /** One source of tool titles, namespace icons, and colors for all chat rows. */
 export function useToolPresentation() {
@@ -24,6 +25,7 @@ export function useToolPresentation() {
 
   function toolNamespaceIcon(name = ''): string {
     const namespaceId = toolsByName.value.get(name)?.namespace.id
+    if (!namespaceId && name.startsWith('project_')) return DEFAULT_PROJECT_ICON
     return namespaceId ? getToolNamespaceIcon(namespaceId) : name === 'spawn_subagent' || name === 'continue_subagent' ? 'lucide:bot' : 'lucide:terminal'
   }
 
