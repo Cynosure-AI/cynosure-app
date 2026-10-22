@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
   tasksByProject: {} as Record<string, ProjectTaskDto[]>,
   executing: null as unknown as { value: Set<string> },
+  selectedTaskIdsByProject: {} as Record<string, string[]>,
   updateTask: vi.fn(),
   removeTask: vi.fn(),
   startProjectChat: vi.fn(),
@@ -20,6 +21,12 @@ vi.mock('../../api/client', () => ({ api: {
 vi.mock('../../stores/projects.store', () => ({
   useProjectsStore: () => ({
     tasksByProject: mocks.tasksByProject,
+    selectedTaskIdsByProject: mocks.selectedTaskIdsByProject,
+    setSelectedTasks: (id: string, ids: string[]) => { mocks.selectedTaskIdsByProject[id] = [...new Set(ids)] },
+    toggleTaskSelection: (id: string, taskId: string) => {
+      const ids = mocks.selectedTaskIdsByProject[id] ?? []
+      mocks.selectedTaskIdsByProject[id] = ids.includes(taskId) ? ids.filter((item) => item !== taskId) : [...ids, taskId]
+    },
     loadTasks: async () => [],
     updateTask: mocks.updateTask,
     removeTask: mocks.removeTask,
@@ -74,6 +81,7 @@ beforeEach(() => {
   mocks.updateTask.mockReset().mockResolvedValue({})
   mocks.removeTask.mockReset().mockResolvedValue(undefined)
   mocks.startProjectChat.mockReset()
+  mocks.selectedTaskIdsByProject = reactive({})
   mocks.executing = ref(new Set<string>())
   for (const key of Object.keys(mocks.tasksByProject)) delete mocks.tasksByProject[key]
 })
@@ -240,5 +248,89 @@ test('the agent list survives scrolling itself and a short trip across other ite
   document.body.dispatchEvent(new Event('scroll'))
   await flushPromises()
   expect(contextMenu()).toBeNull()
+  wrapper.unmount()
+})
+
+
+test('bulk selection reveals checkboxes and makes the whole card toggle selection until the last task is deselected', async () => {
+  mocks.tasksByProject.p1 = reactive([
+    task({ id: 'a', title: 'First' }),
+    task({ id: 'b', title: 'Second', conversationId: 'chat' }),
+  ])
+  const wrapper = render()
+  await flushPromises()
+  const cards = wrapper.findAll('li[draggable="true"]')
+  const checkboxes = cards.map((card) => card.get('input[type="checkbox"]'))
+  const editor = wrapper.getComponent({ name: 'ModalDialog' })
+  expect(checkboxes.every((checkbox) => checkbox.classes().includes('opacity-0'))).toBe(true)
+
+  // Use real clicks to cover capture, native checkbox changes, and bubbling together.
+  ;(checkboxes[0]!.element as HTMLInputElement).click()
+  await flushPromises()
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a'])
+  expect(checkboxes.every((checkbox) => !checkbox.classes().includes('opacity-0'))).toBe(true)
+
+  await cards[1]!.get('button').trigger('click')
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a', 'b'])
+  expect(editor.props('show')).toBe(false)
+
+  await cards[1]!.get('button[aria-label="Start a chat for Second"]').trigger('click')
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a'])
+  expect(mocks.startProjectChat).not.toHaveBeenCalled()
+
+  await cards[1]!.get('a').trigger('click')
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a', 'b'])
+  ;(checkboxes[1]!.element as HTMLInputElement).click()
+  await flushPromises()
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a'])
+
+  await cards[0]!.trigger('click')
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual([])
+  expect(editor.props('show')).toBe(false)
+  expect(checkboxes.every((checkbox) => checkbox.classes().includes('opacity-0'))).toBe(true)
+
+  await cards[0]!.get('button').trigger('click')
+  expect(editor.props('show')).toBe(true)
+  wrapper.unmount()
+})
+
+test('selects cards across columns and applies bulk status and delete actions through the store', async () => {
+  mocks.tasksByProject.p1 = reactive([
+    task({ id: 'a', title: 'First' }),
+    task({ id: 'b', title: 'Second', status: 'blocked' }),
+    task({ id: 'c', title: 'Other' }),
+  ])
+  const wrapper = render()
+  await flushPromises()
+  await wrapper.get('input[aria-label="Select First"]').setValue(true)
+  await wrapper.get('input[aria-label="Select Second"]').setValue(true)
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a', 'b'])
+  expect(wrapper.get('[role="status"]').text()).toBe('2 selected')
+  await wrapper.get('select[aria-label="Move selected tasks"]').setValue('done')
+  await flushPromises()
+  expect(mocks.updateTask.mock.calls).toEqual([
+    ['p1', 'a', { status: 'done' }], ['p1', 'b', { status: 'done' }],
+  ])
+  await wrapper.get('[aria-label="Task selection"]').findAll('button')[0]!.trigger('click')
+  await flushPromises()
+  expect(mocks.removeTask.mock.calls).toEqual([['p1', 'a'], ['p1', 'b']])
+  wrapper.unmount()
+})
+
+test('select visible respects folded Done cards, preserves selection on remount, and clears it', async () => {
+  mocks.tasksByProject.p1 = reactive(Array.from({ length: 7 }, (_, index) => task({
+    id: `d${index}`, title: `Done ${index}`, status: 'done', completedAt: index,
+  })))
+  let wrapper = render()
+  await flushPromises()
+  await wrapper.get('[aria-label="Task selection"] input').setValue(true)
+  expect(mocks.selectedTaskIdsByProject.p1).toHaveLength(5)
+  wrapper.unmount()
+  wrapper = render()
+  await flushPromises()
+  expect(wrapper.get('[role="status"]').text()).toBe('5 selected')
+  const clear = wrapper.findAll('button').find((button) => button.text() === 'Clear selection')!
+  await clear.trigger('click')
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual([])
   wrapper.unmount()
 })

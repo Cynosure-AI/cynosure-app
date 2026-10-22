@@ -55,10 +55,32 @@ type QueueRunner = (conversationId: string, request: QueuedExecutionRequest) => 
 
 const steeringHandlers = new Map<string, () => void>()
 const draining = new Set<string>()
+const activeQueueTurns = new Map<string, { count: number; failed: boolean }>()
 let runner: QueueRunner | null = null
 let broadcastQueue: BroadcastFn = () => {}
 let markRunnerReady!: () => void
 const runnerReady = new Promise<void>((resolve) => { markRunnerReady = resolve })
+
+/** Track orchestration through persistence, rather than a UI stream or model round. */
+export function beginChatQueueTurn(conversationId: string): (completed: boolean) => void {
+  const turns = activeQueueTurns.get(conversationId) ?? { count: 0, failed: false }
+  turns.count++
+  activeQueueTurns.set(conversationId, turns)
+  let finished = false
+  return (completed) => {
+    if (finished) return
+    finished = true
+    turns.failed ||= !completed
+    turns.count--
+    if (!turns.count) activeQueueTurns.delete(conversationId)
+    if (turns.failed) pauseChatQueue(conversationId)
+    else if (!turns.count) void runNextQueuedMessage(conversationId)
+  }
+}
+
+function hasActiveTurn(conversationId: string): boolean {
+  return activeQueueTurns.has(conversationId) || getChatExecutionIdsByConversation(conversationId).length > 0
+}
 
 function parseJson<T>(value: string | null, fallback: T): T {
   if (!value) return fallback
@@ -152,13 +174,17 @@ function commitQueueAttachments(conversationId: string, request: ChatQueueReques
 }
 
 export async function enqueueChatMessage(conversationId: string, request: ChatQueueRequest): Promise<QueuedChatMessageDto> {
+  // Attachment preparation may finish after the turn does. Preserve the user's
+  // next-turn intent, then kick the drain again once the row is actually saved.
+  const enqueueTurn = activeQueueTurns.get(conversationId)
+  const queuedDuringTurn = hasActiveTurn(conversationId) || Boolean(getPendingWait(conversationId))
   const staged = await stageRequest(conversationId, request)
   const db = getDb()
   const id = request.messageId || nanoid()
   const now = Date.now()
-  const active = getChatExecutionIdsByConversation(conversationId).length > 0
+  const active = hasActiveTurn(conversationId)
   const alreadyPaused = rows(conversationId).some(row => row.status === 'paused')
-  const status = request.delivery === 'steer' || ((active || getPendingWait(conversationId)) && !alreadyPaused) ? 'pending' : 'paused'
+  const status = request.delivery === 'steer' || ((queuedDuringTurn || active || getPendingWait(conversationId)) && !alreadyPaused && !enqueueTurn?.failed) ? 'pending' : 'paused'
   try {
     db.prepare(`
       INSERT INTO queued_chat_messages (
@@ -184,6 +210,8 @@ export async function enqueueChatMessage(conversationId: string, request: ChatQu
     const handler = steeringHandlers.get(conversationId)
     if (handler) handler()
     else if (!active) void runNextQueuedMessage(conversationId, id)
+  } else if (status === 'pending' && !active) {
+    void runNextQueuedMessage(conversationId)
   }
   return dto
 }
@@ -298,7 +326,7 @@ export function promoteQueuedMessageToSteering(conversationId: string, id: strin
   notify(conversationId)
   const handler = steeringHandlers.get(conversationId)
   if (handler) handler()
-  else if (getChatExecutionIdsByConversation(conversationId).length === 0) void runNextQueuedMessage(conversationId, id)
+  else if (!hasActiveTurn(conversationId)) void runNextQueuedMessage(conversationId, id)
   return true
 }
 
@@ -334,7 +362,7 @@ function makeQueuedExecution(row: QueueRow): QueuedExecutionRequest {
 }
 
 export async function runNextQueuedMessage(conversationId: string, preferredId?: string): Promise<void> {
-  if (!runner || draining.has(conversationId) || steeringHandlers.has(conversationId)) return
+  if (!runner || draining.has(conversationId) || steeringHandlers.has(conversationId) || hasActiveTurn(conversationId)) return
   const db = getDb()
   const candidate = preferredId
     ? db.prepare('SELECT * FROM queued_chat_messages WHERE id = ? AND conversation_id = ?').get(preferredId, conversationId) as QueueRow | undefined

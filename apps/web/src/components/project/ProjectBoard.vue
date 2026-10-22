@@ -35,6 +35,40 @@ let progressRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let stopPlanningListener: (() => void) | null = null
 
 const tasks = computed(() => projectsStore.tasksByProject[props.project.id] ?? [])
+const selectedIds = computed(() => projectsStore.selectedTaskIdsByProject[props.project.id] ?? [])
+const selectedTasks = computed(() => tasks.value.filter((task) => selectedIds.value.includes(task.id)))
+const bulkSelectMode = computed(() => selectedTasks.value.length > 0)
+const visibleIds = computed(() => columns.value.flatMap((column) => column.tasks.map((task) => task.id)))
+const allVisibleSelected = computed(() => visibleIds.value.length > 0 && visibleIds.value.every((id) => selectedIds.value.includes(id)))
+
+function selectVisible(): void {
+  projectsStore.setSelectedTasks(props.project.id, allVisibleSelected.value
+    ? selectedIds.value.filter((id) => !visibleIds.value.includes(id))
+    : [...selectedIds.value, ...visibleIds.value])
+}
+
+function onMoveSelected(event: Event): void {
+  const select = event.target as HTMLSelectElement
+  moveSelected(select.value as ProjectTaskStatus)
+  select.value = ''
+}
+
+function moveSelected(status: ProjectTaskStatus): void {
+  const projectId = props.project.id
+  const selection = [...selectedTasks.value]
+  void run(async () => {
+    for (const task of selection) if (task.status !== status) await projectsStore.updateTask(projectId, task.id, { status })
+  })
+}
+
+function deleteSelected(): void {
+  const projectId = props.project.id
+  const selection = [...selectedTasks.value]
+  void run(async () => {
+    for (const task of selection) await projectsStore.removeTask(projectId, task.id)
+  })
+}
+
 const columns = computed(() => TASK_COLUMNS.map((column) => {
   const all = tasks.value
     .filter((task) => task.status === column.status)
@@ -132,6 +166,13 @@ function moveTask(task: ProjectTaskDto, status: ProjectTaskStatus): void {
 
 function openEditor(task: ProjectTaskDto): void {
   editing.value = { ...task, assignee: task.assigneeAgentId ?? '' }
+}
+
+function onCardClick(task: ProjectTaskDto, event: MouseEvent): void {
+  if (!bulkSelectMode.value || (event.target as HTMLElement).matches('input[type="checkbox"]')) return
+  event.preventDefault()
+  event.stopPropagation()
+  projectsStore.toggleTaskSelection(props.project.id, task.id)
 }
 
 function saveEditor(): void {
@@ -280,6 +321,50 @@ onBeforeUnmount(() => {
       </button>
     </form>
 
+    <div
+      class="mb-3 flex flex-wrap items-center gap-3 text-sm text-ink-secondary"
+      role="group"
+      aria-label="Task selection"
+    >
+      <label class="inline-flex items-center gap-2">
+        <input
+          type="checkbox"
+          :checked="allVisibleSelected"
+          :indeterminate="!allVisibleSelected && visibleIds.some((id) => selectedIds.includes(id))"
+          @change="selectVisible"
+        >
+        Select visible tasks
+      </label>
+      <template v-if="selectedTasks.length">
+        <span role="status">{{ selectedTasks.length }} selected</span>
+        <select
+          aria-label="Move selected tasks"
+          class="rounded border border-theme-700 bg-theme-900 px-2 py-1"
+          :value="''"
+          @change="onMoveSelected"
+        >
+          <option
+            disabled
+            value=""
+          >Move to…</option>
+          <option
+            v-for="column in TASK_COLUMNS"
+            :key="column.status"
+            :value="column.status"
+          >{{ column.label }}</option>
+        </select>
+        <button
+          type="button"
+          class="text-status-danger"
+          @click="deleteSelected"
+        >Delete selected</button>
+        <button
+          type="button"
+          @click="projectsStore.setSelectedTasks(project.id, [])"
+        >Clear selection</button>
+      </template>
+    </div>
+
     <p
       v-if="error"
       role="alert"
@@ -322,17 +407,30 @@ onBeforeUnmount(() => {
             v-for="task in column.tasks"
             :key="task.id"
             draggable="true"
-            class="group relative flex cursor-grab rounded-lg border border-theme-700 bg-theme-800 shadow-sm transition hover:border-theme-600 active:cursor-grabbing"
+            class="group relative flex rounded-lg border border-theme-700 bg-theme-800 shadow-sm transition hover:border-theme-600"
             :class="{
               'opacity-40': draggingId === task.id,
+              'ring-2 ring-accent-500': selectedIds.includes(task.id),
+              'cursor-pointer': bulkSelectMode,
+              'cursor-grab active:cursor-grabbing': !bulkSelectMode,
               'before:absolute before:inset-x-0 before:-top-1.25 before:h-0.5 before:rounded-full before:bg-accent-500': showsDropMarker(column.status, task.id),
             }"
+            @click.capture="onCardClick(task, $event)"
             @contextmenu.prevent="openContextMenu(task, $event)"
             @dragstart="onDragStart(task, $event)"
             @dragend="clearDrag"
             @dragover.prevent.stop="onDragOver(column.status, task)"
             @drop.prevent.stop="onDrop(column.status, task)"
           >
+            <input
+              type="checkbox"
+              class="ml-2 mt-3 h-4 w-4 shrink-0 accent-accent-500 transition-opacity"
+              :class="{ 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100': !bulkSelectMode }"
+              :aria-label="`Select ${task.title}`"
+              :checked="selectedIds.includes(task.id)"
+              @click.stop
+              @change="projectsStore.toggleTaskSelection(project.id, task.id)"
+            >
             <!-- Main task content -->
             <div class="min-w-0 flex-1 p-2.5">
               <button

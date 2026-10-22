@@ -4,6 +4,7 @@
  * attachment buffering, per-target locking, planning, execution, live
  * streaming, persistence, and title generation — lives here.
  */
+import { beginChatQueueTurn } from '../chat/message-queue.js'
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getGateway } from '../gateway/gateway.js'
@@ -232,6 +233,8 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         executions: state.activeExecutions, channelId: state.channelId, agent: identity, conversationId, broadcast: state.broadcast,
     })
     let planned: Awaited<ReturnType<typeof planExecution>> | undefined
+    const finishQueueTurn = beginChatQueueTurn(conversationId)
+    let queueTurnCompleted = false
     try {
         planned = await planExecution({
             resolvedAgent: agent, conversationId, broadcast: state.broadcast, abortSignal: execAbort.signal,
@@ -361,6 +364,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
             return dataUrl ? [{ dataUrl, name: `image_${i + 1}` }] : []
         })
         if (images.length) await transport.sendImages(images, null)
+        queueTurnCompleted = !execAbort.signal.aborted
     } catch (err) {
         const aborted = execAbort.signal.aborted
         if (planned?.planningRunId) {
@@ -378,6 +382,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
     } finally {
         finishChannelExecution({ executions: state.activeExecutions, executionId: streamId, conversationId, agentId, broadcast: state.broadcast })
         for (const unsub of unsubs) unsub()
+        finishQueueTurn(queueTurnCompleted)
     }
 }
 

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { materializeImageArtifacts } from '../artifacts/image-artifacts.js'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({ db: null as Database.Database | null, waiting: false, active: false }))
@@ -12,7 +13,7 @@ vi.mock('../artifacts/image-artifacts.js', () => ({
   artifactFileUrlToDataUrl: (url: string) => url,
   extractFilePathFromFileUrl: () => null,
   materializeAudioArtifacts: async () => [],
-  materializeImageArtifacts: async () => [],
+  materializeImageArtifacts: vi.fn(async () => []),
 }))
 vi.mock('../artifacts/file-artifacts.js', () => ({
   materializeFileAttachments: async () => [],
@@ -24,6 +25,7 @@ vi.mock('../artifacts/attachment-rag.js', () => ({
 }))
 
 import {
+  beginChatQueueTurn,
   configureChatQueue,
   enqueueChatMessage,
   getChatQueueState,
@@ -172,4 +174,60 @@ describe('persistent chat queue', () => {
     expect(getChatQueueState('conversation').paused).toBe(true)
     expect(getChatQueueState('conversation').items.map(item => item.content)).toEqual(['first'])
   })
+
+  describe('queue turn lifecycle without a chat view or websocket subscriber', () => {
+    test('sends after a background turn has persisted its final response, in FIFO order', async () => {
+      const finish = beginChatQueueTurn('conversation')
+      const executed: string[] = []
+      configureChatQueue(async (conversationId, queued) => {
+        executed.push(queued.content)
+        markQueuedMessagePromoted(conversationId, queued.messageId!)
+        return true
+      }, () => {})
+      await enqueueChatMessage('conversation', request('first'))
+      await enqueueChatMessage('conversation', request('second'))
+      await runNextQueuedMessage('conversation')
+      expect(executed).toEqual([])
+      finish(true)
+      await vi.waitFor(() => expect(executed).toEqual(['first', 'second']))
+      expect(getChatQueueState('conversation').items).toEqual([])
+    })
+
+    test.each([true, false])('handles attachment staging finishing after the turn (completed=%s)', async (completed) => {
+      const finish = beginChatQueueTurn('conversation')
+      const execute = vi.fn(async (conversationId: string, queued: { messageId?: string }) => {
+        markQueuedMessagePromoted(conversationId, queued.messageId!)
+        return true
+      })
+      configureChatQueue(execute, () => {})
+      let release!: () => void
+      vi.mocked(materializeImageArtifacts).mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => { release = resolve })
+        return []
+      })
+      const enqueue = enqueueChatMessage('conversation', { ...request('with attachment'), imageDataUrls: ['data:image/png;base64,AA=='] })
+      finish(completed)
+      release()
+      await enqueue
+      if (completed) {
+        await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1))
+        expect(getChatQueueState('conversation').items).toEqual([])
+      } else {
+        expect(execute).not.toHaveBeenCalled()
+        expect(getChatQueueState('conversation').paused).toBe(true)
+      }
+    })
+
+    test('errors and cancellation pause queued messages', async () => {
+      const finish = beginChatQueueTurn('conversation')
+      const execute = vi.fn(async () => true)
+      configureChatQueue(execute, () => {})
+      await enqueueChatMessage('conversation', request('keep for later'))
+      finish(false)
+      await runNextQueuedMessage('conversation')
+      expect(execute).not.toHaveBeenCalled()
+      expect(getChatQueueState('conversation').paused).toBe(true)
+    })
+  })
+
 })

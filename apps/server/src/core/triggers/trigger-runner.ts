@@ -10,6 +10,7 @@ import { getToolRegistry } from '../tools/tool-registry.js'
 import type { AgentData } from '../agents/agent-store.js'
 import type { ChatMessage } from '../gateway/providers/base.provider.js'
 import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
+import { beginChatQueueTurn } from '../chat/message-queue.js'
 import { persistAssistantTurn } from '../chat/persist-assistant.js'
 import type { ConversationExecutionConfig } from '@shared/types'
 
@@ -72,25 +73,26 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
     // Notify the caller and persist the trigger input before any fallible
     // context preparation. Failed/cancelled pre-turn work must still leave a
     // coherent conversation that explains what was attempted.
-    onConversationCreated?.(conversationId)
-    const triggerMsgId = nanoid()
-    const triggerCreatedAt = Date.now()
-    db.prepare(
-        'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(triggerMsgId, conversationId, 'user', userContent,
-        messageContentJson({ id: triggerMsgId, content: userContent }), triggerCreatedAt)
-    db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(triggerCreatedAt, conversationId)
-
-    publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: {
-        type: 'transcript-item', item: messageToTranscriptItem({
-            id: triggerMsgId, role: 'user', content: userContent, createdAt: triggerCreatedAt,
-        }),
-    } })
-
-    const startMs = Date.now()
+    const finishQueueTurn = beginChatQueueTurn(conversationId)
+    let completed = false
     let planningRunId: string | undefined
-
+    const startMs = Date.now()
     try {
+        onConversationCreated?.(conversationId)
+        const triggerMsgId = nanoid()
+        const triggerCreatedAt = Date.now()
+        db.prepare(
+            'INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(triggerMsgId, conversationId, 'user', userContent,
+            messageContentJson({ id: triggerMsgId, content: userContent }), triggerCreatedAt)
+        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(triggerCreatedAt, conversationId)
+
+        publishChatEvent(broadcast, { conversationId, executionId: 'external', payload: {
+            type: 'transcript-item', item: messageToTranscriptItem({
+                id: triggerMsgId, role: 'user', content: userContent, createdAt: triggerCreatedAt,
+            }),
+        } })
+
         // A job without an agent runs with its saved chat settings or Cyno's profile.
         const settings = resolveRunSettings(agent, executionConfig)
         const planned = await planExecution({
@@ -147,6 +149,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             contextTokens: result.contextTokens, startedAt: startMs,
         })
 
+        completed = true
         return { conversationId, result }
     } catch (err) {
         if (planningRunId) {
@@ -163,5 +166,7 @@ export async function runTriggerExecution(config: TriggerRunConfig): Promise<Tri
             } catch { /* ignore */ }
         }
         throw err
+    } finally {
+        finishQueueTurn(completed)
     }
 }

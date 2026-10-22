@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { expect, test, vi } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
 import { getDb } from '../../db/database.js'
+import { configureChatQueue, enqueueChatMessage, getChatQueueState, markQueuedMessagePromoted } from '../chat/message-queue.js'
 import { persistChatEvent } from '../chat/transcript.js'
 import type { ChatEventDraft, ConversationExecutionConfig } from '@shared/types'
 import { planExecution } from '../agent/pre-execution/execution-planner.js'
@@ -95,6 +96,43 @@ test('the saved chat settings of a job are visible when a cron chat is created, 
             .toEqual({ content: 'Maintain the graph' })
     } finally {
         errorLog.mockRestore()
+        db.close()
+    }
+})
+
+
+test('a background trigger drains queued follow-ups after saving its reply without a UI subscriber', async () => {
+    const db = new Database(':memory:')
+    applySchemaMigrations(db)
+    vi.mocked(getDb).mockReturnValue(db)
+    const execute = vi.fn(async (conversationId: string, request: { messageId?: string }) => {
+        expect(db.prepare("SELECT content FROM messages WHERE conversation_id = ? AND role = 'assistant'").get(conversationId))
+            .toEqual({ content: 'Housekeeping complete' })
+        markQueuedMessagePromoted(conversationId, request.messageId!)
+        return true
+    })
+    configureChatQueue(execute, () => {})
+    const plan = await planExecution({} as Parameters<typeof planExecution>[0])
+    vi.mocked(planExecution).mockImplementationOnce(async (input) => {
+        await enqueueChatMessage(input.conversationId, { content: 'Follow up', delivery: 'next', run: { model: 'model' } })
+        expect(getChatQueueState(input.conversationId).paused).toBe(false)
+        expect(execute).not.toHaveBeenCalled()
+        return plan
+    })
+    try {
+        const { conversationId } = await runTriggerExecution({
+            agent: null,
+            executionConfig: {
+                allowedTools: [], subAgents: [], memoryFolderIds: [], systemPrompt: '',
+                model: 'model', providerId: 'provider', thinkingEnabled: true,
+                reasoningEffort: 'medium', autoToolRouting: false, autoMemory: false,
+            },
+            userContent: 'Run housekeeping', origin: 'cron', title: 'Housekeeping',
+            systemPromptSuffix: '', broadcast: () => {}, signal: new AbortController().signal, logPrefix: '[test]',
+        })
+        await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1))
+        expect(getChatQueueState(conversationId).items).toEqual([])
+    } finally {
         db.close()
     }
 })

@@ -46,6 +46,7 @@ import { executeImageModel, executeTranscriptionModel, executeVideoModel } from 
 import type { ChatEventDraft, ChatEventPayload, ChatRunSettings, ChatSendRequest, ContextStrategy, ConversationExecutionConfig } from '@shared/types'
 import type { ChatQueueRequest } from '@shared/types'
 import {
+  beginChatQueueTurn,
   configureChatQueue,
   deleteQueuedChatMessage,
   deleteQueuedChatAttachment,
@@ -136,6 +137,17 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   })
 
   async function executeSend(conversationId: string, request: QueuedExecutionRequest): Promise<boolean> {
+    const finish = beginChatQueueTurn(conversationId)
+    let completed = false
+    try {
+      completed = await executeSendTurn(conversationId, request)
+      return completed
+    } finally {
+      finish(completed)
+    }
+  }
+
+  async function executeSendTurn(conversationId: string, request: QueuedExecutionRequest): Promise<boolean> {
     const initialConversation = getDb().prepare('SELECT agent_id FROM conversations WHERE id = ?')
       .get(conversationId) as { agent_id: string | null } | undefined
     // A send that lands after its chat was deleted (such as a discarded
@@ -717,9 +729,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       await enqueueChatMessage(req.params.id, { ...req.body, delivery: 'next' })
       return { success: true }
     }
-    const completed = await executeSend(req.params.id, req.body)
-    if (completed) void runNextQueuedMessage(req.params.id)
-    else pauseChatQueue(req.params.id)
+    await executeSend(req.params.id, req.body)
     return { success: true }
   })
 
