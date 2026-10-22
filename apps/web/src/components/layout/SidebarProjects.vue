@@ -1,6 +1,6 @@
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 
@@ -53,6 +53,61 @@ watch([() => route.fullPath, activeProjectId], () => {
 })
 const chatsByProject = ref<Record<string, ProjectChats>>({})
 const activityChatsByProject = ref<Record<string, ConversationRow[]>>({})
+const openMenuId = ref<string | null>(null)
+const editingId = ref<string | null>(null)
+const editingTitle = ref('')
+const titleInputRef = ref<HTMLInputElement | null>(null)
+
+function setTitleInput(element: unknown): void {
+  titleInputRef.value = element as HTMLInputElement | null
+}
+
+function closeMenu(): void {
+  openMenuId.value = null
+}
+
+function openContextMenu(chatId: string): void {
+  editingId.value = null
+  openMenuId.value = chatId
+}
+
+async function togglePin(chat: ConversationRow, projectId: string): Promise<void> {
+  closeMenu()
+  const pinned = !chat.pinned
+  await chatStore.pinConversation(chat.id, pinned)
+  chat.pinned = Number(pinned)
+  await loadChats(projectId)
+}
+
+function startRename(chat: ConversationRow): void {
+  closeMenu()
+  editingId.value = chat.id
+  editingTitle.value = chat.title
+  void nextTick(() => titleInputRef.value?.select())
+}
+
+async function commitRename(chat: ConversationRow): Promise<void> {
+  if (editingId.value !== chat.id) return
+  const title = editingTitle.value.trim()
+  editingId.value = null
+  if (!title || title === chat.title) return
+  await chatStore.renameConversation(chat.id, title)
+  chat.title = title
+}
+
+async function deleteConversation(chat: ConversationRow, projectId: string): Promise<void> {
+  closeMenu()
+  if (chat.pinned) return
+  await chatStore.deleteConversation(chat.id)
+  const chats = chatsByProject.value[projectId]
+  if (chats) {
+    chats.items = chats.items.filter((item) => item.id !== chat.id)
+    chats.total = Math.max(0, chats.total - 1)
+  }
+  activityChatsByProject.value[projectId] = (activityChatsByProject.value[projectId] ?? [])
+    .filter((item) => item.id !== chat.id)
+  await loadChats(projectId)
+}
 
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
 const liveCleanups: Array<() => void> = []
@@ -228,6 +283,7 @@ function isProjectActive(projectId: string): boolean {
 }
 
 async function openChat(row: ConversationRow): Promise<void> {
+  closeMenu()
   await chatStore.selectConversation(row.id, row.agent_id)
 
   await router.push({
@@ -260,6 +316,7 @@ watch(
 
 // Lifecycle
 onMounted(() => {
+  document.addEventListener('click', closeMenu)
   liveCleanups.push(
     api.chat.onEvent((event) => {
       if (
@@ -278,6 +335,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('click', closeMenu)
   if (refreshTimer) clearTimeout(refreshTimer)
   liveCleanups.forEach((cleanup) => cleanup())
 })
@@ -370,10 +428,12 @@ onBeforeUnmount(() => {
           <li
             v-for="chat in chatsByProject[project.id]?.items ?? []"
             :key="chat.id"
+            class="group/chat relative"
           >
-            <button
-              type="button"
-              class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-theme-800/70"
+            <div
+              role="button"
+              tabindex="0"
+              class="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-theme-800/70"
               :class="[
                 chat.id === chatStore.activeConversationId
                   ? 'bg-theme-800 text-theme-100'
@@ -385,6 +445,10 @@ onBeforeUnmount(() => {
               ]"
               :title="chat.title"
               @click="openChat(chat)"
+              @contextmenu.prevent.stop="openContextMenu(chat.id)"
+              @keydown.enter.self.prevent="openChat(chat)"
+              @keydown.space.self.prevent="openChat(chat)"
+              @keydown.escape="closeMenu"
             >
               <span
                 v-if="awaitingIds.has(chat.id)"
@@ -410,10 +474,81 @@ onBeforeUnmount(() => {
                 class="h-3 w-3 shrink-0 text-ink-faint"
               />
 
-              <span class="min-w-0 flex-1 truncate">
+              <Icon
+                v-if="chat.pinned"
+                icon="lucide:pin"
+                class="h-3 w-3 shrink-0 text-status-warning"
+              />
+              <input
+                v-if="editingId === chat.id"
+                :ref="setTitleInput"
+                v-model="editingTitle"
+                class="min-w-0 flex-1 rounded border border-theme-600 bg-theme-900 px-1 py-0.5 text-xs text-theme-100 outline-none"
+                aria-label="Conversation title"
+                @click.stop
+                @blur="commitRename(chat)"
+                @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+                @keydown.escape.prevent="editingId = null"
+              >
+              <span
+                v-else
+                class="min-w-0 flex-1 truncate"
+              >
                 {{ chat.title }}
               </span>
-            </button>
+              <button
+                type="button"
+                class="shrink-0 rounded-md p-1 text-ink-muted opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover/chat:opacity-100 focus-visible:opacity-100"
+                :class="{ 'bg-theme-700 text-theme-200 opacity-100': openMenuId === chat.id }"
+                aria-label="Chat options"
+                @click.stop="openMenuId = openMenuId === chat.id ? null : chat.id"
+              >
+                <Icon
+                  icon="lucide:ellipsis"
+                  class="h-3.5 w-3.5"
+                />
+              </button>
+            </div>
+            <div
+              v-if="openMenuId === chat.id"
+              class="absolute right-0 top-full z-30 w-36 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+              @click.stop
+              @keydown.escape="closeMenu"
+            >
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                @click="togglePin(chat, project.id)"
+              >
+                <Icon
+                  :icon="chat.pinned ? 'lucide:pin-off' : 'lucide:pin'"
+                  class="h-3.5 w-3.5 text-status-warning"
+                />
+                {{ chat.pinned ? 'Unpin' : 'Pin' }}
+              </button>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                @click="startRename(chat)"
+              >
+                <Icon
+                  icon="lucide:pencil"
+                  class="h-3.5 w-3.5"
+                /> Rename
+              </button>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="Boolean(chat.pinned)"
+                :title="chat.pinned ? 'Unpin this chat before deleting it' : undefined"
+                @click="deleteConversation(chat, project.id)"
+              >
+                <Icon
+                  icon="lucide:trash-2"
+                  class="h-3.5 w-3.5"
+                /> Delete
+              </button>
+            </div>
           </li>
 
           <!-- Empty state -->

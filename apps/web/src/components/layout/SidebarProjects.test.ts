@@ -5,11 +5,18 @@ import SidebarProjects from './SidebarProjects.vue'
 
 const mocks = vi.hoisted(() => ({
   selectConversation: vi.fn(),
+  deleteConversation: vi.fn(),
+  pinConversation: vi.fn(),
+  renameConversation: vi.fn(),
   listConversationsPaginated: vi.fn(),
   listProjectConversations: vi.fn(),
 }))
 const route = reactive({ name: 'projects' as string, params: {} as Record<string, string> })
-const chatStore = reactive({ activeConversationId: null as string | null, activeProjectId: null as string | null, selectConversation: mocks.selectConversation })
+const chatStore = reactive({ activeConversationId: null as string | null, activeProjectId: null as string | null, selectConversation: mocks.selectConversation,
+  deleteConversation: mocks.deleteConversation,
+  pinConversation: mocks.pinConversation,
+  renameConversation: mocks.renameConversation,
+})
 const agentStore = reactive({
   liveExecutionConversationIds: [] as string[],
   awaitingHITLConvIds: new Set<string>(),
@@ -39,6 +46,7 @@ beforeEach(() => {
   agentStore.awaitingHITLConvIds = new Set()
   openProjectPage()
   chatStore.activeProjectId = null
+  chatStore.activeConversationId = null
   mocks.listConversationsPaginated.mockResolvedValue({
     items: [{ id: 'chat', title: 'Background chat', origin: 'chat' }], total: 1,
   })
@@ -234,5 +242,73 @@ test('toggles the project chat list when already on its overview', async () => {
     await flushPromises()
     expect(expand.defaultPrevented).toBe(true)
     expect(link.attributes('aria-expanded')).toBe('true')
+  } finally { wrapper.unmount() }
+})
+
+
+test('opens chat actions on right click without selecting the chat and dismisses on outside click', async () => {
+  const wrapper = await render()
+  try {
+    await wrapper.get('ul [role="button"]').trigger('contextmenu')
+    expect(wrapper.text()).toContain('Delete')
+    expect(wrapper.text()).toContain('Rename')
+    expect(wrapper.text()).toContain('Pin')
+    expect(mocks.selectConversation).not.toHaveBeenCalled()
+
+    document.body.click()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Delete')
+    await wrapper.get('[aria-label="Chat options"]').trigger('click')
+    expect(wrapper.text()).toContain('Delete')
+  } finally { wrapper.unmount() }
+})
+
+test('deletes a project chat and refreshes the list to show the next recent chat', async () => {
+  const wrapper = await render()
+  try {
+    await wrapper.get('ul [role="button"]').trigger('contextmenu')
+    mocks.listConversationsPaginated.mockResolvedValue({
+      items: [{ id: 'next-chat', title: 'Next recent chat', origin: 'chat' }], total: 1,
+    })
+    await wrapper.findAll('button').find((button) => button.text() === 'Delete')!.trigger('click')
+    await flushPromises()
+    expect(mocks.deleteConversation).toHaveBeenCalledWith('chat')
+    expect(wrapper.text()).not.toContain('Background chat')
+    expect(wrapper.text()).toContain('Next recent chat')
+    expect(mocks.selectConversation).not.toHaveBeenCalled()
+  } finally { wrapper.unmount() }
+})
+
+test('renames a project chat inline without opening it', async () => {
+  const wrapper = await render()
+  try {
+    await wrapper.get('ul [role="button"]').trigger('contextmenu')
+    await wrapper.findAll('button').find((button) => button.text() === 'Rename')!.trigger('click')
+    const input = wrapper.get('[aria-label="Conversation title"]')
+    await input.setValue('  Renamed project chat  ')
+    await input.trigger('blur')
+    await flushPromises()
+    expect(mocks.renameConversation).toHaveBeenCalledWith('chat', 'Renamed project chat')
+    expect(wrapper.text()).toContain('Renamed project chat')
+    expect(mocks.selectConversation).not.toHaveBeenCalled()
+  } finally { wrapper.unmount() }
+})
+
+test('allows unpinning a protected chat before deleting it', async () => {
+  mocks.listConversationsPaginated.mockResolvedValue({
+    items: [{ id: 'chat', title: 'Pinned chat', origin: 'chat', pinned: 1 }], total: 1,
+  })
+  const wrapper = await render()
+  try {
+    await wrapper.get('ul [role="button"]').trigger('contextmenu')
+    expect(wrapper.findAll('button').find((button) => button.text() === 'Delete')!.attributes('disabled')).toBeDefined()
+    mocks.listConversationsPaginated.mockResolvedValue({
+      items: [{ id: 'chat', title: 'Pinned chat', origin: 'chat', pinned: 0 }], total: 1,
+    })
+    await wrapper.findAll('button').find((button) => button.text() === 'Unpin')!.trigger('click')
+    await flushPromises()
+    expect(mocks.pinConversation).toHaveBeenCalledWith('chat', false)
+    await wrapper.get('ul [role="button"]').trigger('contextmenu')
+    expect(wrapper.findAll('button').find((button) => button.text() === 'Delete')!.attributes('disabled')).toBeUndefined()
   } finally { wrapper.unmount() }
 })
