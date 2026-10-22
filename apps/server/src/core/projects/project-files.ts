@@ -173,12 +173,16 @@ export async function readProjectFile(rootPath: string, relative: string): Promi
     if (!stat.isFile()) throw new ProjectFileError(400, 'Choose a file, not a folder.')
     if (stat.size > MAX_PROJECT_FILE_BYTES) throw new ProjectFileError(413, 'Files larger than 20 MB cannot be attached.')
 
-    const buffer = await fs.readFile(target)
-    const extension = path.extname(target).toLowerCase()
+    return toAttachableContent(await fs.readFile(target), name)
+}
+
+/** Convert file bytes into the form the chat composer attaches; `name` decides the type by its extension. */
+export function toAttachableContent(buffer: Buffer, name: string): ProjectFileContent {
+    const extension = path.extname(name).toLowerCase()
     const dataUrl = (mime: string) => `data:${mime};base64,${buffer.toString('base64')}`
     if (IMAGE_TYPES[extension]) return { kind: 'image', name, content: dataUrl(IMAGE_TYPES[extension]) }
     if (AUDIO_TYPES[extension]) return { kind: 'audio', name, content: dataUrl(AUDIO_TYPES[extension]) }
-    if (isParseableDocument(target)) return { kind: 'file', name, content: dataUrl('application/octet-stream') }
+    if (isParseableDocument(name)) return { kind: 'file', name, content: dataUrl('application/octet-stream') }
     if (buffer.subarray(0, 8000).includes(0)) throw new ProjectFileError(415, 'Binary files cannot be attached.')
     return { kind: 'file', name, content: buffer.toString('utf8') }
 }

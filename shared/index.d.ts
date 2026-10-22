@@ -377,6 +377,20 @@ export interface ProjectTaskDto {
   completedAt: number | null
   /** Steps of the newest run plan that worked on the task; set on API responses, null when no run has. */
   progress?: ProjectTaskProgress | null
+  /** Number of attached files; set on API responses. */
+  attachmentCount?: number
+}
+
+export interface ProjectTaskAttachmentDto {
+  id: string
+  taskId: string
+  projectId: string
+  name: string
+  mimeType: string
+  sizeBytes: number
+  /** Sent in a chat; deleting the task then keeps the file. */
+  usedInChat: boolean
+  createdAt: number
 }
 
 export interface ProjectTaskProgress {

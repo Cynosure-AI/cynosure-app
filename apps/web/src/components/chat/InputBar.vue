@@ -20,6 +20,7 @@ import { findSlashCommand, composerCommandAt, slashSuggestions, type SlashOption
 import { api } from '../../api/client'
 import type { ProjectFileContent, StagedChatAttachment } from '../../api/types'
 import { useProjectsStore } from '../../stores/projects.store'
+import { TASK_ATTACHMENT_SOURCE_PREFIX } from '../../composables/useProjectChat'
 
 const props = defineProps<{ hasSelectionTabs?: boolean }>()
 
@@ -257,6 +258,7 @@ async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
     return { name: f.name, content: stagedId ? undefined : f.content, stagedId, existingAttachmentId: f.existingAttachmentId }
   })
   const audio = attachedAudio.value.map((a) => a.url)
+  const taskAttachments = taskAttachmentsInDraft()
   const selectedMediaSettings = currentMediaSettings()
   inputText.value = ''
   persistDraft(draftStorageKey.value, '')
@@ -273,6 +275,21 @@ async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
   } else {
     await chatStore.sendMessage(normalized, images.length ? images : undefined, files.length ? files : undefined, audio.length ? audio : undefined, selectedMediaSettings)
   }
+  for (const [projectId, ids] of taskAttachments) {
+    // Keeps the files when their task is deleted; the chat has its own copy either way.
+    void api.projects.markTaskAttachmentsUsed(projectId, ids).catch(() => undefined)
+  }
+}
+
+/** Task attachments in the draft, grouped by project. */
+function taskAttachmentsInDraft(): Map<string, string[]> {
+  const byProject = new Map<string, string[]>()
+  for (const item of [...attachedImages.value, ...attachedFiles.value, ...attachedAudio.value]) {
+    if (!item.sourceId?.startsWith(TASK_ATTACHMENT_SOURCE_PREFIX)) continue
+    const [projectId, attachmentId] = item.sourceId.slice(TASK_ATTACHMENT_SOURCE_PREFIX.length).split(':')
+    byProject.set(projectId, [...(byProject.get(projectId) ?? []), attachmentId])
+  }
+  return byProject
 }
 
 function editQueued(id: string, content: string): void {
@@ -317,13 +334,26 @@ function addLibrarySelection(selection: {
 
 function addProjectFiles(files: ProjectFileContent[]): void {
   for (const file of files) {
-    const sourceId = `${projectSourcePrefix.value}${file.name}`
     if (attachedProjectPaths.value.includes(file.name)) continue
-    if (file.kind === 'image') attachedImages.value.push({ url: file.content, name: file.name, sourceId })
-    else if (file.kind === 'audio') attachedAudio.value.push({ url: file.content, name: file.name, sourceId })
-    else void stageFile(file.name, file.content, sourceId)
+    addComposerFile(file, `${projectSourcePrefix.value}${file.name}`)
   }
 }
+
+function addComposerFile(file: ProjectFileContent, sourceId: string): void {
+  if (file.kind === 'image') attachedImages.value.push({ url: file.content, name: file.name, sourceId })
+  else if (file.kind === 'audio') attachedAudio.value.push({ url: file.content, name: file.name, sourceId })
+  else void stageFile(file.name, file.content, sourceId)
+}
+
+// Files handed over from elsewhere, such as a task's attachments when a task chat starts.
+watch(() => chatStore.pendingComposerFiles, (pending) => {
+  if (!pending.length) return
+  chatStore.pendingComposerFiles = []
+  const existing = new Set([...attachedImages.value, ...attachedFiles.value, ...attachedAudio.value].map((item) => item.sourceId))
+  for (const file of pending) {
+    if (!existing.has(file.sourceId)) addComposerFile(file, file.sourceId)
+  }
+}, { immediate: true })
 
 function handleFileSelect(e: Event): void {
   const input = e.target as HTMLInputElement

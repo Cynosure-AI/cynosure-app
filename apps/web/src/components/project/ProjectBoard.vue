@@ -5,6 +5,7 @@ import type { ProjectDto, ProjectTaskDto, ProjectTaskStatus } from '@shared/type
 import ModalDialog from '../shared/ModalDialog.vue'
 import AgentSelect from '../shared/AgentSelect.vue'
 import ProjectTaskWorkLog from './ProjectTaskWorkLog.vue'
+import ProjectTaskAttachments from './ProjectTaskAttachments.vue'
 import ProjectTaskContextMenu, { type TaskContextMenu } from './ProjectTaskContextMenu.vue'
 import { api } from '../../api/client'
 import { useProjectsStore } from '../../stores/projects.store'
@@ -221,6 +222,7 @@ function startTaskChat(task: ProjectTaskDto & { assignee?: string }): void {
   void startProjectChat(props.project, {
     agentId: assignee ?? props.project.defaultAgentId,
     draft: taskDraft(task),
+    taskId: task.id,
   })
 }
 
@@ -451,7 +453,7 @@ onBeforeUnmount(() => {
 
               <!-- Agent and progress metadata -->
               <div
-                v-if="hasFooter(task) && (agentName(task.assigneeAgentId) || showsProgress(task))"
+                v-if="task.attachmentCount || (hasFooter(task) && (agentName(task.assigneeAgentId) || showsProgress(task)))"
                 class="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-ink-muted"
               >
                 <span
@@ -471,6 +473,18 @@ onBeforeUnmount(() => {
                     class="h-3 w-3 shrink-0"
                   />
                   <span class="truncate">{{ agentName(task.assigneeAgentId) }}</span>
+                </span>
+
+                <span
+                  v-if="task.attachmentCount"
+                  class="inline-flex shrink-0 items-center gap-0.5 tabular-nums"
+                  :title="`${task.attachmentCount} attachment${task.attachmentCount === 1 ? '' : 's'}`"
+                >
+                  <Icon
+                    icon="lucide:paperclip"
+                    class="h-3 w-3"
+                  />
+                  {{ task.attachmentCount }}
                 </span>
 
                 <span
@@ -663,6 +677,12 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </form>
+      <ProjectTaskAttachments
+        v-if="editing"
+        class="mt-4"
+        :project-id="project.id"
+        :task-id="editing.id"
+      />
       <ProjectTaskWorkLog
         v-if="editing"
         class="mt-4"

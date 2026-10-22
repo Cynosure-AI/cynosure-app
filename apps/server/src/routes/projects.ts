@@ -19,6 +19,16 @@ import {
 import { ProjectFileError, listProjectFolder, readProjectFile, searchProjectFiles } from '../core/projects/project-files.js'
 import { diffBriefRevisions, getBriefRevision, listBriefRevisions, listProjectTimeline } from '../core/projects/project-history.js'
 import { listProjectTaskPlans, listProjectTaskProgress } from '../core/agent/planning-state.js'
+import {
+    addTaskAttachment,
+    countTaskAttachments,
+    deleteTaskAttachment,
+    getTaskAttachment,
+    listTaskAttachments,
+    markTaskAttachmentsUsed,
+    readTaskAttachmentForChat,
+} from '../core/projects/project-task-attachments.js'
+import { createReadStream, existsSync } from 'node:fs'
 import type { ProjectTaskDto, ProjectTaskStatus } from '@shared/types'
 
 type BroadcastFn = (event: string, data: unknown) => void
@@ -27,10 +37,17 @@ function message(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
 }
 
-/** Board cards show how far the newest run on each task got. */
+/** Board cards show how far the newest run on each task got, and how many files it carries. */
 function withProgress(projectId: string, tasks: ProjectTaskDto[]): ProjectTaskDto[] {
     const progress = listProjectTaskProgress(projectId)
-    return tasks.map((task) => ({ ...task, progress: progress.get(task.id) ?? null }))
+    const attachments = countTaskAttachments(projectId)
+    return tasks.map((task) => ({ ...task, progress: progress.get(task.id) ?? null, attachmentCount: attachments.get(task.id) ?? 0 }))
+}
+
+/** Types a browser may render in place; anything else downloads, so uploaded HTML or SVG never runs in the app. */
+function isInlineSafe(mimeType: string): boolean {
+    return (/^image\//.test(mimeType) && mimeType !== 'image/svg+xml') || /^(audio|video)\//.test(mimeType)
+        || mimeType === 'application/pdf' || mimeType === 'text/plain'
 }
 
 export async function registerProjectRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
@@ -165,7 +182,7 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
         try {
             const task = createProjectTask(req.params.id, { ...req.body, createdBy: 'user' })
             tasksChanged(req.params.id)
-            return { ...task, progress: null }
+            return { ...task, progress: null, attachmentCount: 0 }
         } catch (error) {
             return reply.status(400).send({ error: message(error) })
         }
@@ -186,6 +203,63 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
     app.get<{ Params: { id: string; taskId: string } }>('/:id/tasks/:taskId/work-log', async (req, reply) => {
         if (!getProjectTask(req.params.id, req.params.taskId)) return reply.status(404).send({ error: 'Task not found' })
         return listProjectTaskPlans(req.params.taskId)
+    })
+
+    // ─── Task attachments ──────────────────────────────────
+
+    app.get<{ Params: { id: string; taskId: string } }>('/:id/tasks/:taskId/attachments', async (req, reply) => {
+        if (!getProjectTask(req.params.id, req.params.taskId)) return reply.status(404).send({ error: 'Task not found' })
+        return listTaskAttachments(req.params.id, req.params.taskId)
+    })
+
+    // POST /api/projects/:id/tasks/:taskId/attachments — body { name, content: data URL }
+    app.post<{ Params: { id: string; taskId: string }; Body: { name?: string; content?: string } }>('/:id/tasks/:taskId/attachments', async (req, reply) => {
+        try {
+            const attachment = addTaskAttachment(req.params.id, req.params.taskId, req.body ?? {})
+            tasksChanged(req.params.id)
+            return attachment
+        } catch (error) {
+            return reply.status(400).send({ error: message(error) })
+        }
+    })
+
+    // GET /api/projects/:id/tasks/:taskId/attachments/:attachmentId — the file, to view or download
+    app.get<{ Params: { id: string; taskId: string; attachmentId: string }; Querystring: { download?: string } }>(
+        '/:id/tasks/:taskId/attachments/:attachmentId',
+        async (req, reply) => {
+            const attachment = getTaskAttachment(req.params.id, req.params.taskId, req.params.attachmentId)
+            if (!attachment || !existsSync(attachment.path)) return reply.status(404).send({ error: 'Attachment not found' })
+            const inline = req.query.download !== 'true' && isInlineSafe(attachment.mimeType)
+            const asciiName = attachment.name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_')
+            reply.header('Content-Type', inline ? attachment.mimeType : 'application/octet-stream')
+            reply.header('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(attachment.name)}`)
+            reply.header('X-Content-Type-Options', 'nosniff')
+            reply.header('Content-Length', attachment.sizeBytes)
+            return reply.send(createReadStream(attachment.path))
+        },
+    )
+
+    // GET /api/projects/:id/tasks/:taskId/attachments/:attachmentId/content — ready to attach to a chat
+    app.get<{ Params: { id: string; taskId: string; attachmentId: string } }>('/:id/tasks/:taskId/attachments/:attachmentId/content', async (req, reply) => {
+        try {
+            return readTaskAttachmentForChat(req.params.id, req.params.taskId, req.params.attachmentId)
+                ?? reply.status(404).send({ error: 'Attachment not found' })
+        } catch (error) {
+            return reply.status(error instanceof ProjectFileError ? error.statusCode : 400).send({ error: message(error) })
+        }
+    })
+
+    app.delete<{ Params: { id: string; taskId: string; attachmentId: string } }>('/:id/tasks/:taskId/attachments/:attachmentId', async (req, reply) => {
+        if (!deleteTaskAttachment(req.params.id, req.params.taskId, req.params.attachmentId)) return reply.status(404).send({ error: 'Attachment not found' })
+        tasksChanged(req.params.id)
+        return { success: true }
+    })
+
+    // POST /api/projects/:id/task-attachments/used — the chat sent these attachments
+    app.post<{ Params: { id: string }; Body: { ids?: string[] } }>('/:id/task-attachments/used', async (req) => {
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((id): id is string => typeof id === 'string').slice(0, 100) : []
+        markTaskAttachmentsUsed(ids)
+        return { success: true }
     })
 
     app.delete<{ Params: { id: string; taskId: string } }>('/:id/tasks/:taskId', async (req, reply) => {

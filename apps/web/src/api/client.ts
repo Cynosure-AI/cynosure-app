@@ -16,7 +16,7 @@ import type {
   UserProfile,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, PermissionMode, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, PermissionMode, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskAttachmentDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
 
 export interface ConversationRow {
   id: string
@@ -541,6 +541,21 @@ export const api = {
       put<ProjectTaskDto>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, input),
     removeTask: (id: string, taskId: string) =>
       del<{ success: boolean }>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`),
+    listTaskAttachments: (id: string, taskId: string) =>
+      get<ProjectTaskAttachmentDto[]>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/attachments`),
+    /** `content` is the file as a data URL. */
+    addTaskAttachment: (id: string, taskId: string, file: { name: string; content: string }) =>
+      post<ProjectTaskAttachmentDto>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/attachments`, file),
+    removeTaskAttachment: (id: string, taskId: string, attachmentId: string) =>
+      del<{ success: boolean }>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}`),
+    /** URL that opens the file in the browser, or downloads it when it can't be shown safely. */
+    taskAttachmentHref: (id: string, taskId: string, attachmentId: string) =>
+      `${BASE_URL}/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    /** The attachment in the form the chat composer attaches it. */
+    taskAttachmentContent: (id: string, taskId: string, attachmentId: string) =>
+      get<ProjectFileContent>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}/content`),
+    markTaskAttachmentsUsed: (id: string, ids: string[]) =>
+      post<{ success: boolean }>(`/api/projects/${encodeURIComponent(id)}/task-attachments/used`, { ids }),
     /** Todo lists of the runs that worked on the task, newest first. */
     taskWorkLog: (id: string, taskId: string) =>
       get<PlanningState[]>(`/api/projects/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}/work-log`),

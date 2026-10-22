@@ -8,6 +8,7 @@ import DocumentTypeArt from '../components/shared/DocumentTypeArt.vue'
 import LibraryPreviewModal from '../components/shared/LibraryPreviewModal.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 import { useCynoStore } from '../stores/cyno.store'
+import { formatBytes } from '../utils/format-bytes'
 
 const cyno = useCynoStore()
 
@@ -175,12 +176,6 @@ function formatDate(timestamp: number): string {
     day: 'numeric',
     year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric',
   })
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`
 }
 
 async function loadEntries(reset = false): Promise<void> {

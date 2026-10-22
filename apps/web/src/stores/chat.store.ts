@@ -3,7 +3,7 @@ import { useCynoStore } from './cyno.store'
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { api, type PendingWait } from '../api/client'
-import type { ChatExecutionState, MemoryFolder, ModelPricing } from '../api/types'
+import type { ChatExecutionState, MemoryFolder, ModelPricing, ProjectFileContent } from '../api/types'
 import type { ChatQueueDelivery, MessageToolCall, ContextEvidence, MediaGenerationSettings, PermissionMode, QueuedChatMessageDto } from '@shared/types'
 import { useAgentStore } from './agent-runtime.store'
 import { useAgentDefinitionsStore } from './agent-definitions.store'
@@ -68,6 +68,11 @@ export interface DisplayMessage {
   compactEventData?: { summary: string; compactedMessageCount: number; model: string; createdAt: number }
 }
 
+/** A file in the form the composer attaches it; `sourceId` identifies where it came from. */
+export interface PendingComposerFile extends ProjectFileContent {
+  sourceId: string
+}
+
 export const useChatStore = defineStore('chat', () => {
   const agentStore = useAgentStore()
   const agentDefs = useAgentDefinitionsStore()
@@ -80,6 +85,8 @@ export const useChatStore = defineStore('chat', () => {
   /** Project of the active conversation, or the project a new chat will be created in. */
   const activeProjectId = ref<string | null>(null)
   const draftDiscardRevision = ref(0)
+  /** Files to add to the composer's draft once it picks them up, e.g. a task's attachments. */
+  const pendingComposerFiles = ref<PendingComposerFile[]>([])
   /** The empty new chat will be created as an incognito chat. */
   const incognitoPending = ref(false)
   /** Tool approval for the active chat, or for the empty new chat once it is created. */
@@ -853,6 +860,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     activeProjectId,
     draftDiscardRevision,
+    pendingComposerFiles,
     incognitoPending,
     permissionMode,
     setPermissionMode,

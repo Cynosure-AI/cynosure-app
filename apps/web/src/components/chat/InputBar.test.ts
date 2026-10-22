@@ -9,6 +9,7 @@ import { rankSlashArgs, type SlashCommand } from '../../utils/slash-commands'
 const chatStore = reactive({
   activeConversationId: 'conversation-1' as string | null,
   draftDiscardRevision: 0,
+  pendingComposerFiles: [] as import('../../stores/chat.store').PendingComposerFile[],
   activeAgentId: 'agent-1' as string | null,
   isConversationLocked: false,
   queuedMessages: [] as Array<{ id: string; content: string; attachments: unknown[] }>,
@@ -77,6 +78,7 @@ describe('InputBar drafts', () => {
     chatStore.activeProjectId = null
     chatStore.setConversationProject.mockClear()
     chatStore.draftDiscardRevision = 0
+    chatStore.pendingComposerFiles = []
     chatStore.activeAgentId = 'agent-1'
     chatStore.isConversationLocked = false
     chatStore.queuedMessages = []
@@ -288,6 +290,23 @@ describe('InputBar drafts', () => {
       undefined,
       undefined,
     )
+  })
+
+  test('adds handed-over task attachments and reports them as used once sent', async () => {
+    const markUsed = vi.spyOn(api.projects, 'markTaskAttachmentsUsed').mockResolvedValue({ success: true })
+    chatStore.pendingComposerFiles = [
+      { kind: 'image', name: 'shot.png', content: 'data:image/png;base64,AAAA', sourceId: 'task-attachment:project-1:att-1' },
+    ]
+    const wrapper = mountInputBar()
+    await flushPromises()
+    expect(chatStore.pendingComposerFiles).toEqual([])
+
+    await wrapper.get('textarea').setValue('Work on the task')
+    await wrapper.get('textarea').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(chatStore.sendMessage).toHaveBeenCalledWith('Work on the task', ['data:image/png;base64,AAAA'], undefined, undefined, undefined)
+    expect(markUsed).toHaveBeenCalledWith('project-1', ['att-1'])
   })
 
   test('shows MCP entries below the composer and lifts the context ring to match', async () => {

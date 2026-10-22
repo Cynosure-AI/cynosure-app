@@ -691,6 +691,26 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 34,
+        description: 'Attach files to project tasks',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS project_task_attachments (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+                    size_bytes INTEGER NOT NULL,
+                    used_in_chat INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_project_task_attachments_task ON project_task_attachments(task_id, created_at);
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

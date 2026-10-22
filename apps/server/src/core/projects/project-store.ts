@@ -5,6 +5,7 @@ import { getDb } from '../../db/database.js'
 import { ensureMemoryFolderPath, ensureMemoryRoot, makeChildFolderPath } from '../memory/memory-folder-directories.js'
 import type { ProjectDto, ProjectTaskDto, ProjectTaskStatus } from '@shared/types'
 import { USER_CHANGE, recordBriefRevision, recordTaskEvent, type ProjectChangeContext } from './project-history.js'
+import { removeUnusedAttachmentFiles } from './project-task-attachments.js'
 
 /** Parent memory folder that holds one subfolder per project. */
 export const PROJECTS_MEMORY_FOLDER = 'Projects'
@@ -249,10 +250,12 @@ export function updateProject(id: string, input: UpdateProjectInput, context: Pr
 /**
  * Delete a project. Its conversations and scheduled jobs stay and become
  * unassigned; its memory folder is user knowledge and is never removed here.
+ * Task attachment files go too, except those already sent in a chat.
  */
 export function deleteProject(id: string): boolean {
     const db = getDb()
     let deleted = false
+    removeUnusedAttachmentFiles({ projectId: id })
     db.transaction(() => {
         db.prepare('UPDATE conversations SET project_id = NULL WHERE project_id = ?').run(id)
         db.prepare('UPDATE cron_jobs SET project_id = NULL WHERE project_id = ?').run(id)
@@ -380,6 +383,7 @@ export function updateProjectTask(projectId: string, taskId: string, input: Proj
 export function deleteProjectTask(projectId: string, taskId: string, context: ProjectChangeContext = USER_CHANGE): boolean {
     const existing = getProjectTask(projectId, taskId)
     if (!existing) return false
+    removeUnusedAttachmentFiles({ projectId, taskId })
     getDb().prepare('DELETE FROM project_tasks WHERE id = ? AND project_id = ?').run(taskId, projectId)
     recordTaskEvent(projectId, { kind: 'task_deleted', taskId, taskTitle: existing.title, fromStatus: existing.status }, context)
     return true
