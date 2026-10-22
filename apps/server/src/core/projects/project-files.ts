@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
+import ignore from 'ignore'
 import { isParseableDocument } from '../utils/document-parser.js'
 
 /** Same cap the composer applies to uploads from the user's device. */
@@ -81,43 +82,79 @@ function sortEntries(entries: ProjectFileEntry[]): ProjectFileEntry[] {
         : a.type === 'directory' ? -1 : 1)
 }
 
+interface IgnoreScope {
+    folder: string
+    rules: ReturnType<typeof ignore>
+}
+
+/** Each .gitignore is relative to its own folder; deeper rules can override earlier ones. */
+async function folderIgnoreScopes(base: string, folder: string, parents: IgnoreScope[]): Promise<IgnoreScope[]> {
+    const source = await fs.readFile(path.join(base, folder, '.gitignore'), 'utf8').catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return ''
+        throw error
+    })
+    return source ? [...parents, { folder, rules: ignore({ ignorecase: false }).add(source) }] : parents
+}
+
+function isIgnored(entryPath: string, directory: boolean, scopes: IgnoreScope[]): boolean {
+    let ignored = false
+    for (const scope of scopes) {
+        const relative = scope.folder ? entryPath.slice(scope.folder.length + 1) : entryPath
+        const result = scope.rules.test(relative + (directory ? '/' : ''))
+        if (result.ignored) ignored = true
+        else if (result.unignored) ignored = false
+    }
+    return ignored
+}
+
 /** List one folder of the project directory, folders first. */
 export async function listProjectFolder(rootPath: string, relative?: string, showHidden = false): Promise<ProjectFileListing> {
-    const { target, relative: folder } = await resolveInsideProject(rootPath, relative)
+    const { base, target, relative: folder } = await resolveInsideProject(rootPath, relative)
     if (!(await fs.stat(target)).isDirectory()) throw new ProjectFileError(400, 'That path is not a folder.')
+    let scopes = await folderIgnoreScopes(base, '', [])
+    // Also enforce ancestor rules when a folder is opened directly.
+    let ancestor = ''
+    for (const part of folder ? folder.split('/') : []) {
+        ancestor = ancestor ? `${ancestor}/${part}` : part
+        if (isIgnored(ancestor, true, scopes)) return { path: folder, entries: [] }
+        scopes = await folderIgnoreScopes(base, ancestor, scopes)
+    }
     const entries: ProjectFileEntry[] = []
     for (const entry of await fs.readdir(target, { withFileTypes: true })) {
         if (!showHidden && entry.name.startsWith('.')) continue
         const stat = await fs.stat(path.join(target, entry.name)).catch(() => null)
         if (!stat) continue
         const entryPath = folder ? `${folder}/${entry.name}` : entry.name
+        if (isIgnored(entryPath, stat.isDirectory(), scopes)) continue
         if (stat.isDirectory()) entries.push({ name: entry.name, path: entryPath, type: 'directory' })
         else if (stat.isFile()) entries.push({ name: entry.name, path: entryPath, type: 'file', size: stat.size })
     }
     return { path: folder, entries: sortEntries(entries) }
 }
 
-/** Find files whose project-relative path contains `query`, skipping hidden and generated folders. */
+/** Find files whose project-relative path contains `query`, respecting .gitignore in each folder. */
 export async function searchProjectFiles(rootPath: string, query: string, showHidden = false): Promise<ProjectFileListing> {
     const { base } = await resolveInsideProject(rootPath, undefined)
     const needle = query.trim().toLowerCase()
     const results: ProjectFileEntry[] = []
-    const queue = ['']
+    const queue = [{ folder: '', scopes: [] as IgnoreScope[] }]
     let scanned = 0
     let truncated = false
     while (queue.length) {
-        const folder = queue.shift()!
+        const { folder, scopes: parents } = queue.shift()!
+        const scopes = await folderIgnoreScopes(base, folder, parents)
         const entries = await fs.readdir(path.join(base, folder), { withFileTypes: true }).catch(() => [])
         for (const entry of entries) {
             if (!showHidden && entry.name.startsWith('.')) continue
+            const entryPath = folder ? `${folder}/${entry.name}` : entry.name
+            if (isIgnored(entryPath, entry.isDirectory(), scopes)) continue
             if (++scanned > SEARCH_SCAN_LIMIT || results.length >= SEARCH_RESULT_LIMIT) {
                 truncated = true
                 break
             }
             // Symlinks are not followed so a link cycle cannot stall the search.
-            const entryPath = folder ? `${folder}/${entry.name}` : entry.name
             if (entry.isDirectory()) {
-                if (!SEARCH_SKIPPED_DIRECTORIES.has(entry.name)) queue.push(entryPath)
+                if (!SEARCH_SKIPPED_DIRECTORIES.has(entry.name)) queue.push({ folder: entryPath, scopes })
             } else if (entry.isFile() && entryPath.toLowerCase().includes(needle)) {
                 const stat = await fs.stat(path.join(base, entryPath)).catch(() => null)
                 results.push({ name: entry.name, path: entryPath, type: 'file', size: stat?.size })

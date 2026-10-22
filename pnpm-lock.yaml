@@ -293,6 +293,9 @@ importers:
       fastify:
         specifier: ^5.8.2
         version: 5.8.5
+      ignore:
+        specifier: ^7.0.5
+        version: 7.0.5
       marked:
         specifier: ^17.0.6
         version: 17.0.6

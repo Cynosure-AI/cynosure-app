@@ -54,6 +54,58 @@ describe('project files', () => {
         expect((await searchProjectFiles(root, 'lib/')).entries.map(entry => entry.path)).toEqual(['src/lib/beds.ts'])
     })
 
+    test('hides ignored files and directories in listings and search even with hidden files enabled', async () => {
+        await fs.writeFile(path.join(root, '.gitignore'), '# Generated and private files\nnode_modules/\n*.bin\n.env\n')
+
+        for (const showHidden of [false, true]) {
+            const listing = await listProjectFolder(root, '', showHidden)
+            expect(listing.entries.map(entry => entry.path)).not.toContain('node_modules')
+            expect(listing.entries.map(entry => entry.path)).not.toContain('.env')
+            expect((await listProjectFolder(root, 'src', showHidden)).entries.map(entry => entry.path)).not.toContain('src/blob.bin')
+            const results = (await searchProjectFiles(root, '', showHidden)).entries.map(entry => entry.path)
+            expect(results).toContain('src/app.ts')
+            expect(results).not.toContain('src/blob.bin')
+            expect(results).not.toContain('.env')
+        }
+    })
+
+    test('applies nested rules relative to their folder and allows nested negations', async () => {
+        await fs.writeFile(path.join(root, '.gitignore'), '*.ts\n!src/app.ts\n')
+        await fs.writeFile(path.join(root, 'src', '.gitignore'), '!lib/*.ts\n/logo.png\n')
+        await fs.writeFile(path.join(root, 'src', 'lib', 'logo.png'), 'nested image')
+
+        expect((await listProjectFolder(root, 'src')).entries.map(entry => entry.path)).toEqual(['src/lib', 'src/app.ts', 'src/blob.bin'])
+        expect((await listProjectFolder(root, 'src/lib')).entries.map(entry => entry.path)).toEqual(['src/lib/beds.ts', 'src/lib/logo.png'])
+        expect((await searchProjectFiles(root, '.ts')).entries.map(entry => entry.path)).toEqual(['src/app.ts', 'src/lib/beds.ts'])
+        expect((await searchProjectFiles(root, 'logo')).entries.map(entry => entry.path)).toEqual(['src/lib/logo.png'])
+    })
+
+    test('prunes ignored ancestors and does not let rules inside them reinclude files', async () => {
+        await fs.writeFile(path.join(root, '.gitignore'), 'src/lib/\n')
+        await fs.writeFile(path.join(root, 'src', 'lib', '.gitignore'), '!beds.ts\n')
+        expect((await listProjectFolder(root, 'src')).entries.map(entry => entry.path)).not.toContain('src/lib')
+        expect((await listProjectFolder(root, 'src/lib')).entries).toEqual([])
+        expect((await searchProjectFiles(root, 'beds', true)).entries).toEqual([])
+    })
+
+    test('supports anchored patterns, directory patterns, globstars, and escaped characters', async () => {
+        await fs.writeFile(path.join(root, '.gitignore'), '/README.md\n**/*.bin\nlogo.png/\n\\#notes.txt\n')
+        await fs.writeFile(path.join(root, '#notes.txt'), 'notes')
+        await fs.writeFile(path.join(root, 'src', 'README.md'), 'nested readme')
+        expect((await listProjectFolder(root)).entries.map(entry => entry.path)).toEqual(['node_modules', 'src'])
+        expect((await searchProjectFiles(root, 'README')).entries.map(entry => entry.path)).toEqual(['src/README.md'])
+        expect((await searchProjectFiles(root, 'blob')).entries).toEqual([])
+        expect((await listProjectFolder(root, 'src')).entries.map(entry => entry.path)).toContain('src/logo.png')
+    })
+
+    test('reloads changed ignore rules on subsequent requests', async () => {
+        expect((await searchProjectFiles(root, 'app')).entries).toHaveLength(1)
+        await fs.writeFile(path.join(root, '.gitignore'), '*.ts\n')
+        expect((await searchProjectFiles(root, 'app')).entries).toEqual([])
+        await fs.writeFile(path.join(root, '.gitignore'), '*.ts\n!app.ts\n')
+        expect((await searchProjectFiles(root, 'app')).entries).toHaveLength(1)
+    })
+
     test('reads text as text, images as data URLs, and refuses other binaries', async () => {
         expect(await readProjectFile(root, 'src/app.ts')).toEqual({ kind: 'file', name: 'src/app.ts', content: 'export const app = 1\n' })
         const image = await readProjectFile(root, 'src/logo.png')
