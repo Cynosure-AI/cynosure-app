@@ -242,6 +242,13 @@ const unifiedTimeline = computed<DisplayTimelineEntry[]>(() => groupDelegations(
 const delegationEntries = computed(() =>
   unifiedTimeline.value.filter((entry): entry is DelegationEntry => entry.type === 'delegation'))
 
+/** A delegation stops being live once the conversation moves past it. */
+const activeDelegationKey = computed(() => {
+  if (!agentStore.isExecuting) return null
+  const latest = unifiedTimeline.value.at(-1)
+  return latest?.type === 'delegation' ? latest.key : null
+})
+
 /** Key of the last tool-group entry — only this one can show as "active" */
 const lastToolGroupKey = computed(() => {
   const groups = unifiedTimeline.value.flatMap((entry) => {
@@ -260,7 +267,7 @@ const lastToolGroupKey = computed(() => {
 
 /** The sub-agent run doing work right now: it is streaming or owns the active tool step. */
 function liveRunKey(delegation: DelegationEntry): string | null {
-  if (!agentStore.isExecuting) return null
+  if (delegation.key !== activeDelegationKey.value) return null
   return delegation.runs.find(run => run.entries.some(inner =>
     inner.key === lastToolGroupKey.value || (inner.type === 'message' && inner.msg.isStreaming),
   ))?.key ?? null
@@ -765,9 +772,9 @@ onMounted(() => {
         <SubAgentDelegationCard
           v-if="entry.type === 'delegation'"
           :delegation="entry"
-          :is-executing="agentStore.isExecuting"
+          :is-executing="entry.key === activeDelegationKey"
           :live-run-key="liveRunKey(entry)"
-          :is-call-active="agentStore.isExecuting && entry.call?.key === lastToolGroupKey"
+          :is-call-active="entry.key === activeDelegationKey && entry.call?.key === lastToolGroupKey"
           :is-run-expanded="(key) => isRunExpanded(entry, key)"
           @toggle-run="(key) => toggleRun(entry, key)"
           @register-scroll="registerSubAgentScroll"
@@ -804,13 +811,13 @@ onMounted(() => {
               <PreTurnContextTimeline
                 v-else-if="inner.type === 'tool-group' && inner.group.iteration === 0"
                 :steps="inner.group.steps"
-                :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
+                :is-active="entry.key === activeDelegationKey && inner.key === lastToolGroupKey"
               />
               <ToolExecutionCard
                 v-else-if="inner.type === 'tool-group'"
                 :iteration="inner.group.iteration"
                 :steps="inner.group.steps"
-                :is-active="agentStore.isExecuting && inner.key === lastToolGroupKey"
+                :is-active="entry.key === activeDelegationKey && inner.key === lastToolGroupKey"
                 :delegation-handoff="inner.group.delegationHandoff"
               />
               <div

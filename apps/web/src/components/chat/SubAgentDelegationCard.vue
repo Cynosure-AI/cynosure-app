@@ -21,7 +21,7 @@ type RunStatus = 'starting' | 'running' | 'queued' | 'finished' | 'returned' | '
 
 const props = defineProps<{
   delegation: DelegationEntry
-  /** The conversation's agent is still executing. */
+  /** This delegation belongs to the currently executing work. */
   isExecuting: boolean
   /** The run whose work is happening right now, if known. */
   liveRunKey: string | null

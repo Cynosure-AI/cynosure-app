@@ -78,6 +78,20 @@ describe('SubAgentDelegationCard', () => {
     expect(rows[1].text()).toContain('Failed')
   })
 
+  test('removes the working indicator when an unfinished delegation ends', async () => {
+    const wrapper = mountCard(delegation([
+      run('interrupted', { entries: [message('Searching', 1)] }),
+    ]), { isExecuting: true, liveRunKey: 'interrupted' })
+    expect(wrapper.text()).toContain('Working')
+    expect(wrapper.find('.run-avatar--live').exists()).toBe(true)
+
+    await wrapper.setProps({ isExecuting: false, liveRunKey: null })
+    expect(wrapper.text()).toContain('Ended')
+    expect(wrapper.text()).not.toContain('Working')
+    expect(wrapper.find('.run-avatar--live').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   test('renders a single run as the card itself and its transcript when expanded', async () => {
     const wrapper = mountCard(delegation([run('solo', { entries: [message('Done', 1)] })]), { expanded: ['solo'] })
 

@@ -3,7 +3,9 @@ import { reactive } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import ChatPanel from './ChatPanel.vue'
 import ToolExecutionList from './ToolExecutionList.vue'
+import SubAgentDelegationCard from './SubAgentDelegationCard.vue'
 import type { DisplayMessage } from '../../stores/chat.store'
+import type { ExecutionStep } from '../../stores/agent-runtime.store'
 
 const mocks = vi.hoisted(() => ({
   chat: {
@@ -12,11 +14,11 @@ const mocks = vi.hoisted(() => ({
     messages: [] as DisplayMessage[], sessionSubAgentIds: [] as string[], activeQuickResponses: [],
     activePostActions: new Set(), loadingMessages: false,
   },
-  runtime: { availableTools: [], executionSteps: [], isExecuting: false },
+  runtime: { availableTools: [], executionSteps: [] as ExecutionStep[], isExecuting: false },
   health: { healthByAgent: new Map(), loadMemoryFolders: vi.fn() },
 }))
 vi.mock('../../stores/chat.store', () => ({ useChatStore: () => reactive(mocks.chat) }))
-vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => mocks.runtime }))
+vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => reactive(mocks.runtime) }))
 vi.mock('../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({ get: (id: string) => ({ id, name: id }) }) }))
 vi.mock('../../stores/preferences.store', () => ({ usePreferencesStore: () => ({}) }))
 vi.mock('../../stores/agent-health.store', () => ({ useAgentHealthStore: () => reactive(mocks.health) }))
@@ -38,6 +40,51 @@ describe('chat greeting health warning', () => {
     mocks.health.healthByAgent.clear()
     mocks.chat.sessionSubAgentIds = []
     mocks.chat.messages = []
+    mocks.runtime.executionSteps = []
+    mocks.runtime.isExecuting = false
+  })
+
+  test('keeps an interrupted delegation inactive when the next message starts executing', async () => {
+    mocks.runtime.isExecuting = true
+    mocks.runtime.executionSteps = [{
+      iteration: 1, status: 'executing', timestamp: 2, taskId: 'parent',
+      toolCalls: [{ id: 'spawn', name: 'spawn_subagent', arguments: '{"internalName":"researcher"}' }],
+    }, {
+      iteration: 1, status: 'executing', timestamp: 4, taskId: 'child',
+      maCodename: 'researcher', maInvocationId: 'invocation',
+      toolCalls: [{ id: 'lookup', name: 'lookup', arguments: '{}' }],
+    }]
+    mocks.chat.messages = [
+      { id: 'user', role: 'user', content: 'Research this', createdAt: 1 },
+      { id: 'child', role: 'assistant', content: 'Searching', createdAt: 3, maCodename: 'researcher', maInvocationId: 'invocation' },
+    ]
+    const wrapper = mountPanel()
+    const card = () => wrapper.getComponent(SubAgentDelegationCard)
+    expect(card().props('isExecuting')).toBe(true)
+    expect(card().props('liveRunKey')).not.toBeNull()
+
+    reactive(mocks.runtime).isExecuting = false
+    await wrapper.vm.$nextTick()
+    expect(card().props('isExecuting')).toBe(false)
+
+    reactive(mocks.chat).messages.push({ id: 'next', role: 'user', content: 'Continue here', createdAt: 5 })
+    reactive(mocks.runtime).isExecuting = true
+    await wrapper.vm.$nextTick()
+    expect(card().props('isExecuting')).toBe(false)
+    expect(card().props('liveRunKey')).toBeNull()
+    expect(card().props('isCallActive')).toBe(false)
+  })
+
+  test('ends a delegation when the main agent replies while the conversation is executing', () => {
+    mocks.runtime.isExecuting = true
+    mocks.runtime.executionSteps = [{
+      iteration: 1, status: 'executing', timestamp: 1,
+      toolCalls: [{ id: 'spawn', name: 'spawn_subagent', arguments: '{"internalName":"researcher"}' }],
+    }]
+    mocks.chat.messages = [{ id: 'reply', role: 'assistant', content: 'Moving on', createdAt: 2, isStreaming: true }]
+    const card = mountPanel().getComponent(SubAgentDelegationCard)
+    expect(card.props('isExecuting')).toBe(false)
+    expect(card.props('isCallActive')).toBe(false)
   })
 
   test('renders saved tool messages with the shared list when events are unavailable', () => {
