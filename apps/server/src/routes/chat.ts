@@ -1,3 +1,4 @@
+import { deliverQueuedChannelReply } from '../core/channels/queued-channel-reply.js'
 import { getPendingWait } from '../core/triggers/cron-scheduler.js'
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
@@ -548,6 +549,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             completionTokens: media.completionTokens || null,
             contextTokens: media.contextTokens || null,
           })
+          if (request.fromQueue) await deliverQueuedChannelReply(conversationId, media.content)
+
           if (getChatRunSettings(db).generateQuickResponses) {
             void generateQuickResponses({
               conversationId, messageId: assistant.id, userMessage: normalizedContent,
@@ -648,6 +651,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           contextTokens: result.contextTokens, startedAt: result.usage ? now : undefined,
         })
 
+        if (request.fromQueue) await deliverQueuedChannelReply(conversationId, result.content)
+
         if (getChatRunSettings(db).generateQuickResponses) {
           void generateQuickResponses({
             conversationId,
@@ -697,6 +702,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           conversationId, streamId, content: errorMessage, isError: true, agentId,
           provider: responseProvider, model: responseModel, startedAt: now,
         })
+        if (request.fromQueue) await deliverQueuedChannelReply(conversationId, errorMessage)
         emitChat({ type: 'stream-error', streamId, scope: 'main', error: errorMessage })
         return { streamId }
       } finally {

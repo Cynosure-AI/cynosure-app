@@ -85,14 +85,24 @@ describe('schedule_wait', () => {
         expect(queue.enqueueChatMessage).not.toHaveBeenCalled()
     })
 
-    test('rejects waits longer than an hour, outside a conversation, and in channel conversations', async () => {
+    test('rejects waits longer than an hour and outside a conversation', async () => {
         await expect(waitTool('chat-1').execute({ minutes: 61, note: 'Later' }))
             .resolves.toMatchObject({ success: false, error: expect.stringMatching(/1 to 60/) })
         await expect(makeScheduleTools({ agentId: 'agent-1' })[4].execute({ minutes: 5, note: 'Later' }))
             .resolves.toMatchObject({ success: false, error: expect.stringMatching(/inside a conversation/) })
-        await expect(waitTool('telegram-1').execute({ minutes: 5, note: 'Later' }))
-            .resolves.toMatchObject({ success: false, error: expect.stringMatching(/messaging channel/) })
         expect(listCronJobs()).toEqual([])
+    })
+
+    test('resumes a messaging channel conversation after a wait', async () => {
+        const created = await waitTool('telegram-1').execute({ minutes: 5, note: 'Check the build' })
+        expect(created.success).toBe(true)
+        const jobId = JSON.parse(created.output).jobId
+        triggerCronJobNow(jobId)
+        await vi.waitFor(() => expect(queue.runNextQueuedMessage).toHaveBeenCalledWith('telegram-1', 'wake-up'))
+        expect(queue.enqueueChatMessage).toHaveBeenCalledWith('telegram-1', expect.objectContaining({
+            content: expect.stringContaining('Check the build'), delivery: 'next',
+        }))
+        expect(getCronJob(jobId)).toBeUndefined()
     })
 
     test('is not editable through schedule_update', async () => {

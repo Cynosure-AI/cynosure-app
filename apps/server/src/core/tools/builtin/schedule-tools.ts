@@ -327,11 +327,8 @@ function waitTool(opts: ScheduleToolOptions): ToolDefinition {
                 return failure(`minutes must be a whole number from 1 to ${MAX_WAIT_MINUTES}. Use schedule_create for anything later.`)
             }
 
-            const conversation = getDb().prepare('SELECT origin FROM conversations WHERE id = ?').get(conversationId) as { origin: string | null } | undefined
+            const conversation = getDb().prepare('SELECT id FROM conversations WHERE id = ?').get(conversationId) as { id: string } | undefined
             if (!conversation) return failure('This conversation no longer exists.')
-            if (conversation.origin === 'channel') {
-                return failure('schedule_wait is not available in messaging channel conversations, because the resumed reply would not be delivered to the channel. Use schedule_create instead.')
-            }
 
             const scheduler = await import('../../triggers/cron-scheduler.js')
             try {
