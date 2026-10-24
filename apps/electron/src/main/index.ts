@@ -403,7 +403,10 @@ function createWindow(): BrowserWindow {
     })
 
     if (is.dev) {
-        const devUrl = 'http://localhost:5173'
+        // Must match the port in the package.json dev script. It is strict and
+        // distinct from Vite's default 5173 so another project's dev server
+        // can never be loaded in its place.
+        const devUrl = 'http://localhost:5180'
         win.webContents.on('did-fail-load', (_event, errorCode, _desc, validatedURL) => {
             if (validatedURL === devUrl + '/' && errorCode === -102) {
                 console.log('[electron] Web dev server not ready, retrying in 1s...')

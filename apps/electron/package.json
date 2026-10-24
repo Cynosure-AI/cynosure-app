@@ -12,7 +12,7 @@
     "main": "./out/main/index.js",
     "scripts": {
         "postinstall": "install-electron",
-        "dev": "concurrently -k -n web,electron -c blue,green \"pnpm --filter cynosure-web dev\" \"wait-on http://localhost:5173 && electron-vite dev\"",
+        "dev": "concurrently -k -n web,electron -c blue,green \"pnpm --filter cynosure-web dev --port 5180 --strictPort\" \"wait-on http://localhost:5180 && electron-vite dev\"",
         "build": "electron-vite build",
         "build:deps": "pnpm --filter cynosure-web build && pnpm --filter cynosure-server build",
         "package": "pnpm run build:deps && pnpm run package:skip-deps",

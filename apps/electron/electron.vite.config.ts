@@ -21,7 +21,7 @@ export default defineConfig({
     // Renderer is not built by electron-vite — the web UI is built separately
     // and served via the custom app:// protocol or loaded from the dev server.
     // A placeholder index.html is required by electron-vite.
-    // Use a high port to avoid conflicting with the web project's dev server on 5173.
+    // Use a high port to avoid conflicting with the web dev server (5173 standalone, 5180 under Electron dev).
     renderer: {
         server: {
             port: 5199

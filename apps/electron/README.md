@@ -16,7 +16,7 @@ electron/
 
 1. The main process spawns the Fastify server as a child process, preferring port 3099. Development runs the current TypeScript source through `tsx`; packaged builds run the compiled server.
 2. Data is stored in the shared Cynosure app data directory, matching the standalone server
-3. In **development**: loads the Vite dev server (`http://localhost:5173`)
+3. In **development**: loads the Vite dev server (`http://localhost:5180`)
 4. In **production**: serves built web files via a custom `app://` protocol, while API calls are proxied to the embedded server and WebSocket calls use the embedded server port from preload
 
 ## Prerequisites
@@ -33,7 +33,7 @@ During development, Electron spawns the server from TypeScript source (via `tsx`
 pnpm dev:electron
 ```
 
-Electron will open a window pointing to `http://localhost:5173`. Web changes hot-reload; restart Electron to pick up server changes. Don't run `pnpm dev` at the same time, since that would start a second server.
+Electron will open a window pointing to `http://localhost:5180`. Web changes hot-reload; restart Electron to pick up server changes. Don't run `pnpm dev` at the same time, since that would start a second server.
 
 ## Production Build
 
