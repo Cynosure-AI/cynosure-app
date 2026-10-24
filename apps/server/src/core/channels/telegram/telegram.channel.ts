@@ -1,5 +1,5 @@
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
-import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
+import { handleChannelCommand, projectSuggestions, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
 import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
@@ -114,7 +114,23 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
 
 /** Handle slash commands. Returns true if the message was a command and was handled. */
 export async function handleCommand(ctx: TelegramCtx, chatId: number, text: string): Promise<boolean> {
-    return handleChannelCommand(ctx, chatId, text, async (reply) => { await sendMessage(ctx, chatId, reply) }, TELEGRAM_COMMAND_STYLE)
+    const handled = await handleChannelCommand(ctx, chatId, text, async (reply) => { await sendMessage(ctx, chatId, reply) }, TELEGRAM_COMMAND_STYLE)
+    if (/^\/project(?:@\w+)?\s*$/i.test(text)) await sendProjectPicker(ctx, chatId)
+    return handled
+}
+
+/** Telegram has no argument autocomplete; offer a fresh, paginated inline keyboard instead. */
+export async function sendProjectPicker(ctx: TelegramCtx, chatId: number, requestedPage = 0): Promise<void> {
+    const suggestions = projectSuggestions('', Number.MAX_SAFE_INTEGER)
+    if (!suggestions.length) return
+    const page = Math.max(0, Math.min(requestedPage, Math.ceil(suggestions.length / 20) - 1))
+    const rows = suggestions.slice(page * 20, (page + 1) * 20)
+        .map(item => [{ text: item.name, callback_data: `project:${item.value}` }])
+    const navigation = []
+    if (page > 0) navigation.push({ text: 'Previous', callback_data: `project:page:${page - 1}` })
+    if ((page + 1) * 20 < suggestions.length) navigation.push({ text: 'Next', callback_data: `project:page:${page + 1}` })
+    if (navigation.length) rows.push(navigation)
+    await sendMessageReturningId(ctx, chatId, 'Choose a project:', { reply_markup: { inline_keyboard: rows } })
 }
 
 function createTransport(ctx: TelegramCtx, chatId: number): ChannelTransport<number> {
@@ -202,6 +218,19 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
 
 /** Handle a Telegram callback query (inline button press). */
 export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<TelegramUpdate['callback_query']>): Promise<void> {
+    if (query.data?.startsWith('project:')) {
+        const chat = query.message?.chat
+        if (!isTelegramUserAllowed(ctx.allowedUserIds, query.from.id) || !chat
+            || chat.type !== 'private' || chat.id !== query.from.id) {
+            await answerCallbackQuery(ctx, query.id)
+            return
+        }
+        await answerCallbackQuery(ctx, query.id)
+        const value = query.data.slice('project:'.length)
+        if (/^page:\d+$/.test(value)) await sendProjectPicker(ctx, chat.id, Number(value.slice(5)))
+        else await sendMessage(ctx, chat.id, runProjectSuggestion(ctx, chat.id, value, TELEGRAM_COMMAND_STYLE))
+        return
+    }
     const action = query.data ? parseHITLActionId(query.data) : null
     if (!isTelegramUserAllowed(ctx.allowedUserIds, query.from.id) || !action) {
         await answerCallbackQuery(ctx, query.id)

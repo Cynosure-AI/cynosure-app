@@ -1,7 +1,7 @@
 import { App } from '@slack/bolt'
 import type { WebClient } from '@slack/web-api'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
-import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
+import { handleChannelCommand, projectSuggestions, runProjectCommand, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
 import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
@@ -36,6 +36,42 @@ const SLACK_COMMAND_STYLE: ChannelCommandStyle = {
     switchBackHint: 'Use `!start` to switch back.',
 }
 
+export const PROJECT_SELECT_ACTION = 'project_select'
+
+export function projectPickerBlocks(status = 'Choose a project (this changes the project for this channel):') {
+    return [{
+        type: 'section' as const,
+        text: { type: 'plain_text' as const, text: status.slice(0, 3000) },
+        accessory: {
+            type: 'external_select' as const,
+            action_id: PROJECT_SELECT_ACTION,
+            placeholder: { type: 'plain_text' as const, text: 'Search projects' },
+            min_query_length: 0,
+        },
+    }]
+}
+
+/** Registered on startup; Slack delivers these listeners through the existing Socket Mode connection. */
+export function registerProjectListeners(ctx: SlackCtx): void {
+    ctx.app.command('/project', async ({ command, ack, respond }) => {
+        await ack()
+        const text = runProjectCommand(ctx, command.channel_id, command.text, SLACK_COMMAND_STYLE)
+        await respond({ text, response_type: 'ephemeral',
+            ...(!command.text.trim() ? { blocks: projectPickerBlocks(text) } : {}) })
+    })
+    ctx.app.options(PROJECT_SELECT_ACTION, async ({ options, ack }) => {
+        await ack({ options: projectSuggestions(options.value ?? '', 100).map(item => ({
+            text: { type: 'plain_text', text: item.name.slice(0, 75) }, value: item.value,
+        })) })
+    })
+    ctx.app.action(PROJECT_SELECT_ACTION, async ({ action, ack, body, respond }) => {
+        await ack()
+        if (action.type !== 'external_select' || !action.selected_option || !body.channel?.id) return
+        const text = runProjectSuggestion(ctx, body.channel.id, action.selected_option.value ?? '', SLACK_COMMAND_STYLE)
+        await respond({ text, blocks: [], replace_original: true })
+    })
+}
+
 export async function handleCommand(
     ctx: SlackCtx,
     slackChannelId: string,
@@ -44,7 +80,8 @@ export async function handleCommand(
     threadTs: string
 ): Promise<boolean> {
     return handleChannelCommand(ctx, slackChannelId, text, async (reply) => {
-        await client.chat.postMessage({ channel: slackChannelId, text: reply, thread_ts: threadTs }).catch(() => { })
+        await client.chat.postMessage({ channel: slackChannelId, text: reply, thread_ts: threadTs,
+            ...(/^[!/]project(?:@\w+)?\s*$/i.test(text) ? { blocks: projectPickerBlocks(reply) } : {}) }).catch(() => { })
     }, SLACK_COMMAND_STYLE)
 }
 
@@ -212,6 +249,8 @@ export class SlackChannel implements ChannelProvider {
             return
         }
         this.botUsername = testResult.username
+
+        registerProjectListeners(this)
 
         this.app.message(async ({ message, client }) => {
             if (message.subtype) return

@@ -12,6 +12,27 @@ export interface ChannelCommandStyle {
     switchBackHint: string
 }
 
+/** Read the current, unarchived projects on every suggestion request. Values use stable IDs. */
+export function projectSuggestions(query = '', limit = 25): { name: string; value: string }[] {
+    const needle = query.trim().toLowerCase()
+    const projects = listProjects()
+        .filter(project => project.name.toLowerCase().includes(needle))
+        .map(project => ({ name: project.name, value: `id:${project.id}` }))
+    return [...projects, ...('off'.includes(needle) ? [{ name: 'Leave project', value: 'off' }] : [])].slice(0, limit)
+}
+
+/** Selections resolve by ID, so renames, reordering, and names like "off" remain unambiguous. */
+export function runProjectSuggestion<K extends ChannelTargetId>(
+    state: ChannelSessionState<K>, target: K, value: string, style: Pick<ChannelCommandStyle, 'bold'>,
+): string {
+    if (value === 'off') return runProjectCommand(state, target, 'off', style)
+    const id = value.startsWith('id:') ? value.slice(3) : ''
+    if (!id || !listProjects().some(project => project.id === id)) {
+        return 'That project is no longer available. Send /project to refresh the list.'
+    }
+    return runProjectCommand(state, target, '', style, id)
+}
+
 /** Command word of a `!cmd` or `/cmd` message; drops a Telegram-style `@botname` suffix. */
 function parseChannelCommand(text: string): string {
     return text.split(/\s|@/)[0].slice(1).toLowerCase()
@@ -26,24 +47,25 @@ export function runProjectCommand<K extends ChannelTargetId>(
     target: K,
     arg: string,
     style: Pick<ChannelCommandStyle, 'bold'>,
+    selectedId?: string,
 ): string {
     const projects = listProjects()
     const { conversationId } = resolveHomeConversation(state, target)
     const current = getProjectForConversation(conversationId)
     const query = arg.trim().toLowerCase()
 
-    if (!query) {
+    if (!query && !selectedId) {
         if (!projects.length) return 'There are no projects yet. Create one in the app first.'
         const list = projects.map((project, i) => `${i + 1}. ${project.name}${project.id === current?.id ? ' (current)' : ''}`).join('\n')
         const status = current ? `Working in ${style.bold(current.name)}.` : 'This chat is not in a project.'
         return `${status}\n\n${list}\n\nSend /project <name or number> to switch, or /project off to leave.`
     }
-    if (query === 'off' || query === 'none') {
+    if (!selectedId && (query === 'off' || query === 'none')) {
         if (!current) return 'This chat is not in a project.'
         setConversationProject(conversationId, null)
         return `Left ${style.bold(current.name)}.`
     }
-    const match = /^\d+$/.test(query)
+    const match = selectedId ? projects.find(project => project.id === selectedId) : /^\d+$/.test(query)
         ? projects[Number(query) - 1]
         : projects.find((project) => project.name.toLowerCase() === query)
             ?? projects.find((project) => project.name.toLowerCase().includes(query))

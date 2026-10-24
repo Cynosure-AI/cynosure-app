@@ -1,7 +1,7 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, GatewayIntentBits, Events, Partials } from 'discord.js'
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, GatewayIntentBits, Events, Partials, SlashCommandBuilder, InteractionContextType } from 'discord.js'
 import type { Interaction, Message } from 'discord.js'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
-import { handleChannelCommand, type ChannelCommandStyle } from '../channel-commands.js'
+import { handleChannelCommand, projectSuggestions, runProjectCommand, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
 import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
@@ -132,6 +132,25 @@ export function subscribeToHITL(ctx: DiscordCtx): () => void {
 }
 
 export async function handleInteraction(ctx: DiscordCtx, interaction: Interaction): Promise<void> {
+    if (interaction.isAutocomplete() && interaction.commandName === 'project') {
+        const suggestions = isDiscordUserAllowed(ctx.allowedUserIds, interaction.user.id)
+            ? projectSuggestions(interaction.options.getFocused()) : []
+        await interaction.respond(suggestions.map(item => ({ ...item, name: item.name.slice(0, 100) })))
+        return
+    }
+    if (interaction.isChatInputCommand() && interaction.commandName === 'project') {
+        if (!isDiscordUserAllowed(ctx.allowedUserIds, interaction.user.id) || !interaction.channelId) {
+            await interaction.reply({ content: 'You are not allowed to use this command.', ephemeral: true })
+            return
+        }
+        await interaction.deferReply({ ephemeral: true })
+        const value = interaction.options.getString('project') ?? ''
+        const reply = value.startsWith('id:')
+            ? runProjectSuggestion(ctx, interaction.channelId, value, DISCORD_COMMAND_STYLE)
+            : runProjectCommand(ctx, interaction.channelId, value, DISCORD_COMMAND_STYLE)
+        await interaction.editReply({ content: reply, allowedMentions: { parse: [] } })
+        return
+    }
     if (!interaction.isButton()) return
     const action = parseHITLActionId(interaction.customId)
     if (!action) return
@@ -228,6 +247,7 @@ export class DiscordChannel implements ChannelProvider {
 
         try {
             await this.client.login(this.botToken)
+            await this.refreshCommands()
             this.connected = true
             this.errorMsg = undefined
             this.hitlUnsub = subscribeToHITL(this)
@@ -277,7 +297,15 @@ export class DiscordChannel implements ChannelProvider {
     }
 
     async refreshCommands(): Promise<void> {
-        return
+        if (!this.client.application) throw new Error('Discord application is not ready')
+        // POST upserts just this command, preserving any other application commands.
+        await this.client.application.commands.create(new SlashCommandBuilder()
+            .setName('project')
+            .setDescription('Show or switch the project this chat works in')
+            .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM)
+            .addStringOption(option => option.setName('project')
+                .setDescription('Project name, number, or off to leave')
+                .setAutocomplete(true)))
     }
 
     async sendNotification(target: string, text: string): Promise<void> {
