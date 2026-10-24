@@ -23,6 +23,7 @@ import { useChatEvents } from './composables/useChatEvents'
 import { isCommandPaletteShortcut, useCommandPalette } from './composables/useCommandPalette'
 import { useServerStartupError } from './composables/useServerStartupError'
 import { useFreshChat } from './composables/useFreshChat'
+import { useHITLNotifications } from './composables/useHITLNotifications'
 
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
@@ -37,6 +38,7 @@ const preferencesStore = usePreferencesStore()
 const { sidebarOpen, sidebarCollapsed, close: closeSidebar } = useSidebar()
 const route = useRoute()
 const router = useRouter()
+useHITLNotifications()
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
 // The content panel is a breathing water surface the cursor trails through.
 // Every theme shows it on a fresh chat and while the app is still connecting;

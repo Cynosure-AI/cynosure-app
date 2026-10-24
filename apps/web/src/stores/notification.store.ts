@@ -3,9 +3,11 @@ import { ref, computed } from 'vue'
 import { api } from '../api/client'
 import type { AppNotification } from '../api/types'
 
+export type NotificationToast = AppNotification & { transient?: boolean }
+
 export const useNotificationStore = defineStore('notifications', () => {
     const notifications = ref<AppNotification[]>([])
-    const toasts = ref<AppNotification[]>([])
+    const toasts = ref<NotificationToast[]>([])
     const loaded = ref(false)
     const toastTimers = new Map<string, ReturnType<typeof setTimeout>>()
     const toastStartedAt = new Map<string, number>()
@@ -42,7 +44,7 @@ export const useNotificationStore = defineStore('notifications', () => {
         showToast(notification)
     }
 
-    function showToast(notification: AppNotification) {
+    function showToast(notification: NotificationToast) {
         dismissToast(notification.id)
         toasts.value.unshift(notification)
         toastRemaining.set(notification.id, toastDuration)
@@ -112,6 +114,7 @@ export const useNotificationStore = defineStore('notifications', () => {
         loaded,
         load,
         addFromWs,
+        showToast,
         dismissToast,
         pauseToast,
         resumeToast,

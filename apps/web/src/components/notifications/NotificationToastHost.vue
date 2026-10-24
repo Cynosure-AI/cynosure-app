@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import { useNotificationStore } from '../../stores/notification.store'
+import { useNotificationStore, type NotificationToast } from '../../stores/notification.store'
 import type { AppNotification } from '../../api/types'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../../stores/chat.store'
@@ -9,12 +9,12 @@ const notificationStore = useNotificationStore()
 const chatStore = useChatStore()
 const router = useRouter()
 
-async function openConversation(toast: AppNotification): Promise<void> {
+async function openConversation(toast: NotificationToast): Promise<void> {
   if (!toast.conversationId) return
   await chatStore.selectConversation(toast.conversationId, toast.agentId || null)
   await router.push({ name: 'conversation', params: { conversationId: toast.conversationId } })
   notificationStore.dismissToast(toast.id)
-  void notificationStore.markRead(toast.id)
+  if (!toast.transient) void notificationStore.markRead(toast.id)
 }
 
 function iconFor(priority: AppNotification['priority']): string {
