@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
-import { useViewLayout } from "../../composables/useViewLayout";
 import { documentTypeStyle } from "../../utils/document-types";
 import type { MemoryDiffSegment, MemoryFileSearchResult, MemoryFolder, MemoryRevisionSummary } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
@@ -25,7 +24,9 @@ const emit = defineEmits<{
   restored: [];
 }>();
 
-const explorerView = useViewLayout("list");
+const EXPLORER_VIEW_KEY = "cy-memory-explorer-view";
+const savedView = localStorage.getItem(EXPLORER_VIEW_KEY);
+const explorerView = ref<"list" | "grid">(savedView === "grid" ? "grid" : "list");
 const loading = ref(false);
 const error = ref("");
 const recent = ref<RecentRow[]>([]);
@@ -78,6 +79,7 @@ function fileExtension(fileName: string): string {
 
 function setExplorerView(view: "list" | "grid"): void {
   explorerView.value = view;
+  localStorage.setItem(EXPLORER_VIEW_KEY, view);
 }
 
 function folderFor(folderId: string): MemoryFolder | undefined {

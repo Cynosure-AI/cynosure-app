@@ -35,15 +35,12 @@ describe('ProjectFolderTab', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('/work/garden')
-    expect(wrapper.findAll('li').map((item) => item.text())).toEqual(['srcFolder', 'README.md12 B'])
+    expect(wrapper.findAll('li').map((item) => item.text())).toEqual(['src', 'README.md12 B'])
 
     await rowButton(wrapper, 'src').trigger('click')
     await flushPromises()
     expect(list).toHaveBeenLastCalledWith('project-1', expect.objectContaining({ path: 'src' }))
     expect(wrapper.findAll('li').map((item) => item.text())).toEqual(['app.ts2.0 KB'])
-    expect(wrapper.getComponent({ name: 'DocumentTypeArt' }).props()).toMatchObject({
-      ext: 'ts', href: `/api/files?path=${encodeURIComponent('/work/garden/src/app.ts')}`,
-    })
     expect(wrapper.get('nav').text()).toContain('src')
   })
 
@@ -55,12 +52,15 @@ describe('ProjectFolderTab', () => {
     const wrapper = mountTab()
     await flushPromises()
 
+    // Opens as a list.
     expect(wrapper.get('li img').attributes('src')).toBe(`/api/files?path=${encodeURIComponent('/work/garden/assets/logo.png')}`)
-    expect(wrapper.getComponent({ name: 'DocumentTypeArt' }).props('ext')).toBe('pdf')
-
-    await wrapper.get('button[aria-label="List view"]').trigger('click')
-    expect(wrapper.get('li img').attributes('src')).toContain('logo.png')
     expect(wrapper.find('i[data-icon="mdi:file-pdf-box"]').exists()).toBe(true)
+
+    await wrapper.get('button[aria-label="Grid view"]').trigger('click')
+    expect(wrapper.get('li img').attributes('src')).toContain('logo.png')
+    expect(wrapper.getComponent({ name: 'DocumentTypeArt' }).props()).toMatchObject({
+      ext: 'pdf', href: `/api/files?path=${encodeURIComponent('/work/garden/plan.pdf')}`,
+    })
 
     await wrapper.get('li img').trigger('error')
     expect(wrapper.find('li img').exists()).toBe(false)

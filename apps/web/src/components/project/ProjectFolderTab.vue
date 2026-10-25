@@ -69,7 +69,6 @@ function closePreview(): void {
       :project-id="project.id"
       :project-name="project.name"
       :root-path="project.rootPath"
-      default-layout="grid"
       :unavailable-reason="unavailableReason"
       @file="openFile"
     />
