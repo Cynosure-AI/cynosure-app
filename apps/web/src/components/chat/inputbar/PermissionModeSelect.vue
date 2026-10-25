@@ -33,6 +33,7 @@ function setPermissionMode(value: string): void {
     :groups="groups"
     :chevron-class="modeColors[chatStore.permissionMode]"
     bare-trigger
+    mobile-icon-only
     drop-up
     dropdown-width="w-48"
     size="xs"

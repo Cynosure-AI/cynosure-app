@@ -64,6 +64,8 @@ const props = withDefaults(
     selectedLabel?: string;
     /** Render the trigger like clickable text instead of a boxed form control. */
     bareTrigger?: boolean;
+    /** Show only the selected icon below the mobile breakpoint. */
+    mobileIconOnly?: boolean;
     /** Optional color classes for the trigger chevron. */
     chevronClass?: string;
     /** Render only nearby rows in long dropdowns. */
@@ -88,6 +90,7 @@ const props = withDefaults(
     showSelectedTag: true,
     selectedLabel: undefined,
     bareTrigger: false,
+    mobileIconOnly: false,
     chevronClass: "text-ink-muted",
     virtualized: false,
     size: "sm",
@@ -421,7 +424,9 @@ onBeforeUnmount(() =>
       </span>
 
       <!-- Label -->
-      <span class="flex-1 text-left truncate">
+      <span
+        :class="mobileIconOnly ? 'sr-only md:not-sr-only md:flex-1 md:text-left md:truncate' : 'flex-1 text-left truncate'"
+      >
         {{ selectedLabel ?? selectedOption?.label ?? placeholder }}
       </span>
 
@@ -448,7 +453,7 @@ onBeforeUnmount(() =>
       <Icon
         icon="lucide:chevron-down"
         class="w-3 h-3 shrink-0 transition-transform duration-150"
-        :class="[chevronClass, { 'rotate-180': isOpen }]"
+        :class="[chevronClass, { 'rotate-180': isOpen, 'hidden md:block': mobileIconOnly }]"
       />
     </button>
 
