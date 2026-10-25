@@ -4,7 +4,6 @@
  * attachment buffering, per-target locking, planning, execution, live
  * streaming, persistence, and title generation — lives here.
  */
-import { latestThoughtLine } from '../thinking-preview.js'
 import { cancelConversationWait } from '../triggers/cron-scheduler.js'
 import { beginChatQueueTurn } from '../chat/message-queue.js'
 import { nanoid } from 'nanoid'
@@ -32,7 +31,6 @@ import {
 import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
 import { resolveInlineAttachmentTextLimit } from '../chat/attachment-context.js'
 
-const THINKING_PREVIEW_LIMIT = 200
 const CONTENT_EDIT_INTERVAL_MS = 1500
 const STREAMING_CURSOR = ' ▍'
 
@@ -183,13 +181,6 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
     const statusMsg = await transport.reply('🧭 Preparing context...')
     let thinkingSeconds = 0
     let thinkingPhase = 'Preparing context'
-    let thinking = ''
-    const thinkingStatus = () => {
-        const icon = thinkingPhase === 'Preparing context' ? '🧭' : '🤔'
-        const header = `${icon} ${thinkingPhase} (${thinkingSeconds}s)`
-        const preview = latestThoughtLine(thinking)?.text
-        return preview ? `${header}\n${truncate(preview, Math.max(0, Math.min(THINKING_PREVIEW_LIMIT, transport.messageLimit - header.length - 2)))}` : header
-    }
     let thinkingTimer: ReturnType<typeof setInterval> | null = null
     const stopThinkingTimer = () => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } }
 
@@ -234,7 +225,8 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
     if (statusMsg !== null) {
         thinkingTimer = setInterval(() => {
             thinkingSeconds++
-            void transport.edit(statusMsg, thinkingStatus())
+            const icon = thinkingPhase === 'Preparing context' ? '🧭' : '🤔'
+            void transport.edit(statusMsg, `${icon} ${thinkingPhase} (${thinkingSeconds}s)`)
         }, 1000)
     }
 
@@ -275,11 +267,6 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         })
 
         const eventBus = getEventBus()
-        unsubs.push(eventBus.on('step:thinking', (...args: unknown[]) => {
-            const data = args[0] as { conversationId: string; thinking: string; maCodename?: string }
-            if (data.conversationId !== conversationId || data.maCodename) return
-            thinking += data.thinking
-        }))
         let sendChain = Promise.resolve()
         const enqueueSend = (fn: () => Promise<void>): void => {
             sendChain = sendChain.then(fn, fn)
@@ -290,7 +277,6 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
             const data = args[0] as { conversationId: string; results: { name: string; success: boolean; imageDataUrls?: string[] }[]; maCodename?: string }
             if (data.conversationId !== conversationId) return
-            if (!data.maCodename) thinking += '\n\n'
             const prefix = data.maCodename ? `🤖 ${transport.bold(`[${data.maCodename}]`)} ` : ''
             const lines = data.results.map(r => r.success ? `✅ \`${r.name}\` executed` : `❌ \`${r.name}\` failed`)
             enqueueSend(async () => {

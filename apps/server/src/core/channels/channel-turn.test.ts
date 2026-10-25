@@ -161,28 +161,12 @@ describe('channel turn', () => {
         expect(state.targetLocks.size).toBe(0)
     })
 
-    test('shows thinking paragraph previews without mixing other executions', async () => {
-        vi.useFakeTimers()
+    test('cancels pending conversation waits when a turn starts', async () => {
         const state = makeState()
-        const { transport, messages } = makeTransport()
-        transport.messageLimit = 200
-        mocks.run.mockImplementation(async () => {
-            const bus = getEventBus()
-            bus.emit('step:thinking', { conversationId: 'conversation', thinking: 'First I check the schedule.\n\nSo' })
-            await vi.advanceTimersByTimeAsync(1000)
-            expect(messages[0]).toBe('🤔 Thinking (1s)\nFirst I check the schedule.')
-            bus.emit('step:thinking', { conversationId: 'other', thinking: 'Unrelated reasoning' })
-            bus.emit('step:thinking', { conversationId: 'conversation', maCodename: 'helper', thinking: 'Sub-agent reasoning' })
-            bus.emit('step:thinking', { conversationId: 'conversation', thinking: ' now I compare both calendars.' })
-            await vi.advanceTimersByTimeAsync(1000)
-            expect(messages[0]).toBe('🤔 Thinking (2s)\nSo now I compare both calendars.')
-            return { content: 'done', images: [] }
-        })
+        const { transport } = makeTransport()
+        mocks.run.mockResolvedValue({ content: 'done', images: [] })
         await receiveChannelMessage(state, inbound(transport))
-        expect(messages[0]).toMatch(/^✅ Done thinking/)
         expect(cancelConversationWait).toHaveBeenCalledWith('conversation')
-        await vi.advanceTimersByTimeAsync(1000)
-        expect(messages[0]).toMatch(/^✅ Done thinking/)
     })
 
     test('posts compact tool status lines in the turn\'s send order', async () => {
