@@ -4,6 +4,7 @@ import type { MemoryFileStatus, MemoryFolder } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
 import type { DocumentRow, ExplorerRow, GlobalDocumentRow } from "./memory-file-explorer-types";
 import { OPT_IN_MEMORY_FOLDER_HINT } from "../../utils/memory-folder-selection";
+import { documentTypeStyle } from "../../utils/document-types";
 
 defineProps<{
   searchQuery: string;
@@ -62,6 +63,15 @@ const emit = defineEmits<{
 
 const NO_PREVIEW_HINT = "This file type can't be opened here. Right-click for other actions.";
 
+/** The same file-type icons and colors as the Library; unsupported files stay muted. */
+function fileIcon(extension: string): string {
+  return documentTypeStyle(extension).icon;
+}
+
+function fileIconClass(extension: string, supported = true): string {
+  return supported ? documentTypeStyle(extension).text : "text-ink-faint";
+}
+
 function onRowContextMenu(item: ExplorerRow, event: MouseEvent): void {
   emit("rowContextMenu", item, event);
 }
@@ -101,8 +111,9 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     <template #col-fileName="{ item: file }">
       <div class="flex min-w-0 items-center gap-3">
         <Icon
-          :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
-          class="h-4 w-4 shrink-0 text-ink-secondary"
+          :icon="fileIcon(file.extension)"
+          class="h-4 w-4 shrink-0"
+          :class="fileIconClass(file.extension)"
         />
         <div class="min-w-0">
           <div class="truncate text-sm text-theme-200">
@@ -273,9 +284,9 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
         @click.stop="emit('toggleGridSelection', rowForFile(file), $event)"
       >
       <Icon
-        :icon="file.extension === '.md' ? 'lucide:file-text' : file.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+        :icon="fileIcon(file.extension)"
         class="mb-3 h-8 w-8"
-        :class="file.supported ? 'text-ink-secondary' : 'text-ink-faint'"
+        :class="fileIconClass(file.extension, file.supported)"
       />
       <span
         class="flex w-full min-w-0 items-center justify-center gap-1 truncate text-sm font-medium"
@@ -335,9 +346,9 @@ function onRowDrop(item: ExplorerRow, event: DragEvent): void {
     <template #col-name="{ item }">
       <div class="flex min-w-0 items-center gap-3">
         <Icon
-          :icon="item.kind === 'folder' ? 'lucide:folder' : item.extension === '.md' ? 'lucide:file-text' : item.extension === '.pdf' ? 'lucide:file-type-2' : 'lucide:file'"
+          :icon="item.kind === 'folder' ? 'lucide:folder' : fileIcon(item.extension)"
           class="h-5 w-5 shrink-0"
-          :class="item.kind === 'folder' ? 'text-status-warning' : item.supported ? 'text-ink-secondary' : 'text-ink-faint'"
+          :class="item.kind === 'folder' ? 'text-status-warning' : fileIconClass(item.extension, item.supported)"
         />
         <div
           class="min-w-0"

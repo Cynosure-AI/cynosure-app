@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { resetViewLayout, useViewLayout } from '../../composables/useViewLayout'
 import MemoryFileExplorer from './MemoryFileExplorer.vue'
 import type { MemoryIndexJob } from '../../api/types'
 
@@ -71,6 +72,8 @@ function mountList(focusFile?: string) {
 describe('MemoryFileExplorer navigation and search', () => {
   beforeEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
+    resetViewLayout()
     mocks.listFiles.mockResolvedValue([{
       fileName: 'notes.md', extension: '.md', size: 12, modifiedAt: 1,
       supported: true, textDirect: true, status: 'indexed', chunkCount: 1,
@@ -250,7 +253,7 @@ describe('MemoryFileExplorer navigation and search', () => {
     expect(wrapper.find('[aria-label="Explorer view"]').exists()).toBe(true)
     expect(grid.get('[role="button"]').classes()).not.toContain('border')
     expect(grid.text()).toContain('Projects')
-    expect(localStorage.getItem('cy-memory-explorer-view')).toBe('grid')
+    expect(sessionStorage.getItem('cy-view-layout')).toBe('grid')
     const folderCheckbox = grid.get('input[aria-label="Select Projects"]')
     await folderCheckbox.trigger('click')
     expect(wrapper.text()).toContain('1 selected')
@@ -429,7 +432,7 @@ describe('MemoryFileExplorer navigation and search', () => {
   })
 
   test('marks documents affected by a dream within the last 24 hours', async () => {
-    localStorage.setItem('cy-memory-explorer-view', 'grid')
+    useViewLayout('list').value = 'grid'
     mocks.listFiles.mockResolvedValue([
       {
         fileName: 'recent.md', extension: '.md', size: 12, modifiedAt: 2,

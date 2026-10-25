@@ -6,6 +6,7 @@ import { Icon } from "@iconify/vue";
 import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
 import type { Column } from "../shared/DataTable.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
+import { useViewLayout } from "../../composables/useViewLayout";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
 import MemoryExplorerHeader from "./MemoryExplorerHeader.vue";
 import MemoryExplorerContextMenu from "./MemoryExplorerContextMenu.vue";
@@ -50,7 +51,6 @@ const emit = defineEmits<{
 
 // --- Constants ---
 const LARGE_CHUNK_WARNING_THRESHOLD = 100;
-const EXPLORER_VIEW_KEY = "cy-memory-explorer-view";
 
 // --- State ---
 const files = ref<MemoryFileStatus[]>([]);
@@ -70,12 +70,7 @@ const forgettingMemories = ref(false);
 const moving = ref(false);
 const showMoveDialog = ref(false);
 const moveContextFile = ref<MemoryFileStatus | null>(null);
-const savedExplorerView = localStorage.getItem(EXPLORER_VIEW_KEY);
-const explorerView = ref<"list" | "grid">(
-  savedExplorerView === "grid" || savedExplorerView === "list"
-    ? savedExplorerView
-    : window.matchMedia("(max-width: 639px)").matches ? "grid" : "list",
-);
+const explorerView = useViewLayout(window.matchMedia("(max-width: 639px)").matches ? "grid" : "list");
 const highlightedFolderId = ref<string | null>(null);
 const dropTargetFolderId = ref<string | null>(null);
 const activeDocumentDrag = ref<DocumentDragPayload | null>(null);
@@ -207,7 +202,6 @@ function navigateBreadcrumb(folderId?: string): void {
 
 function setExplorerView(view: "list" | "grid"): void {
   explorerView.value = view;
-  localStorage.setItem(EXPLORER_VIEW_KEY, view);
 }
 
 /**

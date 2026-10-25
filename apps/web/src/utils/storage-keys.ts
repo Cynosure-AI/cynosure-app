@@ -44,6 +44,7 @@ export const SK_SIDEBAR_COLLAPSED = 'sidebar-collapsed'
 export const SK_ACTIVE_AGENT = 'cy-active-agent'
 export const SK_ACTIVITY_LOG_FILTERS = 'cy-activity-log-filters'
 export const SK_RECENT_CHAT_FILTER = 'cy-recent-chat-filter'
+export const SK_VIEW_LAYOUT = 'cy-view-layout'
 export const SK_CHAT_DRAFT_PREFIX = 'cy-chat-draft:'
 
 /**

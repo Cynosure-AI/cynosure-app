@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { api } from "../../api/client";
+import { useViewLayout } from "../../composables/useViewLayout";
+import { documentTypeStyle } from "../../utils/document-types";
 import type { MemoryDiffSegment, MemoryFileSearchResult, MemoryFolder, MemoryRevisionSummary } from "../../api/types";
 import DataTable, { type Column } from "../shared/DataTable.vue";
 import ModalDialog from "../shared/ModalDialog.vue";
@@ -23,9 +25,7 @@ const emit = defineEmits<{
   restored: [];
 }>();
 
-const EXPLORER_VIEW_KEY = "cy-memory-explorer-view";
-const savedView = localStorage.getItem(EXPLORER_VIEW_KEY);
-const explorerView = ref<"list" | "grid">(savedView === "grid" ? "grid" : "list");
+const explorerView = useViewLayout("list");
 const loading = ref(false);
 const error = ref("");
 const recent = ref<RecentRow[]>([]);
@@ -71,9 +71,13 @@ const columns = computed<Column<VirtualRow>[]>(() => [
   { key: "actions", label: "Actions", minWidth: props.mode === "trash" ? "260px" : "100px", grow: 0 },
 ]);
 
+function fileExtension(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  return dot > 0 ? fileName.slice(dot) : "";
+}
+
 function setExplorerView(view: "list" | "grid"): void {
   explorerView.value = view;
-  localStorage.setItem(EXPLORER_VIEW_KEY, view);
 }
 
 function folderFor(folderId: string): MemoryFolder | undefined {
@@ -315,9 +319,9 @@ onUnmounted(() => {
         @click="open(row)"
       >
         <Icon
-          :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : row.fileName.endsWith('.md') ? 'lucide:file-text' : 'lucide:file'"
+          :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : documentTypeStyle(fileExtension(row.fileName)).icon"
           class="mb-3 h-10 w-10"
-          :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-ink-secondary'"
+          :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : documentTypeStyle(fileExtension(row.fileName)).text"
         />
         <span
           class="w-full truncate text-sm font-medium"
@@ -374,9 +378,9 @@ onUnmounted(() => {
       <template #col-fileName="{ item: row }">
         <div class="flex min-w-0 items-center gap-3">
           <Icon
-            :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : 'lucide:file-text'"
+            :icon="mode === 'trash' ? 'lucide:file-x-2' : hasRecentDreamUpdate(row) ? 'lucide:moon' : documentTypeStyle(fileExtension(row.fileName)).icon"
             class="h-5 w-5 shrink-0"
-            :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-ink-secondary'"
+            :class="mode === 'trash' ? 'text-status-danger' : hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : documentTypeStyle(fileExtension(row.fileName)).text"
           /><span
             class="truncate text-sm font-medium"
             :class="hasRecentDreamUpdate(row) ? 'text-[#f4c072]' : 'text-theme-200'"
