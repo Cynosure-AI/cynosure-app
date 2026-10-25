@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import type { ActivityArtifact } from '../../api/types'
 import { documentTypeStyle } from '../../utils/document-types'
+import LibraryPreviewModal from '../shared/LibraryPreviewModal.vue'
 import { fileArtifactKey, fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 
 const props = defineProps<{
@@ -21,8 +23,14 @@ const links = computed(() => {
 
 const visibleLinks = computed(() => props.limit === undefined ? links.value : links.value.slice(0, props.limit))
 
-function handleClick(event: MouseEvent): void {
+const previewArtifact = ref<ActivityArtifact | null>(null)
+
+function handleClick(event: MouseEvent, artifact: FileArtifactLink): void {
   if (props.compact) event.stopPropagation()
+  // Modified clicks keep the browser's open-in-new-tab behavior.
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  previewArtifact.value = { href: artifact.href, label: artifact.label, ext: artifact.ext, kind: 'file' }
 }
 </script>
 
@@ -40,7 +48,7 @@ function handleClick(event: MouseEvent): void {
       rel="noopener noreferrer"
       class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-theme-600/50 bg-theme-900/70 text-theme-300 transition-colors hover:border-accent-500/50 hover:text-accent-fg"
       :class="compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
-      @click="handleClick"
+      @click="handleClick($event, artifact)"
     >
       <Icon
         :icon="documentTypeStyle(artifact.ext).icon"
@@ -55,4 +63,8 @@ function handleClick(event: MouseEvent): void {
       class="self-center text-[10px] text-ink-muted"
     >+{{ links.length - limit }}</span>
   </div>
+  <LibraryPreviewModal
+    :artifact="previewArtifact"
+    @close="previewArtifact = null"
+  />
 </template>
