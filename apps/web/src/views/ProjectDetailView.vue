@@ -9,6 +9,7 @@ import ModalDialog from '../components/shared/ModalDialog.vue'
 import ProjectBoard from '../components/project/ProjectBoard.vue'
 import ProjectTimeline from '../components/project/ProjectTimeline.vue'
 import ProjectMemoryTab from '../components/project/ProjectMemoryTab.vue'
+import ProjectFolderTab from '../components/project/ProjectFolderTab.vue'
 import ProjectIcon from '../components/project/ProjectIcon.vue'
 import ProjectForm, { type ProjectDraft } from '../components/project/ProjectForm.vue'
 import RichContent from '../components/shared/RichContent.vue'
@@ -25,7 +26,7 @@ import { useCynoStore } from '../stores/cyno.store'
 
 const cyno = useCynoStore()
 
-type ProjectTab = 'overview' | 'chats' | 'board' | 'memories' | 'timeline' | 'settings'
+type ProjectTab = 'overview' | 'chats' | 'board' | 'memories' | 'folder' | 'timeline' | 'settings'
 
 const route = useRoute()
 const router = useRouter()
@@ -58,13 +59,14 @@ const tabs = computed<TabDef<ProjectTab>[]>(() => [
   { value: 'board', label: 'Board', icon: 'lucide:square-kanban', badge: project.value?.openTaskCount || undefined, badgeTitle: `${project.value?.openTaskCount ?? 0} open tasks` },
   { value: 'chats', label: 'Chats', icon: 'lucide:message-square', badge: project.value?.conversationCount || undefined },
   { value: 'memories', label: 'Memories', icon: 'lucide:brain', badge: memoryFolder.value ? memoryFileCount.value || undefined : undefined, badgeTitle: `${memoryFileCount.value} memory files` },
+  ...(project.value?.rootPath ? [{ value: 'folder' as const, label: 'Folder', icon: 'lucide:folder-code' }] : []),
   { value: 'timeline', label: 'Timeline', icon: 'lucide:history' },
   { value: 'settings', label: 'Settings', icon: 'lucide:settings' },
 ])
 
 function tabFromQuery(): ProjectTab {
   const tab = route.query.tab
-  return tab === 'chats' || tab === 'board' || tab === 'memories' || tab === 'timeline' || tab === 'settings' ? tab : 'overview'
+  return tab === 'chats' || tab === 'board' || tab === 'memories' || tab === 'folder' || tab === 'timeline' || tab === 'settings' ? tab : 'overview'
 }
 
 function agentIconUrl(agentId: string | null): string | null {
@@ -188,6 +190,11 @@ watch(projectId, () => {
 })
 
 watch(settingsDraft, () => { settingsSaved.value = false }, { deep: true })
+
+// The Folder tab disappears when the project directory is removed.
+watch(() => project.value?.rootPath, (rootPath) => {
+  if (project.value && !rootPath && activeTab.value === 'folder') activeTab.value = 'overview'
+}, { immediate: true })
 
 // A new project's memory folder is created after the chat store loaded its folder list.
 watch(() => project.value?.memoryFolderId, (folderId) => {
@@ -462,11 +469,22 @@ onBeforeUnmount(stopWaitUpdates)
                   </span>
                   Project folder
                 </dt>
-                <dd
-                  class="mt-2 text-xs"
-                  :class="project.rootPath ? 'rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 font-mono leading-relaxed text-theme-200 [overflow-wrap:anywhere]' : 'text-ink-faint'"
-                >
-                  {{ project.rootPath || 'None' }}
+                <dd class="mt-2">
+                  <button
+                    v-if="project.rootPath"
+                    type="button"
+                    class="block w-full rounded-lg border border-theme-700/70 bg-theme-900/60 px-3 py-2 text-left font-mono text-xs leading-relaxed text-theme-200 transition-colors [overflow-wrap:anywhere] hover:border-theme-600 hover:text-accent-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                    :title="`Browse ${project.rootPath}`"
+                    @click="activeTab = 'folder'"
+                  >
+                    {{ project.rootPath }}
+                  </button>
+                  <p
+                    v-else
+                    class="text-xs text-ink-faint"
+                  >
+                    None
+                  </p>
                 </dd>
               </div>
               <div class="relative py-4 pl-12">
@@ -623,6 +641,12 @@ onBeforeUnmount(stopWaitUpdates)
         v-else-if="activeTab === 'memories'"
         :project="project"
         @open-settings="activeTab = 'settings'"
+      />
+
+      <!-- Folder -->
+      <ProjectFolderTab
+        v-else-if="activeTab === 'folder' && project.rootPath"
+        :project="project"
       />
 
       <!-- Timeline -->
