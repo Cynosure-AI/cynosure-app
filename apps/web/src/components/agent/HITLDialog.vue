@@ -17,6 +17,8 @@ const fileAccess = computed(() => fileAccessCall.value?.fileAccess)
 type ToolEffect = 'destructive' | 'write' | 'read' | 'unknown'
 
 function toolEffect(toolCall: ToolCallDisplay): ToolEffect {
+  // The shell tool is annotated destructive as a whole; use the server's review of this command.
+  if (toolCall.shell) return toolCall.shell.readOnly ? 'read' : 'write'
   if (toolCall.annotations?.destructiveHint === true) return 'destructive'
   if (toolCall.annotations?.readOnlyHint === false) return 'write'
   if (toolCall.annotations?.readOnlyHint === true) return 'read'
@@ -24,6 +26,7 @@ function toolEffect(toolCall: ToolCallDisplay): ToolEffect {
 }
 
 function toolEffectLabel(toolCall: ToolCallDisplay): string {
+  if (toolCall.shell) return toolCall.shell.readOnly ? 'Read-only' : 'Not read-only'
   const effect = toolEffect(toolCall)
   return effect === 'unknown' ? 'Unclassified' : effect[0].toUpperCase() + effect.slice(1)
 }
@@ -227,6 +230,12 @@ function toggleExpand(index: number): void {
             >
               in <span class="font-mono">{{ tc.shell.cwd }}</span>
             </p>
+            <p
+              v-if="tc.shell.reasons.length"
+              class="text-[11px] font-medium text-ink-muted"
+            >
+              Needs approval because:
+            </p>
             <ul
               v-if="tc.shell.reasons.length"
               class="hitl-shell-reasons space-y-0.5 text-[11px] text-amber-400"
@@ -239,7 +248,7 @@ function toggleExpand(index: number): void {
                 <Icon
                   icon="lucide:shield-alert"
                   class="mt-0.5 h-3 w-3 shrink-0"
-                />Needs approval: {{ reason }}
+                />{{ reason }}
               </li>
             </ul>
           </div>
