@@ -535,11 +535,14 @@ const chatRoute = computed(() =>
       </section>
 
       <section
-        v-if="!sidebarCollapsed && projectsStore.activeProjects.length"
+        v-if="projectsStore.activeProjects.length"
         class="sidebar-region shrink-0"
       >
         <div class="section-separator" />
-        <div class="group/projects-header relative flex items-center">
+        <div
+          v-if="!sidebarCollapsed"
+          class="group/projects-header relative flex items-center"
+        >
           <button
             type="button"
             class="region-toggle min-w-0 flex-1 pr-1"
@@ -565,7 +568,8 @@ const chatRoute = computed(() =>
           </RouterLink>
         </div>
         <SidebarProjects
-          v-show="projectsOpen"
+          v-show="projectsOpen || sidebarCollapsed"
+          :collapsed="sidebarCollapsed"
           :active-conversation-ids="runningConversationIds"
           :awaiting-conversation-ids="awaitingConversationIds"
         />

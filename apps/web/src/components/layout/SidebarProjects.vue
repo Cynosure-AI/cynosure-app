@@ -10,6 +10,7 @@ import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProjectsStore } from '../../stores/projects.store'
 import { useProjectChat } from '../../composables/useProjectChat'
 import ProjectIcon from '../project/ProjectIcon.vue'
+import HoverTooltip from '../shared/HoverTooltip.vue'
 
 const MAX_PROJECTS = 8
 const CHATS_PER_PROJECT = 5
@@ -20,9 +21,11 @@ type ProjectChats = {
 }
 
 const props = withDefaults(defineProps<{
+  collapsed?: boolean
   activeConversationIds?: string[]
   awaitingConversationIds?: string[]
 }>(), {
+  collapsed: false,
   activeConversationIds: () => [],
   awaitingConversationIds: () => [],
 })
@@ -43,7 +46,7 @@ const collapsedProjectId = ref<string | null>(null)
 
 /** The current project's chats open automatically unless manually collapsed. */
 const expanded = computed(() => new Set<string>(
-  activeProjectId.value && activeProjectId.value !== collapsedProjectId.value
+  !props.collapsed && activeProjectId.value && activeProjectId.value !== collapsedProjectId.value
     ? [activeProjectId.value]
     : [],
 ))
@@ -265,7 +268,7 @@ function clearHeight(el: Element): void {
 // Navigation and interaction
 function toggleProject(projectId: string, event: MouseEvent): void {
   if (
-    event.defaultPrevented || event.button !== 0 ||
+    props.collapsed || event.defaultPrevented || event.button !== 0 ||
     event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ||
     !isProjectActive(projectId)
   ) return
@@ -342,7 +345,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="space-y-0.5">
+  <div
+    class="space-y-0.5"
+    :class="{ 'projects-collapsed': collapsed }"
+  >
     <div
       v-for="project in projects"
       :key="project.id"
@@ -350,56 +356,68 @@ onBeforeUnmount(() => {
     >
       <!-- Project row -->
       <div class="group/project relative">
-        <RouterLink
-          :to="{
-            name: 'project-detail',
-            params: { id: project.id },
-          }"
-          class="flex min-h-9 w-full items-center gap-2.5 rounded-lg py-2 pl-3 pr-10 text-left text-[0.8125rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500"
-          :class="
-            isProjectActive(project.id)
-              ? 'project-row--active text-theme-100'
-              : 'text-ink-secondary hover:bg-theme-800 hover:text-theme-100'
-          "
-          :aria-current="isProjectActive(project.id) ? 'page' : undefined"
-          :aria-expanded="expanded.has(project.id)"
-          :title="project.name"
-          @click.capture="toggleProject(project.id, $event)"
+        <HoverTooltip
+          placement="right"
+          block
+          :disabled="!collapsed"
         >
-          <!-- A collapsed project shows its chats' status in place of its icon. -->
-          <span
-            v-if="!expanded.has(project.id) && awaitingProjectIds.has(project.id)"
-            class="flex h-4 w-4 shrink-0 items-center justify-center"
-            role="img"
-            title="A chat in this project is waiting for your approval"
-            aria-label="A chat in this project is waiting for your approval"
+          <RouterLink
+            :to="{
+              name: 'project-detail',
+              params: { id: project.id },
+            }"
+            class="project-row flex min-h-9 w-full items-center gap-2.5 rounded-lg py-2 pl-3 pr-10 text-left text-[0.8125rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500"
+            :class="
+              isProjectActive(project.id)
+                ? 'project-row--active text-theme-100'
+                : 'text-ink-secondary hover:bg-theme-800 hover:text-theme-100'
+            "
+            :aria-current="isProjectActive(project.id) ? 'page' : undefined"
+            :aria-expanded="collapsed ? undefined : expanded.has(project.id)"
+            :aria-label="project.name"
+            :title="collapsed ? undefined : project.name"
+            @click.capture="toggleProject(project.id, $event)"
           >
-            <span class="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-          </span>
-          <Icon
-            v-else-if="!expanded.has(project.id) && runningProjectIds.has(project.id)"
-            icon="lucide:loader-circle"
-            class="h-4 w-4 shrink-0 animate-spin text-accent-fg"
-            role="img"
-            title="A chat in this project is running"
-            aria-label="A chat in this project is running"
-          />
-          <ProjectIcon
-            v-else
-            :project="project"
-            class="h-4 w-4 shrink-0"
-          />
+            <!-- A collapsed project shows its chats' status in place of its icon. -->
+            <span
+              v-if="!expanded.has(project.id) && awaitingProjectIds.has(project.id)"
+              class="flex h-4 w-4 shrink-0 items-center justify-center"
+              role="img"
+              title="A chat in this project is waiting for your approval"
+              aria-label="A chat in this project is waiting for your approval"
+            >
+              <span class="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+            </span>
+            <Icon
+              v-else-if="!expanded.has(project.id) && runningProjectIds.has(project.id)"
+              icon="lucide:loader-circle"
+              class="h-4 w-4 shrink-0 animate-spin text-accent-fg"
+              role="img"
+              title="A chat in this project is running"
+              aria-label="A chat in this project is running"
+            />
+            <ProjectIcon
+              v-else
+              :project="project"
+              class="h-4 w-4 shrink-0"
+            />
 
-          <span
-            class="min-w-0 flex-1 truncate"
-            :class="{ 'text-amber-200': awaitingProjectIds.has(project.id) }"
-          >
+            <span
+              v-if="!collapsed"
+              class="min-w-0 flex-1 truncate"
+              :class="{ 'text-amber-200': awaitingProjectIds.has(project.id) }"
+            >
+              {{ project.name }}
+            </span>
+          </RouterLink>
+          <template #content>
             {{ project.name }}
-          </span>
-        </RouterLink>
+          </template>
+        </HoverTooltip>
 
         <!-- New project chat -->
         <button
+          v-if="!collapsed"
           type="button"
           class="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted opacity-0 transition-all hover:bg-theme-700 hover:text-theme-100 hover:opacity-100 group-hover/project:opacity-100 group-focus-within/project:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
           :aria-label="`New chat in ${project.name}`"
@@ -584,17 +602,50 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Remaining projects -->
-    <RouterLink
+    <HoverTooltip
       v-if="hiddenCount > 0"
-      :to="{ name: 'projects' }"
-      class="block rounded-md px-3 py-1.5 text-[11px] text-ink-muted transition-colors hover:bg-theme-800/70 hover:text-theme-200"
+      placement="right"
+      block
+      :disabled="!collapsed"
     >
-      {{ hiddenCount }} more {{ hiddenCount === 1 ? 'project' : 'projects' }}
-    </RouterLink>
+      <RouterLink
+        :to="{ name: 'projects' }"
+        class="project-row block w-full rounded-md px-3 py-1.5 text-[11px] text-ink-muted transition-colors hover:bg-theme-800/70 hover:text-theme-200"
+        :aria-label="`${hiddenCount} more ${hiddenCount === 1 ? 'project' : 'projects'}`"
+      >
+        <Icon
+          v-if="collapsed"
+          icon="lucide:ellipsis"
+          class="h-4.5 w-4.5"
+        />
+        <template v-else>
+          {{ hiddenCount }} more {{ hiddenCount === 1 ? 'project' : 'projects' }}
+        </template>
+      </RouterLink>
+      <template #content>
+        {{ hiddenCount }} more {{ hiddenCount === 1 ? 'project' : 'projects' }}
+      </template>
+    </HoverTooltip>
   </div>
 </template>
 
 <style scoped>
+.projects-collapsed .project-row {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  width: 2.5rem;
+  min-height: 2.25rem;
+  margin-inline: auto;
+  padding: 0.5rem;
+}
+
+.projects-collapsed .project-row > :first-child {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+}
+
 .project-chats-enter-active,
 .project-chats-leave-active {
   overflow: hidden;
