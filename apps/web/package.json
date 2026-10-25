@@ -28,6 +28,7 @@
     "highlight.js": "^11.11.1",
     "marked": "^17.0.4",
     "marked-highlight": "^2.2.3",
+    "mermaid": "^11.17.2",
     "pinia": "^3.0.4",
     "turndown": "^7.2.4",
     "vue": "^3.5.25",

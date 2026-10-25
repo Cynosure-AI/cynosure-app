@@ -45,6 +45,28 @@ describe('markdown rendering', () => {
     expect(html).toContain('language-ts')
   })
 
+  test('renders mermaid fences as diagram placeholders that keep their source', () => {
+    const html = renderMarkdown('```mermaid\nflowchart LR\n  A --> B\n```')
+    const container = document.createElement('div')
+    container.innerHTML = html
+
+    expect(container.querySelector('.mermaid-diagram')).toBeInstanceOf(HTMLElement)
+    expect(container.querySelector('.mermaid-toggle-btn')).toBeInstanceOf(HTMLElement)
+    expect(container.querySelector('code')?.textContent).toBe('flowchart LR\n  A --> B')
+  })
+
+  test('toggles a rendered mermaid block between diagram and code', () => {
+    const container = document.createElement('div')
+    container.innerHTML = '<div class="mermaid-block" data-view="diagram"><button class="mermaid-toggle-btn"></button></div>'
+    const block = container.firstElementChild as HTMLElement
+    const button = container.querySelector('.mermaid-toggle-btn') as HTMLElement
+
+    handleMarkdownClick({ target: button } as unknown as MouseEvent)
+    expect(block.dataset.view).toBe('code')
+    handleMarkdownClick({ target: button } as unknown as MouseEvent)
+    expect(block.dataset.view).toBe('diagram')
+  })
+
   test('copies code and restores the button after feedback', async () => {
     vi.useFakeTimers()
     const writeText = vi.fn().mockResolvedValue(undefined)

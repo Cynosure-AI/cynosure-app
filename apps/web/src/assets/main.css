@@ -457,7 +457,8 @@ button:hover {
   user-select: none;
 }
 
-.code-copy-btn {
+.code-copy-btn,
+.mermaid-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -469,7 +470,8 @@ button:hover {
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
 }
-.code-copy-btn:hover {
+.code-copy-btn:hover,
+.mermaid-toggle-btn:hover {
   color: var(--color-theme-100);
   background: var(--color-theme-700);
 }
@@ -481,4 +483,47 @@ button:hover {
   margin-top: 0 !important;
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
+}
+
+.code-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+/* ── Mermaid diagrams ── */
+.mermaid-toggle-btn {
+  display: none;
+}
+.mermaid-block[data-mermaid-state="rendered"] .mermaid-toggle-btn {
+  display: flex;
+}
+.mermaid-block[data-view="code"] .mermaid-toggle-btn {
+  color: var(--color-accent-fg);
+}
+
+.mermaid-diagram {
+  display: none;
+  padding: 1rem;
+  overflow-x: auto;
+  background: var(--color-code-surface);
+  border: 1px solid var(--color-theme-700);
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+.mermaid-diagram svg {
+  display: block;
+  height: auto;
+  margin: 0 auto;
+}
+
+.mermaid-block pre {
+  margin-top: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+.mermaid-block[data-view="diagram"] .mermaid-diagram {
+  display: block;
+}
+.mermaid-block[data-view="diagram"] pre {
+  display: none;
 }

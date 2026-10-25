@@ -6,6 +6,7 @@ import { renderMarkdown, handleMarkdownClick } from '../../utils/markdown'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
 import { useAppBranding } from '../../composables/useAppBranding'
+import { useMermaidDiagrams } from '../../composables/useMermaidDiagrams'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
@@ -196,6 +197,10 @@ const renderedContent = computed(() => {
   if (props.role === 'user') return linkifyText(props.content)
   return renderMarkdown(props.content)
 })
+
+// Diagrams wait for the reply to finish, so a half-streamed fence is not drawn and redrawn.
+const markdownRef = ref<HTMLElement | null>(null)
+useMermaidDiagrams(markdownRef, () => renderedContent.value, () => !props.isStreaming)
 
 const isUser = computed(() => props.role === 'user')
 const showBubble = computed(() => isUser.value || prefs.aiMessageBubbles)
@@ -586,6 +591,7 @@ const imageGridClass = computed(() => {
       <!-- Assistant message: rendered markdown -->
       <div
         v-else-if="!isUser && content"
+        ref="markdownRef"
         class="msg-markdown prose dark:prose-invert prose-sm max-w-none"
         :class="{ 'msg-markdown--streaming': isStreaming && !isThinking }"
         @click="handleMarkdownClick"

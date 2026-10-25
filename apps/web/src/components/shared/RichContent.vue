@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-v-html -- renderMarkdown sanitizes untrusted content before rendering. */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { formatRichContent } from '../../utils/rich-content'
 import { handleMarkdownClick, renderMarkdown } from '../../utils/markdown'
+import { useMermaidDiagrams } from '../../composables/useMermaidDiagrams'
 
 const props = defineProps<{
   content: unknown
@@ -11,10 +12,13 @@ const props = defineProps<{
 
 const formatted = computed(() => formatRichContent(props.content))
 const rendered = computed(() => renderMarkdown(formatted.value.markdown))
+const rootRef = ref<HTMLElement | null>(null)
+useMermaidDiagrams(rootRef, () => rendered.value)
 </script>
 
 <template>
   <div
+    ref="rootRef"
     class="rich-content msg-markdown min-w-0 overflow-auto text-xs leading-relaxed"
     :class="[
       `rich-content--${formatted.kind}`,

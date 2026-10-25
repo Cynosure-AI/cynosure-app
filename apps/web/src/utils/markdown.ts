@@ -80,6 +80,8 @@ marked.use(
     })
 )
 
+const mermaidToggleBtn = `<button class="mermaid-toggle-btn" title="Show code"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>`
+
 marked.use({
     renderer: {
         link({ href, text }: { href: string; text: string }) {
@@ -91,6 +93,12 @@ marked.use({
             const codeContent = escaped ? text : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             const langClass = langLabel ? `hljs language-${langLabel}` : 'hljs'
             const copyBtn = `<button class="code-copy-btn" title="Copy code"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>`
+            if (langLabel.toLowerCase() === 'mermaid') {
+                // Rendered into a diagram after mount (see utils/mermaid.ts); the code stays as fallback.
+                const actions = `<div class="code-header-actions">${mermaidToggleBtn}${copyBtn}</div>`
+                const header = `<div class="code-header"><span>${langLabel}</span>${actions}</div>`
+                return `<div class="code-block-wrapper mermaid-block">${header}<div class="mermaid-diagram"></div><pre><code class="${langClass}">${codeContent}</code></pre></div>`
+            }
             const headerHtml = `<div class="code-header"><span>${langLabel}</span>${copyBtn}</div>`
             return `<div class="code-block-wrapper">${headerHtml}<pre><code class="${langClass}">${codeContent}</code></pre></div>`
         }
@@ -182,6 +190,14 @@ function hardenSanitizedHtml(html: string): string {
 }
 
 export function handleMarkdownClick(e: MouseEvent): void {
+    const toggle = (e.target as HTMLElement).closest('.mermaid-toggle-btn') as HTMLElement | null
+    const mermaidBlock = toggle?.closest('.mermaid-block') as HTMLElement | null
+    if (toggle && mermaidBlock) {
+        const showCode = mermaidBlock.dataset.view !== 'code'
+        mermaidBlock.dataset.view = showCode ? 'code' : 'diagram'
+        toggle.title = showCode ? 'Show diagram' : 'Show code'
+        return
+    }
     const btn = (e.target as HTMLElement).closest('.code-copy-btn') as HTMLElement | null
     if (!btn) return
     const wrapper = btn.closest('.code-block-wrapper')
