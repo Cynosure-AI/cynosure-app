@@ -78,6 +78,24 @@ describe('HITLDialog', () => {
     expect(response).toHaveBeenCalledWith(true, undefined, 'once')
   })
 
+  test('offers Show more only when the command overflows', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAgentStore().handleHITLRequest({ taskId: 'shell-long', toolCalls: [{ name: 'shell_execute', arguments: JSON.stringify({ command: 'echo hi' }) }] })
+    const short = mount(HITLDialog, { global: { plugins: [pinia], stubs: { Icon: true } } })
+    expect(short.text()).not.toContain('Show more')
+    short.unmount()
+
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000)
+    const long = mount(HITLDialog, { global: { plugins: [pinia], stubs: { Icon: true } } })
+    await long.vm.$nextTick()
+    const toggle = long.find('.clamped-toggle')
+    expect(toggle.text()).toBe('Show more')
+    await toggle.trigger('click')
+    expect(toggle.text()).toBe('Show less')
+    scrollHeight.mockRestore()
+  })
+
   test('offers session and saved approvals for shell commands', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

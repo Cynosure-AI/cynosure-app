@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import ToolNamespaceIcon from './ToolNamespaceIcon.vue'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import RichContent from '../shared/RichContent.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import { fileArtifactLinks } from '../../utils/file-artifacts'
+import { toolCallSummary } from '../../utils/tool-call-summary'
 
 type ExecutionRow = {
   name: string
@@ -41,6 +43,9 @@ function tone(row: ExecutionRow): string {
   return row.internal ? 'text-theme-200' : 'text-accent-fg'
 }
 
+// What each call targets (shell explanation, file, memory, schedule time), beside its name.
+const summaries = computed(() => props.rows.map((row) => toolCallSummary(row.call?.name ?? row.result?.name, row.call?.arguments)))
+
 function isRunning(row: ExecutionRow): boolean {
   return !row.result && props.isActive && props.status !== 'Denied' && props.status !== 'Awaiting approval'
 }
@@ -71,11 +76,18 @@ function isRunning(row: ExecutionRow): boolean {
                 :class="tone(row)"
               />
             </span>
-            <span
-              class="min-w-0 flex-1 truncate text-[13px] font-medium"
-              :class="tone(row)"
-              :title="row.name"
-            >{{ row.name }}</span>
+            <span class="flex min-w-0 flex-1 items-baseline gap-2">
+              <span
+                class="min-w-0 max-w-[60%] shrink-0 truncate text-[13px] font-medium"
+                :class="tone(row)"
+                :title="row.name"
+              >{{ row.name }}</span>
+              <span
+                v-if="summaries[index]"
+                class="tool-row-summary min-w-0 truncate text-[12px] text-ink-muted"
+                :title="summaries[index]!.title"
+              >{{ summaries[index]!.text }}</span>
+            </span>
             <span
               class="hidden shrink-0 text-[11px] text-ink-muted sm:inline"
               :class="{ 'text-shimmer': isRunning(row) }"
