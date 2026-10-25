@@ -1,7 +1,7 @@
 import { getDb } from '../../db/database.js'
 import type { PermissionMode } from '@shared/types'
 
-const MODES: readonly PermissionMode[] = ['read-only', 'auto', 'full']
+const MODES: readonly PermissionMode[] = ['read-only', 'edit', 'auto', 'full']
 
 export function isPermissionMode(value: unknown): value is PermissionMode {
     return MODES.includes(value as PermissionMode)

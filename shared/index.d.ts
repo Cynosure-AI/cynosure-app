@@ -132,10 +132,11 @@ export interface ChatEventDraft {
 export type ContextStrategy = 'sliding-window' | 'truncate-middle' | 'compact' | 'none'
 
 /**
- * What a chat's runs may do with tools: only read-only tools (read-only), saved
- * approval policy (auto), or every tool without asking (full).
+ * What a chat's runs may do with tools: only read-only tools (read-only),
+ * non-destructive writes without asking (edit), saved approval policy (auto),
+ * or every tool without asking (full).
  */
-export type PermissionMode = 'read-only' | 'auto' | 'full'
+export type PermissionMode = 'read-only' | 'edit' | 'auto' | 'full'
 
 export type ReasoningEffort ='minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 

@@ -711,6 +711,19 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 35,
+        description: 'Allow the edit tool permission mode',
+        up: (db) => {
+            // SQLite cannot change a CHECK constraint, so swap the column for one with the new list.
+            db.exec(`
+                ALTER TABLE conversations ADD COLUMN permission_mode_next TEXT NOT NULL DEFAULT 'auto' CHECK(permission_mode_next IN ('read-only', 'edit', 'auto', 'full'));
+                UPDATE conversations SET permission_mode_next = permission_mode;
+                ALTER TABLE conversations DROP COLUMN permission_mode;
+                ALTER TABLE conversations RENAME COLUMN permission_mode_next TO permission_mode;
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

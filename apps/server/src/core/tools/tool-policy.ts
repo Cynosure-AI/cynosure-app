@@ -49,6 +49,24 @@ export function isReadOnlyModeTool(tool: { name: string; annotations?: ToolBehav
   return isSystemAutoApprovedTool(tool.name) || isAnnotationAutoApprovedTool(tool.annotations)
 }
 
+/**
+ * Calls an Edit chat runs without asking: native file tools unless they delete
+ * or overwrite, and other tools that explicitly declare themselves
+ * non-destructive writers. Shell commands follow normal approval, since their
+ * effect cannot be told from the tool alone.
+ */
+export function isEditModeTool(
+  tool: { name: string; annotations?: ToolBehaviorAnnotations; namespaceId?: string; originalName?: string },
+  args: Record<string, unknown>,
+): boolean {
+  if (isReadOnlyModeTool(tool)) return true
+  if (tool.namespaceId === 'builtin:shell') return false
+  if (tool.namespaceId === 'builtin:files') {
+    return (tool.originalName || tool.name) !== 'file_delete' && args.overwrite !== true
+  }
+  return tool.annotations?.readOnlyHint === false && tool.annotations.destructiveHint === false
+}
+
 export function isVisibleExecutionTool(toolName: string): boolean {
   return Boolean(toolName)
 }
