@@ -10,6 +10,7 @@ import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
 import BaseCard from '../../components/shared/BaseCard.vue'
 import AgentSelect from '../../components/shared/AgentSelect.vue'
 import CustomSelect from '../../components/shared/CustomSelect.vue'
+import ProjectIcon from '../../components/project/ProjectIcon.vue'
 import {
   buildCronExpr, cronToHuman,
   WEEKDAYS, HOUR_OPTIONS, MINUTE_OPTIONS, INTERVAL_MINUTES, FREQUENCY_OPTIONS,
@@ -25,8 +26,11 @@ const router = useRouter()
 const cronJobs = ref<CronJob[]>([])
 const projects = ref<ProjectDto[]>([])
 const projectsById = computed(() => new Map(projects.value.map(project => [project.id, project])))
+function jobProject(job: CronJob): ProjectDto | undefined {
+  return job.projectId ? projectsById.value.get(job.projectId) : undefined
+}
 function projectName(job: CronJob): string {
-  return job.projectId ? projectsById.value.get(job.projectId)?.name || '' : ''
+  return jobProject(job)?.name || ''
 }
 const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
@@ -460,52 +464,53 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Agent -->
-                <button
-                  type="button"
-                  class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-theme-700 transition-shadow hover:ring-2 hover:ring-accent-500/60 lg:h-11 lg:w-11"
-                  :class="{ 'opacity-60 grayscale': !job.enabled }"
-                  :title="`Open ${job.agentName} agent details`"
-                  :aria-label="`Open ${job.agentName} agent details`"
-                  @click.stop="openAgentDetails(job.agentId)"
-                >
-                  <img
-                    v-if="job.agentIconUrl || !job.agentId"
-                    :src="job.agentIconUrl || cyno.iconUrl"
-                    :alt="job.agentName"
-                    class="h-full w-full object-cover"
+                <div class="relative h-10 w-10 shrink-0 lg:h-11 lg:w-11">
+                  <button
+                    type="button"
+                    class="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-theme-700 transition-shadow hover:ring-2 hover:ring-accent-500/60"
+                    :class="{ 'opacity-60 grayscale': !job.enabled }"
+                    :title="`Open ${job.agentName} agent details`"
+                    :aria-label="`Open ${job.agentName} agent details`"
+                    @click.stop="openAgentDetails(job.agentId)"
                   >
-                  <Icon
-                    v-else
-                    icon="lucide:bot"
-                    class="h-4 w-4 text-ink-secondary"
-                  />
-                </button>
+                    <img
+                      v-if="job.agentIconUrl || !job.agentId"
+                      :src="job.agentIconUrl || cyno.iconUrl"
+                      :alt="job.agentName"
+                      class="h-full w-full object-cover"
+                    >
+                    <Icon
+                      v-else
+                      icon="lucide:bot"
+                      class="h-4 w-4 text-ink-secondary"
+                    />
+                  </button>
+                  <RouterLink
+                    v-if="jobProject(job)"
+                    :to="`/projects/${encodeURIComponent(job.projectId!)}`"
+                    class="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border bg-theme-900 ring-2 ring-theme-900 transition-shadow hover:ring-accent-500/60 focus-visible:outline-none focus-visible:ring-accent-500/60"
+                    :style="{ borderColor: jobProject(job)!.color || 'var(--color-accent-500)' }"
+                    :title="`Project: ${projectName(job)}`"
+                    :aria-label="`Open project ${projectName(job)}`"
+                    @click.stop
+                  >
+                    <ProjectIcon
+                      :project="jobProject(job)!"
+                      class="h-3 w-3"
+                    />
+                  </RouterLink>
+                </div>
 
-                <!-- Name, project, instructions -->
+                <!-- Name, instructions -->
                 <div class="min-w-0">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <RouterLink
-                      :to="`/cron/${encodeURIComponent(job.id)}`"
-                      class="truncate font-medium hover:text-accent-fg"
-                      :class="job.enabled ? 'text-theme-100' : 'text-theme-300'"
-                      @click.stop
-                    >
-                      {{ job.name || 'Unnamed job' }}
-                    </RouterLink>
-                    <RouterLink
-                      v-if="projectName(job)"
-                      :to="`/projects/${encodeURIComponent(job.projectId!)}`"
-                      class="flex min-w-0 max-w-[12rem] shrink items-center gap-1 rounded-md bg-theme-800 px-1.5 py-0.5 text-[11px] text-ink-secondary hover:text-accent-fg"
-                      :title="projectName(job)"
-                      @click.stop
-                    >
-                      <Icon
-                        icon="lucide:folder-kanban"
-                        class="h-3 w-3 shrink-0"
-                      />
-                      <span class="truncate">{{ projectName(job) }}</span>
-                    </RouterLink>
-                  </div>
+                  <RouterLink
+                    :to="`/cron/${encodeURIComponent(job.id)}`"
+                    class="block truncate font-medium hover:text-accent-fg"
+                    :class="job.enabled ? 'text-theme-100' : 'text-theme-300'"
+                    @click.stop
+                  >
+                    {{ job.name || 'Unnamed job' }}
+                  </RouterLink>
                   <p
                     v-if="job.prompt"
                     class="mt-0.5 truncate text-xs text-ink-muted"
