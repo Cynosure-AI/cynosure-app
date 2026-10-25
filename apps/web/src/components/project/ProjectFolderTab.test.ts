@@ -2,7 +2,6 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import ProjectFolderTab from './ProjectFolderTab.vue'
 import { api } from '../../api/client'
-import { resetViewLayout } from '../../composables/useViewLayout'
 import type { ProjectDto } from '@shared/types'
 
 const project = { id: 'project-1', name: 'Garden Planner', rootPath: '/work/garden' } as ProjectDto
@@ -26,11 +25,7 @@ function rowButton(wrapper: ReturnType<typeof mountTab>, label: string) {
 }
 
 describe('ProjectFolderTab', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-    sessionStorage.clear()
-    resetViewLayout()
-  })
+  afterEach(() => vi.restoreAllMocks())
 
   test('lists the project folder and opens subfolders', async () => {
     const list = vi.spyOn(api.projects, 'listFiles').mockImplementation(async (_id, opts = {}) => opts.path === 'src'

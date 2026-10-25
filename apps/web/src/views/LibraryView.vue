@@ -9,12 +9,12 @@ import LibraryPreviewModal from '../components/shared/LibraryPreviewModal.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 import { useCynoStore } from '../stores/cyno.store'
 import { formatBytes } from '../utils/format-bytes'
-import { useViewLayout } from '../composables/useViewLayout'
 
 const cyno = useCynoStore()
 
 type LibraryPanel = 'generated' | 'uploads'
 type LibraryFilter = 'all' | ActivityArtifact['kind']
+type LibraryViewMode = 'grid' | 'list'
 
 interface LibraryEntry {
   id: string
@@ -60,7 +60,7 @@ const activePanel = ref<LibraryPanel>('generated')
 const activityItems = ref<ActivityItem[]>([])
 const uploadItems = ref<ConversationUpload[]>([])
 const selectedFilter = ref<LibraryFilter>('all')
-const viewMode = useViewLayout('grid')
+const viewMode = ref<LibraryViewMode>('grid')
 const selectedEntry = ref<LibraryEntry | null>(null)
 const searchQuery = ref('')
 const loading = ref(true)

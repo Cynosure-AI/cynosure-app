@@ -4,7 +4,6 @@ import { api } from '../../../api/client'
 import type { McpRegistryServer } from '../../../api/types'
 import { Icon } from '@iconify/vue'
 import { useMcpServers } from '../../../composables/useMcpServers'
-import { useViewLayout } from '../../../composables/useViewLayout'
 import { planRemoteHeaders } from './registry-remote-headers'
 
 const emit = defineEmits<{
@@ -25,7 +24,7 @@ const registryLoading = ref(false)
 const addingRegistryId = ref<string | null>(null)
 const registryEnv = reactive<Record<string, string>>({})
 const selectedCategory = ref('all')
-const viewMode = useViewLayout('grid')
+const viewMode = ref<'grid' | 'list'>('grid')
 const failedIconUrls = reactive<Record<string, boolean>>({})
 
 type RegistryRow = McpRegistryServer & { id: string }

@@ -1,7 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { resetViewLayout, useViewLayout } from '../../composables/useViewLayout'
 import MemoryVirtualExplorer from './MemoryVirtualExplorer.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -47,8 +46,6 @@ function file(fileName: string, modifiedAt: number) {
 describe('MemoryVirtualExplorer', () => {
   beforeEach(() => {
     localStorage.clear()
-    sessionStorage.clear()
-    resetViewLayout()
     Object.values(mocks).forEach(mock => mock.mockReset())
     mocks.listFiles.mockImplementation(async (folderId: string) => folderId === 'root'
       ? [file('older.md', 10)]
@@ -93,7 +90,7 @@ describe('MemoryVirtualExplorer', () => {
   })
 
   test('uses Dream title styling for recently dreamed documents', async () => {
-    useViewLayout('list').value = 'grid'
+    localStorage.setItem('cy-memory-explorer-view', 'grid')
     mocks.listFiles.mockImplementation(async (folderId: string) => folderId === 'root'
       ? [{ ...file('dreamed.md', 10), dreamedAt: Date.now() }]
       : [file('regular.md', 20)])

@@ -6,7 +6,8 @@ import type { ProjectFileEntry } from '../../api/types'
 import { formatBytes } from '../../utils/format-bytes'
 import { documentTypeStyle, normalizeExtension } from '../../utils/document-types'
 import DocumentTypeArt from '../shared/DocumentTypeArt.vue'
-import { useViewLayout, type ViewLayout } from '../../composables/useViewLayout'
+
+type BrowserLayout = 'list' | 'grid'
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'])
 
@@ -16,7 +17,7 @@ const props = defineProps<{
   projectName?: string
   /** The project directory; when given, images and PDFs show thumbnails served through `/api/files`. */
   rootPath?: string
-  defaultLayout?: ViewLayout
+  defaultLayout?: BrowserLayout
   /** Files shown as picked. */
   selectedPaths?: ReadonlySet<string>
   /** Why a file can't be opened, shown in place of its size; files with a reason are disabled. */
@@ -33,7 +34,7 @@ const truncated = ref(false)
 const query = ref('')
 const showHidden = ref(false)
 const loading = ref(false)
-const layout = useViewLayout(() => props.defaultLayout ?? 'list')
+const layout = ref<BrowserLayout>(props.defaultLayout ?? 'list')
 /** Thumbnails that failed to load fall back to the file-type icon. */
 const brokenThumbnails = ref(new Set<string>())
 const error = ref('')
