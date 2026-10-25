@@ -31,14 +31,6 @@ function toolEffectLabel(toolCall: ToolCallDisplay): string {
   return effect === 'unknown' ? 'Unclassified' : effect[0].toUpperCase() + effect.slice(1)
 }
 
-function toolCardClass(toolCall: ToolCallDisplay): string {
-  const effect = toolEffect(toolCall)
-  if (effect === 'destructive') return 'border-red-500/30 bg-red-500/5'
-  if (effect === 'write') return 'border-amber-500/30 bg-amber-500/5'
-  if (effect === 'read') return 'border-sky-500/30 bg-sky-500/5'
-  return ''
-}
-
 function toolEffectBadgeClass(toolCall: ToolCallDisplay): string {
   const effect = toolEffect(toolCall)
   if (effect === 'destructive') return 'border-red-500/30 bg-red-500/10 text-red-400'
@@ -184,8 +176,7 @@ function toggleExpand(index: number): void {
           v-for="(tc, i) in agentStore.pendingHITL.toolCalls"
           v-show="!fileAccess"
           :key="i"
-          class="hitl-tool-card flex flex-col gap-1.5 rounded-lg border p-2.5 border-theme-700/50 bg-theme-900/25"
-          :class="toolCardClass(tc)"
+          class="hitl-tool-card flex flex-col gap-1.5"
           :data-tool-effect="toolEffect(tc)"
         >
           <div class="flex items-center justify-between">
