@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3'
+import { createHash } from 'crypto'
 import { existsSync } from 'fs'
 import { basename } from 'path'
 import type { ContentBlock } from '@shared/types'
@@ -13,15 +14,18 @@ export interface ExportableAttachment {
 
 const MEDIA_BLOCK_TYPES = new Set(['image', 'audio', 'video'])
 
-/** The id the model uses for a media block: its stored filename, which is unique per conversation. */
-export function mediaAttachmentId(url: string): string | null {
+const MEDIA_ID_PREFIX = { image: 'img', audio: 'aud', video: 'vid' } as const
+
+/** A short, stable id for a media block, derived from its stored filename. */
+export function mediaAttachmentId(kind: 'image' | 'audio' | 'video', url: string): string | null {
     const filePath = extractFilePathFromFileUrl(url)
-    return filePath ? basename(filePath) : null
+    if (!filePath) return null
+    return `${MEDIA_ID_PREFIX[kind]}-${createHash('sha256').update(basename(filePath)).digest('hex').slice(0, 6)}`
 }
 
 /** The handle shown next to attached media so the model can pass it to attachment_export. */
 export function mediaAttachmentLabel(kind: 'image' | 'audio' | 'video', url: string): string | null {
-    const id = mediaAttachmentId(url)
+    const id = mediaAttachmentId(kind, url)
     return id ? `[Attached ${kind}: attachmentId: ${id}]` : null
 }
 
@@ -58,8 +62,9 @@ export function listExportableAttachments(db: Database, conversationId: string):
             if (!MEDIA_BLOCK_TYPES.has(block.type) || !('url' in block) || typeof block.url !== 'string') continue
             const sourcePath = extractFilePathFromFileUrl(block.url)
             if (!sourcePath || !existsSync(sourcePath)) continue
-            const id = basename(sourcePath)
-            found.set(id, { id, name: id, kind: block.type as ExportableAttachment['kind'], sourcePath })
+            const kind = block.type as 'image' | 'audio' | 'video'
+            const id = mediaAttachmentId(kind, block.url)!
+            found.set(id, { id, name: basename(sourcePath), kind, sourcePath })
         }
     }
 

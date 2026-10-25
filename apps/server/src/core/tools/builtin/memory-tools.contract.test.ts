@@ -77,8 +77,29 @@ describe('memory mutation tool contracts', () => {
         ])).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found', editIndex: 1 })
     })
 
-    test('rejects invalid edit shapes and multi-line anchors', () => {
-        expect(applyMemoryPatch('Line one\nLine two', [{ op: 'replace', anchor: 'Line one\nLine two', content: 'Updated' }]))
+    test('matches multi-line anchors as one block of consecutive complete lines', () => {
+        const source = '# Title\nLine one\n\nLine two\nTail\n'
+        expect(applyMemoryPatch(source, [{ op: 'replace', anchor: 'Line one\n\nLine two\n', content: 'Updated' }]))
+            .toMatchObject({ status: 'success', content: '# Title\nUpdated\nTail\n' })
+        expect(applyMemoryPatch(source, [{ op: 'delete', anchor: 'Line one\r\n\r\nLine two' }]))
+            .toMatchObject({ status: 'success', content: '# Title\nTail\n' })
+        expect(applyMemoryPatch(source, [{ op: 'insert_after', anchor: 'Line one\n\nLine two', content: 'Added' }]))
+            .toMatchObject({ status: 'success', content: '# Title\nLine one\n\nLine two\nAdded\nTail\n' })
+        expect(applyMemoryPatch(source, [{ op: 'insert_before', anchor: 'Line one\n\nLine two', content: 'Added' }]))
+            .toMatchObject({ status: 'success', content: '# Title\nAdded\nLine one\n\nLine two\nTail\n' })
+    })
+
+    test('rejects partial-line, non-consecutive and ambiguous multi-line anchors', () => {
+        expect(applyMemoryPatch('Line one\nLine two', [{ op: 'replace', anchor: 'one\nLine two', content: 'x' }]))
+            .toMatchObject({ status: 'conflict', reason: 'expected_context_not_found' })
+        const gap = applyMemoryPatch('Line one\nMiddle\nLine twoo', [{ op: 'replace', anchor: 'Line one\nLine two', content: 'x' }])
+        expect(gap).toMatchObject({ status: 'conflict', reason: 'expected_context_not_found', suggestedAnchor: 'Line twoo' })
+        expect(applyMemoryPatch('A\nB\nA\nB', [{ op: 'delete', anchor: 'A\nB' }]))
+            .toMatchObject({ status: 'conflict', reason: 'ambiguous_context', matchCount: 2 })
+    })
+
+    test('rejects invalid edit shapes', () => {
+        expect(applyMemoryPatch('Line one', [{ op: 'replace', anchor: 'Line one' } as never]))
             .toMatchObject({ status: 'conflict', reason: 'invalid_patch', editIndex: 0 })
         expect(applyMemoryPatch('Line one', [{ op: 'delete', anchor: 'Line one', content: 'unused' } as never]))
             .toMatchObject({ status: 'conflict', reason: 'invalid_patch' })

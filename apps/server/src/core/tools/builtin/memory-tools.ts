@@ -593,10 +593,30 @@ function canonicalLines(content: string): CanonicalLine[] {
     return lines
 }
 
-function findAnchorLines(content: string, anchor: string): CanonicalLine[] {
-    if (!anchor || /\r|\n/.test(anchor)) return []
-    const expected = normalizePatchText(anchor).text
-    return canonicalLines(content).filter(line => normalizePatchText(line.text).text === expected)
+/** Split an anchor into the complete lines it names; one trailing newline is ignored. */
+function anchorLines(anchor: string): string[] {
+    return anchor.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').map(line => normalizePatchText(line).text)
+}
+
+/** Find every run of consecutive complete lines matching the anchor, as one span per run. */
+function findAnchorSpans(content: string, anchor: string): CanonicalLine[] {
+    const expected = anchorLines(anchor)
+    const lines = canonicalLines(content)
+    const normalized = lines.map(line => normalizePatchText(line.text).text)
+    const spans: CanonicalLine[] = []
+    for (let first = 0; first + expected.length <= lines.length; first++) {
+        if (!expected.every((text, offset) => normalized[first + offset] === text)) continue
+        const last = lines[first + expected.length - 1]
+        spans.push({ text: '', start: lines[first].start, end: last.end, endWithNewline: last.endWithNewline })
+    }
+    return spans
+}
+
+/** For a multi-line anchor, suggest a fix for its first line that matches nothing. */
+function suggestAnchorFix(content: string, anchor: string): string | undefined {
+    const known = new Set(canonicalLines(content).map(line => normalizePatchText(line.text).text))
+    const missing = anchor.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').find(line => !known.has(normalizePatchText(line).text))
+    return missing === undefined ? undefined : suggestCanonicalAnchor(content, missing)
 }
 
 function suggestCanonicalAnchor(content: string, anchor: string): string | undefined {
@@ -636,25 +656,24 @@ export function applyMemoryPatch(content: string, edits: MemoryPatchEdit[]): Mem
     const affectedRanges: Array<{ start: number; oldEnd: number; newEnd: number }> = []
     for (const [editIndex, edit] of edits.entries()) {
         if (!edit || typeof edit !== 'object' || !['insert_before', 'insert_after', 'replace', 'delete'].includes(edit.op) || typeof edit.anchor !== 'string' || !edit.anchor.trim()) {
-            return invalidMemoryEdit(editIndex, 'Each edit needs a supported op and a non-empty, single-line anchor.')
+            return invalidMemoryEdit(editIndex, 'Each edit needs a supported op and a non-empty anchor.')
         }
         const allowedKeys = edit.op === 'delete' ? ['op', 'anchor'] : ['op', 'anchor', 'content']
         if (Object.keys(edit).some(key => !allowedKeys.includes(key))) return invalidMemoryEdit(editIndex, `Unexpected fields for ${edit.op} edit.`)
         if (edit.op !== 'delete' && typeof edit.content !== 'string') return invalidMemoryEdit(editIndex, 'This edit operation requires string content.')
-        if (/\r|\n/.test(edit.anchor)) return invalidMemoryEdit(editIndex, 'Anchors must be one complete line without newline characters.')
-        const matches = findAnchorLines(next, edit.anchor)
+        const matches = findAnchorSpans(next, edit.anchor)
         if (matches.length === 0) {
             return {
                 status: 'conflict',
                 reason: 'expected_context_not_found',
                 editIndex,
                 matchCount: 0,
-                suggestedAnchor: suggestCanonicalAnchor(next, edit.anchor),
-                message: 'The anchor did not match a complete canonical line. Matching tolerates Unicode normalization, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Copy the suggested canonical line if provided, or run memory_search again.',
+                suggestedAnchor: suggestAnchorFix(next, edit.anchor),
+                message: 'The anchor did not match complete consecutive canonical lines. Matching tolerates Unicode normalization, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Copy the suggested canonical line if provided, or run memory_search again.',
             }
         }
         if (matches.length > 1) {
-            return { status: 'conflict', reason: 'ambiguous_context', editIndex, matchCount: matches.length, message: 'The anchor matches multiple complete lines. Use a longer, unique line as the anchor.' }
+            return { status: 'conflict', reason: 'ambiguous_context', editIndex, matchCount: matches.length, message: 'The anchor matches multiple places. Use a longer anchor, such as including a neighboring line.' }
         }
         const { start, end, endWithNewline } = matches[0]
         let replaceStart = start
@@ -693,7 +712,7 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
         name: 'memory_patch',
         execution: { readOnly: false },
         annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-        description: 'Atomically apply structured edits to a canonical Markdown memory file. Each edit targets a unique complete line; anchors never use diff syntax, so Markdown bullets are ordinary text. Matching tolerates canonically equivalent Unicode, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Concurrent changes and revision tracking are handled internally. Use the fileRef returned by memory_search.',
+        description: 'Atomically apply structured edits to a canonical Markdown memory file. Each edit targets a unique anchor of one or more complete consecutive lines (replace and delete cover all of them); anchors never use diff syntax, so Markdown bullets are ordinary text. Matching tolerates canonically equivalent Unicode, emoji presentation selectors, typographic quote and dash variants, and non-breaking space variants; other characters remain exact. Concurrent changes and revision tracking are handled internally. Use the fileRef returned by memory_search.',
         parameters: {
             type: 'object',
             additionalProperties: false,
@@ -702,13 +721,13 @@ export function makeMemoryPatchTool(opts: MemoryToolOptions): ToolDefinition {
                 edits: {
                     type: 'array',
                     minItems: 1,
-                    description: 'Ordered edit operations. Each anchor must exactly match one complete line from the canonical file. Example: {"op":"insert_before","anchor":"## Next section","content":"## New section\\n- A Markdown bullet"}. Apply all edits atomically; a conflict applies none.',
+                    description: 'Ordered edit operations. Each anchor must exactly match one or more complete consecutive lines from the canonical file, occurring once. Example: {"op":"insert_before","anchor":"## Next section","content":"## New section\\n- A Markdown bullet"}. Apply all edits atomically; a conflict applies none.',
                     items: {
                         type: 'object',
                         additionalProperties: false,
                         properties: {
                             op: { type: 'string', enum: ['insert_before', 'insert_after', 'replace', 'delete'] },
-                            anchor: { type: 'string', description: 'A unique, complete, single line copied from memory_search results.' },
+                            anchor: { type: 'string', description: 'One or more complete consecutive lines copied from memory_search results, joined with \\n. Prefer the shortest unique anchor.' },
                             content: { type: 'string', description: 'Markdown text to insert or replace with; required except for delete.' },
                         },
                         required: ['op', 'anchor'],

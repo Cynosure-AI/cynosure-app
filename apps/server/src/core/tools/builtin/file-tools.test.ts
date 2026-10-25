@@ -85,7 +85,9 @@ describe('attachment_export', () => {
             .run(JSON.stringify([{ type: 'image', artifactId: 'y', url: toFileUrl(toolRead) }]));
         const missing = await exportIn('c1', { attachmentId: 'nope', path: root });
         expect(missing.success).toBe(false);
-        expect(missing.output).toContain('abc123.jpg (image, attachmentId: abc123.jpg)');
+        expect(missing.output).toMatch(/abc123\.jpg \(image, attachmentId: (img-[0-9a-f]{6})\)/);
+        const shortId = missing.output.match(/attachmentId: (img-[0-9a-f]{6})/)![1];
+        expect((await exportIn('c1', { attachmentId: shortId, path: root })).output).toContain(path.join(root, 'abc123.jpg'));
         expect(missing.output).not.toContain('read-by-tool.png');
         expect((await exportIn('c1', { attachmentId: 'abc123.jpg', path: outside })).success).toBe(false);
         expect((await exportIn('other', { attachmentId: 'abc123.jpg', path: root })).success).toBe(false);
