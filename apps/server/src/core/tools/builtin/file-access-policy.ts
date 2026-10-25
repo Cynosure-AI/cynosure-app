@@ -31,6 +31,11 @@ export function runInFileAccessScope<T>(conversationId: string | undefined, fn: 
     return conversationId ? fileAccessScope.run({ conversationId }, fn) : fn()
 }
 
+/** The conversation a file tool is running for, if any. */
+export function getFileAccessConversationId(): string | undefined {
+    return fileAccessScope.getStore()?.conversationId
+}
+
 /** Folders granted only to the conversation in scope, such as its project directory. */
 export function listScopedFileAccessRoots(conversationId = fileAccessScope.getStore()?.conversationId): string[] {
     if (!conversationId) return []

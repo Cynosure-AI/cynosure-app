@@ -6,9 +6,10 @@ import sharp from 'sharp';
 import AdmZip from 'adm-zip';
 import { makeFileTools } from './file-tools.js';
 import { getBuiltInToolKey, getBuiltInNamespace, hydrateBuiltInTools } from '../built-in-tools.js';
-import { closeDb } from '../../../db/database.js';
+import { closeDb, getDb } from '../../../db/database.js';
+import { toFileUrl } from '../../artifacts/image-artifacts.js';
 import { getAppDataDir } from '../../data-dir.js';
-import { addFileAccessRoot, listFileAccessRoots, preflightFileToolAccess, removeFileAccessRoot } from './file-access-policy.js';
+import { addFileAccessRoot, listFileAccessRoots, preflightFileToolAccess, removeFileAccessRoot, runInFileAccessScope } from './file-access-policy.js';
 import { getEventBus } from '../../telemetry/event-bus.js';
 import { AgentExecutor } from '../../agent/agent-executor.js';
 import type { LLMGateway } from '../../gateway/gateway.js';
@@ -48,6 +49,44 @@ afterEach(async () => {
     await fs.rm(sandbox, { recursive: true, force: true });
 });
 
+describe('attachment_export', () => {
+    async function seedImage(): Promise<string> {
+        const stored = path.join(sandbox, 'stored', 'abc123.jpg');
+        await fs.mkdir(path.dirname(stored), { recursive: true });
+        await fs.writeFile(stored, 'jpeg-bytes');
+        const db = getDb();
+        db.prepare("INSERT INTO conversations (id, title, created_at, updated_at) VALUES ('c1', 'Chat', 1, 1)").run();
+        db.prepare("INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES ('m1', 'c1', 'user', '', ?, 1)")
+            .run(JSON.stringify([{ type: 'text', text: 'save this' }, { type: 'image', artifactId: 'x', url: toFileUrl(stored) }]));
+        return stored;
+    }
+    const exportIn = (conversationId: string, params: unknown) => runInFileAccessScope(conversationId, () => call('attachment_export', params));
+
+    it('copies an attached image into a directory, keeping its name, and numbers duplicate names', async () => {
+        const stored = await seedImage();
+        const result = await exportIn('c1', { attachmentId: 'abc123.jpg', path: root });
+        expect(result.success, result.output).toBe(true);
+        expect(await fs.readFile(path.join(root, 'abc123.jpg'), 'utf8')).toBe('jpeg-bytes');
+        expect(await fs.readFile(stored, 'utf8')).toBe('jpeg-bytes');
+
+        const second = await exportIn('c1', { attachmentId: 'abc123.jpg', path: root });
+        expect(second.output).toContain(path.join(root, 'abc123 (2).jpg'));
+        expect(second.output).toContain('abc123.jpg already existed');
+        expect(await fs.readFile(path.join(root, 'abc123 (2).jpg'), 'utf8')).toBe('jpeg-bytes');
+        expect((await exportIn('c1', { attachmentId: 'abc123.jpg', path: path.join(root, 'recipes', 'lasagna.jpg') })).success).toBe(true);
+        expect(await fs.readFile(path.join(root, 'recipes', 'lasagna.jpg'), 'utf8')).toBe('jpeg-bytes');
+    });
+
+    it('lists available attachments for an unknown id and stays inside allowed folders', async () => {
+        await seedImage();
+        const missing = await exportIn('c1', { attachmentId: 'nope', path: root });
+        expect(missing.success).toBe(false);
+        expect(missing.output).toContain('abc123.jpg (image, attachmentId: abc123.jpg)');
+        expect((await exportIn('c1', { attachmentId: 'abc123.jpg', path: outside })).success).toBe(false);
+        expect((await exportIn('other', { attachmentId: 'abc123.jpg', path: root })).success).toBe(false);
+    });
+});
+
 describe('native file tools', () => {
     it('publishes schemas accepted by the agent tool validator', () => {
         const examples: Record<string, unknown> = {
@@ -57,6 +96,7 @@ describe('native file tools', () => {
             file_grep: { path: root, pattern: 'hello', glob: '*.txt' },
             file_read: { path: path.join(root, 'one.txt') },
             file_write: { path: path.join(root, 'one.txt'), content: 'test' },
+            attachment_export: { attachmentId: 'photo.jpg', path: root },
             file_edit: { path: path.join(root, 'one.txt'), edits: [{ oldText: 'a', newText: 'b' }] },
             directory_create: { path: path.join(root, 'new') },
             file_move: { source: root, destination: outside },

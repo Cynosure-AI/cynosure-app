@@ -1,10 +1,12 @@
-import { promises as fs, createWriteStream } from 'node:fs';
+import { promises as fs, constants as fsConstants, createWriteStream } from 'node:fs';
 import * as path from 'node:path';
 import sharp from 'sharp';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
 import { z } from 'zod';
-import { listEffectiveFileAccessRoots, resolveFileAccessPath } from './file-access-policy.js';
+import { getFileAccessConversationId, listEffectiveFileAccessRoots, resolveFileAccessPath } from './file-access-policy.js';
+import { findExportableAttachment, formatExportableAttachments, listExportableAttachments } from '../../artifacts/attachment-export.js';
+import { getDb } from '../../../db/database.js';
 import { DEFAULT_READ_LINES, applyFileEdits, compactDiff, fileGlobToRegExp, grepText, renderTextWindow, type ReadWindow } from './file-text.js';
 import type { ToolDefinition, ToolResult, ToolResultContent } from '../../gateway/providers/base.provider.js';
 
@@ -845,6 +847,36 @@ export function makeFileTools(): ToolDefinition[] {
                 await fs.mkdir(path.dirname(absPath), { recursive: true });
                 await fs.writeFile(absPath, content, { encoding: 'utf8', flag: overwrite ? 'w' : 'wx' });
                 return textResult(`Wrote file: ${absPath}`);
+            }),
+        define('attachment_export', 'Save a copy of a file, image, audio or video attached to this conversation (by the user or generated) to disk. Attachments are shown with an attachmentId, e.g. "[Attached image: attachmentId: ...]". If path is an existing directory, the attachment keeps its name inside it. Existing files are never replaced: a numbered name is used instead. Returns the saved absolute path for use with other tools.',
+            z.object({
+                attachmentId: z.string().min(1).describe('The attachmentId (or exact attachment name) to export.'),
+                path: pathField.describe('Destination file path or existing directory inside an allowed directory.'),
+            }), false, false,
+            async ({ attachmentId, path: inputPath }) => {
+                const conversationId = getFileAccessConversationId();
+                if (!conversationId) throw new Error('attachment_export only works inside a conversation.');
+                const attachments = listExportableAttachments(getDb(), conversationId);
+                const attachment = findExportableAttachment(attachments, attachmentId);
+                if (!attachment) {
+                    return { success: false, output: `No attachment matched "${attachmentId}". Available attachments:\n${formatExportableAttachments(attachments)}` };
+                }
+                let absPath = await resolveAllowedPath(inputPath);
+                if ((await fs.stat(absPath).catch(() => null))?.isDirectory()) {
+                    absPath = await resolveAllowedPath(path.join(absPath, path.basename(attachment.name)));
+                }
+                await fs.mkdir(path.dirname(absPath), { recursive: true });
+                const { name, ext } = path.parse(absPath);
+                for (let n = 1; ; n++) {
+                    const target = n === 1 ? absPath : path.join(path.dirname(absPath), `${name} (${n})${ext}`);
+                    try {
+                        await fs.copyFile(attachment.sourcePath, target, fsConstants.COPYFILE_EXCL);
+                        const renamed = target === absPath ? '' : ` (${path.basename(absPath)} already existed)`;
+                        return textResult(`Saved ${attachment.kind} "${attachment.name}" to: ${target}${renamed}`);
+                    } catch (error) {
+                        if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || n >= 1000) throw error;
+                    }
+                }
             }),
         define('file_edit', 'Edit a UTF-8 text file with exact text replacements and save it. Each oldText must match exactly one place in the file: copy it from file_read output without the line-number prefix and include a few surrounding lines to make it unique, or set replaceAll to change every match. Edits apply in order and atomically: if any edit does not match, nothing is saved and the result says why (with line numbers to re-read). The file\'s line endings are kept. Returns a compact diff. Set dryRun: true to preview without saving.',
             z.object({

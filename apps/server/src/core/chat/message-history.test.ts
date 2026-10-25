@@ -148,7 +148,7 @@ describe('conversation history construction', () => {
 
         expect(result.messages[0].content).toEqual([
             { type: 'text', text: 'Review these' },
-            { type: 'text', text: '[Attached file: small.txt]\ninline contents' },
+            { type: 'text', text: '[Attached file: small.txt (attachmentId: small)]\ninline contents' },
             { type: 'text', text: expect.stringContaining('indexed for retrieval (4 chunks, attachmentId: large)') },
             { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
             { type: 'audio_url', audio_url: { url: 'data:audio/wav;base64,abc' } },

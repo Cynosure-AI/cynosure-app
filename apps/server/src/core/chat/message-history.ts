@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { COMPACT_EVENT_PREFIX } from '../agent/context-compactor.js'
 import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-rag.js'
+import { mediaAttachmentId } from '../artifacts/attachment-export.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
 import { isTurnLocalContextMessage, type ChatMessage, type ContentPart, type ToolCall } from '../gateway/providers/base.provider.js'
 import type { ContentBlock } from '@shared/types'
@@ -297,8 +298,9 @@ function buildHistoryContent(
 
     const imageUrls = canonicalBlocks.flatMap((block) => block.type === 'image' ? [block.url] : [])
     const audioUrls = canonicalBlocks.flatMap((block) => block.type === 'audio' ? [block.url] : [])
+    const videoUrls = canonicalBlocks.flatMap((block) => block.type === 'video' ? [block.url] : [])
 
-    if (!fileAttachments.length && !imageUrls.length && !audioUrls.length) {
+    if (!fileAttachments.length && !imageUrls.length && !audioUrls.length && !videoUrls.length) {
         return canonicalText
     }
 
@@ -318,16 +320,26 @@ function buildHistoryContent(
         if (fileText === null) continue
         blocks.push({
             type: 'text',
-            text: `[Attached file: ${file.name}]\n${fileText}`
+            text: `[Attached file: ${file.name} (attachmentId: ${file.id})]\n${fileText}`
         })
     }
     for (const url of imageUrls) {
+        pushMediaLabel(blocks, 'image', url)
         blocks.push({ type: 'image', artifactId: url, url })
     }
     for (const url of audioUrls) {
+        pushMediaLabel(blocks, 'audio', url)
         blocks.push({ type: 'audio', artifactId: url, url })
     }
+    // Providers take no video parts yet; the label still lets the model export it.
+    for (const url of videoUrls) pushMediaLabel(blocks, 'video', url)
     return contentBlocksToProviderContent(blocks, (url) => artifactFileUrlToDataUrl(url) || url)
+}
+
+/** Give the model a handle for attachment_export, since media carries no name of its own. */
+function pushMediaLabel(blocks: ContentBlock[], kind: 'image' | 'audio' | 'video', url: string): void {
+    const id = mediaAttachmentId(url)
+    if (id) blocks.push({ type: 'text', text: `[Attached ${kind}: attachmentId: ${id}]` })
 }
 
 function parseContentBlocks(json: string | null): ContentBlock[] {
