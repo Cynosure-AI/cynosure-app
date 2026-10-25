@@ -601,9 +601,9 @@ onMounted(() => {
       class="chat-empty-state relative isolate flex flex-col items-center justify-center h-full text-ink-secondary"
       :style="introStyle"
     >
-      <div class="relative mb-6">
+      <div class="relative mb-5 sm:mb-6">
         <div
-          class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-20 h-20 bg-theme-900 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border shadow-xl overflow-hidden"
+          class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20 bg-theme-900 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border shadow-xl overflow-hidden"
           :class="chatStore.activeIsTemporary ? 'border-dashed border-accent-500/50' : 'border-white/5'"
         >
           <RouterLink
@@ -621,7 +621,7 @@ onMounted(() => {
             <Icon
               v-else
               icon="lucide:bot-message-square"
-              class="w-10 h-10 text-accent-fg"
+              class="w-7 h-7 sm:w-10 sm:h-10 text-accent-fg"
             />
           </RouterLink>
           <RouterLink
@@ -656,7 +656,7 @@ onMounted(() => {
         </Transition>
       </div>
       <template v-if="!wsConnected">
-        <h2 class="text-3xl font-semibold text-theme-200 tracking-tight">
+        <h2 class="text-xl sm:text-3xl font-semibold text-theme-200 tracking-tight">
           <TypewriterText
             :text="CONNECTING_TITLE"
             :start="introTimeline.typeStart"
@@ -670,7 +670,7 @@ onMounted(() => {
       <template v-else>
         <div class="flex items-center justify-center gap-3">
           <h2
-            class="text-3xl font-semibold tracking-tight text-center transition-colors duration-300"
+            class="text-xl sm:text-3xl font-semibold tracking-tight text-center transition-colors duration-300"
             :class="chatStore.activeIsTemporary ? 'chat-incognito-greeting text-theme-300' : 'text-theme-200'"
           >
             <TypewriterText
@@ -730,7 +730,7 @@ onMounted(() => {
             :key="subAgent.id"
             :title="subAgent.name"
             :style="{ transitionDelay: `${index * 50}ms`, '--intro-index': index }"
-            class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-theme-700 bg-theme-800 shadow-sm"
+            class="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center overflow-hidden rounded-full border border-theme-700 bg-theme-800 shadow-sm"
           >
             <img
               v-if="subAgent.iconUrl"
@@ -741,14 +741,14 @@ onMounted(() => {
             <Icon
               v-else
               icon="lucide:bot"
-              class="h-5 w-5 text-ink-secondary"
+              class="h-4 w-4 sm:h-5 sm:w-5 text-ink-secondary"
             />
           </span>
           <span
             v-if="overflowEmptyStateSubAgents.length"
             :key="'overflow-' + overflowEmptyStateSubAgents.length"
             :title="overflowEmptyStateSubAgentsTitle"
-            class="flex h-10 w-10 items-center justify-center rounded-full border border-theme-700 bg-theme-800 text-xs font-medium text-ink-secondary shadow-sm"
+            class="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-theme-700 bg-theme-800 text-xs font-medium text-ink-secondary shadow-sm"
             :style="{ transitionDelay: `${visibleEmptyStateSubAgents.length * 50}ms`, '--intro-index': visibleEmptyStateSubAgents.length }"
             aria-label="Additional assigned sub-agents"
           >
