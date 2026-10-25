@@ -25,6 +25,7 @@ import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageAr
 import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
 import { releaseAttachmentAsset } from '../core/artifacts/attachment-asset-references.js'
 import { commitStagedChatAttachments, discardStagedChatAttachments, listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
+import { mediaAttachmentLabel } from '../core/artifacts/attachment-export.js'
 import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import {
   cancelChatExecution,
@@ -291,19 +292,24 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
             if (fileText === null) continue
             parts.push({
               type: 'text',
-              text: `[Attached file: ${file.name}]\n${fileText}`
+              text: `[Attached file: ${file.name} (attachmentId: ${file.id})]\n${fileText}`
             })
           }
         }
+        // Stored URLs give each item its attachment_export handle; they line up with the provider data URLs.
         if (providerImageDataUrls?.length) {
-          for (const url of providerImageDataUrls) {
+          providerImageDataUrls.forEach((url, index) => {
+            const label = storedImageUrls?.[index] && mediaAttachmentLabel('image', storedImageUrls[index])
+            if (label) parts.push({ type: 'text', text: label })
             parts.push({ type: 'image_url', image_url: { url } })
-          }
+          })
         }
         if (providerAudioDataUrls?.length) {
-          for (const url of providerAudioDataUrls) {
+          providerAudioDataUrls.forEach((url, index) => {
+            const label = storedAudioUrls?.[index] && mediaAttachmentLabel('audio', storedAudioUrls[index])
+            if (label) parts.push({ type: 'text', text: label })
             parts.push({ type: 'audio_url', audio_url: { url } })
-          }
+          })
         }
         userContent = parts
       } else {

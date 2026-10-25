@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { COMPACT_EVENT_PREFIX } from '../agent/context-compactor.js'
 import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
 import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-rag.js'
-import { mediaAttachmentId } from '../artifacts/attachment-export.js'
+import { mediaAttachmentLabel } from '../artifacts/attachment-export.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
 import { isTurnLocalContextMessage, type ChatMessage, type ContentPart, type ToolCall } from '../gateway/providers/base.provider.js'
 import type { ContentBlock } from '@shared/types'
@@ -338,8 +338,8 @@ function buildHistoryContent(
 
 /** Give the model a handle for attachment_export, since media carries no name of its own. */
 function pushMediaLabel(blocks: ContentBlock[], kind: 'image' | 'audio' | 'video', url: string): void {
-    const id = mediaAttachmentId(url)
-    if (id) blocks.push({ type: 'text', text: `[Attached ${kind}: attachmentId: ${id}]` })
+    const label = mediaAttachmentLabel(kind, url)
+    if (label) blocks.push({ type: 'text', text: label })
 }
 
 function parseContentBlocks(json: string | null): ContentBlock[] {

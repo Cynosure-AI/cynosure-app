@@ -79,9 +79,14 @@ describe('attachment_export', () => {
 
     it('lists available attachments for an unknown id and stays inside allowed folders', async () => {
         await seedImage();
+        const toolRead = path.join(sandbox, 'stored', 'read-by-tool.png');
+        await fs.writeFile(toolRead, 'png-bytes');
+        getDb().prepare("INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES ('m2', 'c1', 'tool', '', ?, 2)")
+            .run(JSON.stringify([{ type: 'image', artifactId: 'y', url: toFileUrl(toolRead) }]));
         const missing = await exportIn('c1', { attachmentId: 'nope', path: root });
         expect(missing.success).toBe(false);
         expect(missing.output).toContain('abc123.jpg (image, attachmentId: abc123.jpg)');
+        expect(missing.output).not.toContain('read-by-tool.png');
         expect((await exportIn('c1', { attachmentId: 'abc123.jpg', path: outside })).success).toBe(false);
         expect((await exportIn('other', { attachmentId: 'abc123.jpg', path: root })).success).toBe(false);
     });

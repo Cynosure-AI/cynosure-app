@@ -19,9 +19,17 @@ export function mediaAttachmentId(url: string): string | null {
     return filePath ? basename(filePath) : null
 }
 
+/** The handle shown next to attached media so the model can pass it to attachment_export. */
+export function mediaAttachmentLabel(kind: 'image' | 'audio' | 'video', url: string): string | null {
+    const id = mediaAttachmentId(url)
+    return id ? `[Attached ${kind}: attachmentId: ${id}]` : null
+}
+
 /**
  * Everything in a conversation that can be copied out to disk: uploaded
- * documents plus image, audio and video blocks from either side of the chat.
+ * documents plus image, audio and video blocks the user attached or the
+ * assistant generated. Media that tools read from disk is left out: those
+ * files already exist where the tool found them.
  * Source paths stay server-side; the model refers to entries by id.
  */
 export function listExportableAttachments(db: Database, conversationId: string): ExportableAttachment[] {
@@ -40,7 +48,7 @@ export function listExportableAttachments(db: Database, conversationId: string):
 
     const messages = db.prepare(`
         SELECT content_blocks_json FROM messages
-        WHERE conversation_id = ? AND content_blocks_json IS NOT NULL ORDER BY created_at ASC
+        WHERE conversation_id = ? AND role IN ('user', 'assistant') AND content_blocks_json IS NOT NULL ORDER BY created_at ASC
     `).all(conversationId) as { content_blocks_json: string }[]
     for (const row of messages) {
         let blocks: ContentBlock[]
