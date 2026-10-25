@@ -207,8 +207,44 @@ function toggleExpand(index: number): void {
             </div>
           </div>
 
+          <div
+            v-if="tc.shell"
+            class="hitl-shell space-y-1.5"
+          >
+            <p
+              class="hitl-shell-explanation text-sm text-theme-100"
+              :class="tc.shell.explanation ? undefined : 'italic text-ink-muted'"
+            >
+              {{ tc.shell.explanation || 'No explanation was given for this command.' }}
+            </p>
+            <pre
+              class="hitl-shell-command custom-scrollbar overflow-auto whitespace-pre-wrap break-all rounded-lg border border-theme-700/50 bg-theme-950/50 p-2.5 font-mono text-[11px] text-theme-200 shadow-inner"
+              :class="expandedArgs.has(i) ? 'max-h-96' : 'max-h-50'"
+            >{{ tc.shell.command }}</pre>
+            <p
+              v-if="tc.shell.cwd"
+              class="break-all text-[11px] text-ink-muted"
+            >
+              in <span class="font-mono">{{ tc.shell.cwd }}</span>
+            </p>
+            <ul
+              v-if="tc.shell.reasons.length"
+              class="hitl-shell-reasons space-y-0.5 text-[11px] text-amber-400"
+            >
+              <li
+                v-for="reason in tc.shell.reasons"
+                :key="reason"
+                class="flex items-start gap-1"
+              >
+                <Icon
+                  icon="lucide:shield-alert"
+                  class="mt-0.5 h-3 w-3 shrink-0"
+                />Needs approval: {{ reason }}
+              </li>
+            </ul>
+          </div>
           <RichContent
-            v-if="tc.arguments"
+            v-else-if="tc.arguments"
             :content="tc.arguments"
             class="hitl-arguments custom-scrollbar mt-0.5 rounded-lg border border-theme-700/50 bg-theme-950/50 p-2.5 text-[11px] shadow-inner"
             :class="expandedArgs.has(i) ? 'max-h-96' : 'max-h-50'"

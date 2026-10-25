@@ -190,7 +190,7 @@ export const api = {
       get<{ events: ChatEvent[]; latestSequence: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/events?after=${after}&limit=${limit}`),
     onEvent: (cb: (event: ChatEvent) => void) => onWsEvent('chat:event', cb as WsHandler),
     getPendingHITL: (conversationId: string) =>
-      get<{ taskId: string; toolCalls: { name: string; arguments: string; fileAccess?: { path: string; folder: string; toolName: string } }[] }[]>(
+      get<{ taskId: string; toolCalls: { name: string; arguments: string; fileAccess?: { path: string; folder: string; toolName: string }; shell?: { command: string; explanation?: string; cwd?: string; readOnly: boolean; reasons: string[] } }[] }[]>(
         `/api/chat/conversations/${encodeURIComponent(conversationId)}/hitl`
       ),
     getPlanningState: (conversationId: string) =>

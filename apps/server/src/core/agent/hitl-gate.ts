@@ -4,6 +4,29 @@ import { getDb } from '../../db/database.js'
 import { isAnnotationAutoApprovedTool, isReadOnlyModeTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
 import { fileToolNeedsFolderApproval, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 import { getPermissionMode } from '../chat/permission-mode.js'
+import { reviewShellCommand, type ShellCommandReview } from '../tools/builtin/shell-classifier.js'
+
+type NamespacedTool = ToolDefinition & { namespaceId?: string; originalName?: string }
+
+export interface ShellApprovalDetails extends ShellCommandReview {
+  command: string
+  explanation?: string
+  cwd?: string
+}
+
+/** Reviews shell_execute calls from their command text; other calls return undefined. */
+function reviewShellCall(toolCall: ToolCall, tool: NamespacedTool | undefined): ShellApprovalDetails | undefined {
+  if (tool?.namespaceId !== 'builtin:shell') return undefined
+  let args: Record<string, unknown>
+  try { args = JSON.parse(toolCall.function.arguments) as Record<string, unknown> } catch { return undefined }
+  if (typeof args.command !== 'string') return undefined
+  return {
+    command: args.command,
+    explanation: typeof args.explanation === 'string' ? args.explanation : undefined,
+    cwd: typeof args.cwd === 'string' ? args.cwd : undefined,
+    ...reviewShellCommand(args.command),
+  }
+}
 
 export interface ApprovalResult {
   approved: boolean
@@ -39,6 +62,11 @@ export class HITLGate {
       this.pendingByConversation.delete(taskId)
     }
     return taskIds
+  }
+
+  /** Whether the user saved an explicit Allow or Ask for this tool. */
+  hasExplicitChoice(toolName: string): boolean {
+    return Boolean(getDb().prepare('SELECT 1 FROM tool_approvals WHERE tool_name = ?').get(toolName))
   }
 
   /** Returns the effective approval state: system, explicit user choice, then annotation default. */
@@ -105,12 +133,18 @@ export class HITLGate {
     const permissionMode = getPermissionMode(conversationId)
     if (permissionMode === 'full') return { approved: true }
 
-    const toolsByName = new Map(tools.map((tool) => [tool.name, tool]))
+    const toolsByName = new Map(tools.map((tool) => [tool.name, tool as NamespacedTool]))
     const annotationsByName = new Map(tools.map((tool) => [tool.name, tool.annotations]))
+    const shellReviews = new Map<string, ShellApprovalDetails>()
+    for (const tc of toolCalls) {
+      const review = reviewShellCall(tc, toolsByName.get(tc.function.name))
+      if (review) shellReviews.set(tc.id, review)
+    }
     // Enforce Read Only tools and its explicit exceptions, including for tools
     // offered before the chat switched to Read Only during a run.
     if (permissionMode === 'read-only') {
-      const blocked = toolCalls.filter((tc) => !isReadOnlyModeTool({ name: tc.function.name, annotations: annotationsByName.get(tc.function.name) }))
+      const blocked = toolCalls.filter((tc) => !shellReviews.get(tc.id)?.readOnly
+        && !isReadOnlyModeTool({ name: tc.function.name, annotations: annotationsByName.get(tc.function.name) }))
       if (blocked.length) {
         return {
           approved: false,
@@ -120,12 +154,18 @@ export class HITLGate {
       }
     }
 
-    // A folder card authorizes that file tool invocation. All other calls use
-    // the normal tool approval policy.
+    // A folder card authorizes that file tool invocation, and read-only shell
+    // commands need no card. All other calls use the normal tool approval policy.
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
     const specificallyApprovedCalls = new Set<string>()
     for (const tc of toolCalls) {
-      const tool = toolsByName.get(tc.function.name) as (ToolDefinition & { namespaceId?: string; originalName?: string }) | undefined
+      // Read-only shell commands run while the shell tool follows default
+      // approval; a saved Allow or Ask applies to every command.
+      if (shellReviews.get(tc.id)?.readOnly && !this.hasExplicitChoice(tc.function.name)) {
+        specificallyApprovedCalls.add(tc.id)
+        continue
+      }
+      const tool = toolsByName.get(tc.function.name)
       if (tool?.namespaceId !== 'builtin:files') continue
       try {
         const args = JSON.parse(tc.function.arguments) as Record<string, unknown>
@@ -172,6 +212,7 @@ export class HITLGate {
       const annotatedToolCalls = needsApproval.map((toolCall) => ({
         ...toolCall,
         annotations: annotationsByName.get(toolCall.function.name),
+        shell: shellReviews.get(toolCall.id),
       }))
 
       this.eventBus.emit('hitl:request', {

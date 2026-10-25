@@ -334,7 +334,7 @@ describe('project directory access', () => {
         await expect(runInFileAccessScope('outside', () => resolveFileAccessPath(path.join(dir, 'notes.txt')))).rejects.toThrow(/Access denied/)
 
         const shell = makeShellTool({ defaultCwd: dir })
-        const result = await shell.execute({ command: process.platform === 'win32' ? 'cd' : 'pwd' })
+        const result = await shell.execute({ command: process.platform === 'win32' ? 'cd' : 'pwd', explanation: 'Print the working directory' })
         expect(String(result.output)).toContain(dir)
     })
 })

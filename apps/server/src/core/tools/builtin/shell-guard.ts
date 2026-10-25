@@ -283,7 +283,7 @@ function changeDirectory(cwd: string | null, args: string[], ctx: GuardContext):
     return ctx.path.resolve(cwd ?? '/', expanded)
 }
 
-function commandName(word: string): string {
+export function commandName(word: string): string {
     const base = word.split(/[\\/]/).pop() ?? word
     return base.toLowerCase().replace(/\.exe$/, '')
 }
@@ -319,7 +319,7 @@ function stripPrefixes(argv: string[]): string[] {
  * command substitutions end a command, and redirect targets are collected
  * separately so they are not mistaken for arguments.
  */
-function tokenize(script: string, backslashEscapes: boolean): { segments: string[][]; redirects: string[] } {
+export function tokenize(script: string, backslashEscapes: boolean): { segments: string[][]; redirects: string[] } {
     const segments: string[][] = []
     const redirects: string[] = []
     let current: string[] = []

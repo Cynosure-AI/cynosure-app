@@ -24,6 +24,7 @@ import { getPermissionMode, isPermissionMode, setPermissionMode } from '../core/
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
 import { getProject, setConversationProject } from '../core/projects/project-store.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
+import type { ShellApprovalDetails } from '../core/agent/hitl-gate.js'
 import { cancelCronRunsByConversation, deleteCronJob, getPendingWait, getWaitJobsForConversation, getWaitResumeTimes, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { cancelChatExecutionByConversation } from '../core/chat/active-executions.js'
 import { pauseChatQueue } from '../core/chat/message-queue.js'
@@ -804,6 +805,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 arguments: string
                 annotations?: ToolBehaviorAnnotations
                 fileAccess?: { path: string; folder: string; toolName: string }
+                shell?: ShellApprovalDetails
             }>
         }))
     })
