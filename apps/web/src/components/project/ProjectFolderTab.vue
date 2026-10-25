@@ -6,6 +6,7 @@ import { api } from '../../api/client'
 import type { ProjectFileContent, ProjectFileEntry } from '../../api/types'
 import BaseCard from '../shared/BaseCard.vue'
 import ModalDialog from '../shared/ModalDialog.vue'
+import RichContent from '../shared/RichContent.vue'
 import ProjectFileBrowser from './ProjectFileBrowser.vue'
 
 /** Browse the files in the project directory, the same folder agents work in. */
@@ -21,6 +22,7 @@ let previewSequence = 0
 
 /** Parseable documents come back as data URLs and can't be shown as text. */
 const previewText = computed(() => preview.value?.kind === 'file' && !preview.value.content.startsWith('data:') ? preview.value.content : null)
+const previewIsMarkdown = computed(() => /\.(md|markdown|mdx)$/i.test(previewPath.value ?? ''))
 
 function unavailableReason(entry: ProjectFileEntry): string | null {
   return (entry.size ?? 0) > MAX_FILE_BYTES ? 'Over 20 MB' : null
@@ -66,6 +68,8 @@ function closePreview(): void {
     <ProjectFileBrowser
       :project-id="project.id"
       :project-name="project.name"
+      :root-path="project.rootPath"
+      default-layout="grid"
       :unavailable-reason="unavailableReason"
       @file="openFile"
     />
@@ -106,6 +110,11 @@ function closePreview(): void {
       :src="preview.content"
       controls
       class="w-full"
+    />
+    <RichContent
+      v-else-if="previewText !== null && previewIsMarkdown"
+      :content="previewText"
+      class="max-h-[70vh] rounded-lg border border-theme-800 bg-theme-900 p-4 text-sm"
     />
     <pre
       v-else-if="previewText !== null"

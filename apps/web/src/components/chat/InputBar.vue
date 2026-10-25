@@ -1030,6 +1030,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
       :show="showProjectFiles"
       :project-id="activeProject?.rootPath ? activeProject.id : null"
       :project-name="activeProject?.name"
+      :root-path="activeProject?.rootPath"
       :already-selected-paths="attachedProjectPaths"
       @close="showProjectFiles = false"
       @add="addProjectFiles"

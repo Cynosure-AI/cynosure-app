@@ -12,6 +12,8 @@ const props = defineProps<{
   show: boolean
   projectId: string | null
   projectName?: string
+  /** The project directory, used for file thumbnails. */
+  rootPath?: string
   /** Project-relative paths already in the draft. */
   alreadySelectedPaths?: string[]
 }>()
@@ -94,6 +96,7 @@ watch(() => props.show, (show) => {
         class="min-h-0 flex-1"
         :project-id="projectId"
         :project-name="projectName"
+        :root-path="rootPath"
         :selected-paths="selectedPaths"
         :unavailable-reason="unavailableReason"
         @file="toggle"
