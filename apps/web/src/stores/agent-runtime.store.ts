@@ -38,6 +38,17 @@ export interface ToolCallDisplay {
   arguments: string
   annotations?: ToolBehaviorAnnotations
   fileAccess?: { path: string; folder: string; toolName: string }
+  /** Server review of a shell_execute call. */
+  shell?: ShellApprovalDisplay
+}
+
+export interface ShellApprovalDisplay {
+  command: string
+  explanation?: string
+  cwd?: string
+  readOnly: boolean
+  /** Why the command needs approval. */
+  reasons: string[]
 }
 
 export interface HITLRequest {

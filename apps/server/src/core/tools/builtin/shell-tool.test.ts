@@ -59,24 +59,24 @@ describe('built-in shell access', () => {
         expect(getBuiltInNamespace('shell_execute').id).toBe('builtin:shell')
         expect(getBuiltInToolKey('shell_execute')).toBe('builtin:shell::shell_execute')
         await fs.writeFile(path.join(outside, 'hello.txt'), 'hello')
-        const result = await makeShellTool().execute({ command: 'cat hello.txt', cwd: outside })
+        const result = await makeShellTool().execute({ command: 'cat hello.txt', explanation: 'Print hello.txt', cwd: outside })
         expect(result.success, result.output).toBe(true)
         expect(result.output).toContain('hello')
         expect(listFileAccessRoots()).toEqual([allowed])
-        expect((await makeShellTool().execute({ command: 'cat hello.txt', cwd: outside, timeoutSeconds: 601 })).success).toBe(false)
+        expect((await makeShellTool().execute({ command: 'cat hello.txt', explanation: 'Print hello.txt', cwd: outside, timeoutSeconds: 601 })).success).toBe(false)
     })
 
     it('sends shell calls through the regular tool approval gate', async () => {
         const gate = new HITLGate()
         const tool = { ...makeShellTool(), namespaceId: 'builtin:shell', originalName: 'shell_execute' }
-        const command = `cat ${path.join(outside, 'hello.txt')}`
-        const call: ToolCall = { id: 'shell-call', type: 'function', function: { name: 'shell_execute', arguments: JSON.stringify({ command, cwd: outside }) } }
+        const command = `rm ${path.join(outside, 'hello.txt')}`
+        const call: ToolCall = { id: 'shell-call', type: 'function', function: { name: 'shell_execute', arguments: JSON.stringify({ command, explanation: 'Delete hello.txt', cwd: outside }) } }
         const requests: string[] = []
         const unsubscribe = getEventBus().on('hitl:request', event => {
-            const request = event as { toolCalls: Array<{ function: { name: string; arguments: string }; fileAccess?: unknown }>; resolve: (result: { approved: boolean }) => void }
+            const request = event as { toolCalls: Array<{ function: { name: string; arguments: string }; fileAccess?: unknown; shell?: unknown }>; resolve: (result: { approved: boolean }) => void }
             requests.push(request.toolCalls[0].function.name)
             expect(request.toolCalls[0].fileAccess).toBeUndefined()
-            expect(JSON.parse(request.toolCalls[0].function.arguments)).toEqual({ command, cwd: outside })
+            expect(request.toolCalls[0].shell).toEqual({ command, explanation: 'Delete hello.txt', cwd: outside, readOnly: false, reasons: ['`rm` is not on the read-only list'] })
             request.resolve({ approved: true })
         })
         try {
@@ -90,6 +90,31 @@ describe('built-in shell access', () => {
             expect(requests).toHaveLength(1)
             expect(listFileAccessRoots()).toEqual([allowed])
         } finally { unsubscribe() }
+    })
+
+    it('runs read-only commands without approval unless the user saved a choice', async () => {
+        const gate = new HITLGate()
+        const tool = { ...makeShellTool(), namespaceId: 'builtin:shell', originalName: 'shell_execute' }
+        const call: ToolCall = { id: 'read-call', type: 'function', function: { name: 'shell_execute', arguments: JSON.stringify({ command: 'git status && ls -la | grep x', explanation: 'Inspect the repo' }) } }
+        const requests: unknown[] = []
+        const unsubscribe = getEventBus().on('hitl:request', event => {
+            const request = event as { toolCalls: Array<{ shell?: { readOnly: boolean } }>; resolve: (result: { approved: boolean }) => void }
+            requests.push(request.toolCalls[0].shell?.readOnly)
+            request.resolve({ approved: true })
+        })
+        try {
+            expect((await gate.requestApproval('read-task', [call], undefined, 'test', [tool])).approved).toBe(true)
+            expect(requests).toEqual([])
+            gate.setAutoApprove('shell_execute', false)
+            expect((await gate.requestApproval('ask-task', [call], undefined, 'test', [tool])).approved).toBe(true)
+            expect(requests).toEqual([true])
+        } finally { unsubscribe() }
+    })
+
+    it('requires an explanation', async () => {
+        const result = await makeShellTool().execute({ command: 'echo hi', cwd: outside })
+        expect(result.success).toBe(false)
+        expect(result.output).toContain('explanation is required')
     })
 
     it('still uses a folder card for native file tools', async () => {
@@ -113,7 +138,7 @@ describe('built-in shell access', () => {
 
     it('refuses catastrophic commands without running them', async () => {
         await fs.writeFile(path.join(outside, 'keep.txt'), 'kept')
-        const result = await makeShellTool({ defaultCwd: outside }).execute({ command: 'echo ran > ran.txt; rm -rf .' })
+        const result = await makeShellTool({ defaultCwd: outside }).execute({ command: 'echo ran > ran.txt; rm -rf .', explanation: 'Delete everything' })
         expect(result.success).toBe(false)
         expect(result.output).toContain('Blocked by the shell safety guard')
         await expect(fs.readFile(path.join(outside, 'keep.txt'), 'utf8')).resolves.toBe('kept')
@@ -122,7 +147,7 @@ describe('built-in shell access', () => {
 
     it('caps command output', async () => {
         await fs.writeFile(path.join(outside, 'large.txt'), 'x'.repeat(256 * 1024))
-        const result = await makeShellTool().execute({ command: 'cat large.txt', cwd: outside })
+        const result = await makeShellTool().execute({ command: 'cat large.txt', explanation: 'Print large.txt', cwd: outside })
         expect(result.success).toBe(false)
         expect(result.output).toContain('Output exceeded 128 KiB.')
         expect(result.output.length).toBeLessThan(132_000)

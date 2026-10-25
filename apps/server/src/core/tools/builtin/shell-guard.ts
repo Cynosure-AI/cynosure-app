@@ -94,9 +94,14 @@ function checkScript(script: string, startCwd: string | null, ctx: GuardContext,
     if (depth > MAX_NESTING) return null
     if (FORK_BOMB.test(script)) return 'it is a fork bomb'
 
-    const { segments, redirects } = tokenize(script, !ctx.win)
+    const { segments, redirects, heredocs } = tokenize(script, !ctx.win)
     for (const target of redirects) {
         if (!ctx.win && BLOCK_DEVICE.test(target)) return `it writes directly to the disk device ${target}`
+    }
+    // A heredoc may be data or a script fed to a shell; check it as a script.
+    for (const body of heredocs) {
+        const reason = checkScript(body, startCwd, ctx, depth + 1)
+        if (reason) return reason
     }
 
     // `cd` changes where later relative paths point; null once it can't be followed.
@@ -283,7 +288,7 @@ function changeDirectory(cwd: string | null, args: string[], ctx: GuardContext):
     return ctx.path.resolve(cwd ?? '/', expanded)
 }
 
-function commandName(word: string): string {
+export function commandName(word: string): string {
     const base = word.split(/[\\/]/).pop() ?? word
     return base.toLowerCase().replace(/\.exe$/, '')
 }
@@ -314,24 +319,38 @@ function stripPrefixes(argv: string[]): string[] {
     return argv.slice(index)
 }
 
+export interface TokenizedScript {
+    segments: string[][]
+    /** Targets of output redirects (>, >>, 2>&1 gives "1"). */
+    redirects: string[]
+    /** Sources of input redirects (<, <<<). */
+    inputs: string[]
+    /** Heredoc bodies, which are not split into commands. */
+    heredocs: string[]
+}
+
 /**
  * Split a script into simple commands. Quotes are removed, operators and
- * command substitutions end a command, and redirect targets are collected
- * separately so they are not mistaken for arguments.
+ * command substitutions end a command, and redirect targets and heredoc
+ * bodies are collected separately so they are not mistaken for commands.
  */
-function tokenize(script: string, backslashEscapes: boolean): { segments: string[][]; redirects: string[] } {
+export function tokenize(script: string, backslashEscapes: boolean): TokenizedScript {
     const segments: string[][] = []
     const redirects: string[] = []
+    const inputs: string[] = []
+    const heredocs: string[] = []
+    const pendingHeredocs: string[] = []
     let current: string[] = []
     let word = ''
     let inWord = false
-    let redirectNext = false
+    let redirectNext: 'in' | 'out' | null = null
 
     const endWord = () => {
         if (!inWord) return
-        if (redirectNext) redirects.push(word)
+        if (redirectNext === 'out') redirects.push(word)
+        else if (redirectNext === 'in') inputs.push(word)
         else current.push(word)
-        redirectNext = false
+        redirectNext = null
         word = ''
         inWord = false
     }
@@ -360,8 +379,26 @@ function tokenize(script: string, backslashEscapes: boolean): { segments: string
             inWord = true
             i++
         } else if (/\s/.test(char)) {
-            if (char === '\n') endSegment()
-            else endWord()
+            if (char !== '\n') {
+                endWord()
+                continue
+            }
+            endSegment()
+            // Heredoc bodies start on the line after the operator and end at the delimiter line.
+            for (const delimiter of pendingHeredocs.splice(0)) {
+                const body: string[] = []
+                let start = i + 1
+                while (start < script.length) {
+                    const newline = script.indexOf('\n', start)
+                    const end = newline === -1 ? script.length : newline
+                    const line = script.slice(start, end)
+                    start = end + 1
+                    if (line.replace(/^\t+/, '') === delimiter) break
+                    body.push(line)
+                }
+                heredocs.push(body.join('\n'))
+                i = start - 1
+            }
         } else if (char === '#' && !inWord) {
             const newline = script.indexOf('\n', i)
             i = newline === -1 ? script.length : newline - 1
@@ -372,17 +409,28 @@ function tokenize(script: string, backslashEscapes: boolean): { segments: string
             if (char === '&' && script[i + 1] === '>') continue // &> redirect
             if (char === '&' && script[i - 1] === '>') continue // >& redirect
             endSegment()
+        } else if (char === '<' && script[i + 1] === '<' && script[i + 2] !== '<') {
+            // Heredoc (<<EOF, <<-'EOF'): remember the delimiter; the body follows the next newline.
+            if (inWord && /^\d+$/.test(word)) { word = ''; inWord = false }
+            endWord()
+            i += script[i + 2] === '-' ? 2 : 1
+            while (script[i + 1] === ' ' || script[i + 1] === '\t') i++
+            let delimiter = ''
+            while (i + 1 < script.length && !/[\s;&|<>()]/.test(script[i + 1])) delimiter += script[++i]
+            pendingHeredocs.push(delimiter.replace(/['"\\]/g, ''))
         } else if (char === '>' || char === '<') {
             // A file descriptor number directly before the operator (2>) is not an argument.
             if (inWord && /^\d+$/.test(word)) { word = ''; inWord = false }
             endWord()
-            while (script[i + 1] === '>' || script[i + 1] === '|' || script[i + 1] === '&') i++
-            redirectNext = true
+            redirectNext = char === '>' || script[i + 1] === '>' ? 'out' : 'in'
+            while (script[i + 1] === '>' || script[i + 1] === '<' || script[i + 1] === '|' || script[i + 1] === '&') i++
         } else {
             word += char
             inWord = true
         }
     }
     endSegment()
-    return { segments, redirects }
+    // A heredoc without a following newline has an empty body.
+    heredocs.push(...pendingHeredocs.map(() => ''))
+    return { segments, redirects, inputs, heredocs }
 }

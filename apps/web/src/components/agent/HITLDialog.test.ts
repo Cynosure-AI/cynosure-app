@@ -33,12 +33,13 @@ describe('HITLDialog', () => {
     expect(cards.map((card) => card.attributes('data-tool-effect'))).toEqual([
       'read', 'write', 'destructive', 'unknown',
     ])
-    expect(wrapper.findAll('.hitl-tool-effect').map((badge) => badge.text())).toEqual([
+    const badges = wrapper.findAll('.hitl-tool-effect')
+    expect(badges.map((badge) => badge.text())).toEqual([
       'Read', 'Write', 'Destructive', 'Unclassified',
     ])
-    expect(cards[0].classes()).toContain('border-sky-500/30')
-    expect(cards[1].classes()).toContain('border-amber-500/30')
-    expect(cards[2].classes()).toContain('border-red-500/30')
+    expect(badges[0].classes()).toContain('border-sky-500/30')
+    expect(badges[1].classes()).toContain('border-amber-500/30')
+    expect(badges[2].classes()).toContain('border-red-500/30')
     expect(wrapper.findAll('[data-content-kind="json"]')).toHaveLength(4)
   })
 
@@ -75,6 +76,24 @@ describe('HITLDialog', () => {
     expect(wrapper.text()).toContain('shell_execute')
     await wrapper.findAll('button').find(button => button.text() === 'Allow')!.trigger('click')
     expect(response).toHaveBeenCalledWith(true, undefined, 'once')
+  })
+
+  test('offers Show more only when the command overflows', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAgentStore().handleHITLRequest({ taskId: 'shell-long', toolCalls: [{ name: 'shell_execute', arguments: JSON.stringify({ command: 'echo hi' }) }] })
+    const short = mount(HITLDialog, { global: { plugins: [pinia], stubs: { Icon: true } } })
+    expect(short.text()).not.toContain('Show more')
+    short.unmount()
+
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000)
+    const long = mount(HITLDialog, { global: { plugins: [pinia], stubs: { Icon: true } } })
+    await long.vm.$nextTick()
+    const toggle = long.find('.clamped-toggle')
+    expect(toggle.text()).toBe('Show more')
+    await toggle.trigger('click')
+    expect(toggle.text()).toBe('Show less')
+    scrollHeight.mockRestore()
   })
 
   test('offers session and saved approvals for shell commands', async () => {

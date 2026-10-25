@@ -19,7 +19,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { closeDb, getDb, getDbPath } from './db/database.js'
 import { DatabaseVersionError } from './db/migrations.js'
-import { type ApprovalResult, getHITLGate } from './core/agent/hitl-gate.js'
+import { type ApprovalResult, type ShellApprovalDetails, getHITLGate } from './core/agent/hitl-gate.js'
 import { setPermissionMode } from './core/chat/permission-mode.js'
 import { getRAGStore } from './core/memory/rag.js'
 import { removeLegacyMemoryAnalysis } from './core/memory/legacy-analysis-cleanup.js'
@@ -492,6 +492,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         function: { name: string; arguments: string }
         annotations?: ToolBehaviorAnnotations
         fileAccess?: { path: string; folder: string; toolName: string }
+        shell?: ShellApprovalDetails
       }>
       resolve: (result: ApprovalResult) => void
     }
@@ -512,6 +513,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         arguments: tc.function.arguments,
         annotations: tc.annotations,
         fileAccess: tc.fileAccess,
+        shell: tc.shell,
       }))),
       Date.now()
     )
@@ -524,6 +526,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
         arguments: toolCall.function.arguments,
         annotations: toolCall.annotations,
         fileAccess: toolCall.fileAccess,
+        shell: toolCall.shell,
       }))
     })
   }

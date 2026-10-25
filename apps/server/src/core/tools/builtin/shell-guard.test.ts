@@ -110,6 +110,14 @@ describe('shell safety guard', () => {
         expect(blocked(command)).toBeNull()
     })
 
+    it('checks heredoc bodies as scripts and ignores input redirects from devices', () => {
+        expect(blocked('bash <<EOF\nrm -rf /\nEOF')).toContain('recursively deletes /')
+        expect(blocked('sh <<-\'END\'\n\trm -rf ~\n\tEND\necho done')).toContain('recursively deletes')
+        expect(blocked('cat <<EOF\nnotes\nEOF\nrm -rf /')).toContain('recursively deletes /')
+        expect(blocked('head -c 512 < /dev/sda')).toBeNull()
+        expect(blocked('echo x > /dev/sda')).toContain('disk device')
+    })
+
     it('blocks deleting the working directory only when it is protected', () => {
         expect(blocked('rm -rf .', { ...posix, cwd: '/tmp/scratch' })).toBeNull()
         expect(blocked('rm -rf .', { ...posix, cwd: '/srv/projects/app' })).toMatch(/\/srv\/projects\/app/)

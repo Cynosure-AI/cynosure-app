@@ -4,19 +4,23 @@ import { useAgentStore, type ToolCallDisplay } from '../../stores/agent-runtime.
 import { useChatStore } from '../../stores/chat.store'
 import { Icon } from '@iconify/vue'
 import RichContent from '../shared/RichContent.vue'
-import { formatRichContent } from '../../utils/rich-content'
+import ClampedContent from '../shared/ClampedContent.vue'
+import ToolNamespaceIcon from '../chat/ToolNamespaceIcon.vue'
+import { useToolPresentation } from '../../composables/useToolPresentation'
 
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
+const { isBuiltInTool, toolDisplayName, toolNamespaceIcon, toolIconUrl } = useToolPresentation()
 const denyReason = ref('')
 const showReasonInput = ref(false)
-const expandedArgs = ref<Set<number>>(new Set())
 const showApproveDropdown = ref(false)
 const fileAccessCall = computed(() => agentStore.pendingHITL?.toolCalls.find(tc => tc.fileAccess))
 const fileAccess = computed(() => fileAccessCall.value?.fileAccess)
 type ToolEffect = 'destructive' | 'write' | 'read' | 'unknown'
 
 function toolEffect(toolCall: ToolCallDisplay): ToolEffect {
+  // The shell tool is annotated destructive as a whole; use the server's review of this command.
+  if (toolCall.shell) return toolCall.shell.readOnly ? 'read' : 'write'
   if (toolCall.annotations?.destructiveHint === true) return 'destructive'
   if (toolCall.annotations?.readOnlyHint === false) return 'write'
   if (toolCall.annotations?.readOnlyHint === true) return 'read'
@@ -24,16 +28,9 @@ function toolEffect(toolCall: ToolCallDisplay): ToolEffect {
 }
 
 function toolEffectLabel(toolCall: ToolCallDisplay): string {
+  if (toolCall.shell) return toolCall.shell.readOnly ? 'Read-only' : 'Not read-only'
   const effect = toolEffect(toolCall)
   return effect === 'unknown' ? 'Unclassified' : effect[0].toUpperCase() + effect.slice(1)
-}
-
-function toolCardClass(toolCall: ToolCallDisplay): string {
-  const effect = toolEffect(toolCall)
-  if (effect === 'destructive') return 'border-red-500/30 bg-red-500/5'
-  if (effect === 'write') return 'border-amber-500/30 bg-amber-500/5'
-  if (effect === 'read') return 'border-sky-500/30 bg-sky-500/5'
-  return ''
 }
 
 function toolEffectBadgeClass(toolCall: ToolCallDisplay): string {
@@ -99,19 +96,7 @@ function cancelDeny(): void {
 function resetState(): void {
   showReasonInput.value = false
   denyReason.value = ''
-  expandedArgs.value.clear()
   showApproveDropdown.value = false
-}
-
-function hasLongArgs(args: string, limit = 250): boolean {
-  return formatRichContent(args).markdown.length > limit
-}
-
-function toggleExpand(index: number): void {
-  const s = new Set(expandedArgs.value)
-  if (s.has(index)) s.delete(index)
-  else s.add(index)
-  expandedArgs.value = s
 }
 </script>
 
@@ -145,18 +130,18 @@ function toggleExpand(index: number): void {
             1 of {{ agentStore.activeHITLQueue.length }}
           </span>
           <span
-            v-if="!fileAccess"
-            class="text-xs font-medium text-ink-secondary bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50"
+            v-if="!fileAccess && agentStore.pendingHITL.toolCalls.length > 1"
+            class="text-[10px] font-medium text-ink-secondary bg-theme-900/50 px-2 py-0.5 rounded-full border border-theme-700/50"
           >
-            {{ agentStore.pendingHITL.toolCalls.length }} tool{{ agentStore.pendingHITL.toolCalls.length > 1 ? 's' : '' }} requested
+            {{ agentStore.pendingHITL.toolCalls.length }} tools
           </span>
         </div>
       </div>
 
-      <div class="hitl-card-body px-4 py-3 space-y-3">
+      <div class="hitl-card-body divide-y divide-theme-700/40">
         <div
           v-if="fileAccess"
-          class="space-y-2 text-sm text-theme-200"
+          class="space-y-2 px-4 py-3 text-sm text-theme-200"
         >
           <p><span class="text-ink-muted">Folder to allow recursively:</span></p>
           <p class="break-all rounded-lg border border-theme-700 bg-theme-950/50 p-2.5 font-mono text-xs">
@@ -168,11 +153,14 @@ function toggleExpand(index: number): void {
           <p class="text-xs text-ink-muted">
             Requested action:
           </p>
-          <RichContent
-            v-if="fileAccessCall?.arguments"
-            :content="fileAccessCall.arguments"
-            class="hitl-arguments custom-scrollbar max-h-48 overflow-auto rounded-lg border border-theme-700/50 bg-theme-950/50 p-2.5 text-[11px] shadow-inner"
-          />
+          <div class="rounded-lg border border-theme-700/50 bg-theme-950/50 p-2.5 shadow-inner">
+            <ClampedContent v-if="fileAccessCall?.arguments">
+              <RichContent
+                :content="fileAccessCall.arguments"
+                class="hitl-arguments text-[11px]"
+              />
+            </ClampedContent>
+          </div>
           <p class="text-xs text-ink-muted">
             Allowing adds this folder to Settings → File Access and lets this tool call proceed. You can remove the folder there later.
           </p>
@@ -180,39 +168,93 @@ function toggleExpand(index: number): void {
         <div
           v-for="(tc, i) in agentStore.pendingHITL.toolCalls"
           v-show="!fileAccess"
-          :key="i"
-          class="hitl-tool-card flex flex-col gap-1.5 rounded-lg border p-2.5 border-theme-700/50 bg-theme-900/25"
-          :class="toolCardClass(tc)"
+          :key="`${agentStore.pendingHITL.taskId}-${i}`"
+          class="hitl-tool-card flex flex-col gap-2.5 px-4 py-3"
           :data-tool-effect="toolEffect(tc)"
         >
-          <div class="flex items-center justify-between">
-            <span class="hitl-tool-name inline-flex items-center gap-1.5 rounded-md bg-accent-500/10 border border-accent-500/20 px-2 py-0.5 text-[11px] text-accent-400 font-mono font-medium">
-              <Icon
-                icon="lucide:wrench"
-                class="h-3 w-3 text-accent-500/70"
-              />{{ tc.name }}
+          <div class="flex min-w-0 items-center gap-2.5">
+            <span
+              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+              :class="isBuiltInTool(tc.name) ? 'bg-theme-700/45 text-theme-200' : 'bg-accent-500/10 text-accent-fg'"
+            >
+              <ToolNamespaceIcon
+                :src="toolIconUrl(tc.name)"
+                :icon="toolNamespaceIcon(tc.name)"
+                icon-class="h-3.5 w-3.5"
+                class="h-4 w-4"
+              />
             </span>
-            <div class="flex items-center gap-2">
-              <span
-                class="hitl-tool-effect rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                :class="toolEffectBadgeClass(tc)"
-              >{{ toolEffectLabel(tc) }}</span>
-              <button
-                v-if="hasLongArgs(tc.arguments)"
-                class="text-[10px] font-medium text-ink-muted hover:text-theme-300 transition-colors uppercase tracking-wider"
-                @click="toggleExpand(i)"
-              >
-                {{ expandedArgs.has(i) ? 'Show Less' : 'Show More' }}
-              </button>
-            </div>
+            <span
+              class="hitl-tool-name min-w-0 flex-1 truncate text-[13px] font-medium"
+              :class="isBuiltInTool(tc.name) ? 'text-theme-200' : 'text-accent-fg'"
+              :title="tc.name"
+            >{{ toolDisplayName(tc.name) }}</span>
+            <span
+              class="hitl-tool-effect shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              :class="toolEffectBadgeClass(tc)"
+            >{{ toolEffectLabel(tc) }}</span>
           </div>
 
-          <RichContent
-            v-if="tc.arguments"
-            :content="tc.arguments"
-            class="hitl-arguments custom-scrollbar mt-0.5 rounded-lg border border-theme-700/50 bg-theme-950/50 p-2.5 text-[11px] shadow-inner"
-            :class="expandedArgs.has(i) ? 'max-h-96' : 'max-h-50'"
-          />
+          <template v-if="tc.shell">
+            <p
+              class="hitl-shell-explanation text-sm leading-snug"
+              :class="tc.shell.explanation ? 'text-theme-100' : 'italic text-ink-muted'"
+            >
+              {{ tc.shell.explanation || 'No explanation was given for this command.' }}
+            </p>
+            <div class="hitl-shell overflow-hidden rounded-lg border border-theme-700/50 bg-theme-950/50 shadow-inner">
+              <div
+                v-if="tc.shell.cwd"
+                class="flex items-center gap-1.5 border-b border-theme-700/40 px-2.5 py-1 text-[10px] text-ink-muted"
+              >
+                <Icon
+                  icon="lucide:folder"
+                  class="h-3 w-3 shrink-0"
+                />
+                <span
+                  class="truncate font-mono"
+                  :title="tc.shell.cwd"
+                >{{ tc.shell.cwd }}</span>
+              </div>
+              <ClampedContent class="px-2.5 py-2">
+                <pre class="hitl-shell-command whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-theme-200"><span
+                  class="select-none text-ink-faint"
+                  aria-hidden="true"
+                >$ </span>{{ tc.shell.command }}</pre>
+              </ClampedContent>
+            </div>
+            <div
+              v-if="tc.shell.reasons.length"
+              class="hitl-shell-reasons rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-2"
+            >
+              <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500/90">
+                Needs approval because
+              </p>
+              <ul class="space-y-0.5 text-[11px] text-amber-400">
+                <li
+                  v-for="reason in tc.shell.reasons"
+                  :key="reason"
+                  class="flex items-start gap-1.5"
+                >
+                  <Icon
+                    icon="lucide:shield-alert"
+                    class="mt-0.5 h-3 w-3 shrink-0"
+                  />{{ reason }}
+                </li>
+              </ul>
+            </div>
+          </template>
+          <div
+            v-else-if="tc.arguments"
+            class="rounded-lg border border-theme-700/50 bg-theme-950/50 px-2.5 py-2 shadow-inner"
+          >
+            <ClampedContent>
+              <RichContent
+                :content="tc.arguments"
+                class="hitl-arguments text-[11px]"
+              />
+            </ClampedContent>
+          </div>
         </div>
       </div>
 
