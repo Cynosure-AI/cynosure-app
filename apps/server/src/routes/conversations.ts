@@ -820,10 +820,10 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         return getPendingWait(req.params.id)
     })
 
-    // PUT /api/chat/conversations/:id/permission-mode — read-only tools only, saved approval policy (auto), or every tool without asking (full)
+    // PUT /api/chat/conversations/:id/permission-mode — read-only tools only, non-destructive writes (edit), saved approval policy (auto), or every tool without asking (full)
     app.put<{ Params: { id: string }; Body: { mode: PermissionMode } }>('/conversations/:id/permission-mode', async (req, reply) => {
         const { mode } = req.body ?? {}
-        if (!isPermissionMode(mode)) return reply.status(400).send({ error: 'mode must be read-only, auto or full' })
+        if (!isPermissionMode(mode)) return reply.status(400).send({ error: 'mode must be read-only, edit, auto or full' })
         if (!getDb().prepare('SELECT 1 FROM conversations WHERE id = ?').get(req.params.id)) {
             return reply.status(404).send({ error: 'Conversation not found' })
         }

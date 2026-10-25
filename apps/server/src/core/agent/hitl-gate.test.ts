@@ -25,7 +25,7 @@ vi.mock('../../db/database.js', () => ({
 }))
 
 const { permissionModes } = vi.hoisted(() => ({
-  permissionModes: new Map<string, 'read-only' | 'auto' | 'full'>(),
+  permissionModes: new Map<string, 'read-only' | 'edit' | 'auto' | 'full'>(),
 }))
 
 vi.mock('../chat/permission-mode.js', () => ({
@@ -150,6 +150,37 @@ describe('HITLGate permission mode', () => {
       await expect(gate.requestApproval('task-1', [call('memory_create')], undefined, 'conv-1'))
         .resolves.toEqual({ approved: false, denied: true, reason: expect.stringContaining('blocked: memory_create') })
       expect(request).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  test('edit runs declared non-destructive writes and asks for destructive or unannotated tools', async () => {
+    const gate = new HITLGate()
+    permissionModes.set('conv-1', 'edit')
+    const tool = (name: string, annotations?: Record<string, boolean>) => ({ name, description: '', parameters: {}, timeout: 1_000, execute: async () => ({ success: true, output: '' }), annotations })
+    const tools = [
+      tool('mcp_write', { readOnlyHint: false, destructiveHint: false }),
+      tool('mcp_drop', { readOnlyHint: false, destructiveHint: true }),
+      tool('mcp_unknown'),
+      tool('mcp_unknown_write', { readOnlyHint: false }),
+    ]
+    const asked: string[] = []
+    const unsubscribe = getEventBus().on('hitl:request', (event) => {
+      const request = event as { toolCalls: Array<{ function: { name: string } }>; resolve: (result: { approved: boolean }) => void }
+      asked.push(...request.toolCalls.map((toolCall) => toolCall.function.name))
+      request.resolve({ approved: true })
+    })
+
+    try {
+      await gate.requestApproval('task-1', [call('mcp_write')], undefined, 'conv-1', tools)
+      expect(asked).toEqual([])
+      await gate.requestApproval('task-2', [call('mcp_write'), call('mcp_drop'), call('mcp_unknown'), call('mcp_unknown_write')], undefined, 'conv-1', tools)
+      expect(asked).toEqual(['mcp_drop', 'mcp_unknown', 'mcp_unknown_write'])
+      asked.length = 0
+      approvalRows.set('mcp_write', 0)
+      await gate.requestApproval('task-3', [call('mcp_write')], undefined, 'conv-1', tools)
+      expect(asked).toEqual(['mcp_write'])
     } finally {
       unsubscribe()
     }

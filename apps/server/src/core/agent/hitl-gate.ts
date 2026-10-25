@@ -1,7 +1,7 @@
 import type { ToolBehaviorAnnotations, ToolCall, ToolDefinition } from '../gateway/providers/base.provider.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { getDb } from '../../db/database.js'
-import { isAnnotationAutoApprovedTool, isReadOnlyModeTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
+import { isAnnotationAutoApprovedTool, isEditModeTool, isReadOnlyModeTool, isSystemAutoApprovedTool } from '../tools/tool-policy.js'
 import { fileToolNeedsFolderApproval, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 import { getPermissionMode } from '../chat/permission-mode.js'
 import { reviewShellCommand, type ShellCommandReview } from '../tools/builtin/shell-classifier.js'
@@ -64,9 +64,10 @@ export class HITLGate {
     return taskIds
   }
 
-  /** Whether the user saved an explicit Allow or Ask for this tool. */
-  hasExplicitChoice(toolName: string): boolean {
-    return Boolean(getDb().prepare('SELECT 1 FROM tool_approvals WHERE tool_name = ?').get(toolName))
+  /** The user's saved Allow (true) or Ask (false) for this tool, if any. */
+  getSavedChoice(toolName: string): boolean | undefined {
+    const row = getDb().prepare('SELECT auto_approve FROM tool_approvals WHERE tool_name = ?').get(toolName) as { auto_approve: number } | undefined
+    return row ? row.auto_approve === 1 : undefined
   }
 
   /** Returns the effective approval state: system, explicit user choice, then annotation default. */
@@ -154,25 +155,29 @@ export class HITLGate {
       }
     }
 
-    // A folder card authorizes that file tool invocation, and read-only shell
-    // commands need no card. All other calls use the normal tool approval policy.
+    // A folder card authorizes that file tool invocation, read-only shell
+    // commands need no card, and Edit runs non-destructive calls. All other
+    // calls use the normal tool approval policy.
     const sessionSet = conversationId ? this.getSessionApprovals(conversationId) : undefined
     const specificallyApprovedCalls = new Set<string>()
     for (const tc of toolCalls) {
       // Read-only shell commands run while the shell tool follows default
       // approval; a saved Allow or Ask applies to every command.
-      if (shellReviews.get(tc.id)?.readOnly && !this.hasExplicitChoice(tc.function.name)) {
+      if (shellReviews.get(tc.id)?.readOnly && this.getSavedChoice(tc.function.name) === undefined) {
         specificallyApprovedCalls.add(tc.id)
         continue
       }
       const tool = toolsByName.get(tc.function.name)
+      let args: Record<string, unknown>
+      try { args = JSON.parse(tc.function.arguments) as Record<string, unknown> } catch { continue /* The executor reports invalid arguments. */ }
+      // A tool the user set to Ask still asks in Edit.
+      if (permissionMode === 'edit' && tool && isEditModeTool(tool, args) && this.getSavedChoice(tc.function.name) !== false) {
+        specificallyApprovedCalls.add(tc.id)
+      }
       if (tool?.namespaceId !== 'builtin:files') continue
-      try {
-        const args = JSON.parse(tc.function.arguments) as Record<string, unknown>
-        if (await runInFileAccessScope(conversationId, () => fileToolNeedsFolderApproval(tool.originalName || tool.name, args))) {
-          specificallyApprovedCalls.add(tc.id)
-        }
-      } catch { /* Invalid arguments are handled by the executor. */ }
+      if (await runInFileAccessScope(conversationId, () => fileToolNeedsFolderApproval(tool.originalName || tool.name, args))) {
+        specificallyApprovedCalls.add(tc.id)
+      }
     }
     const needsApproval = toolCalls.filter(
       (tc) => !specificallyApprovedCalls.has(tc.id)
