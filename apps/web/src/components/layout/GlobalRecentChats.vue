@@ -266,9 +266,35 @@ function closeMenu(): void {
   openMenuId.value = null
 }
 
+// The menu is teleported to <body> with fixed positioning so the scrolling
+// list can't clip it; it flips above the anchor when there's no room below.
+const MENU_WIDTH = 144
+const MENU_HEIGHT = 112
+const menuStyle = ref<Record<string, string>>({})
+
+function placeMenu(left: number, anchorTop: number, anchorBottom: number): void {
+  const fitsBelow = anchorBottom + 4 + MENU_HEIGHT <= window.innerHeight - 8
+  const top = fitsBelow ? anchorBottom + 4 : Math.max(8, anchorTop - 4 - MENU_HEIGHT)
+  menuStyle.value = {
+    top: `${top}px`,
+    left: `${Math.min(Math.max(8, left), window.innerWidth - MENU_WIDTH - 8)}px`,
+  }
+}
+
+function toggleMenu(conversationId: string, event: MouseEvent): void {
+  if (openMenuId.value === conversationId) {
+    openMenuId.value = null
+    return
+  }
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  placeMenu(rect.right - MENU_WIDTH, rect.top, rect.bottom)
+  openMenuId.value = conversationId
+}
+
 function openContextMenu(conversationId: string, event: MouseEvent): void {
   event.stopPropagation()
   editingId.value = null
+  placeMenu(event.clientX, event.clientY, event.clientY)
   openMenuId.value = conversationId
 }
 
@@ -323,6 +349,9 @@ watch(wsConnected, (connected) => {
 onMounted(() => {
   disposed = false
   document.addEventListener('click', closeMenu)
+  // A fixed menu would drift from its row when the list or sidebar scrolls.
+  document.addEventListener('scroll', closeMenu, true)
+  window.addEventListener('resize', closeMenu)
   liveCleanups.push(
     api.chat.onEvent((event) => {
       if (event.type === 'transcript-item' && event.item.type === 'message' || event.type === 'title-updated') scheduleRefresh()
@@ -342,6 +371,8 @@ onBeforeUnmount(() => {
   requestToken.value += 1
   liveCleanups.forEach((cleanup) => cleanup())
   document.removeEventListener('click', closeMenu)
+  document.removeEventListener('scroll', closeMenu, true)
+  window.removeEventListener('resize', closeMenu)
 })
 </script>
 
@@ -477,50 +508,53 @@ onBeforeUnmount(() => {
             class="rounded-md p-1 text-ink-muted opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover:opacity-100 focus-visible:opacity-100"
             :class="{ 'bg-theme-700 text-theme-200 opacity-100': openMenuId === conversation.id }"
             aria-label="Chat options"
-            @click.stop="openMenuId = openMenuId === conversation.id ? null : conversation.id"
+            @click.stop="toggleMenu(conversation.id, $event)"
           >
             <Icon
               icon="lucide:ellipsis"
               class="h-3.5 w-3.5"
             />
           </button>
-          <span
-            v-if="openMenuId === conversation.id"
-            class="absolute right-0 top-7 z-30 w-36 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
-            @click.stop
-          >
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
-              @click="togglePin(conversation, $event)"
+          <Teleport to="body">
+            <span
+              v-if="openMenuId === conversation.id"
+              class="fixed z-200 w-36 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+              :style="menuStyle"
+              @click.stop
             >
-              <Icon
-                :icon="conversation.pinned ? 'lucide:pin-off' : 'lucide:pin'"
-                class="h-3.5 w-3.5 text-status-warning"
-              />
-              {{ conversation.pinned ? 'Unpin' : 'Pin' }}
-            </button>
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
-              @click="startRename(conversation, $event)"
-            >
-              <Icon
-                icon="lucide:pencil"
-                class="h-3.5 w-3.5"
-              /> Rename
-            </button>
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
-              @click="deleteConversation(conversation, $event)"
-            >
-              <Icon
-                icon="lucide:trash-2"
-                class="h-3.5 w-3.5"
-              /> Delete
-            </button>
-          </span>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                @click="togglePin(conversation, $event)"
+              >
+                <Icon
+                  :icon="conversation.pinned ? 'lucide:pin-off' : 'lucide:pin'"
+                  class="h-3.5 w-3.5 text-status-warning"
+                />
+                {{ conversation.pinned ? 'Unpin' : 'Pin' }}
+              </button>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                @click="startRename(conversation, $event)"
+              >
+                <Icon
+                  icon="lucide:pencil"
+                  class="h-3.5 w-3.5"
+                /> Rename
+              </button>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10"
+                @click="deleteConversation(conversation, $event)"
+              >
+                <Icon
+                  icon="lucide:trash-2"
+                  class="h-3.5 w-3.5"
+                /> Delete
+              </button>
+            </span>
+          </Teleport>
         </span>
       </div>
 

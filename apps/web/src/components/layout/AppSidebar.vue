@@ -435,7 +435,8 @@ const chatRoute = computed(() =>
     </div>
 
     <!-- V2 Navigation -->
-    <nav class="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-1">
+    <!-- Scrolls as a whole on short screens so Recent chats keeps its min height instead of being squeezed. -->
+    <nav class="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 pb-1 [scrollbar-width:thin]">
       <!-- Chat -->
       <HoverTooltip
         placement="right"
@@ -570,7 +571,10 @@ const chatRoute = computed(() =>
         />
       </section>
 
-      <section class="recent-region flex min-h-0 flex-1 flex-col">
+      <section
+        class="recent-region flex flex-1 flex-col"
+        :class="recentChatsOpen ? 'min-h-72' : 'min-h-0'"
+      >
         <div class="section-separator" />
         <div class="group/recent-header relative flex items-center">
           <button
