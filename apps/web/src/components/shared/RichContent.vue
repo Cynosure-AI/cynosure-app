@@ -19,7 +19,7 @@ useMermaidDiagrams(rootRef, () => rendered.value)
 <template>
   <div
     ref="rootRef"
-    class="rich-content msg-markdown min-w-0 overflow-auto text-xs leading-relaxed"
+    class="rich-content msg-markdown min-w-0 overflow-auto leading-relaxed"
     :class="[
       `rich-content--${formatted.kind}`,
       tone === 'error' ? 'text-red-700 dark:text-red-300' : tone === 'muted' ? 'text-ink-muted' : 'text-theme-300',
