@@ -724,6 +724,14 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 36,
+        description: 'Store generated avatar settings per agent',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(agents)') as Array<{ name: string }>).map((column) => column.name))
+            if (!columns.has('avatar_json')) db.exec('ALTER TABLE agents ADD COLUMN avatar_json TEXT')
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

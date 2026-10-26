@@ -1,7 +1,8 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
-import type { ReasoningEffort } from '@shared/types'
+import type { AvatarConfig, ReasoningEffort } from '@shared/types'
+import { normalizeAvatarConfig, parseStoredAvatarConfig } from './avatar-config.js'
 
 // ---- Types ----
 
@@ -36,6 +37,7 @@ export interface AgentConfig {
 export interface AgentData extends AgentConfig {
     id: string
     iconUrl: string | null
+    avatar: AvatarConfig | null
     systemPrompt: string
 }
 
@@ -45,6 +47,7 @@ export type CreateAgentInput = {
     description?: string
     category?: string
     iconUrl?: string | null
+    avatar?: AvatarConfig | null
     providerId?: string
     model?: string
     systemPrompt?: string
@@ -155,6 +158,7 @@ interface AgentRow {
     favorite: number
     icon_data: Buffer | null
     icon_mime: string | null
+    avatar_json: string | null
     created_at: number
     updated_at: number
 }
@@ -178,6 +182,7 @@ function rowToAgentData(row: AgentRow): AgentData {
         description: row.description || '',
         category: row.category || '',
         iconUrl: hasIcon ? `/api/agents/${encodeURIComponent(row.id)}/icon?t=${row.updated_at}` : null,
+        avatar: parseStoredAvatarConfig(row.avatar_json),
         providerId: row.provider_id || '',
         model: row.model || '',
         systemPrompt: row.system_prompt || '',
@@ -237,13 +242,14 @@ export function createAgent(input: CreateAgentInput): AgentData {
     }
 
     const normalizedTools = normalizeAgentTools(input.tools || [])
+    const avatar = normalizeAvatarConfig(input.avatar)
 
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, auto_memory, dreaming_enabled, auto_router_provider_id, auto_router_model,
-            sort_order, favorite, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            sort_order, favorite, icon_data, icon_mime, avatar_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -269,6 +275,7 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.favorite === true ? 1 : 0,
         iconData,
         iconMime,
+        avatar ? JSON.stringify(avatar) : null,
         now,
         now
     )
@@ -309,6 +316,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         : existing.max_context_tokens
     const updatedSortOrder = input.sortOrder !== undefined ? input.sortOrder : (existing.sort_order || 0)
     const updatedFavorite = input.favorite !== undefined ? input.favorite : (existing.favorite === 1)
+    const updatedAvatar = input.avatar !== undefined ? normalizeAvatarConfig(input.avatar) : parseStoredAvatarConfig(existing.avatar_json)
 
     // Handle icon update
     let iconData: Buffer | null = existing.icon_data
@@ -332,7 +340,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
             thinking_enabled = ?, reasoning_effort = ?, max_context_tokens = ?, auto_tool_routing = ?,
             auto_memory = ?, dreaming_enabled = ?,
             auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, favorite = ?,
-         icon_data = ?, icon_mime = ?, updated_at = ?
+         icon_data = ?, icon_mime = ?, avatar_json = ?, updated_at = ?
          WHERE id = ?`
     ).run(
         updatedName,
@@ -357,6 +365,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedFavorite ? 1 : 0,
         iconData,
         iconMime,
+        updatedAvatar ? JSON.stringify(updatedAvatar) : null,
         now,
         id
     )
@@ -402,8 +411,8 @@ export function duplicateAgent(id: string): AgentData | null {
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, auto_memory, dreaming_enabled, auto_router_provider_id, auto_router_model,
-            sort_order, favorite, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            sort_order, favorite, icon_data, icon_mime, avatar_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -429,6 +438,7 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.favorite,
         existing.icon_data,
         existing.icon_mime,
+        existing.avatar_json,
         now,
         now
     )

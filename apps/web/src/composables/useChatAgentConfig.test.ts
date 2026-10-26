@@ -20,7 +20,7 @@ const DEFAULT_TOOL_KEYS = [
 /** A profile as the API returns it: unset tools and memory resolved to the defaults. */
 function cynoProfile(overrides: Partial<CynoProfile> = {}): CynoProfileView {
   const profile: CynoProfile = {
-    name: 'Cyno', iconUrl: null, systemPrompt: CYNO_PROMPT, providerId: '', model: '',
+    name: 'Cyno', iconUrl: null, avatar: null, systemPrompt: CYNO_PROMPT, providerId: '', model: '',
     tools: null, memoryFolders: null, subAgents: [], thinkingEnabled: true, reasoningEffort: 'medium',
     autoToolRouting: true, autoMemory: true, dreamingEnabled: true, updatedAt: 1, ...overrides,
   }

@@ -5,6 +5,7 @@ import { useAgentHealthStore } from '../../stores/agent-health.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import type { AgentDefinition, SubAgentAssignment } from '../../api/types'
 import { Icon } from '@iconify/vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
 import BaseCard from '../shared/BaseCard.vue'
 
 const props = defineProps<{ agent: AgentDefinition }>()
@@ -197,17 +198,11 @@ function goToAgents() {
             :data-test="`assigned-${sub.id}`"
           >
             <div class="flex items-start gap-3">
-              <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20">
-                <img
-                  v-if="sub.iconUrl"
-                  :src="sub.iconUrl"
-                  alt=""
-                  class="h-full w-full object-cover"
-                >
-                <Icon
-                  v-else
-                  icon="lucide:bot"
-                  class="h-4 w-4 text-accent-fg"
+              <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+                <AgentAvatar
+                  :name="sub.name"
+                  :icon-url="sub.iconUrl"
+                  :avatar="sub.avatar"
                 />
               </div>
               <div class="min-w-0 flex-1">
@@ -358,17 +353,11 @@ function goToAgents() {
               :data-test="`candidate-${candidate.id}`"
               @click="addSubAgent(candidate.id)"
             >
-              <div class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20">
-                <img
-                  v-if="candidate.iconUrl"
-                  :src="candidate.iconUrl"
-                  alt=""
-                  class="h-full w-full object-cover"
-                >
-                <Icon
-                  v-else
-                  icon="lucide:bot"
-                  class="h-3.5 w-3.5 text-accent-fg"
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+                <AgentAvatar
+                  :name="candidate.name"
+                  :icon-url="candidate.iconUrl"
+                  :avatar="candidate.avatar"
                 />
               </div>
               <div class="min-w-0 flex-1">

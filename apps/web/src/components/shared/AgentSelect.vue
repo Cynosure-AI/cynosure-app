@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import CustomSelect, { type SelectOptionGroup, type SelectSize } from './CustomSelect.vue'
-import { useProviderStore } from '../../stores/provider.store'
-import { useProviderLogos } from '../../composables/useProviderLogos'
 import type { AgentDefinition } from '../../api/types'
+import { agentAvatarSrc } from '../../utils/avatar'
 
 const props = withDefaults(
   defineProps<{
@@ -50,8 +49,6 @@ const emit = defineEmits<{
   change: [value: string]
 }>()
 
-const providerStore = useProviderStore()
-const { logoUrl } = useProviderLogos()
 
 function agentSort(a: AgentDefinition, b: AgentDefinition): number {
   if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
@@ -62,15 +59,10 @@ const groups = computed((): SelectOptionGroup[] => {
   const sorted = [...props.agents].sort(agentSort)
 
   const agentOptions = sorted.map((a) => {
-    let imgSrc: string | null = a.iconUrl || null
-    if (!imgSrc && a.providerId) {
-      const prov = providerStore.providers.find((p) => p.id === a.providerId)
-      if (prov) imgSrc = logoUrl(prov.type)
-    }
     return {
       value: a.id,
       label: a.name,
-      imgSrc,
+      imgSrc: agentAvatarSrc(a.name, a.iconUrl, a.avatar),
       tooltip: a.description || undefined,
       tagIconName: a.favorite ? 'lucide:star' : undefined,
       tag: a.favorite ? 'Favorite' : (a.subAgents?.length ? `+${a.subAgents.length}` : undefined),

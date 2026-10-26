@@ -4,6 +4,9 @@ import { Icon } from "@iconify/vue";
 import { useProviderStore } from "../../stores/provider.store";
 import type { AgentDefinition } from "../../api/types";
 import IconUpload from "../shared/IconUpload.vue";
+import AgentAvatar from "../shared/AgentAvatar.vue";
+import CollapsibleSection from "../shared/CollapsibleSection.vue";
+import AgentAvatarEditor from "./AgentAvatarEditor.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
@@ -92,19 +95,32 @@ onMounted(() =>
     <BaseCard class="p-5 space-y-4">
       <IconUpload
         :icon-url="agent.iconUrl"
-        fallback-icon="lucide:bot"
         @update="emit('update', 'iconUrl', $event)"
       >
         <template #description>
-          <template v-if="cyno">
-            Custom avatar for {{ agent.name }}. Falls back to the app logo if not set.
-          </template>
-          <template v-else>
-            Custom avatar for this agent. Falls back to the provider icon if not
-            set.
-          </template>
+          An uploaded image is used everywhere {{ agent.name || 'this agent' }} appears. Without one,
+          {{ cyno ? 'Cyno' : 'the agent' }} gets a generated avatar that reacts while it works.
+        </template>
+        <template #fallback>
+          <AgentAvatar
+            :name="agent.name"
+            :avatar="agent.avatar"
+          />
         </template>
       </IconUpload>
+
+      <CollapsibleSection
+        v-if="!agent.iconUrl"
+        header-label="Customize generated avatar"
+        header-icon="lucide:sparkles"
+      >
+        <AgentAvatarEditor
+          class="px-1 pt-4"
+          :name="agent.name"
+          :avatar="agent.avatar"
+          @update="emit('update', 'avatar', $event)"
+        />
+      </CollapsibleSection>
 
       <div>
         <label class="block text-sm text-ink-secondary mb-1.5">Name</label>

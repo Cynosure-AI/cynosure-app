@@ -14,6 +14,7 @@ import AgentMemoryTab from '../components/agent/AgentMemoryTab.vue'
 import AgentSubAgentsTab from '../components/agent/AgentSubAgentsTab.vue'
 import AgentAdvancedTab from '../components/agent/AgentAdvancedTab.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
+import AgentAvatar from '../components/shared/AgentAvatar.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
 
 type AgentSectionId = 'general' | 'tools' | 'sub-agents' | 'memory' | 'advanced'
@@ -45,7 +46,7 @@ const cynoAgent = computed<AgentDefinition | null>(() => {
   if (!profile) return null
   return {
     id: 'cyno', name: profile.name, internalName: 'cyno', description: '', category: '',
-    iconUrl: profile.iconUrl, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
+    iconUrl: profile.iconUrl, avatar: profile.avatar, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
     tools: profile.effective.tools,
     subAgents: profile.subAgents,
     memoryFolders: profile.effective.memoryFolders,
@@ -78,8 +79,7 @@ watch(() => [isCyno.value, agentId.value], () => {
   saveError.value = ''
   activeSectionId.value = 'general'
 })
-const CYNO_FIELDS = new Set(['name', 'iconUrl', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled', 'thinkingEnabled', 'reasoningEffort'])
-const headerIconUrl = computed(() => agent.value?.iconUrl || (isCyno.value ? cyno.iconUrl : null))
+const CYNO_FIELDS = new Set(['name', 'iconUrl', 'avatar', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled', 'thinkingEnabled', 'reasoningEffort'])
 const activeSection = computed(() => sections.find(section => section.id === activeSectionId.value) || sections[0])
 const returnToChat = computed(() => {
   const target = route.query.returnTo
@@ -295,18 +295,14 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
 
         <div class="mt-2 flex min-w-0 items-center gap-3">
           <div
-            class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20"
+            class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+            :class="{ 'bg-linear-to-br from-accent-500/20 to-purple-500/20': agent.iconUrl }"
           >
-            <img
-              v-if="headerIconUrl"
-              :src="headerIconUrl"
-              alt=""
-              class="h-full w-full object-cover"
-            >
-            <Icon
-              v-else
-              icon="lucide:bot"
-              class="h-6 w-6 text-accent-fg"
+            <AgentAvatar
+              :name="agent.name"
+              :icon-url="agent.iconUrl"
+              :avatar="agent.avatar"
+              animate="hover"
             />
           </div>
           <div class="min-w-0">

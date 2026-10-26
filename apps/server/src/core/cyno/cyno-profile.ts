@@ -5,6 +5,7 @@
  */
 import { getDb } from '../../db/database.js'
 import type { CynoProfile, ReasoningEffort, SubAgentAssignmentDto } from '@shared/types'
+import { AvatarConfigError, normalizeAvatarConfig } from '../agents/avatar-config.js'
 
 const CYNO_PROFILE_KEY = 'cynoProfile'
 const MAX_NAME_LENGTH = 60
@@ -38,6 +39,7 @@ export function defaultCynoProfile(): CynoProfile {
     return {
         name: 'Cyno',
         iconUrl: null,
+        avatar: null,
         systemPrompt: DEFAULT_CYNO_SYSTEM_PROMPT,
         providerId: '',
         model: '',
@@ -78,6 +80,14 @@ function normalizeUpdate(input: Record<string, unknown>): Partial<CynoProfile> {
             throw new CynoProfileError('Icon must be a supported image smaller than 2 MB, or null')
         }
         update.iconUrl = input.iconUrl as string | null
+    }
+    if (input.avatar !== undefined) {
+        try {
+            update.avatar = normalizeAvatarConfig(input.avatar)
+        } catch (error) {
+            if (error instanceof AvatarConfigError) throw new CynoProfileError(error.message)
+            throw error
+        }
     }
     for (const field of ['systemPrompt', 'providerId', 'model'] as const) {
         if (input[field] === undefined) continue

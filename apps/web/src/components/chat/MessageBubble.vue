@@ -5,12 +5,13 @@ import { useRouter } from 'vue-router'
 import { renderMarkdown, handleMarkdownClick } from '../../utils/markdown'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
-import { useAppBranding } from '../../composables/useAppBranding'
 import { useMermaidDiagrams } from '../../composables/useMermaidDiagrams'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import type { FileArtifactLink } from '../../utils/file-artifacts'
+import type { AvatarConfig } from '../../utils/avatar'
 import { latestThoughtLine, type ThoughtLine } from '../../utils/thinking-preview'
 
 
@@ -30,7 +31,10 @@ const props = defineProps<{
   fileArtifacts?: FileArtifactLink[]
   agentId?: string | null
   agentIconUrl?: string | null
+  agentAvatar?: AvatarConfig | null
   agentName?: string | null
+  /** The chat's live avatar speaks for this message, so keep only the gutter. */
+  hideAvatar?: boolean
   model?: string
   promptTokens?: number
   completionTokens?: number
@@ -53,7 +57,6 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const prefs = usePreferencesStore()
-const { logoIconUrl } = useAppBranding()
 
 const thinkingExpanded = ref(prefs.autoExpandSteps)
 /** Thinking is still streaming until the first response text arrives. */
@@ -256,28 +259,26 @@ const imageGridClass = computed(() => {
   >
     <!-- Avatar -->
     <div
-      v-if="!isUser"
+      v-if="!isUser && hideAvatar"
+      class="shrink-0 hidden md:block w-8"
+      aria-hidden="true"
+    />
+    <div
+      v-else-if="!isUser"
       class="shrink-0 mt-0.5 hidden md:flex flex-col items-center gap-0.5"
     >
       <button
         type="button"
         aria-label="Open agent details"
-        class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-theme-700/50 transition-opacity cursor-pointer hover:opacity-80"
-        :class="agentIconUrl ? 'bg-theme-800' : 'bg-linear-to-br from-theme-700 to-theme-900 text-theme-300'"
+        class="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-opacity cursor-pointer hover:opacity-80"
+        :class="agentIconUrl ? 'bg-theme-800 shadow-sm ring-1 ring-theme-700/50' : ''"
         @click="router.push(agentId ? `/agents/${agentId}` : '/agents/cyno')"
       >
-        <img
-          v-if="agentIconUrl"
-          :src="agentIconUrl"
-          alt=""
-          class="w-full h-full object-cover"
-        >
-        <img
-          v-else
-          :src="logoIconUrl"
-          alt="Cynosure"
-          class="w-full h-full object-contain"
-        >
+        <AgentAvatar
+          :name="agentName || 'Cyno'"
+          :icon-url="agentIconUrl"
+          :avatar="agentAvatar"
+        />
       </button>
       <span
         v-if="agentName"

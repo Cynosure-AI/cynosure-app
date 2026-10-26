@@ -7,6 +7,7 @@ import { Icon } from "@iconify/vue";
 import AgentSelect from "../shared/AgentSelect.vue";
 import ChatSettingsMenu from "./ChatSettingsMenu.vue";
 import { useCynoStore } from '../../stores/cyno.store'
+import { agentAvatarSrc } from '../../utils/avatar'
 
 const cyno = useCynoStore()
 
@@ -155,7 +156,7 @@ async function newChat(): Promise<void> {
         :agents="agentDefs.agents"
         include-default
         :default-label="cyno.name"
-        :default-img-src="cyno.iconUrl"
+        :default-img-src="agentAvatarSrc(cyno.name, cyno.uploadedIconUrl, cyno.avatar)"
         agents-group-label="Agents"
         :placeholder="cyno.name"
         max-height="max-h-96"

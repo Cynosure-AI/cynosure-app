@@ -17,6 +17,15 @@ afterEach(() => {
 })
 
 describe('Cyno profile', () => {
+    test('stores avatar settings and rejects invalid ones as profile errors', () => {
+        expect(getCynoProfile().avatar).toBeNull()
+        expect(saveCynoProfile({ avatar: { seed: null, hue: 30, tone: 0.4, shape: null } }).avatar)
+            .toEqual({ seed: null, hue: 30, tone: 0.4, shape: null })
+        expect(getCynoProfile().avatar).toEqual({ seed: null, hue: 30, tone: 0.4, shape: null })
+        expect(() => saveCynoProfile({ avatar: { tone: 2 } })).toThrow(CynoProfileError)
+        expect(saveCynoProfile({ avatar: null }).avatar).toBeNull()
+    })
+
     test('starts from defaults: All Memory, default tools, automatic routing and memory', () => {
         expect(getCynoProfile()).toMatchObject({
             name: 'Cyno', iconUrl: null, systemPrompt: DEFAULT_CYNO_SYSTEM_PROMPT, providerId: '', model: '',

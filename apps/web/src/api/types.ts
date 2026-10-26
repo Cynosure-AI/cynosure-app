@@ -1,4 +1,4 @@
-import type { ChatEvent, ConversationExecutionConfig } from '@shared/types'
+import type { AvatarConfig, ChatEvent, ConversationExecutionConfig } from '@shared/types'
 
 // ── Provider / Chat ─────────────────────────────────────────────────────────
 
@@ -252,6 +252,8 @@ export interface AgentDefinition {
     description: string
     category: string
     iconUrl: string | null
+    /** Generated avatar settings; null uses the face derived from the name. */
+    avatar: AvatarConfig | null
     providerId: string
     model: string
     systemPrompt: string

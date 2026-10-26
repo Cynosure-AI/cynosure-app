@@ -137,6 +137,13 @@ function removeImage() {
           class="w-full h-full object-cover transition-opacity"
           :class="{ 'opacity-50': isDragging }"
         >
+        <div
+          v-else-if="$slots.fallback && !isProcessing"
+          class="h-full w-full p-1 transition-opacity"
+          :class="{ 'opacity-50': isDragging }"
+        >
+          <slot name="fallback" />
+        </div>
         <Icon
           v-else
           :icon="isProcessing ? 'lucide:loader-2' : fallbackIcon || 'lucide:image'"

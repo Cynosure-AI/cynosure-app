@@ -366,6 +366,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@blobatar/vue':
+        specifier: 2.7.0
+        version: 2.7.0(blobatar@2.7.0(vue@3.5.33(typescript@5.9.3)))(vue@3.5.33(typescript@5.9.3))
       '@huggingface/transformers':
         specifier: ^3.8.1
         version: 3.8.1
@@ -396,6 +399,9 @@ importers:
       '@vueuse/core':
         specifier: ^14.2.1
         version: 14.2.1(vue@3.5.33(typescript@5.9.3))
+      blobatar:
+        specifier: 2.7.0
+        version: 2.7.0(vue@3.5.33(typescript@5.9.3))
       dompurify:
         specifier: ^3.4.12
         version: 3.4.12
@@ -576,6 +582,12 @@ packages:
   '@bcoe/v8-coverage@1.0.2':
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
+
+  '@blobatar/vue@2.7.0':
+    resolution: {integrity: sha512-sE417mbyV8cCevxek3LN0M6vx5lCvjjf6wChEE9Fmc3QuMEN6M8yQHM0egMTERVwdAJV+zT78Y4BTiwyxzFEyA==}
+    peerDependencies:
+      blobatar: 2.x
+      vue: '>=3'
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
@@ -2864,6 +2876,17 @@ packages:
 
   birpc@2.9.0:
     resolution: {integrity: sha512-KrayHS5pBi69Xi9JmvoqrIgYGDkD6mcSe/i6YKi3w5kekCLzrX4+nawcXqrj2tIp50Kw/mT/s3p+GVK0A0sKxw==}
+
+  blobatar@2.7.0:
+    resolution: {integrity: sha512-tL1p2J3dXE/Z9U/ITwHqU7HBHmTH+Am+hif1J1hWAhvFT1VYC2HG+eXtN7081yuY+L2lrp9bs/VaF7dVH3S2jw==}
+    peerDependencies:
+      react: '>=18'
+      vue: '>=3'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      vue:
+        optional: true
 
   bluebird@3.7.2:
     resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
@@ -6069,6 +6092,11 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
+  '@blobatar/vue@2.7.0(blobatar@2.7.0(vue@3.5.33(typescript@5.9.3)))(vue@3.5.33(typescript@5.9.3))':
+    dependencies:
+      blobatar: 2.7.0(vue@3.5.33(typescript@5.9.3))
+      vue: 3.5.33(typescript@5.9.3)
+
   '@borewit/text-codec@0.2.2': {}
 
   '@braintree/sanitize-url@7.1.2': {}
@@ -8318,6 +8346,10 @@ snapshots:
   bignumber.js@9.3.1: {}
 
   birpc@2.9.0: {}
+
+  blobatar@2.7.0(vue@3.5.33(typescript@5.9.3)):
+    optionalDependencies:
+      vue: 3.5.33(typescript@5.9.3)
 
   bluebird@3.7.2: {}
 

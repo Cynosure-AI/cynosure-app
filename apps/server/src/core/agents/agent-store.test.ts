@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb, getDb } from '../../db/database.js'
 import { createAgent, duplicateAgent, getAgent, updateAgent } from './agent-store.js'
+import { AvatarConfigError } from './avatar-config.js'
 
 let directory = ''
 beforeEach(async () => {
@@ -48,4 +49,28 @@ test('legacy cron prompts stay out of agent data and survive unrelated updates',
     expect(copy).not.toHaveProperty('cronPrompt')
     expect(getDb().prepare('SELECT cron_prompt FROM agents WHERE id = ?').get(copy.id))
         .toEqual({ cron_prompt: '' })
+})
+
+test('avatar settings persist, survive unrelated updates, and are copied with the agent', () => {
+    const agent = createAgent({ name: 'Blob', avatar: { seed: 'pebble', hue: 140, tone: null, shape: 'cloud' } })
+    expect(agent.avatar).toEqual({ seed: 'pebble', hue: 140, tone: null, shape: 'cloud' })
+
+    expect(updateAgent(agent.id, { name: 'Renamed' })?.avatar).toEqual(agent.avatar)
+    expect(duplicateAgent(agent.id)?.avatar).toEqual(agent.avatar)
+
+    // Nothing customised is stored as the default face.
+    expect(updateAgent(agent.id, { avatar: { seed: '  ', hue: null, tone: null, shape: null } })?.avatar).toBeNull()
+    expect(createAgent({ name: 'Plain' }).avatar).toBeNull()
+})
+
+test('invalid avatar settings are rejected', () => {
+    expect(() => createAgent({ name: 'Bad', avatar: { seed: null, hue: 400, tone: null, shape: null } })).toThrow(AvatarConfigError)
+    const agent = createAgent({ name: 'Ok' })
+    expect(() => updateAgent(agent.id, { avatar: { shape: 'star' } as never })).toThrow(AvatarConfigError)
+})
+
+test('a hand-edited avatar column falls back to the default face', () => {
+    const agent = createAgent({ name: 'Edited' })
+    getDb().prepare('UPDATE agents SET avatar_json = ? WHERE id = ?').run('{"hue":"red"}', agent.id)
+    expect(getAgent(agent.id)?.avatar).toBeNull()
 })

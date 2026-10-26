@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onMounted, reactive, toRaw } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onBeforeUnmount, reactive, toRaw } from 'vue'
 import { useChatStore, type DisplayMessage } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
@@ -17,6 +17,9 @@ import HITLDialog from '../agent/HITLDialog.vue'
 import ToolExecutionList from './ToolExecutionList.vue'
 import SubAgentDelegationCard from './SubAgentDelegationCard.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
+import { useAgentMood, type AgentMood } from '../../composables/useAgentMood'
+import { useEventListener } from '@vueuse/core'
 import { useToolPresentation } from '../../composables/useToolPresentation'
 import { useStickyScroll } from '../../composables/useStickyScroll'
 import RichContent from '../shared/RichContent.vue'
@@ -173,13 +176,38 @@ const activeAgentIssues = computed(() => conversationAgentId.value
   ? agentHealth.healthByAgent.get(conversationAgentId.value)?.issues ?? []
   : [])
 
-// Chats without an agent are Cyno chats; a null icon shows the app logo.
+// Chats without an agent are Cyno chats; without an uploaded icon they show Cyno's generated avatar.
 const cyno = useCynoStore()
 
 const activeAgentIconUrl = computed(() => {
-  if (!conversationAgentId.value) return cyno.profile?.iconUrl ?? null
+  if (!conversationAgentId.value) return cyno.uploadedIconUrl
   return agentDefs.get(conversationAgentId.value)?.iconUrl ?? null
 })
+const activeAgentAvatar = computed(() => {
+  if (!conversationAgentId.value) return cyno.avatar
+  return agentDefs.get(conversationAgentId.value)?.avatar ?? null
+})
+
+// One live avatar per chat: it carries the run's mood, so replies from this
+// chat's own assistant drop their per-message avatar.
+const { mood: liveMood, speaking: liveSpeaking } = useAgentMood()
+const heroMood = computed<AgentMood>(() => {
+  if (activeAgentIssues.value.length) return 'sick'
+  return chatStore.activeIsTemporary ? 'shy' : 'idle'
+})
+
+// The new-chat hero follows the pointer, and glances at the composer while you type.
+const heroAvatar = ref<InstanceType<typeof AgentAvatar> | null>(null)
+const COMPOSER_GLANCE_MS = 1500
+let composerGlance: ReturnType<typeof setTimeout> | undefined
+useEventListener(document, 'input', (event) => {
+  const target = event.target
+  if (!heroAvatar.value || !(target instanceof HTMLElement) || target.id !== 'chat-textarea') return
+  heroAvatar.value.lookAt(target)
+  clearTimeout(composerGlance)
+  composerGlance = setTimeout(() => heroAvatar.value?.lookAt('pointer'), COMPOSER_GLANCE_MS)
+})
+onBeforeUnmount(() => clearTimeout(composerGlance))
 
 const activeAgentName = computed(() => {
   if (!conversationAgentId.value) return cyno.name
@@ -212,6 +240,10 @@ function resolveAgentIconUrl(msg: DisplayMessage): string | null | undefined {
   if (msg.agentIconUrl !== undefined) return msg.agentIconUrl
   if (msg.agentId) return agentDefs.get(msg.agentId)?.iconUrl ?? null
   return activeAgentIconUrl.value
+}
+function resolveAgentAvatar(msg: DisplayMessage) {
+  if (msg.agentId) return agentDefs.get(msg.agentId)?.avatar ?? null
+  return activeAgentAvatar.value
 }
 function resolveAgentName(msg: DisplayMessage): string | null | undefined {
   if (msg.agentName) return msg.agentName
@@ -361,7 +393,9 @@ function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, 
     fileArtifacts: assistantFileArtifacts(entry, entries),
     agentId: resolveAgentId(msg),
     agentIconUrl: resolveAgentIconUrl(msg),
+    agentAvatar: resolveAgentAvatar(msg),
     agentName: resolveAgentName(msg),
+    hideAvatar: resolveAgentId(msg) === (conversationAgentId.value ?? undefined),
     model: msg.model,
     promptTokens: msg.promptTokens,
     completionTokens: msg.completionTokens,
@@ -602,41 +636,26 @@ onMounted(() => {
       :style="introStyle"
     >
       <div class="relative mb-5 sm:mb-6">
-        <div
-          class="chat-empty-icon chat-intro-icon relative flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20 bg-theme-900 bg-linear-to-br from-accent-500/10 to-accent-500/10 rounded-3xl border shadow-xl overflow-hidden"
-          :class="chatStore.activeIsTemporary ? 'border-dashed border-accent-500/50' : 'border-white/5'"
+        <RouterLink
+          :to="conversationAgentId
+            ? { name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }
+            : { name: 'cyno', query: { returnTo: route.fullPath } }"
+          :aria-label="`Open ${activeAgentName ?? 'agent'} settings`"
+          class="chat-empty-icon chat-intro-icon relative flex items-center justify-center"
+          :class="activeAgentIconUrl
+            ? ['w-14 h-14 sm:w-20 sm:h-20 bg-theme-900 rounded-3xl border shadow-xl overflow-hidden', chatStore.activeIsTemporary ? 'border-dashed border-accent-500/50' : 'border-white/5']
+            : 'w-20 h-20 sm:w-28 sm:h-28 rounded-full'"
         >
-          <RouterLink
-            v-if="conversationAgentId"
-            :to="{ name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }"
-            :aria-label="`Open ${activeAgentName ?? 'agent'} settings`"
-            class="absolute inset-0 flex items-center justify-center"
-          >
-            <img
-              v-if="activeAgentIconUrl"
-              :src="activeAgentIconUrl"
-              class="w-full h-full object-cover"
-              alt=""
-            >
-            <Icon
-              v-else
-              icon="lucide:bot-message-square"
-              class="w-7 h-7 sm:w-10 sm:h-10 text-accent-fg"
-            />
-          </RouterLink>
-          <RouterLink
-            v-else
-            :to="{ name: 'cyno', query: { returnTo: route.fullPath } }"
-            :aria-label="`Open ${cyno.name} settings`"
-            class="absolute inset-0 flex items-center justify-center"
-          >
-            <img
-              :src="cyno.iconUrl"
-              class="w-full h-full object-cover"
-              alt=""
-            >
-          </RouterLink>
-        </div>
+          <AgentAvatar
+            ref="heroAvatar"
+            :name="activeAgentName ?? 'Agent'"
+            :icon-url="activeAgentIconUrl"
+            :avatar="activeAgentAvatar"
+            :mood="heroMood"
+            animate="always"
+            gaze
+          />
+        </RouterLink>
         <Transition
           enter-from-class="opacity-0 scale-50"
           enter-active-class="transition duration-200 ease-out"
@@ -732,16 +751,10 @@ onMounted(() => {
             :style="{ transitionDelay: `${index * 50}ms`, '--intro-index': index }"
             class="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center overflow-hidden rounded-full border border-theme-700 bg-theme-800 shadow-sm"
           >
-            <img
-              v-if="subAgent.iconUrl"
-              :src="subAgent.iconUrl"
-              :alt="subAgent.name"
-              class="h-full w-full object-cover"
-            >
-            <Icon
-              v-else
-              icon="lucide:bot"
-              class="h-4 w-4 sm:h-5 sm:w-5 text-ink-secondary"
+            <AgentAvatar
+              :name="subAgent.name"
+              :icon-url="subAgent.iconUrl"
+              :avatar="subAgent.avatar"
             />
           </span>
           <span
@@ -971,6 +984,31 @@ onMounted(() => {
 
       <!-- HITL dialog -->
       <HITLDialog />
+
+      <!-- Live avatar: one per chat, pinned in the avatar gutter, reacting to the run -->
+      <div
+        class="chat-live-avatar pointer-events-none sticky bottom-0 hidden h-0 md:block"
+        aria-hidden="true"
+      >
+        <RouterLink
+          :to="conversationAgentId
+            ? { name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }
+            : { name: 'cyno', query: { returnTo: route.fullPath } }"
+          :title="activeAgentName ?? undefined"
+          tabindex="-1"
+          class="pointer-events-auto absolute bottom-2 left-2 flex h-12 w-12 items-center justify-center overflow-hidden"
+          :class="activeAgentIconUrl ? 'rounded-full bg-theme-800 shadow-sm ring-1 ring-theme-700/50' : ''"
+        >
+          <AgentAvatar
+            :name="activeAgentName ?? 'Agent'"
+            :icon-url="activeAgentIconUrl"
+            :avatar="activeAgentAvatar"
+            :mood="liveMood"
+            :speaking="liveSpeaking"
+            animate="always"
+          />
+        </RouterLink>
+      </div>
     </div>
   </div>
   <ArtifactImageModal

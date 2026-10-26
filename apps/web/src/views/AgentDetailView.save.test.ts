@@ -18,7 +18,7 @@ vi.mock('../stores/chat.store', () => ({ useChatStore: () => ({ setActiveAgent: 
 
 const original: AgentDefinition = {
   id: 'one', name: 'First agent', internalName: 'first_agent', description: 'Original description',
-  category: '', iconUrl: null, providerId: '', model: '', systemPrompt: '', tools: [], subAgents: [],
+  category: '', iconUrl: null, avatar: null, providerId: '', model: '', systemPrompt: '', tools: [], subAgents: [],
   memoryFolders: [], autoApproveTools: false, autoToolRouting: false, autoMemory: false, dreamingEnabled: true,
   autoRouterProviderId: '', autoRouterModel: '', generateTitle: true, thinkingEnabled: true,
   reasoningEffort: 'medium', maxContextTokens: null, sortOrder: 0, favorite: false, createdAt: 1, updatedAt: 1,
@@ -41,7 +41,7 @@ async function setup(path = '/agents/one') {
   definitions.load = vi.fn(async () => {})
   const cyno = useCynoStore()
   cyno.profile = {
-    name: 'Cyno', iconUrl: null, systemPrompt: '', providerId: '', model: '', tools: null, memoryFolders: null,
+    name: 'Cyno', iconUrl: null, avatar: null, systemPrompt: '', providerId: '', model: '', tools: null, memoryFolders: null,
     subAgents: [], thinkingEnabled: true, reasoningEffort: 'medium', autoToolRouting: false, autoMemory: false,
     dreamingEnabled: true, updatedAt: 1, effective: { tools: [], memoryFolders: [] },
   }

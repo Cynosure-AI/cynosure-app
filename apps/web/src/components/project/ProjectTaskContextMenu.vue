@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
 import type { ProjectTaskDto } from '@shared/types'
 import type { AgentDefinition } from '../../api/types'
 
@@ -272,17 +273,13 @@ onBeforeUnmount(() => {
           :title="agent.description || undefined"
           @click="pick(() => emit('assign', menu!.task, agent.id))"
         >
-          <img
-            v-if="agent.iconUrl"
-            :src="agent.iconUrl"
-            alt=""
-            class="h-3.5 w-3.5 shrink-0 rounded object-cover"
-          >
-          <Icon
-            v-else
-            icon="lucide:bot"
-            class="h-3.5 w-3.5 shrink-0"
-          />
+          <span class="h-3.5 w-3.5 shrink-0 overflow-hidden rounded">
+            <AgentAvatar
+              :name="agent.name"
+              :icon-url="agent.iconUrl"
+              :avatar="agent.avatar"
+            />
+          </span>
           <span class="truncate">{{ agent.name }}</span>
           <Icon
             v-if="menu.task.assigneeAgentId === agent.id"
