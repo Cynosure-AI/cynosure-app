@@ -44,10 +44,10 @@ export const useNotificationStore = defineStore('notifications', () => {
         showToast(notification)
     }
 
-    function showToast(notification: NotificationToast) {
+    function showToast(notification: NotificationToast, duration = toastDuration) {
         dismissToast(notification.id)
         toasts.value.unshift(notification)
-        toastRemaining.set(notification.id, toastDuration)
+        toastRemaining.set(notification.id, duration)
         scheduleToast(notification.id)
 
         while (toasts.value.length > 5) dismissToast(toasts.value[toasts.value.length - 1].id)

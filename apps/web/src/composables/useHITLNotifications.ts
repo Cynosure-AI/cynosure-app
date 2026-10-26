@@ -34,7 +34,7 @@ export function useHITLNotifications(): void {
         createdAt: Date.now(),
         read: true,
         transient: true,
-      })
+      }, 10000)
     }
   }, { flush: 'sync' })
 

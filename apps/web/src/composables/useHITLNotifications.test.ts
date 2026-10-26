@@ -36,7 +36,7 @@ describe('HITL notifications', () => {
     vi.useRealTimers()
   })
 
-  it('shows a brief linked toast for a background chat without persisting a notification', () => {
+  it('shows a linked toast for 10 seconds for a background chat without persisting a notification', () => {
     const notifications = useNotificationStore()
     mocks.agent.hitlQueue = [request]
     expect(notifications.toasts).toEqual([expect.objectContaining({
@@ -45,6 +45,10 @@ describe('HITL notifications', () => {
     })])
     expect(notifications.notifications).toEqual([])
     vi.advanceTimersByTime(5000)
+    expect(notifications.toasts).toHaveLength(1)
+    vi.advanceTimersByTime(4999)
+    expect(notifications.toasts).toHaveLength(1)
+    vi.advanceTimersByTime(1)
     expect(notifications.toasts).toEqual([])
   })
 
@@ -65,7 +69,7 @@ describe('HITL notifications', () => {
 
   it('deduplicates pending requests and notifies again for a later gate in the same task', () => {
     mocks.agent.hitlQueue = [request]
-    vi.advanceTimersByTime(5000)
+    vi.advanceTimersByTime(10000)
     mocks.agent.hitlQueue = [{ ...request }]
     expect(useNotificationStore().toasts).toEqual([])
     mocks.agent.hitlQueue = []
