@@ -4,6 +4,7 @@ import type { CynoProfile, CynoProfileView } from '@shared/types'
 import { api } from '../api/client'
 import { useAppBranding } from '../composables/useAppBranding'
 import { SK_FREE_CHAT_MODEL, SK_FREE_CHAT_PROVIDER } from '../utils/storage-keys'
+import cynosureLogoRed from '../assets/img/app-logo/cynosure-logo-red.png'
 
 export type { CynoProfile, CynoProfileView }
 
@@ -14,8 +15,10 @@ export const useCynoStore = defineStore('cyno', () => {
     let loading: Promise<void> | null = null
 
     const name = computed(() => profile.value?.name || 'Cyno')
+    /** Keep the default image ready even while Cyno uses its generated avatar. */
+    const imageUrl = computed(() => profile.value?.iconUrl || cynosureLogoRed)
     /** Cyno's image when it is the chosen face; null shows the generated avatar. */
-    const displayIconUrl = computed(() => profile.value?.avatarSource === 'image' ? profile.value.iconUrl : null)
+    const displayIconUrl = computed(() => profile.value?.avatarSource === 'image' ? imageUrl.value : null)
     /** For branding spots: Cyno's chosen image, or the theme's app logo. */
     const iconUrl = computed(() => displayIconUrl.value || useAppBranding().logoIconUrl.value)
     const avatar = computed(() => profile.value?.avatar ?? null)
@@ -46,12 +49,19 @@ export const useCynoStore = defineStore('cyno', () => {
     }
 
     async function update(changes: Partial<Omit<CynoProfile, 'updatedAt'>>): Promise<CynoProfileView> {
-        const next = await api.cyno.update(changes)
+        let payload = changes
+        if (changes.avatarSource === 'image' && changes.iconUrl === undefined && !profile.value?.iconUrl) {
+            // Persist the built-in image in the same format as uploads, so every
+            // client and server-rendered job sees it. Load its data only on selection.
+            const { default: iconUrl } = await import('../assets/img/app-logo/cynosure-logo-red.png?inline')
+            payload = { ...changes, iconUrl }
+        }
+        const next = await api.cyno.update(payload)
         profile.value = next
         return next
     }
 
-    return { profile, defaults, name, iconUrl, displayIconUrl, avatar, load, update }
+    return { profile, defaults, name, iconUrl, imageUrl, displayIconUrl, avatar, load, update }
 })
 
 if (import.meta.hot) {

@@ -46,7 +46,7 @@ const cynoAgent = computed<AgentDefinition | null>(() => {
   if (!profile) return null
   return {
     id: 'cyno', name: profile.name, internalName: 'cyno', description: '', category: '',
-    iconUrl: cyno.displayIconUrl, imageUrl: profile.iconUrl, avatar: profile.avatar, avatarSource: profile.avatarSource, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
+    iconUrl: cyno.displayIconUrl, imageUrl: cyno.imageUrl, avatar: profile.avatar, avatarSource: profile.avatarSource, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
     tools: profile.effective.tools,
     subAgents: profile.subAgents,
     memoryFolders: profile.effective.memoryFolders,
