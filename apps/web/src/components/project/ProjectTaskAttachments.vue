@@ -102,16 +102,16 @@ watch(() => [props.projectId, props.taskId], () => {
 
 <template>
   <section
-    class="rounded-lg border border-dashed p-3 transition-colors"
-    :class="dragging ? 'border-accent-500/60 bg-accent-500/5' : 'border-theme-700'"
+    class="min-w-0 rounded-xl border p-3 transition-colors"
+    :class="dragging ? 'border-dashed border-accent-500/60 bg-accent-500/5' : 'border-theme-800 bg-theme-950/30'"
     aria-label="Attachments"
     @dragover.prevent="dragging = true"
     @dragleave.self="dragging = false"
     @drop.prevent="onDrop"
     @paste="onPaste"
   >
-    <div class="mb-2 flex items-center justify-between gap-2">
-      <h3 class="flex items-center gap-1.5 text-sm text-ink-secondary">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="flex items-center gap-1.5 text-sm font-medium text-ink-secondary">
         <Icon
           icon="lucide:paperclip"
           class="h-3.5 w-3.5"
@@ -119,8 +119,8 @@ watch(() => [props.projectId, props.taskId], () => {
         Attachments
         <span
           v-if="attachments.length"
-          class="text-xs text-ink-muted"
-        >({{ attachments.length }})</span>
+          class="rounded bg-theme-800 px-1.5 py-0.5 text-[10px] text-ink-muted"
+        >{{ attachments.length }}</span>
       </h3>
       <button
         type="button"
@@ -146,19 +146,19 @@ watch(() => [props.projectId, props.taskId], () => {
 
     <p
       v-if="!attachments.length && !uploading"
-      class="py-2 text-center text-xs text-ink-faint"
+      class="rounded-lg border border-dashed border-theme-700 px-3 py-5 text-center text-xs leading-relaxed text-ink-faint"
     >
       Drop files or screenshots here, or paste them.
     </p>
 
     <ul
       v-else
-      class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-2"
+      class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,6rem),1fr))] gap-2"
     >
       <li
         v-for="attachment in attachments"
         :key="attachment.id"
-        class="group relative overflow-hidden rounded-lg border border-theme-800 bg-theme-950/45 transition hover:border-theme-600"
+        class="group relative min-w-0 overflow-hidden rounded-lg border border-theme-800 bg-theme-950/45 transition hover:border-theme-600"
       >
         <a
           :href="href(attachment)"
@@ -193,7 +193,7 @@ watch(() => [props.projectId, props.taskId], () => {
         </a>
         <button
           type="button"
-          class="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white/85 opacity-0 backdrop-blur-sm transition hover:bg-status-danger hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
+          class="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white/85 backdrop-blur-sm transition hover:bg-status-danger hover:text-white focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
           :aria-label="`Remove ${attachment.name}`"
           title="Remove attachment"
           @click="remove(attachment)"

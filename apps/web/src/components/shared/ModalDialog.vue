@@ -142,10 +142,11 @@ onBeforeUnmount(() => {
             </div>
             <h3
               :id="titleId"
-              class="text-lg font-semibold text-theme-100"
+              class="min-w-0 flex-1 text-lg font-semibold text-theme-100"
             >
               {{ title }}
             </h3>
+            <slot name="header-actions" />
           </div>
 
           <!-- Body slot -->

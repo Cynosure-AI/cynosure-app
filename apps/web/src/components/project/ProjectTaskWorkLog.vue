@@ -63,7 +63,7 @@ onBeforeUnmount(() => {
     aria-label="Work log"
     class="border-t border-theme-800 pt-4"
   >
-    <h3 class="mb-2 flex items-center gap-2 text-sm text-ink-secondary">
+    <h3 class="mb-3 flex items-center gap-2 text-sm font-medium text-ink-secondary">
       <Icon
         icon="lucide:history"
         class="h-4 w-4"
@@ -101,7 +101,7 @@ onBeforeUnmount(() => {
           class="group rounded-lg border border-theme-800 bg-theme-900/60"
           :open="index === 0"
         >
-          <summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs [&::-webkit-details-marker]:hidden">
+          <summary class="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-xs [&::-webkit-details-marker]:hidden">
             <Icon
               icon="lucide:chevron-right"
               class="h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform group-open:rotate-90"
@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
               class="shrink-0 font-medium"
               :class="PLANNING_RUN_STATUS[plan.status].cls"
             >{{ PLANNING_RUN_STATUS[plan.status].label }}</span>
-            <span class="min-w-0 flex-1 truncate text-theme-200">{{ plan.objective || 'Untitled run' }}</span>
+            <span class="min-w-0 basis-full text-theme-200 [overflow-wrap:anywhere] sm:basis-0 sm:flex-1 sm:truncate">{{ plan.objective || 'Untitled run' }}</span>
             <span class="shrink-0 text-ink-faint">{{ completedCount(plan) }}/{{ plan.items.length }}</span>
             <span
               class="shrink-0 text-ink-faint"

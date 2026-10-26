@@ -668,105 +668,141 @@ onBeforeUnmount(() => {
       :show="Boolean(editing)"
       title="Edit task"
       icon="lucide:square-kanban"
-      max-width="max-w-3xl"
+      max-width="max-w-5xl"
       @close="editing = null"
     >
+      <template #header-actions>
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition hover:bg-theme-800 hover:text-theme-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          aria-label="Close task editor"
+          @click="editing = null"
+        >
+          <Icon
+            icon="lucide:x"
+            class="h-4 w-4"
+          />
+        </button>
+      </template>
       <form
         v-if="editing"
         id="edit-task-form"
-        class="space-y-4"
+        class="min-w-0 space-y-5 pr-1"
         @submit.prevent="saveEditor"
       >
-        <p class="text-xs text-ink-muted">
-          {{ editingMeta }}
-        </p>
-        <div>
+        <div class="space-y-2 border-b border-theme-800 pb-5">
           <label
             for="task-title"
-            class="mb-1.5 block text-sm text-ink-secondary"
+            class="block text-xs font-medium text-ink-secondary"
           >Title</label>
-          <input
+          <textarea
             id="task-title"
             v-model="editing.title"
-            type="text"
+            rows="2"
             maxlength="200"
             required
-            class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
-          >
-        </div>
-        <div>
-          <label
-            for="task-notes"
-            class="mb-1.5 block text-sm text-ink-secondary"
-          >Notes</label>
-          <textarea
-            id="task-notes"
-            v-model="editing.notes"
-            rows="12"
-            maxlength="4000"
-            placeholder="Context an agent needs to do this without the original chat"
-            class="max-h-[50vh] w-full resize-y rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-200 placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-accent-500"
+            class="block min-h-12 w-full resize-none rounded-lg border border-theme-800 bg-theme-950/30 px-3 py-2.5 text-lg font-medium leading-relaxed text-theme-100 [field-sizing:content] focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
           />
+          <p class="text-xs leading-5 text-ink-muted">
+            {{ editingMeta }}
+          </p>
         </div>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div>
+        <div class="grid min-w-0 items-start gap-5 md:grid-cols-[minmax(0,1fr)_15rem] lg:grid-cols-[minmax(0,1fr)_17rem]">
+          <div class="min-w-0">
             <label
-              for="task-status"
-              class="mb-1.5 block text-sm text-ink-secondary"
-            >Status</label>
-            <select
-              id="task-status"
-              v-model="editing.status"
-              class="w-full rounded-lg border border-theme-700 bg-theme-900 px-3 py-2 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+              for="task-notes"
+              class="mb-2 flex items-center gap-2 text-sm font-medium text-ink-secondary"
             >
-              <option
-                v-for="column in TASK_COLUMNS"
-                :key="column.status"
-                :value="column.status"
-              >
-                {{ column.label }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <span class="mb-1.5 block text-sm text-ink-secondary">Assigned agent</span>
-            <AgentSelect
-              v-model="editing.assignee"
-              :agents="agentDefs.agents"
-              include-default
-              default-label="Project default"
-              agents-group-label="Agents"
-              drop-up
-              max-height="max-h-48"
-              size="sm"
+              <Icon
+                icon="lucide:align-left"
+                class="h-4 w-4"
+              />
+              Notes
+            </label>
+            <textarea
+              id="task-notes"
+              v-model="editing.notes"
+              rows="12"
+              maxlength="4000"
+              placeholder="Context an agent needs to do this without the original chat"
+              class="block min-h-48 max-h-[50vh] w-full resize-y rounded-xl border border-theme-700 bg-theme-950/30 px-4 py-3 text-sm leading-relaxed text-theme-200 placeholder:text-ink-faint focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
             />
           </div>
+          <div class="min-w-0 space-y-5 md:col-start-2 md:row-span-2 md:row-start-1">
+            <section
+              aria-label="Task details"
+              class="space-y-4 rounded-xl border border-theme-800 bg-theme-950/30 p-4"
+            >
+              <h4 class="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                Task details
+              </h4>
+              <div>
+                <label
+                  for="task-status"
+                  class="mb-2 block text-xs font-medium text-ink-secondary"
+                >Status</label>
+                <select
+                  id="task-status"
+                  v-model="editing.status"
+                  class="h-9 w-full rounded-lg border border-theme-700 bg-theme-900 px-3 text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
+                >
+                  <option
+                    v-for="column in TASK_COLUMNS"
+                    :key="column.status"
+                    :value="column.status"
+                  >
+                    {{ column.label }}
+                  </option>
+                </select>
+              </div>
+              <fieldset class="min-w-0">
+                <legend class="mb-2 text-xs font-medium text-ink-secondary">
+                  Assigned agent
+                </legend>
+                <AgentSelect
+                  v-model="editing.assignee"
+                  :agents="agentDefs.agents"
+                  include-default
+                  default-label="Project default"
+                  agents-group-label="Agents"
+                  max-height="max-h-48"
+                  size="sm"
+                />
+              </fieldset>
+            </section>
+            <ProjectTaskAttachments
+              :project-id="project.id"
+              :task-id="editing.id"
+            />
+          </div>
+          <ProjectTaskWorkLog
+            class="min-w-0 md:col-start-1 md:row-start-2"
+            :project-id="project.id"
+            :task-id="editing.id"
+          />
         </div>
       </form>
-      <ProjectTaskAttachments
-        v-if="editing"
-        class="mt-4"
-        :project-id="project.id"
-        :task-id="editing.id"
-      />
-      <ProjectTaskWorkLog
-        v-if="editing"
-        class="mt-4"
-        :project-id="project.id"
-        :task-id="editing.id"
-      />
       <template #actions>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 border-t border-theme-800 pt-4">
           <button
             type="button"
-            class="mr-auto inline-flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-2 text-sm text-status-danger hover:bg-status-danger/10"
+            class="mr-auto inline-flex items-center gap-1.5 rounded-lg border border-transparent px-2 py-2 text-sm text-status-danger hover:bg-status-danger/10 sm:px-3"
+            aria-label="Delete task"
+            title="Delete task"
             @click="deleteEditing"
           >
             <Icon
               icon="lucide:trash-2"
               class="h-3.5 w-3.5"
             />
-            Delete
+            <span class="hidden sm:inline">Delete</span>
+          </button>
+          <button
+            type="button"
+            class="hidden rounded-lg px-3 py-2 text-sm text-ink-secondary transition hover:bg-theme-800 hover:text-theme-100 sm:inline-flex"
+            @click="editing = null"
+          >
+            Cancel
           </button>
           <button
             v-if="editing && editing.status !== 'done'"
