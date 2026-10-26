@@ -7,6 +7,7 @@ import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useProjectsStore } from '../stores/projects.store'
 import { useMcpServers } from './useMcpServers'
 import { memoryFolderSelectionInfo } from '../utils/memory-folder-selection'
+import { agentAvatarSrc } from '../utils/avatar'
 import { getToolNamespaceIcon } from '../utils/tool-namespace-icons'
 import { groupSelectableTools, toolGroupSelectionState, withToolGroup, type ToolGroup } from '../utils/tool-groups'
 import {
@@ -324,7 +325,7 @@ export function useSlashCommands(actions: SlashCommandActions) {
         label: agent.name,
         description: agent.description || agent.internalName,
         icon: 'lucide:bot',
-        iconUrl: agent.iconUrl,
+        iconUrl: agentAvatarSrc(agent.name, agent.iconUrl, agent.avatar),
         state: onOffState(chatStore.sessionSubAgentIds.includes(agent.id)),
         run: () => toggleSubAgent(agent.id, agent.name),
       })), query),
