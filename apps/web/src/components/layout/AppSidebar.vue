@@ -9,7 +9,7 @@ import { useChatStore } from "../../stores/chat.store";
 import { useProjectsStore } from "../../stores/projects.store";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
 import { usePreferencesStore } from "../../stores/preferences.store";
-import type { RecentChatFilter } from "../../stores/preferences.store";
+import type { RecentChatFilter, SidebarChatView } from "../../stores/preferences.store";
 import { api } from "../../api/client";
 import { wsConnected } from "../../api/http";
 import type { ActivityItem, AgentInstance } from "../../api/types";
@@ -21,6 +21,7 @@ import { commandPaletteShortcutLabel, useCommandPalette } from "../../composable
 import WorkspacePopover from "../status/WorkspacePopover.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
 import SidebarAgents from "./SidebarAgents.vue";
+import GlobalRecentChats from "./GlobalRecentChats.vue";
 import SidebarProjects from "./SidebarProjects.vue";
 
 const route = useRoute();
@@ -31,7 +32,7 @@ const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
 const memoryJobsStore = useMemoryJobsStore();
 const preferencesStore = usePreferencesStore();
-const { recentChatFilter } = storeToRefs(preferencesStore);
+const { recentChatFilter, sidebarChatView } = storeToRefs(preferencesStore);
 const { close: closeSidebar, sidebarCollapsed: collapsePreference, toggleCollapse } = useSidebar();
 // The collapsed rail only exists on md+; the mobile drawer always renders full width.
 const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -160,6 +161,17 @@ onUnmounted(() => {
 
 function closeRecentFilterMenu(): void {
   recentFilterMenuOpen.value = false;
+}
+
+const sidebarChatViewOptions: Array<{ value: SidebarChatView; label: string; icon: string }> = [
+  { value: "global", label: "Global chats", icon: "lucide:messages-square" },
+  { value: "agents", label: "Agents", icon: "lucide:bot" },
+];
+
+function selectSidebarChatView(view: SidebarChatView): void {
+  sidebarChatView.value = view;
+  recentChatsOpen.value = true;
+  closeRecentFilterMenu();
 }
 
 const recentChatFilterOptions: Array<{ value: RecentChatFilter; label: string; icon: string }> = [
@@ -579,12 +591,15 @@ async function openCynoChat(): Promise<void> {
       </section>
 
       <section
+        v-if="sidebarChatView === 'agents' || !sidebarCollapsed"
         class="recent-region sidebar-region flex flex-1 flex-col"
+        :class="sidebarChatView === 'global' && recentChatsOpen ? 'min-h-72' : 'min-h-0'"
       >
         <div class="section-separator" />
         <div
           v-if="!sidebarCollapsed"
           class="group/recent-header relative flex items-center"
+          @keydown.escape="closeRecentFilterMenu"
         >
           <button
             type="button"
@@ -592,7 +607,7 @@ async function openCynoChat(): Promise<void> {
             :aria-expanded="recentChatsOpen"
             @click="recentChatsOpen = !recentChatsOpen"
           >
-            <span>Chats</span>
+            <span>{{ sidebarChatView === 'agents' ? 'Agents' : 'Chats' }}</span>
             <Icon
               icon="lucide:chevron-down"
               class="h-3.5 w-3.5 transition-transform"
@@ -601,9 +616,9 @@ async function openCynoChat(): Promise<void> {
           </button>
           <button
             type="button"
-            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-ink-muted opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/recent-header:opacity-100 focus-visible:opacity-100"
+            class="absolute right-8 z-10 flex h-6 w-6 items-center justify-center rounded-md text-ink-muted opacity-0 transition hover:bg-theme-800 hover:text-theme-200 group-hover/recent-header:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
             :class="{ 'bg-theme-800 text-theme-200 opacity-100': recentFilterMenuOpen }"
-            aria-label="Filter recent chats"
+            :aria-label="sidebarChatView === 'agents' ? 'Agents options' : 'Chats options'"
             aria-haspopup="menu"
             :aria-expanded="recentFilterMenuOpen"
             @click.stop="recentFilterMenuOpen = !recentFilterMenuOpen"
@@ -619,6 +634,30 @@ async function openCynoChat(): Promise<void> {
             class="absolute right-2 top-7 z-30 w-44 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
             @click.stop
           >
+            <div class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+              View
+            </div>
+            <button
+              v-for="option in sidebarChatViewOptions"
+              :key="option.value"
+              type="button"
+              role="menuitemradio"
+              :aria-checked="sidebarChatView === option.value"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-theme-300 hover:bg-theme-800"
+              @click="selectSidebarChatView(option.value)"
+            >
+              <Icon
+                :icon="option.icon"
+                class="h-3.5 w-3.5 text-ink-muted"
+              />
+              <span class="flex-1">{{ option.label }}</span>
+              <Icon
+                v-if="sidebarChatView === option.value"
+                icon="lucide:check"
+                class="h-3.5 w-3.5 text-accent-fg"
+              />
+            </button>
+            <div class="my-1 border-t border-theme-800" />
             <div class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
               Filter by
             </div>
@@ -646,8 +685,16 @@ async function openCynoChat(): Promise<void> {
           </div>
         </div>
         <SidebarAgents
+          v-if="sidebarChatView === 'agents'"
           v-show="recentChatsOpen || sidebarCollapsed"
           :collapsed="sidebarCollapsed"
+          :awaiting-conversation-ids="awaitingConversationIds"
+          :active-conversation-ids="runningConversationIds"
+          :filters="recentChatFilter"
+          exclude-project-chats
+        />
+        <GlobalRecentChats
+          v-if="sidebarChatView === 'global' && recentChatsOpen && !sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
           :active-conversation-ids="runningConversationIds"
           :filters="recentChatFilter"
