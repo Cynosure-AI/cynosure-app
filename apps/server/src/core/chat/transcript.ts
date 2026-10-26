@@ -169,8 +169,43 @@ function delegatedInvocationId(name: string, args: string): string | undefined {
   } catch { return undefined }
 }
 
-export function listChatEvents(db: Database.Database, conversationId: string, after = 0, limit = 1000): ChatEvent[] {
-  const rows = db.prepare('SELECT sequence, execution_id, event_json, created_at FROM chat_events WHERE conversation_id = ? AND sequence > ? ORDER BY sequence LIMIT ?')
-    .all(conversationId, after, limit) as Array<{ sequence: number; execution_id: string; event_json: string; created_at: number }>
+export function listChatEvents(db: Database.Database, conversationId: string, after = 0, limit = 1000, types?: readonly string[]): ChatEvent[] {
+  const typeFilter = types?.length ? ` AND json_extract(event_json, '$.type') IN (${types.map(() => '?').join(', ')})` : ''
+  const rows = db.prepare(`SELECT sequence, execution_id, event_json, created_at FROM chat_events WHERE conversation_id = ? AND sequence > ?${typeFilter} ORDER BY sequence LIMIT ?`)
+    .all(conversationId, after, ...(types ?? []), limit) as Array<{ sequence: number; execution_id: string; event_json: string; created_at: number }>
   return rows.map((row) => ({ ...JSON.parse(row.event_json) as ChatEventPayload, version: 1, conversationId, executionId: row.execution_id, sequence: row.sequence, createdAt: row.created_at }) as ChatEvent)
+}
+
+/** Sequence of the latest saved message; clients resume event replay after it when opening a chat. */
+export function latestMessageEventSequence(db: Database.Database, conversationId: string): number {
+  return (db.prepare(`
+    SELECT MAX(sequence) AS sequence FROM chat_events
+    WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
+      AND json_extract(event_json, '$.item.type') = 'message'
+  `).get(conversationId) as { sequence: number | null }).sequence ?? 0
+}
+
+/**
+ * Drop streamed token deltas that a saved message already supersedes. Replay
+ * starts after the latest saved message, so earlier deltas are never read again;
+ * they make up most of the event log by row count.
+ */
+export function pruneSettledStreamDeltas(db: Database.Database, conversationId: string): number {
+  const cursor = latestMessageEventSequence(db, conversationId)
+  if (!cursor) return 0
+  return db.prepare(`
+    DELETE FROM chat_events
+    WHERE conversation_id = ? AND sequence < ? AND json_extract(event_json, '$.type') = 'content-delta'
+  `).run(conversationId, cursor).changes
+}
+
+/** Prune every conversation, yielding between them so startup traffic is not blocked. */
+export async function pruneAllSettledStreamDeltas(db: Database.Database): Promise<number> {
+  const conversationIds = db.prepare('SELECT id FROM conversations').pluck().all() as string[]
+  let removed = 0
+  for (const conversationId of conversationIds) {
+    removed += pruneSettledStreamDeltas(db, conversationId)
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+  return removed
 }

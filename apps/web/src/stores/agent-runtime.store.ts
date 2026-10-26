@@ -406,6 +406,9 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  /** Event types handled by handleChatToolEvent; step restore fetches only these. */
+  const TOOL_EVENT_TYPES = ['execution-step', 'routing-decision', 'tool-calls', 'tool-results'] as const satisfies readonly ChatEvent['type'][]
+
   function handleChatToolEvent(event: ChatEvent): void {
     const base = { conversationId: event.conversationId, executionId: event.executionId }
     if (event.type === 'execution-step') {
@@ -552,16 +555,14 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   async function restoreForConversation(conversationId: string): Promise<void> {
-    // Steps survive in memory while the app runs; after a reload they come from the event log.
-    if (!runtimes.get(conversationId)?.steps.length) await loadStepsFromEvents(conversationId)
-
-    // Always check DB for pending HITL requests — needed after a hard reload
-    // (live WS events are lost on reload, but DB entries persist until resolved)
-    if (!hitlQueue.value.some(h => h.conversationId === conversationId)) {
-      await loadHITLFromApi(conversationId)
-    }
-
-    await loadPlanningStateFromApi(conversationId)
+    await Promise.all([
+      // Steps survive in memory while the app runs; after a reload they come from the event log.
+      runtimes.get(conversationId)?.steps.length ? undefined : loadStepsFromEvents(conversationId),
+      // Always check DB for pending HITL requests — needed after a hard reload
+      // (live WS events are lost on reload, but DB entries persist until resolved)
+      hitlQueue.value.some(h => h.conversationId === conversationId) ? undefined : loadHITLFromApi(conversationId),
+      loadPlanningStateFromApi(conversationId),
+    ])
   }
 
   async function loadHITLFromApi(conversationId: string): Promise<void> {
@@ -586,7 +587,7 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       let after = 0
       for (;;) {
-        const page = await api.chat.getEvents(conversationId, after)
+        const page = await api.chat.getEvents(conversationId, after, 1000, TOOL_EVENT_TYPES)
         if (activeViewConversationId.value !== conversationId) return
         for (const event of page.events) handleChatToolEvent(event)
         if (!page.events.length || page.events.length < 1000 || page.events.at(-1)!.sequence >= page.latestSequence) break

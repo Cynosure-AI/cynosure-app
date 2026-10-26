@@ -111,7 +111,7 @@ function clearPendingHITLForConversation(conversationId: string): void {
 export async function registerChatRoutes(app: FastifyInstance, broadcast: BroadcastFn): Promise<void> {
   const gateway = getGateway()
 
-  app.get<{ Params: { id: string }; Querystring: { after?: string; limit?: string } }>('/conversations/:id/events', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { after?: string; limit?: string; types?: string } }>('/conversations/:id/events', async (req, reply) => {
     const db = getDb()
     if (!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(req.params.id)) {
       return reply.status(404).send({ error: 'Conversation not found' })
@@ -121,8 +121,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 5000) {
       return reply.status(400).send({ error: 'Invalid event cursor or limit' })
     }
+    // Callers that only rebuild tool steps skip the high-volume streaming events.
+    const types = req.query.types?.split(',').map((type) => type.trim()).filter(Boolean)
+    if (types && (types.length > 32 || types.some((type) => !/^[a-z-]+$/.test(type)))) {
+      return reply.status(400).send({ error: 'Invalid event types' })
+    }
     const latestSequence = (db.prepare('SELECT MAX(sequence) AS sequence FROM chat_events WHERE conversation_id = ?').get(req.params.id) as { sequence: number | null }).sequence ?? 0
-    return { events: listChatEvents(db, req.params.id, after, limit), latestSequence }
+    return { events: listChatEvents(db, req.params.id, after, limit, types), latestSequence }
   })
 
   // GET /api/chat/run-settings — chat behavior shared by every client, channel, and scheduled run

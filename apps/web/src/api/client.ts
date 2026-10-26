@@ -186,8 +186,8 @@ export const api = {
       }>('/api/chat/artifacts/resolve', { artifacts }),
     getMessages: (conversationId: string) =>
       get<ConversationMessagesResponse>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`),
-    getEvents: (conversationId: string, after = 0, limit = 1000) =>
-      get<{ events: ChatEvent[]; latestSequence: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/events?after=${after}&limit=${limit}`),
+    getEvents: (conversationId: string, after = 0, limit = 1000, types?: readonly ChatEvent['type'][]) =>
+      get<{ events: ChatEvent[]; latestSequence: number }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/events?after=${after}&limit=${limit}${types?.length ? `&types=${types.join(',')}` : ''}`),
     onEvent: (cb: (event: ChatEvent) => void) => onWsEvent('chat:event', cb as WsHandler),
     getPendingHITL: (conversationId: string) =>
       get<{ taskId: string; toolCalls: { name: string; arguments: string; fileAccess?: { path: string; folder: string; toolName: string }; shell?: { command: string; explanation?: string; cwd?: string; readOnly: boolean; reasons: string[] } }[] }[]>(

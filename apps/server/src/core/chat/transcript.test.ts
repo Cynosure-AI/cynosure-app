@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
-import { contentBlocksToProviderContent, executionUpdateToChatPayload, listChatEvents, messageContentBlocks, persistChatEvent } from './transcript.js'
+import { contentBlocksToProviderContent, executionUpdateToChatPayload, latestMessageEventSequence, listChatEvents, messageContentBlocks, persistChatEvent, pruneSettledStreamDeltas } from './transcript.js'
 
 describe('canonical chat transcript', () => {
   test('adapts persisted media fields without losing their order within a modality', () => {
@@ -35,6 +35,25 @@ describe('canonical chat transcript', () => {
     expect(listChatEvents(db, 'c1', delta.sequence)).toEqual([routing])
     expect(persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'title-updated', title: 'New' } })?.type).toBe('title-updated')
     expect(persistChatEvent(db, { conversationId: 'missing', executionId: 'e1', payload: { type: 'queue-changed' } })).toBeNull()
+    expect(listChatEvents(db, 'c1', 0, 1000, ['routing-decision', 'tool-calls'])).toEqual([routing])
+    db.close()
+  })
+
+  test('prunes stream deltas superseded by a saved message and keeps the in-flight stream', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    applySchemaMigrations(db)
+    db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+    const delta = (text: string) => persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'content-delta', streamId: 'e1', scope: 'main', block: { type: 'text', text } } })!
+    expect(pruneSettledStreamDeltas(db, 'c1')).toBe(0)
+    delta('Hel')
+    delta('lo')
+    const saved = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'transcript-item',
+      item: { type: 'message', id: 'm1', role: 'assistant', content: [{ type: 'text', text: 'Hello' }], createdAt: 1 } } })!
+    const pending = delta('Next')
+    expect(latestMessageEventSequence(db, 'c1')).toBe(saved.sequence)
+    expect(pruneSettledStreamDeltas(db, 'c1')).toBe(2)
+    expect(listChatEvents(db, 'c1')).toEqual([saved, pending])
     db.close()
   })
 

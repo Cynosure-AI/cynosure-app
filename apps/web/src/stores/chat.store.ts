@@ -357,13 +357,16 @@ export const useChatStore = defineStore('chat', () => {
       const response = await api.chat.getMessages(id)
       if (activeConversationId.value !== id) return
       activeProjectId.value = response.conversationProjectId ?? null
+      const previousAgentId = agentConfig.activeAgentId.value
       agentConfig.setConversationAgent(agentIdHint !== undefined ? agentIdHint : response.conversationAgentId)
 
       // The conversation list is scoped to the selected agent. Entering a chat
       // from the global sidebar can switch that scope, so refresh it before
       // header actions (such as Pin/Unpin) resolve the active conversation.
-      await loadConversations()
-      if (activeConversationId.value !== id) return
+      if (agentConfig.activeAgentId.value !== previousAgentId || !conversations.value.some((conversation) => conversation.id === id)) {
+        await loadConversations()
+        if (activeConversationId.value !== id) return
+      }
       // An incognito chat opened by URL is missing from the list the server returns.
       if (response.temporary && !conversations.value.some((conversation) => conversation.id === id)) {
         const now = Date.now()
@@ -404,26 +407,6 @@ export const useChatStore = defineStore('chat', () => {
       } : null
       lastLoadedEventCursor.value = { conversationId: id, sequence: response.latestEventSequence }
 
-      // Hydrate server-side post-action state
-      try {
-        const { actions, quickResponses } = await api.chat.getPostActions(id)
-        if (activeConversationId.value !== id) return
-        if (actions.length) {
-          postActionsMap.set(id, new Set(actions))
-        } else {
-          postActionsMap.delete(id)
-        }
-        postActionsTrigger.value++
-        if (quickResponses?.suggestions.length) {
-          quickResponsesMap.set(id, quickResponses)
-        } else {
-          quickResponsesMap.delete(id)
-        }
-        quickResponsesTrigger.value++
-      } catch {
-        // Non-critical
-      }
-
       // Restore streaming state if this conversation has an active stream
       streaming.restorePrimaryStream(id)
       streaming.restoreSubAgentStreams(id)
@@ -432,19 +415,46 @@ export const useChatStore = defineStore('chat', () => {
       // falling back to per-message token data for completed executions.
       restoreContextUsage(lastContextTokens)
 
-      // Restore execution steps so tool calls render as grouped cards
-      await agentStore.restoreForConversation(id)
-      if (activeConversationId.value !== id) return
-
-      // If we navigated into a conversation after its websocket events already
-      // fired, hydrate the run lock from the server-side instance list.
-      await syncConversationRunState(id)
-      await loadQueue(id)
+      // The remaining hydration requests are independent, so they run concurrently.
+      await Promise.all([
+        hydratePostActions(id),
+        (async () => {
+          // Restore execution steps so tool calls render as grouped cards
+          await agentStore.restoreForConversation(id)
+          if (activeConversationId.value !== id) return
+          // Replayed steps can mark the chat as running, so the run lock is
+          // hydrated from the server-side instance list only afterwards.
+          await syncConversationRunState(id)
+        })(),
+        loadQueue(id),
+      ])
     } finally {
       if (activeConversationId.value === id) markConversationRead(id)
       if (activeConversationId.value === id) {
         loadingMessages.value = false
       }
+    }
+  }
+
+  /** Hydrate server-side post-action state. */
+  async function hydratePostActions(id: string): Promise<void> {
+    try {
+      const { actions, quickResponses } = await api.chat.getPostActions(id)
+      if (activeConversationId.value !== id) return
+      if (actions.length) {
+        postActionsMap.set(id, new Set(actions))
+      } else {
+        postActionsMap.delete(id)
+      }
+      postActionsTrigger.value++
+      if (quickResponses?.suggestions.length) {
+        quickResponsesMap.set(id, quickResponses)
+      } else {
+        quickResponsesMap.delete(id)
+      }
+      quickResponsesTrigger.value++
+    } catch {
+      // Non-critical
     }
   }
 

@@ -28,6 +28,7 @@ import type { ShellApprovalDetails } from '../core/agent/hitl-gate.js'
 import { cancelCronRunsByConversation, deleteCronJob, getPendingWait, getWaitJobsForConversation, getWaitResumeTimes, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { cancelChatExecutionByConversation } from '../core/chat/active-executions.js'
 import { pauseChatQueue } from '../core/chat/message-queue.js'
+import { latestMessageEventSequence } from '../core/chat/transcript.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
 
@@ -669,12 +670,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             conversationAgentId: convRow?.agent_id ?? null,
             conversationProjectId: convRow?.project_id ?? null,
             temporary: Boolean(convRow?.temporary),
-            latestEventSequence: (db.prepare(`
-                SELECT MAX(sequence) AS sequence FROM chat_events
-                WHERE conversation_id = ? AND json_extract(event_json, '$.type') = 'transcript-item'
-                  AND json_extract(event_json, '$.item.type') = 'message'
-            `)
-                .get(req.params.id) as { sequence: number | null }).sequence ?? 0,
+            latestEventSequence: latestMessageEventSequence(db, req.params.id),
             compactionInProgress: isConversationCompacting(req.params.id),
             lastContextTokens: convRow?.last_context_tokens ?? null,
             executionConfig,
