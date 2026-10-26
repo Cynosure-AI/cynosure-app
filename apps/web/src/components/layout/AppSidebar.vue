@@ -436,7 +436,7 @@ const chatRoute = computed(() =>
 
     <!-- V2 Navigation -->
     <!-- Scrolls as a whole on short screens so Recent chats keeps its min height instead of being squeezed. -->
-    <nav class="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 pb-1 [scrollbar-width:thin]">
+    <nav class="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 pb-1">
       <!-- Chat -->
       <HoverTooltip
         placement="right"
@@ -821,7 +821,6 @@ const chatRoute = computed(() =>
   .sidebar-collapsed nav {
     padding-inline: 0.5rem;
     overflow-x: hidden;
-    scrollbar-width: thin;
   }
 
   .sidebar-collapsed nav::-webkit-scrollbar {

@@ -780,7 +780,6 @@ const imageGridClass = computed(() => {
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 1.25rem);
   mask-image: linear-gradient(to bottom, transparent, #000 1.25rem);
   padding-top: 0.5rem;
-  scrollbar-width: thin;
 }
 
 @media (prefers-reduced-motion: no-preference) {
