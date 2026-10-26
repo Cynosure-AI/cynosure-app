@@ -124,7 +124,7 @@ function onKeydown(event: KeyboardEvent): void {
           @update="emit('update', 'imageUrl', $event)"
         >
           <template #description>
-            Images up to 5 MB are cropped and optimized to 512 × 512.
+            Images up to 5 MB are cropped and optimized to 512 × 512. Animated GIFs up to 1.5 MB are kept as they are, so they keep playing.
           </template>
         </IconUpload>
         <p
