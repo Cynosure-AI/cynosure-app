@@ -4,7 +4,8 @@
  * every client and survives browser resets.
  */
 import { getDb } from '../../db/database.js'
-import type { CynoProfile, ReasoningEffort, SubAgentAssignmentDto } from '@shared/types'
+import type { AvatarConfig, CynoProfile, ReasoningEffort, SubAgentAssignmentDto } from '@shared/types'
+import { AvatarConfigError, normalizeAvatarConfig } from '../agents/avatar-config.js'
 
 const CYNO_PROFILE_KEY = 'cynoProfile'
 const MAX_NAME_LENGTH = 60
@@ -34,10 +35,19 @@ If memory folders are listed above, check them when the user mentions people, pr
 Current date: {{currentDate}}
 `
 
+/** Cyno's own face: a round crimson blob, so the default assistant reads as the default. */
+export const DEFAULT_CYNO_AVATAR: AvatarConfig = { seed: null, hue: 18, tone: 0.7, shape: 'round' }
+
+function isDefaultAvatar(avatar: AvatarConfig | null): boolean {
+    return avatar === null || JSON.stringify(avatar) === JSON.stringify(DEFAULT_CYNO_AVATAR)
+}
+
 export function defaultCynoProfile(): CynoProfile {
     return {
         name: 'Cyno',
         iconUrl: null,
+        avatar: { ...DEFAULT_CYNO_AVATAR },
+        avatarSource: 'generated',
         systemPrompt: DEFAULT_CYNO_SYSTEM_PROMPT,
         providerId: '',
         model: '',
@@ -79,6 +89,20 @@ function normalizeUpdate(input: Record<string, unknown>): Partial<CynoProfile> {
         }
         update.iconUrl = input.iconUrl as string | null
     }
+    if (input.avatarSource !== undefined) {
+        if (input.avatarSource !== 'image' && input.avatarSource !== 'generated') {
+            throw new CynoProfileError("avatarSource must be 'image' or 'generated'")
+        }
+        update.avatarSource = input.avatarSource
+    }
+    if (input.avatar !== undefined) {
+        try {
+            update.avatar = normalizeAvatarConfig(input.avatar)
+        } catch (error) {
+            if (error instanceof AvatarConfigError) throw new CynoProfileError(error.message)
+            throw error
+        }
+    }
     for (const field of ['systemPrompt', 'providerId', 'model'] as const) {
         if (input[field] === undefined) continue
         if (typeof input[field] !== 'string') throw new CynoProfileError(`${field} must be a string`)
@@ -114,15 +138,28 @@ export function getCynoProfile(): CynoProfile {
         // Stored values are re-validated so a hand-edited row cannot break runs.
         const stored = normalizeUpdate(JSON.parse(row.value_json) as Record<string, unknown>)
         const updatedAt = (JSON.parse(row.value_json) as { updatedAt?: unknown }).updatedAt
-        return { ...defaults, ...stored, updatedAt: typeof updatedAt === 'number' ? updatedAt : 0 }
+        // A stored null means "the default face", so a later default change reaches it.
+        const avatar = stored.avatar ?? defaults.avatar
+        // Profiles from before the explicit choice show their image if they have one.
+        const avatarSource = stored.avatarSource ?? (stored.iconUrl ? 'image' : 'generated')
+        return { ...defaults, ...stored, avatar, avatarSource, updatedAt: typeof updatedAt === 'number' ? updatedAt : 0 }
     } catch {
         return defaults
     }
 }
 
+/** Cyno's image when it is the chosen face, else null for the generated avatar. */
+export function cynoDisplayIconUrl(profile: CynoProfile): string | null {
+    return profile.avatarSource === 'image' ? profile.iconUrl : null
+}
+
 /** Apply a partial update. Throws CynoProfileError for invalid input. */
 export function saveCynoProfile(input: Record<string, unknown>): CynoProfile {
-    const next: CynoProfile = { ...getCynoProfile(), ...normalizeUpdate(input), updatedAt: Date.now() }
-    getDb().prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(CYNO_PROFILE_KEY, JSON.stringify(next))
-    return next
+    const update = normalizeUpdate(input)
+    // Uploading an image picks it; removing it falls back to the generated avatar.
+    if (update.iconUrl !== undefined && update.avatarSource === undefined) update.avatarSource = update.iconUrl ? 'image' : 'generated'
+    const next: CynoProfile = { ...getCynoProfile(), ...update, updatedAt: Date.now() }
+    const stored = { ...next, avatar: isDefaultAvatar(next.avatar) ? null : next.avatar }
+    getDb().prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(CYNO_PROFILE_KEY, JSON.stringify(stored))
+    return { ...next, avatar: next.avatar ?? { ...DEFAULT_CYNO_AVATAR } }
 }

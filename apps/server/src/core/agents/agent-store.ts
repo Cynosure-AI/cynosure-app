@@ -1,7 +1,8 @@
 import { nanoid } from 'nanoid'
 import { getDb } from '../../db/database.js'
 import { getToolRegistry } from '../tools/tool-registry.js'
-import type { ReasoningEffort } from '@shared/types'
+import type { AvatarConfig, AvatarSource, ReasoningEffort } from '@shared/types'
+import { AvatarConfigError, normalizeAvatarConfig, parseStoredAvatarConfig } from './avatar-config.js'
 
 // ---- Types ----
 
@@ -35,7 +36,12 @@ export interface AgentConfig {
 
 export interface AgentData extends AgentConfig {
     id: string
+    /** What to show for the agent: the uploaded image when it is the chosen source, else null. */
     iconUrl: string | null
+    /** The uploaded image, kept while the generated avatar is chosen. */
+    imageUrl: string | null
+    avatar: AvatarConfig | null
+    avatarSource: AvatarSource
     systemPrompt: string
 }
 
@@ -44,7 +50,12 @@ export type CreateAgentInput = {
     internalName?: string
     description?: string
     category?: string
+    /** Uploads (data URL) or removes (null) the image; `imageUrl` is the same field. */
     iconUrl?: string | null
+    imageUrl?: string | null
+    avatar?: AvatarConfig | null
+    /** Defaults to 'image' when an image is uploaded and 'generated' when it is removed. */
+    avatarSource?: AvatarSource
     providerId?: string
     model?: string
     systemPrompt?: string
@@ -155,6 +166,8 @@ interface AgentRow {
     favorite: number
     icon_data: Buffer | null
     icon_mime: string | null
+    avatar_json: string | null
+    avatar_source: string
     created_at: number
     updated_at: number
 }
@@ -169,15 +182,26 @@ function parseReasoningEffort(value: unknown): ReasoningEffort {
         : 'medium'
 }
 
+function parseAvatarSource(value: unknown): AvatarSource | null {
+    if (value === undefined || value === null) return null
+    if (value !== 'image' && value !== 'generated') throw new AvatarConfigError("avatarSource must be 'image' or 'generated'")
+    return value
+}
+
 function rowToAgentData(row: AgentRow): AgentData {
     const hasIcon = row.icon_data !== null || (row.icon_url !== null && row.icon_url !== '')
+    const imageUrl = hasIcon ? `/api/agents/${encodeURIComponent(row.id)}/icon?t=${row.updated_at}` : null
+    const avatarSource: AvatarSource = row.avatar_source === 'image' ? 'image' : 'generated'
     return {
         id: row.id,
         name: row.name,
         internalName: row.internal_name || toInternalName(row.name),
         description: row.description || '',
         category: row.category || '',
-        iconUrl: hasIcon ? `/api/agents/${encodeURIComponent(row.id)}/icon?t=${row.updated_at}` : null,
+        iconUrl: avatarSource === 'image' ? imageUrl : null,
+        imageUrl,
+        avatar: parseStoredAvatarConfig(row.avatar_json),
+        avatarSource,
         providerId: row.provider_id || '',
         model: row.model || '',
         systemPrompt: row.system_prompt || '',
@@ -228,8 +252,9 @@ export function createAgent(input: CreateAgentInput): AgentData {
 
     let iconData: Buffer | null = null
     let iconMime: string | null = null
-    if (input.iconUrl && input.iconUrl.startsWith('data:')) {
-        const parsed = parseIconDataUrl(input.iconUrl)
+    const image = input.imageUrl !== undefined ? input.imageUrl : input.iconUrl
+    if (image && image.startsWith('data:')) {
+        const parsed = parseIconDataUrl(image)
         if (parsed) {
             iconData = parsed.data
             iconMime = parsed.mime
@@ -237,13 +262,15 @@ export function createAgent(input: CreateAgentInput): AgentData {
     }
 
     const normalizedTools = normalizeAgentTools(input.tools || [])
+    const avatar = normalizeAvatarConfig(input.avatar)
+    const avatarSource = parseAvatarSource(input.avatarSource) ?? (iconData ? 'image' : 'generated')
 
     db.prepare(
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, auto_memory, dreaming_enabled, auto_router_provider_id, auto_router_model,
-            sort_order, favorite, icon_data, icon_mime, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            sort_order, favorite, icon_data, icon_mime, avatar_json, avatar_source, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         id,
         input.name,
@@ -269,6 +296,8 @@ export function createAgent(input: CreateAgentInput): AgentData {
         input.favorite === true ? 1 : 0,
         iconData,
         iconMime,
+        avatar ? JSON.stringify(avatar) : null,
+        avatarSource,
         now,
         now
     )
@@ -309,22 +338,29 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         : existing.max_context_tokens
     const updatedSortOrder = input.sortOrder !== undefined ? input.sortOrder : (existing.sort_order || 0)
     const updatedFavorite = input.favorite !== undefined ? input.favorite : (existing.favorite === 1)
+    const updatedAvatar = input.avatar !== undefined ? normalizeAvatarConfig(input.avatar) : parseStoredAvatarConfig(existing.avatar_json)
 
     // Handle icon update
     let iconData: Buffer | null = existing.icon_data
     let iconMime: string | null = existing.icon_mime
-    if (input.iconUrl !== undefined) {
-        if (input.iconUrl && input.iconUrl.startsWith('data:')) {
-            const parsed = parseIconDataUrl(input.iconUrl)
+    const image = input.imageUrl !== undefined ? input.imageUrl : input.iconUrl
+    let impliedSource: AvatarSource | null = null
+    if (image !== undefined) {
+        if (image && image.startsWith('data:')) {
+            const parsed = parseIconDataUrl(image)
             if (parsed) {
                 iconData = parsed.data
                 iconMime = parsed.mime
+                impliedSource = 'image'
             }
-        } else if (input.iconUrl === null || input.iconUrl === '') {
+        } else if (image === null || image === '') {
             iconData = null
             iconMime = null
+            impliedSource = 'generated'
         }
     }
+    const updatedAvatarSource = parseAvatarSource(input.avatarSource) ?? impliedSource
+        ?? (existing.avatar_source === 'image' ? 'image' : 'generated')
 
     db.prepare(
         `UPDATE agents SET name = ?, description = ?, provider_id = ?, model = ?, system_prompt = ?, tools_json = ?,
@@ -332,7 +368,7 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
             thinking_enabled = ?, reasoning_effort = ?, max_context_tokens = ?, auto_tool_routing = ?,
             auto_memory = ?, dreaming_enabled = ?,
             auto_router_provider_id = ?, auto_router_model = ?, sort_order = ?, favorite = ?,
-         icon_data = ?, icon_mime = ?, updated_at = ?
+         icon_data = ?, icon_mime = ?, avatar_json = ?, avatar_source = ?, updated_at = ?
          WHERE id = ?`
     ).run(
         updatedName,
@@ -357,6 +393,8 @@ export function updateAgent(id: string, input: UpdateAgentInput): AgentData | nu
         updatedFavorite ? 1 : 0,
         iconData,
         iconMime,
+        updatedAvatar ? JSON.stringify(updatedAvatar) : null,
+        updatedAvatarSource,
         now,
         id
     )
@@ -402,8 +440,8 @@ export function duplicateAgent(id: string): AgentData | null {
         `INSERT INTO agents (id, name, description, provider_id, model, system_prompt, tools_json, icon_url, internal_name,
             category, sub_agents_json, auto_approve_tools, thinking_enabled, reasoning_effort, max_context_tokens,
             auto_tool_routing, auto_memory, dreaming_enabled, auto_router_provider_id, auto_router_model,
-            sort_order, favorite, icon_data, icon_mime, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            sort_order, favorite, icon_data, icon_mime, avatar_json, avatar_source, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
         newId,
         newName,
@@ -429,6 +467,8 @@ export function duplicateAgent(id: string): AgentData | null {
         existing.favorite,
         existing.icon_data,
         existing.icon_mime,
+        existing.avatar_json,
+        existing.avatar_source,
         now,
         now
     )

@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
 import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
@@ -417,13 +418,17 @@ onBeforeUnmount(() => {
         @keydown.enter.self.prevent="selectConversation(conversation)"
       >
         <span class="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800 text-ink-muted">
-          <img
-            v-if="conversation.agentId && agentDefs.get(conversation.agentId)?.iconUrl"
-            :src="agentDefs.get(conversation.agentId)?.iconUrl || ''"
-            :alt="`${agentName(conversation)} icon`"
-            class="h-full w-full object-cover"
+          <span
+            v-if="conversation.agentId && agentDefs.get(conversation.agentId)"
+            class="h-full w-full"
             :class="{ 'opacity-15': runningIds.has(conversation.id) || isWaiting(conversation) }"
           >
+            <AgentAvatar
+              :name="agentDefs.get(conversation.agentId)!.name"
+              :icon-url="agentDefs.get(conversation.agentId)!.iconUrl"
+              :avatar="agentDefs.get(conversation.agentId)!.avatar"
+            />
+          </span>
           <Icon
             v-else
             :icon="conversation.agentId ? 'lucide:bot' : 'lucide:message-square'"

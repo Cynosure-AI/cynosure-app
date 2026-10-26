@@ -11,6 +11,7 @@ import {
     type CreateAgentInput,
     type UpdateAgentInput,
 } from '../core/agents/agent-store.js'
+import { AvatarConfigError } from '../core/agents/avatar-config.js'
 import { getCronJobsForAgent, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { getHITLGate } from '../core/agent/hitl-gate.js'
@@ -72,9 +73,15 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     })
 
     // POST /api/agents — create
-    app.post<{ Body: CreateAgentInput & { memoryFolders?: string[] } }>('/', async (req) => {
+    app.post<{ Body: CreateAgentInput & { memoryFolders?: string[] } }>('/', async (req, reply) => {
         const { memoryFolders, ...rest } = req.body
-        const agent = createAgent(rest)
+        let agent
+        try {
+            agent = createAgent(rest)
+        } catch (error) {
+            if (error instanceof AvatarConfigError) return reply.code(400).send({ error: error.message })
+            throw error
+        }
         const assignedMemoryFolders = memoryFolders !== undefined ? memoryFolders : defaultMemoryFolderIds()
         const db = getDb()
         const insert = db.prepare('INSERT OR IGNORE INTO agent_memory_folders (agent_id, category_id) VALUES (?, ?)')
@@ -86,7 +93,13 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
     // PUT /api/agents/:id — update
     app.put<{ Params: { id: string }; Body: UpdateAgentInput & { memoryFolders?: string[] } }>('/:id', async (req, reply) => {
         const { memoryFolders, ...rest } = req.body
-        const agent = updateAgent(req.params.id, rest)
+        let agent
+        try {
+            agent = updateAgent(req.params.id, rest)
+        } catch (error) {
+            if (error instanceof AvatarConfigError) return reply.code(400).send({ error: error.message })
+            throw error
+        }
         if (!agent) {
             reply.code(404)
             return { error: 'Agent not found' }

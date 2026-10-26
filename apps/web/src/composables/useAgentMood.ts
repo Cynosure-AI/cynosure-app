@@ -1,0 +1,152 @@
+import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
+import { useAgentStore } from '../stores/agent-runtime.store'
+import { useChatStore, type DisplayMessage } from '../stores/chat.store'
+import type { ExecutionStep } from '../stores/agent-runtime.store'
+
+/** Expressions an assistant's avatar can hold; each maps to a blobatar pose. */
+export type AgentMood =
+  | 'idle' | 'thinking' | 'happy' | 'sad' | 'mad' | 'surprised' | 'unsure' | 'smug' | 'sleepy' | 'shy' | 'sick'
+
+export interface AgentMoodInput {
+  /** A run is in progress for this chat. */
+  executing: boolean
+  /** Reply text is arriving right now. */
+  streamingText: boolean
+  /** The current run's latest tool round has a failed call. */
+  toolFailed: boolean
+  /** The latest assistant reply, once the run is over. */
+  lastReply: Pick<DisplayMessage, 'isError' | 'stopped'> | null
+  /** Assistant replies in a row, counting back from the latest, that ended in an error. */
+  errorStreak: number
+  /** The run paused itself with a scheduled wait and will continue later. */
+  waiting: boolean
+}
+
+/** The mood a chat's state calls for, before any short-lived reaction. */
+export function deriveAgentMood(input: AgentMoodInput): AgentMood {
+  if (input.executing) {
+    if (input.streamingText) return 'idle'
+    return input.toolFailed ? 'unsure' : 'thinking'
+  }
+  if (input.waiting) return 'sleepy'
+  if (input.lastReply?.isError) return input.errorStreak >= 2 ? 'mad' : 'sad'
+  if (input.lastReply?.stopped) return 'sleepy'
+  return 'idle'
+}
+
+/** Count trailing assistant replies that failed; user turns in between do not break the streak. */
+export function countErrorStreak(messages: readonly DisplayMessage[]): number {
+  let streak = 0
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.role !== 'assistant') continue
+    if (!message.isError) break
+    streak++
+  }
+  return streak
+}
+
+/**
+ * Poses a working assistant drifts between so a long think does not look frozen,
+ * with how often each comes up. Sleepy and happy are rare cameos.
+ */
+export const THINKING_POSES: ReadonlyArray<{ mood: AgentMood; weight: number }> = [
+  { mood: 'thinking', weight: 4 },
+  { mood: 'unsure', weight: 3 },
+  { mood: 'smug', weight: 2 },
+  { mood: 'surprised', weight: 2 },
+  { mood: 'sleepy', weight: 0.5 },
+  { mood: 'happy', weight: 0.5 },
+]
+export const THINKING_POSE_MS = 3200
+
+/** A weighted random pose, never the one currently shown. `random` is in [0, 1). */
+export function nextThinkingPose(current: AgentMood, random: () => number = Math.random): AgentMood {
+  const options = THINKING_POSES.filter(({ mood }) => mood !== current)
+  let roll = random() * options.reduce((sum, { weight }) => sum + weight, 0)
+  for (const option of options) {
+    roll -= option.weight
+    if (roll < 0) return option.mood
+  }
+  return options[options.length - 1].mood
+}
+
+export const HAPPY_BURST_MS = 1400
+export const SURPRISE_BURST_MS = 1600
+
+/**
+ * The live mood of the active chat's assistant. Finishing a run cleanly shows a
+ * short happy burst, and a new approval request a short surprise; everything
+ * else is held for as long as the state lasts. It reads only the messages and
+ * steps it is given, so callers pass the chat's own agent's and leave out
+ * delegated sub-agent runs.
+ */
+export function useAgentMood(
+  messages: Readonly<Ref<readonly DisplayMessage[]>>,
+  steps: Readonly<Ref<readonly ExecutionStep[]>>,
+): { mood: Ref<AgentMood>; speaking: Ref<boolean>; executing: Ref<boolean> } {
+  const chatStore = useChatStore()
+  const agentStore = useAgentStore()
+
+  const lastAssistant = computed(() => {
+    for (let index = messages.value.length - 1; index >= 0; index--) {
+      const message = messages.value[index]
+      if (message.role === 'assistant') return message
+    }
+    return null
+  })
+
+  const executing = computed(() => agentStore.isExecuting || chatStore.activeConversationIsStreaming)
+  const speaking = computed(() => Boolean(
+    chatStore.activeConversationIsStreaming && lastAssistant.value?.isStreaming && lastAssistant.value.content,
+  ))
+  const toolFailed = computed(() => {
+    const latest = steps.value[steps.value.length - 1]
+    return Boolean(latest?.results?.some((result) => result.success === false))
+  })
+
+  const base = computed(() => deriveAgentMood({
+    executing: executing.value,
+    streamingText: speaking.value,
+    toolFailed: toolFailed.value,
+    lastReply: lastAssistant.value,
+    errorStreak: countErrorStreak(messages.value),
+    waiting: Boolean(chatStore.pendingWait),
+  }))
+
+  // While thinking, drift between poses at random; each think starts on 'thinking'.
+  const thinkingPose = ref<AgentMood>('thinking')
+  let thinkingTimer: ReturnType<typeof setInterval> | undefined
+  watch(() => base.value === 'thinking', (active) => {
+    clearInterval(thinkingTimer)
+    thinkingPose.value = 'thinking'
+    if (active) thinkingTimer = setInterval(() => { thinkingPose.value = nextThinkingPose(thinkingPose.value) }, THINKING_POSE_MS)
+  }, { immediate: true })
+  onScopeDispose(() => clearInterval(thinkingTimer))
+  const settled = computed(() => base.value === 'thinking' ? thinkingPose.value : base.value)
+
+  const burst = ref<AgentMood | null>(null)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  function flash(mood: AgentMood, ms: number) {
+    clearTimeout(timer)
+    burst.value = mood
+    timer = setTimeout(() => { burst.value = null }, ms)
+  }
+  function clearBurst() {
+    clearTimeout(timer)
+    burst.value = null
+  }
+
+  watch([executing, () => chatStore.activeConversationId], ([now, chat], [before, previousChat]) => {
+    // A reaction belongs to the chat it happened in; switching chats is not a finished run.
+    if (now || chat !== previousChat) return clearBurst()
+    if (before && base.value === 'idle') flash('happy', HAPPY_BURST_MS)
+  })
+  watch(() => agentStore.pendingHITL?.taskId, (id, previous) => {
+    if (id && id !== previous) flash('surprised', SURPRISE_BURST_MS)
+  })
+  onScopeDispose(() => clearTimeout(timer))
+
+  const mood = computed(() => burst.value ?? settled.value)
+  return { mood, speaking, executing }
+}

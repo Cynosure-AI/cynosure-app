@@ -14,6 +14,7 @@ import { useMcpServers } from '../../composables/useMcpServers'
 import { rankItems } from '../../utils/command-palette'
 import { cronToHuman } from '../../utils/cron-helpers'
 import { useCynoStore } from '../../stores/cyno.store'
+import { agentAvatarSrc } from '../../utils/avatar'
 
 const cyno = useCynoStore()
 
@@ -145,7 +146,7 @@ function agentItem(agent: AgentDefinition): PaletteItem {
     title: agent.name,
     subtitle: agent.description || agent.category || 'Agent',
     icon: 'lucide:bot',
-    imageUrl: agent.iconUrl,
+    imageUrl: agentAvatarSrc(agent.name, agent.iconUrl, agent.avatar),
     run: () => router.push({ name: 'agent-detail', params: { id: agent.id } }),
   }
 }

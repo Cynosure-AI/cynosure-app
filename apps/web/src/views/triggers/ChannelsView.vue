@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
-import type { AgentDefinition, ChannelDefinition, ChannelType } from '../../api/types'
+import type { ChannelDefinition, ChannelType } from '../../api/types'
 import { Icon } from '@iconify/vue'
 import ModalDialog from '../../components/shared/ModalDialog.vue'
 import ToggleSwitch from '../../components/shared/ToggleSwitch.vue'
@@ -14,8 +14,13 @@ import SettingsPersistenceStatus, { type SettingsPersistenceState } from '../../
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 import ChannelDetailView from './ChannelDetailView.vue'
 import { useCynoStore } from '../../stores/cyno.store'
+import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import AgentAvatar from '../../components/shared/AgentAvatar.vue'
 
 const cyno = useCynoStore()
+const agentDefs = useAgentDefinitionsStore()
+// Avatar settings live on the definitions; load them if this page opened first.
+if (!agentDefs.loaded) void agentDefs.load()
 
 const route = useRoute()
 const router = useRouter()
@@ -28,7 +33,6 @@ const props = withDefaults(defineProps<{
 })
 const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
 const channels = ref<ChannelDefinition[]>([])
-const allAgents = ref<AgentDefinition[]>([])
 const loading = ref(true)
 const selectedChannelId = ref<string | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | undefined
@@ -70,7 +74,7 @@ const hasManualChanges = computed(() => addDraftDirty.value || detailDirty.value
 watch(hasManualChanges, (dirty) => emit('dirty-change', dirty), { immediate: true })
 
 const agentOptions = computed<MultiSelectOption[]>(() =>
-  allAgents.value.map(a => ({ value: a.id, label: a.name }))
+  agentDefs.agents.map(a => ({ value: a.id, label: a.name }))
 )
 
 function parseUserIds(value: string): string[] {
@@ -97,11 +101,7 @@ const channelTypeOptions = [
 
 /** A channel without an agent answers as Cyno. */
 function agentNameById(id: string): string {
-  return id ? (allAgents.value.find(a => a.id === id)?.name || id) : cyno.name
-}
-
-function agentIconById(id: string): string | null {
-  return id ? (allAgents.value.find(a => a.id === id)?.iconUrl || null) : cyno.iconUrl
+  return id ? (agentDefs.get(id)?.name || id) : cyno.name
 }
 
 function showSection(id: string): boolean {
@@ -139,7 +139,7 @@ function resetDialog() {
 }
 
 async function openAddDialog() {
-  allAgents.value = await api.agents.list()
+  await agentDefs.load()
   resetDialog()
   addDraftBaseline.value = serializedAddDraft.value
   addSaveStatus.value = 'idle'
@@ -413,17 +413,14 @@ onUnmounted(() => {
               </span>
             </div>
             <div class="flex items-center gap-2 text-xs text-ink-muted">
-              <img
-                v-if="agentIconById(ch.agentId)"
-                :src="agentIconById(ch.agentId)!"
-                :alt="agentNameById(ch.agentId)"
-                class="w-3.5 h-3.5 rounded-sm object-cover"
-              >
-              <Icon
-                v-else
-                icon="lucide:bot"
-                class="w-3 h-3"
-              />
+              <span class="h-3.5 w-3.5 shrink-0 overflow-hidden rounded-sm">
+                <AgentAvatar
+                  :name="agentNameById(ch.agentId)"
+                  :icon-url="ch.agentId ? agentDefs.get(ch.agentId)?.iconUrl : cyno.iconUrl"
+                  :avatar="ch.agentId ? agentDefs.get(ch.agentId)?.avatar : cyno.avatar"
+                  :pending="ch.agentId ? !agentDefs.loaded : !cyno.profile"
+                />
+              </span>
               <span>{{ agentNameById(ch.agentId) }}</span>
               <template v-if="ch.status?.username">
                 <span class="text-theme-700">·</span>
@@ -567,10 +564,10 @@ onUnmounted(() => {
           <div class="mb-4">
             <AgentSelect
               v-model="dlgAgentId"
-              :agents="allAgents"
+              :agents="agentDefs.agents"
               include-default
               :default-label="cyno.name"
-              :default-img-src="cyno.iconUrl"
+              :default-img-src="cyno.brandIconUrl"
               agents-group-label="Agents"
               placeholder="Select an agent…"
             />

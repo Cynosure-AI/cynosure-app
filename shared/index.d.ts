@@ -259,6 +259,26 @@ export interface ChatQueueRequest extends ChatSendRequest {
   delivery: ChatQueueDelivery
 }
 
+/** Which face an assistant shows: its uploaded image or its generated avatar. */
+export type AvatarSource = 'image' | 'generated'
+
+/** The ten blobatar silhouettes, in band order. */
+export type AvatarShape = 'round' | 'organic' | 'boxy' | 'capsule' | 'nub' | 'cloud' | 'droplet' | 'hexagon' | 'sun' | 'triangle'
+
+/**
+ * How an assistant's generated avatar looks when no image is uploaded.
+ * Every null field comes from the seed, so an empty config is the plain name-derived face.
+ */
+export interface AvatarConfig {
+  /** String the face is generated from; null means the assistant's name. */
+  seed: string | null
+  /** Hue in degrees, 0–359. */
+  hue: number | null
+  /** Swatch position, 0 (pale) to 1 (ink). */
+  tone: number | null
+  shape: AvatarShape | null
+}
+
 /**
  * Cyno: the default assistant used for new chats, and (when no agent is
  * chosen) for messaging channels and scheduled jobs. Stored server-side.
@@ -267,6 +287,10 @@ export interface CynoProfile {
   name: string
   /** Image data URL, or null for the app logo. */
   iconUrl: string | null
+  /** Generated avatar settings; null uses the face derived from the name. */
+  avatar: AvatarConfig | null
+  /** Shows `iconUrl` when 'image' and one is uploaded, the generated avatar otherwise. */
+  avatarSource: AvatarSource
   systemPrompt: string
   /** Empty means the app's default provider and model. */
   providerId: string

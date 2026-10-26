@@ -5,12 +5,13 @@ import { useRouter } from 'vue-router'
 import { renderMarkdown, handleMarkdownClick } from '../../utils/markdown'
 import { Icon } from '@iconify/vue'
 import { usePreferencesStore } from '../../stores/preferences.store'
-import { useAppBranding } from '../../composables/useAppBranding'
 import { useMermaidDiagrams } from '../../composables/useMermaidDiagrams'
 import CollapsibleSection from '../shared/CollapsibleSection.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
 import FileArtifactLinks from './FileArtifactLinks.vue'
 import type { FileArtifactLink } from '../../utils/file-artifacts'
+import type { AvatarConfig } from '../../utils/avatar'
 import { latestThoughtLine, type ThoughtLine } from '../../utils/thinking-preview'
 
 
@@ -30,7 +31,14 @@ const props = defineProps<{
   fileArtifacts?: FileArtifactLink[]
   agentId?: string | null
   agentIconUrl?: string | null
+  agentAvatar?: AvatarConfig | null
+  /** The agent's identity has not loaded yet. */
+  agentAvatarPending?: boolean
   agentName?: string | null
+  /** The chat's live avatar speaks for this message, so keep only the gutter. */
+  hideAvatar?: boolean
+  /** Which edge of this reply the live avatar sits on, if it is here. */
+  liveAvatarDock?: 'top' | 'bottom'
   model?: string
   promptTokens?: number
   completionTokens?: number
@@ -53,7 +61,6 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const prefs = usePreferencesStore()
-const { logoIconUrl } = useAppBranding()
 
 const thinkingExpanded = ref(prefs.autoExpandSteps)
 /** Thinking is still streaming until the first response text arrives. */
@@ -252,32 +259,39 @@ const imageGridClass = computed(() => {
 <template>
   <div
     class="relative flex items-end justify-center gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
-    :class="[isUser ? 'md:justify-end' : 'md:justify-start', { 'chat-msg-enter': animateIn, 'chat-msg-enter--user': animateIn && isUser }]"
+    :class="[isUser ? 'md:justify-end' : 'md:justify-start', { 'chat-msg-enter': animateIn && !hideAvatar, 'chat-msg-enter--user': animateIn && isUser }]"
   >
     <!-- Avatar -->
+    <!-- The chat's live avatar is teleported into this slot on its reply. It sticks to the docked
+         edge, so it stays in view while a long reply scrolls. -->
     <div
-      v-if="!isUser"
+      v-if="!isUser && hideAvatar"
+      class="shrink-0 hidden md:flex w-8 flex-col self-stretch"
+      :class="liveAvatarDock === 'bottom' ? 'justify-end' : 'justify-start'"
+    >
+      <div
+        class="sticky -ml-1 w-10"
+        :class="liveAvatarDock === 'bottom' ? 'bottom-3' : 'top-3'"
+        :data-live-avatar-slot="messageId"
+      />
+    </div>
+    <div
+      v-else-if="!isUser"
       class="shrink-0 mt-0.5 hidden md:flex flex-col items-center gap-0.5"
     >
       <button
         type="button"
         aria-label="Open agent details"
-        class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold overflow-hidden shadow-sm ring-1 ring-theme-700/50 transition-opacity cursor-pointer hover:opacity-80"
-        :class="agentIconUrl ? 'bg-theme-800' : 'bg-linear-to-br from-theme-700 to-theme-900 text-theme-300'"
+        class="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-opacity cursor-pointer hover:opacity-80"
+        :class="agentIconUrl ? 'bg-theme-800 shadow-sm ring-1 ring-theme-700/50' : ''"
         @click="router.push(agentId ? `/agents/${agentId}` : '/agents/cyno')"
       >
-        <img
-          v-if="agentIconUrl"
-          :src="agentIconUrl"
-          alt=""
-          class="w-full h-full object-cover"
-        >
-        <img
-          v-else
-          :src="logoIconUrl"
-          alt="Cynosure"
-          class="w-full h-full object-contain"
-        >
+        <AgentAvatar
+          :name="agentName || 'Cyno'"
+          :icon-url="agentIconUrl"
+          :avatar="agentAvatar"
+          :pending="agentAvatarPending"
+        />
       </button>
       <span
         v-if="agentName"
@@ -290,6 +304,8 @@ const imageGridClass = computed(() => {
     <div
       class="relative md:max-w-[85%] max-w-[90%] px-5 py-3 text-[15px] wrap-break-word leading-relaxed transition-all"
       :class="[
+        // Rows hosting the live avatar rise the bubble only, so the avatar holds still.
+        { 'chat-msg-enter': animateIn && hideAvatar && !isUser },
         isUser ? 'chat-user-message bg-user-message text-user-message-text md:rounded-tr-sm' : 'text-theme-200 max-md:w-full max-md:max-w-full',
         showBubble ? 'rounded-3xl shadow-sm' : 'bg-transparent max-md:px-0',
         !isUser && showBubble ? 'bg-theme-800/60 border md:rounded-tl-sm' : '',

@@ -6,6 +6,7 @@ import type { AgentDefinition } from '../api/types'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useCynoStore } from '../stores/cyno.store'
 import AgentDetailView from './AgentDetailView.vue'
+import cynosureLogoRed from '../assets/img/app-logo/cynosure-logo-red.png'
 
 const mocks = vi.hoisted(() => ({ update: vi.fn(), updateCyno: vi.fn(), setActiveAgent: vi.fn() }))
 vi.mock('../api/client', () => ({ api: {
@@ -18,7 +19,7 @@ vi.mock('../stores/chat.store', () => ({ useChatStore: () => ({ setActiveAgent: 
 
 const original: AgentDefinition = {
   id: 'one', name: 'First agent', internalName: 'first_agent', description: 'Original description',
-  category: '', iconUrl: null, providerId: '', model: '', systemPrompt: '', tools: [], subAgents: [],
+  category: '', iconUrl: null, imageUrl: null, avatar: null, avatarSource: 'generated', providerId: '', model: '', systemPrompt: '', tools: [], subAgents: [],
   memoryFolders: [], autoApproveTools: false, autoToolRouting: false, autoMemory: false, dreamingEnabled: true,
   autoRouterProviderId: '', autoRouterModel: '', generateTitle: true, thinkingEnabled: true,
   reasoningEffort: 'medium', maxContextTokens: null, sortOrder: 0, favorite: false, createdAt: 1, updatedAt: 1,
@@ -41,7 +42,7 @@ async function setup(path = '/agents/one') {
   definitions.load = vi.fn(async () => {})
   const cyno = useCynoStore()
   cyno.profile = {
-    name: 'Cyno', iconUrl: null, systemPrompt: '', providerId: '', model: '', tools: null, memoryFolders: null,
+    name: 'Cyno', iconUrl: null, avatar: null, avatarSource: 'generated', systemPrompt: '', providerId: '', model: '', tools: null, memoryFolders: null,
     subAgents: [], thinkingEnabled: true, reasoningEffort: 'medium', autoToolRouting: false, autoMemory: false,
     dreamingEnabled: true, updatedAt: 1, effective: { tools: [], memoryFolders: [] },
   }
@@ -60,7 +61,7 @@ async function setup(path = '/agents/one') {
   } })
   wrappers.push(wrapper)
   await flushPromises()
-  const name = () => wrapper.get('input[type="text"]')
+  const name = () => wrapper.get('#agent-name')
   return { wrapper, router, definitions, name, cyno }
 }
 
@@ -79,8 +80,8 @@ describe('agent settings explicit save', () => {
     await wrapper.get('textarea').setValue('Changed description')
     expect(mocks.update).not.toHaveBeenCalled()
     expect(definitions.get('one')?.name).toBe('First agent')
-    await wrapper.findAll('[role="tab"]')[1].trigger('click')
-    await wrapper.findAll('[role="tab"]')[0].trigger('click')
+    await wrapper.findAll('[role="tab"]:not([data-source])')[1].trigger('click')
+    await wrapper.findAll('[role="tab"]:not([data-source])')[0].trigger('click')
     expect(name().element).toHaveProperty('value', 'Changed name')
     await name().setValue('   ')
     expect(wrapper.get('[data-testid="save-agent"]').attributes('disabled')).toBeDefined()
@@ -187,5 +188,43 @@ describe('agent settings explicit save', () => {
     await wrapper.get('[data-testid="save-agent"]').trigger('click')
     await flushPromises()
     expect(mocks.updateCyno).toHaveBeenCalledWith({ name: 'Captain', reasoningEffort: 'xhigh' })
+  })
+
+  test('Cyno keeps the blob by default and has the red logo ready when switching to image', async () => {
+    const { wrapper, cyno } = await setup('/cyno')
+    expect(cyno.profile?.avatarSource).toBe('generated')
+    expect(cyno.iconUrl).toBeNull()
+    expect(wrapper.get('[data-source="image"] img').attributes('src')).toBe(cynosureLogoRed)
+
+    await wrapper.get('[data-source="image"]').trigger('click')
+    expect(mocks.updateCyno).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
+    await vi.dynamicImportSettled()
+    await flushPromises()
+
+    const savedImage = mocks.updateCyno.mock.calls[0][0].iconUrl
+    expect(savedImage).toMatch(/^data:image\/png;base64,/)
+    expect(mocks.updateCyno).toHaveBeenCalledExactlyOnceWith({ avatarSource: 'image', iconUrl: savedImage })
+    expect(cyno.iconUrl).toBe(savedImage)
+
+    await wrapper.get('[data-source="generated"]').trigger('click')
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
+    await flushPromises()
+    expect(cyno.iconUrl).toBeNull()
+    expect(cyno.imageUrl).toBe(savedImage)
+  })
+
+  test('Cyno keeps a custom image when switching from the blob', async () => {
+    const { wrapper, cyno } = await setup('/cyno')
+    const customImage = 'data:image/png;base64,AAAA'
+    cyno.profile!.iconUrl = customImage
+    await flushPromises()
+    expect(wrapper.get('[data-source="image"] img').attributes('src')).toBe(customImage)
+
+    await wrapper.get('[data-source="image"]').trigger('click')
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
+    await flushPromises()
+    expect(mocks.updateCyno).toHaveBeenCalledExactlyOnceWith({ avatarSource: 'image' })
+    expect(cyno.iconUrl).toBe(customImage)
   })
 })

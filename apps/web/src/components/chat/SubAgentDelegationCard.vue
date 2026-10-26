@@ -9,6 +9,8 @@ import { Icon } from '@iconify/vue'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useToolPresentation } from '../../composables/useToolPresentation'
 import ToolExecutionList from './ToolExecutionList.vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
+import type { AgentMood } from '../../composables/useAgentMood'
 import {
   DELEGATION_TOOLS,
   toolResultsById,
@@ -57,6 +59,12 @@ function displayName(run: SubAgentRun): string {
 
 function iconUrl(run: SubAgentRun): string | null {
   return agentFor(run)?.iconUrl ?? null
+}
+
+/** A sub-agent's face follows its run: busy while it works, downcast when it fails. */
+const RUN_MOODS: Record<RunStatus, AgentMood> = {
+  starting: 'thinking', running: 'thinking', queued: 'sleepy', finished: 'idle', returned: 'happy',
+  failed: 'sad', awaiting: 'surprised', denied: 'unsure', ended: 'idle',
 }
 
 // ─── Status ─────────────────────────────────────────────────
@@ -273,16 +281,10 @@ function toggleRun(key: string): void {
             :key="run.key"
             class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-theme-800 ring-2 ring-theme-900"
           >
-            <img
-              v-if="iconUrl(run)"
-              :src="iconUrl(run)!"
-              alt=""
-              class="h-full w-full object-cover"
-            >
-            <Icon
-              v-else
-              icon="lucide:bot"
-              class="h-3.5 w-3.5 text-ink-secondary"
+            <AgentAvatar
+              :name="displayName(run)"
+              :icon-url="iconUrl(run)"
+              :avatar="agentFor(run)?.avatar"
             />
           </span>
         </div>
@@ -334,16 +336,12 @@ function toggleRun(key: string): void {
               :class="[isParallel ? 'h-7 w-7' : 'h-8 w-8', { 'run-avatar--live': isLive(statuses[index]) }]"
             >
               <span class="flex h-full w-full items-center justify-center overflow-hidden rounded-full">
-                <img
-                  v-if="iconUrl(run)"
-                  :src="iconUrl(run)!"
-                  alt=""
-                  class="h-full w-full object-cover"
-                >
-                <Icon
-                  v-else
-                  icon="lucide:bot"
-                  class="h-4 w-4 text-ink-secondary"
+                <AgentAvatar
+                  :name="displayName(run)"
+                  :icon-url="iconUrl(run)"
+                  :avatar="agentFor(run)?.avatar"
+                  :mood="RUN_MOODS[statuses[index]]"
+                  :animate="isLive(statuses[index]) ? 'always' : false"
                 />
               </span>
             </span>

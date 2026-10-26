@@ -190,7 +190,7 @@ describe('ChatOptionsMenu', () => {
     wrapper.unmount()
   })
 
-  test('shows each subagent icon and falls back to the bot icon', async () => {
+  test('shows each subagent icon and falls back to its generated avatar', async () => {
     agentDefs.agents = [
       { id: 'pictured', name: 'Pictured', iconUrl: '/pictured.png' },
       { id: 'plain', name: 'Plain', iconUrl: null },
@@ -204,7 +204,8 @@ describe('ChatOptionsMenu', () => {
     ;([...menu.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Subagents') as HTMLButtonElement).click()
     await flushPromises()
     expect(menu.querySelector('img[src="/pictured.png"]')).not.toBeNull()
-    expect(menu.querySelectorAll('i[data-icon="lucide:bot"]')).toHaveLength(1)
+    expect(menu.querySelectorAll('img[src^="data:image/svg+xml,"]')).toHaveLength(1)
+    expect(menu.querySelectorAll('i[data-icon="lucide:bot"]')).toHaveLength(0)
     wrapper.unmount()
   })
 

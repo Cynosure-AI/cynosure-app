@@ -11,6 +11,8 @@ import { useProviderStore } from '../../stores/provider.store'
 import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import { Icon } from '@iconify/vue'
+import AgentAvatar from '../../components/shared/AgentAvatar.vue'
+import { useCynoStore } from '../../stores/cyno.store'
 import { useMcpServers } from '../../composables/useMcpServers'
 import { useFreshChat } from '../../composables/useFreshChat'
 import { INTRO_PILLS_MS, INTRO_PILL_STAGGER_MS } from '../../components/chat/chatIntro'
@@ -20,6 +22,7 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const { servers: mcpServers } = useMcpServers()
 const providerStore = useProviderStore()
+const cyno = useCynoStore()
 const route = useRoute()
 const router = useRouter()
 const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
@@ -314,10 +317,15 @@ watch(
           data-testid="chat-no-providers"
         >
           <div class="max-w-md text-center">
-            <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-500/10">
-              <Icon
-                icon="lucide:brain-circuit"
-                class="h-8 w-8 text-accent-fg"
+            <!-- Without a provider the assistant has nothing to think with yet. -->
+            <div class="mx-auto mb-5 h-20 w-20">
+              <AgentAvatar
+                :name="cyno.name"
+                :icon-url="cyno.iconUrl"
+                :avatar="cyno.avatar"
+                mood="sleepy"
+                :pending="!cyno.profile"
+                animate="always"
               />
             </div>
             <h2 class="mb-2 text-xl font-medium text-theme-100">

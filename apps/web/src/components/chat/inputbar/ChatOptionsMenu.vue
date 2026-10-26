@@ -4,6 +4,7 @@ import type { CSSProperties } from 'vue'
 import type { ToolInfo } from '../../../stores/agent-runtime.store'
 import { onClickOutside } from '@vueuse/core'
 import { Icon } from '@iconify/vue'
+import AgentAvatar from '../../shared/AgentAvatar.vue'
 import { useChatStore } from '../../../stores/chat.store'
 import { useAgentStore } from '../../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../../stores/agent-definitions.store'
@@ -549,16 +550,11 @@ onBeforeUnmount(() => {
             class="h-4 w-4 accent-accent-500"
             :checked="chatStore.sessionSubAgentIds.includes(agent.id)"
             @change="toggleAgent(agent.id)"
-          ><img
-            v-if="agent.iconUrl"
-            :src="agent.iconUrl"
-            alt=""
-            class="h-4 w-4 shrink-0 rounded-sm object-cover"
-          ><Icon
-            v-else
-            icon="lucide:bot"
-            class="h-4 w-4 shrink-0"
-          /><span class="min-w-0"><span class="block truncate text-xs">{{ agent.name }}</span><span class="block truncate text-[10px] text-ink-muted">{{ agent.description || agent.internalName }}</span></span></label>
+          ><span class="h-4 w-4 shrink-0 overflow-hidden rounded-sm"><AgentAvatar
+            :name="agent.name"
+            :icon-url="agent.iconUrl"
+            :avatar="agent.avatar"
+          /></span><span class="min-w-0"><span class="block truncate text-xs">{{ agent.name }}</span><span class="block truncate text-[10px] text-ink-muted">{{ agent.description || agent.internalName }}</span></span></label>
           <div
             v-if="!visibleAgents.length"
             class="px-3 py-5 text-center text-xs text-ink-muted"

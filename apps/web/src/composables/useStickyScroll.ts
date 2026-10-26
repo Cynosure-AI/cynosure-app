@@ -1,4 +1,4 @@
-import { nextTick, onScopeDispose, watch, type Ref } from 'vue'
+import { nextTick, onScopeDispose, readonly, ref, watch, type Ref } from 'vue'
 
 /** Keep following content growth until the reader scrolls away from the bottom. */
 export function useStickyScroll(
@@ -6,20 +6,20 @@ export function useStickyScroll(
   content: Ref<HTMLElement | null>,
   threshold = 72,
 ) {
-  let following = true
+  const following = ref(true)
 
   function stopFollowing(): void {
-    following = false
+    following.value = false
   }
 
   function onScroll(): void {
     const el = container.value
-    if (el) following = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+    if (el) following.value = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
   }
 
   function followBottom(): void {
     const el = container.value
-    if (following && el) el.scrollTop = el.scrollHeight
+    if (following.value && el) el.scrollTop = el.scrollHeight
   }
 
   function scrollToBottomIfFollowing(): void {
@@ -28,7 +28,7 @@ export function useStickyScroll(
   }
 
   function scrollToBottom(): void {
-    following = true
+    following.value = true
     scrollToBottomIfFollowing()
   }
 
@@ -42,5 +42,5 @@ export function useStickyScroll(
   }, { flush: 'post', immediate: true })
   onScopeDispose(() => observer.disconnect())
 
-  return { onScroll, stopFollowing, scrollToBottom, scrollToBottomIfFollowing }
+  return { following: readonly(following), onScroll, stopFollowing, scrollToBottom, scrollToBottomIfFollowing }
 }

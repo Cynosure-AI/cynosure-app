@@ -13,6 +13,7 @@ import DataTable from '../components/shared/DataTable.vue'
 import BaseCard from '../components/shared/BaseCard.vue'
 import HoverTooltip from '../components/shared/HoverTooltip.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
+import AgentAvatar from '../components/shared/AgentAvatar.vue'
 import ProviderModelSelect from '../components/shared/ProviderModelSelect.vue'
 import type { Column } from '../components/shared/DataTable.vue'
 import type { AgentDefinition } from '../api/types'
@@ -292,11 +293,15 @@ function formatDate(timestamp: number): string {
         :to="{ name: 'cyno' }"
         class="mb-4 flex items-center gap-3 rounded-xl border border-accent-500/25 bg-accent-500/5 px-4 py-3 transition-colors hover:bg-accent-500/10"
       >
-        <img
-          :src="cyno.iconUrl"
-          alt=""
-          class="h-10 w-10 shrink-0 rounded-lg object-cover"
-        >
+        <span class="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
+          <AgentAvatar
+            :name="cyno.name"
+            :icon-url="cyno.iconUrl"
+            :avatar="cyno.avatar"
+            :pending="!cyno.profile"
+            animate="hover"
+          />
+        </span>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 text-sm font-medium text-theme-100">
             {{ cyno.name }}
@@ -370,17 +375,12 @@ function formatDate(timestamp: number): string {
             class="flex min-w-0 items-start gap-3"
             :class="activeSortKey ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'"
           >
-            <div class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-linear-to-br from-accent-500/20 to-purple-500/20">
-              <img
-                v-if="item.iconUrl"
-                :src="item.iconUrl"
-                alt=""
-                class="h-full w-full object-cover"
-              >
-              <Icon
-                v-else
-                icon="lucide:bot"
-                class="h-4 w-4 text-accent-fg"
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+              <AgentAvatar
+                :name="item.name"
+                :icon-url="item.iconUrl"
+                :avatar="item.avatar"
+                animate="hover"
               />
             </div>
             <div class="min-w-0 flex-1">

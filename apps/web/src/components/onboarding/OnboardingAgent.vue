@@ -6,6 +6,7 @@ import { useProviderStore } from '../../stores/provider.store'
 import { agentInternalName } from '../../utils/agent-memory'
 import BaseCard from '../shared/BaseCard.vue'
 import IconUpload from '../shared/IconUpload.vue'
+import AgentAvatar from '../shared/AgentAvatar.vue'
 import ProviderModelSelect from '../shared/ProviderModelSelect.vue'
 import PromptSmartTagPicker from '../shared/PromptSmartTagPicker.vue'
 import { NEW_AGENT_BEHAVIOR } from '../../utils/agent-defaults'
@@ -259,11 +260,16 @@ defineExpose({ createAgent })
         <div class="border-b border-theme-700/70 py-5">
           <IconUpload
             :icon-url="iconUrl"
-            fallback-icon="lucide:bot"
             @update="iconUrl = $event"
           >
             <template #description>
-              Add an optional image so this agent is easy to spot.
+              Without an image, the agent gets a generated face from its name.
+            </template>
+            <template #fallback>
+              <AgentAvatar
+                :name="name || 'Agent'"
+                animate="always"
+              />
             </template>
           </IconUpload>
         </div>

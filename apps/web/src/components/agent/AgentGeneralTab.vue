@@ -2,8 +2,9 @@
 import { ref, computed, onMounted, nextTick } from "vue";
 import { Icon } from "@iconify/vue";
 import { useProviderStore } from "../../stores/provider.store";
+import { useCynoStore } from "../../stores/cyno.store";
 import type { AgentDefinition } from "../../api/types";
-import IconUpload from "../shared/IconUpload.vue";
+import AgentAvatarPicker from "./AgentAvatarPicker.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>();
 
 const providerStore = useProviderStore();
+const cynoStore = useCynoStore();
 const systemPromptRef = ref<HTMLTextAreaElement | null>(null);
 
 const REASONING_LEVELS: Array<{
@@ -90,25 +92,22 @@ onMounted(() =>
   <div class="space-y-4 mb-6">
     <!-- ── Identity ──────────────────────────────────────────── -->
     <BaseCard class="p-5 space-y-4">
-      <IconUpload
-        :icon-url="agent.iconUrl"
-        fallback-icon="lucide:bot"
-        @update="emit('update', 'iconUrl', $event)"
-      >
-        <template #description>
-          <template v-if="cyno">
-            Custom avatar for {{ agent.name }}. Falls back to the app logo if not set.
-          </template>
-          <template v-else>
-            Custom avatar for this agent. Falls back to the provider icon if not
-            set.
-          </template>
-        </template>
-      </IconUpload>
+      <AgentAvatarPicker
+        :name="agent.name"
+        :avatar-source="agent.avatarSource"
+        :avatar="agent.avatar"
+        :image-url="agent.imageUrl"
+        :default-avatar="cyno ? cynoStore.defaults?.avatar : null"
+        @update="(field, value) => emit('update', field, value)"
+      />
 
       <div>
-        <label class="block text-sm text-ink-secondary mb-1.5">Name</label>
+        <label
+          for="agent-name"
+          class="block text-sm text-ink-secondary mb-1.5"
+        >Name</label>
         <input
+          id="agent-name"
           :value="agent.name"
           type="text"
           class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"

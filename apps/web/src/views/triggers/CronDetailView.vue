@@ -27,8 +27,13 @@ import {
 import ToggleSwitch from "@/components/shared/ToggleSwitch.vue";
 import ModalDialog from "@/components/shared/ModalDialog.vue";
 import { useCynoStore } from '../../stores/cyno.store'
+import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import AgentAvatar from '../../components/shared/AgentAvatar.vue'
 
 const cyno = useCynoStore()
+const agentDefs = useAgentDefinitionsStore()
+// Avatar settings live on the definitions; load them if this page opened first.
+if (!agentDefs.loaded) void agentDefs.load()
 
 const route = useRoute();
 const router = useRouter();
@@ -351,17 +356,14 @@ watch(cronPrompt, resizePrompt, { immediate: true });
             :aria-label="`Open ${job.agentName} agent details`"
             @click="router.push(job.agentId ? `/agents/${job.agentId}` : { name: 'cyno' })"
           >
-            <img
-              v-if="job.agentIconUrl || !job.agentId"
-              :src="job.agentIconUrl || cyno.iconUrl"
-              alt=""
-              class="h-full w-full object-cover"
-            >
-            <Icon
-              v-else
-              icon="lucide:clock"
-              class="h-6 w-6 text-status-info"
-            />
+            <AgentAvatar
+                      :name="job.agentName || cyno.name"
+                      :icon-url="job.agentIconUrl"
+                      :avatar="job.agentId ? agentDefs.get(job.agentId)?.avatar : cyno.avatar"
+                      :pending="job.agentId ? !agentDefs.loaded : !cyno.profile"
+                      :mood="job.conversationId ? 'sleepy' : 'idle'"
+                      animate="always"
+                    />
           </button>
           <div class="min-w-0">
             <h1 class="break-words text-2xl font-bold leading-tight text-theme-100">
@@ -465,7 +467,7 @@ watch(cronPrompt, resizePrompt, { immediate: true });
                 :agents="allAgents"
                 include-default
                 :default-label="cyno.name"
-                :default-img-src="cyno.iconUrl"
+                :default-img-src="cyno.brandIconUrl"
                 agents-group-label="Agents"
                 placeholder="Select an agent…"
                 @update:model-value="!saving && (cronAgentId = $event)"

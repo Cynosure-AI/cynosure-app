@@ -18,8 +18,13 @@ import {
 } from '../../utils/cron-helpers'
 import { groupByNextRun, type ScheduleGroup } from '../../utils/schedule-groups'
 import { useCynoStore } from '../../stores/cyno.store'
+import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import AgentAvatar from '../../components/shared/AgentAvatar.vue'
 
 const cyno = useCynoStore()
+const agentDefs = useAgentDefinitionsStore()
+// Avatar settings live on the definitions; load them if this page opened first.
+if (!agentDefs.loaded) void agentDefs.load()
 
 const router = useRouter()
 
@@ -467,22 +472,19 @@ onUnmounted(() => {
                 <div class="relative h-10 w-10 shrink-0 lg:h-11 lg:w-11">
                   <button
                     type="button"
-                    class="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-theme-700 transition-shadow hover:ring-2 hover:ring-accent-500/60"
-                    :class="{ 'opacity-60 grayscale': !job.enabled }"
+                    class="flex h-full w-full items-center justify-center overflow-hidden rounded-full transition-shadow hover:ring-2 hover:ring-accent-500/60"
+                    :class="[job.agentIconUrl ? 'bg-theme-700' : 'bg-theme-800/60', { 'opacity-60 grayscale': !job.enabled }]"
                     :title="`Open ${job.agentName} agent details`"
                     :aria-label="`Open ${job.agentName} agent details`"
                     @click.stop="openAgentDetails(job.agentId)"
                   >
-                    <img
-                      v-if="job.agentIconUrl || !job.agentId"
-                      :src="job.agentIconUrl || cyno.iconUrl"
-                      :alt="job.agentName"
-                      class="h-full w-full object-cover"
-                    >
-                    <Icon
-                      v-else
-                      icon="lucide:bot"
-                      class="h-4 w-4 text-ink-secondary"
+                    <AgentAvatar
+                      :name="job.agentName || cyno.name"
+                      :icon-url="job.agentIconUrl"
+                      :avatar="job.agentId ? agentDefs.get(job.agentId)?.avatar : cyno.avatar"
+                      :pending="job.agentId ? !agentDefs.loaded : !cyno.profile"
+                      :mood="job.conversationId ? 'sleepy' : 'idle'"
+                      animate="hover"
                     />
                   </button>
                   <RouterLink
@@ -680,7 +682,7 @@ onUnmounted(() => {
                 :agents="allAgents"
                 include-default
                 :default-label="cyno.name"
-                :default-img-src="cyno.iconUrl"
+                :default-img-src="cyno.brandIconUrl"
                 agents-group-label="Agents"
                 placeholder="Select an agent…"
                 max-height="max-h-96"

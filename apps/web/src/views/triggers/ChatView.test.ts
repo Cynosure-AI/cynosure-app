@@ -37,6 +37,7 @@ vi.mock('vue-router', () => ({
 vi.mock('../../stores/chat.store', () => ({ useChatStore: () => mocks.chatStore }))
 vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => mocks.agentStore }))
 vi.mock('../../stores/provider.store', () => ({ useProviderStore: () => mocks.providerStore }))
+vi.mock('../../stores/cyno.store', () => ({ useCynoStore: () => ({ name: 'Cyno', iconUrl: null, avatar: null }) }))
 vi.mock('../../api/http', () => ({ wsConnected: mocks.wsConnected }))
 vi.mock('../../api/client', () => ({ api: {
   agents: { list: mocks.agentsList },

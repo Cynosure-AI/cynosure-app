@@ -19,6 +19,8 @@ const isProcessing = ref(false)
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 const AVATAR_SIZE = 512
+/** GIFs skip the canvas so they keep animating; the server caps image data URLs at 2 MB. */
+const MAX_GIF_DATA_URL_LENGTH = 2 * 1024 * 1024
 
 function readFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -37,6 +39,18 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     image.src = src
   })
 }
+
+/** Keep a GIF as uploaded, since redrawing it on a canvas keeps only its first frame. */
+async function keepGif(file: File): Promise<string> {
+  const dataUrl = await readFile(file)
+  if (dataUrl.length > MAX_GIF_DATA_URL_LENGTH) {
+    throw new GifTooLargeError()
+  }
+  await loadImage(dataUrl)
+  return dataUrl
+}
+
+class GifTooLargeError extends Error {}
 
 async function resizeAvatar(file: File): Promise<string> {
   const image = await loadImage(await readFile(file))
@@ -75,9 +89,11 @@ async function processFile(file: File | undefined | null) {
 
   isProcessing.value = true
   try {
-    emit('update', await resizeAvatar(file))
-  } catch {
-    errorMessage.value = 'The image could not be processed. Please try another file.'
+    emit('update', file.type === 'image/gif' ? await keepGif(file) : await resizeAvatar(file))
+  } catch (error) {
+    errorMessage.value = error instanceof GifTooLargeError
+      ? 'Animated GIFs are kept as they are so they keep playing, so they need to be under 1.5 MB.'
+      : 'The image could not be processed. Please try another file.'
   } finally {
     isProcessing.value = false
   }
@@ -113,7 +129,7 @@ function removeImage() {
     <label class="block text-sm text-ink-secondary mb-1.5">{{ label || 'Icon' }}</label>
     <p class="text-xs text-ink-faint mb-2">
       <slot name="description">
-        Custom avatar. Images up to 5 MB are cropped and optimized to 512 × 512.
+        Custom avatar. Images up to 5 MB are cropped and optimized to 512 × 512; GIFs up to 1.5 MB keep their animation.
       </slot>
     </p>
     
@@ -137,6 +153,13 @@ function removeImage() {
           class="w-full h-full object-cover transition-opacity"
           :class="{ 'opacity-50': isDragging }"
         >
+        <div
+          v-else-if="$slots.fallback && !isProcessing"
+          class="h-full w-full p-1 transition-opacity"
+          :class="{ 'opacity-50': isDragging }"
+        >
+          <slot name="fallback" />
+        </div>
         <Icon
           v-else
           :icon="isProcessing ? 'lucide:loader-2' : fallbackIcon || 'lucide:image'"
