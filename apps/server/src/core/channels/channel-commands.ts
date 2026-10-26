@@ -34,6 +34,7 @@ export function runProjectSuggestion<K extends ChannelTargetId>(
 }
 
 const NO_PROJECTS = 'There are no projects yet. Create one in the app first.'
+const FRESH_START = 'Clean slate — what’s next?'
 
 /** The project the target's active conversation works in, for pickers that show the choices as buttons. */
 export function currentChannelProject<K extends ChannelTargetId>(
@@ -122,7 +123,7 @@ export async function handleChannelCommand<K extends ChannelTargetId>(
         else state.agentOverride.set(target, agentId)
         state.lastUsedAgent.set(target, agentId)
         archiveChannelConversation(state, target, agentId)
-        await reply(`🆕 Starting a fresh conversation with ${style.bold(channelAgentName(agentId))}.`)
+        await reply(`✨ ${style.bold('New conversation')} with ${channelAgentName(agentId)}\n${FRESH_START}`)
         return true
     }
 
@@ -134,7 +135,10 @@ export async function handleChannelCommand<K extends ChannelTargetId>(
         }
         state.agentOverride.delete(target)
         archiveChannelConversation(state, target, prevAgentId)
-        await reply(`🔄 Switched back to default agent: ${style.bold(channelAgentName(state.agentId))}\n\nStarting a fresh conversation.`)
+        const name = channelAgentName(state.agentId)
+        await reply(prevAgentId === state.agentId
+            ? `✨ ${style.bold('New conversation')} with ${name}\n${FRESH_START}`
+            : `🏠 ${style.bold(`Back to ${name}`)}, your default agent\n${FRESH_START}`)
         return true
     }
 
@@ -154,6 +158,6 @@ export async function handleChannelCommand<K extends ChannelTargetId>(
     }
     state.agentOverride.set(target, matchedAgent.id)
     state.lastUsedAgent.set(target, matchedAgent.id)
-    await reply(`🔀 Switched to ${style.bold(matchedAgent.name)}. Starting a fresh conversation.\n\n${style.switchBackHint}`)
+    await reply(`🔀 ${style.bold(`Now talking to ${matchedAgent.name}`)}\n${FRESH_START}\n\n${style.switchBackHint}`)
     return true
 }

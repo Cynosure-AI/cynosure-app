@@ -57,7 +57,7 @@ describe('shared channel commands', () => {
 
         expect(await run('!code_helper')).toBe(true)
         expect(state.agentOverride.get('T1')).toBe('coder')
-        expect(replies.at(-1)).toBe('🔀 Switched to *Coder*. Starting a fresh conversation.\n\nUse !start to switch back.')
+        expect(replies.at(-1)).toBe('🔀 *Now talking to Coder*\nClean slate — what’s next?\n\nUse !start to switch back.')
 
         expect(await run('!new')).toBe(true)
         expect(state.agentOverride.get('T1')).toBe('coder')
@@ -65,7 +65,7 @@ describe('shared channel commands', () => {
         expect(await run('!start')).toBe(true)
         expect(state.agentOverride.has('T1')).toBe(false)
         expect(state.lastUsedAgent.get('T1')).toBe('coder')
-        expect(replies.at(-1)).toBe('🔄 Switched back to default agent: *Default*\n\nStarting a fresh conversation.')
+        expect(replies.at(-1)).toBe('🏠 *Back to Default*, your default agent\nClean slate — what’s next?')
     })
 
     test('!cyno switches to Cyno even when the channel defaults to another agent', async () => {
@@ -75,7 +75,7 @@ describe('shared channel commands', () => {
         expect(await handleChannelCommand(state, 'T1', '!cyno', async (r) => { replies.push(r) }, style)).toBe(true)
 
         expect(state.agentOverride.get('T1')).toBe('__agentless__')
-        expect(replies.at(-1)).toBe('🔀 Switched to *Cyno*. Starting a fresh conversation.\n\nUse !start to switch back.')
+        expect(replies.at(-1)).toBe('🔀 *Now talking to Cyno*\nClean slate — what’s next?\n\nUse !start to switch back.')
     })
 
     test('respects the agent allow-list and ignores unknown commands', async () => {

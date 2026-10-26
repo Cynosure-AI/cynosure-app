@@ -18,6 +18,12 @@ describe('channel approvals', () => {
         expect(text).not.toContain('Private file contents')
     })
 
+    test('shows a shell command with its stated purpose', () => {
+        const text = describeChannelApproval(request({ toolCalls: [{ id: 'call', function: { name: 'shell_execute',
+            arguments: JSON.stringify({ command: 'rm hello.txt', explanation: 'Delete the _old_ draft', cwd: '/tmp' }) } }] }))
+        expect(text).toBe('• **Shell execute**\n   Delete the  old  draft\n```\nrm hello.txt\n```')
+    })
+
     test('handles malformed arguments, provider titles and large batches', () => {
         const calls = Array.from({ length: 9 }, (_, i) => ({ id: String(i),
             function: { name: 'some_tool', arguments: '{invalid' }, annotations: { title: 'Useful action' } }))

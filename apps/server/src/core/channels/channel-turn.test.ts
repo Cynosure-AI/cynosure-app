@@ -370,10 +370,12 @@ describe('channel turn', () => {
             getEventBus().emit('step:tools-chosen', { conversationId: 'conversation', toolCalls: [
                 { id: 'c1', name: 'directory_create', arguments: '{"path":"/recipes/53-wurst-topf"}' },
                 { id: 'c2', name: 'Foto.jpg', arguments: '{"type":"attachment-index"}' },
+                { id: 'c3', name: 'shell_execute', arguments: '{"command":"ls","explanation":"List the recipes"}' },
             ] })
             getEventBus().emit('step:tools-chosen', { conversationId: 'conversation', maCodename: 'helper', toolCalls: [{ id: 's1', name: 'sub_tool' }] })
             await vi.waitFor(() => expect(messages[0]).toContain('› Directory create · `53-wurst-topf`'))
             expect(messages[0]).not.toContain('Foto')
+            expect(messages[0]).toContain('› 💻 List the recipes')
             expect(messages[0]).not.toContain('Sub tool')
             getEventBus().emit('step:executed', { conversationId: 'conversation', results: [{ toolCallId: 'c1', success: true }] })
             await vi.waitFor(() => expect(messages[0]).toContain('✓ Directory create'))

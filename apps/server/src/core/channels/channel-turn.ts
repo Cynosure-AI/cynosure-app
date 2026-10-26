@@ -26,7 +26,7 @@ import {
     persistChannelExecutionConfig, persistChannelUserMessage, publishChannelStreamError, updateChannelExecution,
 } from './channel-execution.js'
 import {
-    effectiveAgentId, getOrCreateChannelConversation, resolveChannelHITL, resolveContinuedConversation, toolCallTarget, toolDisplayName, withTargetLock,
+    effectiveAgentId, getOrCreateChannelConversation, resolveChannelHITL, resolveContinuedConversation, shellCallDetails, toolCallTarget, toolDisplayName, withTargetLock,
     type ActiveChannelTurn, type BroadcastFn, type ChannelHITLRequest, type ChannelMedia, type ChannelSessionState, type ChannelTargetId,
 } from './channel-session.js'
 import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
@@ -179,6 +179,9 @@ function mediaPlaceholder(media: ChannelMedia): string {
 /** Status-card line for a tool call, e.g. "Directory create · `53-wurst-gemuese-topf`". Null for internal bookkeeping. */
 function progressStepLabel(name: string, rawArguments = ''): string | null {
     if (rawArguments.includes('"attachment-index"')) return null
+    // "Shell execute" says little; the stated purpose says what is happening.
+    const shell = shellCallDetails(rawArguments)
+    if (shell?.explanation) return `💻 ${shell.explanation.replace(/[`*_\r\n]/g, ' ').slice(0, 60)}`
     const target = toolCallTarget(rawArguments)
     let short = target
     if (target) {

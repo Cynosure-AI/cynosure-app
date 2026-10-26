@@ -307,6 +307,17 @@ export function toolCallTarget(rawArguments: string): string | null {
     return null
 }
 
+/** The stated purpose and command of a shell call, which the model must always supply. */
+export function shellCallDetails(rawArguments: string): { explanation: string; command: string } | null {
+    try {
+        const args = JSON.parse(rawArguments) as Record<string, unknown> | null
+        if (typeof args?.command !== 'string') return null
+        return { command: args.command, explanation: typeof args.explanation === 'string' ? args.explanation.trim() : '' }
+    } catch {
+        return null
+    }
+}
+
 /** Readable name of a tool, e.g. `directory_create` → "Directory create". */
 export function toolDisplayName(name: string, title?: string): string {
     const text = (title || name.replace(/_/g, ' ')).trim()
@@ -319,9 +330,17 @@ export function describeChannelApproval(request: ChannelHITLRequest): string {
     const code = (value: string, limit: number) => value.replace(/[\r\n`]/g, ' ').slice(0, limit)
     const lines = request.toolCalls.slice(0, 6).map(tc => {
         const title = inline(toolDisplayName(tc.function.name, tc.annotations?.title), 70)
-        const target = toolCallTarget(tc.function.arguments)
         // A provider title can hide what actually runs; name the tool then.
         const tool = tc.annotations?.title ? ` (\`${code(tc.function.name, 64)}\`)` : ''
+        const shell = shellCallDetails(tc.function.arguments)
+        if (shell) {
+            // A shell approval is only meaningful with the command itself, so it is shown in full up to a sane length.
+            const command = shell.command.replace(/```/g, '\'\'\'')
+            const shown = command.length > 600 ? `${command.slice(0, 600)}…` : command
+            return [`• **${title}**${tool}`, shell.explanation && `   ${inline(shell.explanation, 200)}`, '```', shown, '```']
+                .filter(Boolean).join('\n')
+        }
+        const target = toolCallTarget(tc.function.arguments)
         return `• **${title}**${tool}${target ? `\n   \`${code(target, 130)}\`` : ''}`
     })
     if (request.toolCalls.length > 6) lines.push(`…and ${request.toolCalls.length - 6} more actions. Review the full request in Cynosure before approving.`)
