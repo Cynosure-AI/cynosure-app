@@ -8,7 +8,7 @@ import {
     SK_THEME, SK_AUTO_EXPAND, SK_AI_MESSAGE_BUBBLES, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_TITLE_PROVIDER, SK_TITLE_MODEL,
     SK_CONTEXT_STRATEGY, SK_INLINE_ATTACHMENT_TEXT_LIMIT, SK_COMPACT_PROVIDER, SK_COMPACT_MODEL,
     SK_AGENT_CATEGORIES, SK_MA_CATEGORIES,
-    SK_RECENT_CHAT_FILTER,
+    SK_RECENT_CHAT_FILTER, SK_SIDEBAR_CHAT_VIEW,
     SK_WHISPER_MODEL, SK_WHISPER_ENABLED, SK_WHISPER_QUANTIZATION, SK_WHISPER_LANGUAGE, SK_WHISPER_MIC_DEVICE,
     SK_VOICE_TRANSCRIPTION_MODE, SK_REMOTE_TRANSCRIPTION_PROVIDER, SK_REMOTE_TRANSCRIPTION_MODEL,
 } from '@/utils/storage-keys'
@@ -19,6 +19,7 @@ const THEME_IDS = new Set<ThemeId>(['dark', 'light', 'blackwall', 'crimson', 'cy
 export type { ContextStrategy }
 export type VoiceTranscriptionMode = 'local' | 'remote'
 export type RecentChatFilter = 'all' | 'free' | 'agents' | 'cron' | 'channel'
+export type SidebarChatView = 'global' | 'agents'
 
 export const usePreferencesStore = defineStore('preferences', () => {
     const userName = ref('')
@@ -33,6 +34,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const autoExpandSteps = useLocalStorage(SK_AUTO_EXPAND, false)
     const aiMessageBubbles = useLocalStorage(SK_AI_MESSAGE_BUBBLES, true)
     const sidebarCollapsed = ref(false)
+    const sidebarChatView = useLocalStorage<SidebarChatView>(SK_SIDEBAR_CHAT_VIEW, 'global')
+    if (sidebarChatView.value !== 'global' && sidebarChatView.value !== 'agents') sidebarChatView.value = 'global'
     const recentChatFilter = useLocalStorage<RecentChatFilter[]>(SK_RECENT_CHAT_FILTER, ['all'])
     // Migrate the former single-select preference and discard malformed values.
     const storedRecentChatFilter = recentChatFilter.value as unknown
@@ -63,7 +66,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     // Sync all pref changes to Electron's JSON file (single watcher)
     watch(
-        [theme, autoExpandSteps, aiMessageBubbles, recentChatFilter,
+        [theme, autoExpandSteps, aiMessageBubbles, recentChatFilter, sidebarChatView,
             agentCategories, maCategories, whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
             voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel],
         () => { syncPrefsToElectron() },
@@ -189,7 +192,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     return {
         userName, userAvatarUrl, userInstructions, userSettingsLoaded, userSettingsSaving, loadUserSettings, saveUserProfile, saveUserName,
         migrateLegacyChatRunSettings,
-        theme, autoExpandSteps, aiMessageBubbles, sidebarCollapsed, recentChatFilter,
+        theme, autoExpandSteps, aiMessageBubbles, sidebarCollapsed, recentChatFilter, sidebarChatView,
         agentCategories, maCategories,
         whisperModel, whisperEnabled, whisperQuantization, whisperLanguage, whisperMicDeviceId,
         voiceTranscriptionMode, remoteTranscriptionProviderId, remoteTranscriptionModel,

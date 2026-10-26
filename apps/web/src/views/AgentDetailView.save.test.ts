@@ -6,6 +6,7 @@ import type { AgentDefinition } from '../api/types'
 import { useAgentDefinitionsStore } from '../stores/agent-definitions.store'
 import { useCynoStore } from '../stores/cyno.store'
 import AgentDetailView from './AgentDetailView.vue'
+import cynosureLogoRed from '../assets/img/app-logo/cynosure-logo-red.png'
 
 const mocks = vi.hoisted(() => ({ update: vi.fn(), updateCyno: vi.fn(), setActiveAgent: vi.fn() }))
 vi.mock('../api/client', () => ({ api: {
@@ -187,5 +188,43 @@ describe('agent settings explicit save', () => {
     await wrapper.get('[data-testid="save-agent"]').trigger('click')
     await flushPromises()
     expect(mocks.updateCyno).toHaveBeenCalledWith({ name: 'Captain', reasoningEffort: 'xhigh' })
+  })
+
+  test('Cyno keeps the blob by default and has the red logo ready when switching to image', async () => {
+    const { wrapper, cyno } = await setup('/cyno')
+    expect(cyno.profile?.avatarSource).toBe('generated')
+    expect(cyno.displayIconUrl).toBeNull()
+    expect(wrapper.get('[data-source="image"] img').attributes('src')).toBe(cynosureLogoRed)
+
+    await wrapper.get('[data-source="image"]').trigger('click')
+    expect(mocks.updateCyno).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
+    await vi.dynamicImportSettled()
+    await flushPromises()
+
+    const savedImage = mocks.updateCyno.mock.calls[0][0].iconUrl
+    expect(savedImage).toMatch(/^data:image\/png;base64,/)
+    expect(mocks.updateCyno).toHaveBeenCalledExactlyOnceWith({ avatarSource: 'image', iconUrl: savedImage })
+    expect(cyno.displayIconUrl).toBe(savedImage)
+
+    await wrapper.get('[data-source="generated"]').trigger('click')
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
+    await flushPromises()
+    expect(cyno.displayIconUrl).toBeNull()
+    expect(cyno.imageUrl).toBe(savedImage)
+  })
+
+  test('Cyno keeps a custom image when switching from the blob', async () => {
+    const { wrapper, cyno } = await setup('/cyno')
+    const customImage = 'data:image/png;base64,AAAA'
+    cyno.profile!.iconUrl = customImage
+    await flushPromises()
+    expect(wrapper.get('[data-source="image"] img').attributes('src')).toBe(customImage)
+
+    await wrapper.get('[data-source="image"]').trigger('click')
+    await wrapper.get('[data-testid="save-agent"]').trigger('click')
+    await flushPromises()
+    expect(mocks.updateCyno).toHaveBeenCalledExactlyOnceWith({ avatarSource: 'image' })
+    expect(cyno.displayIconUrl).toBe(customImage)
   })
 })

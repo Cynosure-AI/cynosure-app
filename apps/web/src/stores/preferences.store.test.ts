@@ -20,7 +20,7 @@ vi.mock('../utils/electron-prefs', () => ({
 }))
 
 import { usePreferencesStore } from './preferences.store'
-import { SK_COMPACT_MODEL, SK_COMPACT_PROVIDER, SK_CONTEXT_STRATEGY, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_RECENT_CHAT_FILTER, SK_THEME } from '../utils/storage-keys'
+import { SK_COMPACT_MODEL, SK_COMPACT_PROVIDER, SK_CONTEXT_STRATEGY, SK_GENERATE_TITLE, SK_QUICK_RESPONSES, SK_RECENT_CHAT_FILTER, SK_SIDEBAR_CHAT_VIEW, SK_THEME } from '../utils/storage-keys'
 
 describe('preferences profile', () => {
   beforeEach(() => {
@@ -79,6 +79,29 @@ describe('preferences profile', () => {
     store.recentChatFilter = ['all']
     await nextTick()
     expect(localStorage.getItem(SK_RECENT_CHAT_FILTER)).toBe(JSON.stringify(['all']))
+  })
+
+  test('defaults to global chats and persists the sidebar view', async () => {
+    const store = usePreferencesStore()
+    expect(store.sidebarChatView).toBe('global')
+
+    store.sidebarChatView = 'agents'
+    await nextTick()
+    expect(localStorage.getItem(SK_SIDEBAR_CHAT_VIEW)).toBe('agents')
+  })
+
+  test.each(['global', 'agents'] as const)('restores the saved %s sidebar view', (view) => {
+    localStorage.setItem(SK_SIDEBAR_CHAT_VIEW, view)
+    expect(usePreferencesStore().sidebarChatView).toBe(view)
+  })
+
+  test('falls back to global chats for an unsupported saved view', async () => {
+    localStorage.setItem(SK_SIDEBAR_CHAT_VIEW, 'unknown')
+    const store = usePreferencesStore()
+    await nextTick()
+
+    expect(store.sidebarChatView).toBe('global')
+    expect(localStorage.getItem(SK_SIDEBAR_CHAT_VIEW)).toBe('global')
   })
 
   test('replaces an unsupported persisted theme with the Crimson fallback', async () => {
