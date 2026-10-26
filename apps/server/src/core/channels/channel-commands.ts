@@ -33,6 +33,16 @@ export function runProjectSuggestion<K extends ChannelTargetId>(
     return runProjectCommand(state, target, '', style, id)
 }
 
+const NO_PROJECTS = 'There are no projects yet. Create one in the app first.'
+
+/** The project the target's active conversation works in, for pickers that show the choices as buttons. */
+export function currentChannelProject<K extends ChannelTargetId>(
+    state: ChannelSessionState<K>, target: K,
+): { id: string; name: string } | null {
+    const project = getProjectForConversation(resolveHomeConversation(state, target).conversationId)
+    return project ? { id: project.id, name: project.name } : null
+}
+
 /** Command word of a `!cmd` or `/cmd` message; drops a Telegram-style `@botname` suffix. */
 function parseChannelCommand(text: string): string {
     return text.split(/\s|@/)[0].slice(1).toLowerCase()
@@ -55,7 +65,7 @@ export function runProjectCommand<K extends ChannelTargetId>(
     const query = arg.trim().toLowerCase()
 
     if (!query && !selectedId) {
-        if (!projects.length) return 'There are no projects yet. Create one in the app first.'
+        if (!projects.length) return NO_PROJECTS
         const list = projects.map((project, i) => `${i + 1}. ${project.name}${project.id === current?.id ? ' (current)' : ''}`).join('\n')
         const status = current ? `Working in ${style.bold(current.name)}.` : 'This chat is not in a project.'
         return `${status}\n\n${list}\n\nSend /project <name or number> to switch, or /project off to leave.`

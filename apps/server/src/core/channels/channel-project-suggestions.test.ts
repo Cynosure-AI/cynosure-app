@@ -10,6 +10,7 @@ const data = vi.hoisted(() => ({
     sendMessage: vi.fn(),
     sendPicker: vi.fn(),
     answerCallback: vi.fn(),
+    editMessage: vi.fn(),
 }))
 vi.mock('../projects/project-store.js', () => ({
     listProjects: () => data.projects,
@@ -30,11 +31,12 @@ vi.mock('./telegram/telegram.api.js', async (original) => ({
     sendMessage: data.sendMessage,
     sendMessageReturningId: data.sendPicker,
     answerCallbackQuery: data.answerCallback,
+    editMessage: data.editMessage,
 }))
 
 import { projectSuggestions, runProjectSuggestion } from './channel-commands.js'
 import { DiscordChannel, handleInteraction } from './discord/discord.channel.js'
-import { handleCallbackQuery, handleCommand, registerBotCommands, sendProjectPicker } from './telegram/telegram.channel.js'
+import { handleCallbackQuery, handleCommand, registerBotCommands } from './telegram/telegram.channel.js'
 import { registerProjectListeners, handleCommand as handleSlackCommand } from './slack/slack.channel.js'
 
 beforeEach(() => {
@@ -116,15 +118,30 @@ describe('Telegram project picker', () => {
             expect(JSON.parse(fetchMock.mock.calls[0][1].body).commands).toContainEqual(expect.objectContaining({ command: 'project' }))
         } finally { vi.unstubAllGlobals() }
     })
-    test('keeps list output and offers buttons when /project is sent', async () => {
-        await handleCommand(ctx, 42, '/project@bot')
-        expect(data.sendMessage.mock.calls[0][2]).toContain('Garden')
-        expect(data.sendPicker.mock.calls[0][3].reply_markup.inline_keyboard[0][0]).toEqual({ text: 'Garden', callback_data: 'project:id:p1' })
-    })
-    test('paginates and fetches current projects on each page', async () => {
-        data.projects = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, name: `Project ${i}` }))
-        await sendProjectPicker(ctx, 42, 1)
+    test('/project sends one message whose buttons are the list', async () => {
+        expect(await handleCommand(ctx, 42, '/project@bot')).toBe(true)
+        expect(data.sendMessage).not.toHaveBeenCalled()
+        expect(data.sendPicker).toHaveBeenCalledOnce()
+        expect(data.sendPicker.mock.calls[0][2]).toContain('isn’t in a project')
         const rows = data.sendPicker.mock.calls[0][3].reply_markup.inline_keyboard
+        expect(rows).toEqual([
+            [{ text: 'Garden', callback_data: 'project:id:p1' }],
+            [{ text: 'Nintendo News', callback_data: 'project:id:p2' }],
+        ])
+    })
+    test('falls back to the text reply without projects', async () => {
+        data.projects = []
+        await handleCommand(ctx, 42, '/project')
+        expect(data.sendPicker).not.toHaveBeenCalled()
+        expect(data.sendMessage.mock.calls[0][2]).toContain('no projects yet')
+    })
+    test('pages in place and fetches current projects on each page', async () => {
+        data.projects = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, name: `Project ${i}` }))
+        await handleCallbackQuery(ctx, { id: 'callback', from: { id: 42, first_name: 'User' },
+            message: { message_id: 7, chat: { id: 42, type: 'private' } }, data: 'project:page:1' })
+        expect(data.sendPicker).not.toHaveBeenCalled()
+        expect(data.editMessage.mock.calls[0][2]).toBe(7)
+        const rows = data.editMessage.mock.calls[0][4].reply_markup.inline_keyboard
         expect(rows[0][0].callback_data).toBe('project:id:p20')
         expect(rows.at(-1)).toHaveLength(2)
     })
@@ -132,6 +149,8 @@ describe('Telegram project picker', () => {
         const query = { id: 'callback', from: { id: 42, first_name: 'User' }, message: { message_id: 1, chat: { id: 42, type: 'private' } }, data: 'project:id:p2' }
         await handleCallbackQuery(ctx, query)
         expect(data.setProject).toHaveBeenCalledWith('conversation', 'p2')
+        // The picker itself becomes the confirmation.
+        expect(data.editMessage).toHaveBeenCalledWith(ctx, 42, 1, expect.stringContaining('Nintendo News'), { reply_markup: { inline_keyboard: [] } })
         data.setProject.mockClear()
         await handleCallbackQuery(ctx, { ...query, from: { id: 99, first_name: 'Unknown' } })
         await handleCallbackQuery(ctx, { ...query, message: { message_id: 1, chat: { id: -1, type: 'group' } } })

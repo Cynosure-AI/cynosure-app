@@ -1,5 +1,5 @@
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
-import { handleChannelCommand, projectSuggestions, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
+import { currentChannelProject, handleChannelCommand, projectSuggestions, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
 import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type ActiveChannelTurn, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
@@ -125,23 +125,41 @@ export async function registerBotCommands(ctx: TelegramCtx): Promise<void> {
 
 /** Handle slash commands. Returns true if the message was a command and was handled. */
 export async function handleCommand(ctx: TelegramCtx, chatId: number, text: string): Promise<boolean> {
-    const handled = await handleChannelCommand(ctx, chatId, text, async (reply) => { await sendMessage(ctx, chatId, reply) }, TELEGRAM_COMMAND_STYLE)
-    if (/^\/project(?:@\w+)?\s*$/i.test(text)) await sendProjectPicker(ctx, chatId)
-    return handled
+    // A bare /project shows its choices as buttons rather than as a numbered list.
+    if (/^\/project(?:@\w+)?\s*$/i.test(text) && await sendProjectPicker(ctx, chatId)) return true
+    return handleChannelCommand(ctx, chatId, text, async (reply) => { await sendMessage(ctx, chatId, reply) }, TELEGRAM_COMMAND_STYLE)
 }
 
-/** Telegram has no argument autocomplete; offer a fresh, paginated inline keyboard instead. */
-export async function sendProjectPicker(ctx: TelegramCtx, chatId: number, requestedPage = 0): Promise<void> {
-    const suggestions = projectSuggestions('', Number.MAX_SAFE_INTEGER)
-    if (!suggestions.length) return
-    const page = Math.max(0, Math.min(requestedPage, Math.ceil(suggestions.length / 20) - 1))
-    const rows = suggestions.slice(page * 20, (page + 1) * 20)
-        .map(item => [{ text: item.name, callback_data: `project:${item.value}` }])
+const PROJECTS_PER_PAGE = 20
+
+/** Status line and a paginated keyboard of the projects; the current one is checked. Null without projects. */
+function projectPicker(ctx: TelegramCtx, chatId: number, requestedPage: number) {
+    const current = currentChannelProject(ctx, chatId)
+    // Leaving is offered only from inside a project.
+    const choices = projectSuggestions('', Number.MAX_SAFE_INTEGER).filter(item => item.value !== 'off' || current)
+    if (!choices.some(item => item.value !== 'off')) return null
+    const pages = Math.ceil(choices.length / PROJECTS_PER_PAGE)
+    const page = Math.max(0, Math.min(requestedPage, pages - 1))
+    const rows = choices.slice(page * PROJECTS_PER_PAGE, (page + 1) * PROJECTS_PER_PAGE).map(item => [{
+        text: item.value === 'off' ? '↩️ Leave project' : item.value === `id:${current?.id}` ? `✓ ${item.name}` : item.name,
+        callback_data: `project:${item.value}`,
+    }])
     const navigation = []
-    if (page > 0) navigation.push({ text: 'Previous', callback_data: `project:page:${page - 1}` })
-    if ((page + 1) * 20 < suggestions.length) navigation.push({ text: 'Next', callback_data: `project:page:${page + 1}` })
+    if (page > 0) navigation.push({ text: '‹ Previous', callback_data: `project:page:${page - 1}` })
+    if (page + 1 < pages) navigation.push({ text: 'Next ›', callback_data: `project:page:${page + 1}` })
     if (navigation.length) rows.push(navigation)
-    await sendMessageReturningId(ctx, chatId, 'Choose a project:', { reply_markup: { inline_keyboard: rows } })
+    const text = current
+        ? `📁 Working in **${current.name}**. Switch to:`
+        : '📁 This chat isn’t in a project yet. Pick one:'
+    return { text, markup: { reply_markup: { inline_keyboard: rows } } }
+}
+
+/** Telegram has no argument autocomplete; the buttons are the list. Returns false when there is nothing to pick. */
+export async function sendProjectPicker(ctx: TelegramCtx, chatId: number): Promise<boolean> {
+    const picker = projectPicker(ctx, chatId, 0)
+    if (!picker) return false
+    await sendMessageReturningId(ctx, chatId, picker.text, picker.markup)
+    return true
 }
 
 function createTransport(ctx: TelegramCtx, chatId: number, inboundMessageId: number): ChannelTransport<number> {
@@ -279,8 +297,15 @@ export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<T
         }
         await answerCallbackQuery(ctx, query.id)
         const value = query.data.slice('project:'.length)
-        if (/^page:\d+$/.test(value)) await sendProjectPicker(ctx, chat.id, Number(value.slice(5)))
-        else await sendMessage(ctx, chat.id, runProjectSuggestion(ctx, chat.id, value, TELEGRAM_COMMAND_STYLE))
+        const messageId = query.message!.message_id
+        // The picker message turns into the outcome, so switching leaves no trail of menus.
+        if (/^page:\d+$/.test(value)) {
+            const picker = projectPicker(ctx, chat.id, Number(value.slice(5)))
+            if (picker) await editMessage(ctx, chat.id, messageId, picker.text, picker.markup)
+        } else {
+            await editMessage(ctx, chat.id, messageId, runProjectSuggestion(ctx, chat.id, value, TELEGRAM_COMMAND_STYLE),
+                { reply_markup: { inline_keyboard: [] } })
+        }
         return
     }
     const action = query.data ? parseHITLActionId(query.data) : null
