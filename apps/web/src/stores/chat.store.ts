@@ -106,6 +106,7 @@ export const useChatStore = defineStore('chat', () => {
   const memoryFolders = ref<MemoryFolder[]>([])
   const queuedMessages = ref<QueuedChatMessageDto[]>([])
   const queuePaused = ref(false)
+  let queueRequestId = 0
   const pendingWait = ref<PendingWait | null>(null)
   let waitRequestId = 0
 
@@ -122,6 +123,12 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   watch(activeConversationId, () => {
+    // A history load belongs to the chat being left. Keeping its flag set
+    // would buffer live events forever in a newly created chat.
+    loadingMessages.value = false
+    queueRequestId++
+    queuedMessages.value = []
+    queuePaused.value = false
     pendingWait.value = null
     void loadPendingWait()
   }, { flush: 'sync' })
@@ -257,19 +264,27 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function loadQueue(conversationId = activeConversationId.value): Promise<void> {
+    const requestId = ++queueRequestId
     if (!conversationId) {
       queuedMessages.value = []
       queuePaused.value = false
       return
     }
     const state = await api.chat.getQueue(conversationId)
-    if (activeConversationId.value !== conversationId) return
+    // Enqueue responses and live events can trigger overlapping refreshes.
+    // An older snapshot must never hide a newly queued message or revive one
+    // that has already been promoted to the transcript.
+    if (requestId !== queueRequestId || activeConversationId.value !== conversationId) return
     queuedMessages.value = state.items
     queuePaused.value = state.paused
   }
 
   function handleQueueChanged(data: { conversationId: string }): void {
-    if (data.conversationId === activeConversationId.value) void loadQueue(data.conversationId)
+    if (data.conversationId === activeConversationId.value) {
+      void loadQueue(data.conversationId).catch(() => {
+        // Keep the last known queue until the next live update or reconnect.
+      })
+    }
   }
 
   async function createConversation(title?: string): Promise<string> {

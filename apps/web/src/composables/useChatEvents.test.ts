@@ -1,12 +1,15 @@
 import { beforeEach, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import type { ChatEvent, ChatEventPayload, MessageItem } from '@shared/types'
 import { api } from '../api/client'
+import { wsConnected } from '../api/http'
 import { useChatStore } from '../stores/chat.store'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useChatEvents } from './useChatEvents'
 
 beforeEach(() => {
+  wsConnected.value = false
   setActivePinia(createPinia())
   vi.spyOn(api.chat, 'subscribeLiveConversations').mockImplementation(() => {})
   vi.spyOn(api.chat, 'markConversationRead').mockResolvedValue(undefined)
@@ -35,6 +38,33 @@ function listen() {
 const message = (id: string, content: string, sequence: number): MessageItem => ({
   type: 'message', id, role: 'assistant', content: [{ type: 'text', text: content }],
   executionId: 'execution', sequence, createdAt: sequence,
+})
+
+test.each([true, false])('reconnect restores queued and promoted messages without a history cursor (already active: %s)', async (alreadyActive) => {
+  const store = useChatStore()
+  if (alreadyActive) store.activeConversationId = 'conversation'
+  const { stop } = listen()
+  if (!alreadyActive) store.activeConversationId = 'conversation'
+  const queued = {
+    id: 'queued', conversationId: 'conversation', content: 'Do this later',
+    delivery: 'next' as const, status: 'pending' as const, position: 1,
+    attachments: [], run: {}, createdAt: 3, updatedAt: 3,
+  }
+  const promoted = { ...message('promoted', 'Do this next', 1), role: 'user' as const }
+  vi.mocked(api.chat.getQueue).mockResolvedValue({ conversationId: 'conversation', items: [queued], paused: false })
+  vi.mocked(api.chat.getEvents).mockResolvedValue({ events: [{
+    type: 'transcript-item', item: promoted, version: 1, conversationId: 'conversation',
+    executionId: 'execution', sequence: 1, createdAt: 1,
+  }], latestSequence: 1 })
+  try {
+    wsConnected.value = true
+    await flushPromises()
+    expect(api.chat.getEvents).toHaveBeenCalledWith('conversation', 0)
+    expect(store.messages.map(item => [item.id, item.content])).toEqual([['promoted', 'Do this next']])
+    expect(store.queuedMessages).toEqual([queued])
+  } finally {
+    stop()
+  }
 })
 
 test('opening an older cron chat does not replay its unsequenced saved final reply', () => {

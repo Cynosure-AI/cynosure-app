@@ -185,15 +185,21 @@ export function useChatEvents(): () => void {
   }, { flush: 'sync' })
 
   const stopConversationWatch = watch(() => chatStore.activeConversationId, (activeId) => {
+    // New chats have no history snapshot to establish a cursor. Track them
+    // before their first event so reconnects can recover missed promotions.
+    if (activeId && !eventCursors.has(activeId)) eventCursors.set(activeId, 0)
     for (const conversationId of loadingEvents.keys()) {
       if (conversationId !== activeId) flushLoadedChatEvents(conversationId)
     }
-  }, { flush: 'sync' })
+  }, { flush: 'sync', immediate: true })
 
   const stopConnectionWatch = watch(wsConnected, (connected) => {
     if (connected) {
       void resumeChatEvents()
       void chatStore.loadPendingWait()
+      if (chatStore.activeConversationId) {
+        chatStore.handleQueueChanged({ conversationId: chatStore.activeConversationId })
+      }
     }
   })
   const unsubscribeWaits = api.chat.onWaitsChanged(() => void chatStore.loadPendingWait())

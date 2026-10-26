@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
+import type { ChatQueueStateDto, QueuedChatMessageDto } from '@shared/types'
 import { api } from '../api/client'
 import { useChatStore } from './chat.store'
 
@@ -156,4 +157,97 @@ test('ignores a wait response after switching conversations', async () => {
   await flushPromises()
   expect(store.pendingWait).toBeNull()
   expect(store.isConversationLocked).toBe(false)
+})
+
+const queuedMessage: QueuedChatMessageDto = {
+  id: 'queued-message', conversationId: 'conversation', content: 'Do this next',
+  delivery: 'next', status: 'pending', position: 1, attachments: [], run: {},
+  createdAt: 1, updatedAt: 1,
+}
+
+test.each([true, false])('keeps the latest queue response when refreshes finish out of order (queued: %s)', async (hasQueuedMessage) => {
+  let resolveOlder!: (state: ChatQueueStateDto) => void
+  const latest: ChatQueueStateDto = {
+    conversationId: 'conversation', items: hasQueuedMessage ? [queuedMessage] : [], paused: false,
+  }
+  vi.spyOn(api.chat, 'getQueue')
+    .mockImplementationOnce(() => new Promise(resolve => { resolveOlder = resolve }))
+    .mockResolvedValue(latest)
+  const store = useChatStore()
+  store.activeConversationId = 'conversation'
+
+  store.handleQueueChanged({ conversationId: 'conversation' })
+  store.handleQueueChanged({ conversationId: 'conversation' })
+  await flushPromises()
+  expect(store.queuedMessages).toEqual(latest.items)
+
+  resolveOlder({ conversationId: 'conversation', items: hasQueuedMessage ? [] : [queuedMessage], paused: true })
+  await flushPromises()
+  expect(store.queuedMessages).toEqual(latest.items)
+  expect(store.queuePaused).toBe(false)
+})
+
+test('dismissing a queued message updates the queue without live events or a reload and ignores older snapshots', async () => {
+  let resolveOlder!: (state: ChatQueueStateDto) => void
+  vi.spyOn(api.chat, 'getQueue')
+    .mockImplementationOnce(() => new Promise(resolve => { resolveOlder = resolve }))
+    .mockResolvedValue({ conversationId: 'conversation', items: [], paused: false })
+  const remove = vi.spyOn(api.chat, 'removeQueued').mockResolvedValue({ success: true })
+  const store = useChatStore()
+  store.activeConversationId = 'conversation'
+  store.queuedMessages = [queuedMessage]
+
+  store.handleQueueChanged({ conversationId: 'conversation' })
+  await store.removeQueuedMessage(queuedMessage.id)
+  expect(remove).toHaveBeenCalledWith('conversation', queuedMessage.id)
+  expect(store.queuedMessages).toEqual([])
+
+  resolveOlder({ conversationId: 'conversation', items: [queuedMessage], paused: false })
+  await flushPromises()
+  expect(store.queuedMessages).toEqual([])
+})
+
+test('ignores an old queue response after leaving and returning to the same conversation', async () => {
+  let resolveQueue!: (state: ChatQueueStateDto) => void
+  vi.spyOn(api.chat, 'getQueue').mockImplementationOnce(() => new Promise(resolve => { resolveQueue = resolve }))
+  const store = useChatStore()
+  store.activeConversationId = 'conversation'
+  store.handleQueueChanged({ conversationId: 'conversation' })
+  store.activeConversationId = 'other'
+  store.activeConversationId = 'conversation'
+
+  resolveQueue({ conversationId: 'conversation', items: [queuedMessage], paused: true })
+  await flushPromises()
+  expect(store.queuedMessages).toEqual([])
+  expect(store.queuePaused).toBe(false)
+})
+
+test('leaving a loading conversation clears its queue and releases live events for the new chat', async () => {
+  let resolveHistory!: (response: Awaited<ReturnType<typeof api.chat.getMessages>>) => void
+  vi.spyOn(api.chat, 'getMessages').mockImplementationOnce(() => new Promise(resolve => { resolveHistory = resolve }))
+  vi.spyOn(api.chat, 'markConversationRead').mockResolvedValue(undefined)
+  vi.spyOn(api.chat, 'discardStagedAttachments').mockResolvedValue({ success: true })
+  const store = useChatStore()
+  const selection = store.selectConversation('conversation')
+  store.queuedMessages = [queuedMessage]
+  store.queuePaused = true
+  expect(store.loadingMessages).toBe(true)
+
+  await store.startNewChat()
+  expect(store.activeConversationId).toBeNull()
+  expect(store.loadingMessages).toBe(false)
+  expect(store.queuedMessages).toEqual([])
+  expect(store.queuePaused).toBe(false)
+
+  // The abandoned history request must not restore the previous chat's state.
+  resolveHistory({
+    messages: [], conversationAgentId: null, latestEventSequence: 0, lastContextTokens: null, permissionMode: 'auto',
+    executionConfig: {
+      allowedTools: [], subAgents: [], memoryFolderIds: [], systemPrompt: '', model: '', providerId: '',
+      thinkingEnabled: false, reasoningEffort: 'medium', autoToolRouting: false, autoMemory: false,
+    },
+  })
+  await selection
+  expect(store.loadingMessages).toBe(false)
+  expect(store.messages).toEqual([])
 })
