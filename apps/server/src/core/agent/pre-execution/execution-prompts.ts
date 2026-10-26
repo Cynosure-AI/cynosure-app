@@ -10,6 +10,8 @@ export interface ResolveSystemPromptInput {
     smartTagContext?: PromptSmartTagContext
     /** User profile section, appended after smart tags resolve so user text is never rewritten. */
     userContext?: string
+    /** MCP server instructions, appended after smart tags resolve so third-party text is never rewritten. */
+    mcpInstructions?: string
 }
 
 export async function resolveSystemPromptMessages(input: ResolveSystemPromptInput): Promise<ChatMessage[]> {
@@ -20,6 +22,7 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
         subAgents,
         smartTagContext,
         userContext,
+        mcpInstructions,
     } = input
 
     let effectiveSystemPrompt = overridePrompt ?? basePrompt ?? ''
@@ -34,6 +37,10 @@ export async function resolveSystemPromptMessages(input: ResolveSystemPromptInpu
     }
 
     effectiveSystemPrompt = resolvePromptSmartTags(effectiveSystemPrompt, smartTagContext ?? {})
+
+    if (mcpInstructions) {
+        effectiveSystemPrompt = appendPrompt(effectiveSystemPrompt, mcpInstructions, '\n\n')
+    }
 
     if (userContext) {
         effectiveSystemPrompt = appendPrompt(effectiveSystemPrompt, userContext, '\n\n')

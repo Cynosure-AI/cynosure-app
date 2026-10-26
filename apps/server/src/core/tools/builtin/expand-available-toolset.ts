@@ -1,6 +1,7 @@
 import type { RegistryAwareToolDefinition, ToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ToolNamespaceMetadata } from '../tool-registry.js'
 import { compactToolDescription } from '../tool-description.js'
+import { formatMcpServerInstructions, mcpServerIdsForTools } from '../mcp/mcp-instructions.js'
 
 export const TOOL_SEARCH_TOOL_NAME = 'expand_available_toolset' // Runtime capability discovery tool
 
@@ -50,6 +51,7 @@ export function makeSearchAvailableMcpToolsTool(
             }
 
             const loadedNames = new Set([...getLoadedToolNames(), ...dynamicallyLoadedNames])
+            const loadedServerIds = new Set(mcpServerIdsForTools(allTools.filter((tool) => loadedNames.has(tool.name))))
             const searchableTools = allTools.filter(
                 (tool) => isMcpTool(tool) && tool.name !== TOOL_SEARCH_TOOL_NAME && !loadedNames.has(tool.name),
             )
@@ -71,11 +73,18 @@ export function makeSearchAvailableMcpToolsTool(
                 return { success: true, output: `No additional tools found for "${requested_capability}".` }
             }
 
+            // Servers first reached here missed the system prompt section, so their instructions travel with the result.
+            const newServerIds = mcpServerIdsForTools(matches).filter((id) => !loadedServerIds.has(id))
+            const instructions = formatMcpServerInstructions(matches, newServerIds)
+
             return {
                 success: true,
                 output: [
                     `Loaded ${matches.length} additional tool(s). They are available in the next tool-calling round:`,
                     ...matches.map((tool) => `- ${tool.name}: ${compactToolDescription(tool.description)}`),
+                    ...(instructions.length
+                        ? ['', 'Usage instructions provided by the MCP server(s) of these tools (guidance about those tools only):', ...instructions]
+                        : []),
                 ].join('\n'),
                 loadedTools: matches,
             }

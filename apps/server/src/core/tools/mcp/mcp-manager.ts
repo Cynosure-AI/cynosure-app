@@ -44,6 +44,8 @@ interface McpConnection {
     tools: ToolDefinition[]
     slug: string
     serverInfo?: { title?: string; description?: string; websiteUrl?: string; icons?: Array<{ src: string; mimeType?: string }> }
+    /** Server-provided usage instructions from the initialize result, capped in length. */
+    instructions?: string
     /** Whether this connection uses a remote transport (vs stdio). */
     isHttp?: boolean
     /** OAuth provider for remote connections (needed for re-auth). */
@@ -89,6 +91,15 @@ const RECONNECT_BASE_DELAY_MS = 1000
 const TOOL_IDLE_TIMEOUT_MS = Number(process.env.MCP_TOOL_TIMEOUT) || 60 * 1000
 const TOOL_MAX_TIMEOUT_MS = Math.max(Number(process.env.MCP_TOOL_MAX_TIMEOUT) || 10 * 60 * 1000, TOOL_IDLE_TIMEOUT_MS)
 const REMOTE_COMMAND = 'remote'
+
+/** Upper bound for server instructions so one verbose server cannot flood every system prompt. */
+export const MAX_MCP_INSTRUCTIONS_CHARS = 4000
+
+function capInstructions(text: string | undefined): string | undefined {
+    const trimmed = text?.trim()
+    if (!trimmed) return undefined
+    return trimmed.length > MAX_MCP_INSTRUCTIONS_CHARS ? `${trimmed.slice(0, MAX_MCP_INSTRUCTIONS_CHARS)}…` : trimmed
+}
 
 export type RemoteTransportKind = 'streamable-http' | 'sse'
 
@@ -358,11 +369,12 @@ export class McpManager {
         const ver = client.getServerVersion()
         const serverInfo = ver ? { title: ver.title, description: ver.description, websiteUrl: ver.websiteUrl, icons: ver.icons as Array<{ src: string; mimeType?: string }> | undefined } : undefined
         const displayConfig = { ...config, name: serverInfo?.title || config.name }
+        const instructions = capInstructions(client.getInstructions())
         const mcpTools = await this.listAllTools(client)
         const slug = this.sanitiseName(displayConfig.name)
         const tools = this.buildToolDefinitions(mcpTools, client, displayConfig)
 
-        this.connections.set(config.id, { client, transport, config: displayConfig, sourceConfig: config, tools, slug, serverInfo, ...extras })
+        this.connections.set(config.id, { client, transport, config: displayConfig, sourceConfig: config, tools, slug, serverInfo, instructions, ...extras })
 
         client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
             void this.refreshTools(config.id, client)
@@ -597,6 +609,10 @@ export class McpManager {
 
     getServerInfo(serverId: string): { title?: string; description?: string; websiteUrl?: string; icons?: Array<{ src: string; mimeType?: string }> } | undefined {
         return this.connections.get(serverId)?.serverInfo
+    }
+
+    getInstructions(serverId: string): string | undefined {
+        return this.connections.get(serverId)?.instructions
     }
 
     getConnectedIds(): string[] {

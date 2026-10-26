@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolDefinition } from '../../gateway/providers/base.provider.js'
-import { McpManager, type McpServerConfig } from './mcp-manager.js'
+import { MAX_MCP_INSTRUCTIONS_CHARS, McpManager, type McpServerConfig } from './mcp-manager.js'
 
 describe('McpManager paginated discovery', () => {
   let directory: string
@@ -49,6 +49,26 @@ describe('McpManager paginated discovery', () => {
     expect(tools.map(tool => tool.name)).toEqual(['first', 'second', 'third'])
     expect(manager.getTools('server')).toEqual(tools)
     expect(manager.getAllTools()).toEqual(tools)
+  })
+
+  test('captures server instructions and caps their length', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue()
+    vi.spyOn(Client.prototype, 'getServerVersion').mockReturnValue({ name: 'test', version: '1' })
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({ tools: [descriptor('only')] })
+    const getInstructions = vi.spyOn(Client.prototype, 'getInstructions')
+      .mockReturnValueOnce('  Call list before create.  ')
+      .mockReturnValueOnce('x'.repeat(MAX_MCP_INSTRUCTIONS_CHARS + 50))
+      .mockReturnValueOnce(undefined)
+    const manager = new McpManager()
+    const config = { name: 'Test', command: 'test', args: [], enabled: true }
+    await manager.connect({ ...config, id: 'short' })
+    await manager.connect({ ...config, id: 'long' })
+    await manager.connect({ ...config, id: 'none' })
+    expect(getInstructions).toHaveBeenCalledTimes(3)
+    expect(manager.getInstructions('short')).toBe('Call list before create.')
+    expect(manager.getInstructions('long')).toHaveLength(MAX_MCP_INSTRUCTIONS_CHARS + 1)
+    expect(manager.getInstructions('none')).toBeUndefined()
+    await manager.disconnectAll()
   })
 
   test('completes remote OAuth with validated state and original connection headers', async () => {

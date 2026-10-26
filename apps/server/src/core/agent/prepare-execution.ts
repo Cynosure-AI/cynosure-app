@@ -27,6 +27,7 @@ import { MEMORY_WRITE_TOOL_NAMES } from '../tools/builtin/memory-tools.js'
 import { mergeProjectMemoryScope, resolveProjectExecutionContext } from '../projects/project-context.js'
 import { getPermissionMode } from '../chat/permission-mode.js'
 import { isReadOnlyModeTool } from '../tools/tool-policy.js'
+import { buildMcpInstructionsPrompt } from '../tools/mcp/mcp-instructions.js'
 
 const MEMORY_STEWARDSHIP_PROMPT = `When maintaining memory, treat canonical files as the source of truth and retrieval chunks as search-only indexes. Search before creating, patch matching files instead of duplicating facts or appending change logs, and include enough unchanged context for every patch hunk to resolve uniquely. Use Title Case paths such as People/<Person>, Projects/<Project>, Organizations/<Organization>, or Topics/<Topic>. Keep related information together in coherent files; chunk boundaries are not editing boundaries. Use Uncategorized only when no clear category exists.`
 
@@ -283,6 +284,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
             selectedMemFolderNames: resolveSelectedMemoryFolderNames(preset.id, memoryFolderOverrides),
         },
         userContext: buildUserContextPrompt(userSettings, { includeInstructions: input.includeUserInstructions !== false }),
+        mcpInstructions: buildMcpInstructionsPrompt(toolLayer.tools),
     })
 
     const systemMessages = [
