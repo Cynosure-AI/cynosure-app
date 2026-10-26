@@ -19,7 +19,7 @@ import SubAgentDelegationCard from './SubAgentDelegationCard.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import AgentAvatar from '../shared/AgentAvatar.vue'
 import { useAgentMood, type AgentMood } from '../../composables/useAgentMood'
-import { useEventListener, useResizeObserver } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { useToolPresentation } from '../../composables/useToolPresentation'
 import { useStickyScroll } from '../../composables/useStickyScroll'
 import RichContent from '../shared/RichContent.vue'
@@ -198,9 +198,10 @@ const heroMood = computed<AgentMood>(() => {
   return chatStore.activeIsTemporary ? 'shy' : 'idle'
 })
 
-// The live avatar rides in the gutter of this chat's latest reply and glides
-// there when a newer reply takes over. It stays one element, so its mood and
-// motion carry across the move.
+// The live avatar sits at the top of this chat's latest reply. It is teleported
+// into that reply's gutter, so layout carries it as the reply grows or a block
+// above it expands, and it stays one instance across replies so its mood and
+// motion carry over. Moving to a newer reply glides it there (FLIP).
 const liveAvatarAnchorId = computed(() => {
   const ownAgentId = conversationAgentId.value ?? undefined
   for (let index = chatStore.messages.length - 1; index >= 0; index--) {
@@ -209,39 +210,26 @@ const liveAvatarAnchorId = computed(() => {
   }
   return null
 })
-const LIVE_AVATAR_SIZE = 40
+const liveAvatarTarget = computed(() => liveAvatarAnchorId.value
+  ? `[data-live-avatar-slot="${CSS.escape(liveAvatarAnchorId.value)}"]`
+  : null)
+const liveAvatar = ref<{ $el?: Element } | null>(null)
 const LIVE_AVATAR_GLIDE_MS = 520
-const liveAvatarPosition = ref<{ x: number; y: number } | null>(null)
-const liveAvatarGliding = ref(false)
-let liveAvatarGlideTimer: ReturnType<typeof setTimeout> | undefined
 
-function placeLiveAvatar(): void {
-  const content = scrollContent.value
-  const anchor = content?.querySelector<HTMLElement>('[data-live-avatar-anchor]')
-  if (!content || !anchor || !anchor.offsetParent) {
-    liveAvatarPosition.value = null
-    return
-  }
-  const box = content.getBoundingClientRect()
-  const slot = anchor.getBoundingClientRect()
-  // Centred on the gutter, resting on the reply's last line like a per-message avatar.
-  liveAvatarPosition.value = {
-    x: slot.left - box.left + (slot.width - LIVE_AVATAR_SIZE) / 2,
-    y: slot.bottom - box.top - LIVE_AVATAR_SIZE + 4,
-  }
-}
-
-watch(liveAvatarAnchorId, (id, previous) => {
-  if (id && previous && liveAvatarPosition.value) {
-    liveAvatarGliding.value = true
-    clearTimeout(liveAvatarGlideTimer)
-    liveAvatarGlideTimer = setTimeout(() => { liveAvatarGliding.value = false }, LIVE_AVATAR_GLIDE_MS)
-  }
-  void nextTick(placeLiveAvatar)
-}, { flush: 'post' })
-// Streaming text, tool cards and quick responses all reflow the timeline.
-useResizeObserver(scrollContent, () => placeLiveAvatar())
-onBeforeUnmount(() => clearTimeout(liveAvatarGlideTimer))
+watch(liveAvatarAnchorId, async (id, previous) => {
+  const el = liveAvatar.value?.$el
+  if (!id || !previous || !(el instanceof HTMLElement)) return
+  const before = el.getBoundingClientRect()
+  await nextTick()
+  const after = el.getBoundingClientRect()
+  const dx = before.left - after.left
+  const dy = before.top - after.top
+  if ((!dx && !dy) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  el.animate(
+    [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
+    { duration: LIVE_AVATAR_GLIDE_MS, easing: 'cubic-bezier(0.34, 1.3, 0.64, 1)' },
+  )
+}, { flush: 'pre' })
 
 // The new-chat hero follows the pointer, and glances at the composer while you type.
 const heroAvatar = ref<InstanceType<typeof AgentAvatar> | null>(null)
@@ -317,7 +305,6 @@ const visibleQuickResponses = computed(() => chatStore.activeQuickResponses)
 const unifiedTimeline = computed<DisplayTimelineEntry[]>(() => groupDelegations(buildChatTimeline(
   chatStore.messages, agentStore.executionSteps,
 )))
-watch(() => unifiedTimeline.value.length, () => void nextTick(placeLiveAvatar), { flush: 'post' })
 
 const delegationEntries = computed(() =>
   unifiedTimeline.value.filter((entry): entry is DelegationEntry => entry.type === 'delegation'))
@@ -445,7 +432,6 @@ function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, 
     agentAvatarPending: msg.agentId ? !agentDefs.loaded : activeAgentPending.value,
     agentName: resolveAgentName(msg),
     hideAvatar: resolveAgentId(msg) === (conversationAgentId.value ?? undefined),
-    liveAvatarAnchor: msg.id === liveAvatarAnchorId.value,
     model: msg.model,
     promptTokens: msg.promptTokens,
     completionTokens: msg.completionTokens,
@@ -826,7 +812,7 @@ onMounted(() => {
     <div
       v-else
       ref="scrollContent"
-      class="relative max-w-5xl mx-auto py-4"
+      class="max-w-5xl mx-auto py-4"
     >
       <template
         v-for="entry in unifiedTimeline"
@@ -1036,36 +1022,34 @@ onMounted(() => {
       <!-- HITL dialog -->
       <HITLDialog />
 
-      <!-- Live avatar: one per chat, in the latest reply's gutter, reacting to the run -->
-      <RouterLink
-        v-if="liveAvatarPosition"
-        :to="conversationAgentId
-          ? { name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }
-          : { name: 'cyno', query: { returnTo: route.fullPath } }"
-        :title="activeAgentName ?? undefined"
-        tabindex="-1"
-        aria-hidden="true"
-        class="chat-live-avatar absolute left-0 top-0 hidden md:flex items-center justify-center overflow-hidden"
-        :class="[
-          { 'chat-live-avatar--gliding': liveAvatarGliding },
-          activeAgentIconUrl ? 'rounded-full bg-theme-800 shadow-sm ring-1 ring-theme-700/50' : '',
-        ]"
-        :style="{
-          width: `${LIVE_AVATAR_SIZE}px`,
-          height: `${LIVE_AVATAR_SIZE}px`,
-          transform: `translate(${liveAvatarPosition.x}px, ${liveAvatarPosition.y}px)`,
-        }"
+      <!-- Live avatar: one per chat, at the top of the latest reply, reacting to the run -->
+      <Teleport
+        v-if="liveAvatarTarget"
+        :to="liveAvatarTarget"
+        defer
       >
-        <AgentAvatar
-          :name="activeAgentName ?? 'Agent'"
-          :icon-url="activeAgentIconUrl"
-          :avatar="activeAgentAvatar"
-          :mood="liveMood"
-          :speaking="liveSpeaking"
-          :pending="activeAgentPending"
-          animate="always"
-        />
-      </RouterLink>
+        <RouterLink
+          ref="liveAvatar"
+          :to="conversationAgentId
+            ? { name: 'agent-detail', params: { id: conversationAgentId }, query: { returnTo: route.fullPath } }
+            : { name: 'cyno', query: { returnTo: route.fullPath } }"
+          :title="activeAgentName ?? undefined"
+          tabindex="-1"
+          aria-hidden="true"
+          class="chat-live-avatar flex h-10 w-10 items-center justify-center overflow-hidden"
+          :class="activeAgentIconUrl ? 'rounded-full bg-theme-800 shadow-sm ring-1 ring-theme-700/50' : ''"
+        >
+          <AgentAvatar
+            :name="activeAgentName ?? 'Agent'"
+            :icon-url="activeAgentIconUrl"
+            :avatar="activeAgentAvatar"
+            :mood="liveMood"
+            :speaking="liveSpeaking"
+            :pending="activeAgentPending"
+            animate="always"
+          />
+        </RouterLink>
+      </Teleport>
     </div>
   </div>
   <ArtifactImageModal
@@ -1075,17 +1059,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Eases along as the reply grows line by line; glides with a little overshoot to a newer reply. */
-@media (prefers-reduced-motion: no-preference) {
-  .chat-live-avatar {
-    transition: transform 180ms ease-out;
-  }
-
-  .chat-live-avatar--gliding {
-    transition: transform 520ms cubic-bezier(0.34, 1.3, 0.64, 1);
-  }
-}
-
 /* Incognito whispers its headline: slanted, a touch looser, with a fainter caret. */
 .chat-incognito-greeting {
   font-style: italic;

@@ -37,8 +37,6 @@ const props = defineProps<{
   agentName?: string | null
   /** The chat's live avatar speaks for this message, so keep only the gutter. */
   hideAvatar?: boolean
-  /** The live avatar sits in this message's gutter. */
-  liveAvatarAnchor?: boolean
   model?: string
   promptTokens?: number
   completionTokens?: number
@@ -262,12 +260,16 @@ const imageGridClass = computed(() => {
     :class="[isUser ? 'md:justify-end' : 'md:justify-start', { 'chat-msg-enter': animateIn, 'chat-msg-enter--user': animateIn && isUser }]"
   >
     <!-- Avatar -->
+    <!-- The chat's live avatar is teleported into this slot on the latest reply; it sticks while a long reply scrolls. -->
     <div
       v-if="!isUser && hideAvatar"
-      class="shrink-0 hidden md:block w-8 h-8"
-      :data-live-avatar-anchor="liveAvatarAnchor || undefined"
-      aria-hidden="true"
-    />
+      class="shrink-0 hidden md:block w-8 self-stretch"
+    >
+      <div
+        class="sticky top-3 -ml-1 w-10"
+        :data-live-avatar-slot="messageId"
+      />
+    </div>
     <div
       v-else-if="!isUser"
       class="shrink-0 mt-0.5 hidden md:flex flex-col items-center gap-0.5"
