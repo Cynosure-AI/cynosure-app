@@ -65,6 +65,26 @@ export function blobatarProps(name: string, config: AvatarConfig | null | undefi
   }
 }
 
+/**
+ * Blobatar's six authored color schemes, frozen per major. `tone` is a 0–1
+ * position, but it only ever selects one of these bands; positions are mids.
+ */
+export const AVATAR_TONES = [
+  { tone: 'pastel', label: 'Pastel', end: 0.2, position: 0.1 },
+  { tone: 'pale', label: 'Pale', end: 0.36, position: 0.28 },
+  { tone: 'mid', label: 'Mid', end: 0.62, position: 0.49 },
+  { tone: 'deep', label: 'Deep', end: 0.8, position: 0.71 },
+  { tone: 'bright', label: 'Bright', end: 0.93, position: 0.865 },
+  { tone: 'ink', label: 'Ink', end: 1, position: 0.965 },
+] as const
+
+export type AvatarTone = typeof AVATAR_TONES[number]['tone']
+
+/** Which scheme a stored tone position falls in. */
+export function toneAt(position: number): AvatarTone {
+  return (AVATAR_TONES.find((entry) => position < entry.end) ?? AVATAR_TONES[0]).tone
+}
+
 /** Collapse a config with nothing customised to null, the server's "default face". */
 export function compactAvatarConfig(config: AvatarConfig): AvatarConfig | null {
   return Object.values(config).every((value) => value === null || value === '') ? null : config

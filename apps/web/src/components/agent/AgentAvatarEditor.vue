@@ -4,12 +4,13 @@
  * leaves it to the seed; the seed itself defaults to the assistant's name.
  */
 import { computed, ref } from 'vue'
+import { palette } from 'blobatar'
 import { Icon } from '@iconify/vue'
 import AgentAvatar from '../shared/AgentAvatar.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import type { AgentMood } from '../../composables/useAgentMood'
 import {
-  AVATAR_SHAPES, EMPTY_AVATAR_CONFIG, compactAvatarConfig, type AvatarConfig, type AvatarShape,
+  AVATAR_SHAPES, AVATAR_TONES, EMPTY_AVATAR_CONFIG, compactAvatarConfig, toneAt, type AvatarConfig, type AvatarShape,
 } from '../../utils/avatar'
 
 const props = withDefaults(defineProps<{
@@ -53,7 +54,12 @@ function selectShape(shape: AvatarShape | null): void {
 }
 
 const DEFAULT_HUE = 210
-const DEFAULT_TONE = 0.5
+const DEFAULT_TONE = AVATAR_TONES.find((entry) => entry.tone === 'mid')!.position
+const activeTone = computed(() => toneAt(config.value.tone ?? DEFAULT_TONE))
+/** The body color this tone gives at the current hue. */
+function toneSwatch(position: number): string {
+  return palette(config.value.hue ?? DEFAULT_HUE, true, position).head ?? 'transparent'
+}
 const customColor = computed(() => config.value.hue !== null || config.value.tone !== null)
 
 function toggleCustomColor(enabled: boolean): void {
@@ -198,18 +204,31 @@ function toggleCustomColor(enabled: boolean): void {
                 @input="patch({ hue: Number(($event.target as HTMLInputElement).value) })"
               >
             </label>
-            <label class="flex items-center gap-3 text-xs text-ink-muted">
-              <span class="w-10 shrink-0">Tone</span>
-              <input
-                :value="config.tone ?? DEFAULT_TONE"
-                type="range"
-                min="0"
-                max="0.999"
-                step="0.001"
-                class="h-2 min-w-0 flex-1 cursor-pointer accent-accent-500"
-                @input="patch({ tone: Number(($event.target as HTMLInputElement).value) })"
+            <div class="flex items-start gap-3 text-xs text-ink-muted">
+              <span class="w-10 shrink-0 pt-1.5">Tone</span>
+              <div
+                class="flex min-w-0 flex-1 flex-wrap gap-1.5"
+                role="radiogroup"
+                aria-label="Avatar tone"
               >
-            </label>
+                <button
+                  v-for="entry in AVATAR_TONES"
+                  :key="entry.tone"
+                  type="button"
+                  role="radio"
+                  :aria-checked="activeTone === entry.tone"
+                  class="flex items-center gap-1.5 rounded-lg border px-2 py-1 transition-colors"
+                  :class="activeTone === entry.tone ? 'border-accent-500 bg-accent-500/10 text-theme-100' : 'border-theme-700 hover:border-theme-500'"
+                  @click="patch({ tone: entry.position })"
+                >
+                  <span
+                    class="h-3 w-3 rounded-full ring-1 ring-black/20"
+                    :style="{ background: toneSwatch(entry.position) }"
+                  />
+                  {{ entry.label }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

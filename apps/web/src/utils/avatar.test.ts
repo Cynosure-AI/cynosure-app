@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { _layout } from 'blobatar'
-import { agentAvatarSrc, blobatarProps, compactAvatarConfig, EMPTY_AVATAR_CONFIG } from './avatar'
+import { _layout, palette } from 'blobatar'
+import { agentAvatarSrc, AVATAR_TONES, blobatarProps, compactAvatarConfig, EMPTY_AVATAR_CONFIG, toneAt } from './avatar'
 
 describe('blobatarProps', () => {
   test('uses the name until a seed overrides it', () => {
@@ -57,5 +57,21 @@ describe('generated shapes', () => {
       const { name, ...options } = blobatarProps('agent-0', { ...EMPTY_AVATAR_CONFIG, shape })
       expect(_layout(name, options).shape).toBe(shape)
     }
+  })
+})
+
+describe('toneAt', () => {
+  test('maps stored positions onto the six schemes, including Cyno’s deep default', () => {
+    expect(toneAt(0)).toBe('pastel')
+    expect(toneAt(0.3)).toBe('pale')
+    expect(toneAt(0.5)).toBe('mid')
+    expect(toneAt(0.7)).toBe('deep')
+    expect(toneAt(0.9)).toBe('bright')
+    expect(toneAt(0.999)).toBe('ink')
+  })
+
+  test('each scheme’s position renders a distinct body color', () => {
+    const heads = AVATAR_TONES.map(({ position }) => palette(200, true, position).head)
+    expect(new Set(heads).size).toBe(AVATAR_TONES.length)
   })
 })
