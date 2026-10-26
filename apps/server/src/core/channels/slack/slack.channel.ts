@@ -3,7 +3,7 @@ import type { WebClient } from '@slack/web-api'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, projectSuggestions, runProjectCommand, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type ActiveChannelTurn, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
 import { sendLongSlackMessage, uploadImage, extractAttachments } from './slack.api.js'
 
@@ -109,6 +109,7 @@ function createTransport(client: WebClient, channel: string, threadTs: string): 
             return res?.ts || null
         },
         edit: async (ts, text) => { await client.chat.update({ channel, ts, text }).catch(() => { }) },
+        delete: async (ts) => { await client.chat.delete({ channel, ts }).catch(() => { }) },
         sendImages: async (images) => {
             for (const { dataUrl, name } of images) {
                 await uploadImage(client, channel, dataUrl, name, threadTs).catch(e =>
@@ -220,6 +221,7 @@ export class SlackChannel implements ChannelProvider {
     targetLocks = new Map<string, Promise<void>>()
     conversationSendQueue = new Map<string, ConversationSendFn>()
     pendingAttachments = new Map<string, ChannelMedia>()
+    activeTurns = new Map<string, ActiveChannelTurn>()
 
     private connected = false
     private errorMsg?: string

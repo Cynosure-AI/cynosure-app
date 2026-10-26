@@ -32,7 +32,7 @@ function state(agentId: string, allowedAgentIds: string[] = [], sessionIdleMs = 
     return {
         channelType: 'telegram', channelId: 'tg', agentId, broadcast: vi.fn(), allowedAgentIds,
         activeExecutions: new Map(), agentOverride: new Map(), lastUsedAgent: new Map(), conversationTargets: new Map(),
-        targetLocks: new Map(), pendingAttachments: new Map(), conversationSendQueue: new Map(), sessionIdleMs,
+        targetLocks: new Map(), pendingAttachments: new Map(), activeTurns: new Map(), conversationSendQueue: new Map(), sessionIdleMs,
     }
 }
 

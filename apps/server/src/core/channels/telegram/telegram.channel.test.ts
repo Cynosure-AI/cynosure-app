@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
     sendMessageReturningId: vi.fn(),
     editMessage: vi.fn(),
     answerCallbackQuery: vi.fn(),
+    deleteMessage: vi.fn(),
+    extractAttachments: vi.fn(),
+    receiveChannelMessage: vi.fn(),
 }))
 
 vi.mock('./telegram.api.js', async (importOriginal) => ({
@@ -16,13 +19,17 @@ vi.mock('./telegram.api.js', async (importOriginal) => ({
     sendMessageReturningId: mocks.sendMessageReturningId,
     editMessage: mocks.editMessage,
     answerCallbackQuery: mocks.answerCallbackQuery,
+    deleteMessage: mocks.deleteMessage,
+    extractAttachments: mocks.extractAttachments,
 }))
+
+vi.mock('../channel-turn.js', () => ({ receiveChannelMessage: mocks.receiveChannelMessage }))
 
 vi.mock('../../activity/stop-all.js', () => ({
     stopAllActivity: mocks.stopAllActivity,
 }))
 
-import { handleCallbackQuery, handleCommand, subscribeToHITL } from './telegram.channel.js'
+import { handleCallbackQuery, handleCommand, handleMessage, subscribeToHITL, type TelegramUpdate } from './telegram.channel.js'
 
 describe('Telegram /kill command', () => {
     beforeEach(() => {
@@ -84,6 +91,7 @@ describe('Telegram approval flow', () => {
         mocks.sendMessageReturningId.mockReset().mockResolvedValue(100)
         mocks.editMessage.mockReset().mockResolvedValue(true)
         mocks.answerCallbackQuery.mockReset().mockResolvedValue(undefined)
+        mocks.deleteMessage.mockReset().mockResolvedValue(true)
     })
     afterEach(() => getEventBus().removeAllListeners())
 
@@ -103,7 +111,7 @@ describe('Telegram approval flow', () => {
         return { ctx, resolve, unsubscribe }
     }
 
-    test('shows the target, retains context after approval and removes the buttons', async () => {
+    test('shows the target and removes the prompt once approved', async () => {
         const { ctx, resolve, unsubscribe } = setup()
         await vi.waitFor(() => expect(ctx.pendingHITL.size).toBe(1))
         expect(mocks.sendMessageReturningId.mock.calls[0][2]).toContain('/recipes/potato_muffins.md')
@@ -113,13 +121,27 @@ describe('Telegram approval flow', () => {
 
         expect(resolve).toHaveBeenCalledWith({ approved: true, reason: undefined })
         expect(ctx.pendingHITL.size).toBe(0)
-        expect(mocks.editMessage).toHaveBeenCalledWith(ctx, 42, 100,
-            expect.stringContaining('/recipes/potato_muffins.md'), { reply_markup: { inline_keyboard: [] } })
-        expect(mocks.editMessage.mock.calls[0][3]).toContain('Approved')
+        expect(mocks.deleteMessage).toHaveBeenCalledWith(ctx, 42, 100)
+        expect(mocks.editMessage).not.toHaveBeenCalled()
+        expect(mocks.answerCallbackQuery).toHaveBeenCalledWith(ctx, 'click', expect.stringContaining('Approved'))
         unsubscribe()
     })
 
-    test('removes stale buttons when answered in Cynosure without resolving twice', async () => {
+    test('collapses the prompt with its context when Telegram refuses to delete it', async () => {
+        mocks.deleteMessage.mockResolvedValue(false)
+        const { ctx, unsubscribe } = setup()
+        await vi.waitFor(() => expect(ctx.pendingHITL.size).toBe(1))
+
+        await handleCallbackQuery(ctx, { id: 'click', from: { id: 42, first_name: 'User' },
+            message: { message_id: 100, chat: { id: 42, type: 'private' } }, data: 'hitl:approval:deny' })
+
+        expect(mocks.editMessage).toHaveBeenCalledWith(ctx, 42, 100,
+            expect.stringContaining('/recipes/potato_muffins.md'), { reply_markup: { inline_keyboard: [] } })
+        expect(mocks.editMessage.mock.calls[0][3]).toContain('Declined')
+        unsubscribe()
+    })
+
+    test('removes the prompt when answered in Cynosure without resolving twice', async () => {
         const { ctx, resolve, unsubscribe } = setup()
         await vi.waitFor(() => expect(ctx.pendingHITL.size).toBe(1))
 
@@ -127,8 +149,28 @@ describe('Telegram approval flow', () => {
 
         expect(ctx.pendingHITL.size).toBe(0)
         expect(resolve).not.toHaveBeenCalled()
-        expect(mocks.editMessage).toHaveBeenCalledWith(ctx, 42, 100,
-            expect.stringContaining('answered in Cynosure'), { reply_markup: { inline_keyboard: [] } })
+        await vi.waitFor(() => expect(mocks.deleteMessage).toHaveBeenCalledWith(ctx, 42, 100))
         unsubscribe()
+    })
+})
+
+describe('Telegram albums', () => {
+    test('handles the photos of an album and its caption as one message', async () => {
+        mocks.receiveChannelMessage.mockReset().mockResolvedValue(undefined)
+        mocks.extractAttachments.mockReset().mockImplementation(async (_ctx, msg: { message_id: number }) =>
+            ({ imageDataUrls: [`image-${msg.message_id}`], audioDataUrls: [] }))
+        const ctx = { channelId: 'telegram', allowedUserIds: new Set(['42']), mediaGroups: new Map() } as unknown as TelegramCtx
+        const part = (id: number, caption?: string): TelegramUpdate => ({ update_id: id, message: {
+            message_id: id, from: { id: 42, first_name: 'User' }, chat: { id: 42, type: 'private' }, date: 0,
+            media_group_id: 'album', caption, photo: [{ file_id: `f${id}`, file_unique_id: `u${id}`, width: 1, height: 1 }],
+        } })
+
+        await Promise.all([handleMessage(ctx, part(1)), handleMessage(ctx, part(2, 'Pls eintragen'))])
+
+        expect(mocks.receiveChannelMessage).toHaveBeenCalledOnce()
+        const inbound = mocks.receiveChannelMessage.mock.calls[0][1]
+        expect(inbound.text).toBe('Pls eintragen')
+        expect(await inbound.extractMedia()).toEqual({ imageDataUrls: ['image-1', 'image-2'], audioDataUrls: [] })
+        expect(ctx.mediaGroups.size).toBe(0)
     })
 })

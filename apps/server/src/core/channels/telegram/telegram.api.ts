@@ -87,6 +87,22 @@ export async function editMessage(ctx: TelegramCtx, chatId: number, messageId: n
     }
 }
 
+/** Returns false when Telegram refuses, e.g. for messages older than 48 hours. */
+export async function deleteMessage(ctx: TelegramCtx, chatId: number, messageId: number): Promise<boolean> {
+    try {
+        return (await callTelegram(ctx, 'deleteMessage', { chat_id: chatId, message_id: messageId })).ok
+    } catch {
+        return false
+    }
+}
+
+/** Set a single emoji reaction on a message, or clear it with null. Best effort. */
+export async function setMessageReaction(ctx: TelegramCtx, chatId: number, messageId: number, emoji: string | null): Promise<void> {
+    await callTelegram(ctx, 'setMessageReaction', {
+        chat_id: chatId, message_id: messageId, reaction: emoji ? [{ type: 'emoji', emoji }] : [],
+    }).catch(() => { })
+}
+
 export async function sendChatAction(ctx: TelegramCtx, chatId: number, action: string): Promise<void> {
     await fetch(`${TELEGRAM_API}/bot${ctx.botToken}/sendChatAction`, {
         method: 'POST',

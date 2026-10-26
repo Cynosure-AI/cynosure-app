@@ -13,7 +13,7 @@ describe('channel approvals', () => {
 
     test('shows actions and targets without exposing payloads', () => {
         const text = describeChannelApproval(request())
-        expect(text).toContain('file write')
+        expect(text).toContain('File write')
         expect(text).toContain('/recipes/muffins.md')
         expect(text).not.toContain('Private file contents')
     })

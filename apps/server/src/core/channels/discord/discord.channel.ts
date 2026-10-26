@@ -3,7 +3,7 @@ import type { Interaction, Message } from 'discord.js'
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, projectSuggestions, runProjectCommand, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type ActiveChannelTurn, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
 import { sendLongMessage, dataUrlToBuffer, extractAttachments, type DiscordSendChannel } from './discord.api.js'
 
@@ -66,6 +66,7 @@ function createTransport(msg: Message): ChannelTransport<Message> {
         reply: (text) => msg.reply(text).catch(() => null),
         send: async (text) => channel ? channel.send(text).catch(() => null) : null,
         edit: async (handle, text) => { await handle.edit(text).catch(() => { }) },
+        delete: async (handle) => { await handle.delete().catch(() => { }) },
         sendImages: async (images) => {
             if (!channel) return
             const files = images.map(({ dataUrl, name }) => {
@@ -198,6 +199,7 @@ export class DiscordChannel implements ChannelProvider {
     targetLocks = new Map<string, Promise<void>>()
     conversationSendQueue = new Map<string, ConversationSendFn>()
     pendingAttachments = new Map<string, ChannelMedia>()
+    activeTurns = new Map<string, ActiveChannelTurn>()
 
     private connected = false
     private errorMsg?: string

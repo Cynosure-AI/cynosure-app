@@ -27,6 +27,13 @@ export interface ChannelMedia {
 
 export type ConversationSendFn = (fn: () => Promise<void>) => void
 
+/** A running agent turn. Follow-up messages steer it instead of waiting for it to end. */
+export interface ActiveChannelTurn {
+    conversationId: string
+    /** Hand a follow-up to the running turn; `settle` runs once the turn has ended. */
+    steer(text: string, media: ChannelMedia, settle?: () => Promise<void>): Promise<void>
+}
+
 export interface ChannelSessionState<K extends ChannelTargetId> {
     readonly channelType: ChannelType
     channelId: string
@@ -44,6 +51,8 @@ export interface ChannelSessionState<K extends ChannelTargetId> {
     targetLocks: Map<K, Promise<void>>
     /** Media sent without text, held until the next text message. */
     pendingAttachments: Map<K, ChannelMedia>
+    /** The turn currently running for a target, if any. */
+    activeTurns: Map<K, ActiveChannelTurn>
     /** Ordered outbound queue of the running turn, including approval prompts and progress. */
     conversationSendQueue: Map<string, ConversationSendFn>
     /** A chat whose last user message is older than this starts over; 0 keeps chats until `new`. */
@@ -286,21 +295,34 @@ export function subscribeChannelHITL<K extends ChannelTargetId>(
     }
 }
 
+/** The path, URL or title a tool call acts on, without exposing its payload. */
+export function toolCallTarget(rawArguments: string): string | null {
+    try {
+        const args = JSON.parse(rawArguments) as Record<string, unknown> | null
+        // Content, credentials and arbitrary arguments are deliberately omitted.
+        for (const key of ['path', 'filePath', 'file_path', 'directory', 'destination', 'title', 'url']) {
+            if (typeof args?.[key] === 'string' && args[key]) return args[key]
+        }
+    } catch { /* The executor reports invalid arguments. */ }
+    return null
+}
+
+/** Readable name of a tool, e.g. `directory_create` → "Directory create". */
+export function toolDisplayName(name: string, title?: string): string {
+    const text = (title || name.replace(/_/g, ' ')).trim()
+    return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 /** Include a readable action and its target, without dumping tool payloads into chat. */
 export function describeChannelApproval(request: ChannelHITLRequest): string {
     const inline = (value: string, limit: number) => value.replace(/[\r\n`*_<>]/g, ' ').slice(0, limit)
     const code = (value: string, limit: number) => value.replace(/[\r\n`]/g, ' ').slice(0, limit)
     const lines = request.toolCalls.slice(0, 6).map(tc => {
-        const title = inline(tc.annotations?.title || tc.function.name.replace(/_/g, ' '), 70)
-        let target = ''
-        try {
-            const args = JSON.parse(tc.function.arguments) as Record<string, unknown> | null
-            // Content, credentials and arbitrary arguments are deliberately omitted.
-            for (const key of ['path', 'filePath', 'file_path', 'directory', 'title', 'url']) {
-                if (typeof args?.[key] === 'string') { target = code(args[key], 130); break }
-            }
-        } catch { /* The executor reports invalid arguments. */ }
-        return `• ${title}${target ? ` — \`${target}\`` : ''} (\`${code(tc.function.name, 64)}\`)`
+        const title = inline(toolDisplayName(tc.function.name, tc.annotations?.title), 70)
+        const target = toolCallTarget(tc.function.arguments)
+        // A provider title can hide what actually runs; name the tool then.
+        const tool = tc.annotations?.title ? ` (\`${code(tc.function.name, 64)}\`)` : ''
+        return `• **${title}**${tool}${target ? `\n   \`${code(target, 130)}\`` : ''}`
     })
     if (request.toolCalls.length > 6) lines.push(`…and ${request.toolCalls.length - 6} more actions. Review the full request in Cynosure before approving.`)
     return lines.join('\n')
@@ -313,10 +335,11 @@ export function resolveChannelHITL(
     taskId: string,
     approved: boolean,
     platformName: string,
+    reason?: string,
 ): void {
-    pending.resolve({ approved, reason: approved ? undefined : `Denied via ${platformName}` })
+    pending.resolve({ approved, reason: approved ? undefined : reason ?? `Denied via ${platformName}` })
     broadcast('agent:hitl-resolved', { taskId, conversationId: pending.conversationId, approved })
-    getEventBus().emit('hitl:resolved', { taskId, conversationId: pending.conversationId })
+    getEventBus().emit('hitl:resolved', { taskId, conversationId: pending.conversationId, approved })
     try { getDb().prepare('DELETE FROM pending_hitl WHERE task_id = ?').run(taskId) } catch { /* best effort */ }
 }
 

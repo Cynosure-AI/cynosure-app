@@ -1,13 +1,14 @@
 import type { ChannelProvider, ChannelStatus, ActiveChannelExecution, ActiveChannelExecutionEntry } from '../base.channel.js'
 import { handleChannelCommand, projectSuggestions, runProjectSuggestion, type ChannelCommandStyle } from '../channel-commands.js'
 import { cancelChannelExecution, cancelChannelExecutionsWhere } from '../channel-execution.js'
-import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
+import { agentCommandName, getAvailableAgents, parseHITLActionId, resolveChannelHITL, findHomeConversation, resolveHomeConversation, sessionIdleMsFromConfig, subscribeChannelHITL, type ActiveChannelTurn, type BroadcastFn, type ChannelMedia, type ChannelSessionState, type ConversationSendFn } from '../channel-session.js'
 import { receiveChannelMessage, type ChannelTransport } from '../channel-turn.js'
 import { getCynoProfile } from '../../cyno/cyno-profile.js'
 import { findDeliveryConversation, recordChannelDeliveries } from '../channel-delivery.js'
 import {
     TELEGRAM_API,
     answerCallbackQuery,
+    deleteMessage,
     editMessage,
     extractAttachments,
     sendChatAction,
@@ -15,7 +16,11 @@ import {
     sendMessage,
     sendMessageReturningId,
     sendPhoto,
+    setMessageReaction,
 } from './telegram.api.js'
+
+/** Telegram delivers each photo of an album as its own message; collect them this long. */
+const MEDIA_GROUP_WINDOW_MS = 800
 
 export interface TelegramConfig {
     botToken: string
@@ -42,6 +47,7 @@ export interface TelegramUpdate {
         video?: { file_id: string; file_name?: string; mime_type?: string; duration: number; width: number; height: number; file_size?: number }
         video_note?: { file_id: string; duration: number; length: number; file_size?: number }
         reply_to_message?: { message_id: number }
+        media_group_id?: string
     }
     callback_query?: {
         id: string
@@ -67,7 +73,11 @@ export interface TelegramCtx extends ChannelSessionState<number> {
     pendingHITL: Map<string, PendingHITL>
     /** Telegram user behind each conversation; HITL prompts are only answerable by them. */
     conversationToUser: Map<string, number>
+    /** Album parts waiting to be handled as one message. */
+    mediaGroups: Map<string, TelegramMessage[]>
 }
+
+type TelegramMessage = NonNullable<TelegramUpdate['message']>
 
 /** Normalize Telegram user IDs from persisted, user-supplied channel config. */
 export function normalizeTelegramUserIds(value: unknown): string[] {
@@ -134,13 +144,15 @@ export async function sendProjectPicker(ctx: TelegramCtx, chatId: number, reques
     await sendMessageReturningId(ctx, chatId, 'Choose a project:', { reply_markup: { inline_keyboard: rows } })
 }
 
-function createTransport(ctx: TelegramCtx, chatId: number): ChannelTransport<number> {
+function createTransport(ctx: TelegramCtx, chatId: number, inboundMessageId: number): ChannelTransport<number> {
     return {
         logTag: '[Telegram]',
         messageLimit: 4000,
         reply: (text) => sendMessageReturningId(ctx, chatId, text),
         send: (text) => sendMessageReturningId(ctx, chatId, text),
         edit: async (messageId, text) => { await editMessage(ctx, chatId, messageId, text) },
+        delete: async (messageId) => { await deleteMessage(ctx, chatId, messageId) },
+        react: (emoji) => setMessageReaction(ctx, chatId, inboundMessageId, emoji),
         sendImages: async (images, replyTo) => {
             for (const { dataUrl } of images) {
                 await sendPhoto(ctx, chatId, dataUrl, replyTo ?? undefined).catch(e =>
@@ -152,14 +164,38 @@ function createTransport(ctx: TelegramCtx, chatId: number): ChannelTransport<num
     }
 }
 
+function hasMedia(msg: TelegramMessage): boolean {
+    return !!(msg.photo || msg.document || msg.audio || msg.voice || msg.video || msg.video_note)
+}
+
 export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): Promise<void> {
     const msg = update.message!
     if (msg.chat.type !== 'private' || !isTelegramUserAllowed(ctx.allowedUserIds, msg.from?.id)) return
-    const chatId = msg.chat.id
-    const userId = msg.from!.id
-    const text = msg.text || msg.caption || ''
+    const groupId = msg.media_group_id
+    if (!groupId) return receiveMessages(ctx, [msg])
+
+    // The first part of an album waits for the rest, then handles them together.
+    const group = ctx.mediaGroups.get(groupId)
+    if (group) {
+        group.push(msg)
+        return
+    }
+    ctx.mediaGroups.set(groupId, [msg])
+    await new Promise(resolve => setTimeout(resolve, MEDIA_GROUP_WINDOW_MS))
+    const parts = ctx.mediaGroups.get(groupId) ?? [msg]
+    ctx.mediaGroups.delete(groupId)
+    await receiveMessages(ctx, parts)
+}
+
+/** Handle one message, or the parts of one album, as a single inbound message. */
+async function receiveMessages(ctx: TelegramCtx, parts: TelegramMessage[]): Promise<void> {
+    // An album carries its caption on one of its parts.
+    const lead = parts.find(part => part.text || part.caption) ?? parts[0]
+    const chatId = lead.chat.id
+    const userId = lead.from!.id
+    const text = lead.text || lead.caption || ''
     // Replying to a delivered result or an earlier answer continues that conversation.
-    const repliedTo = msg.reply_to_message?.message_id
+    const repliedTo = lead.reply_to_message?.message_id
     const continueConversationId = repliedTo === undefined
         ? undefined
         : findDeliveryConversation(ctx.channelId, String(chatId), String(repliedTo)) ?? undefined
@@ -167,17 +203,32 @@ export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): P
     await receiveChannelMessage(ctx, {
         target: chatId,
         text,
-        senderName: msg.from?.first_name || 'User',
-        hasMedia: !!(msg.photo || msg.document || msg.audio || msg.voice || msg.video || msg.video_note),
-        extractMedia: () => extractAttachments(ctx, msg),
+        senderName: lead.from?.first_name || 'User',
+        hasMedia: parts.some(hasMedia),
+        extractMedia: async () => {
+            const media: ChannelMedia = { imageDataUrls: [], audioDataUrls: [] }
+            for (const part of parts) {
+                const extracted = await extractAttachments(ctx, part)
+                media.imageDataUrls.push(...extracted.imageDataUrls)
+                media.audioDataUrls.push(...extracted.audioDataUrls)
+            }
+            return media
+        },
         handleCommand: text.startsWith('/') ? () => handleCommand(ctx, chatId, text) : undefined,
-        transport: createTransport(ctx, chatId),
+        transport: createTransport(ctx, chatId, lead.message_id),
         onConversation: (conversationId) => ctx.conversationToUser.set(conversationId, userId),
         continueConversationId,
         onFinalReply: (messageId, conversationId) => recordChannelDeliveries({
             channelId: ctx.channelId, target: String(chatId), platformMessageIds: [String(messageId)], conversationId,
         }),
     })
+}
+
+/** Remove an answered approval prompt; the status card records the outcome. Old messages that cannot be deleted are collapsed. */
+async function retireApprovalPrompt(ctx: TelegramCtx, pending: PendingHITL, fallback: string): Promise<void> {
+    if (await deleteMessage(ctx, pending.chatId, pending.messageId)) return
+    await editMessage(ctx, pending.chatId, pending.messageId,
+        [fallback, pending.actions].filter(Boolean).join('\n\n'), { reply_markup: { inline_keyboard: [] } })
 }
 
 /** Forward HITL approval requests to Telegram as inline buttons. Returns unsub function. */
@@ -189,12 +240,12 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
         const messageId = await sendMessageReturningId(
             ctx,
             chatId,
-            `🔐 **Approval needed**\n\nTo continue, I need permission for:\n${actions}\n\nWork is paused until you choose.`,
+            `🔐 **Approve to continue?**\n\n${actions}`,
             {
                 reply_markup: {
                     inline_keyboard: [[
-                        { text: 'Approve', callback_data: `hitl:${request.taskId}:approve` },
-                        { text: 'Decline', callback_data: `hitl:${request.taskId}:deny` }
+                        { text: '✅ Approve', callback_data: `hitl:${request.taskId}:approve` },
+                        { text: '✖️ Decline', callback_data: `hitl:${request.taskId}:deny` }
                     ]]
                 }
             }
@@ -213,9 +264,7 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
         const pending = ctx.pendingHITL.get(taskId)
         if (!pending) return
         ctx.pendingHITL.delete(taskId)
-        await editMessage(ctx, pending.chatId, pending.messageId,
-            [cancelled ? '⏹ Approval no longer needed.' : '✓ Approval answered in Cynosure.', pending.actions].filter(Boolean).join('\n\n'),
-            { reply_markup: { inline_keyboard: [] } })
+        await retireApprovalPrompt(ctx, pending, cancelled ? '⏹ Approval no longer needed.' : '✓ Approval answered elsewhere.')
     })
 }
 
@@ -253,10 +302,8 @@ export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<T
     ctx.pendingHITL.delete(action.taskId)
     resolveChannelHITL(ctx.broadcast, pending, action.taskId, action.approved, 'Telegram')
 
-    const decision = action.approved ? '✅ **Approved** — continuing…' : '❌ **Declined** — I’ll continue without these actions.'
-    const statusText = [decision, pending.actions].filter(Boolean).join('\n\n')
-    await editMessage(ctx, pending.chatId, pending.messageId, statusText, { reply_markup: { inline_keyboard: [] } })
-    await answerCallbackQuery(ctx, query.id, action.approved ? 'Approved!' : 'Declined.')
+    await answerCallbackQuery(ctx, query.id, action.approved ? '✅ Approved — continuing' : 'Declined — continuing without it')
+    await retireApprovalPrompt(ctx, pending, action.approved ? '✅ **Approved**' : '✖️ **Declined**')
 }
 
 export class TelegramChannel implements ChannelProvider {
@@ -277,6 +324,8 @@ export class TelegramChannel implements ChannelProvider {
     targetLocks = new Map<number, Promise<void>>()
     conversationSendQueue = new Map<string, ConversationSendFn>()
     pendingAttachments = new Map<number, ChannelMedia>()
+    activeTurns = new Map<number, ActiveChannelTurn>()
+    mediaGroups = new Map<string, TelegramMessage[]>()
 
     private polling = false
     private pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -340,6 +389,7 @@ export class TelegramChannel implements ChannelProvider {
         this.conversationTargets.clear()
         this.conversationToUser.clear()
         this.targetLocks.clear()
+        this.mediaGroups.clear()
     }
 
     status(): ChannelStatus {
