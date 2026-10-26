@@ -64,6 +64,8 @@ const recentLoaded = ref(false)
 const chatsByAgent = ref<Record<string, AgentChats>>({})
 const expanded = ref(new Set<string>())
 const openMenuId = ref<string | null>(null)
+const openAgentMenuKey = ref<string | null>(null)
+const agentMenuRef = ref<HTMLElement | null>(null)
 const editingId = ref<string | null>(null)
 const editingTitle = ref('')
 const titleInputRef = ref<HTMLInputElement | null>(null)
@@ -116,6 +118,8 @@ const agents = computed<AgentEntry[]>(() => {
       (b.lastUsedAt - a.lastUsedAt) ||
       a.name.localeCompare(b.name))
 })
+
+const menuAgent = computed(() => agents.value.find((entry) => entry.key === openAgentMenuKey.value))
 
 const runningIds = computed(() => {
   const ids = new Set([
@@ -300,6 +304,7 @@ async function startAgentChat(entry: AgentEntry): Promise<void> {
 
 function closeMenu(): void {
   openMenuId.value = null
+  openAgentMenuKey.value = null
 }
 
 // Keep menus outside the scroll area and flip them above rows near the bottom.
@@ -307,9 +312,9 @@ const MENU_WIDTH = 144
 const MENU_HEIGHT = 112
 const menuStyle = ref<Record<string, string>>({})
 
-function placeMenu(left: number, anchorTop: number, anchorBottom: number): void {
-  const fitsBelow = anchorBottom + 4 + MENU_HEIGHT <= window.innerHeight - 8
-  const top = fitsBelow ? anchorBottom + 4 : Math.max(8, anchorTop - 4 - MENU_HEIGHT)
+function placeMenu(left: number, anchorTop: number, anchorBottom: number, height = MENU_HEIGHT): void {
+  const fitsBelow = anchorBottom + 4 + height <= window.innerHeight - 8
+  const top = fitsBelow ? anchorBottom + 4 : Math.max(8, anchorTop - 4 - height)
   menuStyle.value = {
     top: `${top}px`,
     left: `${Math.min(Math.max(8, left), window.innerWidth - MENU_WIDTH - 8)}px`,
@@ -321,15 +326,39 @@ function toggleMenu(chatId: string, event: MouseEvent): void {
     closeMenu()
     return
   }
+  closeMenu()
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   placeMenu(rect.right - MENU_WIDTH, rect.top, rect.bottom)
   openMenuId.value = chatId
 }
 
 function openContextMenu(chatId: string, event: MouseEvent): void {
+  closeMenu()
   editingId.value = null
   placeMenu(event.clientX, event.clientY, event.clientY)
   openMenuId.value = chatId
+}
+
+function openAgentMenu(entry: AgentEntry, event: MouseEvent | KeyboardEvent): void {
+  closeMenu()
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const left = event instanceof MouseEvent ? event.clientX : rect.left
+  const top = event instanceof MouseEvent ? event.clientY : rect.bottom
+  placeMenu(left, top, top, entry.key === CYNO_KEY ? 44 : 76)
+  openAgentMenuKey.value = entry.key
+  void nextTick(() => agentMenuRef.value?.querySelector('button')?.focus())
+}
+
+async function toggleAgentFavorite(entry: AgentEntry): Promise<void> {
+  closeMenu()
+  await agentDefs.update(entry.key, { favorite: !entry.favorite })
+}
+
+async function editAgent(entry: AgentEntry): Promise<void> {
+  closeMenu()
+  await router.push(entry.key === CYNO_KEY
+    ? { name: 'cyno', query: { returnTo: route.fullPath } }
+    : { name: 'agent-detail', params: { id: entry.key }, query: { returnTo: route.fullPath } })
 }
 
 function setTitleInput(element: unknown): void {
@@ -435,7 +464,10 @@ onBeforeUnmount(() => {
       class="space-y-0.5"
     >
       <!-- Agent row -->
-      <div class="group/agent relative">
+      <div
+        class="group/agent relative"
+        @contextmenu.prevent.stop="openAgentMenu(entry, $event)"
+      >
         <HoverTooltip
           placement="right"
           block
@@ -453,6 +485,7 @@ onBeforeUnmount(() => {
             :aria-label="entry.name"
             :title="collapsed ? undefined : entry.name"
             @click="selectAgent(entry)"
+            @keydown.shift.f10.prevent.stop="openAgentMenu(entry, $event)"
           >
             <span class="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800">
               <span
@@ -716,10 +749,57 @@ onBeforeUnmount(() => {
     >
       No matching chats
     </div>
+    <Teleport to="body">
+      <div
+        v-if="menuAgent"
+        ref="agentMenuRef"
+        role="menu"
+        :aria-label="`${menuAgent.name} options`"
+        class="fixed z-200 w-36 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+        :style="menuStyle"
+        @click.stop
+        @contextmenu.prevent
+        @keydown.escape.stop.prevent="closeMenu"
+      >
+        <button
+          v-if="menuAgent.key !== CYNO_KEY"
+          type="button"
+          role="menuitem"
+          class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+          @click="toggleAgentFavorite(menuAgent)"
+        >
+          <Icon
+            :icon="menuAgent.favorite ? 'lucide:star-off' : 'lucide:star'"
+            class="h-3.5 w-3.5 text-status-warning"
+          />
+          {{ menuAgent.favorite ? 'Unfavorite' : 'Favorite' }}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+          @click="editAgent(menuAgent)"
+        >
+          <Icon
+            icon="lucide:pencil"
+            class="h-3.5 w-3.5"
+          />
+          Edit
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
+.agents-collapsed {
+  scrollbar-width: none;
+}
+
+.agents-collapsed::-webkit-scrollbar {
+  display: none;
+}
+
 .agents-collapsed .agent-row {
   display: flex;
   justify-content: center;

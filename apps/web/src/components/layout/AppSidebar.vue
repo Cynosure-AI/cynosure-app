@@ -874,10 +874,11 @@ async function openCynoChat(): Promise<void> {
   .sidebar-collapsed nav {
     padding-inline: 0.5rem;
     overflow-x: hidden;
+    scrollbar-width: none;
   }
 
   .sidebar-collapsed nav::-webkit-scrollbar {
-    width: 0.375rem;
+    display: none;
   }
 
   .sidebar-collapsed .nav-item {
