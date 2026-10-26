@@ -73,6 +73,15 @@ const hasAwaitingApproval = computed(() =>
   instances.value.some((i) => i.status === "awaiting-approval"),
 );
 const isDreaming = computed(() => activeDreamRuns.value.length > 0);
+const statusPresentation = computed(() => {
+  if (!wsConnected.value) return { label: "Connecting...", icon: "lucide:loader-circle" };
+  if (hasAwaitingApproval.value) return { label: "Needs Attention", icon: "lucide:shield-alert" };
+  if (instances.value.length > 0) return { label: "Agents Running...", icon: "lucide:bot" };
+  if (memoryJobsStore.hasRunningJobs) return { label: memoryJobsStore.statusLabel, icon: "lucide:database-zap" };
+  if (isDreaming.value) return { label: "Dreaming...", icon: "lucide:moon-star" };
+  if (!providerStore.providers.length) return { label: "No providers", icon: "lucide:unplug" };
+  return { label: "Ready", icon: "lucide:circle-check" };
+});
 const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.activeJobs.length + activeDreamRuns.value.length);
 const runningConversationIds = computed(() => instances.value
   .filter((instance) => instance.status === "running" && instance.conversationId)
@@ -751,14 +760,13 @@ async function openCynoChat(): Promise<void> {
           >
             {{ preferencesStore.userName.trim() }}
           </span>
-          <span class="truncate text-[11px] leading-4 text-ink-secondary">
-            <template v-if="!wsConnected">Connecting...</template>
-            <template v-else-if="hasAwaitingApproval">Needs Attention</template>
-            <template v-else-if="instances.length > 0">Agents Running...</template>
-            <template v-else-if="memoryJobsStore.hasRunningJobs">{{ memoryJobsStore.statusLabel }}</template>
-            <template v-else-if="isDreaming">Dreaming...</template>
-            <template v-else-if="!providerStore.providers.length">No providers</template>
-            <template v-else>Ready</template>
+          <span class="flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-ink-secondary">
+            <Icon
+              :icon="statusPresentation.icon"
+              class="h-3 w-3 shrink-0"
+              aria-hidden="true"
+            />
+            <span class="truncate">{{ statusPresentation.label }}</span>
           </span>
         </span>
         <Icon

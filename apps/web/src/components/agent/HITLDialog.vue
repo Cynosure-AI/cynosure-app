@@ -196,12 +196,17 @@ function resetState(): void {
           </div>
 
           <template v-if="tc.shell">
-            <p
-              class="hitl-shell-explanation text-sm leading-snug"
-              :class="tc.shell.explanation ? 'text-theme-100' : 'italic text-ink-muted'"
-            >
-              {{ tc.shell.explanation || 'No explanation was given for this command.' }}
-            </p>
+            <div class="rounded-lg border border-status-warning/30 bg-status-warning/10 px-2.5 py-2">
+              <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-status-warning">
+                Command purpose
+              </p>
+              <p
+                class="hitl-shell-explanation break-words text-sm leading-relaxed"
+                :class="tc.shell.explanation ? 'font-semibold text-theme-100' : 'italic text-ink-muted'"
+              >
+                {{ tc.shell.explanation || 'No explanation was given for this command.' }}
+              </p>
+            </div>
             <div class="hitl-shell overflow-hidden rounded-lg border border-theme-700/50 bg-theme-950/50 shadow-inner">
               <div
                 v-if="tc.shell.cwd"

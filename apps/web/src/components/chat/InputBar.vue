@@ -701,7 +701,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
             <div class="min-w-0 flex-1 py-1.5">
               <span
                 v-if="item.content"
-                class="line-clamp-2 break-words leading-5 text-theme-200"
+                class="line-clamp-2 break-words leading-5 text-theme-200 text-xs"
                 :title="item.content"
               >{{ item.content }}</span>
               <span
