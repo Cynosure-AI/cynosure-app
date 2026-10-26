@@ -449,7 +449,7 @@ async function openCynoChat(): Promise<void> {
     </div>
 
     <!-- V2 Navigation -->
-    <!-- Scrolls as a whole on short screens so Recent chats keeps its min height instead of being squeezed. -->
+    <!-- Scrolls as a whole on short screens so either chat view keeps its minimum height. -->
     <nav class="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-3 pb-1">
       <!-- Chat -->
       <HoverTooltip
@@ -593,7 +593,7 @@ async function openCynoChat(): Promise<void> {
       <section
         v-if="sidebarChatView === 'agents' || !sidebarCollapsed"
         class="recent-region sidebar-region flex flex-1 flex-col"
-        :class="sidebarChatView === 'global' && recentChatsOpen ? 'min-h-72' : 'min-h-0'"
+        :class="recentChatsOpen && !sidebarCollapsed ? 'min-h-72' : 'min-h-0'"
       >
         <div class="section-separator" />
         <div

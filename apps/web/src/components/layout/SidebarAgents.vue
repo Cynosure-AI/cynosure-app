@@ -302,8 +302,33 @@ function closeMenu(): void {
   openMenuId.value = null
 }
 
-function openContextMenu(chatId: string): void {
+// Keep menus outside the scroll area and flip them above rows near the bottom.
+const MENU_WIDTH = 144
+const MENU_HEIGHT = 112
+const menuStyle = ref<Record<string, string>>({})
+
+function placeMenu(left: number, anchorTop: number, anchorBottom: number): void {
+  const fitsBelow = anchorBottom + 4 + MENU_HEIGHT <= window.innerHeight - 8
+  const top = fitsBelow ? anchorBottom + 4 : Math.max(8, anchorTop - 4 - MENU_HEIGHT)
+  menuStyle.value = {
+    top: `${top}px`,
+    left: `${Math.min(Math.max(8, left), window.innerWidth - MENU_WIDTH - 8)}px`,
+  }
+}
+
+function toggleMenu(chatId: string, event: MouseEvent): void {
+  if (openMenuId.value === chatId) {
+    closeMenu()
+    return
+  }
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  placeMenu(rect.right - MENU_WIDTH, rect.top, rect.bottom)
+  openMenuId.value = chatId
+}
+
+function openContextMenu(chatId: string, event: MouseEvent): void {
   editingId.value = null
+  placeMenu(event.clientX, event.clientY, event.clientY)
   openMenuId.value = chatId
 }
 
@@ -373,6 +398,8 @@ watch(wsConnected, (connected) => {
 
 onMounted(() => {
   document.addEventListener('click', closeMenu)
+  document.addEventListener('scroll', closeMenu, true)
+  window.addEventListener('resize', closeMenu)
   liveCleanups.push(
     api.chat.onEvent((event) => {
       if (event.type === 'title-updated' || (event.type === 'transcript-item' && event.item.type === 'message')) {
@@ -389,6 +416,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeMenu)
+  document.removeEventListener('scroll', closeMenu, true)
+  window.removeEventListener('resize', closeMenu)
   if (refreshTimer) clearTimeout(refreshTimer)
   recentToken++
   liveCleanups.forEach((cleanup) => cleanup())
@@ -397,7 +426,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="space-y-0.5"
+    class="min-h-0 flex-1 space-y-0.5 overflow-y-auto"
     :class="{ 'agents-collapsed': collapsed }"
   >
     <div
@@ -529,7 +558,7 @@ onBeforeUnmount(() => {
               ]"
               :title="chat.title"
               @click="openChat(chat)"
-              @contextmenu.prevent.stop="openContextMenu(chat.id)"
+              @contextmenu.prevent.stop="openContextMenu(chat.id, $event)"
               @keydown.enter.self.prevent="openChat(chat)"
               @keydown.space.self.prevent="openChat(chat)"
               @keydown.escape="closeMenu"
@@ -585,7 +614,7 @@ onBeforeUnmount(() => {
                 class="shrink-0 rounded-md p-1 text-ink-muted opacity-0 transition hover:bg-theme-700 hover:text-theme-200 group-hover/chat:opacity-100 focus-visible:opacity-100"
                 :class="{ 'bg-theme-700 text-theme-200 opacity-100': openMenuId === chat.id }"
                 aria-label="Chat options"
-                @click.stop="openMenuId = openMenuId === chat.id ? null : chat.id"
+                @click.stop="toggleMenu(chat.id, $event)"
               >
                 <Icon
                   icon="lucide:ellipsis"
@@ -593,46 +622,49 @@ onBeforeUnmount(() => {
                 />
               </button>
             </div>
-            <div
-              v-if="openMenuId === chat.id"
-              class="absolute right-0 top-full z-30 w-36 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
-              @click.stop
-              @keydown.escape="closeMenu"
-            >
-              <button
-                type="button"
-                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
-                @click="togglePin(chat, entry.key)"
+            <Teleport to="body">
+              <div
+                v-if="openMenuId === chat.id"
+                class="fixed z-200 w-36 overflow-hidden rounded-lg border border-theme-700 bg-theme-900 py-1 shadow-xl"
+                :style="menuStyle"
+                @click.stop
+                @keydown.escape="closeMenu"
               >
-                <Icon
-                  :icon="chat.pinned ? 'lucide:pin-off' : 'lucide:pin'"
-                  class="h-3.5 w-3.5 text-status-warning"
-                />
-                {{ chat.pinned ? 'Unpin' : 'Pin' }}
-              </button>
-              <button
-                type="button"
-                class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
-                @click="startRename(chat)"
-              >
-                <Icon
-                  icon="lucide:pencil"
-                  class="h-3.5 w-3.5"
-                /> Rename
-              </button>
-              <button
-                type="button"
-                class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="Boolean(chat.pinned)"
-                :title="chat.pinned ? 'Unpin this chat before deleting it' : undefined"
-                @click="deleteConversation(chat, entry.key)"
-              >
-                <Icon
-                  icon="lucide:trash-2"
-                  class="h-3.5 w-3.5"
-                /> Delete
-              </button>
-            </div>
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                  @click="togglePin(chat, entry.key)"
+                >
+                  <Icon
+                    :icon="chat.pinned ? 'lucide:pin-off' : 'lucide:pin'"
+                    class="h-3.5 w-3.5 text-status-warning"
+                  />
+                  {{ chat.pinned ? 'Unpin' : 'Pin' }}
+                </button>
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 px-3 py-2 text-xs text-theme-300 hover:bg-theme-800"
+                  @click="startRename(chat)"
+                >
+                  <Icon
+                    icon="lucide:pencil"
+                    class="h-3.5 w-3.5"
+                  /> Rename
+                </button>
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 border-t border-theme-800 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="Boolean(chat.pinned)"
+                  :title="chat.pinned ? 'Unpin this chat before deleting it' : undefined"
+                  @click="deleteConversation(chat, entry.key)"
+                >
+                  <Icon
+                    icon="lucide:trash-2"
+                    class="h-3.5 w-3.5"
+                  /> Delete
+                </button>
+              </div>
+            </Teleport>
           </li>
 
           <!-- Empty state -->
