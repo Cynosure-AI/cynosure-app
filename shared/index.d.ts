@@ -380,6 +380,8 @@ export interface ProjectTaskDto {
   progress?: ProjectTaskProgress | null
   /** Number of attached files; set on API responses. */
   attachmentCount?: number
+  /** A non-SVG image attachment for the board thumbnail; null when none exists. */
+  imageAttachmentId?: string | null
 }
 
 export interface ProjectTaskAttachmentDto {

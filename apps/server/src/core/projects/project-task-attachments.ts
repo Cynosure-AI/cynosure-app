@@ -62,6 +62,14 @@ export function countTaskAttachments(projectId: string): Map<string, number> {
     return new Map(rows.map((row) => [row.task_id, row.n]))
 }
 
+/** One stable image per task for board thumbnails, using the panel's non-SVG image rule. */
+export function getTaskImageAttachmentIds(projectId: string): Map<string, string> {
+    const rows = getDb().prepare(`SELECT task_id, MIN(id) AS id FROM project_task_attachments
+        WHERE project_id = ? AND mime_type GLOB 'image/*' AND mime_type != 'image/svg+xml'
+        GROUP BY task_id`).all(projectId) as { task_id: string; id: string }[]
+    return new Map(rows.map((row) => [row.task_id, row.id]))
+}
+
 export function getTaskAttachment(projectId: string, taskId: string, attachmentId: string): StoredTaskAttachment | undefined {
     const row = getDb().prepare('SELECT * FROM project_task_attachments WHERE id = ? AND project_id = ? AND task_id = ?')
         .get(attachmentId, projectId, taskId) as AttachmentRow | undefined

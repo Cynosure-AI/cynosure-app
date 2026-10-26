@@ -24,6 +24,7 @@ import {
     countTaskAttachments,
     deleteTaskAttachment,
     getTaskAttachment,
+    getTaskImageAttachmentIds,
     listTaskAttachments,
     markTaskAttachmentsUsed,
     readTaskAttachmentForChat,
@@ -41,7 +42,13 @@ function message(error: unknown): string {
 function withProgress(projectId: string, tasks: ProjectTaskDto[]): ProjectTaskDto[] {
     const progress = listProjectTaskProgress(projectId)
     const attachments = countTaskAttachments(projectId)
-    return tasks.map((task) => ({ ...task, progress: progress.get(task.id) ?? null, attachmentCount: attachments.get(task.id) ?? 0 }))
+    const images = getTaskImageAttachmentIds(projectId)
+    return tasks.map((task) => ({
+        ...task,
+        progress: progress.get(task.id) ?? null,
+        attachmentCount: attachments.get(task.id) ?? 0,
+        imageAttachmentId: images.get(task.id) ?? null,
+    }))
 }
 
 /** Types a browser may render in place; anything else downloads, so uploaded HTML or SVG never runs in the app. */
@@ -182,7 +189,7 @@ export async function registerProjectRoutes(app: FastifyInstance, broadcast: Bro
         try {
             const task = createProjectTask(req.params.id, { ...req.body, createdBy: 'user' })
             tasksChanged(req.params.id)
-            return { ...task, progress: null, attachmentCount: 0 }
+            return { ...task, progress: null, attachmentCount: 0, imageAttachmentId: null }
         } catch (error) {
             return reply.status(400).send({ error: message(error) })
         }

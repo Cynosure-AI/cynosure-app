@@ -62,6 +62,22 @@ function moveSelected(status: ProjectTaskStatus): void {
   })
 }
 
+function onAssignSelected(event: Event): void {
+  const select = event.target as HTMLSelectElement
+  assignSelected(select.value || null)
+  select.selectedIndex = 0
+}
+
+function assignSelected(assigneeAgentId: string | null): void {
+  const projectId = props.project.id
+  const selection = [...selectedTasks.value]
+  void run(async () => {
+    for (const task of selection) {
+      if (task.assigneeAgentId !== assigneeAgentId) await projectsStore.updateTask(projectId, task.id, { assigneeAgentId })
+    }
+  })
+}
+
 function deleteSelected(): void {
   const projectId = props.project.id
   const selection = [...selectedTasks.value]
@@ -348,22 +364,52 @@ onBeforeUnmount(() => {
           <option
             disabled
             value=""
-          >Move to…</option>
+          >
+            Move to…
+          </option>
           <option
             v-for="column in TASK_COLUMNS"
             :key="column.status"
             :value="column.status"
-          >{{ column.label }}</option>
+          >
+            {{ column.label }}
+          </option>
+        </select>
+        <select
+          aria-label="Assign selected tasks"
+          class="rounded border border-theme-700 bg-theme-900 px-2 py-1"
+          @change="onAssignSelected"
+        >
+          <option
+            disabled
+            selected
+          >
+            Assign agent…
+          </option>
+          <option value="">
+            Project default
+          </option>
+          <option
+            v-for="agent in agentDefs.agents"
+            :key="agent.id"
+            :value="agent.id"
+          >
+            {{ agent.name }}
+          </option>
         </select>
         <button
           type="button"
           class="text-status-danger"
           @click="deleteSelected"
-        >Delete selected</button>
+        >
+          Delete selected
+        </button>
         <button
           type="button"
           @click="projectsStore.setSelectedTasks(project.id, [])"
-        >Clear selection</button>
+        >
+          Clear selection
+        </button>
       </template>
     </div>
 
@@ -450,6 +496,26 @@ onBeforeUnmount(() => {
                   :class="task.status === 'done' ? 'text-ink-faint' : 'text-ink-muted'"
                 >{{ notesPreview(task) }}</span>
               </button>
+
+              <a
+                v-if="task.imageAttachmentId"
+                :href="api.projects.taskAttachmentHref(project.id, task.id, task.imageAttachmentId)"
+                :aria-label="`Open image attachment for ${task.title}`"
+                target="_blank"
+                rel="noopener"
+                draggable="false"
+                class="mt-2 block w-fit rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+              >
+                <img
+                  :src="api.projects.taskAttachmentHref(project.id, task.id, task.imageAttachmentId)"
+                  :alt="`Image attachment for ${task.title}`"
+                  loading="lazy"
+                  draggable="false"
+                  width="64"
+                  height="48"
+                  class="h-12 w-16 rounded object-cover"
+                >
+              </a>
 
               <!-- Agent and progress metadata -->
               <div

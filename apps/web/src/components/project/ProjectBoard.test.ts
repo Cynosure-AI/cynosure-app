@@ -12,11 +12,14 @@ const mocks = vi.hoisted(() => ({
   updateTask: vi.fn(),
   removeTask: vi.fn(),
   startProjectChat: vi.fn(),
+  taskAttachmentHref: vi.fn((projectId: string, taskId: string, attachmentId: string) =>
+    `/api/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}`),
 }))
 
 vi.mock('../../api/client', () => ({ api: {
   instances: { list: mocks.listInstances },
   agent: { onPlanningStateUpdated: () => () => {} },
+  projects: { taskAttachmentHref: mocks.taskAttachmentHref },
 } }))
 vi.mock('../../stores/projects.store', () => ({
   useProjectsStore: () => ({
@@ -81,6 +84,7 @@ beforeEach(() => {
   mocks.updateTask.mockReset().mockResolvedValue({})
   mocks.removeTask.mockReset().mockResolvedValue(undefined)
   mocks.startProjectChat.mockReset()
+  mocks.taskAttachmentHref.mockClear()
   mocks.selectedTaskIdsByProject = reactive({})
   mocks.executing = ref(new Set<string>())
   for (const key of Object.keys(mocks.tasksByProject)) delete mocks.tasksByProject[key]
@@ -332,5 +336,108 @@ test('select visible respects folded Done cards, preserves selection on remount,
   const clear = wrapper.findAll('button').find((button) => button.text() === 'Clear selection')!
   await clear.trigger('click')
   expect(mocks.selectedTaskIdsByProject.p1).toEqual([])
+  wrapper.unmount()
+})
+
+test('bulk assignment updates selected tasks, skips the current assignee, and clears to the project default', async () => {
+  mocks.tasksByProject.p1 = reactive([
+    task({ id: 'a', title: 'First' }),
+    task({ id: 'b', title: 'Second', status: 'blocked', assigneeAgentId: 'writer' }),
+    task({ id: 'c', title: 'Already assigned', assigneeAgentId: 'coder' }),
+    task({ id: 'd', title: 'Unselected' }),
+  ])
+  const wrapper = render()
+  await flushPromises()
+  expect(wrapper.find('select[aria-label="Assign selected tasks"]').exists()).toBe(false)
+  for (const title of ['First', 'Second', 'Already assigned']) {
+    await wrapper.get(`input[aria-label="Select ${title}"]`).setValue(true)
+  }
+  const select = wrapper.get<HTMLSelectElement>('select[aria-label="Assign selected tasks"]')
+  expect(select.findAll('option').map((option) => [option.attributes('value'), option.text()]))
+    .toEqual([[undefined, 'Assign agent…'], ['', 'Project default'], ['writer', 'Writer'], ['coder', 'Coder']])
+
+  await select.setValue('coder')
+  await flushPromises()
+  expect(mocks.updateTask.mock.calls).toEqual([
+    ['p1', 'a', { assigneeAgentId: 'coder' }], ['p1', 'b', { assigneeAgentId: 'coder' }],
+  ])
+  expect(select.element.selectedIndex).toBe(0)
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a', 'b', 'c'])
+
+  // Reflect the store's updated tasks before applying another bulk action.
+  for (const selected of mocks.tasksByProject.p1!.filter((item) => item.id !== 'd')) selected.assigneeAgentId = 'coder'
+  mocks.updateTask.mockClear()
+  await select.setValue('')
+  await flushPromises()
+  expect(mocks.updateTask.mock.calls).toEqual([
+    ['p1', 'a', { assigneeAgentId: null }], ['p1', 'b', { assigneeAgentId: null }], ['p1', 'c', { assigneeAgentId: null }],
+  ])
+  expect(select.element.selectedIndex).toBe(0)
+
+  mocks.tasksByProject.p1![0]!.assigneeAgentId = null
+  mocks.updateTask.mockClear()
+  await select.setValue('')
+  await flushPromises()
+  expect(mocks.updateTask.mock.calls).toEqual([
+    ['p1', 'b', { assigneeAgentId: null }], ['p1', 'c', { assigneeAgentId: null }],
+  ])
+  wrapper.unmount()
+})
+
+test('bulk assignment reports update failures and resets the picker', async () => {
+  mocks.tasksByProject.p1 = reactive([task({ id: 'a', title: 'First' })])
+  const wrapper = render()
+  await flushPromises()
+  await wrapper.get('input[aria-label="Select First"]').setValue(true)
+  mocks.updateTask.mockRejectedValueOnce(new Error('Assignment failed'))
+  const select = wrapper.get<HTMLSelectElement>('select[aria-label="Assign selected tasks"]')
+  await select.setValue('writer')
+  await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toBe('Assignment failed')
+  expect(select.element.selectedIndex).toBe(0)
+  await select.setValue('writer')
+  await flushPromises()
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  wrapper.unmount()
+})
+
+test('cards preview only image attachments and preserve bulk clicks and card dragging', async () => {
+  mocks.tasksByProject.p1 = reactive([
+    task({ id: 'a', title: 'Screenshot', attachmentCount: 2, imageAttachmentId: 'image/1' }),
+    task({ id: 'b', title: 'Documents', attachmentCount: 3, imageAttachmentId: null }),
+    task({ id: 'c', title: 'No attachments' }),
+  ])
+  const wrapper = render()
+  await flushPromises()
+  const cards = wrapper.findAll('li[draggable="true"]')
+  const image = cards[0]!.get('img')
+  const link = cards[0]!.get('a[aria-label="Open image attachment for Screenshot"]')
+  const href = '/api/projects/p1/tasks/a/attachments/image%2F1'
+  expect(mocks.taskAttachmentHref).toHaveBeenCalledWith('p1', 'a', 'image/1')
+  expect(image.attributes()).toMatchObject({ src: href, loading: 'lazy', draggable: 'false', width: '64', height: '48' })
+  expect(link.attributes()).toMatchObject({ href, target: '_blank', rel: 'noopener', draggable: 'false' })
+  expect(cards[0]!.get('[title="2 attachments"]').text()).toBe('2')
+  expect(cards[1]!.find('img').exists()).toBe(false)
+  expect(cards[1]!.get('[title="3 attachments"]').text()).toBe('3')
+  expect(cards[2]!.find('img').exists()).toBe(false)
+  const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+  link.element.dispatchEvent(click)
+  expect(click.defaultPrevented).toBe(false)
+  expect(wrapper.getComponent({ name: 'ModalDialog' }).props('show')).toBe(false)
+
+  const setData = vi.fn()
+  await image.trigger('dragstart', { dataTransfer: { setData, effectAllowed: '' } })
+  expect(setData).toHaveBeenCalledWith('text/plain', 'a')
+  await wrapper.get('section[aria-label="Blocked"]').trigger('drop')
+  await flushPromises()
+  expect(mocks.updateTask).toHaveBeenCalledWith('p1', 'a', { status: 'blocked', sortOrder: 1 })
+
+  await wrapper.get('input[aria-label="Select Documents"]').setValue(true)
+  const bulkClick = new MouseEvent('click', { bubbles: true, cancelable: true })
+  image.element.dispatchEvent(bulkClick)
+  await flushPromises()
+  expect(bulkClick.defaultPrevented).toBe(true)
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['b', 'a'])
+  expect(wrapper.getComponent({ name: 'ModalDialog' }).props('show')).toBe(false)
   wrapper.unmount()
 })
