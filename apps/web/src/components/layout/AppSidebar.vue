@@ -20,7 +20,7 @@ import { useAppBranding } from "../../composables/useAppBranding";
 import { commandPaletteShortcutLabel, useCommandPalette } from "../../composables/useCommandPalette";
 import WorkspacePopover from "../status/WorkspacePopover.vue";
 import HoverTooltip from "../shared/HoverTooltip.vue";
-import GlobalRecentChats from "./GlobalRecentChats.vue";
+import SidebarAgents from "./SidebarAgents.vue";
 import SidebarProjects from "./SidebarProjects.vue";
 
 const route = useRoute();
@@ -576,18 +576,20 @@ const chatRoute = computed(() =>
       </section>
 
       <section
-        class="recent-region flex flex-1 flex-col"
-        :class="recentChatsOpen ? 'min-h-72' : 'min-h-0'"
+        class="recent-region sidebar-region flex flex-1 flex-col"
       >
         <div class="section-separator" />
-        <div class="group/recent-header relative flex items-center">
+        <div
+          v-if="!sidebarCollapsed"
+          class="group/recent-header relative flex items-center"
+        >
           <button
             type="button"
             class="region-toggle min-w-0 flex-1 pr-1"
             :aria-expanded="recentChatsOpen"
             @click="recentChatsOpen = !recentChatsOpen"
           >
-            <span>Recent chats</span>
+            <span>Chats</span>
             <Icon
               icon="lucide:chevron-down"
               class="h-3.5 w-3.5 transition-transform"
@@ -640,8 +642,9 @@ const chatRoute = computed(() =>
             </button>
           </div>
         </div>
-        <GlobalRecentChats
-          v-if="recentChatsOpen && !sidebarCollapsed"
+        <SidebarAgents
+          v-show="recentChatsOpen || sidebarCollapsed"
+          :collapsed="sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
           :active-conversation-ids="runningConversationIds"
           :filters="recentChatFilter"
@@ -861,9 +864,12 @@ const chatRoute = computed(() =>
     opacity: 1;
   }
 
-  .sidebar-collapsed .region-toggle,
-  .sidebar-collapsed .recent-region {
+  .sidebar-collapsed .region-toggle {
     display: none;
+  }
+
+  .sidebar-collapsed .recent-region {
+    min-height: 0;
   }
 
   .sidebar-collapsed .sidebar-region {
