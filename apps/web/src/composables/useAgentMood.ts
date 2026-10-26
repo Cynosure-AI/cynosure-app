@@ -4,7 +4,7 @@ import { useChatStore, type DisplayMessage } from '../stores/chat.store'
 
 /** Expressions an assistant's avatar can hold; each maps to a blobatar pose. */
 export type AgentMood =
-  | 'idle' | 'thinking' | 'happy' | 'sad' | 'mad' | 'surprised' | 'unsure' | 'sleepy' | 'shy' | 'sick'
+  | 'idle' | 'thinking' | 'happy' | 'sad' | 'mad' | 'surprised' | 'unsure' | 'smug' | 'sleepy' | 'shy' | 'sick'
 
 export interface AgentMoodInput {
   /** A run is in progress for this chat. */
@@ -17,6 +17,8 @@ export interface AgentMoodInput {
   lastReply: Pick<DisplayMessage, 'isError' | 'stopped'> | null
   /** Assistant replies in a row, counting back from the latest, that ended in an error. */
   errorStreak: number
+  /** The run paused itself with a scheduled wait and will continue later. */
+  waiting: boolean
 }
 
 /** The mood a chat's state calls for, before any short-lived reaction. */
@@ -25,6 +27,7 @@ export function deriveAgentMood(input: AgentMoodInput): AgentMood {
     if (input.streamingText) return 'idle'
     return input.toolFailed ? 'unsure' : 'thinking'
   }
+  if (input.waiting) return 'sleepy'
   if (input.lastReply?.isError) return input.errorStreak >= 2 ? 'mad' : 'sad'
   if (input.lastReply?.stopped) return 'sleepy'
   return 'idle'
@@ -41,6 +44,10 @@ export function countErrorStreak(messages: readonly DisplayMessage[]): number {
   }
   return streak
 }
+
+/** Poses a working assistant cycles through, so a long think does not look frozen. */
+export const THINKING_CYCLE: readonly AgentMood[] = ['thinking', 'unsure', 'thinking', 'smug']
+export const THINKING_POSE_MS = 3200
 
 export const HAPPY_BURST_MS = 1400
 export const SURPRISE_BURST_MS = 1600
@@ -77,7 +84,21 @@ export function useAgentMood(): { mood: Ref<AgentMood>; speaking: Ref<boolean> }
     toolFailed: toolFailed.value,
     lastReply: lastAssistant.value,
     errorStreak: countErrorStreak(chatStore.messages),
+    waiting: Boolean(chatStore.pendingWait),
   }))
+
+  // While thinking, step through a few poses; each think starts from 'thinking'.
+  const thinkingStep = ref(0)
+  let thinkingTimer: ReturnType<typeof setInterval> | undefined
+  watch(() => base.value === 'thinking', (active) => {
+    clearInterval(thinkingTimer)
+    thinkingStep.value = 0
+    if (active) thinkingTimer = setInterval(() => { thinkingStep.value++ }, THINKING_POSE_MS)
+  }, { immediate: true })
+  onScopeDispose(() => clearInterval(thinkingTimer))
+  const settled = computed(() => base.value === 'thinking'
+    ? THINKING_CYCLE[thinkingStep.value % THINKING_CYCLE.length]
+    : base.value)
 
   const burst = ref<AgentMood | null>(null)
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -101,6 +122,6 @@ export function useAgentMood(): { mood: Ref<AgentMood>; speaking: Ref<boolean> }
   })
   onScopeDispose(() => clearTimeout(timer))
 
-  const mood = computed(() => burst.value ?? base.value)
+  const mood = computed(() => burst.value ?? settled.value)
   return { mood, speaking }
 }

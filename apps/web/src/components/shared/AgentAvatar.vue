@@ -14,7 +14,7 @@ import { computed, ref } from 'vue'
 import { Blobatar } from '@blobatar/vue'
 import { useGaze, type GazeTarget } from '@blobatar/vue/gaze'
 import {
-  happy, idle, mad, sad, shy, sick, sleepy, surprised, thinking, unsure,
+  happy, idle, mad, sad, shy, sick, sleepy, smug, surprised, thinking, unsure,
 } from 'blobatar/expression'
 import 'blobatar/motion.css'
 import 'blobatar/gaze.css'
@@ -47,7 +47,7 @@ const props = withDefaults(defineProps<{
 // Resolved only while pending, so a plain avatar needs no stores.
 const logoIconUrl = computed(() => props.pending ? useAppBranding().logoIconUrl.value : '')
 
-const EXPRESSIONS = { idle, thinking, happy, sad, mad, surprised, unsure, sleepy, shy, sick } as const
+const EXPRESSIONS = { idle, thinking, happy, sad, mad, surprised, unsure, smug, sleepy, shy, sick } as const
 
 const blob = ref()
 const face = computed(() => blobatarProps(props.name, props.avatar))

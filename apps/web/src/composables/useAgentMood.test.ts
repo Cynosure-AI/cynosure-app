@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest'
-import { countErrorStreak, deriveAgentMood, type AgentMoodInput } from './useAgentMood'
+import { countErrorStreak, deriveAgentMood, THINKING_CYCLE, type AgentMoodInput } from './useAgentMood'
 import type { DisplayMessage } from '../stores/chat.store'
 
-const idleChat: AgentMoodInput = { executing: false, streamingText: false, toolFailed: false, lastReply: null, errorStreak: 0 }
+const idleChat: AgentMoodInput = { executing: false, streamingText: false, toolFailed: false, lastReply: null, errorStreak: 0, waiting: false }
 
 function message(role: DisplayMessage['role'], extra: Partial<DisplayMessage> = {}): DisplayMessage {
   return { id: Math.random().toString(36), role, content: 'text', createdAt: 0, ...extra }
@@ -29,6 +29,16 @@ describe('deriveAgentMood', () => {
     expect(deriveAgentMood({ ...idleChat, lastReply: {} })).toBe('idle')
     expect(deriveAgentMood(idleChat)).toBe('idle')
   })
+})
+
+test('sleeps while a scheduled wait is pending, and wakes once the run resumes', () => {
+  expect(deriveAgentMood({ ...idleChat, waiting: true, lastReply: {} })).toBe('sleepy')
+  expect(deriveAgentMood({ ...idleChat, waiting: true, executing: true })).toBe('thinking')
+})
+
+test('the thinking cycle starts on thinking and mixes in unsure and smug', () => {
+  expect(THINKING_CYCLE[0]).toBe('thinking')
+  expect(new Set(THINKING_CYCLE)).toEqual(new Set(['thinking', 'unsure', 'smug']))
 })
 
 describe('countErrorStreak', () => {
