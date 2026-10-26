@@ -12,15 +12,17 @@ import {
   AVATAR_SHAPES, EMPTY_AVATAR_CONFIG, compactAvatarConfig, type AvatarConfig, type AvatarShape,
 } from '../../utils/avatar'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   name: string
   avatar: AvatarConfig | null
-}>()
+  /** The look "reset" returns to; null is the plain face from the name. */
+  defaultAvatar?: AvatarConfig | null
+}>(), { defaultAvatar: null })
 
 const emit = defineEmits<{ update: [value: AvatarConfig | null] }>()
 
 const config = computed<AvatarConfig>(() => ({ ...EMPTY_AVATAR_CONFIG, ...props.avatar }))
-const isCustomised = computed(() => props.avatar !== null)
+const isCustomised = computed(() => JSON.stringify(props.avatar) !== JSON.stringify(props.defaultAvatar))
 
 function patch(changes: Partial<AvatarConfig>): void {
   emit('update', compactAvatarConfig({ ...config.value, ...changes }))
@@ -215,13 +217,13 @@ function toggleCustomColor(enabled: boolean): void {
           v-if="isCustomised"
           type="button"
           class="inline-flex items-center gap-1.5 text-xs text-ink-muted transition-colors hover:text-theme-200"
-          @click="emit('update', null)"
+          @click="emit('update', defaultAvatar ? { ...defaultAvatar } : null)"
         >
           <Icon
             icon="lucide:rotate-ccw"
             class="h-3.5 w-3.5"
           />
-          Reset to the face from the name
+          {{ defaultAvatar ? 'Reset to the default face' : 'Reset to the face from the name' }}
         </button>
       </div>
     </div>

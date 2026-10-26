@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest'
 import type { AgentDefinition } from '../../api/types'
 import AgentGeneralTab from './AgentGeneralTab.vue'
 
+vi.mock('../../stores/cyno.store', () => ({ useCynoStore: () => ({ defaults: null }) }))
 vi.mock('../../stores/provider.store', () => ({
   useProviderStore: () => ({ providers: [], loadProviders: vi.fn() }),
 }))

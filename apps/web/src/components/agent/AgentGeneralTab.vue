@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, nextTick } from "vue";
 import { Icon } from "@iconify/vue";
 import { useProviderStore } from "../../stores/provider.store";
+import { useCynoStore } from "../../stores/cyno.store";
 import type { AgentDefinition } from "../../api/types";
 import IconUpload from "../shared/IconUpload.vue";
 import AgentAvatar from "../shared/AgentAvatar.vue";
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 }>();
 
 const providerStore = useProviderStore();
+const cynoStore = useCynoStore();
 const systemPromptRef = ref<HTMLTextAreaElement | null>(null);
 
 const REASONING_LEVELS: Array<{
@@ -118,6 +120,7 @@ onMounted(() =>
           class="px-1 pt-4"
           :name="agent.name"
           :avatar="agent.avatar"
+          :default-avatar="cyno ? cynoStore.defaults?.avatar : null"
           @update="emit('update', 'avatar', $event)"
         />
       </CollapsibleSection>

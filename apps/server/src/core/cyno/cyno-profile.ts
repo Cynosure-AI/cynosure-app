@@ -4,7 +4,7 @@
  * every client and survives browser resets.
  */
 import { getDb } from '../../db/database.js'
-import type { CynoProfile, ReasoningEffort, SubAgentAssignmentDto } from '@shared/types'
+import type { AvatarConfig, CynoProfile, ReasoningEffort, SubAgentAssignmentDto } from '@shared/types'
 import { AvatarConfigError, normalizeAvatarConfig } from '../agents/avatar-config.js'
 
 const CYNO_PROFILE_KEY = 'cynoProfile'
@@ -35,11 +35,18 @@ If memory folders are listed above, check them when the user mentions people, pr
 Current date: {{currentDate}}
 `
 
+/** Cyno's own face: a round crimson blob, so the default assistant reads as the default. */
+export const DEFAULT_CYNO_AVATAR: AvatarConfig = { seed: null, hue: 18, tone: 0.7, shape: 'round' }
+
+function isDefaultAvatar(avatar: AvatarConfig | null): boolean {
+    return avatar === null || JSON.stringify(avatar) === JSON.stringify(DEFAULT_CYNO_AVATAR)
+}
+
 export function defaultCynoProfile(): CynoProfile {
     return {
         name: 'Cyno',
         iconUrl: null,
-        avatar: null,
+        avatar: { ...DEFAULT_CYNO_AVATAR },
         systemPrompt: DEFAULT_CYNO_SYSTEM_PROMPT,
         providerId: '',
         model: '',
@@ -124,7 +131,9 @@ export function getCynoProfile(): CynoProfile {
         // Stored values are re-validated so a hand-edited row cannot break runs.
         const stored = normalizeUpdate(JSON.parse(row.value_json) as Record<string, unknown>)
         const updatedAt = (JSON.parse(row.value_json) as { updatedAt?: unknown }).updatedAt
-        return { ...defaults, ...stored, updatedAt: typeof updatedAt === 'number' ? updatedAt : 0 }
+        // A stored null means "the default face", so a later default change reaches it.
+        const avatar = stored.avatar ?? defaults.avatar
+        return { ...defaults, ...stored, avatar, updatedAt: typeof updatedAt === 'number' ? updatedAt : 0 }
     } catch {
         return defaults
     }
@@ -133,6 +142,7 @@ export function getCynoProfile(): CynoProfile {
 /** Apply a partial update. Throws CynoProfileError for invalid input. */
 export function saveCynoProfile(input: Record<string, unknown>): CynoProfile {
     const next: CynoProfile = { ...getCynoProfile(), ...normalizeUpdate(input), updatedAt: Date.now() }
-    getDb().prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(CYNO_PROFILE_KEY, JSON.stringify(next))
-    return next
+    const stored = { ...next, avatar: isDefaultAvatar(next.avatar) ? null : next.avatar }
+    getDb().prepare('INSERT OR REPLACE INTO settings (key, value_json) VALUES (?, ?)').run(CYNO_PROFILE_KEY, JSON.stringify(stored))
+    return { ...next, avatar: next.avatar ?? { ...DEFAULT_CYNO_AVATAR } }
 }

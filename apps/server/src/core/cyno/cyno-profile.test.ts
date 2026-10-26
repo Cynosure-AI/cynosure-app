@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb, getDb } from '../../db/database.js'
-import { CynoProfileError, DEFAULT_CYNO_SYSTEM_PROMPT, getCynoProfile, saveCynoProfile } from './cyno-profile.js'
+import { CynoProfileError, DEFAULT_CYNO_AVATAR, DEFAULT_CYNO_SYSTEM_PROMPT, getCynoProfile, saveCynoProfile } from './cyno-profile.js'
 
 let directory: string
 beforeEach(() => {
@@ -17,13 +17,20 @@ afterEach(() => {
 })
 
 describe('Cyno profile', () => {
-    test('stores avatar settings and rejects invalid ones as profile errors', () => {
-        expect(getCynoProfile().avatar).toBeNull()
-        expect(saveCynoProfile({ avatar: { seed: null, hue: 30, tone: 0.4, shape: null } }).avatar)
-            .toEqual({ seed: null, hue: 30, tone: 0.4, shape: null })
-        expect(getCynoProfile().avatar).toEqual({ seed: null, hue: 30, tone: 0.4, shape: null })
+    test('starts with the crimson default face and falls back to it when reset', () => {
+        expect(getCynoProfile().avatar).toEqual(DEFAULT_CYNO_AVATAR)
+        const custom = { seed: null, hue: 30, tone: 0.4, shape: null }
+        expect(saveCynoProfile({ avatar: custom }).avatar).toEqual(custom)
+        expect(getCynoProfile().avatar).toEqual(custom)
         expect(() => saveCynoProfile({ avatar: { tone: 2 } })).toThrow(CynoProfileError)
-        expect(saveCynoProfile({ avatar: null }).avatar).toBeNull()
+        expect(saveCynoProfile({ avatar: null }).avatar).toEqual(DEFAULT_CYNO_AVATAR)
+        expect(getCynoProfile().avatar).toEqual(DEFAULT_CYNO_AVATAR)
+    })
+
+    test('stores the default face as null so it keeps following the default', () => {
+        saveCynoProfile({ avatar: { ...DEFAULT_CYNO_AVATAR } })
+        const row = getDb().prepare("SELECT value_json FROM settings WHERE key = 'cynoProfile'").get() as { value_json: string }
+        expect(JSON.parse(row.value_json).avatar).toBeNull()
     })
 
     test('starts from defaults: All Memory, default tools, automatic routing and memory', () => {
