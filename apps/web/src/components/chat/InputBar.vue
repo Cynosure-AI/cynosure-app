@@ -17,6 +17,8 @@ import SystemPromptModal from './modals/SystemPromptModal.vue'
 import SlashCommandMenu from './inputbar/SlashCommandMenu.vue'
 import { useSlashCommands } from '../../composables/useSlashCommands'
 import { findSlashCommand, composerCommandAt, slashSuggestions, type SlashOption } from '../../utils/slash-commands'
+import { useSpeechPlayer } from '../../composables/useSpeechPlayer'
+import { armVoiceReply } from '../../composables/useVoiceAutoRead'
 import { api } from '../../api/client'
 import type { ProjectFileContent, StagedChatAttachment } from '../../api/types'
 import { useProjectsStore } from '../../stores/projects.store'
@@ -58,6 +60,12 @@ const draftStorageKey = computed(() => getDraftStorageKey(
   chatStore.activeAgentId
 ))
 const inputText = ref(readDraft(draftStorageKey.value))
+/** The composer holds dictated text, so the reply to it is read aloud. */
+const sentByVoice = ref(false)
+watch(inputText, (text) => {
+  if (!text.trim()) sentByVoice.value = false
+})
+const speechPlayer = useSpeechPlayer()
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([])
@@ -260,6 +268,9 @@ async function send(delivery: 'next' | 'steer' = 'next'): Promise<void> {
   const audio = attachedAudio.value.map((a) => a.url)
   const taskAttachments = taskAttachmentsInDraft()
   const selectedMediaSettings = currentMediaSettings()
+  // A new message interrupts Cyno; a dictated one asks for a spoken reply.
+  speechPlayer.stop()
+  if (sentByVoice.value && !editingQueueId.value) armVoiceReply(chatStore.activeConversationId)
   inputText.value = ''
   persistDraft(draftStorageKey.value, '')
   attachedImages.value = []
@@ -636,6 +647,7 @@ onBeforeUnmount(() => {
 
 function onTranscription(text: string): void {
   inputText.value = inputText.value ? `${inputText.value} ${text}` : text
+  sentByVoice.value = true
 }
 
 function focus(): void {
