@@ -16,6 +16,7 @@ import AgentAdvancedTab from '../components/agent/AgentAdvancedTab.vue'
 import ModalDialog from '../components/shared/ModalDialog.vue'
 import AgentAvatar from '../components/shared/AgentAvatar.vue'
 import TabBar, { type TabDef } from '../components/shared/TabBar.vue'
+import { displayedIconUrl } from '../utils/avatar'
 
 type AgentSectionId = 'general' | 'tools' | 'sub-agents' | 'memory' | 'advanced'
 
@@ -46,7 +47,7 @@ const cynoAgent = computed<AgentDefinition | null>(() => {
   if (!profile) return null
   return {
     id: 'cyno', name: profile.name, internalName: 'cyno', description: '', category: '',
-    iconUrl: cyno.displayIconUrl, imageUrl: cyno.imageUrl, avatar: profile.avatar, avatarSource: profile.avatarSource, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
+    iconUrl: cyno.iconUrl, imageUrl: cyno.imageUrl, avatar: cyno.avatar, avatarSource: cyno.avatarSource, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
     tools: profile.effective.tools,
     subAgents: profile.subAgents,
     memoryFolders: profile.effective.memoryFolders,
@@ -81,7 +82,7 @@ watch(() => [isCyno.value, agentId.value], () => {
 })
 const CYNO_FIELDS = new Set(['name', 'imageUrl', 'avatar', 'avatarSource', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled', 'thinkingEnabled', 'reasoningEffort'])
 /** The face the draft would show, so switching tabs or uploading previews before saving. */
-const headerIconUrl = computed(() => agent.value?.avatarSource === 'image' ? agent.value.imageUrl : null)
+const headerIconUrl = computed(() => displayedIconUrl(agent.value?.avatarSource, agent.value?.imageUrl))
 const activeSection = computed(() => sections.find(section => section.id === activeSectionId.value) || sections[0])
 const returnToChat = computed(() => {
   const target = route.query.returnTo
@@ -126,11 +127,7 @@ async function save(): Promise<boolean> {
   try {
     const payload = { ...changes.value }
     if (payload.name !== undefined) payload.name = payload.name.trim()
-    if (isCyno.value) {
-      // Cyno's profile stores its image as iconUrl.
-      const { imageUrl, ...profileChanges } = payload
-      await cyno.update(imageUrl === undefined ? profileChanges : { ...profileChanges, iconUrl: imageUrl })
-    }
+    if (isCyno.value) await cyno.update(payload)
     else await agentDefs.update(agentId.value, payload)
     draft.value = {}
     return true

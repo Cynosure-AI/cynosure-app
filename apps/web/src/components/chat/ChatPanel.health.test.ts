@@ -150,3 +150,24 @@ describe('chat greeting health warning', () => {
       .toContain('Sub-agent: missing')
   })
 })
+
+describe('live avatar', () => {
+  beforeEach(() => {
+    mocks.chat.activeAgentId = 'agent'
+    mocks.chat.activeConversationId = null
+    mocks.chat.conversations = []
+    mocks.chat.messages = []
+    mocks.runtime.executionSteps = []
+    mocks.runtime.isExecuting = false
+  })
+
+  test('sits on the latest rendered reply, not an empty bookkeeping reply after it', () => {
+    mocks.chat.messages = [
+      { id: 'user', role: 'user', content: 'Hi', createdAt: 1 },
+      { id: 'reply', role: 'assistant', content: 'Hello', createdAt: 2 },
+      { id: 'bookkeeping', role: 'assistant', content: '', createdAt: 3 },
+    ]
+    const wrapper = mountPanel()
+    expect(wrapper.get('teleport-stub').attributes('to')).toBe('[data-live-avatar-slot="reply"]')
+  })
+})

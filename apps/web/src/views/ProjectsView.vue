@@ -83,7 +83,7 @@ function agentName(agentId: string | null): string {
 }
 
 function agentIconUrl(agentId: string | null): string | null {
-  return agentId ? (agentDefs.get(agentId)?.iconUrl || null) : cyno.iconUrl
+  return agentId ? (agentDefs.get(agentId)?.iconUrl || null) : cyno.brandIconUrl
 }
 
 function toggleMenu(projectId: string): void {

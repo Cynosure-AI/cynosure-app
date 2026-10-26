@@ -682,7 +682,7 @@ onUnmounted(() => {
                 :agents="allAgents"
                 include-default
                 :default-label="cyno.name"
-                :default-img-src="cyno.iconUrl"
+                :default-img-src="cyno.brandIconUrl"
                 agents-group-label="Agents"
                 placeholder="Select an agent…"
                 max-height="max-h-96"

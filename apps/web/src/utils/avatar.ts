@@ -1,8 +1,8 @@
-import type { AvatarConfig, AvatarShape } from '@shared/types'
+import type { AvatarConfig, AvatarShape, AvatarSource } from '@shared/types'
 import { traits, type TraitOverrides } from 'blobatar'
 import { blobatarUri } from 'blobatar/uri'
 
-export type { AvatarConfig, AvatarShape }
+export type { AvatarConfig, AvatarShape, AvatarSource }
 
 /**
  * Each silhouette's position in blobatar's shape trait: the middle of its band,
@@ -91,6 +91,11 @@ export function compactAvatarConfig(config: AvatarConfig): AvatarConfig | null {
 }
 
 export const EMPTY_AVATAR_CONFIG: AvatarConfig = { seed: null, hue: null, tone: null, shape: null }
+
+/** The image an assistant shows: its retained image when that is the chosen face, else null for the generated avatar. */
+export function displayedIconUrl(source: AvatarSource | undefined, imageUrl: string | null | undefined): string | null {
+  return source === 'image' ? imageUrl ?? null : null
+}
 
 /** An image URL for places that only take one: the uploaded icon, else the generated face. */
 export function agentAvatarSrc(name: string, iconUrl: string | null | undefined, config: AvatarConfig | null | undefined): string {

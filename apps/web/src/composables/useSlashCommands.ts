@@ -126,6 +126,15 @@ export function useSlashCommands(actions: SlashCommandActions) {
   }
 
   const toolGroups = computed(() => groupSelectableTools(agentStore.availableTools))
+  // Generated avatars are built once per change to the agents, not on every keystroke.
+  const subAgentOptions = computed(() => agentDefs.agents.map(agent => ({
+    key: agent.id,
+    label: agent.name,
+    description: agent.description || agent.internalName,
+    icon: 'lucide:bot',
+    iconUrl: agentAvatarSrc(agent.name, agent.iconUrl, agent.avatar),
+    run: () => toggleSubAgent(agent.id, agent.name),
+  })))
 
   function toolGroupArg(group: ToolGroup): SlashArgOption {
     const state = toolGroupSelectionState(group, chatStore.selectedToolNames)
@@ -320,14 +329,9 @@ export function useSlashCommands(actions: SlashCommandActions) {
       icon: 'lucide:users',
       group: 'Settings',
       hint: 'name',
-      args: query => rankSlashArgs(agentDefs.agents.map(agent => ({
-        key: agent.id,
-        label: agent.name,
-        description: agent.description || agent.internalName,
-        icon: 'lucide:bot',
-        iconUrl: agentAvatarSrc(agent.name, agent.iconUrl, agent.avatar),
-        state: onOffState(chatStore.sessionSubAgentIds.includes(agent.id)),
-        run: () => toggleSubAgent(agent.id, agent.name),
+      args: query => rankSlashArgs(subAgentOptions.value.map(option => ({
+        ...option,
+        state: onOffState(chatStore.sessionSubAgentIds.includes(option.key)),
       })), query),
     })
     list.push({

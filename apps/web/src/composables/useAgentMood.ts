@@ -1,6 +1,7 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
 import { useAgentStore } from '../stores/agent-runtime.store'
 import { useChatStore, type DisplayMessage } from '../stores/chat.store'
+import type { ExecutionStep } from '../stores/agent-runtime.store'
 
 /** Expressions an assistant's avatar can hold; each maps to a blobatar pose. */
 export type AgentMood =
@@ -76,15 +77,20 @@ export const SURPRISE_BURST_MS = 1600
 /**
  * The live mood of the active chat's assistant. Finishing a run cleanly shows a
  * short happy burst, and a new approval request a short surprise; everything
- * else is held for as long as the state lasts.
+ * else is held for as long as the state lasts. It reads only the messages and
+ * steps it is given, so callers pass the chat's own agent's and leave out
+ * delegated sub-agent runs.
  */
-export function useAgentMood(): { mood: Ref<AgentMood>; speaking: Ref<boolean> } {
+export function useAgentMood(
+  messages: Readonly<Ref<readonly DisplayMessage[]>>,
+  steps: Readonly<Ref<readonly ExecutionStep[]>>,
+): { mood: Ref<AgentMood>; speaking: Ref<boolean>; executing: Ref<boolean> } {
   const chatStore = useChatStore()
   const agentStore = useAgentStore()
 
   const lastAssistant = computed(() => {
-    for (let index = chatStore.messages.length - 1; index >= 0; index--) {
-      const message = chatStore.messages[index]
+    for (let index = messages.value.length - 1; index >= 0; index--) {
+      const message = messages.value[index]
       if (message.role === 'assistant') return message
     }
     return null
@@ -95,7 +101,7 @@ export function useAgentMood(): { mood: Ref<AgentMood>; speaking: Ref<boolean> }
     chatStore.activeConversationIsStreaming && lastAssistant.value?.isStreaming && lastAssistant.value.content,
   ))
   const toolFailed = computed(() => {
-    const latest = agentStore.executionSteps[agentStore.executionSteps.length - 1]
+    const latest = steps.value[steps.value.length - 1]
     return Boolean(latest?.results?.some((result) => result.success === false))
   })
 
@@ -104,7 +110,7 @@ export function useAgentMood(): { mood: Ref<AgentMood>; speaking: Ref<boolean> }
     streamingText: speaking.value,
     toolFailed: toolFailed.value,
     lastReply: lastAssistant.value,
-    errorStreak: countErrorStreak(chatStore.messages),
+    errorStreak: countErrorStreak(messages.value),
     waiting: Boolean(chatStore.pendingWait),
   }))
 
@@ -142,5 +148,5 @@ export function useAgentMood(): { mood: Ref<AgentMood>; speaking: Ref<boolean> }
   onScopeDispose(() => clearTimeout(timer))
 
   const mood = computed(() => burst.value ?? settled.value)
-  return { mood, speaking }
+  return { mood, speaking, executing }
 }

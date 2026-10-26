@@ -156,7 +156,7 @@ async function newChat(): Promise<void> {
         :agents="agentDefs.agents"
         include-default
         :default-label="cyno.name"
-        :default-img-src="cyno.profile ? agentAvatarSrc(cyno.name, cyno.displayIconUrl, cyno.avatar) : cyno.iconUrl"
+        :default-img-src="cyno.profile ? agentAvatarSrc(cyno.name, cyno.iconUrl, cyno.avatar) : cyno.brandIconUrl"
         agents-group-label="Agents"
         :placeholder="cyno.name"
         max-height="max-h-96"

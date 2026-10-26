@@ -95,7 +95,7 @@ const agents = computed<AgentEntry[]>(() => {
     {
       key: CYNO_KEY,
       name: cyno.name,
-      iconUrl: cyno.displayIconUrl,
+      iconUrl: cyno.iconUrl,
       avatar: cyno.avatar,
       pending: !cyno.profile,
       favorite: false,

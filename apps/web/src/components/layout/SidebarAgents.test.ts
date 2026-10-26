@@ -29,7 +29,7 @@ vi.mock('../../stores/agent-runtime.store', () => ({ useAgentStore: () => ({
 }) }))
 vi.mock('../../stores/provider.store', () => ({ useProviderStore: () => ({}) }))
 vi.mock('../../stores/cyno.store', () => ({ useCynoStore: () => ({
-  name: 'Cyno', profile: {}, displayIconUrl: null, avatar: null,
+  name: 'Cyno', profile: {}, iconUrl: null, avatar: null,
 }) }))
 
 const agent: AgentDefinition = {

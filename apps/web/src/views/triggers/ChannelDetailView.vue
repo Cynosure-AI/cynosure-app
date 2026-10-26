@@ -336,7 +336,7 @@ watch(isDirty, (dirty) => emit('dirty-change', dirty), { immediate: true })
               :agents="allAgents"
               include-default
               :default-label="cyno.name"
-              :default-img-src="cyno.iconUrl"
+              :default-img-src="cyno.brandIconUrl"
               agents-group-label="Agents"
               placeholder="Select an agent..."
             />

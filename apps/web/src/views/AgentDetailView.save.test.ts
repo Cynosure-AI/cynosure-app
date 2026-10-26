@@ -193,7 +193,7 @@ describe('agent settings explicit save', () => {
   test('Cyno keeps the blob by default and has the red logo ready when switching to image', async () => {
     const { wrapper, cyno } = await setup('/cyno')
     expect(cyno.profile?.avatarSource).toBe('generated')
-    expect(cyno.displayIconUrl).toBeNull()
+    expect(cyno.iconUrl).toBeNull()
     expect(wrapper.get('[data-source="image"] img').attributes('src')).toBe(cynosureLogoRed)
 
     await wrapper.get('[data-source="image"]').trigger('click')
@@ -205,12 +205,12 @@ describe('agent settings explicit save', () => {
     const savedImage = mocks.updateCyno.mock.calls[0][0].iconUrl
     expect(savedImage).toMatch(/^data:image\/png;base64,/)
     expect(mocks.updateCyno).toHaveBeenCalledExactlyOnceWith({ avatarSource: 'image', iconUrl: savedImage })
-    expect(cyno.displayIconUrl).toBe(savedImage)
+    expect(cyno.iconUrl).toBe(savedImage)
 
     await wrapper.get('[data-source="generated"]').trigger('click')
     await wrapper.get('[data-testid="save-agent"]').trigger('click')
     await flushPromises()
-    expect(cyno.displayIconUrl).toBeNull()
+    expect(cyno.iconUrl).toBeNull()
     expect(cyno.imageUrl).toBe(savedImage)
   })
 
@@ -225,6 +225,6 @@ describe('agent settings explicit save', () => {
     await wrapper.get('[data-testid="save-agent"]').trigger('click')
     await flushPromises()
     expect(mocks.updateCyno).toHaveBeenCalledExactlyOnceWith({ avatarSource: 'image' })
-    expect(cyno.displayIconUrl).toBe(customImage)
+    expect(cyno.iconUrl).toBe(customImage)
   })
 })

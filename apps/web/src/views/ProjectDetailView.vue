@@ -53,7 +53,7 @@ const confirmDelete = ref(false)
 
 const memoryFolder = computed(() => chatStore.memoryFolders.find((folder) => folder.id === project.value?.memoryFolderId))
 const memoryFileCount = computed(() => (memoryFolder.value?.fileCount ?? 0) + (memoryFolder.value?.descendantFileCount ?? 0))
-const defaultAgentIconUrl = computed(() => project.value?.defaultAgentId ? agentIconUrl(project.value.defaultAgentId) : cyno.iconUrl)
+const defaultAgentIconUrl = computed(() => project.value?.defaultAgentId ? agentIconUrl(project.value.defaultAgentId) : cyno.brandIconUrl)
 const tabs = computed<TabDef<ProjectTab>[]>(() => [
   { value: 'overview', label: 'Overview', icon: 'lucide:layout-dashboard' },
   { value: 'board', label: 'Board', icon: 'lucide:square-kanban', badge: project.value?.openTaskCount || undefined, badgeTitle: `${project.value?.openTaskCount ?? 0} open tasks` },

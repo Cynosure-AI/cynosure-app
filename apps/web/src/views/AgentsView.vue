@@ -296,7 +296,7 @@ function formatDate(timestamp: number): string {
         <span class="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
           <AgentAvatar
             :name="cyno.name"
-            :icon-url="cyno.displayIconUrl"
+            :icon-url="cyno.iconUrl"
             :avatar="cyno.avatar"
             :pending="!cyno.profile"
             animate="hover"
