@@ -213,7 +213,9 @@ export function persistChannelExecutionConfig(conversationId: string, config: Co
 }
 
 export function persistChannelAssistantMessage(input: {
+    broadcast: BroadcastFn
     conversationId: string
+    streamId: string
     /** Null for Cyno. */
     agentId: string | null
     planned: PlannedExecution
@@ -221,31 +223,18 @@ export function persistChannelAssistantMessage(input: {
     startedAt: number
 }): string {
     const db = getDb()
-    const id = nanoid()
-    const now = Date.now()
-    db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, generated_media, agent_id, provider, model, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens, context_tokens, latency_ms, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-        id,
-        input.conversationId,
-        'assistant',
-        input.result.content,
-        messageContentJson({ id, content: input.result.content, thinking: input.result.thinking,
-            imageDataUrls: input.result.images }),
-        input.result.images.length ? 1 : 0,
-        input.agentId,
-        input.planned.responseProvider,
-        input.planned.responseModel,
-        input.result.usage?.promptTokens ?? null,
-        input.result.usage?.completionTokens ?? null,
-        input.result.usage?.cacheReadTokens ?? null,
-        input.result.usage?.cacheWriteTokens ?? null,
-        input.result.contextTokens ?? null,
-        input.result.usage ? now - input.startedAt : null,
-        now,
-    )
-    db.prepare('UPDATE conversations SET updated_at = ?, last_context_tokens = ? WHERE id = ?')
-        .run(now, input.result.contextTokens ?? null, input.conversationId)
+    // The shared path also publishes the transcript item, so open clients get the
+    // saved reply and its streamed deltas can be pruned.
+    const { id } = persistAssistantTurn(db, input.broadcast, {
+        conversationId: input.conversationId, streamId: input.streamId,
+        content: input.result.content, thinking: input.result.thinking,
+        images: input.result.images, generatedMedia: input.result.images.length > 0,
+        agentId: input.agentId, provider: input.planned.responseProvider, model: input.planned.responseModel,
+        promptTokens: input.result.usage?.promptTokens, completionTokens: input.result.usage?.completionTokens,
+        cacheReadTokens: input.result.usage?.cacheReadTokens, cacheWriteTokens: input.result.usage?.cacheWriteTokens,
+        contextTokens: input.result.contextTokens, startedAt: input.result.usage ? input.startedAt : undefined,
+    })
+    db.prepare('UPDATE conversations SET last_context_tokens = ? WHERE id = ?')
+        .run(input.result.contextTokens ?? null, input.conversationId)
     return id
 }

@@ -12,6 +12,7 @@ export interface ChatHistoryRow {
     id: string
     role: string
     is_error?: number
+    stopped?: number
     content: string
     tool_calls_json: string | null
     tool_call_id: string | null
@@ -234,7 +235,7 @@ export function buildConversationHistory(input: {
     const { db, conversationId, mainAgentId, inlineAttachmentTextLimit } = input
     const historyRows = db
         .prepare(
-            'SELECT id, role, is_error, content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+            'SELECT id, role, is_error, stopped, content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
         )
         .all(conversationId) as ChatHistoryRow[]
     const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)
@@ -245,6 +246,9 @@ export function buildConversationHistory(input: {
         if (row.role === 'system' && row.content.startsWith(COMPACT_EVENT_PREFIX)) return false
         if (row.role === 'user') return true
         if (row.role === 'assistant') {
+            // A reply stopped while still reasoning has no text to replay, and
+            // providers reject empty assistant turns.
+            if (row.stopped && !row.tool_calls_json && !row.content.trim()) return false
             const isMainAgent = row.agent_id === null || row.agent_id === mainAgentId
             if (isMainAgent) {
                 if (row.tool_calls_json) {

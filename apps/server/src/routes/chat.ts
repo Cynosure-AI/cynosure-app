@@ -688,7 +688,7 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           const partial = result
             ? { content: result.content, thinking: result.thinking, images: result.images }
             : executor?.interruptedReply()
-          if (partial && (partial.content.trim() || partial.images.length)) {
+          if (partial && (partial.content.trim() || partial.thinking.trim() || partial.images.length)) {
             persistAssistantTurn(db, executionBroadcast, {
               conversationId, streamId, content: partial.content, thinking: partial.thinking,
               images: partial.images, generatedMedia: partial.images.length > 0, agentId,

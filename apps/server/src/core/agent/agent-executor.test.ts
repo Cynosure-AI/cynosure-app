@@ -110,6 +110,25 @@ describe('AgentExecutor interrupted replies', () => {
     expect(executor.interruptedReply()).toEqual({ content: 'Partial answer', thinking: 'reasoning', images: [] })
   })
 
+  test('keeps the reasoning when the run is stopped before any text', async () => {
+    let streamed: (() => void) | undefined
+    const reasoningStreamed = new Promise<void>((resolve) => { streamed = resolve })
+    const { executor, controller } = streamingExecutor([
+      async function* (signal) {
+        yield { thinking: 'Still weighing the layout', done: false }
+        streamed?.()
+        await untilAborted(signal)
+      },
+    ])
+
+    const run = executor.run([{ role: 'user', content: 'start' }])
+    await reasoningStreamed
+    controller.abort()
+
+    await expect(run).rejects.toMatchObject({ name: 'AbortError' })
+    expect(executor.interruptedReply()).toEqual({ content: '', thinking: 'Still weighing the layout', images: [] })
+  })
+
   test('does not report an earlier completed round as interrupted', async () => {
     let toolRoundDone: (() => void) | undefined
     const secondRoundStarted = new Promise<void>((resolve) => { toolRoundDone = resolve })

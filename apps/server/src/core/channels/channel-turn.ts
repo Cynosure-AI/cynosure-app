@@ -351,7 +351,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
             if (sub.content) await finalizeStreamedMessage(transport, sub.handle, subAgentHeader(codename) + sub.content)
         }
 
-        persistChannelAssistantMessage({ conversationId, agentId: cyno ? null : agentId, planned, result, startedAt })
+        persistChannelAssistantMessage({ broadcast: state.broadcast, conversationId, streamId, agentId: cyno ? null : agentId, planned, result, startedAt })
         maybeGenerateTitle(state.broadcast, conversationId, userText, result.content, planned)
 
         if (statusMsg !== null) {

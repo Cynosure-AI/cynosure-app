@@ -237,7 +237,8 @@ export class AgentExecutor {
      */
     interruptedReply(): { content: string; thinking: string; images: string[] } | null {
         const round = this.roundInProgress
-        if (!round || (!round.content.trim() && round.images.length === 0)) return null
+        // Reasoning counts too: a Stop during a long thinking phase must not discard what the user watched stream.
+        if (!round || (!round.content.trim() && !round.thinking.trim() && round.images.length === 0)) return null
         return { content: round.content, thinking: round.thinking, images: [...round.images] }
     }
 
@@ -519,6 +520,7 @@ export class AgentExecutor {
             this.broadcastStreamEnd(activeStreamId, {
                 usage, model: this.config.model, contextTokens,
                 images: collectedImages.length ? collectedImages : undefined,
+                cancelled: this.config.signal?.aborted,
             })
             if (loopCompleted) this.emit('task:completed', { taskId, conversationId })
         }

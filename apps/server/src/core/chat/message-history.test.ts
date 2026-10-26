@@ -72,6 +72,21 @@ describe('conversation history construction', () => {
         expect(result.messages[2]).toMatchObject({ toolCallId: 'pending', content: expect.stringContaining('interrupted') })
     })
 
+    test('skips a reply stopped while it was still reasoning', () => {
+        const result = buildConversationHistory({
+            db: databaseReturning([
+                row({ role: 'user', content: 'review this' }),
+                row({ role: 'assistant', stopped: 1, content: '', content_blocks_json: JSON.stringify([{ type: 'reasoning', text: 'thinking' }]) }),
+                row({ role: 'assistant', stopped: 1, content: 'Partial' }),
+            ]),
+            conversationId: 'conversation', mainAgentId: 'main', inlineAttachmentTextLimit: 10_000,
+        })
+        expect(result.messages).toEqual([
+            expect.objectContaining({ role: 'user' }),
+            expect.objectContaining({ role: 'assistant', content: 'Partial' }),
+        ])
+    })
+
     test('opens with a user turn when the thread starts with a message the agent sent on its own', () => {
         const result = buildConversationHistory({
             db: databaseReturning([
