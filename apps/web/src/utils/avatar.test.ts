@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest'
+import { _layout } from 'blobatar'
 import { agentAvatarSrc, blobatarProps, compactAvatarConfig, EMPTY_AVATAR_CONFIG } from './avatar'
 
 describe('blobatarProps', () => {
   test('uses the name until a seed overrides it', () => {
-    expect(blobatarProps('Scout', null)).toEqual({ name: 'Scout', hue: undefined, tone: undefined, traits: undefined })
+    expect(blobatarProps('agent-0', null)).toEqual({ name: 'agent-0', hue: undefined, tone: undefined, traits: undefined })
     expect(blobatarProps('Scout', { ...EMPTY_AVATAR_CONFIG, seed: 'pebble' }).name).toBe('pebble')
   })
 
@@ -27,5 +28,34 @@ describe('agentAvatarSrc', () => {
     expect(generated.startsWith('data:image/svg+xml,')).toBe(true)
     expect(agentAvatarSrc('Scout', null, null)).toBe(generated)
     expect(agentAvatarSrc('Other', null, null)).not.toBe(generated)
+  })
+})
+
+describe('generated shapes', () => {
+  const names = Array.from({ length: 2000 }, (_, index) => `agent-${index}`)
+  const shapeOf = (name: string) => {
+    const { name: seed, ...options } = blobatarProps(name, null)
+    return _layout(seed, options).shape
+  }
+
+  test('names never land on nub or sun by themselves', () => {
+    const shapes = new Set(names.map(shapeOf))
+    expect(shapes.has('nub')).toBe(false)
+    expect(shapes.has('sun')).toBe(false)
+    expect(shapes.size).toBe(8)
+  })
+
+  test('every other name keeps the shape blobatar gives it', () => {
+    for (const name of names) {
+      const natural = _layout(name).shape
+      if (natural !== 'nub' && natural !== 'sun') expect(shapeOf(name)).toBe(natural)
+    }
+  })
+
+  test('nub and sun remain available as a manual pick', () => {
+    for (const shape of ['nub', 'sun'] as const) {
+      const { name, ...options } = blobatarProps('agent-0', { ...EMPTY_AVATAR_CONFIG, shape })
+      expect(_layout(name, options).shape).toBe(shape)
+    }
   })
 })

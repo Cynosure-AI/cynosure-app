@@ -1,5 +1,5 @@
 import type { AvatarConfig, AvatarShape } from '@shared/types'
-import type { TraitOverrides } from 'blobatar'
+import { traits, type TraitOverrides } from 'blobatar'
 import { blobatarUri } from 'blobatar/uri'
 
 export type { AvatarConfig, AvatarShape }
@@ -25,6 +25,28 @@ export const AVATAR_SHAPES: ReadonlyArray<{ shape: AvatarShape; label: string; p
 
 const SHAPE_POSITIONS = new Map(AVATAR_SHAPES.map((entry) => [entry.shape, entry.position]))
 
+/**
+ * Silhouettes a name never lands on by itself (nub and sun read poorly as faces);
+ * they stay available as a manual pick. Bands as in AVATAR_SHAPES, [start, end).
+ */
+const UNSEEDED_BANDS: ReadonlyArray<[number, number]> = [[0.7, 0.79], [0.95, 0.98]]
+const SEEDED_POSITIONS = AVATAR_SHAPES
+  .filter(({ shape }) => shape !== 'nub' && shape !== 'sun')
+  .map(({ position }) => position)
+
+/**
+ * The shape position a name gets on its own. Every other name keeps the exact
+ * silhouette blobatar hashes it to; one that hashes into an excluded band is
+ * moved, by where it fell inside that band, onto one of the remaining shapes.
+ */
+export function seededShapePosition(seed: string): number | undefined {
+  const position = traits(seed)('shape')
+  const band = UNSEEDED_BANDS.find(([start, end]) => position >= start && position < end)
+  if (!band) return undefined
+  const fraction = (position - band[0]) / (band[1] - band[0])
+  return SEEDED_POSITIONS[Math.min(SEEDED_POSITIONS.length - 1, Math.floor(fraction * SEEDED_POSITIONS.length))]
+}
+
 /** The props `<Blobatar>` needs for an assistant with this name and config. */
 export function blobatarProps(name: string, config: AvatarConfig | null | undefined): {
   name: string
@@ -32,9 +54,10 @@ export function blobatarProps(name: string, config: AvatarConfig | null | undefi
   tone?: number
   traits?: TraitOverrides
 } {
-  const shape = config?.shape ? SHAPE_POSITIONS.get(config.shape) : undefined
+  const seed = config?.seed || name || 'assistant'
+  const shape = config?.shape ? SHAPE_POSITIONS.get(config.shape) : seededShapePosition(seed)
   return {
-    name: config?.seed || name || 'assistant',
+    name: seed,
     hue: config?.hue ?? undefined,
     // An exact 1 wraps to the palest swatch; 0.999 is the ink end.
     tone: config?.tone == null ? undefined : Math.min(config.tone, 0.999),
