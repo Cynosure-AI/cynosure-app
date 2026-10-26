@@ -14,8 +14,13 @@ import SettingsPersistenceStatus, { type SettingsPersistenceState } from '../../
 import type { MultiSelectOption } from '../../components/shared/MultiSelect.vue'
 import ChannelDetailView from './ChannelDetailView.vue'
 import { useCynoStore } from '../../stores/cyno.store'
+import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
+import AgentAvatar from '../../components/shared/AgentAvatar.vue'
 
 const cyno = useCynoStore()
+const agentDefs = useAgentDefinitionsStore()
+// Avatar settings live on the definitions; load them if this page opened first.
+if (!agentDefs.loaded) void agentDefs.load()
 
 const route = useRoute()
 const router = useRouter()
@@ -413,17 +418,14 @@ onUnmounted(() => {
               </span>
             </div>
             <div class="flex items-center gap-2 text-xs text-ink-muted">
-              <img
-                v-if="agentIconById(ch.agentId)"
-                :src="agentIconById(ch.agentId)!"
-                :alt="agentNameById(ch.agentId)"
-                class="w-3.5 h-3.5 rounded-sm object-cover"
-              >
-              <Icon
-                v-else
-                icon="lucide:bot"
-                class="w-3 h-3"
-              />
+              <span class="h-3.5 w-3.5 shrink-0 overflow-hidden rounded-sm">
+                <AgentAvatar
+                  :name="agentNameById(ch.agentId)"
+                  :icon-url="ch.agentId ? agentDefs.get(ch.agentId)?.iconUrl : cyno.displayIconUrl"
+                  :avatar="ch.agentId ? agentDefs.get(ch.agentId)?.avatar : cyno.avatar"
+                  :pending="ch.agentId ? !agentDefs.loaded : !cyno.profile"
+                />
+              </span>
               <span>{{ agentNameById(ch.agentId) }}</span>
               <template v-if="ch.status?.username">
                 <span class="text-theme-700">·</span>
