@@ -210,21 +210,47 @@ const liveAvatarAnchorId = computed(() => {
   }
   return null
 })
-const liveAvatarTarget = computed(() => liveAvatarAnchorId.value
-  ? `[data-live-avatar-slot="${CSS.escape(liveAvatarAnchorId.value)}"]`
+// A run can open several short replies in quick succession (a brief thought, a
+// tool round, a few words). The avatar only moves on once a newer reply has
+// lasted a moment, so quick rounds do not bounce it from reply to reply.
+const LIVE_AVATAR_SETTLE_MS = 900
+const liveAvatarShownId = ref<string | null>(null)
+let liveAvatarSettle: ReturnType<typeof setTimeout> | undefined
+watch(liveAvatarAnchorId, (id) => {
+  clearTimeout(liveAvatarSettle)
+  const shown = liveAvatarShownId.value
+  // Move at once when there is nothing to stay on: no avatar yet, another chat, or its reply is gone.
+  if (!id || !shown || !chatStore.messages.some((message) => message.id === shown)) {
+    liveAvatarShownId.value = id
+    return
+  }
+  liveAvatarSettle = setTimeout(() => { liveAvatarShownId.value = liveAvatarAnchorId.value }, LIVE_AVATAR_SETTLE_MS)
+}, { immediate: true })
+onBeforeUnmount(() => clearTimeout(liveAvatarSettle))
+const liveAvatarTarget = computed(() => liveAvatarShownId.value
+  ? `[data-live-avatar-slot="${CSS.escape(liveAvatarShownId.value)}"]`
   : null)
 const liveAvatar = ref<{ $el?: Element } | null>(null)
 const LIVE_AVATAR_GLIDE_MS = 520
 
-watch(liveAvatarAnchorId, async (id, previous) => {
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+watch(liveAvatarShownId, async (id, previous) => {
   const el = liveAvatar.value?.$el
   if (!id || !previous || !(el instanceof HTMLElement)) return
   const before = el.getBoundingClientRect()
   await nextTick()
+  // Hold it where it was until the follow-scroll has landed; measuring before
+  // that would glide from a spot the chat is about to scroll away from.
+  const moved = el.getBoundingClientRect()
+  el.style.transform = `translate(${before.left - moved.left}px, ${before.top - moved.top}px)`
+  await nextFrame()
+  await nextFrame()
+  el.style.transform = ''
   const after = el.getBoundingClientRect()
   const dx = before.left - after.left
   const dy = before.top - after.top
-  if ((!dx && !dy) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  if ((Math.abs(dx) < 1 && Math.abs(dy) < 1) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   el.animate(
     [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
     { duration: LIVE_AVATAR_GLIDE_MS, easing: 'cubic-bezier(0.34, 1.3, 0.64, 1)' },
