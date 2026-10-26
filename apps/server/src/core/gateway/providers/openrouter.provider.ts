@@ -148,6 +148,8 @@ export class OpenRouterProvider extends BaseLLMProvider {
     private imageModelsCache: { models: ModelListItem[]; ts: number } | null = null
     private imageGenerationModelsCache: { models: OpenRouterImageModel[]; ts: number } | null = null
     private imageModelsPromise: Promise<ModelListItem[]> | null = null
+    private videoModelsCache: { models: VideoGenerationModelInfo[]; ts: number } | null = null
+    private videoModelsPromise: Promise<VideoGenerationModelInfo[]> | null = null
     protected get defaultBaseUrl(): string { return 'https://openrouter.ai/api/v1' }
     protected get allowsCustomBaseUrl(): boolean { return false }
 
@@ -1159,9 +1161,19 @@ export class OpenRouterProvider extends BaseLLMProvider {
         })
     }
 
+    /** The video catalogue endpoint is slow (seconds), so it shares the model list TTL. */
     async listVideoModels(): Promise<VideoGenerationModelInfo[]> {
-        const data = await this.requestOpenRouter<{ data?: VideoGenerationModelInfo[] }>('/videos/models')
-        return Array.isArray(data.data) ? data.data : []
+        if (this.videoModelsCache && Date.now() - this.videoModelsCache.ts < MODEL_CACHE_TTL_MS) {
+            return this.videoModelsCache.models
+        }
+        this.videoModelsPromise ??= this.requestOpenRouter<{ data?: VideoGenerationModelInfo[] }>('/videos/models')
+            .then((data) => {
+                const models = Array.isArray(data.data) ? data.data : []
+                if (models.length) this.videoModelsCache = { models, ts: Date.now() }
+                return models
+            })
+            .finally(() => { this.videoModelsPromise = null })
+        return this.videoModelsPromise
     }
 
     async generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationJob> {

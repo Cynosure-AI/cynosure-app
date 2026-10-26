@@ -178,19 +178,12 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
             cache_read_tokens: number
             cache_write_tokens: number
         }[]
-        const nativeGatewayCosts = new Map<string, ModelCost | null>()
-        const gateway = getGateway()
+        const gatewayModels = new Map<string, { provider: string; model: string }>()
         for (const row of assistantCostRows) {
-            const providerInfo = providerInfoMap.get(row.provider)
-            const key = `${row.provider}\u0000${row.model}`
-            if (!['openrouter', 'requesty'].includes(providerInfo?.type || '') || nativeGatewayCosts.has(key)) continue
-            try {
-                const info = await gateway.getModelInfo(row.model, row.provider)
-                nativeGatewayCosts.set(key, modelCostFromPricing(info.pricing))
-            } catch {
-                nativeGatewayCosts.set(key, null)
-            }
+            if (!['openrouter', 'requesty'].includes(providerInfoMap.get(row.provider)?.type || '')) continue
+            gatewayModels.set(`${row.provider}\u0000${row.model}`, { provider: row.provider, model: row.model })
         }
+        const nativeGatewayCosts = await resolveGatewayCosts(gatewayModels)
         const modelCostTotals = new Map<string, number>()
         // Per-day model breakdown (combine providers for display) and cost
         const modelsByDate = new Map<string, { model: string; messages: number; tokens: number; estimatedCost: number | null }[]>()
@@ -473,6 +466,54 @@ function estimateTokenCost(pricing: ModelCost, usage: {
         + usage.cache_write_tokens * cacheWrite
         + usage.completion_tokens * output
     ) / 1_000_000
+}
+
+// Gateway prices change rarely, but a cold lookup can take seconds (catalogue
+// fetches). Known prices are served at once and refreshed in the background;
+// failed lookups are remembered too, so they are not retried on every visit.
+const GATEWAY_COST_TTL_MS = 6 * 60 * 60 * 1000
+// How long a visit waits for prices it is the first to look up (a normal cold
+// lookup takes under a second). Slower results are kept for the next load;
+// until then those models fall back to models.dev.
+const GATEWAY_COST_WAIT_MS = 1_500
+const gatewayCostCache = new Map<string, { cost: ModelCost | null; ts: number }>()
+const gatewayCostLookups = new Map<string, Promise<void>>()
+
+function lookupGatewayCost(key: string, provider: string, model: string): Promise<void> {
+    let lookup = gatewayCostLookups.get(key)
+    if (!lookup) {
+        lookup = getGateway().getModelInfo(model, provider)
+            .then((info) => modelCostFromPricing(info.pricing), () => null)
+            .then((cost) => { gatewayCostCache.set(key, { cost, ts: Date.now() }) })
+            .finally(() => gatewayCostLookups.delete(key))
+        gatewayCostLookups.set(key, lookup)
+    }
+    return lookup
+}
+
+async function resolveGatewayCosts(models: Map<string, { provider: string; model: string }>): Promise<Map<string, ModelCost | null>> {
+    const pending: Promise<void>[] = []
+    for (const [key, { provider, model }] of models) {
+        const cached = gatewayCostCache.get(key)
+        // A lookup an earlier visit started is not waited for again; it finishes in the background.
+        if (!cached && !gatewayCostLookups.has(key)) pending.push(lookupGatewayCost(key, provider, model))
+        else if (!cached) continue
+        else if (Date.now() - cached.ts > GATEWAY_COST_TTL_MS) void lookupGatewayCost(key, provider, model)
+    }
+    if (pending.length) {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        await Promise.race([
+            Promise.all(pending),
+            new Promise<void>((resolve) => { timer = setTimeout(resolve, GATEWAY_COST_WAIT_MS) }),
+        ])
+        clearTimeout(timer)
+    }
+    const costs = new Map<string, ModelCost | null>()
+    for (const key of models.keys()) {
+        const cached = gatewayCostCache.get(key)
+        if (cached) costs.set(key, cached.cost)
+    }
+    return costs
 }
 
 function modelCostFromPricing(pricing: ModelPricing | undefined): ModelCost | null {
