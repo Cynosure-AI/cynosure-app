@@ -32,6 +32,8 @@ const props = defineProps<{
   agentId?: string | null
   agentIconUrl?: string | null
   agentAvatar?: AvatarConfig | null
+  /** The agent's identity has not loaded yet. */
+  agentAvatarPending?: boolean
   agentName?: string | null
   /** The chat's live avatar speaks for this message, so keep only the gutter. */
   hideAvatar?: boolean
@@ -281,6 +283,7 @@ const imageGridClass = computed(() => {
           :name="agentName || 'Cyno'"
           :icon-url="agentIconUrl"
           :avatar="agentAvatar"
+          :pending="agentAvatarPending"
         />
       </button>
       <span

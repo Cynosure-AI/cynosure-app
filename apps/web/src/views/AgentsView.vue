@@ -298,6 +298,7 @@ function formatDate(timestamp: number): string {
             :name="cyno.name"
             :icon-url="cyno.displayIconUrl"
             :avatar="cyno.avatar"
+            :pending="!cyno.profile"
             animate="hover"
           />
         </span>

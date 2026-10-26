@@ -183,6 +183,8 @@ const activeAgentIconUrl = computed(() => {
   if (!conversationAgentId.value) return cyno.displayIconUrl
   return agentDefs.get(conversationAgentId.value)?.iconUrl ?? null
 })
+/** Until the profile or definitions arrive, avatars show the logo instead of a guessed face. */
+const activeAgentPending = computed(() => conversationAgentId.value ? !agentDefs.loaded : !cyno.profile)
 const activeAgentAvatar = computed(() => {
   if (!conversationAgentId.value) return cyno.avatar
   return agentDefs.get(conversationAgentId.value)?.avatar ?? null
@@ -440,6 +442,7 @@ function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, 
     agentId: resolveAgentId(msg),
     agentIconUrl: resolveAgentIconUrl(msg),
     agentAvatar: resolveAgentAvatar(msg),
+    agentAvatarPending: msg.agentId ? !agentDefs.loaded : activeAgentPending.value,
     agentName: resolveAgentName(msg),
     hideAvatar: resolveAgentId(msg) === (conversationAgentId.value ?? undefined),
     liveAvatarAnchor: msg.id === liveAvatarAnchorId.value,
@@ -689,7 +692,7 @@ onMounted(() => {
             : { name: 'cyno', query: { returnTo: route.fullPath } }"
           :aria-label="`Open ${activeAgentName ?? 'agent'} settings`"
           class="chat-empty-icon chat-intro-icon relative flex items-center justify-center"
-          :class="activeAgentIconUrl
+          :class="activeAgentIconUrl || activeAgentPending
             ? ['w-14 h-14 sm:w-20 sm:h-20 bg-theme-900 rounded-3xl border shadow-xl overflow-hidden', chatStore.activeIsTemporary ? 'border-dashed border-accent-500/50' : 'border-white/5']
             : 'w-20 h-20 sm:w-28 sm:h-28 rounded-full'"
         >
@@ -699,6 +702,7 @@ onMounted(() => {
             :icon-url="activeAgentIconUrl"
             :avatar="activeAgentAvatar"
             :mood="heroMood"
+            :pending="activeAgentPending"
             animate="always"
             gaze
           />
@@ -1058,6 +1062,7 @@ onMounted(() => {
           :avatar="activeAgentAvatar"
           :mood="liveMood"
           :speaking="liveSpeaking"
+          :pending="activeAgentPending"
           animate="always"
         />
       </RouterLink>

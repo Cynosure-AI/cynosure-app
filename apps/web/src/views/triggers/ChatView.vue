@@ -324,6 +324,7 @@ watch(
                 :icon-url="cyno.displayIconUrl"
                 :avatar="cyno.avatar"
                 mood="sleepy"
+                :pending="!cyno.profile"
                 animate="always"
               />
             </div>
