@@ -37,6 +37,8 @@ const props = defineProps<{
   agentName?: string | null
   /** The chat's live avatar speaks for this message, so keep only the gutter. */
   hideAvatar?: boolean
+  /** Which edge of this reply the live avatar sits on, if it is here. */
+  liveAvatarDock?: 'top' | 'bottom'
   model?: string
   promptTokens?: number
   completionTokens?: number
@@ -257,16 +259,19 @@ const imageGridClass = computed(() => {
 <template>
   <div
     class="relative flex items-end justify-center gap-4 px-3 md:px-4 py-3 group/msg transition-all duration-300"
-    :class="[isUser ? 'md:justify-end' : 'md:justify-start', { 'chat-msg-enter': animateIn, 'chat-msg-enter--user': animateIn && isUser }]"
+    :class="[isUser ? 'md:justify-end' : 'md:justify-start', { 'chat-msg-enter': animateIn && !hideAvatar, 'chat-msg-enter--user': animateIn && isUser }]"
   >
     <!-- Avatar -->
-    <!-- The chat's live avatar is teleported into this slot on the latest reply; it sticks while a long reply scrolls. -->
+    <!-- The chat's live avatar is teleported into this slot on its reply. It sticks to the docked
+         edge, so it stays in view while a long reply scrolls. -->
     <div
       v-if="!isUser && hideAvatar"
-      class="shrink-0 hidden md:block w-8 self-stretch"
+      class="shrink-0 hidden md:flex w-8 flex-col self-stretch"
+      :class="liveAvatarDock === 'bottom' ? 'justify-end' : 'justify-start'"
     >
       <div
-        class="sticky top-3 -ml-1 w-10"
+        class="sticky -ml-1 w-10"
+        :class="liveAvatarDock === 'bottom' ? 'bottom-3' : 'top-3'"
         :data-live-avatar-slot="messageId"
       />
     </div>
@@ -299,6 +304,8 @@ const imageGridClass = computed(() => {
     <div
       class="relative md:max-w-[85%] max-w-[90%] px-5 py-3 text-[15px] wrap-break-word leading-relaxed transition-all"
       :class="[
+        // Rows hosting the live avatar rise the bubble only, so the avatar holds still.
+        { 'chat-msg-enter': animateIn && hideAvatar && !isUser },
         isUser ? 'chat-user-message bg-user-message text-user-message-text md:rounded-tr-sm' : 'text-theme-200 max-md:w-full max-md:max-w-full',
         showBubble ? 'rounded-3xl shadow-sm' : 'bg-transparent max-md:px-0',
         !isUser && showBubble ? 'bg-theme-800/60 border md:rounded-tl-sm' : '',

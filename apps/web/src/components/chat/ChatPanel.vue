@@ -19,7 +19,7 @@ import SubAgentDelegationCard from './SubAgentDelegationCard.vue'
 import ArtifactImageModal from '../shared/ArtifactImageModal.vue'
 import AgentAvatar from '../shared/AgentAvatar.vue'
 import { useAgentMood, type AgentMood } from '../../composables/useAgentMood'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useResizeObserver } from '@vueuse/core'
 import { useToolPresentation } from '../../composables/useToolPresentation'
 import { useStickyScroll } from '../../composables/useStickyScroll'
 import RichContent from '../shared/RichContent.vue'
@@ -60,6 +60,7 @@ async function forkMessage(messageId: string): Promise<void> {
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const scrollContent = ref<HTMLDivElement | null>(null)
 const {
+  following: followingMain,
   onScroll: onMainScroll,
   stopFollowing: stopFollowingMain,
   scrollToBottom: scrollMainToBottom,
@@ -211,22 +212,66 @@ const liveAvatarAnchorId = computed(() => {
   return null
 })
 // A run can open several short replies in quick succession (a brief thought, a
-// tool round, a few words). The avatar only moves on once a newer reply has
-// lasted a moment, so quick rounds do not bounce it from reply to reply.
+// tool round, a few words). Within a run the avatar only moves on once a newer
+// reply has lasted a moment, so quick rounds do not bounce it from reply to
+// reply. A reply that answers a new message from the user takes it at once.
 const LIVE_AVATAR_SETTLE_MS = 900
 const liveAvatarShownId = ref<string | null>(null)
 let liveAvatarSettle: ReturnType<typeof setTimeout> | undefined
 watch(liveAvatarAnchorId, (id) => {
   clearTimeout(liveAvatarSettle)
-  const shown = liveAvatarShownId.value
-  // Move at once when there is nothing to stay on: no avatar yet, another chat, or its reply is gone.
-  if (!id || !shown || !chatStore.messages.some((message) => message.id === shown)) {
+  const shownIndex = chatStore.messages.findIndex((message) => message.id === liveAvatarShownId.value)
+  const newTurn = shownIndex >= 0 && chatStore.messages.slice(shownIndex + 1).some((message) => message.role === 'user')
+  // Move at once when there is nothing to stay on (no avatar yet, another chat, its reply is gone) or on a new turn.
+  if (!id || shownIndex < 0 || newTurn) {
     liveAvatarShownId.value = id
     return
   }
   liveAvatarSettle = setTimeout(() => { liveAvatarShownId.value = liveAvatarAnchorId.value }, LIVE_AVATAR_SETTLE_MS)
 }, { immediate: true })
 onBeforeUnmount(() => clearTimeout(liveAvatarSettle))
+
+// Where on its reply the avatar rests. While a run streams and the reader is
+// following along, it docks at the reply's bottom edge, which is the chat's
+// bottom edge, so it holds still on screen as the transcript scrolls under it.
+// Afterwards it settles at the top of the reply, unless that top is already off
+// screen, in which case it stays docked rather than flying up.
+const liveAvatarRunning = computed(() => agentStore.isExecuting || chatStore.activeConversationIsStreaming)
+const liveAvatarDock = ref<'top' | 'bottom'>('top')
+function liveReplyTopVisible(): boolean {
+  const container = scrollContainer.value
+  const row = liveAvatar.value?.$el instanceof HTMLElement
+    ? liveAvatar.value.$el.closest('[data-chat-search-message-id]')
+    : null
+  if (!container || !row) return true
+  return row.getBoundingClientRect().top >= container.getBoundingClientRect().top
+}
+// Until the transcript scrolls, following moves nothing, and a bottom dock would
+// just step down line by line; it only pays off once the chat overflows.
+const transcriptOverflows = ref(false)
+useResizeObserver(scrollContent, () => {
+  const container = scrollContainer.value
+  transcriptOverflows.value = Boolean(container && container.scrollHeight > container.clientHeight + 1)
+})
+// The end of a run reflows the chat for a moment (usage line, quick responses),
+// so the resting spot is chosen once that has settled, and then left alone.
+const LIVE_AVATAR_REST_DELAY_MS = 450
+let liveAvatarRest: ReturnType<typeof setTimeout> | undefined
+watch([liveAvatarRunning, followingMain, transcriptOverflows, liveAvatarShownId], ([running, following, overflows], previous) => {
+  clearTimeout(liveAvatarRest)
+  if (running) {
+    liveAvatarDock.value = following && overflows ? 'bottom' : 'top'
+    return
+  }
+  const runJustEnded = previous?.[0] === true
+  const newReply = previous?.[3] !== liveAvatarShownId.value
+  if (!runJustEnded && !newReply) return
+  liveAvatarRest = setTimeout(() => {
+    liveAvatarDock.value = liveReplyTopVisible() ? 'top' : 'bottom'
+  }, runJustEnded ? LIVE_AVATAR_REST_DELAY_MS : 0)
+})
+onBeforeUnmount(() => clearTimeout(liveAvatarRest))
+
 const liveAvatarTarget = computed(() => liveAvatarShownId.value
   ? `[data-live-avatar-slot="${CSS.escape(liveAvatarShownId.value)}"]`
   : null)
@@ -235,9 +280,11 @@ const LIVE_AVATAR_GLIDE_MS = 520
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
-watch(liveAvatarShownId, async (id, previous) => {
+watch([liveAvatarShownId, liveAvatarDock], async ([id], [previous]) => {
   const el = liveAvatar.value?.$el
   if (!id || !previous || !(el instanceof HTMLElement)) return
+  // A streamed reply is swapped for its saved copy under a new id; same reply, so no glide.
+  if (id !== previous && !chatStore.messages.some((message) => message.id === previous)) return
   const before = el.getBoundingClientRect()
   await nextTick()
   // Hold it where it was until the follow-scroll has landed; measuring before
@@ -251,9 +298,13 @@ watch(liveAvatarShownId, async (id, previous) => {
   const dx = before.left - after.left
   const dy = before.top - after.top
   if ((Math.abs(dx) < 1 && Math.abs(dy) < 1) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  // A real move gets a little overshoot; a small correction just eases in.
+  const far = Math.hypot(dx, dy) > 48
   el.animate(
     [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
-    { duration: LIVE_AVATAR_GLIDE_MS, easing: 'cubic-bezier(0.34, 1.3, 0.64, 1)' },
+    far
+      ? { duration: LIVE_AVATAR_GLIDE_MS, easing: 'cubic-bezier(0.34, 1.3, 0.64, 1)' }
+      : { duration: 220, easing: 'ease-out' },
   )
 }, { flush: 'pre' })
 
@@ -458,6 +509,7 @@ function messageBubbleProps(entry: Extract<TimelineEntry, { type: 'message' }>, 
     agentAvatarPending: msg.agentId ? !agentDefs.loaded : activeAgentPending.value,
     agentName: resolveAgentName(msg),
     hideAvatar: resolveAgentId(msg) === (conversationAgentId.value ?? undefined),
+    liveAvatarDock: msg.id === liveAvatarShownId.value ? liveAvatarDock.value : 'top',
     model: msg.model,
     promptTokens: msg.promptTokens,
     completionTokens: msg.completionTokens,
