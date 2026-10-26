@@ -6,6 +6,14 @@ import { getAgent } from '../core/agents/agent-store.js'
 import { listActiveInstances } from './instances.js'
 import { stopAllActivity } from '../core/activity/stop-all.js'
 import { getMemoryRevision, inlineMemoryDiff, listMemoryRevisions, type MemoryDiffSegment } from '../core/memory/memory-revisions.js'
+import { messageRowText } from '../core/chat/transcript.js'
+
+// Tool rows keep their full text only in content blocks. Matching the raw JSON
+// is a cheap superset filter; the exact text is checked per row afterwards.
+function toolTextPrefilter(table = ''): string {
+    const column = (name: string) => table ? `${table}.${name}` : name
+    return `CASE WHEN ${column('role')} = 'tool' THEN COALESCE(${column('content_blocks_json')}, ${column('content')}) ELSE ${column('content')} END`
+}
 import type { ContentBlock } from '@shared/types'
 
 type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'
@@ -499,7 +507,8 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             `SELECT conversation_id, role, content, content_blocks_json, created_at
              FROM messages
              WHERE (role = 'user' OR (role = 'tool' AND generated_media = 0))
-               AND (content_blocks_json LIKE '%"type":"image"%' OR content_blocks_json LIKE '%"type":"video"%' OR content_blocks_json LIKE '%"type":"audio"%' OR content LIKE '%/api/files?path=%' OR content GLOB '*/*.*')`
+               AND (content_blocks_json LIKE '%"type":"image"%' OR content_blocks_json LIKE '%"type":"video"%' OR content_blocks_json LIKE '%"type":"audio"%'
+                 OR ${toolTextPrefilter()} LIKE '%/api/files?path=%' OR ${toolTextPrefilter()} GLOB '*/*.*')`
         ).all() as {
             conversation_id: string
             role: string
@@ -508,6 +517,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             created_at: number
         }[]
         for (const row of contextMediaRows) {
+            row.content = messageRowText(row)
             if (row.role === 'tool' && toolOutputIndicatesGeneratedArtifact(row.content)) continue
             const contextArtifacts = dedupeArtifacts([
                 ...mediaArtifactsFromBlocks(row.content_blocks_json),
@@ -532,7 +542,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
              JOIN conversations c ON c.id = m.conversation_id
              WHERE m.generated_media = 1
                 OR m.role = 'assistant'
-                OR (m.role = 'tool' AND (m.content LIKE '%/api/files?path=%' OR m.content GLOB '*/*.*'))
+                OR (m.role = 'tool' AND (${toolTextPrefilter('m')} LIKE '%/api/files?path=%' OR ${toolTextPrefilter('m')} GLOB '*/*.*'))
              ORDER BY m.created_at DESC, m.id DESC`
         ).iterate() as Iterable<{
             id: string
@@ -547,6 +557,7 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }>
 
         for (const row of messageRows) {
+            row.content = messageRowText(row)
             if (row.role === 'tool' && row.generated_media !== 1 && !toolOutputIndicatesGeneratedArtifact(row.content)) {
                 continue
             }

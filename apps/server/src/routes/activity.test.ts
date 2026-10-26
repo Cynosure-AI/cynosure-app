@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { closeDb, getDb } from '../db/database.js'
 import { registerActivityRoutes } from './activity.js'
 import { registerActiveChatExecution, unregisterActiveChatExecution } from '../core/chat/active-executions.js'
-import { messageContentJson } from '../core/chat/transcript.js'
+import { messageContentJson, toolContentPreview } from '../core/chat/transcript.js'
 import type Database from 'better-sqlite3'
 
 function insertMediaMessage(db: Database.Database, id: string, conversationId: string, role: string,
@@ -121,6 +121,25 @@ describe('activity artifact discovery', () => {
         expect(body.items[2].artifacts).toEqual([
             expect.objectContaining({ label: 'generated.png' }),
         ])
+    })
+
+    test('finds documents named past the stored preview of a long tool output', async () => {
+        const now = Date.now()
+        const db = getDb()
+        db.prepare("INSERT INTO conversations (id, title, origin, created_at, updated_at) VALUES ('conversation-1', 'Report', 'chat', ?, ?)").run(now, now)
+        const output = `${'Collected sources. '.repeat(60)}\nCreated DOCX document: /tmp/late-report.docx`
+        db.prepare(`INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, tool_call_id, created_at)
+            VALUES ('tool-message', 'conversation-1', 'tool', ?, ?, 'create-docx-call', ?)`)
+            .run(toolContentPreview(output), messageContentJson({ id: 'tool-message', content: output }), now)
+
+        const app = Fastify()
+        await app.register(registerActivityRoutes, { prefix: '/api/activity' })
+        const response = await app.inject({ method: 'GET', url: '/api/activity?types=artifact' })
+        await app.close()
+
+        const body = response.json() as { items: { sourceId?: string; artifacts?: { label: string }[] }[] }
+        expect(body.items.map((item) => item.sourceId)).toEqual(['tool-message'])
+        expect(body.items[0].artifacts).toEqual([expect.objectContaining({ label: 'late-report.docx' })])
     })
 
     test('keeps older artifacts discoverable and paginated as ordinary messages accumulate', async () => {

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
-import { contentBlocksToProviderContent, executionUpdateToChatPayload, latestMessageEventSequence, listChatEvents, messageContentBlocks, persistChatEvent, pruneSettledStreamDeltas, slimSettledToolEvents } from './transcript.js'
+import { contentBlocksToProviderContent, executionUpdateToChatPayload, latestMessageEventSequence, listChatEvents, messageContentBlocks, messageContentJson, messageTextSql, persistChatEvent, pruneSettledStreamDeltas, slimSettledToolEvents, TOOL_CONTENT_PREVIEW_CHARS, toolContentPreview } from './transcript.js'
 
 describe('canonical chat transcript', () => {
   test('adapts persisted media fields without losing their order within a modality', () => {
@@ -83,6 +83,21 @@ describe('canonical chat transcript', () => {
     expect(stored[0]).toContain('what the card showed')
     expect(listChatEvents(db, 'c1')).toEqual([results, item])
     expect(slimSettledToolEvents(db, 'c1')).toBe(0)
+    db.close()
+  })
+
+  test('reads full tool output from content blocks behind a stored preview', () => {
+    const db = new Database(':memory:')
+    applySchemaMigrations(db)
+    db.prepare("INSERT INTO conversations (id, title, created_at, updated_at) VALUES ('c1', 'Chat', 1, 1)").run()
+    const output = 'x'.repeat(TOOL_CONTENT_PREVIEW_CHARS + 50)
+    const insert = db.prepare("INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, created_at) VALUES (?, 'c1', ?, ?, ?, 1)")
+    insert.run('tool', 'tool', toolContentPreview(output), messageContentJson({ id: 'tool', content: output, structuredContent: { ok: true } }))
+    insert.run('assistant', 'assistant', 'Short reply', null)
+    expect(toolContentPreview(output)).toHaveLength(TOOL_CONTENT_PREVIEW_CHARS + 1)
+    expect(toolContentPreview('short')).toBe('short')
+    const text = db.prepare(`SELECT id, ${messageTextSql()} AS text FROM messages ORDER BY id`).all()
+    expect(text).toEqual([{ id: 'assistant', text: 'Short reply' }, { id: 'tool', text: output }])
     db.close()
   })
 

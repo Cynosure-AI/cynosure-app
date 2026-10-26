@@ -241,8 +241,10 @@ export function getPendingWait(conversationId: string, now = Date.now()): { jobI
 }
 
 function getCronEvaluationContext(conversationId: string, result: AgentExecutorResult): string {
+    // Every row is read so the final reply is never cut off; tool rows carry only
+    // their stored preview, and the length cap below keeps the prompt bounded.
     const rows = getDb().prepare(
-        'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 40'
+        'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
     ).all(conversationId) as { role: string; content: string }[]
 
     const transcript = rows

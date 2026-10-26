@@ -787,6 +787,22 @@ const MIGRATIONS: SchemaMigration[] = [
             }
         },
     },
+    {
+        version: 41,
+        description: 'Keep full tool output only in content blocks; content holds a preview',
+        up: (db) => {
+            // Only rows whose blocks hold the identical text are shortened, so no output is lost.
+            // Kept in step with toolContentPreview (500 characters plus an ellipsis).
+            db.exec(`
+                UPDATE messages SET content = substr(content, 1, 500) || '…'
+                WHERE role = 'tool' AND length(content) > 500
+                  AND content = (
+                    SELECT group_concat(json_extract(block.value, '$.text'), '') FROM json_each(messages.content_blocks_json) AS block
+                    WHERE json_extract(block.value, '$.type') = 'text'
+                  )
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

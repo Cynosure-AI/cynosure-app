@@ -95,6 +95,32 @@ export function messageToTranscriptItem(message: MessageFields, executionId?: st
   }
 }
 
+/**
+ * Tool output is stored in full only in content_blocks_json. The content
+ * column keeps a short preview, enough for listings and notification checks.
+ */
+export const TOOL_CONTENT_PREVIEW_CHARS = 500
+
+export function toolContentPreview(output: string): string {
+  return output.length > TOOL_CONTENT_PREVIEW_CHARS ? `${output.slice(0, TOOL_CONTENT_PREVIEW_CHARS)}…` : output
+}
+
+/** A message row's full text, read from its content blocks for tool rows. */
+export function messageRowText(row: { role: string; content: string; content_blocks_json: string | null }): string {
+  if (row.role !== 'tool') return row.content
+  const blocks = parseBlocks(row.content_blocks_json)
+  return blocks ? textOf(blocks) : row.content
+}
+
+/** SQL for a message row's full text; `table` qualifies the columns when the query joins. */
+export function messageTextSql(table = ''): string {
+  const column = (name: string) => table ? `${table}.${name}` : name
+  return `CASE WHEN ${column('role')} = 'tool' THEN COALESCE((
+    SELECT group_concat(json_extract(block.value, '$.text'), '') FROM json_each(${column('content_blocks_json')}) AS block
+    WHERE json_extract(block.value, '$.type') = 'text'
+  ), ${column('content')}) ELSE ${column('content')} END`
+}
+
 /** Publish one typed chat event through the same persistence and WebSocket path. */
 export function publishChatEvent(broadcast: (event: string, data: unknown) => void, draft: ChatEventDraft): void {
   broadcast('chat:event', draft)

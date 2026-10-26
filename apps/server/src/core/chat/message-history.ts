@@ -6,7 +6,7 @@ import { mediaAttachmentLabel } from '../artifacts/attachment-export.js'
 import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
 import { isTurnLocalContextMessage, type ChatMessage, type ContentPart, type ToolCall } from '../gateway/providers/base.provider.js'
 import type { ContentBlock } from '@shared/types'
-import { contentBlocksToProviderContent } from './transcript.js'
+import { contentBlocksToProviderContent, messageTextSql } from './transcript.js'
 
 export interface ChatHistoryRow {
     id: string
@@ -235,7 +235,7 @@ export function buildConversationHistory(input: {
     const { db, conversationId, mainAgentId, inlineAttachmentTextLimit } = input
     const historyRows = db
         .prepare(
-            'SELECT id, role, is_error, stopped, content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
+            `SELECT id, role, is_error, stopped, ${messageTextSql()} AS content, tool_calls_json, tool_call_id, agent_id, content_blocks_json, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
         )
         .all(conversationId) as ChatHistoryRow[]
     const attachmentsByMessage = listConversationFileAttachmentsByMessage(db, conversationId)

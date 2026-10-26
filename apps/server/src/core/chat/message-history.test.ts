@@ -72,6 +72,28 @@ describe('conversation history construction', () => {
         expect(result.messages[2]).toMatchObject({ toolCallId: 'pending', content: expect.stringContaining('interrupted') })
     })
 
+    test('replays full tool output from content blocks, not the stored preview', async () => {
+        const { default: SqliteDatabase } = await import('better-sqlite3')
+        const { applySchemaMigrations } = await import('../../db/migrations.js')
+        const { messageContentJson, toolContentPreview } = await import('./transcript.js')
+        const db = new SqliteDatabase(':memory:')
+        applySchemaMigrations(db)
+        db.prepare("INSERT INTO conversations (id, created_at, updated_at) VALUES ('conversation', 1, 1)").run()
+        const output = 'result line\n'.repeat(100)
+        const insert = db.prepare(`INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, tool_calls_json, tool_call_id, created_at)
+            VALUES (?, 'conversation', ?, ?, ?, ?, ?, ?)`)
+        insert.run('user', 'user', 'look it up', null, null, null, 1)
+        insert.run('assistant', 'assistant', '', null, JSON.stringify([{ id: 'call', type: 'function', function: { name: 'search', arguments: '{}' } }]), null, 2)
+        insert.run('tool', 'tool', toolContentPreview(output), messageContentJson({ id: 'tool', content: output }), null, 'call', 3)
+
+        const result = buildConversationHistory({ db, conversationId: 'conversation', mainAgentId: null, inlineAttachmentTextLimit: 10_000 })
+
+        // Compaction replays history rows directly, so they must carry the full text too.
+        expect(result.filteredRows.find((historyRow) => historyRow.id === 'tool')?.content).toBe(output)
+        expect(result.messages.at(-1)).toMatchObject({ role: 'tool', content: output })
+        db.close()
+    })
+
     test('skips a reply stopped while it was still reasoning', () => {
         const result = buildConversationHistory({
             db: databaseReturning([

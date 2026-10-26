@@ -13,7 +13,7 @@ import {
 import type { LLMGateway } from '../gateway/gateway.js'
 import { IncompleteModelResponseError, type ChatMessage, type CompletionResponse, type ToolCall, type ToolDefinition, type RegistryAwareToolDefinition, type ToolResult, type ToolResultContent } from '../gateway/providers/base.provider.js'
 import type { ChatEventPayload, ReasoningEffort } from '@shared/types'
-import { messageContentJson, messageToTranscriptItem, publishChatEvent } from '../chat/transcript.js'
+import { messageContentJson, messageToTranscriptItem, publishChatEvent, toolContentPreview } from '../chat/transcript.js'
 import {
     artifactFileUrlToDataUrl,
     materializeAudioArtifacts,
@@ -1284,7 +1284,7 @@ export class AgentExecutor {
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
-                toolMsgId, conversationId, 'tool', tr.output, tr.toolCallId,
+                toolMsgId, conversationId, 'tool', toolContentPreview(tr.output), tr.toolCallId,
                 messageContentJson({ id: toolMsgId, content: tr.output, imageDataUrls: tr.images,
                     audioDataUrls: tr.audioArtifacts || tr.audioDataUrls, structuredContent: tr.structuredContent }),
                 tr.generatedMedia ? 1 : 0,
