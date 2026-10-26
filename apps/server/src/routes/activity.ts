@@ -1,6 +1,7 @@
 import { listDreamRuns, type DreamChange } from '../core/memory/dream-store.js'
 import { cancelAllDreamRuns } from '../core/memory/dream-worker.js'
 import type { FastifyInstance } from 'fastify'
+import type Database from 'better-sqlite3'
 import { getDb } from '../db/database.js'
 import { getAgent } from '../core/agents/agent-store.js'
 import { listActiveInstances } from './instances.js'
@@ -344,6 +345,149 @@ function activitySearchText(item: ActivityItem): string {
         .toLowerCase()
 }
 
+interface ArtifactSource {
+    messageId: string
+    conversationId: string
+    createdAt: number
+    artifacts: ActivityArtifact[]
+}
+
+interface ArtifactScanCache {
+    dataVersion: number
+    versions: Map<string, number>
+    sources: Map<string, ArtifactSource[]>
+}
+
+// Keyed by connection, so a reopened or restored database never sees another one's scan.
+const artifactScanCache = new WeakMap<Database.Database, ArtifactScanCache>()
+
+/**
+ * Find artifacts in message history, grouped by conversation, newest first. Every
+ * rule here (first context use, per-chat deduplication) is scoped to one
+ * conversation, so `conversationId` narrows the scan without changing results.
+ */
+function scanArtifactSourcesIn(db: Database.Database, conversationId?: string): Map<string, ArtifactSource[]> {
+    const params = conversationId ? [conversationId] : []
+    const conversationFilter = (prefix: string) => conversationId ? `${prefix}conversation_id = ? AND ` : ''
+    // Media attached by the user or returned by a tool is context, not a
+    // generated artifact. Remember when those URLs/paths first appeared so
+    // assistant rows that duplicated tool media are filtered too.
+    const nonGeneratedArtifactFirstSeen = new Map<string, number>()
+    const contextMediaRows = db.prepare(
+        `SELECT conversation_id, role, content, content_blocks_json, created_at
+         FROM messages
+         WHERE ${conversationFilter('')}(role = 'user' OR (role = 'tool' AND generated_media = 0))
+           AND (content_blocks_json LIKE '%"type":"image"%' OR content_blocks_json LIKE '%"type":"video"%' OR content_blocks_json LIKE '%"type":"audio"%'
+             OR ${toolTextPrefilter()} LIKE '%/api/files?path=%' OR ${toolTextPrefilter()} GLOB '*/*.*')`
+    ).all(...params) as {
+        conversation_id: string
+        role: string
+        content: string
+        content_blocks_json: string | null
+        created_at: number
+    }[]
+    for (const row of contextMediaRows) {
+        row.content = messageRowText(row)
+        if (row.role === 'tool' && toolOutputIndicatesGeneratedArtifact(row.content)) continue
+        const contextArtifacts = dedupeArtifacts([
+            ...mediaArtifactsFromBlocks(row.content_blocks_json),
+            ...fileArtifactsFromText(row.content),
+        ])
+        for (const artifact of contextArtifacts) {
+            const key = `${row.conversation_id}:${artifactKey(artifact)}`
+            const previous = nonGeneratedArtifactFirstSeen.get(key)
+            if (previous === undefined || row.created_at < previous) {
+                nonGeneratedArtifactFirstSeen.set(key, row.created_at)
+            }
+        }
+    }
+
+    const sources = new Map<string, ArtifactSource[]>()
+    const messageArtifactKeysByConversation = new Map<string, Set<string>>()
+    // Paginate after artiDeep Research and deduplication. A bounded window
+    // of messages lets ordinary replies push older artifacts out of history
+    // and can incorrectly report hasMore=false before they are reached.
+    const messageRows = db.prepare(
+        `SELECT m.id, m.conversation_id, m.role, m.content, m.content_blocks_json, m.generated_media, m.created_at
+         FROM messages m
+         WHERE ${conversationFilter('m.')}(m.generated_media = 1
+            OR m.role = 'assistant'
+            OR (m.role = 'tool' AND (${toolTextPrefilter('m')} LIKE '%/api/files?path=%' OR ${toolTextPrefilter('m')} GLOB '*/*.*')))
+         ORDER BY m.created_at DESC, m.id DESC`
+    ).iterate(...params) as Iterable<{
+        id: string
+        conversation_id: string
+        role: string
+        content: string
+        content_blocks_json: string | null
+        generated_media: number
+        created_at: number
+    }>
+
+    for (const row of messageRows) {
+        row.content = messageRowText(row)
+        if (row.role === 'tool' && row.generated_media !== 1 && !toolOutputIndicatesGeneratedArtifact(row.content)) {
+            continue
+        }
+        const artifacts = dedupeArtifacts([
+            ...mediaArtifactsFromBlocks(row.content_blocks_json),
+            // Generated media is persisted in content blocks.
+            // A bare media path in assistant prose may simply describe a
+            // file the model is about to inspect, so only documents from
+            // message text remain eligible here.
+            ...fileArtifactsFromText(row.content).filter((artifact) => artifact.kind === 'file'),
+        ]).filter((artifact) => {
+            const firstContextUse = nonGeneratedArtifactFirstSeen.get(`${row.conversation_id}:${artifactKey(artifact)}`)
+            return firstContextUse === undefined || firstContextUse > row.created_at
+        })
+        if (!artifacts.length) continue
+        let conversationKeys = messageArtifactKeysByConversation.get(row.conversation_id)
+        if (!conversationKeys) {
+            conversationKeys = new Set<string>()
+            messageArtifactKeysByConversation.set(row.conversation_id, conversationKeys)
+        }
+        const visibleArtifacts = artifacts.filter((artifact) => !conversationKeys.has(artifactKey(artifact)))
+        if (!visibleArtifacts.length) continue
+        for (const artifact of visibleArtifacts) {
+            conversationKeys.add(artifactKey(artifact))
+        }
+        const conversationSources = sources.get(row.conversation_id) ?? []
+        conversationSources.push({ messageId: row.id, conversationId: row.conversation_id, createdAt: row.created_at, artifacts: visibleArtifacts })
+        sources.set(row.conversation_id, conversationSources)
+    }
+    return sources
+}
+
+/**
+ * Artifacts across all conversations, newest first. Results are kept per
+ * conversation and rescanned only when that conversation's messages change
+ * (tracked by triggers in message_versions). A write from another connection
+ * discards everything, since its changes may not have been seen.
+ */
+function scanArtifactSources(db: Database.Database): ArtifactSource[] {
+    const dataVersion = db.pragma('data_version', { simple: true }) as number
+    const versions = new Map((db.prepare('SELECT conversation_id, version FROM message_versions').all() as Array<{ conversation_id: string; version: number }>)
+        .map((row) => [row.conversation_id, row.version]))
+    let cache = artifactScanCache.get(db)
+    if (!cache || cache.dataVersion !== dataVersion) {
+        cache = { dataVersion, versions, sources: scanArtifactSourcesIn(db) }
+        artifactScanCache.set(db, cache)
+    } else {
+        for (const [conversationId, version] of versions) {
+            if (cache.versions.get(conversationId) === version) continue
+            const rescanned = scanArtifactSourcesIn(db, conversationId).get(conversationId)
+            if (rescanned) cache.sources.set(conversationId, rescanned)
+            else cache.sources.delete(conversationId)
+        }
+        for (const conversationId of cache.sources.keys()) {
+            if (!versions.has(conversationId)) cache.sources.delete(conversationId)
+        }
+        cache.versions = versions
+    }
+    return [...cache.sources.values()].flat().sort((a, b) => b.createdAt - a.createdAt
+        || (a.messageId < b.messageId ? 1 : a.messageId > b.messageId ? -1 : 0))
+}
+
 export async function registerActivityRoutes(app: FastifyInstance): Promise<void> {
     app.post('/stop-all', async () => {
         const result = stopAllActivity()
@@ -355,13 +499,17 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
         }
     })
 
-    app.get<{ Querystring: { limit?: string; offset?: string; types?: string; search?: string } }>('/', async (req) => {
+    app.get<{ Querystring: { limit?: string; offset?: string; types?: string; search?: string; totals?: string; status?: string } }>('/', async (req) => {
         const db = getDb()
         const limit = clampLimit(req.query.limit)
         const offset = clampOffset(req.query.offset)
         const searchQuery = cleanSearchQuery(req.query.search)
         const queryLimit = searchQuery ? -1 : Math.max(limit + offset, limit)
         const typeFilter = parseTypeFilter(req.query.types)
+        // Per-kind totals need every kind; callers that skip them (totals=0) pay only for the kinds they list.
+        const includeTotals = req.query.totals !== '0'
+        const builds = (kind: ActivityKind) => includeTotals || !typeFilter || typeFilter.has(kind)
+        const statusFilter = req.query.status?.trim() || null
         const items: ActivityItem[] = []
         const activeInstancesByIdentity = new Map<string, ReturnType<typeof listActiveInstances>[number]>()
         for (const instance of listActiveInstances()) {
@@ -400,288 +548,224 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         }
 
-        const cronRows = db.prepare(
-            "SELECT id, title, agent_id, created_at, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
-        ).all(queryLimit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
-        for (const row of cronRows) {
-            if (activeConversationIds.has(row.id)) continue
-            const title = row.title && row.title !== 'New Chat'
-                ? row.title
-                : 'Cron job finished'
-            items.push({
-                id: `cron:${row.id}`,
-                kind: 'cron',
-                title,
-                description: 'Scheduled run completed',
-                createdAt: row.updated_at,
-                agentId: row.agent_id,
-                ...agentInfo(row.agent_id),
-                conversationId: row.id,
-                status: 'completed',
-                sourceId: row.id,
-                sourceLabel: 'Cron',
-            })
-        }
-
-        const chatRows = db.prepare(
-            `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
-                    (SELECT SUBSTR(m.content, 1, 220)
-                     FROM messages m
-                     WHERE m.conversation_id = c.id AND m.role = 'user'
-                     ORDER BY m.created_at DESC
-                     LIMIT 1) AS last_user_message
-             FROM conversations c
-             WHERE c.origin = 'chat' AND c.temporary = 0
-             ORDER BY c.updated_at DESC
-             LIMIT ?`
-        ).all(queryLimit) as {
-            id: string
-            title: string | null
-            agent_id: string | null
-            created_at: number
-            updated_at: number
-            last_user_message: string | null
-        }[]
-
-        for (const row of chatRows) {
-            if (activeConversationIds.has(row.id)) continue
-            const title = row.title && row.title !== 'New Chat' ? row.title : 'Chat message'
-            items.push({
-                id: `chat:${row.id}`,
-                kind: 'chat',
-                title,
-                description: row.last_user_message || 'User chat conversation',
-                createdAt: row.updated_at || row.created_at,
-                agentId: row.agent_id,
-                ...agentInfo(row.agent_id),
-                conversationId: row.id,
-                status: 'completed',
-                sourceId: row.id,
-                sourceLabel: 'Chat',
-            })
-        }
-
-        const channelRows = db.prepare(
-            `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
-                    (SELECT SUBSTR(m.content, 1, 220)
-                     FROM messages m
-                     WHERE m.conversation_id = c.id AND m.role = 'user'
-                     ORDER BY m.created_at DESC
-                     LIMIT 1) AS last_user_message
-             FROM conversations c
-             WHERE c.origin = 'channel'
-             ORDER BY c.updated_at DESC
-             LIMIT ?`
-        ).all(queryLimit) as {
-            id: string
-            title: string | null
-            agent_id: string | null
-            created_at: number
-            updated_at: number
-            last_user_message: string | null
-        }[]
-
-        for (const row of channelRows) {
-            if (activeConversationIds.has(row.id)) continue
-            const title = row.title && row.title !== 'New Chat' ? row.title : 'Channel message'
-            items.push({
-                id: `channels:${row.id}`,
-                kind: 'channels',
-                title,
-                description: row.last_user_message || 'Channel conversation',
-                createdAt: row.updated_at || row.created_at,
-                agentId: row.agent_id,
-                ...agentInfo(row.agent_id),
-                conversationId: row.id,
-                status: 'completed',
-                sourceId: row.id,
-                sourceLabel: 'Channel',
-            })
-        }
-
-        // Media attached by the user or returned by a tool is context, not a
-        // generated artifact. Remember when those URLs/paths first appeared so
-        // assistant rows that duplicated tool media are filtered too.
-        const nonGeneratedArtifactFirstSeen = new Map<string, number>()
-        const contextMediaRows = db.prepare(
-            `SELECT conversation_id, role, content, content_blocks_json, created_at
-             FROM messages
-             WHERE (role = 'user' OR (role = 'tool' AND generated_media = 0))
-               AND (content_blocks_json LIKE '%"type":"image"%' OR content_blocks_json LIKE '%"type":"video"%' OR content_blocks_json LIKE '%"type":"audio"%'
-                 OR ${toolTextPrefilter()} LIKE '%/api/files?path=%' OR ${toolTextPrefilter()} GLOB '*/*.*')`
-        ).all() as {
-            conversation_id: string
-            role: string
-            content: string
-            content_blocks_json: string | null
-            created_at: number
-        }[]
-        for (const row of contextMediaRows) {
-            row.content = messageRowText(row)
-            if (row.role === 'tool' && toolOutputIndicatesGeneratedArtifact(row.content)) continue
-            const contextArtifacts = dedupeArtifacts([
-                ...mediaArtifactsFromBlocks(row.content_blocks_json),
-                ...fileArtifactsFromText(row.content),
-            ])
-            for (const artifact of contextArtifacts) {
-                const key = `${row.conversation_id}:${artifactKey(artifact)}`
-                const previous = nonGeneratedArtifactFirstSeen.get(key)
-                if (previous === undefined || row.created_at < previous) {
-                    nonGeneratedArtifactFirstSeen.set(key, row.created_at)
-                }
+        if (builds('cron')) {
+            const cronRows = db.prepare(
+                "SELECT id, title, agent_id, created_at, updated_at FROM conversations WHERE origin = 'cron' ORDER BY updated_at DESC LIMIT ?"
+            ).all(queryLimit) as { id: string; title: string | null; agent_id: string | null; created_at: number; updated_at: number }[]
+            for (const row of cronRows) {
+                if (activeConversationIds.has(row.id)) continue
+                const title = row.title && row.title !== 'New Chat'
+                    ? row.title
+                    : 'Cron job finished'
+                items.push({
+                    id: `cron:${row.id}`,
+                    kind: 'cron',
+                    title,
+                    description: 'Scheduled run completed',
+                    createdAt: row.updated_at,
+                    agentId: row.agent_id,
+                    ...agentInfo(row.agent_id),
+                    conversationId: row.id,
+                    status: 'completed',
+                    sourceId: row.id,
+                    sourceLabel: 'Cron',
+                })
             }
         }
 
-        const messageArtifactKeysByConversation = new Map<string, Set<string>>()
-        // Paginate after artiDeep Research and deduplication. A bounded window
-        // of messages lets ordinary replies push older artifacts out of history
-        // and can incorrectly report hasMore=false before they are reached.
-        const messageRows = db.prepare(
-            `SELECT m.id, m.conversation_id, m.role, m.content, m.content_blocks_json, m.generated_media, m.created_at, c.title, c.agent_id
-             FROM messages m
-             JOIN conversations c ON c.id = m.conversation_id
-             WHERE m.generated_media = 1
-                OR m.role = 'assistant'
-                OR (m.role = 'tool' AND (${toolTextPrefilter('m')} LIKE '%/api/files?path=%' OR ${toolTextPrefilter('m')} GLOB '*/*.*'))
-             ORDER BY m.created_at DESC, m.id DESC`
-        ).iterate() as Iterable<{
-            id: string
-            conversation_id: string
-            role: string
-            content: string
-            content_blocks_json: string | null
-            generated_media: number
-            created_at: number
-            title: string | null
-            agent_id: string | null
-        }>
+        if (builds('chat')) {
+            const chatRows = db.prepare(
+                `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
+                        (SELECT SUBSTR(m.content, 1, 220)
+                         FROM messages m
+                         WHERE m.conversation_id = c.id AND m.role = 'user'
+                         ORDER BY m.created_at DESC
+                         LIMIT 1) AS last_user_message
+                 FROM conversations c
+                 WHERE c.origin = 'chat' AND c.temporary = 0
+                 ORDER BY c.updated_at DESC
+                 LIMIT ?`
+            ).all(queryLimit) as {
+                id: string
+                title: string | null
+                agent_id: string | null
+                created_at: number
+                updated_at: number
+                last_user_message: string | null
+            }[]
 
-        for (const row of messageRows) {
-            row.content = messageRowText(row)
-            if (row.role === 'tool' && row.generated_media !== 1 && !toolOutputIndicatesGeneratedArtifact(row.content)) {
-                continue
+            for (const row of chatRows) {
+                if (activeConversationIds.has(row.id)) continue
+                const title = row.title && row.title !== 'New Chat' ? row.title : 'Chat message'
+                items.push({
+                    id: `chat:${row.id}`,
+                    kind: 'chat',
+                    title,
+                    description: row.last_user_message || 'User chat conversation',
+                    createdAt: row.updated_at || row.created_at,
+                    agentId: row.agent_id,
+                    ...agentInfo(row.agent_id),
+                    conversationId: row.id,
+                    status: 'completed',
+                    sourceId: row.id,
+                    sourceLabel: 'Chat',
+                })
             }
-            const artifacts = dedupeArtifacts([
-                ...mediaArtifactsFromBlocks(row.content_blocks_json),
-                // Generated media is persisted in content blocks.
-                // A bare media path in assistant prose may simply describe a
-                // file the model is about to inspect, so only documents from
-                // message text remain eligible here.
-                ...fileArtifactsFromText(row.content).filter((artifact) => artifact.kind === 'file'),
-            ]).filter((artifact) => {
-                const firstContextUse = nonGeneratedArtifactFirstSeen.get(`${row.conversation_id}:${artifactKey(artifact)}`)
-                return firstContextUse === undefined || firstContextUse > row.created_at
-            })
-            if (!artifacts.length) continue
-            let conversationKeys = messageArtifactKeysByConversation.get(row.conversation_id)
-            if (!conversationKeys) {
-                conversationKeys = new Set<string>()
-                messageArtifactKeysByConversation.set(row.conversation_id, conversationKeys)
+        }
+
+        if (builds('channels')) {
+            const channelRows = db.prepare(
+                `SELECT c.id, c.title, c.agent_id, c.created_at, c.updated_at,
+                        (SELECT SUBSTR(m.content, 1, 220)
+                         FROM messages m
+                         WHERE m.conversation_id = c.id AND m.role = 'user'
+                         ORDER BY m.created_at DESC
+                         LIMIT 1) AS last_user_message
+                 FROM conversations c
+                 WHERE c.origin = 'channel'
+                 ORDER BY c.updated_at DESC
+                 LIMIT ?`
+            ).all(queryLimit) as {
+                id: string
+                title: string | null
+                agent_id: string | null
+                created_at: number
+                updated_at: number
+                last_user_message: string | null
+            }[]
+
+            for (const row of channelRows) {
+                if (activeConversationIds.has(row.id)) continue
+                const title = row.title && row.title !== 'New Chat' ? row.title : 'Channel message'
+                items.push({
+                    id: `channels:${row.id}`,
+                    kind: 'channels',
+                    title,
+                    description: row.last_user_message || 'Channel conversation',
+                    createdAt: row.updated_at || row.created_at,
+                    agentId: row.agent_id,
+                    ...agentInfo(row.agent_id),
+                    conversationId: row.id,
+                    status: 'completed',
+                    sourceId: row.id,
+                    sourceLabel: 'Channel',
+                })
             }
-            const visibleArtifacts = artifacts.filter((artifact) => !conversationKeys.has(artifactKey(artifact)))
-            if (!visibleArtifacts.length) continue
-            for (const artifact of visibleArtifacts) {
-                conversationKeys.add(artifactKey(artifact))
+        }
+
+        if (builds('artifact')) {
+            const conversationsById = new Map((db.prepare('SELECT id, title, agent_id FROM conversations').all() as Array<{ id: string; title: string | null; agent_id: string | null }>)
+                .map((row) => [row.id, row]))
+            for (const source of scanArtifactSources(db)) {
+                const conversation = conversationsById.get(source.conversationId)
+                if (!conversation) continue
+                items.push({
+                    id: `artifact:${source.messageId}`,
+                    kind: 'artifact',
+                    title: source.artifacts.length === 1 ? `Generated ${source.artifacts[0].label}` : `Generated ${source.artifacts.length} artifacts`,
+                    description: conversation.title || 'Assistant response',
+                    createdAt: source.createdAt,
+                    agentId: conversation.agent_id,
+                    ...agentInfo(conversation.agent_id),
+                    conversationId: source.conversationId,
+                    sourceId: source.messageId,
+                    sourceLabel: 'Artifact',
+                    artifacts: source.artifacts,
+                })
             }
-            items.push({
-                id: `artifact:${row.id}`,
-                kind: 'artifact',
-                title: visibleArtifacts.length === 1 ? `Generated ${visibleArtifacts[0].label}` : `Generated ${visibleArtifacts.length} artifacts`,
-                description: row.title || 'Assistant response',
-                createdAt: row.created_at,
-                agentId: row.agent_id,
-                ...agentInfo(row.agent_id),
-                conversationId: row.conversation_id,
-                sourceId: row.id,
-                sourceLabel: 'Artifact',
-                artifacts: visibleArtifacts,
-            })
         }
 
-        const memoryRows = db.prepare(
-            `SELECT mfi.category_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, ms.name AS category_name
-             FROM memory_file_index mfi
-             LEFT JOIN memory_folders ms ON ms.id = mfi.category_id
-             ORDER BY MAX(mfi.last_indexed_at, mfi.created_at) DESC
-             LIMIT ?`
-        ).all(queryLimit) as {
-            category_id: string
-            file_name: string
-            chunk_count: number
-            created_at: number
-            last_indexed_at: number
-            category_name: string | null
-        }[]
+        if (builds('memory')) {
+            const memoryRows = db.prepare(
+                `SELECT mfi.category_id, mfi.file_name, mfi.chunk_count, mfi.created_at, mfi.last_indexed_at, ms.name AS category_name
+                 FROM memory_file_index mfi
+                 LEFT JOIN memory_folders ms ON ms.id = mfi.category_id
+                 ORDER BY MAX(mfi.last_indexed_at, mfi.created_at) DESC
+                 LIMIT ?`
+            ).all(queryLimit) as {
+                category_id: string
+                file_name: string
+                chunk_count: number
+                created_at: number
+                last_indexed_at: number
+                category_name: string | null
+            }[]
 
-        for (const row of memoryRows) {
-            const createdAt = Math.max(row.last_indexed_at || 0, row.created_at || 0)
-            if (!createdAt) continue
-            items.push({
-                id: `memory-file:${row.category_id}:${row.file_name}:${createdAt}`,
-                kind: 'memory',
-                title: `Indexed memory file ${row.file_name}`,
-                description: `${row.category_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
-                createdAt,
-                agentId: null,
-                agentName: null,
-                agentIconUrl: null,
-                conversationId: null,
-                status: 'completed',
-                sourceId: row.category_id,
-                sourceLabel: 'Memory',
-                memoryFolderId: row.category_id,
-                memoryFileName: row.file_name,
-            })
+            for (const row of memoryRows) {
+                const createdAt = Math.max(row.last_indexed_at || 0, row.created_at || 0)
+                if (!createdAt) continue
+                items.push({
+                    id: `memory-file:${row.category_id}:${row.file_name}:${createdAt}`,
+                    kind: 'memory',
+                    title: `Indexed memory file ${row.file_name}`,
+                    description: `${row.category_name || 'Memory folder'} · ${row.chunk_count} chunk${row.chunk_count === 1 ? '' : 's'}`,
+                    createdAt,
+                    agentId: null,
+                    agentName: null,
+                    agentIconUrl: null,
+                    conversationId: null,
+                    status: 'completed',
+                    sourceId: row.category_id,
+                    sourceLabel: 'Memory',
+                    memoryFolderId: row.category_id,
+                    memoryFileName: row.file_name,
+                })
+            }
+
+            const toolIndexJobs = db.prepare(`
+                SELECT id, status, error, progress_current, progress_total, updated_at
+                FROM memory_index_jobs
+                WHERE kind = 'tool-embeddings' AND status NOT IN ('queued', 'running', 'retrying')
+                ORDER BY updated_at DESC LIMIT ?
+            `).all(queryLimit) as Array<{ id: string; status: string; error: string | null; progress_current: number | null; progress_total: number | null; updated_at: number }>
+            for (const job of toolIndexJobs) {
+                items.push({
+                    id: `tool-index:${job.id}`, kind: 'memory',
+                    title: job.status === 'completed' ? 'Indexed tool capabilities' : 'Tool capability indexing',
+                    description: job.error || `${job.progress_current ?? 0}/${job.progress_total ?? 0} embeddings`,
+                    createdAt: job.updated_at, agentId: null, agentName: null, agentIconUrl: null,
+                    conversationId: null, status: job.status, sourceId: job.id, sourceLabel: 'Tool indexing',
+                })
+            }
         }
 
-        const toolIndexJobs = db.prepare(`
-            SELECT id, status, error, progress_current, progress_total, updated_at
-            FROM memory_index_jobs
-            WHERE kind = 'tool-embeddings' AND status NOT IN ('queued', 'running', 'retrying')
-            ORDER BY updated_at DESC LIMIT ?
-        `).all(queryLimit) as Array<{ id: string; status: string; error: string | null; progress_current: number | null; progress_total: number | null; updated_at: number }>
-        for (const job of toolIndexJobs) {
-            items.push({
-                id: `tool-index:${job.id}`, kind: 'memory',
-                title: job.status === 'completed' ? 'Indexed tool capabilities' : 'Tool capability indexing',
-                description: job.error || `${job.progress_current ?? 0}/${job.progress_total ?? 0} embeddings`,
-                createdAt: job.updated_at, agentId: null, agentName: null, agentIconUrl: null,
-                conversationId: null, status: job.status, sourceId: job.id, sourceLabel: 'Tool indexing',
-            })
+        if (builds('dream')) {
+            for (const run of listDreamRuns(queryLimit)) {
+                // Checked before building memory diffs, the expensive part of each run.
+                if (statusFilter && run.status !== statusFilter) continue
+                const changes = JSON.parse(run.changes_json) as DreamChange[]
+                const changeSummary = changes.length
+                    ? `${changes.length} memory change${changes.length === 1 ? '' : 's'}`
+                    : 'No new memories'
+
+                const conversation = db
+                    .prepare('SELECT title FROM conversations WHERE id = ?')
+                    .get(run.conversation_id) as { title: string | null } | undefined
+
+                const conversationTitle = conversation?.title || 'Untitled conversation'
+
+                items.push({
+                    id: `dream:${run.id}`,
+                    kind: 'dream',
+                    title: `Dream review - ${conversationTitle}`,
+                    description: `${run.reviewed_count} message excerpts reviewed · ${changeSummary}${run.error ? ` · ${run.error}` : ''}`,
+                    createdAt: run.updated_at,
+                    agentId: null,
+                    agentName: null,
+                    agentIconUrl: null,
+                    conversationId: run.conversation_id,
+                    conversationTitle,
+                    status: run.status,
+                    sourceId: run.id,
+                    sourceLabel: 'Dream',
+                    model: run.model,
+                    dreamChanges: changes.map(dreamChangeForActivity),
+                })
+            }
         }
 
-        for (const run of listDreamRuns(queryLimit)) {
-            const changes = JSON.parse(run.changes_json) as DreamChange[]
-            const changeSummary = changes.length
-                ? `${changes.length} memory change${changes.length === 1 ? '' : 's'}`
-                : 'No new memories'
-
-            const conversation = db
-                .prepare('SELECT title FROM conversations WHERE id = ?')
-                .get(run.conversation_id) as { title: string | null } | undefined
-
-            const conversationTitle = conversation?.title || 'Untitled conversation'
-
-            items.push({
-                id: `dream:${run.id}`,
-                kind: 'dream',
-                title: `Dream review - ${conversationTitle}`,
-                description: `${run.reviewed_count} message excerpts reviewed · ${changeSummary}${run.error ? ` · ${run.error}` : ''}`,
-                createdAt: run.updated_at,
-                agentId: null,
-                agentName: null,
-                agentIconUrl: null,
-                conversationId: run.conversation_id,
-                conversationTitle,
-                status: run.status,
-                sourceId: run.id,
-                sourceLabel: 'Dream',
-                model: run.model,
-                dreamChanges: changes.map(dreamChangeForActivity),
-            })
-        }
-
-        const searched = items.filter((item) => !searchQuery || activitySearchText(item).includes(searchQuery))
+        const searched = items.filter((item) => (!statusFilter || item.status === statusFilter)
+            && (!searchQuery || activitySearchText(item).includes(searchQuery)))
         const totalsByKind = searched.reduce<ActivityTotalsByKind>((totals, item) => {
             totals[item.kind] += 1
             return totals
@@ -707,6 +791,6 @@ export async function registerActivityRoutes(app: FastifyInstance): Promise<void
             })
         const page = sorted.slice(offset, offset + limit)
 
-        return { items: page, hasMore: offset + limit < sorted.length, total: sorted.length, totalsByKind }
+        return { items: page, hasMore: offset + limit < sorted.length, total: sorted.length, ...(includeTotals ? { totalsByKind } : {}) }
     })
 }

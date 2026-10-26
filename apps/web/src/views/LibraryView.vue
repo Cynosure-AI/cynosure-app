@@ -205,6 +205,7 @@ async function loadEntries(reset = false): Promise<void> {
         offset,
         types: ['artifact'],
         search: searchQuery.value,
+        totals: false,
       })
       if (generation !== loadGeneration) return
       activityItems.value = reset ? response.items : [...activityItems.value, ...response.items]

@@ -203,9 +203,12 @@ export function listChatEvents(db: Database.Database, conversationId: string, af
   return rows.map((row) => ({ ...hydrate(JSON.parse(row.event_json) as ChatEventPayload), version: 1, conversationId, executionId: row.execution_id, sequence: row.sequence, createdAt: row.created_at }) as ChatEvent)
 }
 
-// Tool output is saved on its message row. Settled events drop their copy of
-// it and are filled back in from that row whenever they are read.
-type StoredToolResult = Extract<ChatEventPayload, { type: 'tool-results' }>['items'][number] & { outputInMessage?: true }
+// Message content and tool call arguments are saved on message rows. Settled
+// events drop their copy and are filled back in from those rows when read.
+type ToolResultsPayload = Extract<ChatEventPayload, { type: 'tool-results' }>
+type ToolCallsPayload = Extract<ChatEventPayload, { type: 'tool-calls' }>
+type StoredToolResult = ToolResultsPayload['items'][number] & { outputInMessage?: true; contentInMessage?: true }
+type StoredToolCall = ToolCallsPayload['items'][number] & { argumentsInMessage?: true }
 type StoredTranscriptItem = Extract<ChatEventPayload, { type: 'transcript-item' }> & { contentInMessage?: true }
 
 function textOf(blocks: ContentBlock[]): string {
@@ -217,79 +220,128 @@ function parseBlocks(json: string | null): ContentBlock[] | null {
   try { return JSON.parse(json) as ContentBlock[] } catch { return null }
 }
 
-function toolMessageLookup(db: Database.Database, conversationId: string) {
-  const byId = db.prepare("SELECT content_blocks_json FROM messages WHERE id = ? AND conversation_id = ? AND role = 'tool'").pluck()
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+function messageLookup(db: Database.Database, conversationId: string) {
+  const byId = db.prepare('SELECT content_blocks_json FROM messages WHERE id = ? AND conversation_id = ?').pluck()
   const byCallId = db.prepare("SELECT content_blocks_json FROM messages WHERE conversation_id = ? AND tool_call_id = ? AND role = 'tool' LIMIT 2").pluck()
+  let callArguments: Map<string, string | null> | undefined
   return {
-    byId: (id: string) => parseBlocks(byId.get(id, conversationId) as string | null),
+    blocksById: (id: string) => parseBlocks(byId.get(id, conversationId) as string | null),
     // A call ID only identifies a message when it is unique in the conversation.
-    byCallId: (callId: string) => {
+    toolBlocksByCallId: (callId: string) => {
       const rows = byCallId.all(conversationId, callId) as Array<string | null>
       return rows.length === 1 ? parseBlocks(rows[0]) : null
+    },
+    argumentsByCallId: (callId: string): string | null => {
+      if (!callArguments) {
+        callArguments = new Map()
+        const rows = db.prepare('SELECT tool_calls_json FROM messages WHERE conversation_id = ? AND tool_calls_json IS NOT NULL').pluck().all(conversationId) as string[]
+        for (const json of rows) {
+          let calls: Array<{ id?: string; function?: { arguments?: string } }> = []
+          try { calls = JSON.parse(json) } catch { continue }
+          for (const call of calls) {
+            if (!call.id || typeof call.function?.arguments !== 'string') continue
+            callArguments.set(call.id, callArguments.has(call.id) ? null : call.function.arguments)
+          }
+        }
+      }
+      return callArguments.get(callId) ?? null
     },
   }
 }
 
 function toolOutputHydrator(db: Database.Database, conversationId: string): (payload: ChatEventPayload) => ChatEventPayload {
-  let lookup: ReturnType<typeof toolMessageLookup> | undefined
+  let lookup: ReturnType<typeof messageLookup> | undefined
+  const messages = () => lookup ??= messageLookup(db, conversationId)
   return (payload) => {
-    if (payload.type === 'tool-results' && payload.items.some((item) => (item as StoredToolResult).outputInMessage)) {
-      lookup ??= toolMessageLookup(db, conversationId)
+    if (payload.type === 'tool-results' && payload.items.some((item) => (item as StoredToolResult).outputInMessage || (item as StoredToolResult).contentInMessage)) {
       return { ...payload, items: payload.items.map((item) => {
-        const { outputInMessage, ...rest } = item as StoredToolResult
-        if (!outputInMessage) return item
-        const blocks = lookup!.byCallId(item.callId)
-        return blocks ? { ...rest, content: [{ type: 'text' as const, text: textOf(blocks) }, ...rest.content] } : rest
+        const { outputInMessage, contentInMessage, ...rest } = item as StoredToolResult
+        if (!outputInMessage && !contentInMessage) return item
+        const blocks = messages().toolBlocksByCallId(item.callId)
+        if (!blocks) return rest
+        return { ...rest, content: contentInMessage ? blocks : [{ type: 'text' as const, text: textOf(blocks) }, ...rest.content] }
+      }) }
+    }
+    if (payload.type === 'tool-calls' && payload.items.some((item) => (item as StoredToolCall).argumentsInMessage)) {
+      return { ...payload, items: payload.items.map((item) => {
+        const { argumentsInMessage, ...rest } = item as StoredToolCall
+        return argumentsInMessage ? { ...rest, arguments: messages().argumentsByCallId(item.callId) ?? rest.arguments } : item
       }) }
     }
     if (payload.type === 'transcript-item') {
       const { contentInMessage, ...rest } = payload as StoredTranscriptItem
       if (!contentInMessage || rest.item.type !== 'message') return payload
-      lookup ??= toolMessageLookup(db, conversationId)
-      return { ...rest, item: { ...rest.item, content: lookup.byId(rest.item.id) ?? rest.item.content } }
+      return { ...rest, item: { ...rest.item, content: messages().blocksById(rest.item.id) ?? rest.item.content } }
     }
     return payload
   }
 }
 
+function slimToolResults(payload: ToolResultsPayload, messages: ReturnType<typeof messageLookup>): ChatEventPayload | null {
+  let changed = false
+  const items = payload.items.map((stored) => {
+    const { outputInMessage, contentInMessage, ...item } = stored as StoredToolResult
+    if (contentInMessage) return stored
+    const blocks = messages.toolBlocksByCallId(item.callId)
+    if (!blocks) return stored
+    const full = outputInMessage ? [{ type: 'text' as const, text: textOf(blocks) }, ...item.content] : item.content
+    if (sameJson(full, blocks)) {
+      changed = true
+      return { ...item, content: [], contentInMessage: true }
+    }
+    // Media or structured output differs from the saved row; drop only the matching text.
+    const [first, ...others] = item.content
+    if (outputInMessage || first?.type !== 'text' || others.some((block) => block.type === 'text') || textOf(blocks) !== first.text) return stored
+    changed = true
+    return { ...item, content: others, outputInMessage: true }
+  })
+  return changed ? { ...payload, items } as ChatEventPayload : null
+}
+
+function slimToolCalls(payload: ToolCallsPayload, messages: ReturnType<typeof messageLookup>): ChatEventPayload | null {
+  let changed = false
+  const items = payload.items.map((item) => {
+    if ((item as StoredToolCall).argumentsInMessage || messages.argumentsByCallId(item.callId) !== item.arguments) return item
+    changed = true
+    return { ...item, arguments: '', argumentsInMessage: true }
+  })
+  return changed ? { ...payload, items } as ChatEventPayload : null
+}
+
 /**
- * Drop the tool output copies a settled turn left in the event log. Each copy
- * is removed only after it is confirmed identical to the saved tool message,
- * so reading the event back yields exactly what was stored.
+ * Drop the copies of saved messages and tool calls a settled turn left in the
+ * event log. Each copy is removed only after it is confirmed identical to the
+ * saved row, so reading the event back yields exactly what was stored.
  */
-export function slimSettledToolEvents(db: Database.Database, conversationId: string): number {
+export function slimSettledChatEvents(db: Database.Database, conversationId: string): number {
   const cursor = latestMessageEventSequence(db, conversationId)
   if (!cursor) return 0
   const rows = db.prepare(`
     SELECT sequence, event_json FROM chat_events
     WHERE conversation_id = ? AND sequence <= ? AND (
-      (json_extract(event_json, '$.type') = 'tool-results' AND json_extract(event_json, '$.items[0].outputInMessage') IS NULL)
-      OR (json_extract(event_json, '$.type') = 'transcript-item' AND json_extract(event_json, '$.item.role') = 'tool'
+      (json_extract(event_json, '$.type') = 'tool-results' AND json_extract(event_json, '$.items[0].contentInMessage') IS NULL)
+      OR (json_extract(event_json, '$.type') = 'tool-calls' AND json_extract(event_json, '$.items[0].argumentsInMessage') IS NULL)
+      OR (json_extract(event_json, '$.type') = 'transcript-item' AND json_extract(event_json, '$.item.type') = 'message'
         AND json_extract(event_json, '$.contentInMessage') IS NULL)
     )
   `).all(conversationId, cursor) as Array<{ sequence: number; event_json: string }>
   if (!rows.length) return 0
-  const lookup = toolMessageLookup(db, conversationId)
+  const messages = messageLookup(db, conversationId)
   const update = db.prepare('UPDATE chat_events SET event_json = ? WHERE sequence = ?')
   let slimmed = 0
   db.transaction(() => {
     for (const row of rows) {
       const payload = JSON.parse(row.event_json) as ChatEventPayload
       let next: ChatEventPayload | null = null
-      if (payload.type === 'tool-results') {
-        let changed = false
-        const items = payload.items.map((item) => {
-          const [first, ...others] = item.content
-          if ((item as StoredToolResult).outputInMessage || first?.type !== 'text' || others.some((block) => block.type === 'text')) return item
-          const blocks = lookup.byCallId(item.callId)
-          if (!blocks || textOf(blocks) !== first.text) return item
-          changed = true
-          return { ...item, content: others, outputInMessage: true }
-        })
-        if (changed) next = { ...payload, items } as ChatEventPayload
-      } else if (payload.type === 'transcript-item' && payload.item.type === 'message') {
-        const blocks = lookup.byId(payload.item.id)
-        if (blocks && JSON.stringify(blocks) === JSON.stringify(payload.item.content)) {
+      if (payload.type === 'tool-results') next = slimToolResults(payload, messages)
+      else if (payload.type === 'tool-calls') next = slimToolCalls(payload, messages)
+      else if (payload.type === 'transcript-item' && payload.item.type === 'message') {
+        const blocks = messages.blocksById(payload.item.id)
+        if (blocks && sameJson(blocks, payload.item.content)) {
           next = { ...payload, item: { ...payload.item, content: [] }, contentInMessage: true } as ChatEventPayload
         }
       }
@@ -304,7 +356,7 @@ export function slimSettledToolEvents(db: Database.Database, conversationId: str
 /** Compact one conversation's event log once its turn has settled. */
 export function compactSettledChatEvents(db: Database.Database, conversationId: string): void {
   pruneSettledStreamDeltas(db, conversationId)
-  slimSettledToolEvents(db, conversationId)
+  slimSettledChatEvents(db, conversationId)
 }
 
 /** Sequence of the latest saved message; clients resume event replay after it when opening a chat. */

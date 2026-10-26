@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
-import { contentBlocksToProviderContent, executionUpdateToChatPayload, latestMessageEventSequence, listChatEvents, messageContentBlocks, messageContentJson, messageTextSql, persistChatEvent, pruneSettledStreamDeltas, slimSettledToolEvents, TOOL_CONTENT_PREVIEW_CHARS, toolContentPreview } from './transcript.js'
+import { contentBlocksToProviderContent, executionUpdateToChatPayload, latestMessageEventSequence, listChatEvents, messageContentBlocks, messageContentJson, messageTextSql, persistChatEvent, pruneSettledStreamDeltas, slimSettledChatEvents, TOOL_CONTENT_PREVIEW_CHARS, toolContentPreview } from './transcript.js'
 
 describe('canonical chat transcript', () => {
   test('adapts persisted media fields without losing their order within a modality', () => {
@@ -76,13 +76,24 @@ describe('canonical chat transcript', () => {
       item: { type: 'message', id: 'm-same', role: 'tool', toolCallId: 'call-same', createdAt: 1,
         content: [{ type: 'text', text: 'full output' }, { type: 'image', artifactId: '/img', url: '/img' }] } } })!
 
-    expect(slimSettledToolEvents(db, 'c1')).toBe(2)
+    const args = '{"query":"unique search arguments"}'
+    db.prepare(`INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, tool_calls_json, created_at)
+      VALUES ('m-assistant', 'c1', 'assistant', 'Searching now', ?, ?, 1)`)
+      .run(JSON.stringify([{ type: 'text', text: 'Searching now' }, { type: 'reasoning', text: 'long private reasoning' }]),
+        JSON.stringify([{ id: 'call-same', type: 'function', function: { name: 'search', arguments: args } }]))
+    const calls = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'tool-calls', items: [{
+      type: 'tool-call', id: 'call:call-same', executionId: 'e1', taskId: 't1', iteration: 1, callId: 'call-same', name: 'search', arguments: args, createdAt: 1 }] } })!
+    const reply = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'transcript-item',
+      item: { type: 'message', id: 'm-assistant', role: 'assistant', createdAt: 1,
+        content: [{ type: 'text', text: 'Searching now' }, { type: 'reasoning', text: 'long private reasoning' }] } } })!
+
+    expect(slimSettledChatEvents(db, 'c1')).toBe(4)
     const stored = db.prepare('SELECT event_json FROM chat_events ORDER BY sequence').pluck().all() as string[]
-    expect(stored.every((json) => !json.includes('full output'))).toBe(true)
+    expect(stored.every((json) => !json.includes('full output') && !json.includes('unique search arguments') && !json.includes('private reasoning'))).toBe(true)
     // A copy that differs from the saved message is the only record of what was shown, so it stays.
     expect(stored[0]).toContain('what the card showed')
-    expect(listChatEvents(db, 'c1')).toEqual([results, item])
-    expect(slimSettledToolEvents(db, 'c1')).toBe(0)
+    expect(listChatEvents(db, 'c1')).toEqual([results, item, calls, reply])
+    expect(slimSettledChatEvents(db, 'c1')).toBe(0)
     db.close()
   })
 

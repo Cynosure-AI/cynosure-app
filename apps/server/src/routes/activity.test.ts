@@ -142,6 +142,36 @@ describe('activity artifact discovery', () => {
         expect(body.items[0].artifacts).toEqual([expect.objectContaining({ label: 'late-report.docx' })])
     })
 
+    test('reuses the artifact scan until messages change, and builds only listed kinds without totals', async () => {
+        const now = Date.now()
+        const db = getDb()
+        db.prepare("INSERT INTO conversations (id, title, origin, created_at, updated_at) VALUES ('conversation-1', 'Images', 'chat', ?, ?)").run(now, now)
+        insertMediaMessage(db, 'first', 'conversation-1', 'assistant', 'One.', now + 1, ['https://example.com/one.png'])
+        const app = Fastify()
+        await app.register(registerActivityRoutes, { prefix: '/api/activity' })
+        const artifactIds = async () => ((await app.inject({ method: 'GET', url: '/api/activity?types=artifact' })).json() as { items: { sourceId: string }[] })
+            .items.map((item) => item.sourceId)
+
+        expect(await artifactIds()).toEqual(['first'])
+        insertMediaMessage(db, 'second', 'conversation-1', 'assistant', 'Two.', now + 2, ['https://example.com/two.png'])
+        expect(await artifactIds()).toEqual(['second', 'first'])
+        // A retry truncates and rewrites the newest messages; the cached scan must follow.
+        db.prepare("DELETE FROM messages WHERE id = 'second'").run()
+        expect(await artifactIds()).toEqual(['first'])
+        insertMediaMessage(db, 'second', 'conversation-1', 'assistant', 'Two again.', now + 2, ['https://example.com/two.png'])
+        expect(await artifactIds()).toEqual(['second', 'first'])
+        db.prepare("UPDATE conversations SET title = 'Renamed' WHERE id = 'conversation-1'").run()
+        const renamed = (await app.inject({ method: 'GET', url: '/api/activity?types=artifact' })).json() as { items: { description: string }[] }
+        expect(renamed.items[0].description).toBe('Renamed')
+
+        const withoutTotals = (await app.inject({ method: 'GET', url: '/api/activity?types=chat&totals=0' })).json() as { items: { kind: string }[]; totalsByKind?: unknown }
+        expect(withoutTotals.items.map((item) => item.kind)).toEqual(['chat'])
+        expect(withoutTotals.totalsByKind).toBeUndefined()
+        const withTotals = (await app.inject({ method: 'GET', url: '/api/activity?types=chat' })).json() as { totalsByKind: Record<string, number> }
+        expect(withTotals.totalsByKind).toMatchObject({ chat: 1, artifact: 2 })
+        await app.close()
+    })
+
     test('keeps older artifacts discoverable and paginated as ordinary messages accumulate', async () => {
         const db = getDb()
         const now = Date.now()

@@ -91,7 +91,7 @@ async function loadEntries(reset = true): Promise<void> {
       uploadTotal.value = response.total
     } else {
       const offset = reset ? 0 : artifactItems.value.length
-      const response = await api.activity.list({ limit: PAGE_SIZE, offset, types: ['artifact'], search: query.value })
+      const response = await api.activity.list({ limit: PAGE_SIZE, offset, types: ['artifact'], search: query.value, totals: false })
       if (sequence !== requestSequence) return
       artifactItems.value = reset ? response.items : [...artifactItems.value, ...response.items]
       artifactsHaveMore.value = Boolean(response.hasMore)

@@ -103,8 +103,8 @@ async function loadInstances() {
 
 async function loadDreamRuns() {
   try {
-    const result = await api.activity.list({ limit: 100, types: ["dream"] });
-    activeDreamRuns.value = result.items.filter((item) => item.status === "running");
+    const result = await api.activity.list({ limit: 100, types: ["dream"], totals: false, status: "running" });
+    activeDreamRuns.value = result.items;
   } catch {
     // Keep the last known state through a transient connection failure.
   }

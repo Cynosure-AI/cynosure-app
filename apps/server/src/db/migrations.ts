@@ -803,6 +803,34 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 42,
+        description: 'Track a per-conversation message version for cached derived views',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS message_versions (
+                    conversation_id TEXT PRIMARY KEY,
+                    version INTEGER NOT NULL
+                );
+                INSERT OR IGNORE INTO message_versions (conversation_id, version)
+                    SELECT DISTINCT conversation_id, 1 FROM messages;
+                CREATE TRIGGER IF NOT EXISTS message_versions_insert AFTER INSERT ON messages BEGIN
+                    INSERT INTO message_versions (conversation_id, version) VALUES (NEW.conversation_id, 1)
+                        ON CONFLICT(conversation_id) DO UPDATE SET version = version + 1;
+                END;
+                CREATE TRIGGER IF NOT EXISTS message_versions_update AFTER UPDATE ON messages BEGIN
+                    INSERT INTO message_versions (conversation_id, version) VALUES (NEW.conversation_id, 1)
+                        ON CONFLICT(conversation_id) DO UPDATE SET version = version + 1;
+                    INSERT INTO message_versions (conversation_id, version) VALUES (OLD.conversation_id, 1)
+                        ON CONFLICT(conversation_id) DO UPDATE SET version = version + 1;
+                END;
+                CREATE TRIGGER IF NOT EXISTS message_versions_delete AFTER DELETE ON messages BEGIN
+                    INSERT INTO message_versions (conversation_id, version) VALUES (OLD.conversation_id, 1)
+                        ON CONFLICT(conversation_id) DO UPDATE SET version = version + 1;
+                END;
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

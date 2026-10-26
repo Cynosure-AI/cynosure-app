@@ -514,12 +514,15 @@ export const api = {
   },
 
   activity: {
-    list: (opts?: { limit?: number; offset?: number; types?: ActivityKind[]; search?: string }) => {
+    /** `totals: false` skips per-kind counts, so only the listed kinds are computed. */
+    list: (opts?: { limit?: number; offset?: number; types?: ActivityKind[]; search?: string; totals?: boolean; status?: string }) => {
       const params = new URLSearchParams()
       if (opts?.limit) params.set('limit', String(opts.limit))
       if (opts?.offset) params.set('offset', String(opts.offset))
       if (opts?.types?.length) params.set('types', opts.types.join(','))
       if (opts?.search?.trim()) params.set('search', opts.search.trim())
+      if (opts?.totals === false) params.set('totals', '0')
+      if (opts?.status) params.set('status', opts.status)
       const qs = params.toString()
       return get<{ items: ActivityItem[]; hasMore?: boolean; total?: number; totalsByKind?: ActivityTotalsByKind }>(`/api/activity${qs ? `?${qs}` : ''}`)
     },
