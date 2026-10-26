@@ -6,11 +6,18 @@ vi.mock('../../db/database.js', () => ({
   getDb: () => dbHolder.current,
 }))
 
-import { AgentExecutor } from './agent-executor.js'
+import {
+  AgentExecutor,
+  MAIN_AGENT_MAX_ROUNDS,
+  MaxToolRoundsExceededError,
+  OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS,
+  type AgentExecutorConfig,
+} from './agent-executor.js'
 import { applyTodoUpdate, createPlanningRun, getPlanningState } from './planning-state.js'
+import { getEventBus } from '../telemetry/event-bus.js'
 import { makePlanningTools } from '../tools/builtin/planning-tools.js'
 import type { LLMGateway } from '../gateway/gateway.js'
-import type { StreamChunk, ToolDefinition } from '../gateway/providers/base.provider.js'
+import type { CompletionRequest, StreamChunk, ToolDefinition } from '../gateway/providers/base.provider.js'
 
 describe('AgentExecutor planning recovery', () => {
   beforeEach(() => {
@@ -32,6 +39,129 @@ describe('AgentExecutor planning recovery', () => {
   })
 
   afterEach(() => dbHolder.current.close())
+
+  describe('tool-round limit continuations', () => {
+    function setup(overrides: Partial<AgentExecutorConfig> = {}) {
+      const run = createPlanningRun('planning-cap', 'Finish the task')
+      applyTodoUpdate(run.runId, { tasks: [{ title: 'Finish it', status: 'in_progress' }] })
+      const execute = vi.fn(async () => ({ success: true, output: 'work done' }))
+      const work: ToolDefinition = {
+        name: 'work', description: 'Work on the task', parameters: { type: 'object', properties: {} }, timeout: 1_000,
+        execute,
+      }
+      const streamComplete = vi.fn((_request: CompletionRequest) => (async function* (): AsyncIterable<StreamChunk> {
+        yield { toolCalls: [{ id: `work-${streamComplete.mock.calls.length}`, type: 'function', function: { name: 'work', arguments: '{}' } }], done: true }
+      })())
+      const broadcast = vi.fn()
+      const events = vi.spyOn(getEventBus(), 'emit')
+      const executor = new AgentExecutor({
+        gateway: { streamComplete } as unknown as LLMGateway,
+        tools: [work, ...makePlanningTools(run.runId)],
+        conversationId: run.conversationId,
+        broadcast,
+        model: 'test',
+        maxRounds: 1,
+        saveMessages: false,
+        planningRunId: run.runId,
+        isPrimaryExecutor: true,
+        ...overrides,
+      })
+      const capContinuations = () => events.mock.calls.filter(([event, payload]) =>
+        event === 'step:status' && (payload as { message?: string }).message?.includes('tool-round limit reached'))
+      return { run, executor, execute, streamComplete, broadcast, capContinuations }
+    }
+
+    test.each(['single', 'per-round'] as const)('continues past the default cap with open tasks (%s streams)', async (streamMode) => {
+      const { run, executor, execute, streamComplete, capContinuations } = setup({ maxRounds: MAIN_AGENT_MAX_ROUNDS, streamMode })
+      streamComplete.mockImplementation((request) => (async function* (): AsyncIterable<StreamChunk> {
+        const call = streamComplete.mock.calls.length
+        if (call === MAIN_AGENT_MAX_ROUNDS + 1) {
+          // The pending update must execute in the continuation, with prior results intact.
+          expect(request.messages.filter(({ role }) => role === 'tool')).toHaveLength(MAIN_AGENT_MAX_ROUNDS)
+          yield {
+            toolCalls: [{ id: 'finish', type: 'function', function: {
+              name: 'todo_update', arguments: '{"tasks":[{"title":"Finish it","status":"completed"}]}',
+            } }], done: true,
+          }
+        } else if (call > MAIN_AGENT_MAX_ROUNDS + 1) {
+          yield { content: 'finished', done: true }
+        } else {
+          yield { toolCalls: [{ id: `work-${call}`, type: 'function', function: { name: 'work', arguments: '{}' } }], done: true }
+        }
+      })())
+
+      await expect(executor.run([{ role: 'user', content: 'go' }])).resolves.toMatchObject({
+        content: 'finished', toolRounds: MAIN_AGENT_MAX_ROUNDS + 1,
+      })
+      expect(execute).toHaveBeenCalledTimes(MAIN_AGENT_MAX_ROUNDS)
+      expect(streamComplete).toHaveBeenCalledTimes(MAIN_AGENT_MAX_ROUNDS + 2)
+      expect(getPlanningState(run.runId)?.items[0].status).toBe('completed')
+      expect(capContinuations()).toHaveLength(1)
+    })
+
+    test.each(['completed', 'blocked', 'cancelled', 'empty', 'missing', 'empty-goal', 'non-primary'] as const)(
+      'preserves the cap error for a %s plan', async (plan) => {
+        const { run, executor, execute, streamComplete, broadcast, capContinuations } = setup({
+          ...(plan === 'missing' ? { planningRunId: undefined } : {}),
+          ...(plan === 'empty-goal' ? { planningGoal: true } : {}),
+          ...(plan === 'non-primary' ? { isPrimaryExecutor: false } : {}),
+        })
+        if (plan === 'empty' || plan === 'empty-goal') applyTodoUpdate(run.runId, { tasks: [] })
+        if (plan === 'completed' || plan === 'blocked' || plan === 'cancelled') {
+          // Check the list after the last allowed tool round, not just at run start.
+          execute.mockImplementation(async () => {
+            applyTodoUpdate(run.runId, { tasks: [{ title: 'Finish it', status: plan }] })
+            return { success: true, output: 'closed' }
+          })
+        }
+
+        await expect(executor.run([{ role: 'user', content: 'go' }])).rejects.toThrow(
+          'Agent exceeded the maximum of 1 tool-calling rounds before producing a final response.',
+        )
+        expect(execute).toHaveBeenCalledTimes(1)
+        expect(streamComplete).toHaveBeenCalledTimes(2)
+        expect(capContinuations()).toHaveLength(0)
+        expect(broadcast).toHaveBeenCalledWith('chat:event', expect.objectContaining({
+          payload: expect.objectContaining({ type: 'stream-end' }),
+        }))
+      },
+    )
+
+    test.each([false, true])('never refreshes the cap continuation bound after tool work (model recovery: %s)', async (recoverModel) => {
+      const { executor, execute, streamComplete, capContinuations } = setup({ maxRounds: 2 })
+      if (recoverModel) {
+        streamComplete.mockImplementation(() => (async function* (): AsyncIterable<StreamChunk> {
+          if (streamComplete.mock.calls.length % 2 === 0) yield { content: 'stopped early', done: true }
+          else yield { toolCalls: [{ id: `work-${streamComplete.mock.calls.length}`, type: 'function', function: { name: 'work', arguments: '{}' } }], done: true }
+        })())
+      }
+
+      await expect(executor.run([{ role: 'user', content: 'go' }])).rejects.toBeInstanceOf(MaxToolRoundsExceededError)
+      const totalRounds = 2 * (1 + OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS)
+      expect(execute).toHaveBeenCalledTimes(totalRounds)
+      expect(streamComplete).toHaveBeenCalledTimes(1 + totalRounds * (recoverModel ? 2 : 1))
+      expect(capContinuations()).toHaveLength(OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS)
+    })
+
+    test('allows the plan to finish on the last permitted continuation round', async () => {
+      const { run, executor, execute, streamComplete, capContinuations } = setup()
+      execute.mockImplementation(async () => {
+        if (execute.mock.calls.length === 1 + OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS) {
+          applyTodoUpdate(run.runId, { tasks: [{ title: 'Finish it', status: 'completed' }] })
+        }
+        return { success: true, output: 'worked' }
+      })
+      streamComplete.mockImplementation(() => (async function* (): AsyncIterable<StreamChunk> {
+        if (getPlanningState(run.runId)?.items[0].status === 'completed') yield { content: 'finished', done: true }
+        else yield { toolCalls: [{ id: `work-${streamComplete.mock.calls.length}`, type: 'function', function: { name: 'work', arguments: '{}' } }], done: true }
+      })())
+
+      await expect(executor.run([{ role: 'user', content: 'go' }])).resolves.toMatchObject({
+        content: 'finished', toolRounds: 1 + OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS,
+      })
+      expect(capContinuations()).toHaveLength(OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS)
+    })
+  })
 
   test('allows more than one consecutive continuation before the plan resumes', async () => {
     const run = createPlanningRun('planning-retries', 'Finish the task')

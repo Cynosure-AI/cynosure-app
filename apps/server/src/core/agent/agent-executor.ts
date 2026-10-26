@@ -24,8 +24,11 @@ import { getPlanningState } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
 import { preflightFileToolAccess, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
 
-/** Maximum tool-use rounds for the main (orchestrator) agent per request. */
+/** Maximum tool-use rounds for the main agent before a planning continuation is needed. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
+
+/** Additional tool-round budgets allowed for an unfinished task list in one turn. */
+export const OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS = 3
 
 /** One retry for model-only continuation rounds after tools have already run. */
 const MODEL_ROUND_MAX_ATTEMPTS = 2
@@ -63,7 +66,7 @@ export interface AgentExecutorConfig {
     model?: string
     /** Whether to require HITL approval for tool calls (default: false) */
     hitl?: boolean
-    /** Maximum number of tool-calling rounds (default: 50) */
+    /** Tool-calling rounds per budget; unfinished task lists may continue (default: 50). */
     maxRounds?: number
     /** LLM temperature (default: provider default) */
     temperature?: number
@@ -265,7 +268,7 @@ export class AgentExecutor {
     /**
      * Run the agent execution loop.
      * Streams the initial LLM response, then executes tool calls in a loop
-     * until the LLM responds without tool calls or max rounds is reached.
+     * until the LLM finishes its plan or the bounded tool-round budgets are exhausted.
      */
     async run(messages: ChatMessage[]): Promise<AgentExecutorResult> {
         const { conversationId } = this.config
@@ -286,6 +289,8 @@ export class AgentExecutor {
         let pendingToolCalls: ToolCall[] | undefined
         let toolRounds = 0
         let openPlanRecoveryAttempts = 0
+        let toolRoundContinuations = 0
+        let toolRoundLimit = this.config.maxRounds
 
         const primaryStreamId = this._streamId
         let activeStreamId = primaryStreamId
@@ -317,13 +322,7 @@ export class AgentExecutor {
                 throw new IncompletePlanningRunError()
             }
             openPlanRecoveryAttempts++
-            this.emit('step:status', {
-                taskId,
-                conversationId,
-                iteration: 1,
-                status: 'continuing',
-                message: `Open tasks remain — starting continuation round ${openPlanRecoveryAttempts}.`,
-            })
+            this.emitPlanningContinuation(taskId, 1, openPlanRecoveryAttempts)
             currentMessages = this.withOpenPlanRecoveryPrompt(currentMessages, fullContent)
             let recoveryResult: Awaited<ReturnType<AgentExecutor['streamLLMRound']>>
             try {
@@ -360,8 +359,17 @@ export class AgentExecutor {
         let loopCompleted = false
 
         try {
-            for (let round = 0; round < this.config.maxRounds && pendingToolCalls?.length; round++) {
+            for (let round = 0; pendingToolCalls?.length; round++) {
                 if (this.config.signal?.aborted) break
+                if (round >= toolRoundLimit) {
+                    if (toolRoundContinuations >= OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS
+                        || !this.hasOpenPlanningItems({ requireTaskList: true })) break
+                    toolRoundContinuations++
+                    toolRoundLimit += this.config.maxRounds
+                    this.emitPlanningContinuation(taskId, round + 1, toolRoundContinuations, true)
+                    // Keep pending tool calls and their context: the model has
+                    // already chosen how to continue, so no recovery prompt is needed.
+                }
                 if (await this.applyPendingSteering(currentMessages, activeStreamId)) {
                     const steered = await this.streamLLMRound(currentMessages, activeStreamId)
                     fullContent = steered.content
@@ -485,13 +493,7 @@ export class AgentExecutor {
                         throw new IncompletePlanningRunError()
                     }
                     openPlanRecoveryAttempts++
-                    this.emit('step:status', {
-                        taskId,
-                        conversationId,
-                        iteration: round + 2,
-                        status: 'continuing',
-                        message: `Open tasks remain — starting continuation round ${openPlanRecoveryAttempts}.`,
-                    })
+                    this.emitPlanningContinuation(taskId, round + 2, openPlanRecoveryAttempts)
                     currentMessages = this.withOpenPlanRecoveryPrompt(currentMessages, fullContent)
 
                     const recoveryResult = await this.streamLLMRound(currentMessages, activeStreamId)
@@ -1175,14 +1177,26 @@ export class AgentExecutor {
         return name === 'schedule_wait'
     }
 
-    private hasOpenPlanningItems(): boolean {
+    private emitPlanningContinuation(taskId: string, iteration: number, attempt: number, toolLimitReached = false): void {
+        this.emit('step:status', {
+            taskId,
+            conversationId: this.config.conversationId,
+            iteration,
+            status: 'continuing',
+            message: toolLimitReached
+                ? `Open tasks remain — tool-round limit reached, starting continuation round ${attempt}/${OPEN_PLAN_MAX_TOOL_ROUND_CONTINUATIONS}.`
+                : `Open tasks remain — starting continuation round ${attempt}.`,
+        })
+    }
+
+    private hasOpenPlanningItems({ requireTaskList = false }: { requireTaskList?: boolean } = {}): boolean {
         const runId = this.config.planningRunId
         if (!runId || !this.config.isPrimaryExecutor) return false
         // Ending the turn is how a wait starts; the open tasks are still being worked on.
         if (this.waitScheduled) return false
         const state = getPlanningState(runId)
         if (!state || state.status !== 'running') return false
-        if (this.config.planningGoal && state.items.length === 0) return true
+        if (this.config.planningGoal && state.items.length === 0) return !requireTaskList
         return state.items.some((item) => item.status === 'pending' || item.status === 'in_progress')
     }
 
