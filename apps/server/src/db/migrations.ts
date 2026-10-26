@@ -831,6 +831,17 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 43,
+        description: 'Persist remote model catalogues and pricing across restarts',
+        up: (db) => db.exec(`
+            CREATE TABLE IF NOT EXISTS catalog_cache (
+                key TEXT PRIMARY KEY,
+                value_json TEXT NOT NULL,
+                fetched_at INTEGER NOT NULL
+            )
+        `),
+    },
 ]
 
 /** The schema version this build produces and expects. */

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { getDb } from '../db/database.js'
 import { ensurePricingLoaded, getModelCost, type ModelCost } from '../core/model-dev-fetcher.js'
 import { getGateway } from '../core/gateway/gateway.js'
+import { readCatalogEntry, writeCatalogEntry } from '../core/catalog-cache.js'
 import type { ModelPricing } from '../core/gateway/providers/base.provider.js'
 
 interface ModelUsage {
@@ -471,6 +472,7 @@ function estimateTokenCost(pricing: ModelCost, usage: {
 // Gateway prices change rarely, but a cold lookup can take seconds (catalogue
 // fetches). Known prices are served at once and refreshed in the background;
 // failed lookups are remembered too, so they are not retried on every visit.
+// Both survive restarts through the catalogue cache.
 const GATEWAY_COST_TTL_MS = 6 * 60 * 60 * 1000
 // How long a visit waits for prices it is the first to look up (a normal cold
 // lookup takes under a second). Slower results are kept for the next load;
@@ -484,7 +486,11 @@ function lookupGatewayCost(key: string, provider: string, model: string): Promis
     if (!lookup) {
         lookup = getGateway().getModelInfo(model, provider)
             .then((info) => modelCostFromPricing(info.pricing), () => null)
-            .then((cost) => { gatewayCostCache.set(key, { cost, ts: Date.now() }) })
+            .then((cost) => {
+                const entry = { cost, ts: Date.now() }
+                gatewayCostCache.set(key, entry)
+                writeCatalogEntry(`usage-cost:${key}`, cost, entry.ts)
+            })
             .finally(() => gatewayCostLookups.delete(key))
         gatewayCostLookups.set(key, lookup)
     }
@@ -494,7 +500,14 @@ function lookupGatewayCost(key: string, provider: string, model: string): Promis
 async function resolveGatewayCosts(models: Map<string, { provider: string; model: string }>): Promise<Map<string, ModelCost | null>> {
     const pending: Promise<void>[] = []
     for (const [key, { provider, model }] of models) {
-        const cached = gatewayCostCache.get(key)
+        let cached = gatewayCostCache.get(key)
+        if (!cached) {
+            const persisted = readCatalogEntry<ModelCost | null>(`usage-cost:${key}`)
+            if (persisted) {
+                cached = { cost: persisted.value, ts: persisted.fetchedAt }
+                gatewayCostCache.set(key, cached)
+            }
+        }
         // A lookup an earlier visit started is not waited for again; it finishes in the background.
         if (!cached && !gatewayCostLookups.has(key)) pending.push(lookupGatewayCost(key, provider, model))
         else if (!cached) continue
@@ -514,6 +527,19 @@ async function resolveGatewayCosts(models: Map<string, { provider: string; model
         if (cached) costs.set(key, cached.cost)
     }
     return costs
+}
+
+/** Refresh prices for recently used gateway models at startup, so the first usage visit is warm. */
+export async function warmUsagePricing(days = 30): Promise<void> {
+    const db = getDb()
+    const gatewayProviders = new Set((db.prepare("SELECT id FROM providers WHERE type IN ('openrouter', 'requesty')").pluck().all()) as string[])
+    const rows = db.prepare(`
+        SELECT DISTINCT provider, model FROM messages
+        WHERE role = 'assistant' AND provider IS NOT NULL AND model IS NOT NULL AND created_at >= ?
+    `).all(Date.now() - days * 86_400_000) as Array<{ provider: string; model: string }>
+    const models = new Map(rows.filter((row) => gatewayProviders.has(row.provider))
+        .map((row) => [`${row.provider}\u0000${row.model}`, row]))
+    await resolveGatewayCosts(models)
 }
 
 function modelCostFromPricing(pricing: ModelPricing | undefined): ModelCost | null {

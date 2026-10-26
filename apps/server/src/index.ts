@@ -42,7 +42,7 @@ import { registerChannelRoutes } from './routes/channels.js'
 import { registerMemoryFoldersRoutes } from './routes/memory-folders.js'
 import { stopAllMemoryFolderWatchers } from './core/memory/memory-folder-watcher.js'
 import { ensureDefaultMemoryFolders, syncMemoryFoldersFromFolders } from './core/memory/memory-folder-directories.js'
-import { registerMetricsRoutes } from './routes/metrics.js'
+import { registerMetricsRoutes, warmUsagePricing } from './routes/metrics.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerFileAccessRoutes } from './routes/file-access.js'
 import { registerUserSettingsRoutes } from './routes/user-settings.js'
@@ -59,6 +59,7 @@ import { startCronScheduler, stopCronScheduler } from './core/triggers/cron-sche
 import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 import { ensurePricingLoaded } from './core/model-dev-fetcher.js'
+import { pruneCatalogCache } from './core/catalog-cache.js'
 
 const APP_NAME = 'cynosure-server'
 const APP_VERSION = packageJson.version
@@ -632,9 +633,12 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   const webUiAvailable = await registerWebUi(app, startedAt)
 
   loadSavedProviders()
-  // Model pickers wait on this index before they can list models, so fetch it
-  // now instead of on the first settings visit. Failures are logged and retried later.
+  // Model pickers wait on this index before they can list models, so load it
+  // now instead of on the first settings visit: the saved copy is ready at once,
+  // and a stale one is refreshed in the background. Failures are retried later.
+  pruneCatalogCache()
   void ensurePricingLoaded()
+  void warmUsagePricing().catch((err) => console.warn('[metrics] Usage pricing warm-up failed:', err))
   loadEmbeddingServiceFromDb()
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })

@@ -59,3 +59,50 @@ describe('models.dev metadata normalization', () => {
         expect(metadata.getModelCost('unrelated-host', 'shared')).toBeNull()
     })
 })
+
+describe('models.dev saved index', () => {
+    let directory = ''
+
+    afterEach(async () => {
+        vi.unstubAllGlobals()
+        vi.useRealTimers()
+        const { closeDb } = await import('../db/database.js')
+        closeDb()
+        vi.resetModules()
+        delete process.env.CYNOSURE_DATA_DIR
+        if (directory) await (await import('node:fs/promises')).rm(directory, { recursive: true, force: true })
+    })
+
+    test('a restart prices models from the saved index and refreshes it in the background once stale', async () => {
+        const { mkdtemp } = await import('node:fs/promises')
+        const { tmpdir } = await import('node:os')
+        const { join } = await import('node:path')
+        directory = await mkdtemp(join(tmpdir(), 'cynosure-models-dev-'))
+        process.env.CYNOSURE_DATA_DIR = directory
+        const catalogue = (input: number) => new Response(JSON.stringify({ openai: { id: 'openai', models: { 'gpt-test': { cost: { input, output: 10 } } } } }))
+        const fetch = vi.fn().mockResolvedValue(catalogue(2.5))
+        vi.stubGlobal('fetch', fetch)
+        await (await import('./model-dev-fetcher.js')).ensurePricingLoaded()
+
+        // A new process: the saved index answers without a network call.
+        vi.resetModules()
+        fetch.mockClear()
+        const restarted = await import('./model-dev-fetcher.js')
+        await restarted.ensurePricingLoaded()
+        expect(restarted.getModelCost('openai', 'gpt-test')).toEqual({ input: 2.5, output: 10 })
+        expect(fetch).not.toHaveBeenCalled()
+
+        // A day later the stale index still answers at once while a refresh runs.
+        vi.resetModules()
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(Date.now() + 25 * 60 * 60 * 1000)
+        let release!: () => void
+        fetch.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve(catalogue(3)) }))
+        const nextDay = await import('./model-dev-fetcher.js')
+        await nextDay.ensurePricingLoaded()
+        expect(nextDay.getModelCost('openai', 'gpt-test')).toEqual({ input: 2.5, output: 10 })
+        expect(fetch).toHaveBeenCalledTimes(1)
+        release()
+        await vi.waitFor(() => expect(nextDay.getModelCost('openai', 'gpt-test')).toEqual({ input: 3, output: 10 }))
+    })
+})

@@ -3,6 +3,8 @@
  * Costs in the API are $ per 1 M tokens.
  */
 
+import { readCatalogEntry, writeCatalogEntry } from './catalog-cache.js'
+
 export interface ModelCost {
     input: number   // $ per 1M input tokens
     output: number  // $ per 1M output tokens
@@ -79,16 +81,37 @@ let exactLookup: Map<string, ModelMetadata> = new Map()
 let modelOnlyLookup: Map<string, ModelMetadata> = new Map()
 
 let lastFetchedAt = 0
+let lastAttemptAt = 0
+let restoredPersisted = false
 let fetchPromise: Promise<void> | null = null
+
+/** A failed refresh is retried after this long, while the stale index keeps serving. */
+const RETRY_AFTER_MS = 5 * 60 * 1000
+const CATALOG_KEY = 'models.dev'
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export async function ensurePricingLoaded(): Promise<void> {
+    if (!restoredPersisted) restorePersistedPricing()
     if (Date.now() - lastFetchedAt < CACHE_TTL_MS && exactLookup.size > 0) return
-    if (fetchPromise) return fetchPromise // coalesce concurrent calls
-    fetchPromise = fetchPricing()
-    await fetchPromise
-    fetchPromise = null
+    const hasData = exactLookup.size > 0
+    if (!fetchPromise && (!hasData || Date.now() - lastAttemptAt >= RETRY_AFTER_MS)) {
+        lastAttemptAt = Date.now()
+        fetchPromise = fetchPricing().finally(() => { fetchPromise = null })
+    }
+    // A stale index keeps serving while the refresh runs; only a first load waits.
+    if (!hasData && fetchPromise) await fetchPromise
+}
+
+/** Load the last saved index, so a restart has pricing before models.dev answers. */
+function restorePersistedPricing(): void {
+    restoredPersisted = true
+    if (exactLookup.size) return
+    const saved = readCatalogEntry<{ exact: Array<[string, ModelMetadata]>; modelOnly: Array<[string, ModelMetadata]> }>(CATALOG_KEY)
+    if (!saved?.value.exact?.length) return
+    exactLookup = new Map(saved.value.exact)
+    modelOnlyLookup = new Map(saved.value.modelOnly ?? [])
+    lastFetchedAt = saved.fetchedAt
 }
 
 export function getModelCost(provider: string, model: string): ModelCost | null {
@@ -158,6 +181,7 @@ async function fetchPricing(): Promise<void> {
         const data = (await res.json()) as ModelsDevData
         buildLookups(data)
         lastFetchedAt = Date.now()
+        writeCatalogEntry(CATALOG_KEY, { exact: [...exactLookup], modelOnly: [...modelOnlyLookup] }, lastFetchedAt)
         console.log(`[pricing] Loaded pricing for ${exactLookup.size} provider/model combos`)
     } catch (err) {
         console.warn('[pricing] Error fetching models.dev pricing:', err instanceof Error ? err.message : err)

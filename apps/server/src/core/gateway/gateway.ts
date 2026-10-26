@@ -22,6 +22,7 @@ import {
   ensurePricingLoaded,
   getModelMetadata
 } from '../model-dev-fetcher.js'
+import { providerCatalogFingerprint, readCatalogEntry, writeCatalogEntry } from '../catalog-cache.js'
 import { OpenAIProvider } from './providers/openai.provider.js'
 import { AnthropicProvider } from './providers/anthropic.provider.js'
 import { GoogleProvider } from './providers/google.provider.js'
@@ -37,15 +38,22 @@ import { UnslothProvider } from './providers/unsloth.provider.js'
 export class LLMGateway {
   private providers = new Map<string, BaseLLMProvider>()
   private lastUsedProviderId: string = ''
-  /** Cache model info keyed by "providerId:modelId" — TTL 10 minutes */
+  /**
+   * Model info keyed by "providerId:modelId". Entries older than the TTL are
+   * still served while a background refresh runs; remote providers' entries
+   * are persisted, so a restart does not hold the first chat on the network.
+   */
   private modelInfoCache = new Map<string, { info: ModelInfo; ts: number }>()
+  private modelInfoLoads = new Map<string, Promise<ModelInfo>>()
   /**
    * Raw provider model lists keyed by provider, list kind and type. Every model
    * picker asks every provider on mount, so without this each settings page
-   * fans out to the remote /models endpoints. Holds in-flight requests too, so
-   * pickers mounting together share one call.
+   * fans out to the remote /models endpoints. Served stale while refreshing and
+   * persisted like model info; in-flight loads are shared, so pickers mounting
+   * together make one call.
    */
   private modelListCache = new Map<string, ModelListCacheEntry>()
+  private modelListLoads = new Map<string, Promise<Array<string | ModelListItem>>>()
 
   registerProvider(config: LLMProviderConfig): void {
     const provider = this.createProvider(config)
@@ -206,34 +214,51 @@ export class LLMGateway {
     if (isLocalProviderType(provider.config.type)) return load()
 
     const key = modelListCacheKey(provider.config.id, kind, type)
-    const cached = this.modelListCache.get(key)
-    if (!options.refresh && cached) {
-      if (!('ts' in cached)) return cached.promise as Promise<T[]>
-      if (Date.now() - cached.ts < MODEL_LIST_CACHE_TTL_MS) return cached.models as T[]
+    const persistedKey = `models:${provider.config.id}:${providerCatalogFingerprint(provider.config)}:${kind}:${type ?? ''}`
+    if (!options.refresh) {
+      let cached = this.modelListCache.get(key)
+      if (!cached) {
+        const persisted = readCatalogEntry<T[]>(persistedKey)
+        if (persisted?.value.length) {
+          cached = { models: persisted.value, ts: persisted.fetchedAt }
+          this.modelListCache.set(key, cached)
+        }
+      }
+      if (cached) {
+        if (Date.now() - cached.ts >= MODEL_LIST_CACHE_TTL_MS) {
+          void this.loadModelList(key, persistedKey, load).catch(() => { /* the stale list stays in use */ })
+        }
+        return cached.models as T[]
+      }
     }
+    return this.loadModelList(key, persistedKey, load)
+  }
 
-    const promise = load()
-    const entry: ModelListCacheEntry = { promise }
-    this.modelListCache.set(key, entry)
-    try {
-      const models = await promise
+  private loadModelList<T extends string | ModelListItem>(key: string, persistedKey: string, load: () => Promise<T[]>): Promise<T[]> {
+    const running = this.modelListLoads.get(key)
+    if (running) return running as Promise<T[]>
+    const promise: Promise<T[]> = load().then((models) => {
       // Skip writing back if the provider was re-registered or removed meanwhile,
       // and do not pin an empty list that may just be a soft provider failure.
-      if (this.modelListCache.get(key) === entry) {
-        if (models.length) this.modelListCache.set(key, { models, ts: Date.now() })
-        else this.modelListCache.delete(key)
+      if (this.modelListLoads.get(key) === promise && models.length) {
+        this.modelListCache.set(key, { models, ts: Date.now() })
+        writeCatalogEntry(persistedKey, models)
       }
       return models
-    } catch (err) {
-      if (this.modelListCache.get(key) === entry) this.modelListCache.delete(key)
-      throw err
-    }
+    }).finally(() => {
+      if (this.modelListLoads.get(key) === promise) this.modelListLoads.delete(key)
+    })
+    this.modelListLoads.set(key, promise)
+    return promise
   }
 
   private clearModelListCache(providerId: string): void {
     const prefix = `${providerId}\0`
     for (const key of this.modelListCache.keys()) {
       if (key.startsWith(prefix)) this.modelListCache.delete(key)
+    }
+    for (const key of this.modelListLoads.keys()) {
+      if (key.startsWith(prefix)) this.modelListLoads.delete(key)
     }
   }
 
@@ -303,7 +328,7 @@ export class LLMGateway {
   }
 
   /**
-   * Get metadata for a specific model (cached for 10 minutes).
+   * Get metadata for a specific model (refreshed every 10 minutes, served stale meanwhile).
    * Returns context length when the provider supports it.
    * Falls back to models.dev data when the provider doesn't expose context length.
    */
@@ -315,11 +340,45 @@ export class LLMGateway {
 
     const pid = providerId || this.lastUsedProviderId
     const cacheKey = `${pid}:${modelId}`
-    const cached = this.modelInfoCache.get(cacheKey)
-    if (cached && Date.now() - cached.ts < 10 * 60 * 1000) {
+    const persistedKey = isLocalProviderType(provider.config.type)
+      ? null
+      : `model-info:${pid}:${providerCatalogFingerprint(provider.config)}:${modelId}`
+    let cached = this.modelInfoCache.get(cacheKey)
+    if (!cached && persistedKey) {
+      const persisted = readCatalogEntry<ModelInfo>(persistedKey)
+      if (persisted) {
+        cached = { info: persisted.value, ts: persisted.fetchedAt }
+        this.modelInfoCache.set(cacheKey, cached)
+      }
+    }
+    if (cached) {
+      if (Date.now() - cached.ts >= MODEL_INFO_CACHE_TTL_MS) {
+        void this.loadModelInfo(provider, modelId, cacheKey, persistedKey).catch(() => { /* the stale info stays in use */ })
+      }
       return cached.info
     }
+    return this.loadModelInfo(provider, modelId, cacheKey, persistedKey)
+  }
 
+  private loadModelInfo(provider: BaseLLMProvider, modelId: string, cacheKey: string, persistedKey: string | null): Promise<ModelInfo> {
+    const running = this.modelInfoLoads.get(cacheKey)
+    if (running) return running
+    const promise = this.fetchModelInfo(provider, modelId).then((info) => {
+      // Do not turn a transient upstream/models.dev failure into ten minutes of
+      // empty metadata. Meaningful partial information is still safe to cache.
+      if (hasUsefulModelInfo(info)) {
+        this.modelInfoCache.set(cacheKey, { info, ts: Date.now() })
+        if (persistedKey) writeCatalogEntry(persistedKey, info)
+      }
+      return info
+    }).finally(() => {
+      if (this.modelInfoLoads.get(cacheKey) === promise) this.modelInfoLoads.delete(cacheKey)
+    })
+    this.modelInfoLoads.set(cacheKey, promise)
+    return promise
+  }
+
+  private async fetchModelInfo(provider: BaseLLMProvider, modelId: string): Promise<ModelInfo> {
     const info = await provider.getModelInfo(modelId)
 
     // The model-list endpoint is often richer than the provider's single-model
@@ -385,12 +444,6 @@ export class LLMGateway {
       }
     } else if (!hasProviderPricingCatalog(provider.config.type)) {
       info.cost ??= metadata?.cost
-    }
-
-    // Do not turn a transient upstream/models.dev failure into ten minutes of
-    // empty metadata. Meaningful partial information is still safe to cache.
-    if (hasUsefulModelInfo(info)) {
-      this.modelInfoCache.set(cacheKey, { info, ts: Date.now() })
     }
     return info
   }
@@ -459,15 +512,14 @@ function pricingFromCost(cost: NonNullable<ReturnType<typeof getModelMetadata>>[
 /** Decision models (typed judgments instead of text) are an OpenRouter catalog. */
 /** Matches the TTL OpenRouter and Requesty already use for their own model caches. */
 const MODEL_LIST_CACHE_TTL_MS = 10 * 60 * 1000
+const MODEL_INFO_CACHE_TTL_MS = 10 * 60 * 1000
 
 export interface ModelListOptions {
   /** Bypass the cached list, for example when the user presses refresh. */
   refresh?: boolean
 }
 
-type ModelListCacheEntry =
-  | { promise: Promise<Array<string | ModelListItem>> }
-  | { models: Array<string | ModelListItem>; ts: number }
+type ModelListCacheEntry = { models: Array<string | ModelListItem>; ts: number }
 
 function modelListCacheKey(providerId: string, kind: 'ids' | 'items', type: ModelListType | undefined): string {
   return `${providerId}\0${kind}\0${type ?? ''}`
