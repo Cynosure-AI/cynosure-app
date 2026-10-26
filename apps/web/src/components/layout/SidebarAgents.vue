@@ -279,9 +279,13 @@ async function openChat(row: ConversationRow): Promise<void> {
   await router.push({ name: 'conversation', params: { conversationId: row.id } })
 }
 
-/** Starts a fresh chat with the agent and shows its chats; a second click on the open agent folds them away. */
+/** Opens a folded agent's pending approval chat, otherwise starts a fresh chat; a second click folds it away. */
 async function selectAgent(entry: AgentEntry): Promise<void> {
   closeMenu()
+  const awaitingChat = props.collapsed || !expanded.value.has(entry.key)
+    ? [...recentChats.value, ...(chatsByAgent.value[entry.key]?.items ?? [])]
+      .find((chat) => keyOf(chat.agent_id) === entry.key && awaitingIds.value.has(chat.id))
+    : undefined
   if (
     !props.collapsed && expanded.value.has(entry.key) &&
     activeAgentKey.value === entry.key && !chatStore.activeConversationId
@@ -290,6 +294,10 @@ async function selectAgent(entry: AgentEntry): Promise<void> {
     return
   }
   if (!props.collapsed) setExpanded(entry.key, true)
+  if (awaitingChat) {
+    await openChat(awaitingChat)
+    return
+  }
   await startAgentChat(entry)
 }
 
