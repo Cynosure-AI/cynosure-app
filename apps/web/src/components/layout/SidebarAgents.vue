@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 
 import { api, type ConversationRow } from '../../api/client'
@@ -9,6 +9,7 @@ import { useChatStore } from '../../stores/chat.store'
 import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
 import { useCynoStore } from '../../stores/cyno.store'
+import { useProviderStore } from '../../stores/provider.store'
 import type { AvatarConfig } from '../../utils/avatar'
 import AgentAvatar from '../shared/AgentAvatar.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
@@ -32,6 +33,7 @@ type AgentEntry = {
   iconUrl: string | null
   avatar: AvatarConfig | null
   pending: boolean
+  favorite: boolean
   lastUsedAt: number
 }
 
@@ -49,11 +51,13 @@ const props = withDefaults(defineProps<{
   filters: () => ['all'],
 })
 
+const route = useRoute()
 const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const cyno = useCynoStore()
+const providerStore = useProviderStore()
 
 const recentChats = ref<ConversationRow[]>([])
 const recentLoaded = ref(false)
@@ -82,7 +86,7 @@ const lastUsedByAgent = computed(() => {
   return latest
 })
 
-// Every agent, most recently used first; unused ones follow by name.
+// Every agent: favorites first, then most recently used; unused ones follow by name.
 // A narrowed filter lists only the agents that have matching chats.
 const agents = computed<AgentEntry[]>(() => {
   const entries: AgentEntry[] = [
@@ -92,6 +96,7 @@ const agents = computed<AgentEntry[]>(() => {
       iconUrl: cyno.displayIconUrl,
       avatar: cyno.avatar,
       pending: !cyno.profile,
+      favorite: false,
       lastUsedAt: lastUsedByAgent.value.get(CYNO_KEY) ?? 0,
     },
     ...agentDefs.agents.map((agent) => ({
@@ -100,12 +105,16 @@ const agents = computed<AgentEntry[]>(() => {
       iconUrl: agent.iconUrl,
       avatar: agent.avatar,
       pending: false,
+      favorite: agent.favorite,
       lastUsedAt: lastUsedByAgent.value.get(agent.id) ?? 0,
     })),
   ]
   return entries
     .filter((entry) => filterAll.value || entry.lastUsedAt > 0)
-    .sort((a, b) => (b.lastUsedAt - a.lastUsedAt) || a.name.localeCompare(b.name))
+    .sort((a, b) =>
+      Number(b.favorite) - Number(a.favorite) ||
+      (b.lastUsedAt - a.lastUsedAt) ||
+      a.name.localeCompare(b.name))
 })
 
 const runningIds = computed(() => {
@@ -137,10 +146,19 @@ function agentKeysWith(conversationIds: Set<string>): Set<string> {
 
 const runningAgentKeys = computed(() => agentKeysWith(runningIds.value))
 const awaitingAgentKeys = computed(() => agentKeysWith(awaitingIds.value))
+const waitingAgentKeys = computed(() => {
+  const keys = new Set<string>()
+  const chats = [...recentChats.value, ...Object.values(chatsByAgent.value).flatMap((group) => group.items)]
+  for (const chat of chats) {
+    if (isWaiting(chat)) keys.add(keyOf(chat.agent_id))
+  }
+  return keys
+})
 
+/** The agent of the open chat, or of the fresh chat being started on /chat. */
 const activeAgentKey = computed(() => {
   const id = chatStore.activeConversationId
-  if (!id) return null
+  if (!id) return route.name === 'triggers-chat' ? keyOf(chatStore.activeAgentId) : null
   const chat = recentChats.value.find((item) => item.id === id) ??
     Object.values(chatsByAgent.value).flatMap((chats) => chats.items).find((item) => item.id === id)
   return chat ? keyOf(chat.agent_id) : null
@@ -245,10 +263,8 @@ function clearHeight(el: Element): void {
 }
 
 function setExpanded(key: string, open: boolean): void {
-  const next = new Set(expanded.value)
-  if (open) next.add(key)
-  else next.delete(key)
-  expanded.value = next
+  // One agent is open at a time, like projects.
+  expanded.value = open ? new Set([key]) : new Set()
   if (open) void loadChats(key)
 }
 
@@ -259,36 +275,25 @@ async function openChat(row: ConversationRow): Promise<void> {
   await router.push({ name: 'conversation', params: { conversationId: row.id } })
 }
 
-/** Opens the agent's most recent chat and shows its chats; a second click on the open agent folds them away. */
+/** Starts a fresh chat with the agent and shows its chats; a second click on the open agent folds them away. */
 async function selectAgent(entry: AgentEntry): Promise<void> {
   closeMenu()
-  if (!props.collapsed && expanded.value.has(entry.key) && activeAgentKey.value === entry.key) {
+  if (
+    !props.collapsed && expanded.value.has(entry.key) &&
+    activeAgentKey.value === entry.key && !chatStore.activeConversationId
+  ) {
     setExpanded(entry.key, false)
     return
   }
   if (!props.collapsed) setExpanded(entry.key, true)
-
-  let latest = recentChats.value.find((chat) => keyOf(chat.agent_id) === entry.key)
-  if (!latest) {
-    try {
-      latest = (await listChats(entry.key, 1, 0, 'updated')).items[0]
-    } catch {
-      latest = undefined
-    }
-  }
-  if (latest) {
-    await openChat(latest)
-    return
-  }
-  // No chats yet: start a fresh one with this agent.
-  await chatStore.setActiveAgent(entry.key === CYNO_KEY ? null : entry.key)
-  await chatStore.startNewChat()
-  await router.push({ name: 'triggers-chat' })
+  await startAgentChat(entry)
 }
 
 async function startAgentChat(entry: AgentEntry): Promise<void> {
   closeMenu()
   await chatStore.setActiveAgent(entry.key === CYNO_KEY ? null : entry.key)
+  const providerId = entry.key !== CYNO_KEY ? agentDefs.get(entry.key)?.providerId : undefined
+  if (providerId) providerStore.setLastUsed(providerId)
   await chatStore.startNewChat()
   await router.push({ name: 'triggers-chat' })
 }
@@ -423,7 +428,7 @@ onBeforeUnmount(() => {
             <span class="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800">
               <span
                 class="h-full w-full"
-                :class="{ 'opacity-15': !expanded.has(entry.key) && runningAgentKeys.has(entry.key) }"
+                :class="{ 'opacity-15': !expanded.has(entry.key) && (runningAgentKeys.has(entry.key) || waitingAgentKeys.has(entry.key)) }"
               >
                 <AgentAvatar
                   :name="entry.name"
@@ -442,6 +447,18 @@ onBeforeUnmount(() => {
                 <Icon
                   icon="lucide:loader-circle"
                   class="h-3.5 w-3.5 animate-spin text-accent-fg drop-shadow-sm"
+                />
+              </span>
+              <span
+                v-else-if="!expanded.has(entry.key) && waitingAgentKeys.has(entry.key) && !awaitingAgentKeys.has(entry.key)"
+                class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
+                role="img"
+                :aria-label="`A chat with ${entry.name} is waiting to resume`"
+                :title="`A chat with ${entry.name} is waiting to resume`"
+              >
+                <Icon
+                  icon="lucide:hourglass"
+                  class="h-3.5 w-3.5 text-status-info drop-shadow-sm"
                 />
               </span>
               <span

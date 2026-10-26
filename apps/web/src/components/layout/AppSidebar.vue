@@ -234,11 +234,13 @@ function isActive(path: string, exact = false): boolean {
   return route.path === path || route.path.startsWith(path + "/");
 }
 
-const chatRoute = computed(() =>
-  chatStore.activeConversationId
-    ? `/chat/${encodeURIComponent(chatStore.activeConversationId)}`
-    : "/chat",
-);
+/** The Chat entry always starts a fresh chat with Cyno. */
+async function openCynoChat(): Promise<void> {
+  closeSidebar();
+  await chatStore.setActiveAgent(null);
+  await chatStore.startNewChat();
+  await router.push({ name: "triggers-chat" });
+}
 </script>
 
 <template>
@@ -444,9 +446,10 @@ const chatRoute = computed(() =>
         :disabled="!sidebarCollapsed"
       >
         <RouterLink
-          :to="chatRoute"
+          to="/chat"
           class="nav-item"
           :class="{ active: isActive('/chat') }"
+          @click.prevent="openCynoChat"
         >
           <Icon
             icon="lucide:message-square"
