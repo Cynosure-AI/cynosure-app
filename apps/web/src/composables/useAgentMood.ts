@@ -45,9 +45,30 @@ export function countErrorStreak(messages: readonly DisplayMessage[]): number {
   return streak
 }
 
-/** Poses a working assistant cycles through, so a long think does not look frozen. */
-export const THINKING_CYCLE: readonly AgentMood[] = ['thinking', 'unsure', 'thinking', 'smug']
+/**
+ * Poses a working assistant drifts between so a long think does not look frozen,
+ * with how often each comes up. Sleepy and happy are rare cameos.
+ */
+export const THINKING_POSES: ReadonlyArray<{ mood: AgentMood; weight: number }> = [
+  { mood: 'thinking', weight: 4 },
+  { mood: 'unsure', weight: 3 },
+  { mood: 'smug', weight: 2 },
+  { mood: 'surprised', weight: 2 },
+  { mood: 'sleepy', weight: 0.5 },
+  { mood: 'happy', weight: 0.5 },
+]
 export const THINKING_POSE_MS = 3200
+
+/** A weighted random pose, never the one currently shown. `random` is in [0, 1). */
+export function nextThinkingPose(current: AgentMood, random: () => number = Math.random): AgentMood {
+  const options = THINKING_POSES.filter(({ mood }) => mood !== current)
+  let roll = random() * options.reduce((sum, { weight }) => sum + weight, 0)
+  for (const option of options) {
+    roll -= option.weight
+    if (roll < 0) return option.mood
+  }
+  return options[options.length - 1].mood
+}
 
 export const HAPPY_BURST_MS = 1400
 export const SURPRISE_BURST_MS = 1600
@@ -87,18 +108,16 @@ export function useAgentMood(): { mood: Ref<AgentMood>; speaking: Ref<boolean> }
     waiting: Boolean(chatStore.pendingWait),
   }))
 
-  // While thinking, step through a few poses; each think starts from 'thinking'.
-  const thinkingStep = ref(0)
+  // While thinking, drift between poses at random; each think starts on 'thinking'.
+  const thinkingPose = ref<AgentMood>('thinking')
   let thinkingTimer: ReturnType<typeof setInterval> | undefined
   watch(() => base.value === 'thinking', (active) => {
     clearInterval(thinkingTimer)
-    thinkingStep.value = 0
-    if (active) thinkingTimer = setInterval(() => { thinkingStep.value++ }, THINKING_POSE_MS)
+    thinkingPose.value = 'thinking'
+    if (active) thinkingTimer = setInterval(() => { thinkingPose.value = nextThinkingPose(thinkingPose.value) }, THINKING_POSE_MS)
   }, { immediate: true })
   onScopeDispose(() => clearInterval(thinkingTimer))
-  const settled = computed(() => base.value === 'thinking'
-    ? THINKING_CYCLE[thinkingStep.value % THINKING_CYCLE.length]
-    : base.value)
+  const settled = computed(() => base.value === 'thinking' ? thinkingPose.value : base.value)
 
   const burst = ref<AgentMood | null>(null)
   let timer: ReturnType<typeof setTimeout> | undefined
