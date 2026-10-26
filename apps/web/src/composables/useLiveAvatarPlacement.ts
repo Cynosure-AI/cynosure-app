@@ -100,7 +100,11 @@ export function useLiveAvatarPlacement(options: LiveAvatarPlacementOptions) {
     // A streamed reply is swapped for its saved copy under a new id; same reply, so no glide.
     if (id !== previous && !messages.value.some((message) => message.id === previous)) return
     glide?.cancel()
+    // A detached or hidden avatar measures as a 0×0 box at the viewport origin; gliding
+    // from there flies it in from the top left, so only glide between real positions.
+    const placed = (rect: DOMRect) => el.isConnected && (rect.width > 0 || rect.height > 0)
     const before = el.getBoundingClientRect()
+    if (!placed(before)) return
     await nextTick()
     if (generation !== glideGeneration) return
     // Hold it where it was until the follow-scroll has landed; measuring before
@@ -112,6 +116,7 @@ export function useLiveAvatarPlacement(options: LiveAvatarPlacementOptions) {
     el.style.transform = ''
     if (generation !== glideGeneration) return
     const after = el.getBoundingClientRect()
+    if (!placed(after)) return
     const dx = before.left - after.left
     const dy = before.top - after.top
     if ((Math.abs(dx) < 1 && Math.abs(dy) < 1) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
