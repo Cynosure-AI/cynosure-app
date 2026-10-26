@@ -1,8 +1,8 @@
 /**
  * The platform-independent agent turn for messaging channels. Each platform
  * supplies a ChannelTransport for one inbound message; everything else —
- * attachment buffering, per-target locking, planning, execution, live
- * streaming, persistence, and title generation — lives here.
+ * attachment buffering, per-target locking, planning, execution, progress,
+ * persistence, and title generation — lives here.
  */
 import { cancelConversationWait } from '../triggers/cron-scheduler.js'
 import { beginChatQueueTurn } from '../chat/message-queue.js'
@@ -30,9 +30,9 @@ import {
 } from './channel-session.js'
 import { CYNO_AGENT_ID, isCyno } from '../agent/execution-preset.js'
 import { resolveInlineAttachmentTextLimit } from '../chat/attachment-context.js'
+import { CHANNEL_REPLY_PROMPT, splitChannelReply } from './channel-presentation.js'
 
-const CONTENT_EDIT_INTERVAL_MS = 1500
-const STREAMING_CURSOR = ' ▍'
+const PROGRESS_INTERVAL_MS = 15_000
 
 export interface ChannelImage {
     dataUrl: string
@@ -43,24 +43,19 @@ export interface ChannelImage {
 /**
  * Outbound operations for one inbound message. `H` is the platform's handle
  * for a sent message that can be edited later (a Discord Message, a Slack ts,
- * a Telegram message id). Implementations swallow delivery errors.
+ * a Telegram message id). Final sends report failure; progress edits are best effort.
  */
 export interface ChannelTransport<H> {
     /** Log prefix, e.g. "[Discord]". */
     logTag: string
-    /** Live previews are truncated to this length. */
-    previewLimit: number
     /** Hard per-message limit; longer final text overflows into follow-up messages. */
     messageLimit: number
-    bold(text: string): string
     /** Reply to the inbound message (status line, errors). */
     reply(text: string): Promise<H | null>
     /** Post a new message in the conversation. */
     send(text: string): Promise<H | null>
     edit(handle: H, text: string): Promise<void>
-    /** Post text of any length, split across messages as needed. */
-    sendLong(text: string): Promise<void>
-    /** `replyTo` is the turn's status message when the images come from a tool call. */
+    /** Send final generated images, optionally associated with a reply. */
     sendImages(images: ChannelImage[], replyTo: H | null): Promise<void>
     sendTyping?(): Promise<void>
     typingIntervalMs?: number
@@ -145,25 +140,6 @@ function multimodalContent(text: string, media: ChannelMedia): ContentPart[] {
     ]
 }
 
-function truncate(text: string, limit: number): string {
-    return text.length > limit ? text.slice(0, limit) + '…' : text
-}
-
-/**
- * Replace a streamed preview with the final text, overflowing into follow-up
- * messages. Returns the first message of the final text when it is known.
- */
-async function finalizeStreamedMessage<H>(transport: ChannelTransport<H>, handle: H | null, text: string): Promise<H | null> {
-    if (handle === null) {
-        if (text.length <= transport.messageLimit) return transport.send(text)
-        await transport.sendLong(text)
-        return null
-    }
-    await transport.edit(handle, text.slice(0, transport.messageLimit))
-    if (text.length > transport.messageLimit) await transport.sendLong(text.slice(transport.messageLimit))
-    return handle
-}
-
 async function runChannelTurn<K extends ChannelTargetId, H>(
     state: ChannelSessionState<K>,
     message: ChannelInboundMessage<K, H>,
@@ -178,11 +154,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         ? resolveContinuedConversation(state, message.continueConversationId)
         : null
     const agentId = continued?.agentId ?? effectiveAgentId(state, target)
-    const statusMsg = await transport.reply('🧭 Preparing context...')
-    let thinkingSeconds = 0
-    let thinkingPhase = 'Preparing context'
-    let thinkingTimer: ReturnType<typeof setInterval> | null = null
-    const stopThinkingTimer = () => { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null } }
+    const statusMsg = await transport.reply('⏳ Working on your request…')
 
     const conversationId = continued?.conversationId ?? getOrCreateChannelConversation(state, target, message.senderName, agentId)
     cancelConversationWait(conversationId)
@@ -222,26 +194,65 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
     const identity = agent
         ? { id: agent.id, name: agent.name, iconUrl: agent.iconUrl || null, model: agent.model || null }
         : { id: CYNO_AGENT_ID, name: getCynoProfile().name, iconUrl: null, model: cynoConfig!.model || null }
-    if (statusMsg !== null) {
-        thinkingTimer = setInterval(() => {
-            thinkingSeconds++
-            const icon = thinkingPhase === 'Preparing context' ? '🧭' : '🤔'
-            void transport.edit(statusMsg, `${icon} ${thinkingPhase} (${thinkingSeconds}s)`)
-        }, 1000)
-    }
-
-    const unsubs: Array<() => void> = [stopThinkingTimer]
     const { streamId, controller: execAbort } = beginChannelExecution({
         executions: state.activeExecutions, channelId: state.channelId, agent: identity, conversationId, broadcast: state.broadcast,
     })
     let planned: Awaited<ReturnType<typeof planExecution>> | undefined
     const finishQueueTurn = beginChatQueueTurn(conversationId)
     let queueTurnCompleted = false
+    let replySaved = false
+    let progressClosed = false
+    let sendChain = Promise.resolve()
+    const enqueueSend = (fn: () => Promise<void>): void => {
+        sendChain = sendChain.then(fn).catch((err: unknown) => {
+            console.warn(`${transport.logTag} Progress delivery failed:`, (err as Error).message)
+        })
+    }
+    state.conversationSendQueue.set(conversationId, enqueueSend)
+    const eventBus = getEventBus()
+    const waitingApprovals = new Set<string>()
+    const updateProgress = () => {
+        if (progressClosed || statusMsg === null) return
+        const text = waitingApprovals.size
+            ? '🔐 Waiting for your approval below.'
+            : `⏳ Working on your request… · ${Math.floor((Date.now() - startedAt) / 1000)}s`
+        enqueueSend(async () => { if (!progressClosed) await transport.edit(statusMsg, text) })
+    }
+    const progressTimer = setInterval(() => {
+        // Approval prompts are the active UI while paused; do not keep "typing" or counting.
+        if (!waitingApprovals.size) updateProgress()
+    }, PROGRESS_INTERVAL_MS)
+    const unsubs: Array<() => void> = [() => clearInterval(progressTimer)]
+    unsubs.push(eventBus.on('hitl:request', (...args: unknown[]) => {
+        const data = args[0] as { conversationId: string; taskId: string }
+        if (data.conversationId !== conversationId) return
+        waitingApprovals.add(data.taskId)
+        updateProgress()
+    }))
+    const approvalFinished = (...args: unknown[]) => {
+        const data = args[0] as { taskId: string }
+        if (waitingApprovals.delete(data.taskId)) updateProgress()
+    }
+    unsubs.push(eventBus.on('hitl:resolved', approvalFinished))
+    unsubs.push(eventBus.on('hitl:cancel-request', approvalFinished))
+    if (transport.sendTyping) {
+        const sendTyping = transport.sendTyping.bind(transport)
+        const typingTimer = setInterval(() => {
+            if (!progressClosed && !waitingApprovals.size) void sendTyping().catch(() => {})
+        }, transport.typingIntervalMs ?? 5000)
+        unsubs.push(() => clearInterval(typingTimer))
+    }
+    const closeProgress = async (text: string) => {
+        progressClosed = true
+        for (const unsub of unsubs) unsub()
+        await sendChain
+        if (statusMsg !== null) await transport.edit(statusMsg, text).catch(() => {})
+    }
     try {
         planned = await planExecution({
             resolvedAgent: agent, conversationId, broadcast: state.broadcast, abortSignal: execAbort.signal,
             gateway: getGateway(), toolRegistry: getToolRegistry(), messages, userText,
-            run: { ...settings.plan, inlineAttachmentTextLimit },
+            run: { ...settings.plan, inlineAttachmentTextLimit, systemPromptSuffix: CHANNEL_REPLY_PROMPT },
         })
         updateChannelExecution(state.activeExecutions, streamId, { model: planned.responseModel, planningRunId: planned.planningRunId })
         if (execAbort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
@@ -252,8 +263,6 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         })
         execAbort.signal.throwIfAborted()
         messages = context.messages
-        thinkingPhase = 'Thinking'
-        if (statusMsg !== null) await transport.edit(statusMsg, `🤔 Thinking (${thinkingSeconds}s)`)
 
         const executor = new AgentExecutor({
             gateway: getGateway(), tools: planned.tools, conversationId, broadcast: state.broadcast,
@@ -266,124 +275,54 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
             contextStrategy: context.strategy, isPrimaryExecutor: true,
         })
 
-        const eventBus = getEventBus()
-        let sendChain = Promise.resolve()
-        const enqueueSend = (fn: () => Promise<void>): void => {
-            sendChain = sendChain.then(fn, fn)
-        }
-        state.conversationSendQueue.set(conversationId, enqueueSend)
-
-        // Compact status lines only; verbose tool arguments are intentionally not posted to channels.
-        unsubs.push(eventBus.on('step:executed', (...args: unknown[]) => {
-            const data = args[0] as { conversationId: string; results: { name: string; success: boolean; imageDataUrls?: string[] }[]; maCodename?: string }
-            if (data.conversationId !== conversationId) return
-            const prefix = data.maCodename ? `🤖 ${transport.bold(`[${data.maCodename}]`)} ` : ''
-            const lines = data.results.map(r => r.success ? `✅ \`${r.name}\` executed` : `❌ \`${r.name}\` failed`)
-            enqueueSend(async () => {
-                if (lines.length) await transport.send(`${prefix}${lines.join('\n')}`.slice(0, transport.messageLimit))
-                for (const r of data.results) {
-                    if (!r.imageDataUrls?.length) continue
-                    await transport.sendImages(r.imageDataUrls.map((dataUrl, i) => ({ dataUrl, name: `tool_${r.name}_${i + 1}` })), statusMsg)
-                }
-            })
-        }))
-
-        if (transport.sendTyping) {
-            const sendTyping = transport.sendTyping.bind(transport)
-            const typingInterval = setInterval(() => { void sendTyping() }, transport.typingIntervalMs ?? 5000)
-            unsubs.push(() => clearInterval(typingInterval))
-        }
-
-        let executionFinished = false
-        const main = { content: '', handle: null as H | null, timer: null as ReturnType<typeof setTimeout> | null }
-        // Sub-agent output streams into its own message per codename.
-        const subAgents = new Map<string, { content: string; handle: H | null; timer: ReturnType<typeof setTimeout> | null }>()
-        const subAgentHeader = (codename: string) => `🤖 ${transport.bold(`[${codename}]`)}\n\n`
-
-        const showPreview = async (stream: { handle: H | null }, text: string) => {
-            const display = truncate(text, transport.previewLimit) + STREAMING_CURSOR
-            if (stream.handle !== null) await transport.edit(stream.handle, display)
-            else stream.handle = await transport.send(display)
-        }
-
-        unsubs.push(eventBus.on('step:content', (...args: unknown[]) => {
-            const data = args[0] as { conversationId: string; content: string; maCodename?: string }
-            if (data.conversationId !== conversationId) return
-
-            if (data.maCodename) {
-                const codename = data.maCodename
-                let sub = subAgents.get(codename)
-                if (!sub) {
-                    sub = { content: '', handle: null, timer: null }
-                    subAgents.set(codename, sub)
-                }
-                sub.content += data.content
-                if (sub.timer) clearTimeout(sub.timer)
-                if (executionFinished) return
-                const stream = sub
-                stream.timer = setTimeout(() => {
-                    stream.timer = null
-                    void showPreview(stream, subAgentHeader(codename) + stream.content)
-                }, CONTENT_EDIT_INTERVAL_MS)
-                return
-            }
-
-            main.content += data.content
-            if (main.timer || executionFinished) return
-            main.timer = setTimeout(() => {
-                main.timer = null
-                if (!executionFinished) void showPreview(main, main.content)
-            }, CONTENT_EDIT_INTERVAL_MS)
-        }))
-
+        // Channels are linear conversations. Intermediate prose, tool results and
+        // sub-agent output stay in Cynosure; only the complete answer is posted here.
         const result = await executor.run(messages)
         if (planned.planningRunId) {
             closePlanningRun(planned.planningRunId, 'completed', { summary: result.content.slice(0, 500) })
         }
-        executionFinished = true
-        stopThinkingTimer()
-        if (main.timer) { clearTimeout(main.timer); main.timer = null }
-        state.conversationSendQueue.delete(conversationId)
+        progressClosed = true
+        for (const unsub of unsubs) unsub()
         await sendChain
 
-        for (const [codename, sub] of subAgents) {
-            if (sub.timer) { clearTimeout(sub.timer); sub.timer = null }
-            if (sub.content) await finalizeStreamedMessage(transport, sub.handle, subAgentHeader(codename) + sub.content)
-        }
-
         persistChannelAssistantMessage({ broadcast: state.broadcast, conversationId, streamId, agentId: cyno ? null : agentId, planned, result, startedAt })
+        replySaved = true
         maybeGenerateTitle(state.broadcast, conversationId, userText, result.content, planned)
-
-        if (statusMsg !== null) {
-            const durationSec = Math.round((Date.now() - startedAt) / 1000)
-            await transport.edit(statusMsg, `✅ Done thinking (${durationSec}s)`)
-        }
-        const finalReply = await finalizeStreamedMessage(transport, main.handle, result.content || '(no response)')
-        if (finalReply !== null) message.onFinalReply?.(finalReply, conversationId)
 
         const images = (result.images ?? []).flatMap((image, i) => {
             const dataUrl = channelImageDataUrl(image)
             return dataUrl ? [{ dataUrl, name: `image_${i + 1}` }] : []
         })
         if (images.length) await transport.sendImages(images, null)
+        for (const chunk of splitChannelReply(result.content.trim() || '(no response)', transport.messageLimit)) {
+            const handle = await transport.send(chunk)
+            if (handle === null) throw new Error('Could not deliver the final reply.')
+            message.onFinalReply?.(handle, conversationId)
+        }
+        await closeProgress('✓ Finished. Reply below.')
         queueTurnCompleted = !execAbort.signal.aborted
     } catch (err) {
         const aborted = execAbort.signal.aborted
-        if (planned?.planningRunId) {
+        if (planned?.planningRunId && !replySaved) {
             const isAbort = (err as Error).name === 'AbortError'
             closePlanningRun(planned.planningRunId, isAbort ? 'cancelled' : 'error', { error: isAbort ? 'Cancelled' : (err as Error).message })
         }
-        stopThinkingTimer()
         const errorMsg = (err as Error).message || 'Unknown error'
         console.error(`${transport.logTag} Agent execution error: ${errorMsg}`)
         getEventBus().emit('task:error', { conversationId, error: aborted ? 'Cancelled' : errorMsg })
-        if (!aborted) publishChannelStreamError(state.broadcast, conversationId, streamId, errorMsg)
-        const errorText = `⚠️ Error: ${errorMsg.slice(0, transport.previewLimit)}`
-        if (statusMsg !== null) await transport.edit(statusMsg, aborted ? '⏹ Stopped.' : errorText)
-        else await transport.reply(errorText)
+        if (!aborted && !replySaved) publishChannelStreamError(state.broadcast, conversationId, streamId, errorMsg)
+        const errorText = aborted ? '⏹ Stopped.' : replySaved
+            ? '⚠️ Your reply was saved in Cynosure, but could not be fully delivered here. Open Cynosure to read it.'
+            : `⚠️ I couldn't finish this request: ${errorMsg.slice(0, 300)}`
+        await closeProgress(errorText)
+        // Errors and cancellations must also be visible at the bottom, after any approval prompts.
+        await transport.reply(errorText)
     } finally {
         finishChannelExecution({ executions: state.activeExecutions, executionId: streamId, conversationId, agentId, broadcast: state.broadcast })
+        progressClosed = true
         for (const unsub of unsubs) unsub()
+        await sendChain
+        state.conversationSendQueue.delete(conversationId)
         finishQueueTurn(queueTurnCompleted)
     }
 }

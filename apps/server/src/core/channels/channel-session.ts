@@ -15,6 +15,7 @@ import { cynoExecutionConfig } from '../cyno/cyno-run.js'
 import { getEventBus } from '../telemetry/event-bus.js'
 import { cancelChannelExecutionsWhere, type ActiveChannelExecutionMap } from './channel-execution.js'
 import type { ChannelType } from './base.channel.js'
+import type { ToolBehaviorAnnotations } from '../gateway/providers/base.provider.js'
 
 export type BroadcastFn = (event: string, data: unknown) => void
 export type ChannelTargetId = string | number
@@ -43,7 +44,7 @@ export interface ChannelSessionState<K extends ChannelTargetId> {
     targetLocks: Map<K, Promise<void>>
     /** Media sent without text, held until the next text message. */
     pendingAttachments: Map<K, ChannelMedia>
-    /** Ordered outbound queue of the running turn, so HITL prompts land after tool status lines. */
+    /** Ordered outbound queue of the running turn, including approval prompts and progress. */
     conversationSendQueue: Map<string, ConversationSendFn>
     /** A chat whose last user message is older than this starts over; 0 keeps chats until `new`. */
     sessionIdleMs: number
@@ -226,7 +227,7 @@ export async function withTargetLock<K extends ChannelTargetId>(
 export interface ChannelHITLRequest {
     taskId: string
     conversationId: string
-    toolCalls: { id: string; function: { name: string; arguments: string } }[]
+    toolCalls: { id: string; function: { name: string; arguments: string }; annotations?: ToolBehaviorAnnotations }[]
     resolve: (result: { approved: boolean; reason?: string }) => void
 }
 
@@ -236,18 +237,73 @@ export interface ChannelHITLRequest {
  */
 export function subscribeChannelHITL<K extends ChannelTargetId>(
     state: ChannelSessionState<K>,
-    send: (request: ChannelHITLRequest, target: K, toolNames: string) => Promise<void>,
+    send: (request: ChannelHITLRequest, target: K, actions: string) => Promise<void>,
+    settled?: (taskId: string, cancelled: boolean) => Promise<void>,
 ): () => void {
-    return getEventBus().on('hitl:request', (...args: unknown[]) => {
+    const bus = getEventBus()
+    const active = new Map<string, string>()
+    const notifySettled = (taskId: string, cancelled: boolean) => {
+        void settled?.(taskId, cancelled).catch((err: unknown) =>
+            console.warn('[channels] Could not update approval message:', (err as Error).message))
+    }
+    const unsubs = [bus.on('hitl:request', (...args: unknown[]) => {
         const request = args[0] as ChannelHITLRequest
         const target = state.conversationTargets.get(request.conversationId)
         if (target === undefined) return
-        const toolNames = request.toolCalls.map(tc => `\`${tc.function.name}\``).join(', ')
-        const deliver = () => send(request, target, toolNames).catch(() => { })
+        active.set(request.taskId, request.conversationId)
+        const deliver = async () => {
+            // A request can be answered or cancelled while waiting in the outbound queue.
+            if (!active.has(request.taskId)) return
+            try {
+                await send(request, target, describeChannelApproval(request))
+                if (!active.has(request.taskId)) notifySettled(request.taskId, true)
+            } catch (err) {
+                console.warn('[channels] Could not deliver approval:', (err as Error).message)
+            }
+        }
         const enqueue = state.conversationSendQueue.get(request.conversationId)
         if (enqueue) enqueue(deliver)
         else void deliver()
+    })]
+    const finish = (cancelled: boolean) => (...args: unknown[]) => {
+        const data = args[0] as { taskId: string }
+        if (active.delete(data.taskId)) notifySettled(data.taskId, cancelled)
+    }
+    unsubs.push(bus.on('hitl:resolved', finish(false)))
+    unsubs.push(bus.on('hitl:cancel-request', finish(true)))
+    unsubs.push(bus.on('hitl:clear-conversation', (...args: unknown[]) => {
+        const { conversationId } = args[0] as { conversationId: string }
+        for (const [taskId, id] of active) {
+            if (id !== conversationId) continue
+            active.delete(taskId)
+            notifySettled(taskId, true)
+        }
+    }))
+    return () => {
+        for (const unsub of unsubs) unsub()
+        for (const taskId of active.keys()) notifySettled(taskId, true)
+        active.clear()
+    }
+}
+
+/** Include a readable action and its target, without dumping tool payloads into chat. */
+export function describeChannelApproval(request: ChannelHITLRequest): string {
+    const inline = (value: string, limit: number) => value.replace(/[\r\n`*_<>]/g, ' ').slice(0, limit)
+    const code = (value: string, limit: number) => value.replace(/[\r\n`]/g, ' ').slice(0, limit)
+    const lines = request.toolCalls.slice(0, 6).map(tc => {
+        const title = inline(tc.annotations?.title || tc.function.name.replace(/_/g, ' '), 70)
+        let target = ''
+        try {
+            const args = JSON.parse(tc.function.arguments) as Record<string, unknown> | null
+            // Content, credentials and arbitrary arguments are deliberately omitted.
+            for (const key of ['path', 'filePath', 'file_path', 'directory', 'title', 'url']) {
+                if (typeof args?.[key] === 'string') { target = code(args[key], 130); break }
+            }
+        } catch { /* The executor reports invalid arguments. */ }
+        return `• ${title}${target ? ` — \`${target}\`` : ''} (\`${code(tc.function.name, 64)}\`)`
     })
+    if (request.toolCalls.length > 6) lines.push(`…and ${request.toolCalls.length - 6} more actions. Review the full request in Cynosure before approving.`)
+    return lines.join('\n')
 }
 
 /** Resolve a HITL request answered from a channel and notify the rest of the app. */

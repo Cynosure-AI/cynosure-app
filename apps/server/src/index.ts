@@ -468,6 +468,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
           }
 
           resolver({ approved, reason })
+          // Channel approval buttons and progress also follow decisions made in the app.
+          getEventBus().emit('hitl:resolved', { taskId, conversationId, approved })
           pendingHITLResolvers.delete(taskId)
           getHITLGate().clearExternalRequest(taskId)
           // Remove from persistence now that it is resolved

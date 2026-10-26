@@ -17,6 +17,7 @@ export interface SlackConfig {
 
 export interface PendingHITL {
     conversationId: string
+    actions?: string
     slackChannelId: string
     messageTs: string
     resolve: (result: { approved: boolean; reason?: string }) => void
@@ -98,9 +99,7 @@ export interface SlackMessage {
 function createTransport(client: WebClient, channel: string, threadTs: string): ChannelTransport<string> {
     return {
         logTag: '[Slack]',
-        previewLimit: 3000,
         messageLimit: 3000,
-        bold: (text) => `*${text}*`,
         reply: async (text) => {
             const res = await client.chat.postMessage({ channel, text, thread_ts: threadTs }).catch(() => null)
             return res?.ts || null
@@ -110,7 +109,6 @@ function createTransport(client: WebClient, channel: string, threadTs: string): 
             return res?.ts || null
         },
         edit: async (ts, text) => { await client.chat.update({ channel, ts, text }).catch(() => { }) },
-        sendLong: (text) => sendLongSlackMessage(client, channel, text, threadTs),
         sendImages: async (images) => {
             for (const { dataUrl, name } of images) {
                 await uploadImage(client, channel, dataUrl, name, threadTs).catch(e =>
@@ -138,27 +136,27 @@ export async function handleMessage(ctx: SlackCtx, msg: SlackMessage, client: We
 }
 
 export function subscribeToHITL(ctx: SlackCtx): () => void {
-    return subscribeChannelHITL(ctx, async (request, slackChannelId, toolNames) => {
+    return subscribeChannelHITL(ctx, async (request, slackChannelId, actions) => {
         const result = await ctx.app.client.chat.postMessage({
             channel: slackChannelId,
-            text: `🔐 *Tool approval required*\n\nThe agent wants to use: ${toolNames}\n\nApprove or deny?`,
+            text: `🔐 *Approval needed*\n\nTo continue, I need permission for:\n${actions}\n\nWork is paused until you choose.`,
             blocks: [
                 {
                     type: 'section',
-                    text: { type: 'mrkdwn', text: `🔐 *Tool approval required*\n\nThe agent wants to use: ${toolNames}` }
+                    text: { type: 'mrkdwn', text: `🔐 *Approval needed*\n\nTo continue, I need permission for:\n${actions}` }
                 },
                 {
                     type: 'actions',
                     elements: [
                         {
                             type: 'button',
-                            text: { type: 'plain_text', text: '✅ Approve' },
+                            text: { type: 'plain_text', text: 'Approve' },
                             style: 'primary',
                             action_id: `hitl:${request.taskId}:approve`
                         },
                         {
                             type: 'button',
-                            text: { type: 'plain_text', text: '❌ Deny' },
+                            text: { type: 'plain_text', text: 'Decline' },
                             style: 'danger',
                             action_id: `hitl:${request.taskId}:deny`
                         }
@@ -169,11 +167,18 @@ export function subscribeToHITL(ctx: SlackCtx): () => void {
         if (result.ts) {
             ctx.pendingHITL.set(request.taskId, {
                 conversationId: request.conversationId,
+                actions,
                 slackChannelId,
                 messageTs: result.ts,
                 resolve: request.resolve,
             })
         }
+    }, async (taskId, cancelled) => {
+        const pending = ctx.pendingHITL.get(taskId)
+        if (!pending) return
+        ctx.pendingHITL.delete(taskId)
+        await ctx.app.client.chat.update({ channel: pending.slackChannelId, ts: pending.messageTs,
+            text: [cancelled ? '⏹ Approval no longer needed.' : '✓ Approval answered in Cynosure.', pending.actions].filter(Boolean).join('\n\n'), blocks: [] })
     })
 }
 
@@ -186,7 +191,8 @@ export async function handleHITLAction(ctx: SlackCtx, actionId: string, client: 
     ctx.pendingHITL.delete(action.taskId)
     resolveChannelHITL(ctx.broadcast, pending, action.taskId, action.approved, 'Slack')
 
-    const statusText = action.approved ? '✅ *Approved* — proceeding...' : '❌ *Denied* — the agent will try a different approach.'
+    const decision = action.approved ? '✅ *Approved* — continuing…' : '❌ *Declined* — I’ll continue without these actions.'
+    const statusText = [decision, pending.actions].filter(Boolean).join('\n\n')
     await client.chat.update({
         channel: pending.slackChannelId,
         ts: pending.messageTs,

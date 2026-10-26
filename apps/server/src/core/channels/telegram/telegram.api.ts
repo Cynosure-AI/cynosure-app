@@ -70,15 +70,17 @@ export async function sendMessageReturningId(
 ): Promise<number | null> {
     try {
         const data = await callWithFormattedText<{ message_id: number }>(ctx, 'sendMessage', { ...extra, chat_id: chatId }, text)
+        if (!data.ok) console.warn(`[Telegram] Could not send message: ${data.description ?? 'Unknown API error'}`)
         return data.ok ? data.result?.message_id ?? null : null
-    } catch {
+    } catch (err) {
+        console.warn('[Telegram] Could not send message:', (err as Error).message)
         return null
     }
 }
 
-export async function editMessage(ctx: TelegramCtx, chatId: number, messageId: number, text: string): Promise<boolean> {
+export async function editMessage(ctx: TelegramCtx, chatId: number, messageId: number, text: string, extra: Record<string, unknown> = {}): Promise<boolean> {
     try {
-        const data = await callWithFormattedText(ctx, 'editMessageText', { chat_id: chatId, message_id: messageId }, text)
+        const data = await callWithFormattedText(ctx, 'editMessageText', { ...extra, chat_id: chatId, message_id: messageId }, text)
         return data.ok
     } catch {
         return false

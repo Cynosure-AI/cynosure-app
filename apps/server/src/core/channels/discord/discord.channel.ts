@@ -18,6 +18,7 @@ export interface DiscordConfig {
 
 export interface PendingHITL {
     conversationId: string
+    actions?: string
     discordChannelId: string
     messageId: string
     resolve: (result: { approved: boolean; reason?: string }) => void
@@ -61,13 +62,10 @@ function createTransport(msg: Message): ChannelTransport<Message> {
     const channel = 'send' in msg.channel ? msg.channel as DiscordSendChannel : null
     return {
         logTag: '[Discord]',
-        previewLimit: 1900,
         messageLimit: 2000,
-        bold: (text) => `**${text}**`,
         reply: (text) => msg.reply(text).catch(() => null),
         send: async (text) => channel ? channel.send(text).catch(() => null) : null,
         edit: async (handle, text) => { await handle.edit(text).catch(() => { }) },
-        sendLong: async (text) => { if (channel) await sendLongMessage(channel, text) },
         sendImages: async (images) => {
             if (!channel) return
             const files = images.map(({ dataUrl, name }) => {
@@ -102,7 +100,7 @@ export async function handleMessage(ctx: DiscordCtx, msg: Message): Promise<void
 }
 
 export function subscribeToHITL(ctx: DiscordCtx): () => void {
-    return subscribeChannelHITL(ctx, async (request, discordChannelId, toolNames) => {
+    return subscribeChannelHITL(ctx, async (request, discordChannelId, actions) => {
         const channel = ctx.client.channels.cache.get(discordChannelId)
         if (!channel || !('send' in channel)) return
 
@@ -114,20 +112,29 @@ export function subscribeToHITL(ctx: DiscordCtx): () => void {
                 .setEmoji('✅'),
             new ButtonBuilder()
                 .setCustomId(`hitl:${request.taskId}:deny`)
-                .setLabel('Deny')
+                .setLabel('Decline')
                 .setStyle(ButtonStyle.Danger)
                 .setEmoji('❌')
         )
         const sentMsg = await (channel as DiscordSendChannel).send({
-            content: `🔐 **Tool approval required**\n\nThe agent wants to use: ${toolNames}\n\nApprove or deny?`,
+            content: `🔐 **Approval needed**\n\nTo continue, I need permission for:\n${actions}\n\nWork is paused until you choose.`,
             components: [row],
         })
         ctx.pendingHITL.set(request.taskId, {
             conversationId: request.conversationId,
+            actions,
             discordChannelId,
             messageId: sentMsg.id,
             resolve: request.resolve,
         })
+    }, async (taskId, cancelled) => {
+        const pending = ctx.pendingHITL.get(taskId)
+        if (!pending) return
+        ctx.pendingHITL.delete(taskId)
+        const channel = ctx.client.channels.cache.get(pending.discordChannelId)
+        if (!channel || !('messages' in channel)) return
+        const message = await channel.messages.fetch(pending.messageId)
+        await message.edit({ content: [cancelled ? '⏹ Approval no longer needed.' : '✓ Approval answered in Cynosure.', pending.actions].filter(Boolean).join('\n\n'), components: [] })
     })
 }
 
@@ -168,7 +175,8 @@ export async function handleInteraction(ctx: DiscordCtx, interaction: Interactio
     ctx.pendingHITL.delete(action.taskId)
     resolveChannelHITL(ctx.broadcast, pending, action.taskId, action.approved, 'Discord')
 
-    const statusText = action.approved ? '✅ **Approved** — proceeding...' : '❌ **Denied** — the agent will try a different approach.'
+    const decision = action.approved ? '✅ **Approved** — continuing…' : '❌ **Declined** — I’ll continue without these actions.'
+    const statusText = [decision, pending.actions].filter(Boolean).join('\n\n')
     await interaction.update({ content: statusText, components: [] }).catch(() => { })
 }
 

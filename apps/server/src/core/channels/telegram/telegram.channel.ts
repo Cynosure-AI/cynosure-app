@@ -53,6 +53,7 @@ export interface TelegramUpdate {
 
 export interface PendingHITL {
     conversationId: string
+    actions?: string
     chatId: number
     userId: number
     messageId: number
@@ -136,16 +137,10 @@ export async function sendProjectPicker(ctx: TelegramCtx, chatId: number, reques
 function createTransport(ctx: TelegramCtx, chatId: number): ChannelTransport<number> {
     return {
         logTag: '[Telegram]',
-        previewLimit: 4000,
         messageLimit: 4000,
-        bold: (text) => `**${text}**`,
         reply: (text) => sendMessageReturningId(ctx, chatId, text),
         send: (text) => sendMessageReturningId(ctx, chatId, text),
         edit: async (messageId, text) => { await editMessage(ctx, chatId, messageId, text) },
-        sendLong: async (text) => {
-            await sendLongMessage(ctx, chatId, text).catch(e =>
-                console.warn('[Telegram] Failed to send message:', (e as Error).message))
-        },
         sendImages: async (images, replyTo) => {
             for (const { dataUrl } of images) {
                 await sendPhoto(ctx, chatId, dataUrl, replyTo ?? undefined).catch(e =>
@@ -187,19 +182,19 @@ export async function handleMessage(ctx: TelegramCtx, update: TelegramUpdate): P
 
 /** Forward HITL approval requests to Telegram as inline buttons. Returns unsub function. */
 export function subscribeToHITL(ctx: TelegramCtx): () => void {
-    return subscribeChannelHITL(ctx, async (request, chatId, toolNames) => {
+    return subscribeChannelHITL(ctx, async (request, chatId, actions) => {
         const userId = ctx.conversationToUser.get(request.conversationId)
         if (userId === undefined || !isTelegramUserAllowed(ctx.allowedUserIds, userId)) return
 
         const messageId = await sendMessageReturningId(
             ctx,
             chatId,
-            `🔐 **Tool approval required**\n\nThe agent wants to use: ${toolNames}\n\nApprove or deny?`,
+            `🔐 **Approval needed**\n\nTo continue, I need permission for:\n${actions}\n\nWork is paused until you choose.`,
             {
                 reply_markup: {
                     inline_keyboard: [[
-                        { text: '✅ Approve', callback_data: `hitl:${request.taskId}:approve` },
-                        { text: '❌ Deny', callback_data: `hitl:${request.taskId}:deny` }
+                        { text: 'Approve', callback_data: `hitl:${request.taskId}:approve` },
+                        { text: 'Decline', callback_data: `hitl:${request.taskId}:deny` }
                     ]]
                 }
             }
@@ -207,12 +202,20 @@ export function subscribeToHITL(ctx: TelegramCtx): () => void {
         if (messageId !== null) {
             ctx.pendingHITL.set(request.taskId, {
                 conversationId: request.conversationId,
+                actions,
                 chatId,
                 userId,
                 messageId,
                 resolve: request.resolve,
             })
         }
+    }, async (taskId, cancelled) => {
+        const pending = ctx.pendingHITL.get(taskId)
+        if (!pending) return
+        ctx.pendingHITL.delete(taskId)
+        await editMessage(ctx, pending.chatId, pending.messageId,
+            [cancelled ? '⏹ Approval no longer needed.' : '✓ Approval answered in Cynosure.', pending.actions].filter(Boolean).join('\n\n'),
+            { reply_markup: { inline_keyboard: [] } })
     })
 }
 
@@ -250,9 +253,10 @@ export async function handleCallbackQuery(ctx: TelegramCtx, query: NonNullable<T
     ctx.pendingHITL.delete(action.taskId)
     resolveChannelHITL(ctx.broadcast, pending, action.taskId, action.approved, 'Telegram')
 
-    const statusText = action.approved ? '✅ **Approved** — proceeding...' : '❌ **Denied** — the agent will try a different approach.'
-    await editMessage(ctx, pending.chatId, pending.messageId, statusText)
-    await answerCallbackQuery(ctx, query.id, action.approved ? 'Approved!' : 'Denied.')
+    const decision = action.approved ? '✅ **Approved** — continuing…' : '❌ **Declined** — I’ll continue without these actions.'
+    const statusText = [decision, pending.actions].filter(Boolean).join('\n\n')
+    await editMessage(ctx, pending.chatId, pending.messageId, statusText, { reply_markup: { inline_keyboard: [] } })
+    await answerCallbackQuery(ctx, query.id, action.approved ? 'Approved!' : 'Declined.')
 }
 
 export class TelegramChannel implements ChannelProvider {

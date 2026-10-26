@@ -1,21 +1,28 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { TelegramCtx } from './telegram.channel.js'
+import { getEventBus } from '../../telemetry/event-bus.js'
 
 const mocks = vi.hoisted(() => ({
     sendMessage: vi.fn(),
     stopAllActivity: vi.fn(),
+    sendMessageReturningId: vi.fn(),
+    editMessage: vi.fn(),
+    answerCallbackQuery: vi.fn(),
 }))
 
 vi.mock('./telegram.api.js', async (importOriginal) => ({
     ...await importOriginal<typeof import('./telegram.api.js')>(),
     sendMessage: mocks.sendMessage,
+    sendMessageReturningId: mocks.sendMessageReturningId,
+    editMessage: mocks.editMessage,
+    answerCallbackQuery: mocks.answerCallbackQuery,
 }))
 
 vi.mock('../../activity/stop-all.js', () => ({
     stopAllActivity: mocks.stopAllActivity,
 }))
 
-import { handleCommand } from './telegram.channel.js'
+import { handleCallbackQuery, handleCommand, subscribeToHITL } from './telegram.channel.js'
 
 describe('Telegram /kill command', () => {
     beforeEach(() => {
@@ -69,5 +76,59 @@ describe('Telegram /kill command', () => {
             42,
             'No executions are currently running.',
         )
+    })
+})
+
+describe('Telegram approval flow', () => {
+    beforeEach(() => {
+        mocks.sendMessageReturningId.mockReset().mockResolvedValue(100)
+        mocks.editMessage.mockReset().mockResolvedValue(true)
+        mocks.answerCallbackQuery.mockReset().mockResolvedValue(undefined)
+    })
+    afterEach(() => getEventBus().removeAllListeners())
+
+    function setup() {
+        const ctx = {
+            channelId: 'telegram', broadcast: vi.fn(), allowedUserIds: new Set(['42']),
+            conversationTargets: new Map([['conversation', 42]]),
+            conversationToUser: new Map([['conversation', 42]]),
+            conversationSendQueue: new Map(), pendingHITL: new Map(),
+        } as unknown as TelegramCtx
+        const unsubscribe = subscribeToHITL(ctx)
+        const resolve = vi.fn()
+        getEventBus().emit('hitl:request', {
+            conversationId: 'conversation', taskId: 'approval', resolve,
+            toolCalls: [{ id: 'call', function: { name: 'file_write', arguments: '{"path":"/recipes/potato_muffins.md"}' } }],
+        })
+        return { ctx, resolve, unsubscribe }
+    }
+
+    test('shows the target, retains context after approval and removes the buttons', async () => {
+        const { ctx, resolve, unsubscribe } = setup()
+        await vi.waitFor(() => expect(ctx.pendingHITL.size).toBe(1))
+        expect(mocks.sendMessageReturningId.mock.calls[0][2]).toContain('/recipes/potato_muffins.md')
+
+        await handleCallbackQuery(ctx, { id: 'click', from: { id: 42, first_name: 'User' },
+            message: { message_id: 100, chat: { id: 42, type: 'private' } }, data: 'hitl:approval:approve' })
+
+        expect(resolve).toHaveBeenCalledWith({ approved: true, reason: undefined })
+        expect(ctx.pendingHITL.size).toBe(0)
+        expect(mocks.editMessage).toHaveBeenCalledWith(ctx, 42, 100,
+            expect.stringContaining('/recipes/potato_muffins.md'), { reply_markup: { inline_keyboard: [] } })
+        expect(mocks.editMessage.mock.calls[0][3]).toContain('Approved')
+        unsubscribe()
+    })
+
+    test('removes stale buttons when answered in Cynosure without resolving twice', async () => {
+        const { ctx, resolve, unsubscribe } = setup()
+        await vi.waitFor(() => expect(ctx.pendingHITL.size).toBe(1))
+
+        getEventBus().emit('hitl:resolved', { taskId: 'approval' })
+
+        expect(ctx.pendingHITL.size).toBe(0)
+        expect(resolve).not.toHaveBeenCalled()
+        expect(mocks.editMessage).toHaveBeenCalledWith(ctx, 42, 100,
+            expect.stringContaining('answered in Cynosure'), { reply_markup: { inline_keyboard: [] } })
+        unsubscribe()
     })
 })
