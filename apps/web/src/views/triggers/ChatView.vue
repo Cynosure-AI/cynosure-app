@@ -321,7 +321,7 @@ watch(
             <div class="mx-auto mb-5 h-20 w-20">
               <AgentAvatar
                 :name="cyno.name"
-                :icon-url="cyno.uploadedIconUrl"
+                :icon-url="cyno.displayIconUrl"
                 :avatar="cyno.avatar"
                 mood="sleepy"
                 animate="always"

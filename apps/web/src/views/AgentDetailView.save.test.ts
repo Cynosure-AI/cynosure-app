@@ -18,7 +18,7 @@ vi.mock('../stores/chat.store', () => ({ useChatStore: () => ({ setActiveAgent: 
 
 const original: AgentDefinition = {
   id: 'one', name: 'First agent', internalName: 'first_agent', description: 'Original description',
-  category: '', iconUrl: null, avatar: null, providerId: '', model: '', systemPrompt: '', tools: [], subAgents: [],
+  category: '', iconUrl: null, imageUrl: null, avatar: null, avatarSource: 'generated', providerId: '', model: '', systemPrompt: '', tools: [], subAgents: [],
   memoryFolders: [], autoApproveTools: false, autoToolRouting: false, autoMemory: false, dreamingEnabled: true,
   autoRouterProviderId: '', autoRouterModel: '', generateTitle: true, thinkingEnabled: true,
   reasoningEffort: 'medium', maxContextTokens: null, sortOrder: 0, favorite: false, createdAt: 1, updatedAt: 1,
@@ -41,7 +41,7 @@ async function setup(path = '/agents/one') {
   definitions.load = vi.fn(async () => {})
   const cyno = useCynoStore()
   cyno.profile = {
-    name: 'Cyno', iconUrl: null, avatar: null, systemPrompt: '', providerId: '', model: '', tools: null, memoryFolders: null,
+    name: 'Cyno', iconUrl: null, avatar: null, avatarSource: 'generated', systemPrompt: '', providerId: '', model: '', tools: null, memoryFolders: null,
     subAgents: [], thinkingEnabled: true, reasoningEffort: 'medium', autoToolRouting: false, autoMemory: false,
     dreamingEnabled: true, updatedAt: 1, effective: { tools: [], memoryFolders: [] },
   }
@@ -60,7 +60,7 @@ async function setup(path = '/agents/one') {
   } })
   wrappers.push(wrapper)
   await flushPromises()
-  const name = () => wrapper.get('input[type="text"]')
+  const name = () => wrapper.get('#agent-name')
   return { wrapper, router, definitions, name, cyno }
 }
 
@@ -79,8 +79,8 @@ describe('agent settings explicit save', () => {
     await wrapper.get('textarea').setValue('Changed description')
     expect(mocks.update).not.toHaveBeenCalled()
     expect(definitions.get('one')?.name).toBe('First agent')
-    await wrapper.findAll('[role="tab"]')[1].trigger('click')
-    await wrapper.findAll('[role="tab"]')[0].trigger('click')
+    await wrapper.findAll('[role="tab"]:not([data-source])')[1].trigger('click')
+    await wrapper.findAll('[role="tab"]:not([data-source])')[0].trigger('click')
     expect(name().element).toHaveProperty('value', 'Changed name')
     await name().setValue('   ')
     expect(wrapper.get('[data-testid="save-agent"]').attributes('disabled')).toBeDefined()

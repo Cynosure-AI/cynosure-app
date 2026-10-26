@@ -259,6 +259,9 @@ export interface ChatQueueRequest extends ChatSendRequest {
   delivery: ChatQueueDelivery
 }
 
+/** Which face an assistant shows: its uploaded image or its generated avatar. */
+export type AvatarSource = 'image' | 'generated'
+
 /** The ten blobatar silhouettes, in band order. */
 export type AvatarShape = 'round' | 'organic' | 'boxy' | 'capsule' | 'nub' | 'cloud' | 'droplet' | 'hexagon' | 'sun' | 'triangle'
 
@@ -286,6 +289,8 @@ export interface CynoProfile {
   iconUrl: string | null
   /** Generated avatar settings; null uses the face derived from the name. */
   avatar: AvatarConfig | null
+  /** Shows `iconUrl` when 'image' and one is uploaded, the generated avatar otherwise. */
+  avatarSource: AvatarSource
   systemPrompt: string
   /** Empty means the app's default provider and model. */
   providerId: string

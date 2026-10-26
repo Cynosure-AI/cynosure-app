@@ -14,10 +14,10 @@ export const useCynoStore = defineStore('cyno', () => {
     let loading: Promise<void> | null = null
 
     const name = computed(() => profile.value?.name || 'Cyno')
-    /** Cyno's own icon, or the theme's app logo. */
-    const iconUrl = computed(() => profile.value?.iconUrl || useAppBranding().logoIconUrl.value)
-    /** The uploaded icon only; without one, chat shows Cyno's generated avatar instead of the logo. */
-    const uploadedIconUrl = computed(() => profile.value?.iconUrl || null)
+    /** Cyno's image when it is the chosen face; null shows the generated avatar. */
+    const displayIconUrl = computed(() => profile.value?.avatarSource === 'image' ? profile.value.iconUrl : null)
+    /** For branding spots: Cyno's chosen image, or the theme's app logo. */
+    const iconUrl = computed(() => displayIconUrl.value || useAppBranding().logoIconUrl.value)
     const avatar = computed(() => profile.value?.avatar ?? null)
 
     function load(): Promise<void> {
@@ -51,7 +51,7 @@ export const useCynoStore = defineStore('cyno', () => {
         return next
     }
 
-    return { profile, defaults, name, iconUrl, uploadedIconUrl, avatar, load, update }
+    return { profile, defaults, name, iconUrl, displayIconUrl, avatar, load, update }
 })
 
 if (import.meta.hot) {

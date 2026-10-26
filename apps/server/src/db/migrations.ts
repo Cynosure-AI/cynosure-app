@@ -732,6 +732,18 @@ const MIGRATIONS: SchemaMigration[] = [
             if (!columns.has('avatar_json')) db.exec('ALTER TABLE agents ADD COLUMN avatar_json TEXT')
         },
     },
+    {
+        version: 37,
+        description: 'Choose between an agent\'s uploaded image and its generated avatar',
+        up: (db) => {
+            const columns = new Set((db.pragma('table_info(agents)') as Array<{ name: string }>).map((column) => column.name))
+            if (columns.has('avatar_source')) return
+            db.exec(`
+                ALTER TABLE agents ADD COLUMN avatar_source TEXT NOT NULL DEFAULT 'generated' CHECK(avatar_source IN ('image', 'generated'));
+                UPDATE agents SET avatar_source = 'image' WHERE icon_data IS NOT NULL OR (icon_url IS NOT NULL AND icon_url != '');
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

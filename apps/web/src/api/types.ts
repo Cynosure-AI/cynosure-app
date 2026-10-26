@@ -1,4 +1,4 @@
-import type { AvatarConfig, ChatEvent, ConversationExecutionConfig } from '@shared/types'
+import type { AvatarConfig, AvatarSource, ChatEvent, ConversationExecutionConfig } from '@shared/types'
 
 // ── Provider / Chat ─────────────────────────────────────────────────────────
 
@@ -251,9 +251,13 @@ export interface AgentDefinition {
     internalName: string
     description: string
     category: string
+    /** What to show: the uploaded image when it is the chosen source, else null for the generated avatar. */
     iconUrl: string | null
+    /** The uploaded image, kept while the generated avatar is chosen. Writing it uploads or removes the image. */
+    imageUrl: string | null
     /** Generated avatar settings; null uses the face derived from the name. */
     avatar: AvatarConfig | null
+    avatarSource: AvatarSource
     providerId: string
     model: string
     systemPrompt: string

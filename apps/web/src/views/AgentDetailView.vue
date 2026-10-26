@@ -46,7 +46,7 @@ const cynoAgent = computed<AgentDefinition | null>(() => {
   if (!profile) return null
   return {
     id: 'cyno', name: profile.name, internalName: 'cyno', description: '', category: '',
-    iconUrl: profile.iconUrl, avatar: profile.avatar, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
+    iconUrl: cyno.displayIconUrl, imageUrl: profile.iconUrl, avatar: profile.avatar, avatarSource: profile.avatarSource, providerId: profile.providerId, model: profile.model, systemPrompt: profile.systemPrompt,
     tools: profile.effective.tools,
     subAgents: profile.subAgents,
     memoryFolders: profile.effective.memoryFolders,
@@ -79,7 +79,9 @@ watch(() => [isCyno.value, agentId.value], () => {
   saveError.value = ''
   activeSectionId.value = 'general'
 })
-const CYNO_FIELDS = new Set(['name', 'iconUrl', 'avatar', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled', 'thinkingEnabled', 'reasoningEffort'])
+const CYNO_FIELDS = new Set(['name', 'imageUrl', 'avatar', 'avatarSource', 'systemPrompt', 'providerId', 'model', 'tools', 'subAgents', 'memoryFolders', 'autoToolRouting', 'autoMemory', 'dreamingEnabled', 'thinkingEnabled', 'reasoningEffort'])
+/** The face the draft would show, so switching tabs or uploading previews before saving. */
+const headerIconUrl = computed(() => agent.value?.avatarSource === 'image' ? agent.value.imageUrl : null)
 const activeSection = computed(() => sections.find(section => section.id === activeSectionId.value) || sections[0])
 const returnToChat = computed(() => {
   const target = route.query.returnTo
@@ -124,7 +126,11 @@ async function save(): Promise<boolean> {
   try {
     const payload = { ...changes.value }
     if (payload.name !== undefined) payload.name = payload.name.trim()
-    if (isCyno.value) await cyno.update(payload)
+    if (isCyno.value) {
+      // Cyno's profile stores its image as iconUrl.
+      const { imageUrl, ...profileChanges } = payload
+      await cyno.update(imageUrl === undefined ? profileChanges : { ...profileChanges, iconUrl: imageUrl })
+    }
     else await agentDefs.update(agentId.value, payload)
     draft.value = {}
     return true
@@ -296,11 +302,11 @@ const tabs = computed<TabDef<AgentSectionId>[]>(() => {
         <div class="mt-2 flex min-w-0 items-center gap-3">
           <div
             class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg"
-            :class="{ 'bg-linear-to-br from-accent-500/20 to-purple-500/20': agent.iconUrl }"
+            :class="{ 'bg-linear-to-br from-accent-500/20 to-purple-500/20': headerIconUrl }"
           >
             <AgentAvatar
               :name="agent.name"
-              :icon-url="agent.iconUrl"
+              :icon-url="headerIconUrl"
               :avatar="agent.avatar"
               animate="hover"
             />

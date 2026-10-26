@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { getCynoProfile } from '../core/cyno/cyno-profile.js'
+import { cynoDisplayIconUrl, getCynoProfile } from '../core/cyno/cyno-profile.js'
 import { CronExpressionParser } from 'cron-parser'
 import {
     listCronJobs,
@@ -38,7 +38,7 @@ export async function registerCronJobRoutes(app: FastifyInstance): Promise<void>
             return {
                 ...job,
                 agentName: job.agentId ? (agent?.name || 'Unknown') : cyno.name,
-                agentIconUrl: job.agentId ? (agent?.iconUrl || null) : cyno.iconUrl,
+                agentIconUrl: job.agentId ? (agent?.iconUrl || null) : cynoDisplayIconUrl(cyno),
                 isRunning: activeRuns.has(job.id),
                 nextRunAt: job.enabled ? getNextRunAt(job.schedule) : null,
             }

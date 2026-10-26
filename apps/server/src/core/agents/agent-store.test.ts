@@ -74,3 +74,21 @@ test('a hand-edited avatar column falls back to the default face', () => {
     getDb().prepare('UPDATE agents SET avatar_json = ? WHERE id = ?').run('{"hue":"red"}', agent.id)
     expect(getAgent(agent.id)?.avatar).toBeNull()
 })
+
+test('the chosen avatar source decides which face is shown, keeping the image either way', () => {
+    const image = 'data:image/png;base64,iVBORw0KGgo='
+    const agent = createAgent({ name: 'Pictured', iconUrl: image })
+    expect(agent.avatarSource).toBe('image')
+    expect(agent.imageUrl).toMatch(/^\/api\/agents\//)
+    expect(agent.iconUrl).toBe(agent.imageUrl)
+
+    const generated = updateAgent(agent.id, { avatarSource: 'generated' })!
+    expect(generated.iconUrl).toBeNull()
+    expect(generated.imageUrl).not.toBeNull()
+    expect(duplicateAgent(agent.id)).toMatchObject({ avatarSource: 'generated', iconUrl: null })
+
+    expect(updateAgent(agent.id, { imageUrl: image })?.avatarSource).toBe('image')
+    expect(updateAgent(agent.id, { imageUrl: null })).toMatchObject({ avatarSource: 'generated', imageUrl: null, iconUrl: null })
+    expect(createAgent({ name: 'Plain' })).toMatchObject({ avatarSource: 'generated', iconUrl: null, imageUrl: null })
+    expect(() => updateAgent(agent.id, { avatarSource: 'emoji' as never })).toThrow(AvatarConfigError)
+})

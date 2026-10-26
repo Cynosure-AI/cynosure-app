@@ -35,6 +35,8 @@ const props = defineProps<{
   agentName?: string | null
   /** The chat's live avatar speaks for this message, so keep only the gutter. */
   hideAvatar?: boolean
+  /** The live avatar sits in this message's gutter. */
+  liveAvatarAnchor?: boolean
   model?: string
   promptTokens?: number
   completionTokens?: number
@@ -260,7 +262,8 @@ const imageGridClass = computed(() => {
     <!-- Avatar -->
     <div
       v-if="!isUser && hideAvatar"
-      class="shrink-0 hidden md:block w-8"
+      class="shrink-0 hidden md:block w-8 h-8"
+      :data-live-avatar-anchor="liveAvatarAnchor || undefined"
       aria-hidden="true"
     />
     <div

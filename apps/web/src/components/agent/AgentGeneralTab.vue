@@ -4,10 +4,7 @@ import { Icon } from "@iconify/vue";
 import { useProviderStore } from "../../stores/provider.store";
 import { useCynoStore } from "../../stores/cyno.store";
 import type { AgentDefinition } from "../../api/types";
-import IconUpload from "../shared/IconUpload.vue";
-import AgentAvatar from "../shared/AgentAvatar.vue";
-import CollapsibleSection from "../shared/CollapsibleSection.vue";
-import AgentAvatarEditor from "./AgentAvatarEditor.vue";
+import AgentAvatarPicker from "./AgentAvatarPicker.vue";
 import ProviderModelSelect from "../shared/ProviderModelSelect.vue";
 import BaseCard from "../shared/BaseCard.vue";
 import ToggleSwitch from "../shared/ToggleSwitch.vue";
@@ -95,39 +92,22 @@ onMounted(() =>
   <div class="space-y-4 mb-6">
     <!-- ── Identity ──────────────────────────────────────────── -->
     <BaseCard class="p-5 space-y-4">
-      <IconUpload
-        :icon-url="agent.iconUrl"
-        @update="emit('update', 'iconUrl', $event)"
-      >
-        <template #description>
-          An uploaded image is used everywhere {{ agent.name || 'this agent' }} appears. Without one,
-          {{ cyno ? 'Cyno' : 'the agent' }} gets a generated avatar that reacts while it works.
-        </template>
-        <template #fallback>
-          <AgentAvatar
-            :name="agent.name"
-            :avatar="agent.avatar"
-          />
-        </template>
-      </IconUpload>
-
-      <CollapsibleSection
-        v-if="!agent.iconUrl"
-        header-label="Customize generated avatar"
-        header-icon="lucide:sparkles"
-      >
-        <AgentAvatarEditor
-          class="px-1 pt-4"
-          :name="agent.name"
-          :avatar="agent.avatar"
-          :default-avatar="cyno ? cynoStore.defaults?.avatar : null"
-          @update="emit('update', 'avatar', $event)"
-        />
-      </CollapsibleSection>
+      <AgentAvatarPicker
+        :name="agent.name"
+        :avatar-source="agent.avatarSource"
+        :avatar="agent.avatar"
+        :image-url="agent.imageUrl"
+        :default-avatar="cyno ? cynoStore.defaults?.avatar : null"
+        @update="(field, value) => emit('update', field, value)"
+      />
 
       <div>
-        <label class="block text-sm text-ink-secondary mb-1.5">Name</label>
+        <label
+          for="agent-name"
+          class="block text-sm text-ink-secondary mb-1.5"
+        >Name</label>
         <input
+          id="agent-name"
           :value="agent.name"
           type="text"
           class="w-full px-3 py-2 bg-theme-900 border border-theme-700 rounded-lg text-sm text-theme-200 focus:outline-none focus:ring-1 focus:ring-accent-500"
