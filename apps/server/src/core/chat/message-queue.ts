@@ -27,7 +27,7 @@ import type {
 } from '@shared/types'
 import { cancelConversationWait, getPendingWait } from '../triggers/cron-scheduler.js'
 import { getChatExecutionIdsByConversation } from './active-executions.js'
-import { messageContentJson, messageToTranscriptItem, pruneSettledStreamDeltas, publishChatEvent } from './transcript.js'
+import { compactSettledChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from './transcript.js'
 
 type BroadcastFn = (event: string, data: unknown) => void
 
@@ -74,8 +74,8 @@ export function beginChatQueueTurn(conversationId: string): (completed: boolean)
     turns.count--
     if (!turns.count) {
       activeQueueTurns.delete(conversationId)
-      // Chat, channel, and trigger turns all end here; their saved replies supersede the streamed deltas.
-      try { pruneSettledStreamDeltas(getDb(), conversationId) } catch { /* retried on the next turn or start */ }
+      // Chat, channel, and trigger turns all end here; their saved messages supersede the streamed copies.
+      try { compactSettledChatEvents(getDb(), conversationId) } catch { /* retried on the next turn or start */ }
     }
     if (turns.failed) pauseChatQueue(conversationId)
     else if (!turns.count) void runNextQueuedMessage(conversationId)

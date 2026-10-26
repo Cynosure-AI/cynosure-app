@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { applySchemaMigrations } from '../../db/migrations.js'
-import { contentBlocksToProviderContent, executionUpdateToChatPayload, latestMessageEventSequence, listChatEvents, messageContentBlocks, persistChatEvent, pruneSettledStreamDeltas } from './transcript.js'
+import { contentBlocksToProviderContent, executionUpdateToChatPayload, latestMessageEventSequence, listChatEvents, messageContentBlocks, persistChatEvent, pruneSettledStreamDeltas, slimSettledToolEvents } from './transcript.js'
 
 describe('canonical chat transcript', () => {
   test('adapts persisted media fields without losing their order within a modality', () => {
@@ -54,6 +54,35 @@ describe('canonical chat transcript', () => {
     expect(latestMessageEventSequence(db, 'c1')).toBe(saved.sequence)
     expect(pruneSettledStreamDeltas(db, 'c1')).toBe(2)
     expect(listChatEvents(db, 'c1')).toEqual([saved, pending])
+    db.close()
+  })
+
+  test('stores settled tool output once and reads events back unchanged', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    applySchemaMigrations(db)
+    db.prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('c1', 'Chat', 1, 1)
+    const saveTool = (id: string, callId: string, blocks: unknown[]) => db.prepare(
+      "INSERT INTO messages (id, conversation_id, role, content, content_blocks_json, tool_call_id, created_at) VALUES (?, 'c1', 'tool', ?, ?, ?, 1)",
+    ).run(id, (blocks as Array<{ text?: string }>).map((block) => block.text ?? '').join(''), JSON.stringify(blocks), callId)
+    const result = (callId: string, text: string) => ({ type: 'tool-result' as const, id: `result:${callId}`, executionId: 'e1', taskId: 't1',
+      iteration: 1, callId, name: 'search', success: true, createdAt: 1,
+      content: [{ type: 'text' as const, text }, { type: 'image' as const, artifactId: '/img', url: '/img' }] })
+    saveTool('m-same', 'call-same', [{ type: 'text', text: 'full output' }, { type: 'image', artifactId: '/img', url: '/img' }])
+    saveTool('m-diff', 'call-diff', [{ type: 'text', text: 'saved differently' }])
+    const results = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'tool-results',
+      items: [result('call-same', 'full output'), result('call-diff', 'what the card showed')] } })!
+    const item = persistChatEvent(db, { conversationId: 'c1', executionId: 'e1', payload: { type: 'transcript-item',
+      item: { type: 'message', id: 'm-same', role: 'tool', toolCallId: 'call-same', createdAt: 1,
+        content: [{ type: 'text', text: 'full output' }, { type: 'image', artifactId: '/img', url: '/img' }] } } })!
+
+    expect(slimSettledToolEvents(db, 'c1')).toBe(2)
+    const stored = db.prepare('SELECT event_json FROM chat_events ORDER BY sequence').pluck().all() as string[]
+    expect(stored.every((json) => !json.includes('full output'))).toBe(true)
+    // A copy that differs from the saved message is the only record of what was shown, so it stays.
+    expect(stored[0]).toContain('what the card showed')
+    expect(listChatEvents(db, 'c1')).toEqual([results, item])
+    expect(slimSettledToolEvents(db, 'c1')).toBe(0)
     db.close()
   })
 

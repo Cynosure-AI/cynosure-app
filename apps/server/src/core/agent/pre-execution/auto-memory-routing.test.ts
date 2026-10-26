@@ -256,6 +256,7 @@ describe('automatic memory routing visibility', () => {
             weakCount: 0,
             relativeScoreThreshold: 0.65,
         })
+        expect(JSON.parse(candidateCalls[1].arguments).pipelineStats).toBeUndefined()
         const finalCalls = events.at(-1)!.toolCalls as Array<{ arguments: string }>
         expect(finalCalls.map(({ arguments: value }) => JSON.parse(value).selectionMethod)).toEqual(['reranker', 'reranker'])
     })

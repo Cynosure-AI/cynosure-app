@@ -744,6 +744,49 @@ const MIGRATIONS: SchemaMigration[] = [
             `)
         },
     },
+    {
+        version: 38,
+        description: 'Keep one copy of memory pipeline stats per routing decision',
+        up: (db) => {
+            const rows = db.prepare(`
+                SELECT sequence, event_json FROM chat_events
+                WHERE json_extract(event_json, '$.type') = 'routing-decision'
+                  AND json_extract(event_json, '$.entries[1].details.pipelineStats') IS NOT NULL
+            `).all() as Array<{ sequence: number; event_json: string }>
+            const update = db.prepare('UPDATE chat_events SET event_json = ? WHERE sequence = ?')
+            for (const row of rows) {
+                const event = JSON.parse(row.event_json) as { entries: Array<{ details?: Record<string, unknown> }> }
+                for (const entry of event.entries.slice(1)) delete entry.details?.pipelineStats
+                update.run(JSON.stringify(event), row.sequence)
+            }
+        },
+    },
+    {
+        version: 39,
+        description: 'Index tool messages by call ID for event log hydration',
+        up: (db) => db.exec('CREATE INDEX IF NOT EXISTS idx_messages_tool_call ON messages(conversation_id, tool_call_id) WHERE tool_call_id IS NOT NULL'),
+    },
+    {
+        version: 40,
+        description: 'Store router embedding vectors as Float32 blobs instead of JSON text',
+        up: (db) => {
+            for (const table of ['tool_router_embeddings', 'tool_router_tool_embeddings']) {
+                const columns = new Set((db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((column) => column.name))
+                if (!columns.has('vector_json')) continue
+                if (!columns.has('vector')) db.exec(`ALTER TABLE ${table} ADD COLUMN vector BLOB`)
+                const rows = db.prepare(`SELECT rowid, vector_json FROM ${table}`).all() as Array<{ rowid: number; vector_json: string }>
+                const update = db.prepare(`UPDATE ${table} SET vector = ? WHERE rowid = ?`)
+                for (const row of rows) {
+                    try {
+                        const floats = Float32Array.from(JSON.parse(row.vector_json) as number[])
+                        update.run(Buffer.from(floats.buffer), row.rowid)
+                    } catch { /* unreadable entries are re-embedded on demand */ }
+                }
+                // The tables are caches: a row without a vector is simply recomputed.
+                db.exec(`DELETE FROM ${table} WHERE vector IS NULL; ALTER TABLE ${table} DROP COLUMN vector_json`)
+            }
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

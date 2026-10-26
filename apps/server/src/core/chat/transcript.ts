@@ -173,7 +173,112 @@ export function listChatEvents(db: Database.Database, conversationId: string, af
   const typeFilter = types?.length ? ` AND json_extract(event_json, '$.type') IN (${types.map(() => '?').join(', ')})` : ''
   const rows = db.prepare(`SELECT sequence, execution_id, event_json, created_at FROM chat_events WHERE conversation_id = ? AND sequence > ?${typeFilter} ORDER BY sequence LIMIT ?`)
     .all(conversationId, after, ...(types ?? []), limit) as Array<{ sequence: number; execution_id: string; event_json: string; created_at: number }>
-  return rows.map((row) => ({ ...JSON.parse(row.event_json) as ChatEventPayload, version: 1, conversationId, executionId: row.execution_id, sequence: row.sequence, createdAt: row.created_at }) as ChatEvent)
+  const hydrate = toolOutputHydrator(db, conversationId)
+  return rows.map((row) => ({ ...hydrate(JSON.parse(row.event_json) as ChatEventPayload), version: 1, conversationId, executionId: row.execution_id, sequence: row.sequence, createdAt: row.created_at }) as ChatEvent)
+}
+
+// Tool output is saved on its message row. Settled events drop their copy of
+// it and are filled back in from that row whenever they are read.
+type StoredToolResult = Extract<ChatEventPayload, { type: 'tool-results' }>['items'][number] & { outputInMessage?: true }
+type StoredTranscriptItem = Extract<ChatEventPayload, { type: 'transcript-item' }> & { contentInMessage?: true }
+
+function textOf(blocks: ContentBlock[]): string {
+  return blocks.flatMap((block) => block.type === 'text' ? [block.text] : []).join('')
+}
+
+function parseBlocks(json: string | null): ContentBlock[] | null {
+  if (!json) return null
+  try { return JSON.parse(json) as ContentBlock[] } catch { return null }
+}
+
+function toolMessageLookup(db: Database.Database, conversationId: string) {
+  const byId = db.prepare("SELECT content_blocks_json FROM messages WHERE id = ? AND conversation_id = ? AND role = 'tool'").pluck()
+  const byCallId = db.prepare("SELECT content_blocks_json FROM messages WHERE conversation_id = ? AND tool_call_id = ? AND role = 'tool' LIMIT 2").pluck()
+  return {
+    byId: (id: string) => parseBlocks(byId.get(id, conversationId) as string | null),
+    // A call ID only identifies a message when it is unique in the conversation.
+    byCallId: (callId: string) => {
+      const rows = byCallId.all(conversationId, callId) as Array<string | null>
+      return rows.length === 1 ? parseBlocks(rows[0]) : null
+    },
+  }
+}
+
+function toolOutputHydrator(db: Database.Database, conversationId: string): (payload: ChatEventPayload) => ChatEventPayload {
+  let lookup: ReturnType<typeof toolMessageLookup> | undefined
+  return (payload) => {
+    if (payload.type === 'tool-results' && payload.items.some((item) => (item as StoredToolResult).outputInMessage)) {
+      lookup ??= toolMessageLookup(db, conversationId)
+      return { ...payload, items: payload.items.map((item) => {
+        const { outputInMessage, ...rest } = item as StoredToolResult
+        if (!outputInMessage) return item
+        const blocks = lookup!.byCallId(item.callId)
+        return blocks ? { ...rest, content: [{ type: 'text' as const, text: textOf(blocks) }, ...rest.content] } : rest
+      }) }
+    }
+    if (payload.type === 'transcript-item') {
+      const { contentInMessage, ...rest } = payload as StoredTranscriptItem
+      if (!contentInMessage || rest.item.type !== 'message') return payload
+      lookup ??= toolMessageLookup(db, conversationId)
+      return { ...rest, item: { ...rest.item, content: lookup.byId(rest.item.id) ?? rest.item.content } }
+    }
+    return payload
+  }
+}
+
+/**
+ * Drop the tool output copies a settled turn left in the event log. Each copy
+ * is removed only after it is confirmed identical to the saved tool message,
+ * so reading the event back yields exactly what was stored.
+ */
+export function slimSettledToolEvents(db: Database.Database, conversationId: string): number {
+  const cursor = latestMessageEventSequence(db, conversationId)
+  if (!cursor) return 0
+  const rows = db.prepare(`
+    SELECT sequence, event_json FROM chat_events
+    WHERE conversation_id = ? AND sequence <= ? AND (
+      (json_extract(event_json, '$.type') = 'tool-results' AND json_extract(event_json, '$.items[0].outputInMessage') IS NULL)
+      OR (json_extract(event_json, '$.type') = 'transcript-item' AND json_extract(event_json, '$.item.role') = 'tool'
+        AND json_extract(event_json, '$.contentInMessage') IS NULL)
+    )
+  `).all(conversationId, cursor) as Array<{ sequence: number; event_json: string }>
+  if (!rows.length) return 0
+  const lookup = toolMessageLookup(db, conversationId)
+  const update = db.prepare('UPDATE chat_events SET event_json = ? WHERE sequence = ?')
+  let slimmed = 0
+  db.transaction(() => {
+    for (const row of rows) {
+      const payload = JSON.parse(row.event_json) as ChatEventPayload
+      let next: ChatEventPayload | null = null
+      if (payload.type === 'tool-results') {
+        let changed = false
+        const items = payload.items.map((item) => {
+          const [first, ...others] = item.content
+          if ((item as StoredToolResult).outputInMessage || first?.type !== 'text' || others.some((block) => block.type === 'text')) return item
+          const blocks = lookup.byCallId(item.callId)
+          if (!blocks || textOf(blocks) !== first.text) return item
+          changed = true
+          return { ...item, content: others, outputInMessage: true }
+        })
+        if (changed) next = { ...payload, items } as ChatEventPayload
+      } else if (payload.type === 'transcript-item' && payload.item.type === 'message') {
+        const blocks = lookup.byId(payload.item.id)
+        if (blocks && JSON.stringify(blocks) === JSON.stringify(payload.item.content)) {
+          next = { ...payload, item: { ...payload.item, content: [] }, contentInMessage: true } as ChatEventPayload
+        }
+      }
+      if (!next) continue
+      update.run(JSON.stringify(next), row.sequence)
+      slimmed++
+    }
+  })()
+  return slimmed
+}
+
+/** Compact one conversation's event log once its turn has settled. */
+export function compactSettledChatEvents(db: Database.Database, conversationId: string): void {
+  pruneSettledStreamDeltas(db, conversationId)
+  slimSettledToolEvents(db, conversationId)
 }
 
 /** Sequence of the latest saved message; clients resume event replay after it when opening a chat. */
@@ -199,13 +304,11 @@ export function pruneSettledStreamDeltas(db: Database.Database, conversationId: 
   `).run(conversationId, cursor).changes
 }
 
-/** Prune every conversation, yielding between them so startup traffic is not blocked. */
-export async function pruneAllSettledStreamDeltas(db: Database.Database): Promise<number> {
+/** Compact every conversation, yielding between them so startup traffic is not blocked. */
+export async function compactAllSettledChatEvents(db: Database.Database): Promise<void> {
   const conversationIds = db.prepare('SELECT id FROM conversations').pluck().all() as string[]
-  let removed = 0
   for (const conversationId of conversationIds) {
-    removed += pruneSettledStreamDeltas(db, conversationId)
+    compactSettledChatEvents(db, conversationId)
     await new Promise((resolve) => setImmediate(resolve))
   }
-  return removed
 }

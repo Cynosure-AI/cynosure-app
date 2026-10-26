@@ -50,7 +50,7 @@ import { registerCynoRoutes } from './routes/cyno.js'
 import { registerModelFavoritesRoutes } from './routes/model-favorites.js'
 import { registerProjectRoutes } from './routes/projects.js'
 import { addClient, broadcast, setClientConversationSubscriptions, startHeartbeat, startToolRegistryUpdates } from './ws.js'
-import { executionUpdateToChatPayload, pruneAllSettledStreamDeltas, publishChatEvent } from './core/chat/transcript.js'
+import { compactAllSettledChatEvents, executionUpdateToChatPayload, publishChatEvent } from './core/chat/transcript.js'
 import { pauseAllChatQueuesOnStartup } from './core/chat/message-queue.js'
 import { getMcpManager } from './core/tools/mcp/mcp-manager.js'
 import { loadEmbeddingServiceFromDb } from './core/memory/embedding.js'
@@ -647,8 +647,8 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   pauseAllChatQueuesOnStartup()
   // Incognito chats whose tab closed before discarding them are abandoned.
   await purgeTemporaryConversations().catch((err) => console.warn('[chat] Temporary chat cleanup failed; will retry on next start:', err))
-  // Streamed token deltas of finished replies are pruned after each turn; this catches older history.
-  void pruneAllSettledStreamDeltas(getDb()).catch((err) => console.warn('[chat] Stream delta cleanup failed; will retry on next start:', err))
+  // Settled turns are compacted as they finish; this catches older history.
+  void compactAllSettledChatEvents(getDb()).catch((err) => console.warn('[chat] Event log compaction failed; will retry on next start:', err))
 
   // Start filesystem watchers for all existing memory folders
   startMemoryFolderWatchers()

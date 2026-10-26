@@ -664,7 +664,7 @@ function emitMemoryRoutingSelection(
     const visiblePipelineStats = contextPhase === 'gathered-results' || !memories.length
         ? pipelineStats
         : undefined
-    const toolCalls: RoutingDecision['entries'] = memories.map((memory) => {
+    const toolCalls: RoutingDecision['entries'] = memories.map((memory, index) => {
         const visibleMatch = memoryMatch(memory)
         return {
             name: memoryLabel(memory),
@@ -679,7 +679,8 @@ function emitMemoryRoutingSelection(
                 matchScore: visibleMatch.score,
                 scoreType: visibleMatch.scoreType,
                 sourceChunkId: memory.sourceChunkId || memory.id,
-                pipelineStats: visiblePipelineStats,
+                // The stats describe the whole search, so one copy per decision is enough.
+                pipelineStats: index === 0 ? visiblePipelineStats : undefined,
             },
         }
     })

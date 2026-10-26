@@ -16,7 +16,7 @@ export function loadCachedRouterEmbeddings(
 
     try {
         const stmt = getDb().prepare(`
-            SELECT content_hash, vector_json
+            SELECT content_hash, vector
             FROM tool_router_embeddings
             WHERE namespace_id = ?
               AND embedding_provider_id = ?
@@ -28,13 +28,13 @@ export function loadCachedRouterEmbeddings(
         for (const groupId of groupIds) {
             const row = stmt.get(groupId, scope.providerId, scope.model, scope.dimensions, scope.fingerprint) as {
                 content_hash: string
-                vector_json: string
+                vector: Buffer
             } | undefined
 
             if (!row || row.content_hash !== hashes.get(groupId)) continue
 
-            const vector = JSON.parse(row.vector_json) as unknown
-            if (isNumberArray(vector)) vectors.set(groupId, vector)
+            const vector = decodeVector(row.vector, scope.dimensions)
+            if (vector) vectors.set(groupId, vector)
         }
     } catch (err) {
         console.warn('[tool-router] Failed to read router embedding cache:', err)
@@ -58,14 +58,14 @@ export function saveCachedRouterEmbedding(
                 embedding_dimensions,
                 profile_fingerprint,
                 content_hash,
-                vector_json,
+                vector,
                 updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(namespace_id, embedding_provider_id, embedding_model, embedding_dimensions)
             DO UPDATE SET
                 content_hash = excluded.content_hash,
                 profile_fingerprint = excluded.profile_fingerprint,
-                vector_json = excluded.vector_json,
+                vector = excluded.vector,
                 updated_at = excluded.updated_at
         `).run(
             namespaceId,
@@ -74,7 +74,7 @@ export function saveCachedRouterEmbedding(
             scope.dimensions,
             scope.fingerprint,
             contentHash,
-            JSON.stringify(vector),
+            encodeVector(vector),
             Date.now(),
         )
     } catch (err) {
@@ -114,7 +114,7 @@ export function loadCachedToolEmbeddings(
 
     try {
         const stmt = getDb().prepare(`
-            SELECT content_hash, vector_json
+            SELECT content_hash, vector
             FROM tool_router_tool_embeddings
             WHERE tool_name = ?
               AND embedding_provider_id = ?
@@ -126,13 +126,13 @@ export function loadCachedToolEmbeddings(
         for (const toolName of toolNames) {
             const row = stmt.get(toolName, scope.providerId, scope.model, scope.dimensions, scope.fingerprint) as {
                 content_hash: string
-                vector_json: string
+                vector: Buffer
             } | undefined
 
             if (!row || row.content_hash !== hashes.get(toolName)) continue
 
-            const vector = JSON.parse(row.vector_json) as unknown
-            if (isNumberArray(vector)) vectors.set(toolName, vector)
+            const vector = decodeVector(row.vector, scope.dimensions)
+            if (vector) vectors.set(toolName, vector)
         }
     } catch (err) {
         console.warn('[tool-router] Failed to read tool embedding cache:', err)
@@ -156,14 +156,14 @@ export function saveCachedToolEmbedding(
                 embedding_dimensions,
                 profile_fingerprint,
                 content_hash,
-                vector_json,
+                vector,
                 updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(tool_name, embedding_provider_id, embedding_model, embedding_dimensions)
             DO UPDATE SET
                 content_hash = excluded.content_hash,
                 profile_fingerprint = excluded.profile_fingerprint,
-                vector_json = excluded.vector_json,
+                vector = excluded.vector,
                 updated_at = excluded.updated_at
         `).run(
             toolName,
@@ -172,7 +172,7 @@ export function saveCachedToolEmbedding(
             scope.dimensions,
             scope.fingerprint,
             contentHash,
-            JSON.stringify(vector),
+            encodeVector(vector),
             Date.now(),
         )
     } catch (err) {
@@ -201,6 +201,14 @@ export function pruneToolEmbeddingCache(
     }
 }
 
-function isNumberArray(value: unknown): value is number[] {
-    return Array.isArray(value) && value.every((item) => typeof item === 'number')
+/** Vectors are stored as raw Float32 values; embedding providers return float32 precision, so this is lossless. */
+function encodeVector(vector: number[]): Buffer {
+    const floats = Float32Array.from(vector)
+    return Buffer.from(floats.buffer, floats.byteOffset, floats.byteLength)
+}
+
+function decodeVector(blob: Buffer | null, dimensions: number): number[] | null {
+    if (!blob || blob.byteLength !== dimensions * Float32Array.BYTES_PER_ELEMENT) return null
+    // Copy out of the Buffer pool so the view is aligned and owns its memory.
+    return Array.from(new Float32Array(blob.buffer.slice(blob.byteOffset, blob.byteOffset + blob.byteLength)))
 }
