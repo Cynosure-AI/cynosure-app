@@ -465,3 +465,19 @@ export type ProjectTimelineEntry =
     toStatus: ProjectTaskStatus | null
   })
   | (ProjectTimelineBase & { kind: 'chat_started'; origin: string })
+
+/** Public startup diagnostics. Contains display names and timings, never MCP credentials or stderr. */
+export interface McpStartupServer {
+  id: string
+  name: string
+  status: 'connecting' | 'connected' | 'auth-required' | 'error'
+  elapsedMs: number
+  toolCount?: number
+}
+
+export interface ServerStartupProgress {
+  phase: 'providers' | 'memory' | 'tools' | 'conversations' | 'folders' | 'mcp' | 'channels' | 'ready'
+  message: string
+  elapsedMs: number
+  mcpServers: McpStartupServer[]
+}

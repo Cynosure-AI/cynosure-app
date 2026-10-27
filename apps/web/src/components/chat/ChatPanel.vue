@@ -25,6 +25,7 @@ import { useToolPresentation } from '../../composables/useToolPresentation'
 import { useStickyScroll } from '../../composables/useStickyScroll'
 import RichContent from '../shared/RichContent.vue'
 import TypewriterText from '../shared/TypewriterText.vue'
+import StartupProgress from '../status/StartupProgress.vue'
 import { chatIntroTimeline } from './chatIntro'
 import { Icon } from '@iconify/vue'
 import { useRoute } from 'vue-router'
@@ -716,9 +717,7 @@ onMounted(() => {
             :step="introTimeline.typeStep"
           />
         </h2>
-        <p class="chat-intro-fade text-sm mt-2 text-ink-muted max-w-sm text-center">
-          Connecting to server and loading your data.
-        </p>
+        <StartupProgress />
       </template>
       <template v-else>
         <div class="flex items-center justify-center gap-3">

@@ -1,11 +1,13 @@
 import { readonly, ref, watch } from 'vue'
 import { BASE_URL, wsConnected } from '../api/http'
 import type { ServerStartupError } from '../api/types'
+import type { ServerStartupProgress } from '@shared/types'
 
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 1000
 
 const startupError = ref<ServerStartupError | null>(null)
 const serverVersion = ref('')
+const startupProgress = ref<ServerStartupProgress | null>(null)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let initialized = false
 
@@ -15,12 +17,16 @@ let initialized = false
  */
 export async function checkServerHealth(): Promise<void> {
   try {
-    const res = await fetch(`${BASE_URL}/api/health`)
-    const body = await res.json() as { version?: string; startupError?: ServerStartupError }
+    const res = await fetch(`${BASE_URL}/api/health`, { signal: AbortSignal.timeout(5000), cache: 'no-store' })
+    const body = await res.json() as {
+      status?: string; version?: string; startupError?: ServerStartupError; startupProgress?: ServerStartupProgress
+    }
     serverVersion.value = body.version ?? ''
     startupError.value = body.startupError ?? null
+    startupProgress.value = body.status === 'starting' ? body.startupProgress ?? null : null
   } catch {
     // Server not reachable yet; the next poll tries again.
+    startupProgress.value = null
   }
 }
 
@@ -47,11 +53,15 @@ export function useServerStartupError() {
       if (connected) {
         stopPolling()
         startupError.value = null
+        startupProgress.value = null
       } else {
         schedulePoll()
       }
     })
   }
 
-  return { startupError: readonly(startupError), serverVersion: readonly(serverVersion) }
+  return {
+    startupError: readonly(startupError), serverVersion: readonly(serverVersion),
+    startupProgress: readonly(startupProgress),
+  }
 }

@@ -60,6 +60,7 @@ import { registerBuiltInTools } from './core/tools/built-in-tools.js'
 import { getChannelManager } from './core/channels/channel-manager.js'
 import { ensurePricingLoaded } from './core/model-dev-fetcher.js'
 import { pruneCatalogCache } from './core/catalog-cache.js'
+import { createStartupStatus } from './startup-status.js'
 
 const APP_NAME = 'cynosure-server'
 const APP_VERSION = packageJson.version
@@ -404,6 +405,7 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
 
   const startedAt = new Date().toISOString()
   const app = Fastify({ bodyLimit: 50 * 1024 * 1024 })
+  const startup = createStartupStatus(app)
 
   await app.register(fastifyCors)
   await app.register(fastifyWebsocket)
@@ -622,18 +624,24 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerModelFavoritesRoutes, { prefix: '/api/model-favorites' })
   app.register(async (instance) => registerProjectRoutes(instance, broadcast), { prefix: '/api/projects' })
 
-  app.get('/api/health', async () => {
+  app.get('/api/health', async (_request, reply) => {
+    reply.code(startup.ready ? 200 : 503).header('Cache-Control', 'no-store')
     return {
-      status: 'ok',
+      status: startup.ready ? 'ok' : 'starting',
       name: APP_NAME,
       version: APP_VERSION,
       timestamp: new Date().toISOString(),
-      uptimeSeconds: Math.floor(process.uptime())
+      uptimeSeconds: Math.floor(process.uptime()),
+      startupProgress: startup.snapshot(),
     }
   })
 
   const webUiAvailable = await registerWebUi(app, startedAt)
+  // Listen before slow initialization so the UI can poll real progress. The
+  // startup guard keeps APIs and WebSocket unavailable until everything is ready.
+  await app.listen({ port: options.port, host: listenHost })
 
+  startup.stage('providers', 'Loading providers and settings…')
   loadSavedProviders()
   // Model pickers wait on this index before they can list models, so load it
   // now instead of on the first settings visit: the saved copy is ready at once,
@@ -642,14 +650,17 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   void ensurePricingLoaded()
   void warmUsagePricing().catch((err) => console.warn('[metrics] Usage pricing warm-up failed:', err))
   loadEmbeddingServiceFromDb()
+  startup.stage('memory', 'Opening memory and search indexes…')
   const ragStore = getRAGStore()
   await ragStore.initialize(undefined, { optimizeOnStartup: true })
   removeLegacyMemoryAnalysis().catch((err) => console.warn('[memory] Legacy analysis cleanup failed; will retry on next start:', err))
   pruneDocumentThumbnails().catch((err) => console.warn('[files] Thumbnail cache cleanup failed; will retry on next start:', err))
+  startup.stage('tools', 'Registering built-in tools…')
   registerBuiltInTools()
 
   // No execution survives a restart, so leftover queue items would sit as
   // 'pending' with nothing to drain them. Pause them so the UI offers Resume.
+  startup.stage('conversations', 'Restoring conversations…')
   pauseAllChatQueuesOnStartup()
   // Incognito chats whose tab closed before discarding them are abandoned.
   await purgeTemporaryConversations().catch((err) => console.warn('[chat] Temporary chat cleanup failed; will retry on next start:', err))
@@ -657,23 +668,26 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   void compactAllSettledChatEvents(getDb()).catch((err) => console.warn('[chat] Event log compaction failed; will retry on next start:', err))
 
   // Start filesystem watchers for all existing memory folders
+  startup.stage('folders', 'Watching memory folders…')
   startMemoryFolderWatchers()
 
   // Set the server base URL so MCP HTTP transport can construct OAuth callback URLs
   getMcpManager().setServerBaseUrl(`http://127.0.0.1:${options.port}`)
-  await loadSavedMcpServers()
+  startup.stage('mcp', 'Connecting MCP servers…')
+  await loadSavedMcpServers(startup.mcpServer)
   const stopToolEmbeddingWarmup = startToolEmbeddingWarmup()
 
   // Start messaging channels (Telegram, etc.) before cron catch-up runs so
   // startup-triggered jobs can deliver configured output notifications.
   const channelManager = getChannelManager()
   channelManager.setBroadcast(broadcast)
+  startup.stage('channels', 'Starting messaging channels…')
   await channelManager.loadAll()
 
   startCronScheduler(broadcast)
   const stopDreamWorker = startDreamWorker(broadcast)
 
-  await app.listen({ port: options.port, host: listenHost })
+  startup.stage('ready', 'Ready')
 
   const useColor = Boolean(process.stdout.isTTY)
     && process.env.TERM !== 'dumb'

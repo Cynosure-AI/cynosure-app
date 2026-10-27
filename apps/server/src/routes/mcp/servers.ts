@@ -6,6 +6,7 @@ import { readFileSync } from 'fs'
 import { registerMcpTools, findMcpIcon, findEnvHints, type McpEnvHint } from './utils.js'
 import { renderOAuthCallbackPage } from './oauth-callback-page.js'
 import { createMcpServerId } from './server-id.js'
+import type { McpStartupServer } from '@shared/types'
 
 type McpServerRow = {
     id: string
@@ -91,7 +92,7 @@ function setupToolsChangedCallback(): void {
 }
 
 /** Load saved MCP servers from DB and connect enabled ones */
-export async function loadSavedMcpServers(): Promise<void> {
+export async function loadSavedMcpServers(onProgress?: (server: McpStartupServer) => void): Promise<void> {
     setupToolsChangedCallback()
 
     const db = getDb()
@@ -111,13 +112,22 @@ export async function loadSavedMcpServers(): Promise<void> {
 
     await Promise.allSettled(
         configs.map(async (config) => {
+            const startedAt = Date.now()
+            onProgress?.({ id: config.id, name: config.name, status: 'connecting', elapsedMs: 0 })
             try {
                 const tools = await manager.connect(config)
                 const originalName = syncOriginalNameFromServerInfo(config.id, config.name)
                 config.name = rows.find((row) => row.id === config.id)?.custom_name?.trim() || originalName
                 const ns = buildMcpNamespace(config.id, config.name, manager)
                 registerMcpTools(tools, ns, registry)
+                const elapsedMs = Date.now() - startedAt
+                console.log(`[startup] MCP "${config.name}" connected: ${tools.length} tools (${elapsedMs}ms)`)
+                onProgress?.({ id: config.id, name: config.name, status: 'connected', elapsedMs, toolCount: tools.length })
             } catch (err) {
+                const elapsedMs = Date.now() - startedAt
+                const status = manager.hasPendingAuthConnection(config.id) ? 'auth-required' : 'error'
+                console.log(`[startup] MCP "${config.name}" ${status} (${elapsedMs}ms)`)
+                onProgress?.({ id: config.id, name: config.name, status, elapsedMs })
                 console.error(`Failed to connect MCP server '${config.name}':`, (err as Error).message)
             }
         })
