@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { checkServerHealth, useServerStartupError } from './useServerStartupError'
 import { nextTick } from 'vue'
-import { wsConnected } from '../api/http'
+import { reconnectWsNow, wsConnected } from '../api/http'
+
+vi.mock('../api/http', async importOriginal => ({
+  ...await importOriginal<typeof import('../api/http')>(),
+  reconnectWsNow: vi.fn(),
+}))
 
 describe('useServerStartupError', () => {
   afterEach(() => {
@@ -51,9 +56,11 @@ describe('useServerStartupError', () => {
     await checkServerHealth()
     expect(state.startupProgress.value).toEqual(startupProgress)
     expect(state.startupError.value).toBeNull()
+    // Ready before the WebSocket reconnects: hold the final snapshot rather than resetting to the empty state.
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: 'ok' })))
     await checkServerHealth()
-    expect(state.startupProgress.value).toBeNull()
+    expect(state.startupProgress.value).toEqual({ ...startupProgress, phase: 'ready', message: 'Ready' })
+    expect(reconnectWsNow).toHaveBeenCalled()
   })
 
   test('polls while starting and stops once WebSocket connects', async () => {

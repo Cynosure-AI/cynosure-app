@@ -1,5 +1,5 @@
 import { readonly, ref, watch } from 'vue'
-import { BASE_URL, wsConnected } from '../api/http'
+import { BASE_URL, reconnectWsNow, wsConnected } from '../api/http'
 import type { ServerStartupError } from '../api/types'
 import type { ServerStartupProgress } from '@shared/types'
 
@@ -23,7 +23,13 @@ export async function checkServerHealth(): Promise<void> {
     }
     serverVersion.value = body.version ?? ''
     startupError.value = body.startupError ?? null
-    startupProgress.value = body.status === 'starting' ? body.startupProgress ?? null : null
+    if (body.status === 'starting') {
+      startupProgress.value = body.startupProgress ?? null
+    } else if (startupProgress.value && !wsConnected.value) {
+      // Ready, but the WebSocket has not reconnected yet: hold the final snapshot instead of falling back to the empty state.
+      startupProgress.value = { ...startupProgress.value, phase: 'ready', message: 'Ready' }
+      reconnectWsNow()
+    }
   } catch {
     // Server not reachable yet; the next poll tries again.
     startupProgress.value = null

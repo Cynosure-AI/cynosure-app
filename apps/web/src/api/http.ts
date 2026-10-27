@@ -144,6 +144,13 @@ function connectWs(): void {
     }
 }
 
+/** Skip the pending reconnect delay, e.g. once health reports the server is ready. */
+export function reconnectWsNow(): void {
+    if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+    wsReconnectTimer = null
+    connectWs()
+}
+
 export function onWsEvent(event: string, handler: WsHandler): () => void {
     if (!wsListeners.has(event)) wsListeners.set(event, new Set())
     wsListeners.get(event)!.add(handler)
