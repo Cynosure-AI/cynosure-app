@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import type { McpStartupServer, ServerStartupProgress } from '@shared/types'
+import type { ServerStartupProgress } from '@shared/types'
 import { useServerStartupError } from '../../composables/useServerStartupError'
 
 const PHASES: ServerStartupProgress['phase'][] = ['providers', 'memory', 'tools', 'conversations', 'folders', 'mcp', 'channels', 'ready']
-// Connecting servers only show their timer once they start to feel slow.
+// The waiting line only shows a timer once startup starts to feel slow.
 const SLOW_MS = 3000
 
 const { startupProgress } = useServerStartupError()
@@ -30,24 +30,26 @@ const percent = computed(() => {
   return Math.min(100, ((index + within) / (PHASES.length - 1)) * 100)
 })
 
-const statusMeta: Record<McpStartupServer['status'], { label: string; icon: string; class: string }> = {
-  connecting: { label: 'Connecting', icon: 'lucide:loader-2', class: 'border-theme-700/70 text-ink-muted' },
-  connected: { label: 'Connected', icon: 'lucide:check', class: 'border-status-success/25 bg-status-success/5 text-theme-200' },
-  'auth-required': { label: 'Authorization needed', icon: 'lucide:key-round', class: 'border-status-warning/40 bg-status-warning/10 text-theme-200' },
-  error: { label: 'Could not connect', icon: 'lucide:circle-x', class: 'border-status-danger/40 bg-status-danger/10 text-theme-200' },
-}
-const iconClass: Record<McpStartupServer['status'], string> = {
-  connecting: 'animate-spin motion-reduce:animate-none text-accent-fg',
-  connected: 'text-status-success',
-  'auth-required': 'text-status-warning',
-  error: 'text-status-danger',
+// Connected servers are the expected outcome, so only pending and problem servers get named.
+const pending = computed(() => servers.value.filter(server => server.status === 'connecting'))
+const issues = computed(() => servers.value.filter(server => server.status === 'auth-required' || server.status === 'error'))
+// Name a couple of the servers still being waited on; the rest collapse into "+N".
+const WAITING_NAMES = 2
+const waitingOn = computed(() => {
+  const list = pending.value
+  if (!list.length) return ''
+  const names = list.slice(0, WAITING_NAMES).map(server => server.name).join(', ')
+  return list.length > WAITING_NAMES ? `${names} +${list.length - WAITING_NAMES}` : names
+})
+const waitingTitle = computed(() => pending.value.map(server => `${server.name} · ${seconds(server.elapsedMs)}`).join('\n'))
+const slowestPending = computed(() => Math.max(0, ...pending.value.map(server => server.elapsedMs)))
+
+const issueMeta: Record<'auth-required' | 'error', { label: string; icon: string; iconClass: string }> = {
+  'auth-required': { label: 'needs authorization', icon: 'lucide:key-round', iconClass: 'text-status-warning' },
+  error: { label: 'could not connect', icon: 'lucide:circle-x', iconClass: 'text-status-danger' },
 }
 function seconds(ms: number): string {
   return `${Math.floor(ms / 1000)}s`
-}
-function chipTitle(server: McpStartupServer): string {
-  const tools = server.toolCount ? ` · ${server.toolCount} tool${server.toolCount === 1 ? '' : 's'}` : ''
-  return `${server.name}\n${statusMeta[server.status].label} · ${seconds(server.elapsedMs)}${tools}`
 }
 </script>
 
@@ -80,30 +82,41 @@ function chipTitle(server: McpStartupServer): string {
         :style="{ width: `${Math.max(percent, 4)}%` }"
       />
     </div>
+    <p
+      v-if="startupProgress?.phase === 'mcp' && waitingOn"
+      class="mt-2 flex items-center gap-1.5 text-xs text-ink-faint"
+      :title="waitingTitle"
+      data-testid="startup-waiting"
+    >
+      <Icon
+        icon="lucide:loader-2"
+        class="h-3 w-3 shrink-0 animate-spin text-accent-fg motion-reduce:animate-none"
+        aria-hidden="true"
+      />
+      <span class="min-w-0 truncate">Waiting on {{ waitingOn }}</span>
+      <span
+        v-if="slowestPending >= SLOW_MS"
+        class="ml-auto shrink-0 tabular-nums"
+      >{{ seconds(slowestPending) }}</span>
+    </p>
     <ul
-      v-if="servers.length"
-      aria-label="MCP server startup status"
-      class="mt-4 flex flex-wrap justify-center gap-1.5 text-xs"
+      v-if="issues.length"
+      aria-label="MCP servers needing attention"
+      class="mt-3 space-y-1 text-xs"
     >
       <li
-        v-for="server in servers"
+        v-for="server in issues"
         :key="server.id"
-        class="inline-flex max-w-[12rem] items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors duration-300"
-        :class="statusMeta[server.status].class"
-        :title="chipTitle(server)"
+        class="flex items-center gap-1.5"
       >
         <Icon
-          :icon="statusMeta[server.status].icon"
+          :icon="issueMeta[server.status as keyof typeof issueMeta].icon"
           class="h-3 w-3 shrink-0"
-          :class="iconClass[server.status]"
+          :class="issueMeta[server.status as keyof typeof issueMeta].iconClass"
           aria-hidden="true"
         />
-        <span class="min-w-0 truncate">{{ server.name }}</span>
-        <span class="sr-only">{{ statusMeta[server.status].label }}</span>
-        <span
-          v-if="server.status === 'connecting' && server.elapsedMs >= SLOW_MS"
-          class="shrink-0 tabular-nums text-ink-faint"
-        >{{ seconds(server.elapsedMs) }}</span>
+        <span class="min-w-0 truncate text-theme-200">{{ server.name }}</span>
+        <span class="shrink-0 text-ink-faint">{{ issueMeta[server.status as keyof typeof issueMeta].label }}</span>
       </li>
     </ul>
     <p
