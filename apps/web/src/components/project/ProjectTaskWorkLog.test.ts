@@ -32,7 +32,7 @@ function render() {
   })
 }
 
-test('shows each run with its steps and outcome, newest open', async () => {
+test('shows each run with its steps and outcome, all collapsed initially', async () => {
   mocks.taskWorkLog.mockResolvedValue([
     plan({ runId: 'second', status: 'error', items: [{ id: '01', title: 'Draft', status: 'blocked', note: 'Waiting for numbers', updatedAt: 2 }], result: { error: 'Stopped before completion.' } }),
     plan({ runId: 'first', items: [{ id: '01', title: 'Gather data', status: 'completed', updatedAt: 1 }], result: { summary: 'Collected the data.' } }),
@@ -43,7 +43,7 @@ test('shows each run with its steps and outcome, newest open', async () => {
   expect(mocks.taskWorkLog).toHaveBeenCalledWith('project', 'task')
   const runs = wrapper.findAll('details')
   expect(runs).toHaveLength(2)
-  expect(runs[0].attributes('open')).toBeDefined()
+  expect(runs[0].attributes('open')).toBeUndefined()
   expect(runs[1].attributes('open')).toBeUndefined()
   expect(runs[0].text()).toContain('Stopped')
   expect(runs[0].text()).toContain('Waiting for numbers')

@@ -94,12 +94,11 @@ onBeforeUnmount(() => {
       class="flex flex-col gap-2"
     >
       <li
-        v-for="(plan, index) in plans"
+        v-for="plan in plans"
         :key="plan.runId"
       >
         <details
           class="group rounded-lg border border-theme-800 bg-theme-900/60"
-          :open="index === 0"
         >
           <summary class="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-xs [&::-webkit-details-marker]:hidden">
             <Icon
