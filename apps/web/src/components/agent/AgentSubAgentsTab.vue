@@ -64,6 +64,7 @@ const filteredCandidates = computed(() => {
 
 function addSubAgent(agentId: string) {
   if (assignedIds.value.has(agentId)) return
+  if (candidates.value.find(c => c.agent.id === agentId)?.blockedReason) return
   emit('update', 'subAgents', [...assignments.value, { agentId }])
 }
 
@@ -80,6 +81,44 @@ function removeMissing() {
   emit('update', 'subAgents', assignments.value.filter(sa => !missingIds.has(sa.agentId)))
 }
 
+type DropZone = 'assigned' | 'library'
+
+/** The agent being dragged and the column it came from; drops are only accepted by the other column. */
+const dragging = ref<{ agentId: string, from: DropZone } | null>(null)
+const dropZone = ref<DropZone | null>(null)
+
+function onDragStart(agentId: string, from: DropZone, event: DragEvent) {
+  dragging.value = { agentId, from }
+  event.dataTransfer?.setData('text/plain', agentId)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function onDragOver(zone: DropZone, event: DragEvent) {
+  if (!dragging.value || dragging.value.from === zone) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  dropZone.value = zone
+}
+
+function onDragLeave(zone: DropZone, event: DragEvent) {
+  const target = event.currentTarget as HTMLElement | null
+  if (target?.contains(event.relatedTarget as Node | null)) return
+  if (dropZone.value === zone) dropZone.value = null
+}
+
+function onDrop(zone: DropZone) {
+  const drag = dragging.value
+  clearDrag()
+  if (!drag || drag.from === zone) return
+  if (zone === 'assigned') addSubAgent(drag.agentId)
+  else removeSubAgent(drag.agentId)
+}
+
+function clearDrag() {
+  dragging.value = null
+  dropZone.value = null
+}
+
 function openAgent(agentId: string) {
   void router.push(`/agents/${agentId}`)
 }
@@ -90,7 +129,10 @@ function goToAgents() {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div
+    class="space-y-4"
+    :class="{ 'is-dragging': dragging }"
+  >
     <!-- Missing sub-agents warning -->
     <div
       v-if="missingSubAgents.length"
@@ -138,8 +180,12 @@ function goToAgents() {
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <!-- Assigned team -->
       <BaseCard
-        class="flex min-w-0 flex-col p-5"
+        class="flex min-w-0 flex-col p-5 transition-colors"
+        :class="{ 'border-accent-500/60! bg-accent-500/5!': dropZone === 'assigned' }"
         data-test="assigned-sub-agents"
+        @dragover="onDragOver('assigned', $event)"
+        @dragleave="onDragLeave('assigned', $event)"
+        @drop.prevent="onDrop('assigned')"
       >
         <div class="mb-1 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
@@ -173,17 +219,18 @@ function goToAgents() {
 
         <div
           v-if="!assignedAgents.length"
-          class="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-theme-700 px-4 py-8 text-center"
+          class="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center transition-colors"
+          :class="dropZone === 'assigned' ? 'border-accent-500/60' : 'border-theme-700'"
         >
           <Icon
-            icon="lucide:git-fork"
+            :icon="dragging?.from === 'library' ? 'lucide:arrow-down-to-line' : 'lucide:git-fork'"
             class="mb-2 h-6 w-6 text-ink-faint"
           />
           <p class="text-xs text-ink-secondary">
-            No sub-agents assigned
+            {{ dragging?.from === 'library' ? 'Drop to assign' : 'No sub-agents assigned' }}
           </p>
           <p class="mt-1 text-[11px] text-ink-faint">
-            This agent handles every task itself.
+            {{ dragging?.from === 'library' ? 'The agent becomes a sub-agent of this one.' : 'This agent handles every task itself. Drag agents here to assign them.' }}
           </p>
         </div>
 
@@ -194,10 +241,14 @@ function goToAgents() {
           <li
             v-for="sub in assignedAgents"
             :key="sub.id"
-            class="group rounded-lg border border-theme-700/70 bg-theme-800/50 p-3"
+            draggable="true"
+            class="group h-16 cursor-grab rounded-lg border border-theme-700/70 bg-theme-800/50 px-3 transition-[opacity,border-color] hover:border-theme-600 active:cursor-grabbing"
+            :class="{ 'opacity-40': dragging?.agentId === sub.id }"
             :data-test="`assigned-${sub.id}`"
+            @dragstart="onDragStart(sub.id, 'assigned', $event)"
+            @dragend="clearDrag"
           >
-            <div class="flex items-start gap-3">
+            <div class="flex h-full items-center gap-3">
               <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg">
                 <AgentAvatar
                   :name="sub.name"
@@ -206,54 +257,54 @@ function goToAgents() {
                 />
               </div>
               <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <div class="flex min-w-0 items-center gap-2">
                   <span class="truncate text-sm font-medium text-theme-200">{{ sub.name }}</span>
-                  <code class="rounded bg-theme-900 px-1.5 py-0.5 font-mono text-[10px] text-ink-secondary">{{ sub.internalName }}</code>
+                  <code class="shrink-0 rounded bg-theme-900 px-1.5 py-0.5 font-mono text-[10px] text-ink-secondary">{{ sub.internalName }}</code>
                 </div>
-                <p
-                  v-if="sub.description"
-                  class="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-muted"
-                >
-                  {{ sub.description }}
-                </p>
-                <p
-                  v-else
-                  class="mt-1 flex items-center gap-1 text-[11px] text-status-warning"
-                >
-                  <Icon
-                    icon="lucide:alert-triangle"
-                    class="h-3 w-3 shrink-0"
-                  />
-                  No description — the orchestrator uses it to decide when to delegate.
-                </p>
-                <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-faint">
+                <div class="hover-reveal flex items-center gap-1.5 text-[10px] text-ink-faint">
+                  <span
+                    v-if="sub.description"
+                    class="min-w-0 flex-1 truncate text-xs text-ink-muted"
+                    :title="sub.description"
+                  >{{ sub.description }}</span>
+                  <span
+                    v-else
+                    class="flex min-w-0 flex-1 items-center gap-1 text-[11px] text-status-warning"
+                    title="The orchestrator uses the description to decide when to delegate."
+                  >
+                    <Icon
+                      icon="lucide:alert-triangle"
+                      class="h-3 w-3 shrink-0"
+                    />
+                    <span class="truncate">No description</span>
+                  </span>
                   <span
                     v-if="sub.model"
-                    class="inline-flex items-center gap-1 rounded bg-theme-900 px-1.5 py-0.5"
+                    class="inline-flex shrink-0 items-center gap-1 rounded bg-theme-900 px-1.5 py-0.5"
+                    :title="sub.model"
                   >
                     <Icon
                       icon="lucide:cpu"
                       class="h-3 w-3"
                     />
-                    {{ sub.model }}
+                    <span class="max-w-24 truncate">{{ sub.model }}</span>
                   </span>
-                  <span class="inline-flex items-center gap-1 rounded bg-theme-900 px-1.5 py-0.5">
+                  <span class="inline-flex shrink-0 items-center gap-1 rounded bg-theme-900 px-1.5 py-0.5">
                     <Icon
                       icon="lucide:wrench"
                       class="h-3 w-3"
                     />
-                    {{ sub.autoToolRouting ? 'auto tools' : `${sub.tools.length} tool${sub.tools.length === 1 ? '' : 's'}` }}
+                    {{ sub.autoToolRouting ? 'auto' : sub.tools.length }}
                   </span>
                   <span
                     v-if="sub.subAgents?.length"
-                    class="inline-flex items-center gap-1 rounded bg-theme-900 px-1.5 py-0.5"
-                    title="Sub-agents of a delegated agent are not used when it runs as a sub-agent."
+                    class="inline-flex shrink-0 items-center rounded bg-theme-900 px-1.5 py-0.5"
+                    title="Own sub-agents inactive: sub-agents of a delegated agent are not used when it runs as a sub-agent."
                   >
                     <Icon
                       icon="lucide:info"
                       class="h-3 w-3"
                     />
-                    own sub-agents inactive
                   </span>
                 </div>
               </div>
@@ -288,8 +339,12 @@ function goToAgents() {
 
       <!-- Agent library -->
       <BaseCard
-        class="flex min-w-0 flex-col p-5"
+        class="flex min-w-0 flex-col p-5 transition-colors"
+        :class="{ 'border-status-danger/50! bg-status-danger/5!': dropZone === 'library' }"
         data-test="sub-agent-library"
+        @dragover="onDragOver('library', $event)"
+        @dragleave="onDragLeave('library', $event)"
+        @drop.prevent="onDrop('library')"
       >
         <div class="mb-1 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
@@ -316,7 +371,12 @@ function goToAgents() {
           </button>
         </div>
         <p class="mb-3 text-xs text-ink-muted">
-          Click an agent to add it as a sub-agent.
+          <template v-if="dragging?.from === 'assigned'">
+            Drop here to remove it from the sub-agents.
+          </template>
+          <template v-else>
+            Click or drag an agent to add it as a sub-agent.
+          </template>
         </p>
 
         <div
@@ -346,12 +406,18 @@ function goToAgents() {
           >
             <button
               type="button"
-              class="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left transition-colors"
-              :class="blockedReason ? 'cursor-not-allowed opacity-55' : 'hover:bg-theme-800/70'"
+              class="group flex h-12 w-full items-center gap-3 rounded-lg px-2 text-left transition-[background-color,opacity]"
+              :class="[
+                blockedReason ? 'cursor-not-allowed opacity-55' : 'cursor-grab hover:bg-theme-800/70 active:cursor-grabbing',
+                { 'opacity-40': dragging?.agentId === candidate.id },
+              ]"
+              :draggable="!blockedReason"
               :disabled="!!blockedReason"
               :title="blockedReason || `Add ${candidate.name}`"
               :data-test="`candidate-${candidate.id}`"
               @click="addSubAgent(candidate.id)"
+              @dragstart="onDragStart(candidate.id, 'library', $event)"
+              @dragend="clearDrag"
             >
               <div class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg">
                 <AgentAvatar
@@ -361,17 +427,17 @@ function goToAgents() {
                 />
               </div>
               <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <div class="flex min-w-0 items-center gap-2">
                   <Icon
                     v-if="candidate.favorite"
                     icon="lucide:star"
                     class="h-3 w-3 shrink-0 text-amber-300"
                   />
                   <span class="truncate text-xs font-medium text-theme-200">{{ candidate.name }}</span>
-                  <code class="font-mono text-[10px] text-ink-faint">{{ candidate.internalName }}</code>
+                  <code class="shrink-0 font-mono text-[10px] text-ink-faint">{{ candidate.internalName }}</code>
                 </div>
                 <p
-                  class="mt-0.5 line-clamp-1 text-[11px]"
+                  class="hover-reveal truncate text-[11px]"
                   :class="blockedReason ? 'text-status-warning' : 'text-ink-muted'"
                 >
                   {{ blockedReason || candidate.description || 'No description' }}
@@ -380,7 +446,7 @@ function goToAgents() {
               <Icon
                 v-if="!blockedReason"
                 icon="lucide:plus"
-                class="mt-1 h-4 w-4 shrink-0 text-accent-fg"
+                class="h-4 w-4 shrink-0 text-accent-fg"
               />
             </button>
           </li>
@@ -438,3 +504,35 @@ function goToAgents() {
     </BaseCard>
   </div>
 </template>
+
+<style scoped>
+/* Like the sidebar's recent chats: rows have a fixed height with centred content, so as the
+   detail line grows from nothing the heading slides up to make room for it. */
+.hover-reveal {
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 200ms ease-out, margin-top 200ms ease-out, opacity 200ms ease-out;
+}
+
+.group:hover .hover-reveal,
+.group:focus-visible .hover-reveal,
+.group:focus-within .hover-reveal {
+  max-height: 1.25rem;
+  margin-top: 0.125rem;
+  opacity: 1;
+}
+
+.is-dragging .hover-reveal {
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hover-reveal {
+    transition: none;
+  }
+}
+</style>

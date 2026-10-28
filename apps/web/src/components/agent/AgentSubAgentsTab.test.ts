@@ -81,4 +81,29 @@ describe('AgentSubAgentsTab', () => {
     expect(wrapper.find('[data-test="candidate-writer"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="candidate-researcher-copy"]').exists()).toBe(false)
   })
+
+  test('assigns a sub-agent by dragging it onto the assigned column', async () => {
+    const wrapper = mount(AgentSubAgentsTab, { props: { agent: orchestrator } })
+
+    await wrapper.find('[data-test="candidate-writer"]').trigger('dragstart')
+    await wrapper.find('[data-test="assigned-sub-agents"]').trigger('dragover')
+    await wrapper.find('[data-test="assigned-sub-agents"]').trigger('drop')
+    expect(wrapper.emitted('update')).toEqual([['subAgents', [{ agentId: 'researcher' }, { agentId: 'writer' }]]])
+  })
+
+  test('removes a sub-agent by dragging it back to the library', async () => {
+    const wrapper = mount(AgentSubAgentsTab, { props: { agent: orchestrator } })
+
+    await wrapper.find('[data-test="assigned-researcher"]').trigger('dragstart')
+    await wrapper.find('[data-test="sub-agent-library"]').trigger('drop')
+    expect(wrapper.emitted('update')).toEqual([['subAgents', []]])
+  })
+
+  test('ignores drops onto the column the agent came from', async () => {
+    const wrapper = mount(AgentSubAgentsTab, { props: { agent: orchestrator } })
+
+    await wrapper.find('[data-test="candidate-writer"]').trigger('dragstart')
+    await wrapper.find('[data-test="sub-agent-library"]').trigger('drop')
+    expect(wrapper.emitted('update')).toBeUndefined()
+  })
 })
