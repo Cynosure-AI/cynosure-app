@@ -222,7 +222,6 @@
 }
 
 /* Floating panels share the crimson HUD frame, including teleported panels. */
-[data-theme="blackwall"] .notification-popover,
 [data-theme="blackwall"] .planning-task-panel,
 [data-theme="blackwall"] .command-palette {
   border-color: var(--bw-line);
@@ -236,20 +235,9 @@
     0 24px 80px rgba(0, 0, 0, 0.7);
 }
 
-[data-theme="blackwall"] .notification-popover-header,
 [data-theme="blackwall"] .planning-task-panel > div:first-child {
   border-color: var(--bw-line-faint);
   background: linear-gradient(90deg, rgba(255, 46, 59, 0.1), transparent 55%);
-}
-
-[data-theme="blackwall"] .notification-popover-header > span {
-  color: var(--color-accent-fg);
-  text-transform: uppercase;
-  letter-spacing: var(--theme-heading-spacing);
-}
-
-[data-theme="blackwall"] .notification-popover-item {
-  border-color: var(--bw-line-faint);
 }
 
 [data-theme="blackwall"] .planning-task-toggle {

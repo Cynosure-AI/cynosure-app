@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 import { useNotificationStore, type NotificationToast } from '../../stores/notification.store'
-import type { AppNotification } from '../../api/types'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../../stores/chat.store'
 
@@ -14,10 +13,9 @@ async function openConversation(toast: NotificationToast): Promise<void> {
   await chatStore.selectConversation(toast.conversationId, toast.agentId || null)
   await router.push({ name: 'conversation', params: { conversationId: toast.conversationId } })
   notificationStore.dismissToast(toast.id)
-  if (!toast.transient) void notificationStore.markRead(toast.id)
 }
 
-function iconFor(priority: AppNotification['priority']): string {
+function iconFor(priority: NotificationToast['priority']): string {
   if (priority === 'alert') return 'lucide:triangle-alert'
   if (priority === 'action') return 'lucide:circle-alert'
   return 'lucide:info'

@@ -1,7 +1,7 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
   DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse, MemoryRerankerConfig,
-  AgentDefinition, AppNotification, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryDocumentChunks, RuntimeLimits,
+  AgentDefinition, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryDocumentChunks, RuntimeLimits,
   AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ChannelDefinition, ChannelType,
   MetricsSummary, PlanningState,
   ModelListType,
@@ -492,25 +492,6 @@ export const api = {
     /** Background connection changes: unexpected disconnect, auto-reconnect, tools/list_changed. */
     onServerStatus: (cb: (data: { serverId: string; connected: boolean; toolCount?: number }) => void) =>
       onWsEvent('mcp-server-status', cb as WsHandler)
-  },
-
-  notifications: {
-    list: (unreadOnly?: boolean) => {
-      const params = unreadOnly ? '?unreadOnly=true' : ''
-      return get<AppNotification[]>(`/api/notifications${params}`)
-    },
-    markRead: (id: string) =>
-      patch<{ success: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`),
-    markAllRead: () =>
-      post<{ success: boolean }>('/api/notifications/read-all'),
-    remove: (id: string) =>
-      del<{ success: boolean }>(`/api/notifications/${encodeURIComponent(id)}`),
-    removeAll: () =>
-      del<{ success: boolean }>('/api/notifications'),
-    unreadCount: () =>
-      get<{ count: number }>('/api/notifications/unread-count').then((r) => r.count),
-    onCreated: (cb: (data: AppNotification) => void) =>
-      onWsEvent('notification:created', cb as WsHandler)
   },
 
   activity: {

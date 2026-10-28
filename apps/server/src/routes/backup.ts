@@ -40,7 +40,6 @@ type ResetModule =
     | 'channels'
     | 'memory'
     | 'conversations'
-    | 'notifications'
     | 'usage'
     | 'vectors'
 
@@ -52,7 +51,6 @@ const RESET_MODULES: ResetModule[] = [
     'channels',
     'memory',
     'conversations',
-    'notifications',
     'usage',
     'vectors'
 ]
@@ -437,10 +435,6 @@ function resetUsage(db = getDb()): void {
     `).run(JSON.stringify(Date.now()))
 }
 
-function resetNotifications(db = getDb()): void {
-    db.prepare('DELETE FROM notifications').run()
-}
-
 function resetSettings(db = getDb()): void {
     const existingCronJobs = db.prepare('SELECT id FROM cron_jobs').all() as { id: string }[]
     for (const job of existingCronJobs) {
@@ -501,7 +495,6 @@ async function resetSelectedModules(modules: ResetModule[]): Promise<Record<stri
     if (selected.has('memory')) selected.delete('vectors')
 
     await run('conversations', () => resetConversations(db))
-    await run('notifications', () => resetNotifications(db))
     await run('usage', () => resetUsage(db))
     await run('memory', () => resetMemoryFolders(db))
     await run('vectors', resetVectorIndexes)

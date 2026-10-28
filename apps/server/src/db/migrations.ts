@@ -842,6 +842,11 @@ const MIGRATIONS: SchemaMigration[] = [
             )
         `),
     },
+    {
+        version: 44,
+        description: 'Drop in-app notifications; notify_user now delivers through messaging channels only',
+        up: (db) => db.exec('DROP TABLE IF EXISTS notifications'),
+    },
 ]
 
 /** The schema version this build produces and expects. */

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -52,7 +52,7 @@ describe('internal tool behavior annotations', () => {
         const tools = [
             ...makePlanningTools('run'),
             ...makeAttachmentTools('conversation'),
-            makeNotificationTool({ agentId: 'agent', conversationId: 'conversation', broadcast: vi.fn() }),
+            makeNotificationTool({ conversationId: 'conversation', availableChannels: ['telegram'] }),
             makeSearchAvailableMcpToolsTool({ allTools: [], getLoadedToolNames: () => new Set() }),
             makeManageMcpTool(),
         ]

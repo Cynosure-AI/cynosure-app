@@ -1,48 +1,22 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
-import { ref, computed } from 'vue'
-import { api } from '../api/client'
-import type { AppNotification } from '../api/types'
+import { ref } from 'vue'
 
-export type NotificationToast = AppNotification & { transient?: boolean }
+/** A temporary in-app toast, e.g. for a chat waiting on approval. Toasts are not stored. */
+export interface NotificationToast {
+    id: string
+    agentId: string
+    conversationId: string | null
+    title: string
+    body: string
+    priority: 'notice' | 'action' | 'alert'
+}
 
 export const useNotificationStore = defineStore('notifications', () => {
-    const notifications = ref<AppNotification[]>([])
     const toasts = ref<NotificationToast[]>([])
-    const loaded = ref(false)
     const toastTimers = new Map<string, ReturnType<typeof setTimeout>>()
     const toastStartedAt = new Map<string, number>()
     const toastRemaining = new Map<string, number>()
     const toastDuration = 5000
-
-    const unreadCount = computed(() => notifications.value.filter((n) => !n.read).length)
-
-    function sortNotifications() {
-        notifications.value.sort((a, b) =>
-            b.createdAt - a.createdAt
-        )
-    }
-
-    async function load() {
-        try {
-            notifications.value = await api.notifications.list()
-            sortNotifications()
-            loaded.value = true
-        } catch {
-            notifications.value = []
-        }
-    }
-
-    function addFromWs(notification: AppNotification) {
-        const existingIndex = notifications.value.findIndex((n) => n.id === notification.id)
-        if (existingIndex !== -1) {
-            notifications.value[existingIndex] = notification
-            sortNotifications()
-        } else {
-            notifications.value.unshift(notification)
-            sortNotifications()
-        }
-        showToast(notification)
-    }
 
     function showToast(notification: NotificationToast, duration = toastDuration) {
         dismissToast(notification.id)
@@ -82,46 +56,12 @@ export const useNotificationStore = defineStore('notifications', () => {
         toasts.value = toasts.value.filter((toast) => toast.id !== id)
     }
 
-    async function markRead(id: string) {
-        await api.notifications.markRead(id)
-        const n = notifications.value.find((n) => n.id === id)
-        if (n) n.read = true
-    }
-
-    async function markAllRead() {
-        await api.notifications.markAllRead()
-        for (const n of notifications.value) {
-            n.read = true
-        }
-    }
-
-    async function remove(id: string) {
-        await api.notifications.remove(id)
-        notifications.value = notifications.value.filter((n) => n.id !== id)
-        dismissToast(id)
-    }
-
-    async function removeAll() {
-        await api.notifications.removeAll()
-        notifications.value = []
-        for (const toast of [...toasts.value]) dismissToast(toast.id)
-    }
-
     return {
-        notifications,
         toasts,
-        unreadCount,
-        loaded,
-        load,
-        addFromWs,
         showToast,
         dismissToast,
         pauseToast,
-        resumeToast,
-        markRead,
-        markAllRead,
-        remove,
-        removeAll
+        resumeToast
     }
 })
 if (import.meta.hot) {

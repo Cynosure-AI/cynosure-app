@@ -32,7 +32,6 @@ vi.mock('../../api/client', () => ({ api: {
   memory: { onDreamUpdated: () => () => {} },
 } }))
 vi.mock('../../stores/provider.store', () => ({ useProviderStore: () => ({ providers: [] }) }))
-vi.mock('../../stores/notification.store', () => ({ useNotificationStore: () => ({ unreadCount: 0, notifications: [] }) }))
 vi.mock('../../stores/agent-definitions.store', () => ({ useAgentDefinitionsStore: () => ({}) }))
 vi.mock('../../stores/chat.store', () => ({ useChatStore: () => ({}) }))
 vi.mock('../../stores/projects.store', () => ({ useProjectsStore: () => ({

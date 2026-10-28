@@ -33,7 +33,6 @@ import { purgeTemporaryConversations, registerConversationRoutes } from './route
 import { registerMemoryRoutes } from './routes/memory.js'
 import { registerMcpRoutes, loadSavedMcpServers } from './routes/mcp/index.js'
 import { registerProviderRoutes, loadSavedProviders } from './routes/providers.js'
-import { registerNotificationRoutes } from './routes/notifications.js'
 import { registerInstanceRoutes } from './routes/instances.js'
 import { registerActivityRoutes } from './routes/activity.js'
 import { registerCronJobRoutes } from './routes/cron-jobs.js'
@@ -609,7 +608,6 @@ async function startServer(options: StartServerOptions): Promise<RunningServer> 
   app.register(registerAgentDefinitionRoutes, { prefix: '/api/agents' })
   app.register(async (instance) => registerMemoryRoutes(instance, broadcast), { prefix: '/api/memory' })
   app.register(registerMcpRoutes, { prefix: '/api/mcp' })
-  app.register(async (instance) => registerNotificationRoutes(instance, broadcast), { prefix: '/api/notifications' })
   app.register(registerInstanceRoutes, { prefix: '/api/instances' })
   app.register(registerActivityRoutes, { prefix: '/api/activity' })
   app.register(registerCronJobRoutes, { prefix: '/api/cron-jobs' })

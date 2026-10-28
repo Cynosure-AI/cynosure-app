@@ -1,28 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import type { AppNotification } from '../api/types'
+import { useNotificationStore, type NotificationToast } from './notification.store'
 
-const apiMocks = vi.hoisted(() => ({
-  list: vi.fn(),
-  markRead: vi.fn(),
-  markAllRead: vi.fn(),
-  remove: vi.fn(),
-  removeAll: vi.fn(),
-}))
-
-vi.mock('../api/client', () => ({
-  api: { notifications: apiMocks },
-}))
-
-import { useNotificationStore } from './notification.store'
-
-function notification(id: string, createdAt: number, read = false): AppNotification {
+function toast(id: string): NotificationToast {
   return {
     id,
     agentId: 'agent',
     conversationId: null,
-    createdAt,
-    read,
     title: id,
     body: `${id} message`,
     priority: 'notice',
@@ -32,68 +16,36 @@ function notification(id: string, createdAt: number, read = false): AppNotificat
 describe('notification store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.clearAllMocks()
-    vi.useRealTimers()
-  })
-
-  test('loads notifications newest first and computes unread count', async () => {
-    apiMocks.list.mockResolvedValue([
-      notification('old', 1, false),
-      notification('new', 3, true),
-      notification('middle', 2, false),
-    ])
-    const store = useNotificationStore()
-
-    await store.load()
-
-    expect(store.notifications.map(({ id }) => id)).toEqual(['new', 'middle', 'old'])
-    expect(store.unreadCount).toBe(2)
-    expect(store.loaded).toBe(true)
-  })
-
-  test('clears stale data but does not claim a failed load completed', async () => {
-    apiMocks.list.mockRejectedValue(new Error('offline'))
-    const store = useNotificationStore()
-    store.notifications = [notification('stale', 1)]
-
-    await store.load()
-
-    expect(store.notifications).toEqual([])
-    expect(store.loaded).toBe(false)
-  })
-
-  test('merges websocket updates by id and keeps chronological order', () => {
-    const store = useNotificationStore()
-    store.addFromWs(notification('one', 1))
-    store.addFromWs(notification('two', 2))
-    store.addFromWs(notification('one', 3, true))
-
-    expect(store.notifications.map(({ id }) => id)).toEqual(['one', 'two'])
-    expect(store.notifications[0].read).toBe(true)
-    expect(store.unreadCount).toBe(1)
-  })
-
-  test('stacks websocket notifications as temporary, independently dismissible toasts', () => {
     vi.useFakeTimers()
+  })
+
+  test('stacks toasts newest first and dismisses them independently', () => {
     const store = useNotificationStore()
 
-    store.addFromWs(notification('one', 1))
-    store.addFromWs(notification('two', 2))
+    store.showToast(toast('one'))
+    store.showToast(toast('two'))
     expect(store.toasts.map(({ id }) => id)).toEqual(['two', 'one'])
 
     store.dismissToast('one')
     expect(store.toasts.map(({ id }) => id)).toEqual(['two'])
-    expect(store.notifications.map(({ id }) => id)).toEqual(['two', 'one'])
 
     vi.advanceTimersByTime(5000)
     expect(store.toasts).toEqual([])
-    expect(store.notifications).toHaveLength(2)
+  })
+
+  test('replaces a toast shown again under the same id and caps the stack at five', () => {
+    const store = useNotificationStore()
+    store.showToast(toast('one'))
+    store.showToast({ ...toast('one'), title: 'updated' })
+    expect(store.toasts).toEqual([{ ...toast('one'), title: 'updated' }])
+
+    for (const id of ['a', 'b', 'c', 'd', 'e']) store.showToast(toast(id))
+    expect(store.toasts.map(({ id }) => id)).toEqual(['e', 'd', 'c', 'b', 'a'])
   })
 
   test('pauses toast expiry while it is being interacted with', () => {
-    vi.useFakeTimers()
     const store = useNotificationStore()
-    store.addFromWs(notification('one', 1))
+    store.showToast(toast('one'))
 
     vi.advanceTimersByTime(3000)
     store.pauseToast('one')
@@ -103,23 +55,5 @@ describe('notification store', () => {
     store.resumeToast('one')
     vi.advanceTimersByTime(2000)
     expect(store.toasts).toEqual([])
-  })
-
-  test('updates local state only after mutation requests succeed', async () => {
-    apiMocks.markRead.mockResolvedValue(undefined)
-    apiMocks.markAllRead.mockResolvedValue(undefined)
-    apiMocks.remove.mockResolvedValue(undefined)
-    apiMocks.removeAll.mockResolvedValue(undefined)
-    const store = useNotificationStore()
-    store.notifications = [notification('one', 1), notification('two', 2)]
-
-    await store.markRead('one')
-    expect(store.notifications.find(({ id }) => id === 'one')?.read).toBe(true)
-    await store.markAllRead()
-    expect(store.unreadCount).toBe(0)
-    await store.remove('one')
-    expect(store.notifications.map(({ id }) => id)).toEqual(['two'])
-    await store.removeAll()
-    expect(store.notifications).toEqual([])
   })
 })

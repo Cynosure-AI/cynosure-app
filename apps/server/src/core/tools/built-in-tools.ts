@@ -9,6 +9,7 @@ import {
 } from "../memory/memory-folder-scope.js";
 import { getToolRegistry, type ToolNamespace } from "./tool-registry.js";
 import { makeNotificationTool } from "./builtin/notification.js";
+import { getAvailableNotificationChannels } from "./builtin/channel-notification.js";
 import { filterSchedulingTools, makeScheduleTools, SCHEDULE_TOOL_NAMES } from "./builtin/schedule-tools.js";
 import { makeManageMcpTool } from "./builtin/manage-mcp.js";
 import { makeFileTools } from "./builtin/file-tools.js";
@@ -49,7 +50,7 @@ export const BUILTIN_NAMESPACES = {
     notifications: {
         id: BUILTIN_NAMESPACE_IDS.notifications,
         label: "Built-In: Notifications",
-        description: "Send notifications in Cynosure or through connected channels.",
+        description: "Send notifications through connected messaging channels.",
     },
     utility: {
         id: BUILTIN_NAMESPACE_IDS.utility,
@@ -99,11 +100,7 @@ const BUILTIN_TOOL_HYDRATORS = {
         defaultCwd: ctx.conversationId ? getProjectForConversation(ctx.conversationId)?.rootPath : undefined,
     }),
     manage_mcp: () => makeManageMcpTool(),
-    notify_user: (ctx: BuiltInHydrationContext) => makeNotificationTool({
-        agentId: ctx.agentId || "",
-        conversationId: ctx.conversationId,
-        broadcast: ctx.broadcast,
-    }),
+    notify_user: (ctx: BuiltInHydrationContext) => makeNotificationTool({ conversationId: ctx.conversationId }),
     schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[0],
     schedule_list: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[1],
     schedule_update: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[2],
@@ -202,6 +199,13 @@ export function registerBuiltInTools(): void {
 
 // ─── Hydration helpers ─────────────────────────────────────
 
+/** Notifications only reach the user through a channel, so hide the tool while none is connected. */
+function filterNotificationTool(tools: RegistryAwareToolDefinition[]): RegistryAwareToolDefinition[] {
+    const isNotificationTool = (tool: RegistryAwareToolDefinition) => (tool.originalName ?? tool.name) === "notify_user";
+    if (!tools.some(isNotificationTool) || getAvailableNotificationChannels().length > 0) return tools;
+    return tools.filter((tool) => !isNotificationTool(tool));
+}
+
 /**
  * Get the default memory folder when no agent context is available.
  */
@@ -239,7 +243,7 @@ export function hydrateBuiltInTools(
         scheduleExecutionConfig: ctx.scheduleExecutionConfig,
     };
 
-    return filterSchedulingTools(tools, ctx.conversationId).map((t) => {
+    return filterNotificationTool(filterSchedulingTools(tools, ctx.conversationId)).map((t) => {
         const metadata = {
             registryKey: t.registryKey,
             originalName: t.originalName,

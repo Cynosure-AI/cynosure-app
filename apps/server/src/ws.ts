@@ -45,7 +45,6 @@ const globalEventNames = new Set([
   'memory:dream-updated',
   'memory:reembed-progress',
   'backup:restore-progress',
-  'notification:created',
   'mcp-auth-needed',
   'mcp-auth-complete',
   'tools:registry-changed',

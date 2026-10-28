@@ -10,7 +10,7 @@ vi.mock('../api/client', () => ({
   api: {
     activity: { list: mocks.list }, instances: { list: async () => [] },
     memory: { onDreamUpdated: mocks.onDream, cancelDreamRun: mocks.cancel },
-    memoryFolders: { onJobUpdated: () => () => undefined }, notifications: { onCreated: () => () => undefined },
+    memoryFolders: { onJobUpdated: () => () => undefined },
     agent: { onHITLRequest: () => () => undefined },
     chat: { onEvent: () => () => undefined },
   }

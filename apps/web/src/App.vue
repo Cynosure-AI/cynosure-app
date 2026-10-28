@@ -6,7 +6,6 @@ import { useAgentStore, type HITLRequest } from './stores/agent-runtime.store'
 import { useAgentDefinitionsStore } from './stores/agent-definitions.store'
 import { useCynoStore } from './stores/cyno.store'
 import { usePreferencesStore } from './stores/preferences.store'
-import { useNotificationStore } from './stores/notification.store'
 import { api } from './api/client'
 import { wsConnected } from './api/http'
 import AppSidebar from './components/layout/AppSidebar.vue'
@@ -30,7 +29,6 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
 const cynoStore = useCynoStore()
-const notificationStore = useNotificationStore()
 
 // Initialize preferences early so theme is applied before first render
 const preferencesStore = usePreferencesStore()
@@ -85,7 +83,6 @@ async function loadAllStores() {
   await chatStore.loadConversations()
   chatStore.syncAgentBaseline()
   await agentStore.loadTools()
-  await notificationStore.load()
 }
 
 // Reload stores when server connection is (re)established
@@ -178,8 +175,7 @@ onMounted(async () => {
       agentStore.handlePlanningStateUpdated(data)
     }),
     api.mcp.onAuthNeeded(handleMcpAuth),
-    api.mcp.onAuthComplete(handleMcpAuthComplete),
-    api.notifications.onCreated((data) => notificationStore.addFromWs(data))
+    api.mcp.onAuthComplete(handleMcpAuthComplete)
   )
 })
 

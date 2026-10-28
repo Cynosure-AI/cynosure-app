@@ -284,19 +284,6 @@ export interface SubAgentAssignment {
     agentId: string
 }
 
-// ── Notifications ───────────────────────────────────────────────────────────
-
-export interface AppNotification {
-    id: string
-    agentId: string
-    conversationId: string | null
-    title: string
-    body: string
-    priority: 'notice' | 'action' | 'alert'
-    read: boolean
-    createdAt: number
-}
-
 // ── Activity ────────────────────────────────────────────────────────────────
 
 export type ActivityKind = 'instance' | 'artifact' | 'cron' | 'memory' | 'chat' | 'channels' | 'dream'

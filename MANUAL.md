@@ -130,7 +130,6 @@ The router provides these main destinations. Navigation presentation can vary wi
 | Scheduled jobs, `/cron` | Recurring jobs, one-off jobs, and waits |
 | Activity, `/activity` | Active work and histories including chat, cron, memory, and Dream |
 | Tool policy, `/tools-policy` | Per-tool approval behavior |
-| Notifications, `/notifications` | App notifications and read/dismiss controls |
 | Usage, `/usage` | Usage reporting |
 | Settings, `/settings` | Profile, appearance, providers, memory, chat, voice, channels, file access, backup, reset, and About |
 | MCP settings, `/settings/mcp` | MCP server configuration and discovery |
@@ -364,7 +363,7 @@ A tool is a callable capability available to the assistant. Availability, automa
 | Scheduling | Create/list/update/delete jobs; pause a conversation with `schedule_wait` |
 | Files | Metadata, directory listing/tree, path search, content grep, text/media reads, write/edit, create directories, move, merge directories, ZIP archives, delete |
 | Shell | `shell_execute` runs a command on the server host |
-| Notifications | `notify_user` creates an app notification or uses a connected channel |
+| Notifications | `notify_user` messages the user on a connected channel (Telegram, Discord, Slack); it is hidden while none is connected |
 | MCP management | `manage_mcp` manages configured MCP connections |
 | Execution helpers | Todo planning, attachment search/read, MCP discovery, and sub-agent spawn/continue are added when relevant |
 | Projects | Brief/task tools are added inside a project |
@@ -1014,7 +1013,6 @@ shared/
 | `artifacts/` | Media/uploads, staging, attachment retrieval, thumbnails |
 | `telemetry/event-bus.ts` | Internal event publication |
 | `activity/stop-all.ts` | Cross-entry-point stopping |
-| `notifications/` | App notification service |
 | `user-settings.ts` | Shared identity and standing instructions |
 | `usage-metering.ts`, `model-dev-fetcher.ts` | Auxiliary usage and metadata/pricing support |
 | `data-dir.ts`, `runtime-limits.ts` | Canonical paths and common policy constants |
@@ -1037,7 +1035,6 @@ Prefixes are registered in `src/index.ts`. This map lists representative operati
 | `/api/channels` | `channels.ts` | CRUD/toggle/test/observed targets |
 | `/api/activity` | `activity.ts` | Listing and stop-all |
 | `/api/instances` | `instances.ts` | Active executions and stopping |
-| `/api/notifications` | `notifications.ts` | List/read/count/dismiss |
 | `/api/metrics` | `metrics.ts` | Usage and clearing |
 | `/api/files` | `files.ts` | File serving/thumbnails |
 | `/api/file-access` | `file-access.ts` | File-tool roots/directory browsing |
@@ -1291,7 +1288,6 @@ apps/server/src/core/usage-metering.ts
 apps/server/src/core/model-dev-fetcher.ts
 apps/server/src/core/telemetry/event-bus.ts
 apps/server/src/core/activity/stop-all.ts
-apps/server/src/core/notifications/app-notifications.ts
 ```
 
 **Agent, chat, Cyno, and project implementation**
@@ -1420,7 +1416,6 @@ apps/server/src/routes/channels.ts
 apps/server/src/routes/cron-jobs.ts
 apps/server/src/routes/activity.ts
 apps/server/src/routes/instances.ts
-apps/server/src/routes/notifications.ts
 apps/server/src/routes/metrics.ts
 apps/server/src/routes/files.ts
 apps/server/src/routes/file-access.ts
@@ -1455,7 +1450,6 @@ apps/web/src/views/LibraryView.vue
 apps/web/src/views/ToolsPolicyView.vue
 apps/web/src/views/ActivityLogView.vue
 apps/web/src/views/UsageView.vue
-apps/web/src/views/NotificationsView.vue
 apps/web/src/views/settings/SettingsView.vue
 apps/web/src/views/triggers/ChatView.vue
 apps/web/src/views/triggers/CronView.vue

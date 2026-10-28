@@ -3,6 +3,9 @@ import { getChannelManager } from '../../channels/channel-manager.js'
 import { normalizeTelegramUserIds } from '../../channels/telegram/telegram.channel.js'
 import { resolveChannelTarget } from '../../triggers/channel-target-resolver.js'
 
+/** Messaging channel types that can deliver a notification, in preference order. */
+export const NOTIFICATION_CHANNEL_TYPES = ['telegram', 'discord', 'slack'] as const satisfies readonly ChannelType[]
+
 /** Configured channels that are currently capable of delivering a notification. */
 export function getAvailableNotificationChannels(): ChannelType[] {
     const manager = getChannelManager()
@@ -12,11 +15,11 @@ export function getAvailableNotificationChannels(): ChannelType[] {
         if (!manager.getStatus(channel.id).connected || !resolveNotificationTarget(channel)) continue
         types.add(channel.type)
     }
-    return ['telegram', 'discord', 'slack'].filter((type): type is ChannelType => types.has(type as ChannelType))
+    return NOTIFICATION_CHANNEL_TYPES.filter((type) => types.has(type))
 }
 
 export function isNotificationChannelType(value: unknown): value is ChannelType {
-    return value === 'telegram' || value === 'discord' || value === 'slack'
+    return NOTIFICATION_CHANNEL_TYPES.includes(value as typeof NOTIFICATION_CHANNEL_TYPES[number])
 }
 
 /** A reply to the notification on the platform continues `sourceConversationId`. */

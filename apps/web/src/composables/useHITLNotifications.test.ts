@@ -36,14 +36,13 @@ describe('HITL notifications', () => {
     vi.useRealTimers()
   })
 
-  it('shows a linked toast for 10 seconds for a background chat without persisting a notification', () => {
+  it('shows a linked toast for 10 seconds for a background chat', () => {
     const notifications = useNotificationStore()
     mocks.agent.hitlQueue = [request]
     expect(notifications.toasts).toEqual([expect.objectContaining({
       title: 'Approval needed', body: 'Research is waiting for your approval.',
-      conversationId: 'chat-1', agentId: 'agent-1', transient: true,
+      conversationId: 'chat-1', agentId: 'agent-1', priority: 'action',
     })])
-    expect(notifications.notifications).toEqual([])
     vi.advanceTimersByTime(5000)
     expect(notifications.toasts).toHaveLength(1)
     vi.advanceTimersByTime(4999)

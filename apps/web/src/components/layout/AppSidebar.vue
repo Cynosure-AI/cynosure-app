@@ -3,8 +3,6 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { storeToRefs } from "pinia";
 import { useRoute, useRouter } from "vue-router";
 import { useProviderStore } from "../../stores/provider.store";
-import { useNotificationStore } from "../../stores/notification.store";
-import { useAgentDefinitionsStore } from "../../stores/agent-definitions.store";
 import { useChatStore } from "../../stores/chat.store";
 import { useProjectsStore } from "../../stores/projects.store";
 import { useMemoryJobsStore } from "../../stores/memory-jobs.store";
@@ -27,8 +25,6 @@ import SidebarProjects from "./SidebarProjects.vue";
 const route = useRoute();
 const router = useRouter();
 const providerStore = useProviderStore();
-const notificationStore = useNotificationStore();
-const agentDefs = useAgentDefinitionsStore();
 const chatStore = useChatStore();
 const memoryJobsStore = useMemoryJobsStore();
 const preferencesStore = usePreferencesStore();
@@ -42,23 +38,11 @@ const { open: openCommandPalette } = useCommandPalette();
 
 const showStatusPopover = ref(false);
 const statusButtonRef = ref<HTMLElement | null>(null);
-const showNotifications = ref(false);
 const workspaceOpen = ref(true);
 const recentChatsOpen = ref(true);
 const projectsOpen = ref(true);
 const projectsStore = useProjectsStore();
 const recentFilterMenuOpen = ref(false);
-const bellBtnRef = ref<HTMLElement | null>(null);
-const notifPopoverStyle = computed(() => {
-  if (!bellBtnRef.value) return {};
-  const rect = bellBtnRef.value.getBoundingClientRect();
-  return {
-    position: "fixed" as const,
-    top: `${rect.bottom + 8}px`,
-    left: `${rect.left}px`,
-  };
-});
-
 const instances = ref<AgentInstance[]>([]);
 const activeDreamRuns = ref<ActivityItem[]>([]);
 let instancePollTimer: ReturnType<typeof setInterval> | undefined;
@@ -205,51 +189,6 @@ function toggleRecentChatFilter(filter: RecentChatFilter): void {
     : [...selected, filter];
 }
 
-function formatTimeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const future = diff < 0;
-  const absDiff = Math.abs(diff);
-  const mins = Math.floor(absDiff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return future ? `in ${mins}m` : `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return future ? `in ${hrs}h` : `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return future ? `in ${days}d` : `${days}d ago`;
-}
-
-function notificationTime(notif: { createdAt: number }): number {
-  return notif.createdAt;
-}
-
-function notificationPriorityIcon(priority: string): string {
-  switch (priority) {
-    case "alert":
-      return "lucide:alert-triangle";
-    case "action":
-      return "lucide:circle-alert";
-    default:
-      return "lucide:info";
-  }
-}
-
-async function navigateToNotification(notif: {
-  id: string;
-  agentId: string;
-  conversationId: string | null;
-}) {
-  notificationStore.markRead(notif.id);
-  showNotifications.value = false;
-  closeSidebar();
-  if (notif.conversationId) {
-    await chatStore.setActiveAgent(notif.agentId || null);
-    await chatStore.selectConversation(notif.conversationId);
-    router.push(`/chat/${encodeURIComponent(notif.conversationId)}`);
-  } else if (notif.agentId) {
-    router.push(`/agents/${notif.agentId}`);
-  }
-}
-
 function isActive(path: string, exact = false): boolean {
   if (exact) return route.path === path;
   return route.path === path || route.path.startsWith(path + "/");
@@ -285,161 +224,6 @@ async function openCynoChat(): Promise<void> {
 
       <!-- Header actions -->
       <div class="brand-actions flex items-center gap-1 shrink-0">
-        <!-- Notification Bell -->
-        <div class="relative">
-          <button
-            ref="bellBtnRef"
-            type="button"
-            class="p-1.5 rounded-lg hover:bg-theme-800 transition-colors relative"
-            aria-label="Open notifications"
-            aria-haspopup="dialog"
-            :aria-expanded="showNotifications"
-            @click.stop="showNotifications = !showNotifications"
-          >
-            <Icon
-              icon="lucide:bell"
-              class="w-4 h-4"
-              :class="notificationStore.unreadCount > 0
-                ? 'text-accent-fg'
-                : 'text-ink-muted'
-              "
-            />
-            <span
-              v-if="notificationStore.unreadCount > 0"
-              class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center leading-none"
-            >
-              {{
-                notificationStore.unreadCount > 9
-                  ? "9+"
-                  : notificationStore.unreadCount
-              }}
-            </span>
-          </button>
-
-          <Teleport to="body">
-            <!-- Notification Popover -->
-            <Transition
-              enter-active-class="transition duration-150 ease-out"
-              enter-from-class="opacity-0 -translate-y-2"
-              enter-to-class="opacity-100 translate-y-0"
-              leave-active-class="transition duration-100 ease-in"
-              leave-from-class="opacity-100 translate-y-0"
-              leave-to-class="opacity-0 -translate-y-2"
-            >
-              <div
-                v-if="showNotifications"
-                role="dialog"
-                aria-label="Notifications"
-                class="notification-popover w-90 bg-theme-900 border border-theme-700 rounded-xl shadow-2xl overflow-hidden z-200"
-                :style="notifPopoverStyle"
-                @click.stop
-              >
-                <!-- Header -->
-                <div class="notification-popover-header flex items-center justify-between px-3 py-2.5 border-b border-theme-800">
-                  <span class="text-xs font-semibold text-theme-200">Notifications</span>
-                  <div class="flex items-center gap-1">
-                    <RouterLink
-                      to="/notifications"
-                      class="text-[10px] text-accent-fg hover:text-accent-fg transition-colors px-1.5 py-0.5"
-                      @click="showNotifications = false"
-                    >
-                      View all
-                    </RouterLink>
-                    <button
-                      v-if="notificationStore.unreadCount > 0"
-                      class="text-[10px] text-accent-fg hover:text-accent-fg transition-colors px-1.5 py-0.5"
-                      @click.stop="notificationStore.markAllRead()"
-                    >
-                      Mark read
-                    </button>
-                    <button
-                      v-if="notificationStore.notifications.length > 0"
-                      class="text-[10px] text-ink-muted hover:text-theme-300 transition-colors px-1.5 py-0.5"
-                      @click.stop="notificationStore.removeAll()"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Notifications list -->
-                <div class="max-h-72 overflow-y-auto">
-                  <div
-                    v-if="notificationStore.notifications.length === 0"
-                    class="px-3 py-6 text-center text-xs text-ink-muted"
-                  >
-                    No notifications yet
-                  </div>
-                  <div
-                    v-for="notif in notificationStore.notifications"
-                    :key="notif.id"
-                    role="button"
-                    tabindex="0"
-                    class="notification-popover-item w-full text-left px-3 py-2.5 hover:bg-theme-800/60 transition-colors border-b border-theme-800/50 last:border-0 flex gap-2.5 cursor-pointer"
-                    :class="{ 'bg-theme-800/30': !notif.read }"
-                    @click="navigateToNotification(notif)"
-                    @keydown.enter.prevent="navigateToNotification(notif)"
-                    @keydown.space.prevent="navigateToNotification(notif)"
-                  >
-                    <!-- Priority indicator -->
-                    <div class="mt-1 shrink-0">
-                      <Icon
-                        :icon="notificationPriorityIcon(notif.priority)"
-                        class="w-3.5 h-3.5"
-                        :class="{
-                          'text-status-danger': notif.priority === 'alert',
-                          'text-status-warning': notif.priority === 'action',
-                          'text-accent-fg': notif.priority === 'notice',
-                        }"
-                      />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-1.5">
-                        <span
-                          v-if="!notif.read"
-                          class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"
-                        />
-                        <span class="text-xs font-medium text-theme-200 truncate">{{ notif.title }}</span>
-                      </div>
-                      <p class="text-[11px] text-ink-muted mt-0.5 line-clamp-2">
-                        {{ notif.body }}
-                      </p>
-                      <div class="flex items-center gap-2 mt-1">
-                        <span class="text-[10px] text-ink-faint">
-                          {{ agentDefs.get(notif.agentId)?.name || "Agent" }}
-                        </span>
-                        <span class="text-[10px] text-ink-faint">·</span>
-                        <span class="text-[10px] text-ink-faint">{{
-                          formatTimeAgo(notificationTime(notif))
-                        }}</span>
-                      </div>
-                    </div>
-                    <!-- Delete button -->
-                    <button
-                      type="button"
-                      class="mt-1 shrink-0 text-ink-faint hover:text-theme-300 transition-colors"
-                      :aria-label="`Dismiss ${notif.title}`"
-                      @click.stop="notificationStore.remove(notif.id)"
-                    >
-                      <Icon
-                        icon="lucide:x"
-                        class="w-3 h-3"
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </Transition>
-
-            <!-- Click-outside backdrop -->
-            <div
-              v-if="showNotifications"
-              class="fixed inset-0 z-199"
-              @click="showNotifications = false"
-            />
-          </Teleport>
-        </div>
-
         <!-- Collapse toggle (desktop only) -->
         <button
           type="button"
@@ -793,11 +577,6 @@ async function openCynoChat(): Promise<void> {
         class="fixed inset-0 z-40"
         @click="showStatusPopover = false"
       />
-      <div
-        v-if="showNotifications"
-        class="fixed inset-0 z-40"
-        @click="showNotifications = false"
-      />
     </Teleport>
   </aside>
 </template>
@@ -955,10 +734,6 @@ async function openCynoChat(): Promise<void> {
     flex: none;
     width: 100%;
     justify-content: center;
-  }
-
-  .sidebar-collapsed .brand-actions .relative {
-    display: none;
   }
 
   .sidebar-collapsed .status-section>.status-trigger {

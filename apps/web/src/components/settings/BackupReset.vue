@@ -6,7 +6,6 @@ import ModalDialog from '../shared/ModalDialog.vue'
 
 const resetModules = [
   { key: 'conversations', label: 'Conversations', icon: 'lucide:message-square', description: 'Chat history, messages, tasks, attachments, and conversation indexes.' },
-  { key: 'notifications', label: 'Notifications', icon: 'lucide:bell', description: 'Delivered and unread app notifications.' },
   { key: 'usage', label: 'Usage Statistics', icon: 'lucide:bar-chart-3', description: 'Execution logs, step traces, auxiliary model usage, and usage counters.' },
   { key: 'memory', label: 'Memory Folders', icon: 'lucide:book-open', description: 'Memory folder definitions, source files, assignments, and search indexes.' },
   { key: 'vectors', label: 'Vector Indexes', icon: 'lucide:database-search', description: 'Stored vector embeddings only. Memory source files and spaces stay in place.' },

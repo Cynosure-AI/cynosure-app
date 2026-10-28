@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   selectConversation: vi.fn(),
   dismissToast: vi.fn(),
-  markRead: vi.fn(),
   pauseToast: vi.fn(),
   resumeToast: vi.fn(),
   toasts: [] as NotificationToast[],
@@ -20,7 +19,7 @@ vi.mock('../../stores/notification.store', () => ({ useNotificationStore: () => 
 describe('NotificationToastHost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.toasts = [{ id: 'n1', agentId: 'agent-1', conversationId: 'chat-1', title: 'Finished', body: 'Task done', priority: 'notice', read: false, createdAt: 1 }]
+    mocks.toasts = [{ id: 'n1', agentId: 'agent-1', conversationId: 'chat-1', title: 'Finished', body: 'Task done', priority: 'notice' }]
   })
 
   it('opens an associated conversation from the toast', async () => {
@@ -38,16 +37,5 @@ describe('NotificationToastHost', () => {
     await wrapper.get('section').trigger('click')
     expect(mocks.push).not.toHaveBeenCalled()
     expect(mocks.selectConversation).not.toHaveBeenCalled()
-  })
-
-  it('opens a transient HITL toast without marking a nonexistent server notification read', async () => {
-    mocks.toasts[0].transient = true
-    mocks.toasts[0].title = 'Approval needed'
-    const wrapper = mount(NotificationToastHost, { global: { stubs: { Icon: true, TransitionGroup: false } } })
-    await wrapper.get('[aria-label="Open conversation: Approval needed"]').trigger('click')
-    expect(mocks.selectConversation).toHaveBeenCalledWith('chat-1', 'agent-1')
-    expect(mocks.push).toHaveBeenCalledWith({ name: 'conversation', params: { conversationId: 'chat-1' } })
-    expect(mocks.dismissToast).toHaveBeenCalledWith('n1')
-    expect(mocks.markRead).not.toHaveBeenCalled()
   })
 })

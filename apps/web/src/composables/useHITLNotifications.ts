@@ -31,9 +31,6 @@ export function useHITLNotifications(): void {
         title: 'Approval needed',
         body: `${conversation?.title || 'A conversation'} is waiting for your approval.`,
         priority: 'action',
-        createdAt: Date.now(),
-        read: true,
-        transient: true,
       }, 10000)
     }
   }, { flush: 'sync' })

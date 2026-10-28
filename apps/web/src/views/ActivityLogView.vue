@@ -33,7 +33,6 @@ const PAGE_SIZE = 30;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
-let unsubNotification: (() => void) | undefined;
 let unsubDreamUpdate: (() => void) | undefined;
 let unsubMemoryJobUpdate: (() => void) | undefined;
 let unsubHITLRequest: (() => void) | undefined;
@@ -569,7 +568,6 @@ onMounted(() => {
   tickTimer = setInterval(() => {
     now.value = Date.now();
   }, 30_000);
-  unsubNotification = api.notifications.onCreated(() => void loadActivity());
   unsubDreamUpdate = api.memory.onDreamUpdated(() => void loadActivity());
   unsubMemoryJobUpdate = api.memoryFolders.onJobUpdated(() => void loadActivity());
   unsubHITLRequest = api.agent.onHITLRequest(() => void loadActivity());
@@ -584,7 +582,6 @@ onUnmounted(() => {
   clearInterval(tickTimer);
   clearTimeout(searchTimer);
   clearTimeout(stopAllMessageTimer);
-  unsubNotification?.();
   unsubDreamUpdate?.();
   unsubMemoryJobUpdate?.();
   unsubHITLRequest?.();
