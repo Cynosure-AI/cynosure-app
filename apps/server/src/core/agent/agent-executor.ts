@@ -100,9 +100,6 @@ export interface AgentExecutorConfig {
     /** Context window size (max tokens) for the model being used.
      *  Included in stream-end events so the UI can display context usage. */
     contextWindow?: number
-    /** Pre-trim estimated token count from the caller.
-     *  Used as starting floor so the context indicator never drops after trimming. */
-    initialContextEstimate?: number
     /** Context window management strategy. Compaction runs before the executor; within a run it trims like 'sliding-window' (the default). */
     contextStrategy?: ContextStrategy
     /** Maximum completion tokens requested from the provider and reserved in the context budget. */
@@ -124,7 +121,7 @@ export interface AgentExecutorResult {
     content: string
     /** Token usage from the last LLM call */
     usage?: CompletionResponse['usage']
-    /** Total tokens from the last LLM round (accurate context window usage) */
+    /** Projected input tokens of the next model request (context window usage) */
     contextTokens?: number
     /** Number of tool-calling rounds executed */
     toolRounds: number
@@ -178,11 +175,9 @@ function accumulateUsage(prev: Usage, next: Usage): Usage {
     }
 }
 
-/** Returns `candidate` if it exceeds `current`, otherwise returns `current`. */
-function maxTokens(current: number | undefined, candidate: number | undefined): number | undefined {
-    if (candidate == null) return current
-    if (current == null) return candidate
-    return candidate > current ? candidate : current
+/** The assistant turn a model round appends to the context. Thinking is not replayed. */
+function assistantTurn(round: { content: string; toolCalls?: ToolCall[] }): ChatMessage {
+    return { role: 'assistant', content: round.content || '', toolCalls: round.toolCalls }
 }
 
 function toolReturnsGeneratedMedia(tool: ToolDefinition): boolean {
@@ -226,6 +221,10 @@ export class AgentExecutor {
     private roundInProgress: { content: string; thinking: string; images: string[] } | null = null
     /** A schedule_wait succeeded: open tasks continue when the wait resumes the conversation. */
     private waitScheduled = false
+    /** Estimate of the request most recently sent to the model. */
+    private lastRequestEstimate = 0
+    /** Provider-reported prompt size of the last completed model call, paired with our estimate of that request. */
+    private contextAnchor: { promptTokens: number; estimate: number } | null = null
 
     /** The primary streamId (useful for callers that need it for cancel/error handling). */
     get streamId(): string { return this._streamId }
@@ -283,10 +282,7 @@ export class AgentExecutor {
         let lastRoundThinking = ''
         const collectedImages: string[] = []
         let usage: Usage
-        let contextTokens = maxTokens(
-            this.config.initialContextEstimate,
-            this.estimateContextTokens(currentMessages),
-        )
+        let contextTokens = this.projectContextTokens(currentMessages)
         let pendingToolCalls: ToolCall[] | undefined
         let toolRounds = 0
         let openPlanRecoveryAttempts = 0
@@ -314,7 +310,7 @@ export class AgentExecutor {
         collectedImages.push(...initialResult.images)
         pendingToolCalls = initialResult.toolCalls
         usage = initialResult.usage
-        contextTokens = maxTokens(contextTokens, usage?.totalTokens)
+        contextTokens = this.projectContextTokens([...currentMessages, assistantTurn(initialResult)])
         this.publishContextUsage(conversationId, usage, contextTokens)
 
         while (!pendingToolCalls?.length && this.hasOpenPlanningItems()) {
@@ -337,7 +333,7 @@ export class AgentExecutor {
             lastRoundThinking = recoveryResult.thinking
             collectedImages.push(...recoveryResult.images)
             pendingToolCalls = recoveryResult.toolCalls
-            contextTokens = maxTokens(contextTokens, recoveryResult.usage?.totalTokens)
+            contextTokens = this.projectContextTokens([...currentMessages, assistantTurn(recoveryResult)])
             usage = accumulateUsage(usage, recoveryResult.usage)
             if (this.config.streamMode === 'per-round') activeStreamId = recoveryResult.streamId
             this.publishContextUsage(conversationId, usage, contextTokens)
@@ -379,7 +375,7 @@ export class AgentExecutor {
                     collectedImages.push(...steered.images)
                     pendingToolCalls = steered.toolCalls
                     usage = accumulateUsage(usage, steered.usage)
-                    contextTokens = maxTokens(contextTokens, steered.usage?.totalTokens)
+                    contextTokens = this.projectContextTokens([...currentMessages, assistantTurn(steered)])
                     if (!pendingToolCalls?.length) break
                 }
                 toolRounds = round + 1
@@ -398,7 +394,7 @@ export class AgentExecutor {
 
                 // HITL approval
                 if (hitlGate && visibleToolCalls.length) {
-                    const roundResult = await this.handleHITL(hitlGate, taskId, pendingToolCalls, currentMessages, activeStreamId, round, fullContent, usage, contextTokens)
+                    const roundResult = await this.handleHITL(hitlGate, taskId, pendingToolCalls, currentMessages, activeStreamId, round, fullContent, usage)
                     if (roundResult) {
                         // HITL was denied — update state and continue to the next round
                         ; ({ fullContent, lastRoundThinking, pendingToolCalls, usage, contextTokens, activeStreamId } = roundResult)
@@ -415,13 +411,10 @@ export class AgentExecutor {
                 if (this.config.saveMessages) {
                     this.saveAssistantToolCallMessage(conversationId, fullContent, lastRoundThinking, pendingToolCalls, activeStreamId)
                 }
-                contextTokens = maxTokens(
-                    contextTokens,
-                    this.estimateContextTokens([
-                        ...currentMessages,
-                        { role: 'assistant', content: fullContent || '', toolCalls: pendingToolCalls },
-                    ])
-                )
+                contextTokens = this.projectContextTokens([
+                    ...currentMessages,
+                    assistantTurn({ content: fullContent, toolCalls: pendingToolCalls }),
+                ])
                 this.publishContextUsage(conversationId, usage, contextTokens)
 
                 if (visibleToolCalls.length) {
@@ -470,12 +463,11 @@ export class AgentExecutor {
                             : tr.output,
                         toolCallId: tr.toolCallId,
                     })
-                    contextTokens = maxTokens(contextTokens, this.estimateContextTokens(currentMessages))
+                    contextTokens = this.projectContextTokens(currentMessages)
                     this.publishContextUsage(conversationId, usage, contextTokens)
                 }
 
                 currentMessages = this.maybeTrimContext(currentMessages)
-                contextTokens = maxTokens(contextTokens, this.estimateContextTokens(currentMessages))
 
                 const roundResult = await this.streamLLMRound(currentMessages, activeStreamId)
                 fullContent = roundResult.content
@@ -483,7 +475,7 @@ export class AgentExecutor {
                 lastRoundThinking = roundResult.thinking
                 collectedImages.push(...roundResult.images)
                 pendingToolCalls = roundResult.toolCalls
-                contextTokens = maxTokens(contextTokens, roundResult.usage?.totalTokens)
+                contextTokens = this.projectContextTokens([...currentMessages, assistantTurn(roundResult)])
                 usage = accumulateUsage(usage, roundResult.usage)
                 if (this.config.streamMode === 'per-round') activeStreamId = roundResult.streamId
 
@@ -503,7 +495,7 @@ export class AgentExecutor {
                     lastRoundThinking = recoveryResult.thinking
                     collectedImages.push(...recoveryResult.images)
                     pendingToolCalls = recoveryResult.toolCalls
-                    contextTokens = maxTokens(contextTokens, recoveryResult.usage?.totalTokens)
+                    contextTokens = this.projectContextTokens([...currentMessages, assistantTurn(recoveryResult)])
                     usage = accumulateUsage(usage, recoveryResult.usage)
                     if (this.config.streamMode === 'per-round') activeStreamId = recoveryResult.streamId
                     this.publishContextUsage(conversationId, usage, contextTokens)
@@ -654,6 +646,23 @@ export class AgentExecutor {
         return estimateTotalTokens(messages) + estimateToolDefinitionTokens(this.config.tools)
     }
 
+    /** The messages a model request built from `messages` actually sends. */
+    private requestMessages(messages: ChatMessage[]): ChatMessage[] {
+        return this.maybeTrimContext(AgentExecutor.trimOldImages(messages))
+    }
+
+    /**
+     * Input tokens the next model request built from `messages` will use.
+     * Once a call has completed, its provider-reported prompt size is the anchor
+     * and only the change since that request is estimated, so the heuristic's
+     * error does not accumulate. Trimming lowers the projection.
+     */
+    private projectContextTokens(messages: ChatMessage[]): number {
+        const estimate = this.estimateContextTokens(this.requestMessages(messages))
+        if (!this.contextAnchor) return estimate
+        return Math.max(0, this.contextAnchor.promptTokens + estimate - this.contextAnchor.estimate)
+    }
+
     /**
      * Create a gateway stream from the current messages, with old images trimmed.
      */
@@ -664,8 +673,10 @@ export class AgentExecutor {
         const { gateway, tools, model, temperature, thinkingEnabled, reasoningEffort, providerId, conversationId, agentId } = this.config
         const signal = modelSignal || this.config.signal
         const maxTokens = this.requestedOutputTokens()
+        const requestMessages = this.requestMessages(messages)
+        this.lastRequestEstimate = this.estimateContextTokens(requestMessages)
         const request = {
-            messages: this.maybeTrimContext(AgentExecutor.trimOldImages(messages)),
+            messages: requestMessages,
             model,
             tools: tools.length ? tools : undefined,
             temperature,
@@ -695,13 +706,12 @@ export class AgentExecutor {
         round: number,
         fullContent: string,
         usage: Usage,
-        contextTokens: number | undefined,
     ): Promise<{
         fullContent: string
         lastRoundThinking: string
         pendingToolCalls: ToolCall[] | undefined
         usage: Usage
-        contextTokens: number | undefined
+        contextTokens: number
         activeStreamId: string
         images: string[]
     } | null> {
@@ -732,7 +742,6 @@ export class AgentExecutor {
             }
         )
 
-        const updatedContextTokens = maxTokens(contextTokens, this.estimateContextTokens(currentMessages))
         const trimmedMessages = this.maybeTrimContext(currentMessages)
 
         const result = await this.streamLLMRound(trimmedMessages, activeStreamId)
@@ -741,7 +750,7 @@ export class AgentExecutor {
             lastRoundThinking: result.thinking,
             pendingToolCalls: result.toolCalls,
             usage: accumulateUsage(usage, result.usage),
-            contextTokens: maxTokens(updatedContextTokens, result.usage?.totalTokens),
+            contextTokens: this.projectContextTokens([...currentMessages, assistantTurn(result)]),
             activeStreamId: this.config.streamMode === 'per-round' ? result.streamId : activeStreamId,
             images: result.images,
         }
@@ -825,6 +834,9 @@ export class AgentExecutor {
         }
 
         this.roundInProgress = null
+        if (usage?.promptTokens) {
+            this.contextAnchor = { promptTokens: usage.promptTokens, estimate: this.lastRequestEstimate }
+        }
         return { content, thinking, images, toolCalls, usage }
     }
 

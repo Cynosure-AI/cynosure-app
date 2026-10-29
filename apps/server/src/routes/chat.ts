@@ -607,7 +607,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         })
         abortController.signal.throwIfAborted()
         messages = fitted.messages
-        const initialContextEstimate: number | undefined = fitted.initialContextEstimate
         const contextStrategy: ContextStrategy | undefined = fitted.strategy
 
         executor = new AgentExecutor({
@@ -628,7 +627,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           agentName: chatAgentName,
           agentIconUrl: chatAgentIconUrl,
           contextWindow,
-          initialContextEstimate,
           contextStrategy,
           planningRunId,
           planningGoal,

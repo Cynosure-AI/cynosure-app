@@ -174,7 +174,7 @@ export async function applyChannelContextLimit(input: {
     conversationId: string
     broadcast: BroadcastFn
     signal?: AbortSignal
-}): Promise<{ messages: ChatMessage[]; contextWindow?: number; initialContextEstimate?: number; strategy?: ContextStrategy }> {
+}): Promise<{ messages: ChatMessage[]; contextWindow?: number; strategy?: ContextStrategy }> {
     const contextWindow = await resolveContextWindow({
         gateway: input.gateway,
         providerId: input.planned.responseProvider,
@@ -201,7 +201,6 @@ export async function applyChannelContextLimit(input: {
     return {
         messages: fitted.messages,
         contextWindow,
-        initialContextEstimate: fitted.initialContextEstimate,
         strategy: fitted.strategy,
     }
 }

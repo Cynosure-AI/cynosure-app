@@ -3,7 +3,6 @@ import { getDb } from '../../db/database.js'
 import {
     assertHistoryBudget,
     calculateContextBudget,
-    estimateToolDefinitionTokens,
     estimateTotalTokens,
     trimMessagesToContextLimit,
 } from './context-trimmer.js'
@@ -296,8 +295,7 @@ export async function applyCompactStrategy({
     db,
     broadcast,
     signal,
-}: CompactStrategyInput): Promise<{ messages: ChatMessage[]; initialContextEstimate: number }> {
-    const initialEstimate = estimateTotalTokens(messages) + estimateToolDefinitionTokens(tools)
+}: CompactStrategyInput): Promise<{ messages: ChatMessage[] }> {
     const { messages: workingMessages, lastCompactEvent } = replayCompactedHistory({ messages, historyRows, filteredRows })
 
     // Use the same budget as the executor so compaction reacts to routed and
@@ -315,7 +313,7 @@ export async function applyCompactStrategy({
         workingMessages.filter((message) => message.role !== 'system'),
     )
     if (historyTokens <= contextBudget.availableHistory) {
-        return { messages: workingMessages, initialContextEstimate: initialEstimate }
+        return { messages: workingMessages }
     }
 
     // Summarise everything before the latest request. The complete request
@@ -346,7 +344,7 @@ export async function applyCompactStrategy({
     ]
 
     if (toSummarize.length === 0) {
-        return { messages: workingMessages, initialContextEstimate: initialEstimate }
+        return { messages: workingMessages }
     }
 
     const summaryModel = compactModel ?? responseModel
@@ -363,14 +361,14 @@ export async function applyCompactStrategy({
         if (signal?.aborted || (err as Error).name === 'AbortError') throw err
         // Summarisation failed (e.g. provider error). The UI has been notified;
         // the main request still proceeds with the unmodified working messages.
-        return { messages: workingMessages, initialContextEstimate: initialEstimate }
+        return { messages: workingMessages }
     }
 
     const summaryNote = `\n\n---\n[Conversation compacted — ${toSummarize.length} messages summarized by ${summaryModel}]\n${summary}`
     const finalSystemMsgs = injectSummaryNote(workingSystemMsgs, summaryNote)
     const finalMessages: ChatMessage[] = [...finalSystemMsgs, ...latestRequestGroup]
 
-    return { messages: finalMessages, initialContextEstimate: initialEstimate }
+    return { messages: finalMessages }
 }
 
 export class NothingToCompactError extends Error {
@@ -425,7 +423,7 @@ export async function compactConversationNow(input: ReplayInput & {
  */
 export async function applyContextStrategy(
     input: Omit<CompactStrategyInput, 'compactProviderId' | 'compactModel' | 'contextWindow'> & { contextWindow?: number },
-): Promise<{ messages: ChatMessage[]; initialContextEstimate?: number; strategy?: ContextStrategy }> {
+): Promise<{ messages: ChatMessage[]; strategy?: ContextStrategy }> {
     const { contextWindow } = input
     if (!contextWindow) return { messages: replayCompactedHistory(input).messages }
     const { contextStrategy: strategy, compactProviderId, compactModel } = getChatRunSettings(input.db)
@@ -446,7 +444,6 @@ export async function applyContextStrategy(
             reasoningEffort: input.reasoningEffort,
             strategy,
         }),
-        initialContextEstimate: estimateTotalTokens(input.messages) + estimateToolDefinitionTokens(input.tools),
         strategy,
     }
 }

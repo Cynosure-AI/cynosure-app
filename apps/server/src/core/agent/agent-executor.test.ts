@@ -581,3 +581,46 @@ describe('AgentExecutor loaded tools', () => {
     expect(await toolsAfterLoading('missing')).toEqual(['routed', 'search', 'planning', 'loaded'])
   })
 })
+
+describe('AgentExecutor context usage', () => {
+  test('reports the next request input from the provider prompt size, without replayed thinking', async () => {
+    const tool: ToolDefinition = {
+      name: 'lookup',
+      description: 'Returns data',
+      parameters: { type: 'object', properties: {} },
+      timeout: 1_000,
+      execute: async () => ({ success: true, output: 'x'.repeat(400) }),
+    }
+    const streamComplete = vi.fn(() => (async function* (): AsyncIterable<StreamChunk> {
+      if (streamComplete.mock.calls.length === 1) {
+        yield {
+          thinking: 'long reasoning',
+          toolCalls: [{ id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{}' } }],
+          usage: { promptTokens: 10_000, completionTokens: 5_000, totalTokens: 15_000 },
+          done: true,
+        }
+      } else {
+        yield {
+          thinking: 'more reasoning',
+          content: 'done',
+          usage: { promptTokens: 10_150, completionTokens: 3_000, totalTokens: 13_150 },
+          done: true,
+        }
+      }
+    })())
+    const executor = new AgentExecutor({
+      gateway: { streamComplete } as unknown as LLMGateway,
+      tools: [tool],
+      conversationId: 'conversation-1',
+      broadcast: vi.fn(),
+      model: 'test-model',
+      saveMessages: false,
+      emitEvents: false,
+    })
+
+    const result = await executor.run([{ role: 'user', content: 'start' }])
+
+    // Last prompt plus the visible reply the next request appends (1 text token + 20 framing).
+    expect(result.contextTokens).toBe(10_171)
+  })
+})

@@ -406,7 +406,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
             reasoningEffort: settings.reasoningEffort, streamMode: 'single', signal: execAbort.signal,
             streamId, agentId: agent?.id, agentName: identity.name,
             agentIconUrl: identity.iconUrl, planningRunId: planned.planningRunId, planningGoal: planned.planningGoal,
-            contextWindow: context.contextWindow, initialContextEstimate: context.initialContextEstimate,
+            contextWindow: context.contextWindow,
             contextStrategy: context.strategy, isPrimaryExecutor: true,
             takeSteeringMessages: () => takeSteeringMessages(conversationId, streamId),
         })
