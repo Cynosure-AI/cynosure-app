@@ -266,6 +266,7 @@ onUnmounted(() => {
             v-if="showWaterField"
             :key="preferencesStore.theme"
             :intensity="waterIntensity"
+            :drift="freshChat ? 1 : 0"
             class="absolute inset-0 -z-10"
           />
         </Transition>
