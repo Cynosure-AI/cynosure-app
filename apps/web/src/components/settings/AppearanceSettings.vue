@@ -27,7 +27,7 @@ const themes: { id: ThemeId; label: string; icon: string; colors: { bg: string; 
   { id: 'light', label: 'Light', icon: 'lucide:sun', colors: { bg: '#eef2f7', surface: '#ffffff', accent: '#3b82f6', text: '#0f172a' } },
   { id: 'blackwall', label: 'Blackwall', icon: 'lucide:scan-eye', colors: { bg: '#050507', surface: '#0f0f12', accent: '#ff2e3b', text: '#eaeaea' } },
   { id: 'cyberpunk', label: 'Cyberpunk', icon: 'lucide:cpu', colors: { bg: '#111114', surface: '#181819', accent: '#f9f002', text: '#e8e8f0' } },
-  { id: 'emerald', label: 'Emerald', icon: 'lucide:orbit', colors: { bg: '#03110c', surface: '#0b2419', accent: '#18b978', text: '#edf8f2' } },
+  { id: 'emerald', label: 'Emerald', icon: 'lucide:sparkles', colors: { bg: '#030e0b', surface: '#102c22', accent: '#50e4a6', text: '#effaf3' } },
   { id: 'industrial', label: 'Industrial', icon: 'lucide:factory', colors: { bg: '#100e0b', surface: '#211c16', accent: '#f59e0b', text: '#eee7d9' } },
   { id: 'monochrome', label: 'Monochrome', icon: 'lucide:circle-half', colors: { bg: '#080808', surface: '#181818', accent: '#f5f5f5', text: '#ededed' } },
 ]

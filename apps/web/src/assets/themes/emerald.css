@@ -1,32 +1,32 @@
-/* Emerald — deep green glass framed by fine, architectural gold geometry. */
+/* Emerald — nocturnal jade, diffused aurora light, and luminous green glass. */
 [data-theme="emerald"] {
-  --color-accent-fg: #6ee7b7;
-  --color-accent-on: #03130d;
+  --color-accent-fg: #83efc0;
+  --color-accent-on: #02140e;
 
-  --color-theme-950: #06100d;
-  --color-theme-900: #0b1914;
-  --color-theme-800: #12251d;
-  --color-theme-700: #203b30;
-  --color-theme-600: #365747;
-  --color-theme-500: #587968;
-  --color-theme-400: #8fb09f;
-  --color-theme-300: #adccbb;
-  --color-theme-200: #d3e7dc;
-  --color-theme-100: #edf8f2;
+  --color-theme-950: #030e0b;
+  --color-theme-900: #071a14;
+  --color-theme-800: #102c22;
+  --color-theme-700: #244d3d;
+  --color-theme-600: #3c6c56;
+  --color-theme-500: #608d76;
+  --color-theme-400: #91b8a3;
+  --color-theme-300: #b4d4c3;
+  --color-theme-200: #d9eee1;
+  --color-theme-100: #effaf3;
 
   --color-accent-50: #ecfdf5;
   --color-accent-100: #d1fae5;
-  --color-accent-200: #a7f3d0;
-  --color-accent-300: #6ee7b7;
-  --color-accent-400: #34d399;
-  --color-accent-500: #10b981;
-  --color-accent-600: #059669;
-  --color-accent-700: #047857;
-  --color-accent-800: #065f46;
-  --color-accent-900: #064e3b;
-  --color-accent-950: #022c22;
+  --color-accent-200: #b4f5d5;
+  --color-accent-300: #83efc0;
+  --color-accent-400: #50e4a6;
+  --color-accent-500: #25ce8b;
+  --color-accent-600: #13ad74;
+  --color-accent-700: #098359;
+  --color-accent-800: #086448;
+  --color-accent-900: #074d39;
+  --color-accent-950: #032e22;
 
-  --theme-glow-strong: 0 0 0 1px rgba(110,231,183,.3), 0 12px 38px rgba(3,70,48,.3);
+  --theme-glow-strong: 0 0 0 2px rgba(131,239,192,.45), 0 0 28px rgba(37,206,139,.16);
 
   --radius-sm: 6px;
   --radius-md: 9px;
@@ -40,28 +40,54 @@
   letter-spacing: 0;
   color-scheme: dark;
 
-  --theme-shell-background: radial-gradient(circle at 8% 6%, rgba(163,230,53,.1), transparent 24rem), radial-gradient(circle at 88% 24%, rgba(45,212,191,.11), transparent 30rem), var(--color-theme-950);
-  --theme-sidebar-background: linear-gradient(180deg, #0b1914, #06100d);
-  --theme-composer-background: linear-gradient(180deg, #162d23, #10221a);
-  --theme-composer-shadow: 0 12px 36px rgba(1,12,8,.24);
-  --theme-composer-tab-background: #10221a;
-  --theme-nav-active-background: linear-gradient(100deg, rgba(163,230,53,.13), rgba(45,212,191,.055));
-  --theme-nav-active-border: 1px solid rgba(110,231,183,.16);
-  --theme-nav-active-shadow: 0 8px 24px rgba(1,25,17,.18);
-  --theme-heading-shadow: 0 0 26px rgba(110,231,183,.1);
+  --theme-shell-background: #030e0b;
+  /* Broad, feathered light lives on the visible panel, below the content. */
+  --theme-content-background:
+    radial-gradient(ellipse 65% 60% at 52% -12%, rgba(40,175,112,.19), transparent 78%),
+    radial-gradient(ellipse 50% 75% at 108% 58%, rgba(12,116,83,.16), transparent 80%),
+    radial-gradient(ellipse 55% 55% at -12% 100%, rgba(46,130,84,.13), transparent 80%),
+    linear-gradient(155deg, #071a14, #04110e 65%, #061812);
+  --theme-sidebar-background: linear-gradient(165deg, #0a2018, #040f0c 72%);
+  --theme-sidebar-border: rgba(101,203,153,.12);
+  --theme-sidebar-shadow: 8px 0 40px rgba(0,8,5,.18);
+  --theme-composer-background: linear-gradient(135deg, rgba(22,57,42,.96), rgba(10,32,25,.97));
+  --theme-composer-shadow: inset 0 1px 0 rgba(168,244,204,.07), 0 16px 48px rgba(0,8,5,.36), 0 0 40px rgba(37,206,139,.035);
+  --theme-composer-tab-background: #0a2019;
+  --theme-composer-tab-line: rgba(131,239,192,.2);
+  --theme-composer-tab-focus-line: rgba(131,239,192,.55);
+  --theme-nav-active-color: #c4f7dc;
+  --theme-nav-active-background: linear-gradient(100deg, rgba(60,216,144,.17), rgba(37,206,139,.035));
+  --theme-nav-active-border: 1px solid rgba(131,239,192,.14);
+  --theme-nav-active-shadow: inset 2px 0 0 #50e4a6, 0 0 20px rgba(37,206,139,.04);
+  --theme-heading-shadow: 0 0 32px rgba(131,239,192,.15);
   --theme-heading-spacing: -.025em;
-  --theme-selection-background: rgba(52,211,153,.3);
-  --theme-scrollbar-size: 7px;
-  --theme-scrollbar-thumb: linear-gradient(180deg, rgba(163,230,53,.48), rgba(45,212,191,.34));
-  --theme-scrollbar-hover: linear-gradient(180deg, rgba(163,230,53,.72), rgba(45,212,191,.58));
+  --theme-selection-background: rgba(80,228,166,.26);
+  --theme-scrollbar-size: 5px;
+  --theme-scrollbar-track: transparent;
+  --theme-scrollbar-thumb: rgba(104,188,143,.28);
+  --theme-scrollbar-hover: rgba(131,239,192,.5);
 
-  --color-user-message: #0d7047;
+  --color-user-message: #0c6343;
   --color-user-message-text: #f1fff7;
 
-  --theme-action-gradient: linear-gradient(135deg, rgba(163,230,53,.86), rgba(52,211,153,.86) 48%, rgba(45,212,191,.86));
-  --theme-action-shadow: 0 8px 24px rgba(16,185,129,.16);
+  --theme-action-gradient: linear-gradient(135deg, #83efc0, #3cdb9a 55%, #25bd83);
+  --theme-action-shadow: inset 0 1px 0 rgba(223,255,238,.4), 0 4px 18px rgba(37,206,139,.2);
 
-  --color-ink-secondary: #c0dbc9;
-  --color-ink-muted: #a0c6af;
-  --color-ink-faint: #91ae9e;
+  --color-ink-secondary: #c0decd;
+  --color-ink-muted: #a0c5b0;
+  --color-ink-faint: #91b29f;
+  --color-page-header: rgba(5,20,15,.78);
+}
+
+[data-theme="emerald"] .app-content {
+  box-shadow: inset 0 0 0 1px rgba(131,239,192,.1), 0 20px 60px rgba(0,6,4,.3);
+}
+
+[data-theme="emerald"] .chat-composer {
+  border-color: rgba(131,239,192,.22);
+}
+
+[data-theme="emerald"] .chat-composer:focus-within {
+  border-color: rgba(131,239,192,.55);
+  box-shadow: inset 0 1px 0 rgba(168,244,204,.1), 0 0 0 1px rgba(80,228,166,.16), 0 0 40px rgba(37,206,139,.1), 0 16px 48px rgba(0,8,5,.36);
 }
