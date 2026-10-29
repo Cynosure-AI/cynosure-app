@@ -14,7 +14,7 @@ import {
   readFileAttachmentText,
   type FileAttachmentArtifact,
 } from '../artifacts/file-artifacts.js'
-import { collectOrphanedAttachmentAssets, indexConversationAttachment, persistMessageFileAttachments, reuseConversationAttachment } from '../artifacts/attachment-rag.js'
+import { collectOrphanedAttachmentAssets, persistMessageFileAttachments, reuseConversationAttachment } from '../artifacts/attachment-store.js'
 import { releaseAttachmentAsset } from '../artifacts/attachment-asset-references.js'
 import { commitStagedChatAttachments, takeStagedChatAttachments } from '../artifacts/staged-attachments.js'
 import type {
@@ -165,7 +165,6 @@ async function stageRequest(conversationId: string, request: ChatQueueRequest): 
         .filter((file): file is NonNullable<typeof file> => Boolean(file)))
       files.push(...await materializeFileAttachments(request.files.filter(file => !file.stagedId && !file.existingAttachmentId && typeof file.content === 'string').map(file => ({ name: file.name, content: file.content! })), conversationId))
     }
-    for (const file of files) if (file.chunkCount === undefined) file.chunkCount = await indexConversationAttachment(conversationId, file)
     return { images, audio, files }
   } catch (error) {
     for (const file of files) releaseAttachmentAsset(file)

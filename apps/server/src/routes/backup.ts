@@ -25,7 +25,6 @@ import { ensureFolder, listFilesInFolder } from '../core/memory/memory-file-mana
 import { directoryPathForRelative, folderPathForDirectory, validateRelativePath } from '../core/memory/memory-folder-directories.js'
 import { stopAllMemoryFolderWatchers, watchMemoryFolder } from '../core/memory/memory-folder-watcher.js'
 import { scheduleCronJob, unscheduleCronJob } from '../core/triggers/cron-scheduler.js'
-import { dropConversationAttachmentIndex, indexConversationAttachment } from '../core/artifacts/attachment-rag.js'
 import type { FileAttachmentArtifact } from '../core/artifacts/file-artifacts.js'
 import { DEFAULT_PERMANENT_MEMORY_TABLE, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { invalidateDreamConversation } from '../core/memory/dream-worker.js'
@@ -382,7 +381,6 @@ async function resetVectorIndexes(): Promise<void> {
     }
     await ragStore.initialize()
     setActivePermanentMemoryTableName(DEFAULT_PERMANENT_MEMORY_TABLE)
-    await dropConversationAttachmentIndex()
     try { getDb().prepare('DELETE FROM memory_file_index').run() } catch { /* ignore */ }
 }
 
@@ -417,7 +415,6 @@ async function resetConversations(db = getDb()): Promise<void> {
     db.prepare('DELETE FROM project_brief_revisions').run()
     db.prepare('DELETE FROM project_tasks').run()
     db.prepare('DELETE FROM projects').run()
-    await dropConversationAttachmentIndex()
 
     const artifactsDir = join(getAppDataDir(), 'artifacts')
     if (existsSync(artifactsDir)) {
@@ -734,7 +731,7 @@ async function restoreAttachments(
     }
 
     const rows = db.prepare(`
-        SELECT id, asset_id, conversation_id, name, original_path, text_path, size_bytes, text_bytes, chunk_count
+        SELECT id, asset_id, conversation_id, name, original_path, text_path, size_bytes, text_bytes, metadata_json
         FROM message_attachments
         WHERE conversation_id IN (${placeholders}) AND kind = 'file'
     `).all(...ids) as {
@@ -746,7 +743,7 @@ async function restoreAttachments(
         text_path: string | null
         size_bytes: number | null
         text_bytes: number | null
-        chunk_count: number | null
+        metadata_json: string | null
     }[]
 
     for (const row of rows) {
@@ -770,10 +767,11 @@ async function restoreAttachments(
             textPath,
             sizeBytes: row.size_bytes ?? 0,
             textBytes: row.text_bytes ?? 0,
-            chunkCount: row.chunk_count ?? undefined,
         }
-        const chunkCount = await indexConversationAttachment(row.conversation_id, attachment)
-        const metadataJson = JSON.stringify({ ...attachment, chunkCount })
+        // Keep stored fields such as the attachment's session ref; only the paths move.
+        let stored: Record<string, unknown> = {}
+        try { stored = JSON.parse(row.metadata_json || '{}') as Record<string, unknown> } catch { /* rebuilt below */ }
+        const metadataJson = JSON.stringify({ ...stored, ...attachment })
         res.errors.push(...insertRows('attachment_assets', [{
             id: attachment.assetId,
             name: row.name,
@@ -781,15 +779,15 @@ async function restoreAttachments(
             text_path: textPath,
             size_bytes: attachment.sizeBytes,
             text_bytes: attachment.textBytes,
-            chunk_count: chunkCount,
+            chunk_count: null,
             metadata_json: metadataJson,
             created_at: Date.now(),
         }]).errors)
         db.prepare(`
             UPDATE message_attachments
-            SET original_path = ?, text_path = ?, chunk_count = ?, metadata_json = ?
+            SET original_path = ?, text_path = ?, metadata_json = ?
             WHERE id = ?
-        `).run(originalPath, textPath, chunkCount, metadataJson, row.id)
+        `).run(originalPath, textPath, metadataJson, row.id)
     }
 }
 

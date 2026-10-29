@@ -1,9 +1,10 @@
 import Database from 'better-sqlite3'
 import { COMPACT_EVENT_PREFIX } from '../agent/context-compactor.js'
 import { artifactFileUrlToDataUrl, extractFilePathFromFileUrl } from '../artifacts/image-artifacts.js'
-import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-rag.js'
+import { listConversationFileAttachmentsByMessage } from '../artifacts/attachment-store.js'
+import { formatFileAttachmentForModel } from '../tools/session-content.js'
 import { mediaAttachmentLabel } from '../artifacts/attachment-export.js'
-import { readFileAttachmentText, type FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
+import type { FileAttachmentArtifact } from '../artifacts/file-artifacts.js'
 import { isTurnLocalContextMessage, type ChatMessage, type ContentPart, type ToolCall } from '../gateway/providers/base.provider.js'
 import type { ContentBlock } from '@shared/types'
 import { contentBlocksToProviderContent, messageTextSql } from './transcript.js'
@@ -310,22 +311,8 @@ function buildHistoryContent(
 
     const blocks: ContentBlock[] = [{ type: 'text', text: canonicalText }]
     for (const file of fileAttachments) {
-        if (file.textBytes > inlineAttachmentTextLimit) {
-            const status = file.chunkCount && file.chunkCount > 0
-                ? `This attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}).`
-                : `This attachment is larger than the inline context limit and will be indexed for retrieval (attachmentId: ${file.id}).`
-            blocks.push({
-                type: 'text',
-                text: `[Attached file: ${file.name}]\n${status} Use the current attachment context or attachment_search/attachment_read when details are needed.`
-            })
-            continue
-        }
-        const fileText = readFileAttachmentText(file)
-        if (fileText === null) continue
-        blocks.push({
-            type: 'text',
-            text: `[Attached file: ${file.name} (attachmentId: ${file.id})]\n${fileText}`
-        })
+        const text = formatFileAttachmentForModel(file, inlineAttachmentTextLimit)
+        if (text !== null) blocks.push({ type: 'text', text })
     }
     for (const url of imageUrls) {
         pushMediaLabel(blocks, 'image', url)

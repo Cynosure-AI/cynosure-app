@@ -23,6 +23,8 @@ import { isVisibleExecutionTool } from '../tools/tool-policy.js'
 import { getPlanningState } from './planning-state.js'
 import { validateToolArguments } from '../tools/tool-argument-validator.js'
 import { preflightFileToolAccess, runInFileAccessScope } from '../tools/builtin/file-access-policy.js'
+import { makeSessionContentTools } from '../tools/builtin/session-content-tools.js'
+import { limitToolOutput, listSessionContent } from '../tools/session-content.js'
 
 /** Maximum tool-use rounds for the main agent before a planning continuation is needed. */
 export const MAIN_AGENT_MAX_ROUNDS = 50
@@ -275,6 +277,11 @@ export class AgentExecutor {
         const taskId = nanoid()
 
         this.config.signal?.throwIfAborted()
+
+        // Earlier turns may refer to saved outputs (out-N) or attachments (att-N).
+        if (this.config.tools.length && listSessionContent(conversationId).length) {
+            this.addLoadedTools(makeSessionContentTools(conversationId))
+        }
 
         let currentMessages = this.maybeTrimContext([...messages])
         let fullContent = ''
@@ -1019,7 +1026,7 @@ export class AgentExecutor {
             if (isVisibleExecutionTool(tc.function.name)) {
                 this.config.usedToolNames?.add(tc.function.name)
             }
-            const result = await this.executeSingleToolCall(tc)
+            const result = await this.limitResultOutput(await this.executeSingleToolCall(tc))
             if (result.success && this.isWaitToolCall(tc)) this.waitScheduled = true
             results.push(result)
             this.config.signal?.throwIfAborted()
@@ -1122,6 +1129,19 @@ export class AgentExecutor {
             if (signal?.aborted || (err as Error).name === 'AbortError') throw err
             return { toolCallId: tc.id, name: tc.function.name, output: `Error: ${(err as Error).message}`, success: false }
         }
+    }
+
+    /** Save an output too large for the context as session content and offer the tools that read it. */
+    private async limitResultOutput(result: ToolCallResult): Promise<ToolCallResult> {
+        const tool = this.findToolForCall(result.name)
+        const limited = await limitToolOutput({
+            conversationId: this.config.conversationId,
+            toolName: (tool as RegistryAwareToolDefinition | undefined)?.originalName ?? result.name,
+            output: result.output,
+        })
+        if (limited.output === result.output) return result
+        if (limited.ref) this.addLoadedTools(makeSessionContentTools(this.config.conversationId))
+        return { ...result, output: limited.output }
     }
 
     private findToolForCall(name: string): ToolDefinition | undefined {

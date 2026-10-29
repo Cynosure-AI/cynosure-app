@@ -3,22 +3,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Fastify from 'fastify'
-import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test } from 'vitest'
 import { closeDb, getDb } from '../../db/database.js'
-import { buildAttachmentFilter, makeAttachmentTools, persistMessageFileAttachments, searchConversationAttachments } from './attachment-rag.js'
+import { listConversationFileAttachments, persistMessageFileAttachments } from './attachment-store.js'
 import { materializeFileAttachment } from './file-artifacts.js'
 import { listStagedChatAttachments, stageChatAttachment } from './staged-attachments.js'
 import { registerConversationRoutes } from '../../routes/conversations.js'
 import { registerChatRoutes } from '../../routes/chat.js'
 
-const mocks = vi.hoisted(() => ({
-  ingest: vi.fn().mockResolvedValue(1),
-  retrieve: vi.fn().mockResolvedValue([{ text: 'Another chat', sourceFile: 'other-asset' }]),
-  deleteByFilter: vi.fn().mockResolvedValue(undefined),
-  countBySource: vi.fn().mockResolvedValue(1),
-}))
-vi.mock('../memory/parser.js', () => ({ getMemoryParser: () => mocks }))
-vi.mock('../memory/rag.js', () => ({ getRAGStore: () => mocks }))
 let directory = ''
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'cynosure-attachment-scope-'))
@@ -31,33 +23,16 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true })
 })
 
-test('empty conversations cannot search other chats or uncommitted uploads', async () => {
+test('staged uploads are ready once parsed and stay out of the conversation until sent', async () => {
   const staged = await stageChatAttachment('draft', { name: 'notes.txt', content: 'Unsent draft' })
-  await vi.waitFor(() => expect(listStagedChatAttachments('draft')[0].status).toBe('ready'))
-  expect(buildAttachmentFilter('draft')).toBe('1 = 0')
-  expect(await searchConversationAttachments('draft', 'notes')).toEqual([])
-  const search = makeAttachmentTools('draft').find(tool => tool.name === 'attachment_search')!
-  expect((await search.execute({ query: 'notes' })).success).toBe(false)
-  expect(mocks.retrieve).not.toHaveBeenCalled()
+  expect(staged.status).toBe('ready')
+  expect(listStagedChatAttachments('draft').map((item) => item.status)).toEqual(['ready'])
+  expect(listConversationFileAttachments(getDb(), 'draft')).toEqual([])
   expect(existsSync(staged.artifact.originalPath)).toBe(true)
 })
 
-test('an empty or unmatched requested subset cannot broaden to all documents', async () => {
-  const db = getDb()
-  db.prepare("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES ('m1', 'draft', 'user', '', 1)").run()
-  const artifact = await materializeFileAttachment({ name: 'saved.txt', content: 'Committed' }, 'draft')
-  persistMessageFileAttachments(db, 'm1', 'draft', [artifact], 1)
-  expect(buildAttachmentFilter('draft')).toContain(artifact.id)
-  for (const ids of [[], ['missing']]) {
-    expect(await searchConversationAttachments('draft', 'notes', 6, ids)).toEqual([])
-  }
-  expect(mocks.retrieve).not.toHaveBeenCalled()
-})
-
-test.each(['single', 'all'])('conversation deletion (%s) cleans staged files and vectors before cascading rows', async (kind) => {
+test.each(['single', 'all'])('conversation deletion (%s) cleans staged files before cascading rows', async (kind) => {
   const staged = await stageChatAttachment('draft', { name: 'notes.txt', content: 'Unsent draft' })
-  await vi.waitFor(() => expect(listStagedChatAttachments('draft')[0].status).toBe('ready'))
-  mocks.deleteByFilter.mockClear()
   const app = Fastify()
   await app.register(registerConversationRoutes, { prefix: '/api/chat' })
   try {
@@ -66,7 +41,6 @@ test.each(['single', 'all'])('conversation deletion (%s) cleans staged files and
     expect(listStagedChatAttachments('draft')).toEqual([])
     expect(existsSync(staged.artifact.originalPath)).toBe(false)
     expect(existsSync(staged.artifact.textPath)).toBe(false)
-    expect(mocks.deleteByFilter).toHaveBeenCalledWith('conversation_attachments', `sourceFile = '${staged.id}'`)
   } finally { await app.close() }
 })
 
@@ -76,7 +50,6 @@ test('New Chat discard endpoint removes drafts while preserving committed files'
   const committed = await materializeFileAttachment({ name: 'saved.txt', content: 'Keep me' }, 'draft')
   persistMessageFileAttachments(db, 'm1', 'draft', [committed], 1)
   const staged = await stageChatAttachment('draft', { name: 'unsent.txt', content: 'Discard me' })
-  await vi.waitFor(() => expect(listStagedChatAttachments('draft')[0].status).toBe('ready'))
   const app = Fastify()
   await app.register(instance => registerChatRoutes(instance, () => undefined), { prefix: '/api/chat' })
   try {

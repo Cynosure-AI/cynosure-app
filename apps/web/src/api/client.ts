@@ -219,8 +219,6 @@ export const api = {
       post<StagedChatAttachment>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`, file, signal),
     listStagedAttachments: (conversationId: string) =>
       get<StagedChatAttachment[]>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage`),
-    onAttachmentStageProgress: (cb: (data: StagedChatAttachment) => void) =>
-      onWsEvent('attachment:stage-progress', cb as WsHandler),
     removeStagedAttachment: (conversationId: string, attachmentId: string) =>
       del<{ success: boolean }>(`/api/chat/conversations/${encodeURIComponent(conversationId)}/attachments/stage/${encodeURIComponent(attachmentId)}`),
     discardStagedAttachments: (conversationId: string) =>

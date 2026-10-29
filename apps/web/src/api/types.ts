@@ -301,15 +301,12 @@ export interface ConversationUpload {
     href: string
     ext: string
     sizeBytes: number
-    chunkCount: number
     createdAt: number
     conversationId: string
     conversationTitle: string
     agentId: string | null
     agentName: string | null
     status: 'processing' | 'ready' | 'failed'
-    progressCurrent: number
-    progressTotal: number
     error?: string
     staged: boolean
 }
@@ -320,9 +317,6 @@ export interface StagedChatAttachment {
     clientId?: string
     name: string
     status: 'processing' | 'ready' | 'failed'
-    progressCurrent: number
-    progressTotal: number
-    chunkCount: number
     error?: string
 }
 

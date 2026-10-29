@@ -15,7 +15,8 @@ import {
     toFileUrl,
     type MediaArtifactKind,
 } from '../core/artifacts/image-artifacts.js'
-import { collectOrphanedAttachmentAssets, deleteConversationAttachmentIndexes, preserveReferencedAttachmentAssets } from '../core/artifacts/attachment-rag.js'
+import { deleteSessionContent } from '../core/tools/session-content.js'
+import { collectOrphanedAttachmentAssets, preserveReferencedAttachmentAssets } from '../core/artifacts/attachment-store.js'
 import { discardStagedChatAttachments, listStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { getAssignedMemoryFolders } from '../core/memory/memory-folder-scope.js'
 import { buildInitialExecutionConfig, parseExecutionConfig } from '../core/chat/run-config.js'
@@ -107,8 +108,9 @@ async function cleanupConversationArtifactsAndIndexes(conversationIds: string[])
         }
 
         cleanupConversationArtifacts(convId)
+        deleteSessionContent(convId)
     }
-    await deleteConversationAttachmentIndexes(conversationIds)
+    await collectOrphanedAttachmentAssets()
 }
 
 /** Delete one conversation with its messages, plans, approvals and files. */
@@ -387,11 +389,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
         const uploadsCte = `
             WITH uploads AS (
-              SELECT a.id, a.name, a.original_path, a.size_bytes, COALESCE(a.chunk_count, 0) AS chunk_count,
+              SELECT a.id, a.name, a.original_path, a.size_bytes,
                      a.created_at, c.id AS conversation_id, c.title AS conversation_title,
-                     c.agent_id, ag.name AS agent_name, 'ready' AS status,
-                     COALESCE(a.chunk_count, 0) AS progress_current,
-                     COALESCE(a.chunk_count, 0) AS progress_total, NULL AS error, 0 AS staged
+                     c.agent_id, ag.name AS agent_name, 'ready' AS status, NULL AS error, 0 AS staged
               FROM message_attachments a
               JOIN conversations c ON c.id = a.conversation_id
               LEFT JOIN agents ag ON ag.id = c.agent_id
@@ -401,9 +401,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
               SELECT s.id, json_extract(s.artifact_json, '$.name'),
                      json_extract(s.artifact_json, '$.originalPath'),
                      COALESCE(json_extract(s.artifact_json, '$.sizeBytes'), 0),
-                     COALESCE(json_extract(s.artifact_json, '$.chunkCount'), 0),
-                     s.created_at, c.id, c.title, c.agent_id, ag.name, s.status,
-                     s.progress_current, s.progress_total, s.error, 1 AS staged
+                     s.created_at, c.id, c.title, c.agent_id, ag.name, s.status, s.error, 1 AS staged
               FROM staged_chat_attachments s
               JOIN conversations c ON c.id = s.conversation_id
               LEFT JOIN agents ag ON ag.id = c.agent_id
@@ -421,15 +419,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             name: string
             original_path: string
             size_bytes: number | null
-            chunk_count: number | null
             created_at: number
             conversation_id: string
             conversation_title: string
             agent_id: string | null
             agent_name: string | null
             status: 'processing' | 'ready' | 'failed'
-            progress_current: number
-            progress_total: number
             error: string | null
             staged: number
         }[]
@@ -441,15 +436,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
                 href: toFileUrl(row.original_path, row.name),
                 ext: extname(row.name).replace(/^\./, '').toLowerCase(),
                 sizeBytes: row.size_bytes ?? 0,
-                chunkCount: row.chunk_count ?? 0,
                 createdAt: row.created_at,
                 conversationId: row.conversation_id,
                 conversationTitle: row.conversation_title,
                 agentId: row.agent_id,
                 agentName: row.agent_name,
                 status: row.status,
-                progressCurrent: row.progress_current,
-                progressTotal: row.progress_total,
                 error: row.error || undefined,
                 staged: Boolean(row.staged),
             })),
@@ -458,7 +450,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     })
 
     // Resolve library selections to stable server-side references. The send
-    // path clones the durable artifact and its existing vectors without
+    // path clones the durable artifact without
     // transferring or parsing the file again in the browser.
     app.post<{ Body: { ids?: string[] } }>('/uploads/resolve', async (req, reply) => {
         const ids = Array.isArray(req.body?.ids)

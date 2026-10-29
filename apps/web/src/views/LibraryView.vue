@@ -24,10 +24,7 @@ interface LibraryEntry {
   conversationTitle: string
   conversationId: string | null
   sizeBytes?: number
-  chunkCount?: number
   status?: ConversationUpload['status']
-  progressCurrent?: number
-  progressTotal?: number
   error?: string
 }
 
@@ -116,10 +113,7 @@ const uploads = computed<LibraryEntry[]>(() => uploadItems.value.map((upload) =>
   conversationTitle: upload.conversationTitle,
   conversationId: upload.conversationId,
   sizeBytes: upload.sizeBytes,
-  chunkCount: upload.chunkCount,
   status: upload.status,
-  progressCurrent: upload.progressCurrent,
-  progressTotal: upload.progressTotal,
   error: upload.error,
 })))
 
@@ -263,23 +257,9 @@ watch(searchQuery, () => {
   searchTimer = setTimeout(() => void loadEntries(true), 250)
 })
 
-const unsubscribeStageProgress = api.chat.onAttachmentStageProgress((progress) => {
-  const upload = uploadItems.value.find((item) => item.id === progress.id)
-  if (upload) {
-    upload.status = progress.status
-    upload.progressCurrent = progress.progressCurrent
-    upload.progressTotal = progress.progressTotal
-    upload.chunkCount = progress.chunkCount
-    upload.error = progress.error
-  } else if (activePanel.value === 'uploads') {
-    void loadEntries(true)
-  }
-})
-
 onUnmounted(() => {
   clearTimeout(searchTimer)
   clearTimeout(uploadRefreshTimer)
-  unsubscribeStageProgress()
 })
 </script>
 
@@ -557,7 +537,7 @@ onUnmounted(() => {
                 class="h-3 w-3"
                 :class="{ 'animate-spin': entry.status === 'processing' }"
               />
-              {{ entry.status === 'failed' ? 'Failed' : `${entry.progressCurrent || 0}/${entry.progressTotal || '?'} chunks` }}
+              {{ entry.status === 'failed' ? 'Failed' : 'Processing…' }}
             </span>
             <span
               v-if="viewMode === 'grid'"
@@ -592,15 +572,6 @@ onUnmounted(() => {
                 <template v-if="entry.sizeBytes != null"> · {{ formatBytes(entry.sizeBytes) }}</template>
               </span>
               <span class="shrink-0">{{ formatDate(entry.createdAt) }}</span>
-            </div>
-            <div
-              v-if="entry.status === 'processing' && entry.progressTotal"
-              class="mt-2 h-1 overflow-hidden rounded-full bg-theme-800"
-            >
-              <div
-                class="h-full rounded-full bg-accent-500 transition-[width]"
-                :style="{ width: `${Math.min(100, ((entry.progressCurrent || 0) / entry.progressTotal) * 100)}%` }"
-              />
             </div>
           </div>
         </button>

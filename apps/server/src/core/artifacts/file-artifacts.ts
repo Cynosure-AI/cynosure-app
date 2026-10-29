@@ -6,7 +6,7 @@ import { getDb } from '../../db/database.js'
 import type { Database } from 'better-sqlite3'
 import { releaseAttachmentAsset, retainAttachmentAsset } from './attachment-asset-references.js'
 import { getAppDataDir } from '../data-dir.js'
-import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
+import { detectDocumentExtension, looksBinary, parseDocument } from '../utils/document-parser.js'
 
 export interface FileAttachmentInput {
     name: string
@@ -20,8 +20,9 @@ export interface FileAttachmentArtifact {
     textPath: string
     sizeBytes: number
     textBytes: number
-    chunkCount?: number
     assetId?: string
+    /** Ref (att-N) the model uses to grep and read this attachment's text in its conversation. */
+    sessionRef?: string
 }
 
 function getConversationFilesDir(conversationId: string): string {
@@ -83,16 +84,18 @@ const pendingMaterializations = new WeakMap<Database, Map<string, Promise<FileAt
 
 interface AttachmentAssetRow {
     id: string; name: string; original_path: string; text_path: string
-    size_bytes: number; text_bytes: number; chunk_count: number | null; content_hash: string | null
+    size_bytes: number; text_bytes: number; content_hash: string | null
 }
 
 function findAttachmentAsset(db: Database, contentHash: string, sizeBytes: number): FileAttachmentArtifact | undefined {
     // Hash older assets lazily, so existing uploads participate without a startup file scan.
     const rows = db.prepare(`SELECT * FROM attachment_assets
         WHERE content_hash = ? OR (content_hash IS NULL AND size_bytes = ?)
-        ORDER BY chunk_count IS NULL, created_at`).all(contentHash, sizeBytes) as AttachmentAssetRow[]
+        ORDER BY created_at`).all(contentHash, sizeBytes) as AttachmentAssetRow[]
     for (const row of rows) {
         if (!existsSync(row.original_path) || !existsSync(row.text_path)) continue
+        // Text saved as raw document bytes, before parsing detected formats by content.
+        if (hasUnparsedText(row.text_path)) continue
         let hash = row.content_hash
         if (!hash) {
             try { hash = createHash('sha256').update(readFileSync(row.original_path)).digest('hex') }
@@ -103,8 +106,16 @@ function findAttachmentAsset(db: Database, contentHash: string, sizeBytes: numbe
         return {
             id: row.id, assetId: row.id, name: row.name, originalPath: row.original_path,
             textPath: row.text_path, sizeBytes: row.size_bytes, textBytes: row.text_bytes,
-            chunkCount: row.chunk_count ?? undefined,
         }
+    }
+}
+
+function hasUnparsedText(textPath: string): boolean {
+    try {
+        const head = readFileSync(textPath).subarray(0, 8000)
+        return looksBinary(head) || head.subarray(0, 1024).includes('%PDF-')
+    } catch {
+        return false
     }
 }
 
@@ -119,12 +130,14 @@ async function createAttachmentAsset(
 
     let extractedText = text
 
-    if (isParseableDocument(file.name) && file.content.startsWith('data:')) {
+    if (file.content.startsWith('data:') && detectDocumentExtension(buffer, file.name)) {
         try {
             extractedText = await parseDocument(buffer, file.name)
         } catch (err) {
             extractedText = `[Error parsing ${file.name}: ${err instanceof Error ? err.message : 'unknown error'}]`
         }
+    } else if (file.content.startsWith('data:') && looksBinary(buffer)) {
+        extractedText = `[${file.name} is a binary file in a format Cynosure cannot convert to text.]`
     }
 
     try {

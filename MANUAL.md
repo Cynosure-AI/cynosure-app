@@ -370,7 +370,9 @@ A tool is a callable capability available to the assistant. Availability, automa
 
 Native file tools include `file_read`, `file_grep`, `file_write`, and `file_edit`. Edits use exact matches and support a dry run. File tools enforce allowed folders. A folder grant is shared server configuration; use **Settings → File Access** to review/remove saved grants.
 
-`shell_execute` runs with the permissions and environment of the server process. It is not limited by the native file-tool folder allowlist. Its default timeout is **120 seconds**, maximum requested timeout **600 seconds**, and collected output cap **128 KiB**. A guard refuses recognized destructive system commands, but it is not an operating-system sandbox.
+A tool output longer than **32,000 characters** (about 8k tokens) is not sent to the model whole. It is saved as **session content** with a short ref such as `out-3`, and the model sees its numbered first and last lines plus example calls. JSON packed on a few long lines is reformatted to one value per line first. File attachments are session content too, as `att-1`, `att-2`, and so on; a ref never changes once given. The model reaches session content only by ref, never by path, through two read-only tools that run without approval: `session_content_grep` finds lines (regular expression or plain text, ignoring case by default, across one ref or all of them) and `session_content_read` reads numbered lines by offset and limit. Their errors list the session content available and an example call. They are offered whenever the conversation has session content. Saved outputs are deleted with their conversation.
+
+`shell_execute` runs with the permissions and environment of the server process. It is not limited by the native file-tool folder allowlist. Its default timeout is **120 seconds**, maximum requested timeout **600 seconds**, and collected output cap **8 MiB**; output over the 32,000-character limit is saved as session content as described above. A guard refuses recognized destructive system commands, but it is not an operating-system sandbox.
 
 ### 8.2 MCP servers
 
@@ -600,7 +602,7 @@ Local model tracking/cache is separate from server memory embeddings. Clearing W
 
 ### 13.2 Attachment context
 
-Uploads retain originals and parsed text. Small text is included inline; larger text is indexed/retrieved, with `attachment_search` and `attachment_read` when appropriate. The inline limit uses a 10% context share, bounded from 2,000 to 500,000 text bytes, with a 24,000-byte fallback for an unknown window.
+Uploads retain originals and parsed text. Documents (PDF, Office, OpenDocument, RTF) are recognized by their content, so a file without its extension is still parsed; other binary files are noted as unreadable instead of being passed on as bytes. Small text is included inline. Larger text is session content: the model sees its ref (`att-N`), size and first lines, and reads the rest with `session_content_grep` and `session_content_read`. Attachments are not embedded for semantic search; put documents you want searched by meaning in a memory folder. The inline limit uses a 10% context share, bounded from 2,000 to 500,000 text bytes, with a 24,000-byte fallback for an unknown window.
 
 Library separates **Generated** and **Uploads** and reuses previous inputs. Reference-aware cleanup preserves attachments still needed by another conversation.
 

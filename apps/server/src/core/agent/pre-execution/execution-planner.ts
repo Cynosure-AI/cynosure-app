@@ -70,7 +70,6 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
         usedToolNames,
         thinkingEnabled,
         reasoningEffort,
-        inlineAttachmentTextLimit,
     } = run
     const autoToolRouting = run.autoToolRouting ?? defaultAutoModes(resolvedAgent).autoToolRouting
     const autoMemory = run.autoMemory ?? defaultAutoModes(resolvedAgent).autoMemory
@@ -125,7 +124,6 @@ export async function planExecution(request: ExecutionRequest): Promise<PlannedE
         userQuery: userText,
         memoryFolderOverrides,
         eventMeta,
-        inlineAttachmentTextLimit,
         scheduleSelectedToolKeys: selectedToolKeys,
         thinkingEnabled,
         reasoningEffort,

@@ -7,7 +7,7 @@ const artifactMocks = vi.hoisted(() => ({
     readText: vi.fn(),
 }))
 
-vi.mock('../artifacts/attachment-rag.js', () => ({
+vi.mock('../artifacts/attachment-store.js', () => ({
     listConversationFileAttachmentsByMessage: () => artifactMocks.attachmentsByMessage,
 }))
 vi.mock('../artifacts/file-artifacts.js', () => ({
@@ -165,8 +165,8 @@ describe('conversation history construction', () => {
 
     test('builds multipart user content for inline, indexed, image, and audio attachments', () => {
         artifactMocks.attachmentsByMessage.set('user', [
-            { id: 'small', name: 'small.txt', textBytes: 20 } as FileAttachmentArtifact,
-            { id: 'large', name: 'large.pdf', textBytes: 5_000, chunkCount: 4 } as FileAttachmentArtifact,
+            { id: 'small', name: 'small.txt', textBytes: 20, sessionRef: 'att-1' } as FileAttachmentArtifact,
+            { id: 'large', name: 'large.pdf', textBytes: 5_000, sessionRef: 'att-2' } as FileAttachmentArtifact,
         ])
         artifactMocks.readText.mockReturnValue('inline contents')
         const result = buildConversationHistory({
@@ -185,8 +185,15 @@ describe('conversation history construction', () => {
 
         expect(result.messages[0].content).toEqual([
             { type: 'text', text: 'Review these' },
-            { type: 'text', text: '[Attached file: small.txt (attachmentId: small)]\ninline contents' },
-            { type: 'text', text: expect.stringContaining('indexed for retrieval (4 chunks, attachmentId: large)') },
+            { type: 'text', text: '[Attached file: small.txt (att-1, attachmentId: small)]\ninline contents' },
+            { type: 'text', text: [
+                '[Attached file: large.pdf (att-2, attachmentId: large)]',
+                '[Too large to include whole (1 lines, 15 characters). It is session content att-2.',
+                'Find lines: session_content_grep {"ref": "att-2", "pattern": "<text or regex>"}',
+                'Read lines: session_content_read {"ref": "att-2", "offset": 1, "limit": 200}',
+                'The first lines follow, numbered.]',
+                '1\tinline contents',
+            ].join('\n') },
             { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
             { type: 'audio_url', audio_url: { url: 'data:audio/wav;base64,abc' } },
         ])

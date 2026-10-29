@@ -4,7 +4,8 @@ import type { ToolDefinition, ToolResult } from '../../gateway/providers/base.pr
 import { getDataDir } from '../../data-dir.js'
 import { findBlockedShellCommand } from './shell-guard.js'
 
-const MAX_OUTPUT_BYTES = 128 * 1024
+// Large output is saved as session content by the executor; this only bounds memory.
+const MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const DEFAULT_COMMAND_TIMEOUT_SECONDS = 120
 const MAX_COMMAND_TIMEOUT_SECONDS = 600
 const MAX_EXPLANATION_LENGTH = 500
@@ -118,7 +119,7 @@ function runCommand(command: string, cwd: string, timeoutMs: number, shell: stri
                 chunks.push(kept)
                 bytes += kept.length
             }
-            if (bytes >= MAX_OUTPUT_BYTES) stop('Output exceeded 128 KiB.')
+            if (bytes >= MAX_OUTPUT_BYTES) stop('Output exceeded 8 MiB.')
         }
         child.stdout.on('data', collect)
         child.stderr.on('data', collect)

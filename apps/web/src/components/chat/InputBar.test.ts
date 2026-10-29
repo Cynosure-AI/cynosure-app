@@ -325,7 +325,7 @@ describe('InputBar drafts', () => {
   test('stages project folder files and adds project images to the draft', async () => {
     chatStore.activeProjectId = 'project-1'
     const stage = vi.spyOn(api.chat, 'stageAttachment').mockResolvedValue({
-      id: 'staged-1', conversationId: 'conversation-1', name: 'src/app.ts', status: 'ready', progressCurrent: 1, progressTotal: 1, chunkCount: 1,
+      id: 'staged-1', conversationId: 'conversation-1', name: 'src/app.ts', status: 'ready',
     })
     const wrapper = mountInputBar()
     wrapper.findComponent({ name: 'InputToolbar' }).vm.$emit('browseProject')
@@ -389,7 +389,7 @@ describe('InputBar drafts', () => {
 
     finish({
       id: 'staged-1', conversationId: 'conversation-1', name: 'notes.txt',
-      status: 'ready', progressCurrent: 1, progressTotal: 1, chunkCount: 1,
+      status: 'ready',
     })
     await flushPromises()
     expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(true)
@@ -401,11 +401,6 @@ describe('InputBar drafts', () => {
     chatStore.activeConversationId = null
     let finish!: (value: Awaited<ReturnType<typeof api.chat.stageAttachment>>) => void
     const stage = vi.spyOn(api.chat, 'stageAttachment').mockReturnValue(new Promise(resolve => { finish = resolve }))
-    let progress!: Parameters<typeof api.chat.onAttachmentStageProgress>[0]
-    vi.spyOn(api.chat, 'onAttachmentStageProgress').mockImplementation(callback => {
-      progress = callback
-      return () => {}
-    })
     const wrapper = mountInputBar()
     await wrapper.get('textarea').setValue('Read this document and summarize it')
 
@@ -422,11 +417,9 @@ describe('InputBar drafts', () => {
 
     const staged = {
       id: 'staged-new-chat', conversationId: 'conversation-1', name: 'notes.txt',
-      status: 'processing' as const, progressCurrent: 1, progressTotal: 2, chunkCount: 0,
+      status: 'ready' as const,
     }
     finish(staged)
-    await flushPromises()
-    progress({ ...staged, status: 'ready', progressCurrent: 2, chunkCount: 2 })
     await flushPromises()
 
     expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('Read this document and summarize it')
@@ -441,17 +434,17 @@ describe('InputBar drafts', () => {
     wrapper.unmount()
   })
 
-  test('restores server-side attachment indexing progress after remounting', async () => {
+  test('restores an attachment still processing on the server after remounting', async () => {
     vi.mocked(api.chat.listStagedAttachments).mockResolvedValue([{
       id: 'staged-1', conversationId: 'conversation-1', clientId: 'client-1', name: 'large.pdf',
-      status: 'processing', progressCurrent: 7, progressTotal: 20, chunkCount: 0,
+      status: 'processing',
     }])
 
     const wrapper = mountInputBar()
     await flushPromises()
 
     expect(wrapper.text()).toContain('large.pdf')
-    expect(wrapper.text()).toContain('7 / 20 chunks')
+    expect(wrapper.text()).toContain('Processing…')
     expect(wrapper.findComponent({ name: 'InputToolbar' }).props('canSend')).toBe(false)
     wrapper.unmount()
   })
@@ -468,7 +461,7 @@ describe('InputBar drafts', () => {
     await flushPromises()
     finish({
       id: 'staged-navigation', conversationId: 'conversation-1', name: 'large.txt',
-      status: 'processing', progressCurrent: 1, progressTotal: 10, chunkCount: 0,
+      status: 'processing',
     })
     await flushPromises()
 
@@ -476,22 +469,16 @@ describe('InputBar drafts', () => {
     wrapper.unmount()
   })
 
-  test('does not restore a removed upload from a stale polling response or progress event', async () => {
+  test('does not restore a removed upload from a stale polling response', async () => {
     const staged = {
       id: 'removed-1', conversationId: 'conversation-1', clientId: 'removed-client', name: 'removed.txt',
-      status: 'ready' as const, progressCurrent: 1, progressTotal: 1, chunkCount: 1,
+      status: 'ready' as const,
     }
-    let progress!: Parameters<typeof api.chat.onAttachmentStageProgress>[0]
-    vi.spyOn(api.chat, 'onAttachmentStageProgress').mockImplementation(callback => {
-      progress = callback
-      return () => {}
-    })
     vi.mocked(api.chat.listStagedAttachments).mockResolvedValue([staged])
     vi.spyOn(api.chat, 'removeStagedAttachment').mockResolvedValue({ success: true })
     const wrapper = mountInputBar()
     await flushPromises()
     await wrapper.get('button[aria-label="Remove removed.txt"]').trigger('click')
-    progress(staged)
     chatStore.activeConversationId = 'conversation-2'
     await flushPromises()
     chatStore.activeConversationId = 'conversation-1'
@@ -510,7 +497,7 @@ describe('InputBar drafts', () => {
     chatStore.draftDiscardRevision++
     chatStore.activeConversationId = null
     await flushPromises()
-    finish({ id: 'discarded-1', conversationId: 'conversation-1', name: 'discarded.txt', status: 'ready', progressCurrent: 1, progressTotal: 1, chunkCount: 1 })
+    finish({ id: 'discarded-1', conversationId: 'conversation-1', name: 'discarded.txt', status: 'ready' })
     await flushPromises()
     expect(remove).toHaveBeenCalledWith('conversation-1', 'discarded-1')
     expect(wrapper.text()).not.toContain('discarded.txt')

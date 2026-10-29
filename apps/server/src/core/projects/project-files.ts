@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import ignore from 'ignore'
-import { isParseableDocument } from '../utils/document-parser.js'
+import { detectDocumentExtension, looksBinary } from '../utils/document-parser.js'
 
 /** Same cap the composer applies to uploads from the user's device. */
 export const MAX_PROJECT_FILE_BYTES = 20 * 1024 * 1024
@@ -182,7 +182,7 @@ export function toAttachableContent(buffer: Buffer, name: string): ProjectFileCo
     const dataUrl = (mime: string) => `data:${mime};base64,${buffer.toString('base64')}`
     if (IMAGE_TYPES[extension]) return { kind: 'image', name, content: dataUrl(IMAGE_TYPES[extension]) }
     if (AUDIO_TYPES[extension]) return { kind: 'audio', name, content: dataUrl(AUDIO_TYPES[extension]) }
-    if (isParseableDocument(name)) return { kind: 'file', name, content: dataUrl('application/octet-stream') }
-    if (buffer.subarray(0, 8000).includes(0)) throw new ProjectFileError(415, 'Binary files cannot be attached.')
+    if (detectDocumentExtension(buffer, name)) return { kind: 'file', name, content: dataUrl('application/octet-stream') }
+    if (looksBinary(buffer)) throw new ProjectFileError(415, 'Binary files cannot be attached.')
     return { kind: 'file', name, content: buffer.toString('utf8') }
 }

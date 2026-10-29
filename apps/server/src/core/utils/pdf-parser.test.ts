@@ -100,6 +100,26 @@ describe('PDF Markdown ingestion', () => {
         }
     })
 
+    test('parses documents whose names have no extension by their content', async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'cynosure-pdf-noext-'))
+        vi.stubEnv('CYNOSURE_DATA_DIR', directory)
+        try {
+            const buffer = makePdf([text(body, 12, 700)])
+            const artifact = await materializeFileAttachment({ name: 'Steuerbescheid2025', content: `data:application/octet-stream;base64,${buffer.toString('base64')}` }, 'pdf-test')
+            expect(await readFile(artifact.textPath, 'utf8')).toBe(body)
+
+            const binary = await materializeFileAttachment({ name: 'blob', content: `data:application/octet-stream;base64,${Buffer.from([1, 0, 2, 0, 3]).toString('base64')}` }, 'pdf-test')
+            expect(await readFile(binary.textPath, 'utf8')).toBe('[blob is a binary file in a format Cynosure cannot convert to text.]')
+        } finally {
+            vi.unstubAllEnvs()
+            await rm(directory, { recursive: true, force: true })
+        }
+
+        const zip = new AdmZip()
+        zip.addFile('word/document.xml', Buffer.from('<w:document><w:body><w:p><w:r><w:t>Office text</w:t></w:r></w:p></w:body></w:document>'))
+        expect(await parseDocument(zip.toBuffer(), 'Letter')).toBe('Office text')
+    })
+
     test('keeps the DOCX conversion path working', async () => {
         const zip = new AdmZip()
         zip.addFile('word/document.xml', Buffer.from('<w:document><w:body><w:p><w:r><w:t>Office text</w:t></w:r></w:p></w:body></w:document>'))

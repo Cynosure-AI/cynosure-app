@@ -1,6 +1,5 @@
 import { existsSync, rmSync } from 'fs'
 import { getDb } from '../../db/database.js'
-import { deleteConversationAttachmentChunks, indexConversationAttachment } from './attachment-rag.js'
 import { materializeFileAttachment, type FileAttachmentArtifact, type FileAttachmentInput } from './file-artifacts.js'
 import { hasAttachmentAssetReferences, releaseAttachmentAsset } from './attachment-asset-references.js'
 
@@ -12,23 +11,17 @@ export interface StagedChatAttachmentState {
   clientId?: string
   name: string
   status: StagedAttachmentStatus
-  progressCurrent: number
-  progressTotal: number
-  chunkCount: number
   error?: string
   createdAt: number
   updatedAt: number
   artifact: FileAttachmentArtifact
 }
 
-type StageUpdate = Omit<StagedChatAttachmentState, 'artifact' | 'createdAt' | 'updatedAt'>
-const activeIndexJobs = new Map<string, { controller: AbortController; assetId: string }>()
-const indexCompletions = new Map<string, Promise<void>>()
 const pendingStages = new Map<string, Set<Promise<StagedChatAttachmentState>>>()
 
 function rowToState(row: {
   id: string; conversation_id: string; client_id: string | null; artifact_json: string
-  status: StagedAttachmentStatus; progress_current: number; progress_total: number
+  status: StagedAttachmentStatus
   error: string | null; created_at: number; updated_at: number | null
 }): StagedChatAttachmentState {
   const artifact = JSON.parse(row.artifact_json) as FileAttachmentArtifact
@@ -38,9 +31,6 @@ function rowToState(row: {
     clientId: row.client_id || undefined,
     name: artifact.name,
     status: row.status,
-    progressCurrent: row.progress_current || 0,
-    progressTotal: row.progress_total || 0,
-    chunkCount: artifact.chunkCount || 0,
     error: row.error || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at || row.created_at,
@@ -48,99 +38,27 @@ function rowToState(row: {
   }
 }
 
-function publicUpdate(state: StagedChatAttachmentState): StageUpdate {
-  return {
-    id: state.id,
-    conversationId: state.conversationId,
-    clientId: state.clientId,
-    name: state.name,
-    status: state.status,
-    progressCurrent: state.progressCurrent,
-    progressTotal: state.progressTotal,
-    chunkCount: state.chunkCount,
-    error: state.error,
-  }
-}
-
 function readStagedRows(conversationId?: string): StagedChatAttachmentState[] {
   const rows = getDb().prepare(`
-    SELECT id, conversation_id, client_id, artifact_json, status,
-      progress_current, progress_total, error, created_at, updated_at
+    SELECT id, conversation_id, client_id, artifact_json, status, error, created_at, updated_at
     FROM staged_chat_attachments
     ${conversationId ? 'WHERE conversation_id = ?' : ''}
     ORDER BY created_at ASC
   `).all(...(conversationId ? [conversationId] : [])) as Array<{
     id: string; conversation_id: string; client_id: string | null; artifact_json: string
-    status: StagedAttachmentStatus; progress_current: number; progress_total: number
+    status: StagedAttachmentStatus
     error: string | null; created_at: number; updated_at: number | null
   }>
   return rows.map(rowToState)
 }
 
-function startIndexing(state: StagedChatAttachmentState, onUpdate?: (update: StageUpdate) => void): void {
-  if (activeIndexJobs.has(state.id)) return
-  const controller = new AbortController()
-  const assetId = state.artifact.assetId || state.artifact.id
-  activeIndexJobs.set(state.id, { controller, assetId })
-
-  const completion = (async () => {
-    try {
-      const chunkCount = await indexConversationAttachment(state.conversationId, state.artifact, {
-        signal: controller.signal,
-        throwOnError: true,
-        onProgress: (current, total) => {
-          const updatedAt = Date.now()
-          const result = getDb().prepare(`
-            UPDATE staged_chat_attachments
-            SET progress_current = ?, progress_total = ?, updated_at = ?
-            WHERE id = ? AND status = 'processing'
-          `).run(current, total, updatedAt, state.id)
-          if (result.changes === 0) return
-          state.progressCurrent = current
-          state.progressTotal = total
-          state.updatedAt = updatedAt
-          onUpdate?.(publicUpdate(state))
-        },
-      })
-      controller.signal.throwIfAborted()
-      state.artifact.chunkCount = chunkCount
-      state.chunkCount = chunkCount
-      state.status = 'ready'
-      state.progressCurrent = Math.max(state.progressCurrent, chunkCount)
-      state.progressTotal = Math.max(state.progressTotal, chunkCount)
-      state.updatedAt = Date.now()
-      const result = getDb().prepare(`
-        UPDATE staged_chat_attachments
-        SET artifact_json = ?, status = 'ready', progress_current = ?, progress_total = ?,
-          error = NULL, updated_at = ? WHERE id = ? AND status = 'processing'
-      `).run(JSON.stringify(state.artifact), state.progressCurrent, state.progressTotal, state.updatedAt, state.id)
-      if (result.changes > 0) onUpdate?.(publicUpdate(state))
-    } catch (error) {
-      if (controller.signal.aborted) return
-      state.status = 'failed'
-      state.error = error instanceof Error ? error.message : 'Attachment indexing failed'
-      state.updatedAt = Date.now()
-      const result = getDb().prepare(`
-        UPDATE staged_chat_attachments SET status = 'failed', error = ?, updated_at = ?
-        WHERE id = ? AND status = 'processing'
-      `).run(state.error, state.updatedAt, state.id)
-      if (result.changes > 0) onUpdate?.(publicUpdate(state))
-    } finally {
-      activeIndexJobs.delete(state.id)
-      indexCompletions.delete(state.id)
-    }
-  })()
-  indexCompletions.set(state.id, completion)
-}
-
 export function stageChatAttachment(
   conversationId: string,
   file: FileAttachmentInput & { clientId?: string },
-  opts?: { onUpdate?: (update: StageUpdate) => void },
 ): Promise<StagedChatAttachmentState> {
   const pending = pendingStages.get(conversationId) ?? new Set<Promise<StagedChatAttachmentState>>()
   pendingStages.set(conversationId, pending)
-  const job = materializeAndStage(conversationId, file, opts)
+  const job = materializeAndStage(conversationId, file)
   pending.add(job)
   const settled = (): void => {
     pending.delete(job)
@@ -153,7 +71,6 @@ export function stageChatAttachment(
 async function materializeAndStage(
   conversationId: string,
   file: FileAttachmentInput & { clientId?: string },
-  opts?: { onUpdate?: (update: StageUpdate) => void },
 ): Promise<StagedChatAttachmentState> {
   const artifact = await materializeFileAttachment(file, conversationId)
   const now = Date.now()
@@ -162,10 +79,7 @@ async function materializeAndStage(
     conversationId,
     clientId: file.clientId,
     name: artifact.name,
-    status: 'processing',
-    progressCurrent: 0,
-    progressTotal: 0,
-    chunkCount: 0,
+    status: 'ready',
     createdAt: now,
     updatedAt: now,
     artifact,
@@ -175,7 +89,7 @@ async function materializeAndStage(
       INSERT INTO staged_chat_attachments
         (id, conversation_id, client_id, artifact_json, status, progress_current,
          progress_total, error, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'processing', 0, 0, NULL, ?, ?)
+      VALUES (?, ?, ?, ?, 'ready', 0, 0, NULL, ?, ?)
     `).run(artifact.id, conversationId, file.clientId || null, JSON.stringify(artifact), now, now)
   } catch (error) {
     releaseAttachmentAsset(artifact)
@@ -186,16 +100,13 @@ async function materializeAndStage(
     throw error
   }
   releaseAttachmentAsset(artifact)
-  startIndexing(state, opts?.onUpdate)
   return state
 }
 
 export function listStagedChatAttachments(conversationId?: string): StagedChatAttachmentState[] {
-  const states = readStagedRows(conversationId)
-  // Recover jobs interrupted by an application restart. Stored artifact paths
-  // are authoritative, and startIndexing de-duplicates live work.
-  for (const state of states) if (state.status === 'processing') startIndexing(state)
-  return states
+  // Uploads staged while attachments were still indexed after parsing are ready as they are.
+  getDb().prepare(`UPDATE staged_chat_attachments SET status = 'ready' WHERE status = 'processing'`).run()
+  return readStagedRows(conversationId)
 }
 
 export function takeStagedChatAttachments(conversationId: string, ids: string[]): FileAttachmentArtifact[] {
@@ -231,21 +142,12 @@ export async function releaseStagedChatAttachments(conversationId: string, ids: 
   const remove = getDb().prepare('DELETE FROM staged_chat_attachments WHERE id = ? AND conversation_id = ?')
   for (const id of ownedIds) remove.run(id, conversationId)
   const retiring = new Map<string, FileAttachmentArtifact>()
-  const completions: Array<Promise<void> | undefined> = []
   for (const artifact of artifacts) {
     const assetId = artifact.assetId || artifact.id
     if (hasAttachmentAssetReferences(getDb(), assetId)) continue
     retiring.set(assetId, artifact)
     getDb().prepare('DELETE FROM attachment_assets WHERE id = ?').run(assetId)
-    for (const [id, job] of activeIndexJobs) {
-      if (job.assetId !== assetId) continue
-      job.controller.abort()
-      completions.push(indexCompletions.get(id))
-    }
   }
-  // Shared jobs continue for surviving references; only the last release cancels.
-  await Promise.all(completions)
-  await deleteConversationAttachmentChunks(conversationId, [...retiring.keys()])
   for (const artifact of retiring.values()) {
     for (const path of [artifact.originalPath, artifact.textPath]) {
       try { if (existsSync(path)) rmSync(path) } catch { /* best effort */ }
