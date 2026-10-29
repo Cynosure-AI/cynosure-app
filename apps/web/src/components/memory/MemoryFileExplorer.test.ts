@@ -31,12 +31,11 @@ vi.mock('../../api/client', () => ({
 }))
 
 const EditorStub = defineComponent({
-  name: 'MemoryDocumentEditorModal',
+  name: 'MemoryDocumentEditor',
   props: {
-    show: Boolean,
     sourceFile: { type: String, default: '' },
   },
-  template: '<div data-testid="editor-state">{{ show }}:{{ sourceFile }}</div>',
+  template: '<div data-testid="editor-state">{{ sourceFile }}</div>',
 })
 
 const StatusColumnTableStub = {
@@ -62,7 +61,7 @@ function mountList(focusFile?: string) {
         DataTable: true,
         HoverTooltip: true,
         MemoryDocumentMoveDialog: true,
-        MemoryDocumentEditorModal: EditorStub,
+        MemoryDocumentEditor: EditorStub,
       },
     },
   })
@@ -100,17 +99,56 @@ describe('MemoryFileExplorer navigation and search', () => {
     await flushPromises()
 
     expect(mocks.ingestFile).toHaveBeenCalledWith('category', 'Project.md', '')
-    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('true:Project (2).md')
+    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('Project (2).md')
     expect(wrapper.emitted('spacesChanged')).toHaveLength(1)
   })
 
-  test('opens a linked document while leaving the always-visible search empty', async () => {
+  test('opens a linked document within the explorer and returns to the file list', async () => {
     const wrapper = mountList('notes.md')
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('true:notes.md')
+    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('notes.md')
+    expect(wrapper.find('input[placeholder="Search this folder and subfolders…"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'MemoryExplorerBrowser' }).exists()).toBe(false)
+    expect(wrapper.get('nav[aria-label="Memory folder path"]').text()).toContain('notes.md')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+
+    await wrapper.get('[aria-label="Go back"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="editor-state"]').exists()).toBe(false)
     expect((wrapper.get('input[placeholder="Search this folder and subfolders…"]').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.findComponent({ name: 'MemoryExplorerBrowser' }).exists()).toBe(true)
     expect(mocks.searchFiles).not.toHaveBeenCalled()
+  })
+
+  test('keeps the editor open after saving and follows a renamed file', async () => {
+    const wrapper = mountList('notes.md')
+    await flushPromises()
+
+    wrapper.getComponent(EditorStub).vm.$emit('saved', { fileName: 'renamed.md', chunksStored: 0 })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('renamed.md')
+    expect(wrapper.get('nav[aria-label="Memory folder path"]').text()).toContain('renamed.md')
+    expect(wrapper.findComponent({ name: 'MemoryExplorerBrowser' }).exists()).toBe(false)
+    expect(wrapper.emitted('spacesChanged')).toHaveLength(1)
+
+    wrapper.getComponent(EditorStub).vm.$emit('close')
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'MemoryExplorerBrowser' }).exists()).toBe(true)
+  })
+
+  test('returns to the current folder from its breadcrumb without navigating away', async () => {
+    const wrapper = mountList('notes.md')
+    await flushPromises()
+
+    const folder = wrapper.get('nav[aria-label="Memory folder path"]').findAll('button')
+      .find(button => button.text() === 'notes')!
+    await folder.trigger('click')
+
+    expect(wrapper.find('[data-testid="editor-state"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'MemoryExplorerBrowser' }).exists()).toBe(true)
+    expect(wrapper.emitted('navigateFolder')).toBeUndefined()
   })
 
   test('shows a clear button only for a query and restores the unfiltered list', async () => {
@@ -237,7 +275,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: true, HoverTooltip: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -269,7 +307,7 @@ describe('MemoryFileExplorer navigation and search', () => {
     table.vm.$emit('row-click', rows[1], new MouseEvent('click', { detail: 2 }))
     await flushPromises()
     expect(wrapper.emitted('navigateFolder')).toEqual([['child']])
-    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('false:')
+    expect(wrapper.find('[data-testid="editor-state"]').exists()).toBe(false)
 
     table.vm.$emit('row-contextmenu', rows[0], new MouseEvent('contextmenu', { clientX: 20, clientY: 20 }))
     await flushPromises()
@@ -309,7 +347,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: StatusColumnTableStub, HoverTooltip: true, SplitButton: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -353,7 +391,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: StatusColumnTableStub, HoverTooltip: true, SplitButton: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -387,7 +425,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: true, HoverTooltip: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -418,7 +456,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: true, HoverTooltip: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -465,7 +503,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: true, HoverTooltip: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -495,8 +533,9 @@ describe('MemoryFileExplorer navigation and search', () => {
 
     const cards = wrapper.findAll('[data-testid="memory-explorer-grid"] [role="button"]')
     await cards[0].trigger('click')
-    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('true:alpha.md')
+    expect(wrapper.get('[data-testid="editor-state"]').text()).toBe('alpha.md')
     expect(wrapper.text()).not.toContain('1 selected')
+    await wrapper.get('[aria-label="Go back"]').trigger('click')
 
     const checkboxes = wrapper.findAll('[data-testid="memory-explorer-grid"] input[type="checkbox"]')
     await checkboxes[0].trigger('click')
@@ -539,7 +578,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: true, HoverTooltip: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -583,7 +622,7 @@ describe('MemoryFileExplorer navigation and search', () => {
       },
       global: {
         plugins: [createPinia()],
-        stubs: { Icon: true, DataTable: true, HoverTooltip: true, MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub },
+        stubs: { Icon: true, DataTable: true, HoverTooltip: true, MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub },
       },
     })
     await flushPromises()
@@ -631,7 +670,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: StatusColumnTableStub, HoverTooltip: true, SplitButton: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -680,7 +719,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: true, HoverTooltip: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })
@@ -717,7 +756,7 @@ describe('MemoryFileExplorer navigation and search', () => {
         plugins: [createPinia()],
         stubs: {
           Icon: true, DataTable: true, HoverTooltip: true,
-          MemoryDocumentMoveDialog: true, MemoryDocumentEditorModal: EditorStub,
+          MemoryDocumentMoveDialog: true, MemoryDocumentEditor: EditorStub,
         },
       },
     })

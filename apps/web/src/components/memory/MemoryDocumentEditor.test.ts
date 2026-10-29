@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import MemoryDocumentEditorModal from './MemoryDocumentEditorModal.vue'
+import MemoryDocumentEditor from './MemoryDocumentEditor.vue'
 
 const mocks = vi.hoisted(() => ({
   getFileContent: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('../../api/client', () => ({
   },
 }))
 
-describe('MemoryDocumentEditorModal', () => {
+describe('MemoryDocumentEditor', () => {
   beforeEach(() => {
     mocks.getFileContent.mockReset()
     mocks.updateFileContent.mockReset().mockResolvedValue({
@@ -61,12 +61,11 @@ describe('MemoryDocumentEditorModal', () => {
   test('loads large content into the rich-text editor', async () => {
     const content = `# Large\n${'memory line\n'.repeat(25_000)}`
     mocks.getFileContent.mockResolvedValue({ content, revision: 'current', documentRef: 'large#ref' })
-    const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, folderId: 'category', sourceFile: 'large.md' },
+    const wrapper = mount(MemoryDocumentEditor, {
+      props: { folderId: 'category', sourceFile: 'large.md' },
       global: {
         plugins: [createPinia()],
         stubs: {
-          ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' },
           Icon: true,
         },
       },
@@ -75,9 +74,15 @@ describe('MemoryDocumentEditorModal', () => {
     await vi.waitFor(() => expect(mocks.setContent).toHaveBeenCalledOnce())
 
     expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(true)
+    expect(wrapper.get('section[aria-label="Memory document editor"]').exists()).toBe(true)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect((wrapper.get('input[aria-label="Document name"]').element as HTMLInputElement).value).toBe('large')
     expect(wrapper.text()).not.toContain('large.md')
     expect(wrapper.find('textarea[aria-label="Large memory document content"]').exists()).toBe(false)
+
+    const back = wrapper.findAll('button').find(button => button.text() === 'Back to files')!
+    await back.trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
   test('marks the indexed chunk boundaries in the editor', async () => {
@@ -88,11 +93,11 @@ describe('MemoryDocumentEditorModal', () => {
         { chunkIndex: 1, text: 'Second chunk' },
       ],
     })
-    const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
+    const wrapper = mount(MemoryDocumentEditor, {
+      props: { folderId: 'category', sourceFile: 'memory.md' },
       global: {
         plugins: [createPinia()],
-        stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
+        stubs: { Icon: true },
       },
     })
     await flushPromises()
@@ -105,11 +110,11 @@ describe('MemoryDocumentEditorModal', () => {
 
   test('toggles the revision history view', async () => {
     mocks.getFileContent.mockResolvedValue({ content: '# Memory\nText', revision: 'current', documentRef: 'memory#ref' })
-    const wrapper = mount(MemoryDocumentEditorModal, {
-      props: { show: true, folderId: 'category', sourceFile: 'memory.md' },
+    const wrapper = mount(MemoryDocumentEditor, {
+      props: { folderId: 'category', sourceFile: 'memory.md' },
       global: {
         plugins: [createPinia()],
-        stubs: { ModalDialog: { template: '<div><slot/><slot name="actions"/></div>' }, Icon: true },
+        stubs: { Icon: true },
       },
     })
     await flushPromises()

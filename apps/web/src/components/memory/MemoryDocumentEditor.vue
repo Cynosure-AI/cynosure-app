@@ -14,10 +14,8 @@ import { api } from "../../api/client";
 import type { MemoryDiffSegment, MemoryDocumentChunks, MemoryRevisionSummary } from "../../api/types";
 import MemoryInlineDiff from "./MemoryInlineDiff.vue";
 import MemoryChunkMarkers from "./MemoryChunkMarkers.vue";
-import ModalDialog from "../shared/ModalDialog.vue";
 
 const props = defineProps<{
-  show: boolean;
   folderId: string;
   sourceFile: string;
 }>();
@@ -150,7 +148,7 @@ function editorToMarkdown(): string {
 }
 
 async function loadContent() {
-  if (!props.show || !props.folderId || !props.sourceFile || !editor.value) return;
+  if (!props.folderId || !props.sourceFile || !editor.value) return;
   const sequence = ++contentLoadSequence;
   ++historyLoadSequence;
   loading.value = true;
@@ -184,7 +182,7 @@ async function loadContent() {
 
 /** Chunk boundaries of the indexed revision; unindexed documents show none. */
 async function loadChunks() {
-  if (!props.show || !props.folderId || !props.sourceFile) return;
+  if (!props.folderId || !props.sourceFile) return;
   const sequence = ++chunksLoadSequence;
   chunks.value = [];
   try {
@@ -315,31 +313,27 @@ function close() {
 }
 
 watch(
-  () => [props.show, props.folderId, props.sourceFile, editor.value] as const,
+  () => [props.folderId, props.sourceFile, editor.value] as const,
   () => {
-    if (props.show) {
-      void loadContent().then(() => loadChunks());
-    }
+    void loadContent().then(() => loadChunks());
   },
   { immediate: true },
 );
 
 onBeforeUnmount(() => {
+  ++contentLoadSequence;
+  ++historyLoadSequence;
+  ++chunksLoadSequence;
   editor.value?.destroy();
 });
 </script>
 
 <template>
-  <ModalDialog
-    :show="show && Boolean(sourceFile)"
-    title="Edit memory document"
-    hide-header
-    max-width="max-w-7xl"
-    max-height="h-[88vh]"
-    body-overflow-hidden
-    @close="close"
+  <section
+    aria-label="Memory document editor"
+    class="flex h-[calc(100dvh-16rem)] min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-xl border border-theme-800"
   >
-    <div class="flex h-full min-h-0 flex-col rounded-2xl overflow-hidden">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
         <label class="text-xs text-ink-muted shrink-0">Name</label>
         <input
@@ -487,47 +481,47 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <template #actions>
-      <div class="flex justify-end gap-2">
-        <button
-          v-if="showHistory && selectedRevisionId"
-          class="px-3 py-1.5 text-amber-300 hover:bg-amber-500/10 rounded-lg text-sm transition-colors"
-          :disabled="saving"
-          @click="restoreSelectedRevision"
-        >
-          Restore revision
-        </button>
-        <button
-          class="px-3 py-1.5 text-ink-secondary hover:text-theme-100 rounded-lg text-sm transition-colors"
-          :disabled="saving"
-          @click="close"
-        >
-          Close
-        </button>
-        <button
-          :disabled="loading || saving || !canSave"
-          class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-fg rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          @click="saveContent"
-        >
-          <Icon
-            :icon="saving ? 'lucide:loader-2' : 'lucide:save'"
-            class="w-4 h-4"
-            :class="{ 'animate-spin': saving }"
-          />
-          Save
-        </button>
-      </div>
-    </template>
-  </ModalDialog>
+    <div class="flex shrink-0 justify-end gap-2 border-t border-theme-800 bg-theme-950/25 px-5 py-3">
+      <button
+        v-if="showHistory && selectedRevisionId"
+        class="px-3 py-1.5 text-amber-300 hover:bg-amber-500/10 rounded-lg text-sm transition-colors"
+        :disabled="saving"
+        @click="restoreSelectedRevision"
+      >
+        Restore revision
+      </button>
+      <button
+        class="px-3 py-1.5 text-ink-secondary hover:text-theme-100 rounded-lg text-sm transition-colors"
+        :disabled="saving"
+        @click="close"
+      >
+        Back to files
+      </button>
+      <button
+        :disabled="loading || saving || !canSave"
+        class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-fg rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+        @click="saveContent"
+      >
+        <Icon
+          :icon="saving ? 'lucide:loader-2' : 'lucide:save'"
+          class="w-4 h-4"
+          :class="{ 'animate-spin': saving }"
+        />
+        Save
+      </button>
+    </div>
+  </section>
 </template>
 
 <style scoped>
 .memory-editor-shell {
+  display: flex;
   min-height: 100%;
 }
 
 :deep(.memory-editor-content) {
-  min-height: calc(88vh - 132px);
+  flex: 1;
+  min-width: 0;
   padding: 1.25rem;
   /* Reserve a right gutter so chunk markers never overlap the text. */
   padding-right: 7rem;

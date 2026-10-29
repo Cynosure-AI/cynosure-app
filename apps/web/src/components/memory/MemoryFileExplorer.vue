@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted, toRef, watch } from "vue";
 import { api } from "../../api/client";
 import type { MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob } from "../../api/types";
 import { Icon } from "@iconify/vue";
-import MemoryDocumentEditorModal from "./MemoryDocumentEditorModal.vue";
+import MemoryDocumentEditor from "./MemoryDocumentEditor.vue";
 import type { Column } from "../shared/DataTable.vue";
 import { useMemoryDocumentJobs } from "../../composables/useMemoryDocumentJobs";
 import MemoryDocumentMoveDialog from "./MemoryDocumentMoveDialog.vue";
@@ -160,6 +160,13 @@ const pathSegments = computed(() => {
     return { label, folderId };
   }).filter((segment): segment is { label: string; folderId: string } => Boolean(segment.folderId));
 });
+const explorerSegments = computed(() => [
+  ...pathSegments.value.map(segment => ({
+    label: segment.label,
+    disabled: !editorFileName.value && segment.folderId === props.folderId,
+  })),
+  ...(editorFileName.value ? [{ label: editorFileName.value, disabled: true }] : []),
+]);
 
 async function copyCurrentFolderPath(): Promise<void> {
   const path = currentSpace.value?.directoryPath;
@@ -190,6 +197,10 @@ async function copyCurrentFolderPath(): Promise<void> {
 }
 
 function navigateHistory(offset: -1 | 1): void {
+  if (editorFileName.value) {
+    closeEditor();
+    return;
+  }
   const nextIndex = folderHistoryIndex.value + offset;
   const folderId = folderHistory.value[nextIndex];
   if (!folderId || nextIndex < 0 || nextIndex >= folderHistory.value.length) return;
@@ -198,10 +209,12 @@ function navigateHistory(offset: -1 | 1): void {
 }
 
 function navigateHome(): void {
+  closeEditor();
   if (rootFolder.value && rootFolder.value.id !== props.folderId) emit("navigateFolder", rootFolder.value.id);
 }
 
 function navigateBreadcrumb(folderId?: string): void {
+  if (folderId) closeEditor();
   if (folderId && folderId !== props.folderId) emit("navigateFolder", folderId);
 }
 
@@ -226,7 +239,7 @@ function openFolder(folder: MemoryFolder, event?: MouseEvent | KeyboardEvent): v
 
 function openDocumentRow(file: DocumentRow): void {
   highlightedFolderId.value = null;
-  openEditorModal(file.fileName);
+  openEditor(file.fileName);
 }
 
 function openExplorerRow(item: ExplorerRow, event?: MouseEvent | KeyboardEvent): void {
@@ -913,19 +926,21 @@ async function createFile(): Promise<void> {
   }
 }
 
-const showEditorModal = ref(false);
 const editorFileName = ref("");
 
-function openEditorModal(fileName: string) {
+function openEditor(fileName: string) {
   const file = files.value.find((f) => f.fileName === fileName);
   if (!file?.textDirect) return;
-  editorFileName.value = fileName;
-  showEditorModal.value = true;
+  openDocument(fileName);
 }
 
 function openDocument(fileName: string) {
+  contextMenu.value = null;
   editorFileName.value = fileName;
-  showEditorModal.value = true;
+}
+
+function closeEditor() {
+  editorFileName.value = "";
 }
 
 function openGlobalResult(file: GlobalDocumentRow) {
@@ -933,8 +948,8 @@ function openGlobalResult(file: GlobalDocumentRow) {
   emit("openGlobalDocument", file.folderId, file.fileName);
 }
 
-async function handleEditorSaved() {
-  showEditorModal.value = false;
+async function handleEditorSaved(payload: { fileName: string }) {
+  editorFileName.value = payload.fileName;
   await loadFiles();
   await loadJobs();
   emit("spacesChanged");
@@ -1036,7 +1051,6 @@ watch(
     files.value = [];
     clearSelection();
     resetJobs();
-    showEditorModal.value = false;
     editorFileName.value = "";
     searchQuery.value = "";
     highlightedFolderId.value = null;
@@ -1044,13 +1058,13 @@ watch(
     actionError.value = "";
     page.value = 0;
     await Promise.all([loadFiles(), loadJobs()]);
-    if (props.folderId === folderId && props.focusFile) openEditorModal(props.focusFile);
+    if (props.folderId === folderId && props.focusFile) openEditor(props.focusFile);
   },
   { immediate: true },
 );
 
 watch(() => props.focusFile, (fileName) => {
-  if (fileName) openEditorModal(fileName);
+  if (fileName) openEditor(fileName);
 });
 
 watch([searchQuery, () => props.folderId, semanticSearch], ([query]) => {
@@ -1110,17 +1124,20 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
 <template>
   <div class="memory-document-list min-w-0">
     <MemoryExplorerHeader
-      :segments="pathSegments.map((segment) => ({ label: segment.label, disabled: segment.folderId === folderId }))"
-      :home-disabled="!rootFolder || rootFolder.id === folderId"
+      :segments="explorerSegments"
+      :home-disabled="!rootFolder || (!editorFileName && rootFolder.id === folderId)"
       :home-label="scopeRoot ? `Go to ${scopeRoot.name}` : undefined"
-      :can-go-back="canNavigateBack"
-      :can-go-forward="canNavigateForward"
+      :can-go-back="Boolean(editorFileName) || canNavigateBack"
+      :can-go-forward="!editorFileName && canNavigateForward"
       @home="navigateHome"
       @back="navigateHistory(-1)"
       @forward="navigateHistory(1)"
       @segment-click="navigateBreadcrumb(pathSegments[$event]?.folderId)"
     >
-      <template #path-actions>
+      <template
+        v-if="!editorFileName"
+        #path-actions
+      >
         <button
           type="button"
           class="ml-1 shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-theme-800 hover:text-theme-200"
@@ -1160,7 +1177,10 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
           />
         </button>
       </template>
-      <template #actions>
+      <template
+        v-if="!editorFileName"
+        #actions
+      >
         <button
           v-if="currentSpace"
           type="button"
@@ -1237,6 +1257,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
     </MemoryExplorerHeader>
 
     <MemoryExplorerSearchStatus
+      v-if="!editorFileName"
       v-model:query="searchQuery"
       v-model:semantic="semanticSearch"
       :description="currentSpace?.description"
@@ -1275,6 +1296,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
     </div>
 
     <MemoryExplorerToolbar
+      v-if="!editorFileName"
       :view="explorerView"
       :searching="Boolean(searchQuery.trim())"
       :result-count="globalSearchResults.length"
@@ -1307,6 +1329,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
     />
 
     <MemoryExplorerBrowser
+      v-if="!editorFileName"
       v-model:page="page"
       v-model:selected-ids="selectedExplorerIds"
       :search-query="searchQuery"
@@ -1338,7 +1361,7 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       :search-index-progress="searchIndexProgress"
       @open-global-result="openGlobalResult"
       @open-folder="openFolder"
-      @open-document="(fileName, event) => !isRepeatClick(event) && openEditorModal(fileName)"
+      @open-document="(fileName, event) => !isRepeatClick(event) && openEditor(fileName)"
       @open-context-menu="openContextMenu"
       @toggle-grid-selection="toggleGridSelection"
       @folder-drag-over="onFolderDocumentDragOver"
@@ -1366,18 +1389,18 @@ defineExpose({ ingestFiles, moveDocumentsToFolder, openDocument });
       @edit-folder="emit('editFolder', $event)"
       @toggle-auto-memory-exclusion="emit('toggleAutoMemoryExclusion', $event)"
       @delete-folder="emit('deleteFolder', $event)"
-      @open-document="openEditorModal($event.fileName)"
+      @open-document="openEditor($event.fileName)"
       @move-document="openContextMove"
       @index-document="makeSearchableSelected"
       @forget-document="forgetSelectedMemories"
       @remove-document="deleteSelectedFiles"
     />
 
-    <MemoryDocumentEditorModal
-      :show="showEditorModal"
+    <MemoryDocumentEditor
+      v-if="editorFileName"
       :folder-id="folderId"
       :source-file="editorFileName"
-      @close="showEditorModal = false"
+      @close="closeEditor"
       @saved="handleEditorSaved"
     />
 
