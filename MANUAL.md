@@ -602,7 +602,7 @@ Local model tracking/cache is separate from server memory embeddings. Clearing W
 
 ### 13.2 Attachment context
 
-Uploads retain originals and parsed text. Documents (PDF, Office, OpenDocument, RTF) are recognized by their content, so a file without its extension is still parsed; other binary files are noted as unreadable instead of being passed on as bytes. Small text is included inline. Larger text is session content: the model sees its ref (`att-N`), size and first lines, and reads the rest with `session_content_grep` and `session_content_read`. Attachments are not embedded for semantic search; put documents you want searched by meaning in a memory folder. The inline limit uses a 10% context share, bounded from 2,000 to 500,000 text bytes, with a 24,000-byte fallback for an unknown window.
+Uploads retain originals and parsed text. Small text is included inline. Larger text is session content: the model sees its ref (`att-N`), size and first lines, and reads the rest with `session_content_grep` and `session_content_read`. Attachments are not embedded for semantic search; put documents you want searched by meaning in a memory folder. The inline limit uses a 10% context share, bounded from 2,000 to 500,000 text bytes, with a 24,000-byte fallback for an unknown window.
 
 Library separates **Generated** and **Uploads** and reuses previous inputs. Reference-aware cleanup preserves attachments still needed by another conversation.
 

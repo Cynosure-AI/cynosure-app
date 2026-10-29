@@ -13,53 +13,17 @@ const PARSEABLE_EXTENSIONS = new Set([
     '.pdf', '.rtf'
 ])
 
-const ZIP_DOCUMENT_ENTRIES: Array<[string, string]> = [
-    ['word/document.xml', '.docx'],
-    ['ppt/presentation.xml', '.pptx'],
-    ['xl/workbook.xml', '.xlsx'],
-]
-
-const OPEN_DOCUMENT_TYPES: Record<string, string> = {
-    'application/vnd.oasis.opendocument.text': '.odt',
-    'application/vnd.oasis.opendocument.presentation': '.odp',
-    'application/vnd.oasis.opendocument.spreadsheet': '.ods',
-}
-
-/**
- * The document format as a parseable extension: from the file name, or from
- * the content when the name has none (an upload named "Tax notice 2025"
- * without ".pdf" is still a PDF).
- */
-export function detectDocumentExtension(buffer: Buffer, filename: string): string | undefined {
-    const named = filename.slice(filename.lastIndexOf('.')).toLowerCase()
-    if (filename.includes('.') && PARSEABLE_EXTENSIONS.has(named)) return named
-    // Readers accept the PDF header anywhere in the first kilobyte.
-    if (buffer.subarray(0, 1024).includes('%PDF-')) return '.pdf'
-    if (buffer.subarray(0, 5).toString('latin1') === '{\\rtf') return '.rtf'
-    if (buffer.length > 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04) {
-        try {
-            const zip = new AdmZip(buffer)
-            const mimetype = zip.getEntry('mimetype')?.getData().toString('utf8').trim()
-            if (mimetype && OPEN_DOCUMENT_TYPES[mimetype]) return OPEN_DOCUMENT_TYPES[mimetype]
-            return ZIP_DOCUMENT_ENTRIES.find(([entry]) => zip.getEntry(entry))?.[1]
-        } catch {
-            return undefined
-        }
-    }
-    return undefined
-}
-
-/** True when the bytes are not text: a NUL byte in the first 8,000 bytes, as git decides. */
-export function looksBinary(buffer: Buffer): boolean {
-    return buffer.subarray(0, 8000).includes(0)
+/** Check if a filename has a parseable document extension */
+export function isParseableDocument(filename: string): boolean {
+    const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase()
+    return PARSEABLE_EXTENSIONS.has(ext)
 }
 
 /** Parse a document buffer and return structured Markdown text */
 export async function parseDocument(buffer: Buffer, filename: string): Promise<string> {
-    const extension = detectDocumentExtension(buffer, filename)
-    if (extension === '.pdf') return parsePdfToMarkdown(buffer)
+    if (filename.toLowerCase().endsWith('.pdf')) return parsePdfToMarkdown(buffer)
 
-    if (extension === '.docx') {
+    if (filename.toLowerCase().endsWith('.docx')) {
         const docxMarkdown = parseDocxToMarkdown(buffer)
         if (docxMarkdown) return docxMarkdown
     }

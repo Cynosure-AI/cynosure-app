@@ -6,7 +6,7 @@ import { getDb } from '../../db/database.js'
 import type { Database } from 'better-sqlite3'
 import { releaseAttachmentAsset, retainAttachmentAsset } from './attachment-asset-references.js'
 import { getAppDataDir } from '../data-dir.js'
-import { detectDocumentExtension, looksBinary, parseDocument } from '../utils/document-parser.js'
+import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 
 export interface FileAttachmentInput {
     name: string
@@ -94,8 +94,6 @@ function findAttachmentAsset(db: Database, contentHash: string, sizeBytes: numbe
         ORDER BY created_at`).all(contentHash, sizeBytes) as AttachmentAssetRow[]
     for (const row of rows) {
         if (!existsSync(row.original_path) || !existsSync(row.text_path)) continue
-        // Text saved as raw document bytes, before parsing detected formats by content.
-        if (hasUnparsedText(row.text_path)) continue
         let hash = row.content_hash
         if (!hash) {
             try { hash = createHash('sha256').update(readFileSync(row.original_path)).digest('hex') }
@@ -110,15 +108,6 @@ function findAttachmentAsset(db: Database, contentHash: string, sizeBytes: numbe
     }
 }
 
-function hasUnparsedText(textPath: string): boolean {
-    try {
-        const head = readFileSync(textPath).subarray(0, 8000)
-        return looksBinary(head) || head.subarray(0, 1024).includes('%PDF-')
-    } catch {
-        return false
-    }
-}
-
 async function createAttachmentAsset(
     file: FileAttachmentInput, conversationId: string, buffer: Buffer, text: string, contentHash: string,
 ): Promise<FileAttachmentArtifact> {
@@ -130,14 +119,12 @@ async function createAttachmentAsset(
 
     let extractedText = text
 
-    if (file.content.startsWith('data:') && detectDocumentExtension(buffer, file.name)) {
+    if (isParseableDocument(file.name) && file.content.startsWith('data:')) {
         try {
             extractedText = await parseDocument(buffer, file.name)
         } catch (err) {
             extractedText = `[Error parsing ${file.name}: ${err instanceof Error ? err.message : 'unknown error'}]`
         }
-    } else if (file.content.startsWith('data:') && looksBinary(buffer)) {
-        extractedText = `[${file.name} is a binary file in a format Cynosure cannot convert to text.]`
     }
 
     try {

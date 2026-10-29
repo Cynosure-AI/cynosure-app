@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -14,8 +14,7 @@ const mocks = vi.hoisted(() => ({
     parse: vi.fn(),
 }))
 vi.mock('../utils/document-parser.js', () => ({
-    detectDocumentExtension: (_buffer: Buffer, name: string) => name.endsWith('.pdf') ? '.pdf' : undefined,
-    looksBinary: (buffer: Buffer) => buffer.subarray(0, 8000).includes(0),
+    isParseableDocument: (name: string) => name.endsWith('.pdf'),
     parseDocument: mocks.parse,
 }))
 
@@ -138,15 +137,4 @@ test('queued attachments retain shared assets until the last queue or chat relea
     expect(existsSync(second.originalPath)).toBe(true)
     expect(deleteQueuedChatMessage('b', queuedB.id)).toBe(true)
     await vi.waitFor(() => expect(existsSync(second.originalPath)).toBe(false))
-})
-
-test('an asset whose stored text is raw PDF bytes is parsed again instead of reused', async () => {
-    const pdf = `data:application/pdf;base64,${Buffer.from('%PDF-1.7 raw').toString('base64')}`
-    const first = await ready('a', 'Steuerbescheid2025', pdf)
-    commit('a', first)
-    // Simulate an asset saved before formats were detected by content.
-    writeFileSync(first.textPath, '%PDF-1.7 raw')
-    const second = await ready('b', 'Steuerbescheid2025.pdf', pdf)
-    expect(second.assetId).not.toBe(first.assetId)
-    expect(readFileSync(second.textPath, 'utf8')).toBe('Parsed document')
 })

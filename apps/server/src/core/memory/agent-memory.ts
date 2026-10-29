@@ -14,7 +14,7 @@ import {
 } from './memory-file-manager.js'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { detectDocumentExtension, parseDocument } from '../utils/document-parser.js'
+import { isParseableDocument, parseDocument } from '../utils/document-parser.js'
 import { cancelMemoryIndexJobsForFile } from './memory-index-jobs.js'
 import { getActivePermanentMemoryTableName } from './memory-index-manifest.js'
 import { randomBytes } from 'node:crypto'
@@ -188,11 +188,10 @@ export class AgentMemory {
         let text: string
         const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase()
 
-        const documentBuffer = PLAIN_TEXT_EXTENSIONS.has(ext) ? undefined : readFileSync(filePath)
-        if (!documentBuffer) {
+        if (PLAIN_TEXT_EXTENSIONS.has(ext)) {
             text = readTextFile(directoryPath, fileName)
-        } else if (detectDocumentExtension(documentBuffer, fileName)) {
-            const buf = documentBuffer
+        } else if (isParseableDocument(fileName)) {
+            const buf = readFileSync(filePath)
             throwIfAborted(opts?.signal)
             text = await parseDocument(buf, fileName)
             throwIfAborted(opts?.signal)
