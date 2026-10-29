@@ -363,6 +363,7 @@ A tool is a callable capability available to the assistant. Availability, automa
 | Scheduling | Create/list/update/delete jobs; pause a conversation with `schedule_wait` |
 | Files | Metadata, directory listing/tree, path search, content grep, text/media reads, write/edit, create directories, move, merge directories, ZIP archives, delete |
 | Shell | `shell_execute` runs a command on the server host |
+| Web | `web_fetch` reads a web page by URL and returns its main content as Markdown |
 | Notifications | `notify_user` messages the user on a connected channel (Telegram, Discord, Slack); it is hidden while none is connected |
 | MCP management | `manage_mcp` manages configured MCP connections |
 | Execution helpers | Todo planning, attachment search/read, MCP discovery, and sub-agent spawn/continue are added when relevant |
@@ -373,6 +374,8 @@ Native file tools include `file_read`, `file_grep`, `file_write`, and `file_edit
 A tool output longer than **32,000 characters** (about 8k tokens) is not sent to the model whole. It is saved as **session content** with a short ref such as `out-3`, and the model sees its numbered first and last lines plus example calls. JSON packed on a few long lines is reformatted to one value per line first. File attachments are session content too, as `att-1`, `att-2`, and so on; a ref never changes once given. The model reaches session content only by ref, never by path, through two read-only tools that run without approval: `session_content_grep` finds lines (regular expression or plain text, ignoring case by default, across one ref or all of them) and `session_content_read` reads numbered lines by offset and limit. Their errors list the session content available and an example call. They are offered whenever the conversation has session content. Saved outputs are deleted with their conversation.
 
 `shell_execute` runs with the permissions and environment of the server process. It is not limited by the native file-tool folder allowlist. Its default timeout is **120 seconds**, maximum requested timeout **600 seconds**, and collected output cap **8 MiB**; output over the 32,000-character limit is saved as session content as described above. A guard refuses recognized destructive system commands, but it is not an operating-system sandbox.
+
+`web_fetch` makes one HTTP GET request (30-second timeout, 5 MiB response cap) without running JavaScript. HTML is cleaned with Defuddle and returned as Markdown; text responses such as JSON are returned as is, and binary responses are refused. A page with almost no readable text, typically one rendered by scripts, returns an error suggesting a browser tool such as the Playwright MCP server. The tool declares itself read-only, so it runs without approval and is available in Read Only chats. It can reach any address the server can, including localhost and the local network.
 
 ### 8.2 MCP servers
 

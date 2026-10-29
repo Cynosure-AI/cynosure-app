@@ -4,6 +4,7 @@ const BUILT_IN_NAMESPACE_ICONS: Record<string, string> = {
   'builtin:notifications': 'lucide:bell',
   'builtin:utility': 'lucide:wrench',
   'builtin:files': 'lucide:folder-tree',
+  'builtin:web': 'lucide:globe',
 }
 
 export function getToolNamespaceIcon(namespaceId: string): string {
