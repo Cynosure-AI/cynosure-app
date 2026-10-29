@@ -33,8 +33,7 @@
   z-index: 10000;
 }
 
-/* Feathered aurora veils stay behind the empty chat, never over controls.
-   No fixed overlays, outlined rings, or repeating dot patterns. */
+/* Soft forest light with a faint gold veil, below the chat content. */
 [data-theme="emerald"] .chat-column--empty::before {
   content: "";
   position: absolute;
@@ -42,37 +41,49 @@
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(118deg, transparent 16%, rgba(72,204,131,.045) 30%, transparent 43%),
-    linear-gradient(128deg, transparent 30%, rgba(40,183,127,.065) 46%, transparent 61%),
-    linear-gradient(114deg, transparent 52%, rgba(108,218,155,.035) 64%, transparent 76%);
+    radial-gradient(ellipse 45% 48% at 50% 25%, rgba(64,139,89,.07), transparent 80%),
+    linear-gradient(118deg, transparent 16%, rgba(203,165,87,.035) 32%, transparent 48%),
+    linear-gradient(128deg, transparent 38%, rgba(76,157,102,.055) 53%, transparent 70%);
   -webkit-mask-image: linear-gradient(#000, transparent 85%);
   mask-image: linear-gradient(#000, transparent 85%);
+}
+
+/* The gold lattice stays subtle, with a clear space for the greeting and text. */
+[data-theme="emerald"] .water-ripple-field {
+  opacity: .38;
+  -webkit-mask-image: radial-gradient(ellipse 42% 40% at 50% 40%, rgba(0,0,0,.2), #000);
+  mask-image: radial-gradient(ellipse 42% 40% at 50% 40%, rgba(0,0,0,.2), #000);
 }
 
 [data-theme="emerald"] .chat-empty-state h2 {
   font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
   font-weight: 500;
   letter-spacing: -.035em;
-  color: #def5e7;
-  text-shadow: 0 2px 24px rgba(131,239,192,.2);
+  color: #f1e4c6;
+  text-wrap: balance;
+  text-shadow: 0 2px 24px rgba(203,165,87,.1);
 }
 
 [data-theme="emerald"] .chat-empty-icon {
-  border-color: rgba(131,239,192,.18);
-  background: linear-gradient(145deg, #153c2c, #091e17);
-  box-shadow: inset 0 1px 0 rgba(190,255,216,.1), 0 0 48px rgba(37,206,139,.14), 0 12px 32px rgba(0,8,5,.24);
+  border-color: rgba(230,200,136,.28);
+  background: linear-gradient(145deg, #254c35, #10271c);
+  box-shadow: inset 0 1px 0 rgba(247,237,207,.12), 0 0 0 6px rgba(203,165,87,.025), 0 12px 40px rgba(0,8,5,.28);
 }
 
 [data-theme="emerald"] .chat-header-bar,
 [data-theme="emerald"] .page-header {
-  border-bottom-color: rgba(131,239,192,.09);
+  border-bottom-color: rgba(230,200,136,.12);
   background: var(--color-page-header);
+}
+
+[data-theme="emerald"] .section-separator {
+  background: linear-gradient(90deg, rgba(230,200,136,.22), rgba(230,200,136,.03));
 }
 
 [data-theme="emerald"] .command-palette,
 [data-theme="emerald"] .planning-task-panel {
-  border-color: rgba(131,239,192,.22);
-  box-shadow: inset 0 1px 0 rgba(168,244,204,.06), 0 24px 80px rgba(0,8,5,.55), 0 0 40px rgba(37,206,139,.06);
+  border-color: rgba(230,200,136,.25);
+  box-shadow: inset 0 1px 0 rgba(247,237,207,.07), 0 24px 80px rgba(0,8,5,.55);
 }
 
 [data-theme="monochrome"] img[src*="cynosure-logo"] {

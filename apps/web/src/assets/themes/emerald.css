@@ -1,32 +1,32 @@
-/* Emerald — nocturnal jade, diffused aurora light, and luminous green glass. */
+/* Emerald — forest-green glass, champagne gold, and warm ivory. */
 [data-theme="emerald"] {
-  --color-accent-fg: #83efc0;
-  --color-accent-on: #02140e;
+  --color-accent-fg: #e6c888;
+  --color-accent-on: #1b180d;
 
-  --color-theme-950: #030e0b;
-  --color-theme-900: #071a14;
-  --color-theme-800: #102c22;
-  --color-theme-700: #244d3d;
-  --color-theme-600: #3c6c56;
-  --color-theme-500: #608d76;
-  --color-theme-400: #91b8a3;
-  --color-theme-300: #b4d4c3;
-  --color-theme-200: #d9eee1;
-  --color-theme-100: #effaf3;
+  --color-theme-950: #070f0d;
+  --color-theme-900: #0d1c17;
+  --color-theme-800: #182e25;
+  --color-theme-700: #304b3e;
+  --color-theme-600: #4e6b59;
+  --color-theme-500: #829884;
+  --color-theme-400: #a6b7a4;
+  --color-theme-300: #c9d3bf;
+  --color-theme-200: #e4e7d5;
+  --color-theme-100: #f6f3e7;
 
-  --color-accent-50: #ecfdf5;
-  --color-accent-100: #d1fae5;
-  --color-accent-200: #b4f5d5;
-  --color-accent-300: #83efc0;
-  --color-accent-400: #50e4a6;
-  --color-accent-500: #25ce8b;
-  --color-accent-600: #13ad74;
-  --color-accent-700: #098359;
-  --color-accent-800: #086448;
-  --color-accent-900: #074d39;
-  --color-accent-950: #032e22;
+  --color-accent-50: #fcf8ee;
+  --color-accent-100: #f7edcf;
+  --color-accent-200: #efdeaf;
+  --color-accent-300: #e6c888;
+  --color-accent-400: #dbb86e;
+  --color-accent-500: #cba557;
+  --color-accent-600: #b99248;
+  --color-accent-700: #947036;
+  --color-accent-800: #71532d;
+  --color-accent-900: #503e25;
+  --color-accent-950: #2c2418;
 
-  --theme-glow-strong: 0 0 0 2px rgba(131,239,192,.45), 0 0 28px rgba(37,206,139,.16);
+  --theme-glow-strong: 0 0 0 2px rgba(230,200,136,.5), 0 0 24px rgba(203,165,87,.12);
 
   --radius-sm: 6px;
   --radius-md: 9px;
@@ -40,54 +40,65 @@
   letter-spacing: 0;
   color-scheme: dark;
 
-  --theme-shell-background: #030e0b;
-  /* Broad, feathered light lives on the visible panel, below the content. */
+  --theme-shell-background: #070f0d;
+  /* Green depth and a restrained wash of gold frame the reading area. */
   --theme-content-background:
-    radial-gradient(ellipse 65% 60% at 52% -12%, rgba(40,175,112,.19), transparent 78%),
-    radial-gradient(ellipse 50% 75% at 108% 58%, rgba(12,116,83,.16), transparent 80%),
-    radial-gradient(ellipse 55% 55% at -12% 100%, rgba(46,130,84,.13), transparent 80%),
-    linear-gradient(155deg, #071a14, #04110e 65%, #061812);
-  --theme-sidebar-background: linear-gradient(165deg, #0a2018, #040f0c 72%);
-  --theme-sidebar-border: rgba(101,203,153,.12);
-  --theme-sidebar-shadow: 8px 0 40px rgba(0,8,5,.18);
-  --theme-composer-background: linear-gradient(135deg, rgba(22,57,42,.96), rgba(10,32,25,.97));
-  --theme-composer-shadow: inset 0 1px 0 rgba(168,244,204,.07), 0 16px 48px rgba(0,8,5,.36), 0 0 40px rgba(37,206,139,.035);
-  --theme-composer-tab-background: #0a2019;
-  --theme-composer-tab-line: rgba(131,239,192,.2);
-  --theme-composer-tab-focus-line: rgba(131,239,192,.55);
-  --theme-nav-active-color: #c4f7dc;
-  --theme-nav-active-background: linear-gradient(100deg, rgba(60,216,144,.17), rgba(37,206,139,.035));
-  --theme-nav-active-border: 1px solid rgba(131,239,192,.14);
-  --theme-nav-active-shadow: inset 2px 0 0 #50e4a6, 0 0 20px rgba(37,206,139,.04);
-  --theme-heading-shadow: 0 0 32px rgba(131,239,192,.15);
+    radial-gradient(ellipse 65% 60% at 48% -10%, rgba(47,125,85,.2), transparent 80%),
+    radial-gradient(ellipse 50% 65% at 105% 85%, rgba(154,121,53,.08), transparent 80%),
+    radial-gradient(ellipse 45% 60% at -10% 70%, rgba(36,115,78,.1), transparent 80%),
+    linear-gradient(150deg, #0c2018, #091610 62%, #101c15);
+  --theme-sidebar-background: linear-gradient(170deg, #10271e, #091710 65%, #0b1812);
+  --theme-sidebar-border: rgba(230,200,136,.13);
+  --theme-sidebar-shadow: 8px 0 40px rgba(0,8,5,.2);
+  --theme-composer-background: linear-gradient(125deg, rgba(28,55,41,.98), rgba(17,36,27,.98));
+  --theme-composer-shadow: inset 0 1px 0 rgba(247,237,207,.07), 0 16px 48px rgba(0,8,5,.32);
+  --theme-composer-tab-background: #11241b;
+  --theme-composer-tab-line: rgba(230,200,136,.25);
+  --theme-composer-tab-focus-line: rgba(230,200,136,.65);
+  --theme-nav-active-color: #efdeaf;
+  --theme-nav-active-background: linear-gradient(100deg, rgba(203,165,87,.14), rgba(203,165,87,.025));
+  --theme-nav-active-border: 1px solid rgba(230,200,136,.18);
+  --theme-nav-active-shadow: inset 2px 0 0 #dbb86e, 0 4px 16px rgba(0,8,5,.12);
+  --theme-region-label-color: #a9ad8e;
+  --theme-heading-shadow: none;
   --theme-heading-spacing: -.025em;
-  --theme-selection-background: rgba(80,228,166,.26);
+  --theme-selection-background: rgba(203,165,87,.27);
+  --theme-selection-color: #fcf8ee;
   --theme-scrollbar-size: 5px;
   --theme-scrollbar-track: transparent;
-  --theme-scrollbar-thumb: rgba(104,188,143,.28);
-  --theme-scrollbar-hover: rgba(131,239,192,.5);
+  --theme-scrollbar-thumb: rgba(166,183,164,.25);
+  --theme-scrollbar-hover: rgba(230,200,136,.45);
 
-  --color-user-message: #0c6343;
-  --color-user-message-text: #f1fff7;
+  --color-user-message: #24563e;
+  --color-user-message-text: #f6f3e7;
 
-  --theme-action-gradient: linear-gradient(135deg, #83efc0, #3cdb9a 55%, #25bd83);
-  --theme-action-shadow: inset 0 1px 0 rgba(223,255,238,.4), 0 4px 18px rgba(37,206,139,.2);
+  --theme-action-gradient: linear-gradient(135deg, #efdeaf, #dbb86e 52%, #cba557);
+  --theme-action-shadow: inset 0 1px 0 rgba(252,248,238,.45), 0 4px 16px rgba(0,8,5,.2);
 
-  --color-ink-secondary: #c0decd;
-  --color-ink-muted: #a0c5b0;
-  --color-ink-faint: #91b29f;
-  --color-page-header: rgba(5,20,15,.78);
+  --color-ink-secondary: #cdd7c5;
+  --color-ink-muted: #afbea9;
+  --color-ink-faint: #a0b09b;
+  --color-page-header: rgba(9,23,17,.88);
 }
 
 [data-theme="emerald"] .app-content {
-  box-shadow: inset 0 0 0 1px rgba(131,239,192,.1), 0 20px 60px rgba(0,6,4,.3);
+  box-shadow: inset 0 0 0 1px rgba(230,200,136,.12), 0 20px 60px rgba(0,6,4,.3);
 }
 
 [data-theme="emerald"] .chat-composer {
-  border-color: rgba(131,239,192,.22);
+  border-color: rgba(230,200,136,.28);
 }
 
 [data-theme="emerald"] .chat-composer:focus-within {
-  border-color: rgba(131,239,192,.55);
-  box-shadow: inset 0 1px 0 rgba(168,244,204,.1), 0 0 0 1px rgba(80,228,166,.16), 0 0 40px rgba(37,206,139,.1), 0 16px 48px rgba(0,8,5,.36);
+  border-color: rgba(230,200,136,.65);
+  box-shadow: inset 0 1px 0 rgba(247,237,207,.1), 0 0 0 1px rgba(203,165,87,.15), 0 0 32px rgba(203,165,87,.06), 0 16px 48px rgba(0,8,5,.32);
+}
+
+/* Incognito keeps its dashed, quieter frame. */
+[data-theme="emerald"] .chat-composer.chat-composer--temporary {
+  border-color: rgba(175,190,169,.4);
+}
+
+[data-theme="emerald"] .chat-composer.chat-composer--temporary:focus-within {
+  border-color: rgba(230,200,136,.65);
 }
