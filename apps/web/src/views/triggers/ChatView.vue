@@ -3,6 +3,7 @@ import ChatHeaderBar from '../../components/chat/ChatHeaderBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import InputBar from '../../components/chat/InputBar.vue'
 import PlanningTaskList from '../../components/chat/PlanningTaskList.vue'
+import RecentCronResults from '../../components/chat/RecentCronResults.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore, type Conversation } from '../../stores/chat.store'
@@ -459,6 +460,11 @@ watch(
               <span class="max-w-52 truncate">{{ conversation.title }}</span>
             </button>
           </div>
+
+          <RecentCronResults
+            v-if="showCenteredComposer && !chatStore.activeAgentId && !chatStore.activeIsTemporary"
+            :intro-started-at="introStartedAt"
+          />
 
           <div
             class="composer-spacer hidden md:block"

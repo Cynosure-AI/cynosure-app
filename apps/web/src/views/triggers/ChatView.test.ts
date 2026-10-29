@@ -3,6 +3,7 @@ import { nextTick } from 'vue'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import InputBar from '../../components/chat/InputBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
+import RecentCronResults from '../../components/chat/RecentCronResults.vue'
 import ChatView from './ChatView.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -78,6 +79,18 @@ describe('ChatView provider availability', () => {
     expect(wrapper.find('[data-testid="chat-no-providers"]').exists()).toBe(false)
     expect(wrapper.findComponent(InputBar).exists()).toBe(true)
     expect(wrapper.findComponent(ChatPanel).exists()).toBe(true)
+    expect(wrapper.findComponent(RecentCronResults).exists()).toBe(true)
+  })
+
+  test.each(['agent', 'conversation', 'incognito'])('hides recent cron results in %s chats', (context) => {
+    mocks.providerStore.providers = [{ id: 'provider-1' }]
+    if (context === 'agent') mocks.chatStore.activeAgentId = 'agent-1' as never
+    if (context === 'conversation') mocks.chatStore.activeConversationId = 'conversation-1'
+    if (context === 'incognito') mocks.chatStore.activeIsTemporary = true
+    const wrapper = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    expect(wrapper.findComponent(RecentCronResults).exists()).toBe(false)
+    wrapper.unmount()
+    mocks.chatStore.activeIsTemporary = false
   })
 
   test('shows missing setup links before recent chats and hides completed steps', async () => {

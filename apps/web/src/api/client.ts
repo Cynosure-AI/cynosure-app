@@ -2,7 +2,7 @@ import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscri
 import type {
   DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse, MemoryRerankerConfig,
   AgentDefinition, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryDocumentChunks, RuntimeLimits,
-  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ChannelDefinition, ChannelType,
+  AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, CronResult, ChannelDefinition, ChannelType,
   MetricsSummary, PlanningState,
   ModelListType,
   ModelInfo,
@@ -575,6 +575,8 @@ export const api = {
   },
 
   cronJobs: {
+    recentResults: () =>
+      get<CronResult[]>('/api/cron-jobs/recent-results'),
     list: () =>
       get<CronJob[]>('/api/cron-jobs'),
     create: (input: { name?: string; agentId: string; schedule: string; prompt: string; enabled?: boolean; oneOff?: boolean; outputChannelId?: string; notificationMode?: 'always' | 'conditional'; notificationCondition?: string; executionConfig?: ConversationExecutionConfig; projectId?: string | null }) =>

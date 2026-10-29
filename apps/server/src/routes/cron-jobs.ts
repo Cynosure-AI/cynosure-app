@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { getDb } from '../db/database.js'
 import { cynoDisplayIconUrl, getCynoProfile } from '../core/cyno/cyno-profile.js'
 import { CronExpressionParser } from 'cron-parser'
 import {
@@ -27,6 +28,32 @@ function getNextRunAt(schedule: string): number | null {
 }
 
 export async function registerCronJobRoutes(app: FastifyInstance): Promise<void> {
+    // Saved run conversations also cover one-off jobs and jobs deleted since running.
+    app.get('/recent-results', async () => {
+        const activeConversationIds = getActiveCronRuns().map(run => run.conversationId).filter(Boolean)
+        const excluded = activeConversationIds.length
+            ? `AND c.id NOT IN (${activeConversationIds.map(() => '?').join(', ')})`
+            : ''
+        return getDb().prepare(`
+            SELECT c.id AS conversationId, COALESCE(NULLIF(c.title, ''), 'Scheduled task') AS title,
+                   c.agent_id AS agentId, substr(m.content, 1, 4000) AS content,
+                   m.created_at AS completedAt
+            FROM conversations c
+            JOIN messages m ON m.rowid = (
+                SELECT reply.rowid FROM messages reply
+                WHERE reply.conversation_id = c.id AND reply.role = 'assistant'
+                  AND reply.ma_invocation_id IS NULL
+                ORDER BY reply.created_at DESC, reply.rowid DESC LIMIT 1
+            )
+            WHERE c.origin = 'cron' AND c.temporary = 0
+              AND length(trim(m.content)) > 0
+              AND (m.tool_calls_json IS NULL OR m.tool_calls_json = '[]')
+              AND m.stopped = 0 AND m.is_error = 0
+              ${excluded}
+            ORDER BY m.created_at DESC, m.rowid DESC LIMIT 3
+        `).all(...activeConversationIds)
+    })
+
     // GET /api/cron-jobs — list all cron jobs with agent info
     app.get('/', async () => {
         const jobs = listCronJobs()

@@ -501,6 +501,14 @@ export interface AgentInstance {
 export type ChatExecutionState = Pick<Extract<ChatEvent, { type: 'execution-state' }>,
     'executionId' | 'conversationId' | 'agentId' | 'state'>
 
+export interface CronResult {
+    conversationId: string
+    title: string
+    agentId: string | null
+    content: string
+    completedAt: number
+}
+
 export interface CronJob {
     id: string
     name: string
