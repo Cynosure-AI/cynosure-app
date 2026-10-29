@@ -20,8 +20,9 @@ export interface FileAttachmentArtifact {
     textPath: string
     sizeBytes: number
     textBytes: number
-    chunkCount?: number
     assetId?: string
+    /** Ref (att-N) the model uses to grep and read this attachment's text in its conversation. */
+    sessionRef?: string
 }
 
 function getConversationFilesDir(conversationId: string): string {
@@ -83,14 +84,14 @@ const pendingMaterializations = new WeakMap<Database, Map<string, Promise<FileAt
 
 interface AttachmentAssetRow {
     id: string; name: string; original_path: string; text_path: string
-    size_bytes: number; text_bytes: number; chunk_count: number | null; content_hash: string | null
+    size_bytes: number; text_bytes: number; content_hash: string | null
 }
 
 function findAttachmentAsset(db: Database, contentHash: string, sizeBytes: number): FileAttachmentArtifact | undefined {
     // Hash older assets lazily, so existing uploads participate without a startup file scan.
     const rows = db.prepare(`SELECT * FROM attachment_assets
         WHERE content_hash = ? OR (content_hash IS NULL AND size_bytes = ?)
-        ORDER BY chunk_count IS NULL, created_at`).all(contentHash, sizeBytes) as AttachmentAssetRow[]
+        ORDER BY created_at`).all(contentHash, sizeBytes) as AttachmentAssetRow[]
     for (const row of rows) {
         if (!existsSync(row.original_path) || !existsSync(row.text_path)) continue
         let hash = row.content_hash
@@ -103,7 +104,6 @@ function findAttachmentAsset(db: Database, contentHash: string, sizeBytes: numbe
         return {
             id: row.id, assetId: row.id, name: row.name, originalPath: row.original_path,
             textPath: row.text_path, sizeBytes: row.size_bytes, textBytes: row.text_bytes,
-            chunkCount: row.chunk_count ?? undefined,
         }
     }
 }

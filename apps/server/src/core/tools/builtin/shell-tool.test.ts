@@ -145,11 +145,16 @@ describe('built-in shell access', () => {
         await expect(fs.access(path.join(outside, 'ran.txt'))).rejects.toThrow()
     })
 
-    it('caps command output', async () => {
+    it('keeps large output whole and stops a command past 8 MiB', async () => {
         await fs.writeFile(path.join(outside, 'large.txt'), 'x'.repeat(256 * 1024))
-        const result = await makeShellTool().execute({ command: 'cat large.txt', explanation: 'Print large.txt', cwd: outside })
-        expect(result.success).toBe(false)
-        expect(result.output).toContain('Output exceeded 128 KiB.')
-        expect(result.output.length).toBeLessThan(132_000)
+        const large = await makeShellTool().execute({ command: 'cat large.txt', explanation: 'Print large.txt', cwd: outside })
+        expect(large.success).toBe(true)
+        expect(large.output.length).toBeGreaterThan(256 * 1024)
+
+        await fs.writeFile(path.join(outside, 'huge.txt'), 'x'.repeat(9 * 1024 * 1024))
+        const huge = await makeShellTool().execute({ command: 'cat huge.txt', explanation: 'Print huge.txt', cwd: outside })
+        expect(huge.success).toBe(false)
+        expect(huge.output).toContain('Output exceeded 8 MiB.')
+        expect(huge.output.length).toBeLessThan(8 * 1024 * 1024 + 100)
     })
 })

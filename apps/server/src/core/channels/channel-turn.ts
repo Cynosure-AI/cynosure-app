@@ -387,7 +387,7 @@ async function runChannelTurn<K extends ChannelTargetId, H>(
         planned = await planExecution({
             resolvedAgent: agent, conversationId, broadcast: state.broadcast, abortSignal: execAbort.signal,
             gateway: getGateway(), toolRegistry: getToolRegistry(), messages, userText,
-            run: { ...settings.plan, inlineAttachmentTextLimit, systemPromptSuffix: CHANNEL_REPLY_PROMPT },
+            run: { ...settings.plan, systemPromptSuffix: CHANNEL_REPLY_PROMPT },
         })
         updateChannelExecution(state.activeExecutions, streamId, { model: planned.responseModel, planningRunId: planned.planningRunId })
         if (execAbort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')

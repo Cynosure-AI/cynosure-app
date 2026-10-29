@@ -14,7 +14,6 @@ import { resolveExecutionTools, resolveRoutingCandidateTools, isToolRoutingEnabl
 import { buildToolsetCandidates } from './pre-execution/auto-tool-routing.js'
 import { resolveSystemPromptMessages } from './pre-execution/execution-prompts.js'
 import { resolveMemoryContext, isAutoMemoryEnabled, hasExplicitEmptyMemoryScope } from './pre-execution/execution-memory.js'
-import { ensureOversizedAttachmentsIndexed } from './pre-execution/execution-attachments.js'
 import { buildTaskContext } from './pre-execution/task-context.js'
 import { getAssignedMemoryFolders, type MemoryFolderRef } from '../memory/memory-folder-scope.js'
 import type { SubAgentAssignment } from '../agents/agent-store.js'
@@ -89,8 +88,6 @@ export interface PrepareExecutionInput {
     hydrationAgentId?: string
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>
-    /** Inline text threshold; larger conversation attachments are indexed before execution. */
-    inlineAttachmentTextLimit?: number
     /** Explicitly selected tools to preserve when a Cyno chat schedules a job. */
     scheduleSelectedToolKeys?: string[]
     thinkingEnabled?: boolean
@@ -234,14 +231,6 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
     ])
     // Query rewriting complements recent conversational context; it does not
     // replace it, so both routers still receive input.recentMessages.
-    const attachmentPreparation = input.inlineAttachmentTextLimit !== undefined
-        ? ensureOversizedAttachmentsIndexed({
-            conversationId,
-            inlineAttachmentTextLimit: input.inlineAttachmentTextLimit,
-            eventMeta: input.eventMeta,
-        })
-        : Promise.resolve()
-
     // Tool selection and memory retrieval share the prepared queries and run concurrently.
     const [toolLayer, memoryContext] = await Promise.all([resolveExecutionTools({
         ...input,
@@ -264,7 +253,7 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
         standaloneQuery: taskContext?.memoryQuery,
         retrievalQueries: memoryRoutingQueries,
         suppressAutoMemory: taskContext?.requiresMemory === false,
-    }), attachmentPreparation])
+    })])
 
     const promptMessages = await resolveSystemPromptMessages({
         basePrompt: preset.systemPrompt,

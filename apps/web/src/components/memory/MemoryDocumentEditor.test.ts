@@ -80,7 +80,7 @@ describe('MemoryDocumentEditor', () => {
     expect(wrapper.text()).not.toContain('large.md')
     expect(wrapper.find('textarea[aria-label="Large memory document content"]').exists()).toBe(false)
 
-    const back = wrapper.findAll('button').find(button => button.text() === 'Back to files')!
+    const back = wrapper.get('button[aria-label="Back to files"]')
     await back.trigger('click')
     expect(wrapper.emitted('close')).toHaveLength(1)
   })

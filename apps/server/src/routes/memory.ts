@@ -8,7 +8,6 @@ import { EmbeddingService, getEmbeddingConfig, getEmbeddingService, getStoredEmb
 import { getMemoryReranker, type MemoryRerankerConfig } from '../core/memory/reranker.js'
 import { getRAGStore } from '../core/memory/rag.js'
 import { buildMemoryFolderFilter, getAllMemoryFolders } from '../core/memory/memory-folder-scope.js'
-import { dropConversationAttachmentIndex } from '../core/artifacts/attachment-rag.js'
 import { getDb } from '../db/database.js'
 import { activatePermanentMemoryIndex, DEFAULT_PERMANENT_MEMORY_TABLE, getActivePermanentMemoryTableName, setActivePermanentMemoryTableName } from '../core/memory/memory-index-manifest.js'
 import { beginMemoryReembedding, finishMemoryReembedding } from '../core/memory/reembedding-operation.js'
@@ -187,10 +186,6 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
         await rag.rebuildFtsIndex(stagingTable)
         signal.throwIfAborted()
 
-        // Attachment vectors use the old dimensions, so invalidate them before
-        // publishing the new provider/index pair.
-        await dropConversationAttachmentIndex()
-        signal.throwIfAborted()
         activatePermanentMemoryIndex(stagingTable, resolvedConfig, nextService.profile.fingerprint)
         setEmbeddingService(resolvedConfig, false)
         activated = true
@@ -221,7 +216,6 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
       if (activeTable !== DEFAULT_PERMANENT_MEMORY_TABLE) {
         await rag.deleteTable(DEFAULT_PERMANENT_MEMORY_TABLE)
       }
-      await dropConversationAttachmentIndex()
       markMemoryIndexesForRebuild()
       activatePermanentMemoryIndex(DEFAULT_PERMANENT_MEMORY_TABLE, resolvedConfig, nextService.profile.fingerprint)
       setEmbeddingService(resolvedConfig, false)
@@ -243,7 +237,6 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const activeTable = getActivePermanentMemoryTableName()
     await rag.deleteTable(activeTable)
     setActivePermanentMemoryTableName(DEFAULT_PERMANENT_MEMORY_TABLE)
-    await dropConversationAttachmentIndex()
     markMemoryIndexesForRebuild()
     return { success: true }
   })

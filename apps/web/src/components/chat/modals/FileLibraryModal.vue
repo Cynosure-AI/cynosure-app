@@ -268,7 +268,7 @@ watch(query, () => {
                   class="mt-1 text-[11px]"
                   :class="upload.status === 'failed' ? 'text-status-danger' : 'text-accent-fg'"
                 >
-                  {{ upload.status === 'failed' ? 'Indexing failed' : `Indexing ${upload.progressCurrent || 0}/${upload.progressTotal || '?'} chunks` }}
+                  {{ upload.status === 'failed' ? 'Processing failed' : 'Processing…' }}
                 </p>
                 <p
                   v-else-if="upload.staged"

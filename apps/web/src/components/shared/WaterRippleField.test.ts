@@ -209,6 +209,38 @@ describe('WaterRippleField', () => {
     wrapper.unmount()
   })
 
+  test('drift rolls dithered bands across the resting lattice, then fades back to the cache', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const { drawImage } = mockCanvas()
+    // Track which brightness bucket each dot lands in.
+    vi.stubGlobal('Path2D', class { dots: number[][] = []; rect(...args: number[]) { this.dots.push(args) } })
+    const fill = vi.fn()
+    const context = HTMLCanvasElement.prototype.getContext('2d') as unknown as Record<string, unknown>
+    context.fill = fill
+    const frames = mockFrames()
+    const wrapper = mount(WaterRippleField, { props: { drift: 1 } })
+    const buckets = () => fill.mock.calls.map(([path]) => JSON.stringify(path.dots))
+
+    fill.mockClear()
+    frames.advance(50)
+    const first = buckets()
+    expect(first.some(dots => dots !== '[]')).toBe(true)
+    for (let t = 0; t < 20000; t += 500) frames.advance(500)
+    fill.mockClear()
+    frames.advance(50)
+    expect(buckets()).not.toEqual(first)
+
+    await wrapper.setProps({ drift: 0 })
+    for (let t = 0; t < 5000; t += 50) frames.advance(50)
+    fill.mockClear()
+    drawImage.mockClear()
+    frames.advance(50)
+    expect(fill).not.toHaveBeenCalled()
+    expect(drawImage).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
   test('reduced motion holds one still frame and responds to preference changes', () => {
     vi.useFakeTimers()
     const { drawImage } = mockCanvas()

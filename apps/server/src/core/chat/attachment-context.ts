@@ -1,7 +1,6 @@
 /**
  * How much attachment text goes to the model directly. A file whose text fits
- * a share of the model's context window is inlined; a larger one is indexed
- * and reaches the model through retrieval instead.
+ * a share of the model's context window is inlined;
  */
 import type { LLMGateway } from '../gateway/gateway.js'
 import { resolveProviderAndModel } from '../agent/pre-execution/execution-resolvers.js'

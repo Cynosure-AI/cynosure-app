@@ -6,6 +6,7 @@ export function toolInjectionCondition(toolName: string, namespaceId: string): s
     if (toolName.startsWith('memory_')) return 'Memory enabled + folder available'
     if (toolName.startsWith('todo_')) return 'Thinking + execution tools'
     if (toolName.startsWith('attachment_')) return 'Tool-capable chat + files'
+    if (toolName.startsWith('session_content_')) return 'Large tool output or files'
     if (toolName === 'expand_available_toolset') return 'Auto-tool routing enabled'
     if (toolName === 'spawn_subagent' || toolName === 'continue_subagent') return 'Sub-agent assigned'
     if (toolName === 'manage_mcp') return 'Selected explicitly'

@@ -1,6 +1,7 @@
 const INTERNAL_TOOL_PREFIXES = [
   'todo_',
   'attachment_',
+  'session_content_',
   'memory_',
 ]
 
@@ -22,6 +23,7 @@ const INTERNAL_TOOL_NAMES = new Set([
 const AUTO_MANAGED_BUILT_IN_TOOL_PREFIXES = [
   'todo_',
   'attachment_',
+  'session_content_',
 ]
 
 const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set<string>([

@@ -26,13 +26,13 @@ const automaticToolStates = computed(() => ({
     criteria: 'visible execution tools',
   },
   ...memoryAutomaticToolStates(hasMemoryScope.value),
-  attachment_search: {
+  session_content_grep: {
     active: false,
-    criteria: 'large indexed attachment available during chat',
+    criteria: 'tool output saved as session content or file attachment in the chat',
   },
-  attachment_read: {
+  session_content_read: {
     active: false,
-    criteria: 'large indexed attachment available during chat',
+    criteria: 'tool output saved as session content or file attachment in the chat',
   },
   expand_available_toolset: {
     active: props.agent.autoToolRouting || usesSelectionCapRouting.value,

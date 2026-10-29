@@ -4,15 +4,16 @@
  * and delayed flares. At rest the wall breathes: it slowly brightens and dims
  * on a long, slightly irregular rhythm while a soft swell around a wandering
  * focus grows on the inhale and recedes on the exhale. `intensity` (0–1) scales
- * the reaction so it can sit quietly behind content. A settled field repaints
- * only the breath, from a cached lattice and at a reduced frame rate; reduced
- * motion holds one still mid-breath frame and hidden documents stop all
- * animation.
+ * the reaction so it can sit quietly behind content. `drift` (0–1) rolls broad
+ * dithered bands across the lattice, so an idle wall feels alive. A settled
+ * field without drift repaints only the breath, from a cached lattice; any
+ * settled field repaints at a reduced frame rate. Reduced motion holds one
+ * still mid-breath frame and hidden documents stop all animation.
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createRippleSurface, type RippleSurface } from './rippleSurface'
 
-const props = withDefaults(defineProps<{ intensity?: number }>(), { intensity: 1 })
+const props = withDefaults(defineProps<{ intensity?: number; drift?: number }>(), { intensity: 1, drift: 0 })
 
 const canvas = ref<HTMLCanvasElement | null>(null)
 
@@ -41,6 +42,17 @@ const BREATH_SPREAD = 0.4
 // The lattice is painted this much brighter before the breath dims it, so on
 // average it sits about as bright as a still wall would.
 const BREATH_LIFT = 1.25
+// Drift bands span several hundred pixels and take about a minute to roll past.
+const DRIFT_SCALE = 1 / 160
+const DRIFT_SPEED = 10 / 9000
+// Steepens the band edges so the dither reads as shapes, not a flat checkerboard.
+const DRIFT_CONTRAST = 1.7
+// Dots outside a band fade to this share and dots inside lift by this much,
+// so an idle wall reads a little brighter than a working one.
+const DRIFT_FLOOR = 0.25 // how bright the dark bands are
+const DRIFT_LIFT = 2.2 // how much brighter the light bands are
+// A 4×4 ordered dither turns the smooth band field into dot density.
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16)
 // The breath changes slowly, so a settled field repaints at this rate.
 const IDLE_FRAME_MS = 1000 / 30
 const STEP_MS = 1000 / 60
@@ -74,6 +86,10 @@ let motionQuery: MediaQueryList | null = null
 let lastEcho = -Infinity
 // Eases toward props.intensity so switching pages fades rather than snaps.
 let level = props.intensity
+// Eases toward props.drift so the bands fade in and out with the idle state.
+let driftLevel = props.drift
+// Per-dot resting brightness for the current frame, drift included.
+let restFrame = new Float32Array(0)
 // Starts each mount's swell somewhere different.
 const breathSeed = Math.random() * Math.PI * 2
 
@@ -177,6 +193,36 @@ function restScale(): number {
   return (REST_FLOOR + (1 - REST_FLOOR) * level) * BREATH_LIFT
 }
 
+/** Smooth 0–1 band field: a few slow waves at different angles, one warping the others. */
+function bandAt(a: number, b: number, s: number, warp: number): number {
+  const v = Math.sin(a * 0.8 + b * 0.45 + s + warp * 1.6)
+    + 0.7 * Math.sin(b * 0.9 - a * 0.35 - s * 0.7 + 2.1)
+    + 0.35 * Math.sin((a + b) * 1.6 + s * 1.3 + warp)
+  return Math.min(1, Math.max(0, (v / 2.05) * DRIFT_CONTRAST * 0.5 + 0.5))
+}
+
+/** Fills restFrame with each dot's resting brightness, dithered by the drift bands. */
+function paintRest(now: number) {
+  if (!surface) return
+  const { cols, rows } = surface
+  const scale = restScale()
+  if (driftLevel === 0) {
+    for (let i = 0; i < restFrame.length; i++) restFrame[i] = restAlpha[i] * scale
+    return
+  }
+  const s = (reducedMotion ? 0 : now) * DRIFT_SPEED
+  for (let r = 0; r < rows; r++) {
+    const b = r * cell * DRIFT_SCALE
+    const warp = Math.sin(b * 0.7 - s * 0.6)
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c
+      const on = bandAt(c * cell * DRIFT_SCALE, b, s, warp) > BAYER[(r & 3) * 4 + (c & 3)]
+      const dither = on ? DRIFT_LIFT : DRIFT_FLOOR
+      restFrame[i] = restAlpha[i] * scale * (1 + driftLevel * (dither - 1))
+    }
+  }
+}
+
 /** Dims what is already painted by the current breath; only the lattice sits under it. */
 function breathe(now: number) {
   if (!ctx) return
@@ -201,6 +247,21 @@ function breathe(now: number) {
 
 function drawResting(now: number) {
   if (!ctx || !surface) return
+  // Drifting bands change every frame, so the lattice is rebuilt instead of cached.
+  if (driftLevel > 0) {
+    const { cols, rows } = surface
+    const offset = cell / 2
+    const paths = emptyBuckets()
+    paintRest(now)
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        paths[bucketOf(restFrame[r * cols + c])].rect(c * cell + offset - DOT_SIZE / 2, r * cell + offset - DOT_SIZE / 2, DOT_SIZE, DOT_SIZE)
+      }
+    }
+    fillBuckets(ctx, paths)
+    breathe(now)
+    return
+  }
   if (latticeLevel !== level && latticeCtx) {
     const { cols, rows } = surface
     const offset = cell / 2
@@ -222,13 +283,13 @@ function drawResting(now: number) {
 function drawDisturbed(now: number) {
   if (!ctx || !surface) return
   paintActivity(now)
+  paintRest(now)
 
   const { cols, rows, height: water, dragX, dragY } = surface
   const offset = cell / 2
   // The lattice layer breathes; the reaction is painted over it at full strength.
   const dots = emptyBuckets()
   const glows = emptyBuckets()
-  const scale = restScale()
   const motion = 0.3 + 0.7 * level
 
   for (let r = 0; r < rows; r++) {
@@ -259,7 +320,7 @@ function drawDisturbed(now: number) {
       // Quantized displacement lets the wall lose alignment, then lock back in.
       const x = c * cell + offset + Math.round(((slopeX * REFRACTION + dragX[i] * cell) * motion) / 2) * 2 + slip - DOT_SIZE / 2
       const y = r * cell + offset + Math.round(((slopeY * REFRACTION + dragY[i] * cell) * motion) / 2) * 2 - DOT_SIZE / 2
-      dots[bucketOf(restAlpha[i] * scale)].rect(x, y, DOT_SIZE, DOT_SIZE)
+      dots[bucketOf(restFrame[i])].rect(x, y, DOT_SIZE, DOT_SIZE)
       if (glow < 0.02) continue
       const dotHeight = bar ? DOT_SIZE + corruption * cell * (0.5 + column) : DOT_SIZE
       glows[bucketOf(glow)].rect(x, y, DOT_SIZE, dotHeight)
@@ -292,10 +353,12 @@ function tick(now: number) {
     }
     level += (props.intensity - level) * 0.08
     if (Math.abs(props.intensity - level) < 0.004) level = props.intensity
+    driftLevel += (props.drift - driftLevel) * 0.03
+    if (Math.abs(props.drift - driftLevel) < 0.004) driftLevel = props.drift
     backlog -= STEP_MS
   }
-  // Only the breath moves a settled field, and it needs far fewer frames.
-  const settled = !surfaceMoving && pulses.length === 0 && level === props.intensity
+  // Only the breath and drift move a settled field, and they need far fewer frames.
+  const settled = !surfaceMoving && pulses.length === 0 && level === props.intensity && driftLevel === props.drift
   if (!settled || now - lastPaint >= IDLE_FRAME_MS) {
     draw(now)
     lastPaint = now
@@ -336,6 +399,7 @@ function resize() {
   surfaceMoving = false
   pulses = []
   activity = new Float32Array(cols * rows)
+  restFrame = new Float32Array(cols * rows)
   seedLattice(cols, rows)
   baseColor = resolveColor(el, '--color-accent-500')
   highlightColor = resolveColor(el, '--color-accent-300')
@@ -396,12 +460,14 @@ function stop() {
   lastEcho = -Infinity
   pointer.inside = false
   level = props.intensity
+  driftLevel = props.drift
   surface?.reset()
 }
 
-watch(() => props.intensity, (intensity) => {
+watch(() => [props.intensity, props.drift], () => {
   if (reducedMotion || document.hidden) {
-    level = intensity
+    level = props.intensity
+    driftLevel = props.drift
     draw()
     return
   }

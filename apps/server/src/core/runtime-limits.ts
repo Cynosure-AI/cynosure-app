@@ -31,6 +31,20 @@ export const ATTACHMENT_TEXT_LIMITS: Readonly<{
 
 export const MAX_CHUNK_READ: number = 20
 
+/**
+ * A tool output longer than inlineChars (about 8k tokens) is saved to a file
+ * for the conversation; the model sees its start and end and the saved path.
+ */
+export const TOOL_OUTPUT_LIMITS: Readonly<{
+  inlineChars: number
+  previewHeadChars: number
+  previewTailChars: number
+}> = {
+  inlineChars: 32_000,
+  previewHeadChars: 6_000,
+  previewTailChars: 2_000,
+}
+
 /** Manual selections at or below this size are sent directly to the model. */
 export const DIRECT_TOOL_SELECTION_LIMIT: number = 50
 

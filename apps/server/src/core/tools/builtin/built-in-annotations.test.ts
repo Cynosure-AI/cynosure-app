@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb } from '../../../db/database.js'
-import { makeAttachmentTools } from '../../artifacts/attachment-rag.js'
 import { makePlanningTools } from './planning-tools.js'
 import { makeNotificationTool } from './notification.js'
 import { makeSearchAvailableMcpToolsTool } from './expand-available-toolset.js'
 import { makeManageMcpTool } from './manage-mcp.js'
+import { makeSessionContentTools } from './session-content-tools.js'
 
 describe('internal tool behavior annotations', () => {
     let dataDir = ''
@@ -39,19 +39,18 @@ describe('internal tool behavior annotations', () => {
         expect(Object.keys(tool.parameters.properties as Record<string, unknown>)).toEqual(['objective', 'tasks'])
     })
 
-    test('exposes the consolidated attachment tool contract', () => {
-        const tools = makeAttachmentTools('conversation')
+    test('exposes the session content tool contract', () => {
+        const tools = makeSessionContentTools('conversation')
 
-        expect(tools.map((tool) => tool.name)).toEqual(['attachment_search', 'attachment_read'])
-        expect(tools[0].parameters.required).toBeUndefined()
-        expect(tools[0].parameters.properties).toHaveProperty('query')
-        expect(tools[0].parameters.properties).toHaveProperty('attachmentId')
+        expect(tools.map((tool) => tool.name)).toEqual(['session_content_grep', 'session_content_read'])
+        expect(tools[0].parameters.required).toEqual(['pattern'])
+        expect(tools[1].parameters.required).toBeUndefined()
     })
 
     test('declares complete annotations for dynamic internal tools', () => {
         const tools = [
             ...makePlanningTools('run'),
-            ...makeAttachmentTools('conversation'),
+            ...makeSessionContentTools('conversation'),
             makeNotificationTool({ conversationId: 'conversation', availableChannels: ['telegram'] }),
             makeSearchAvailableMcpToolsTool({ allTools: [], getLoadedToolNames: () => new Set() }),
             makeManageMcpTool(),

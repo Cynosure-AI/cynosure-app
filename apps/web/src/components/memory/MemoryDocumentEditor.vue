@@ -335,6 +335,18 @@ onBeforeUnmount(() => {
   >
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div class="flex items-center gap-3 px-5 py-3 border-b border-theme-800 bg-theme-950/25 shrink-0">
+        <button
+          aria-label="Back to files"
+          title="Back to files"
+          class="shrink-0 rounded-lg p-1.5 text-ink-secondary transition-colors hover:bg-theme-800 hover:text-theme-100 disabled:opacity-40"
+          :disabled="saving"
+          @click="close"
+        >
+          <Icon
+            icon="lucide:arrow-left"
+            class="h-4 w-4"
+          />
+        </button>
         <label class="text-xs text-ink-muted shrink-0">Name</label>
         <input
           v-model="editableTitle"
@@ -343,6 +355,18 @@ onBeforeUnmount(() => {
           :disabled="loading || saving"
           @keydown.enter.prevent="saveContent"
         >
+        <button
+          :disabled="loading || saving || !canSave"
+          class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-fg rounded-lg text-sm transition-colors shrink-0 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          @click="saveContent"
+        >
+          <Icon
+            :icon="saving ? 'lucide:loader-2' : 'lucide:save'"
+            class="w-4 h-4"
+            :class="{ 'animate-spin': saving }"
+          />
+          Save
+        </button>
       </div>
 
       <div class="flex items-center gap-1 px-4 py-2 border-b border-theme-800 bg-theme-950/35 shrink-0 overflow-x-auto">
@@ -481,33 +505,16 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="flex shrink-0 justify-end gap-2 border-t border-theme-800 bg-theme-950/25 px-5 py-3">
+    <div
+      v-if="showHistory && selectedRevisionId"
+      class="flex shrink-0 justify-end gap-2 border-t border-theme-800 bg-theme-950/25 px-5 py-3"
+    >
       <button
-        v-if="showHistory && selectedRevisionId"
         class="px-3 py-1.5 text-amber-300 hover:bg-amber-500/10 rounded-lg text-sm transition-colors"
         :disabled="saving"
         @click="restoreSelectedRevision"
       >
         Restore revision
-      </button>
-      <button
-        class="px-3 py-1.5 text-ink-secondary hover:text-theme-100 rounded-lg text-sm transition-colors"
-        :disabled="saving"
-        @click="close"
-      >
-        Back to files
-      </button>
-      <button
-        :disabled="loading || saving || !canSave"
-        class="px-3 py-1.5 bg-accent-500/15 hover:bg-accent-500/25 text-accent-fg rounded-lg text-sm transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-        @click="saveContent"
-      >
-        <Icon
-          :icon="saving ? 'lucide:loader-2' : 'lucide:save'"
-          class="w-4 h-4"
-          :class="{ 'animate-spin': saving }"
-        />
-        Save
       </button>
     </div>
   </section>

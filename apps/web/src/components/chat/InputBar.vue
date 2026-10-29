@@ -61,7 +61,7 @@ const inputText = ref(readDraft(draftStorageKey.value))
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<{ url: string; name: string; sourceId?: string }[]>([])
-type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; progressCurrent?: number; progressTotal?: number; controller?: AbortController; error?: string }
+type DraftFile = { clientId: string; name: string; content?: string; sourceId?: string; stagedId?: string; existingAttachmentId?: string; stagedConversationId?: string; status: 'processing' | 'ready' | 'error'; controller?: AbortController; error?: string }
 const attachedFiles = ref<DraftFile[]>([])
 const attachedAudio = ref<{ url: string; name: string; sourceId?: string }[]>([])
 const mediaSettings = computed<MediaGenerationSettings | null>({
@@ -95,7 +95,6 @@ const attachedProjectPaths = computed(() =>
   [...attachedImages.value, ...attachedFiles.value, ...attachedAudio.value].flatMap((item) =>
     item.sourceId?.startsWith(projectSourcePrefix.value) ? [item.sourceId.slice(projectSourcePrefix.value.length)] : []),
 )
-const liveCleanups: Array<() => void> = []
 const cancelledStageClientIds = new Set<string>()
 const discardedStageIds = new Set<string>()
 let fileReadGeneration = 0
@@ -377,7 +376,7 @@ function isParseableDoc(filename: string): boolean {
 
 async function stageFile(name: string, content: string, sourceId?: string): Promise<void> {
   const controller = new AbortController()
-  const draft: DraftFile = { clientId: crypto.randomUUID(), name, content, sourceId, status: 'processing', progressCurrent: 0, progressTotal: 0, controller }
+  const draft: DraftFile = { clientId: crypto.randomUUID(), name, content, sourceId, status: 'processing', controller }
   attachedFiles.value.push(draft)
   try {
     let conversationId = chatStore.activeConversationId
@@ -410,8 +409,6 @@ async function stageFile(name: string, content: string, sourceId?: string): Prom
     current.stagedId = staged.id
     current.stagedConversationId = conversationId
     current.status = staged.status === 'failed' ? 'error' : staged.status
-    current.progressCurrent = staged.progressCurrent
-    current.progressTotal = staged.progressTotal
     current.error = staged.error
     if (staged.status === 'processing') scheduleStagedRefresh(1_000)
   } catch (err) {
@@ -440,8 +437,6 @@ function applyStagedState(staged: StagedChatAttachment): void {
   file.stagedId = staged.id
   file.stagedConversationId = staged.conversationId
   file.status = staged.status === 'failed' ? 'error' : staged.status
-  file.progressCurrent = staged.progressCurrent
-  file.progressTotal = staged.progressTotal
   file.error = staged.error
 }
 
@@ -618,18 +613,11 @@ onMounted(() => {
   // The initial draft is read before the textarea exists, so its watcher does
   // not run on mount. Size the now-mounted composer to the restored content.
   autoResize()
-  const unsubscribe = api.chat.onAttachmentStageProgress((progress) => {
-    if (progress.conversationId !== chatStore.activeConversationId) return
-    applyStagedState(progress)
-    if (progress.status === 'processing') scheduleStagedRefresh(1_000)
-  })
-  liveCleanups.push(unsubscribe)
   void refreshStagedAttachments()
 })
 
 onBeforeUnmount(() => {
   persistDraft(draftStorageKey.value, inputText.value)
-  for (const cleanup of liveCleanups) cleanup()
   if (stagedPollTimer !== null) window.clearTimeout(stagedPollTimer)
   if (slashNoticeTimer !== null) window.clearTimeout(slashNoticeTimer)
 })
@@ -832,7 +820,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           <span
             v-if="file.status === 'processing'"
             class="text-[10px] text-ink-muted group-hover:hidden"
-          >{{ file.progressCurrent || 0 }} / {{ file.progressTotal || '?' }} chunks</span>
+          >Processing…</span>
           <span
             v-if="file.status === 'processing'"
             class="hidden text-[10px] text-red-300 group-hover:inline"

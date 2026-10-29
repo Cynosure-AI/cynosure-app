@@ -19,8 +19,7 @@ vi.mock('../artifacts/file-artifacts.js', () => ({
   materializeFileAttachments: async () => [],
   readFileAttachmentText: () => null,
 }))
-vi.mock('../artifacts/attachment-rag.js', () => ({
-  indexConversationAttachment: async () => 0,
+vi.mock('../artifacts/attachment-store.js', () => ({
   persistMessageFileAttachments: () => {},
 }))
 

@@ -32,7 +32,6 @@ export interface ExecutionRequest {
         usedToolNames?: Set<string>
         thinkingEnabled?: boolean
         reasoningEffort?: ReasoningEffort
-        inlineAttachmentTextLimit?: number
     }
     /** Extra metadata to merge into emitted EventBus events during pre-execution routing (e.g. maCodename for sub-agents). */
     eventMeta?: Record<string, unknown>

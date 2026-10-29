@@ -68,6 +68,7 @@ function memoryRef(value: unknown): ToolCallSummary | null {
 
 const SUMMARIES: Record<string, (args: Args) => ToolCallSummary | null> = {
   shell_execute: (a) => plain(a.explanation) ?? plain(a.command),
+  web_fetch: (a) => plain(a.url),
   file_info: (a) => file(a.path),
   file_read: (a) => file(a.path) ?? files(a.paths),
   file_write: (a) => file(a.path),

@@ -1,7 +1,7 @@
 import { isPlanningToolName } from './builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from './builtin/expand-available-toolset.js'
 import { isMemoryReadToolName } from './builtin/memory-tools.js'
-import { isAttachmentToolName } from '../artifacts/attachment-tools.js'
+import { isSessionContentToolName } from './builtin/session-content-tool-names.js'
 import type { ToolBehaviorAnnotations } from '../gateway/providers/base.provider.js'
 import { isProjectToolName } from '../projects/project-tools.js'
 
@@ -21,7 +21,7 @@ export function isInternalTool(toolName: string): boolean {
     isSubAgentDelegationTool(toolName) ||
     isPlanningToolName(toolName) ||
     isMemoryReadToolName(toolName) ||
-    isAttachmentToolName(toolName)
+    isSessionContentToolName(toolName)
   )
 }
 
@@ -42,7 +42,7 @@ export function isAnnotationAutoApprovedTool(annotations?: ToolBehaviorAnnotatio
 /**
  * Tools a Read Only chat may use: tools that declare themselves read-only,
  * internal tools, which only touch the run's own state (plans, tool discovery,
- * memory and attachment reads, delegation to sub-agents that inherit the mode),
+ * memory and session content reads, delegation to sub-agents that inherit the mode),
  * project tools for keeping the brief and task board current.
  */
 export function isReadOnlyModeTool(tool: { name: string; annotations?: ToolBehaviorAnnotations }): boolean {

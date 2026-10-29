@@ -14,6 +14,7 @@ import { filterSchedulingTools, makeScheduleTools, SCHEDULE_TOOL_NAMES } from ".
 import { makeManageMcpTool } from "./builtin/manage-mcp.js";
 import { makeFileTools } from "./builtin/file-tools.js";
 import { makeShellTool } from "./builtin/shell-tool.js";
+import { makeWebFetchTool } from "./builtin/web-fetch.js";
 import { getProjectForConversation } from "../projects/project-store.js";
 import {
     makeMemorySearchTool,
@@ -34,6 +35,7 @@ export const BUILTIN_NAMESPACE_IDS = {
     utility: "builtin:utility",
     files: "builtin:files",
     shell: "builtin:shell",
+    web: "builtin:web",
 } as const;
 
 export const BUILTIN_NAMESPACES = {
@@ -67,6 +69,11 @@ export const BUILTIN_NAMESPACES = {
         label: "Built-In: Shell",
         description: "Run shell commands with server permissions using the normal tool approval settings.",
     },
+    web: {
+        id: BUILTIN_NAMESPACE_IDS.web,
+        label: "Built-In: Web",
+        description: "Fetch web pages and read their main content as Markdown.",
+    },
 } as const satisfies Record<string, ToolNamespace>;
 
 type BuiltInToolSpec = Pick<
@@ -99,6 +106,7 @@ const BUILTIN_TOOL_HYDRATORS = {
     shell_execute: (ctx: BuiltInHydrationContext) => makeShellTool({
         defaultCwd: ctx.conversationId ? getProjectForConversation(ctx.conversationId)?.rootPath : undefined,
     }),
+    web_fetch: () => makeWebFetchTool(),
     manage_mcp: () => makeManageMcpTool(),
     notify_user: (ctx: BuiltInHydrationContext) => makeNotificationTool({ conversationId: ctx.conversationId }),
     schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[0],
@@ -131,6 +139,7 @@ export type BuiltinToolName = keyof typeof BUILTIN_TOOL_HYDRATORS;
 export function getBuiltInNamespace(toolName: string): ToolNamespace {
     if (toolName.startsWith('file_') || toolName.startsWith('directory_')) return BUILTIN_NAMESPACES.files;
     if (toolName === 'shell_execute') return BUILTIN_NAMESPACES.shell;
+    if (toolName === 'web_fetch') return BUILTIN_NAMESPACES.web;
     if (MEMORY_TOOL_NAMES.includes(toolName as never)) {
         return BUILTIN_NAMESPACES.memory;
     }

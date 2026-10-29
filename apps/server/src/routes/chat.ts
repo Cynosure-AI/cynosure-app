@@ -22,11 +22,13 @@ import { nanoid } from 'nanoid'
 import { getChannelManager } from '../core/channels/channel-manager.js'
 import { cancelCronRunsByConversation } from '../core/triggers/cron-scheduler.js'
 import { artifactFileUrlToDataUrl, materializeAudioArtifacts, materializeImageArtifacts, toFileUrl } from '../core/artifacts/image-artifacts.js'
-import { materializeFileAttachments, readFileAttachmentText } from '../core/artifacts/file-artifacts.js'
+import { materializeFileAttachments } from '../core/artifacts/file-artifacts.js'
 import { releaseAttachmentAsset } from '../core/artifacts/attachment-asset-references.js'
 import { commitStagedChatAttachments, discardStagedChatAttachments, listStagedChatAttachments, releaseStagedChatAttachments, stageChatAttachment, takeStagedChatAttachments } from '../core/artifacts/staged-attachments.js'
 import { mediaAttachmentLabel } from '../core/artifacts/attachment-export.js'
-import { ATTACHMENT_SYSTEM_CONTEXT, buildAttachmentContextBundle, indexConversationAttachment, listConversationFileAttachments, makeAttachmentTools, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-rag.js'
+import { assignAttachmentSessionRefs, persistMessageFileAttachments, reuseConversationAttachment } from '../core/artifacts/attachment-store.js'
+import { formatFileAttachmentForModel, listSessionContent } from '../core/tools/session-content.js'
+import { makeSessionContentTools } from '../core/tools/builtin/session-content-tools.js'
 import {
   cancelChatExecution,
   cancelChatExecutionByConversation,
@@ -40,7 +42,7 @@ import { withConversationLock } from '../core/chat/conversation-locks.js'
 import { shouldGenerateConversationTitle } from '../core/chat/conversation-title.js'
 import { resolveInlineAttachmentTextLimit } from '../core/chat/attachment-context.js'
 import { getChatRunSettings, readChatRunSettings, saveChatRunSettings } from '../core/chat/chat-run-settings.js'
-import { appendHiddenSystemContext, attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsHint, insertTurnLocalContext, insertTurnLocalUntrustedContext } from '../core/chat/message-history.js'
+import { attachPreviousGeneratedImageToActiveUser, buildConversationHistory, buildRecentImageArtifactsHint, insertTurnLocalContext } from '../core/chat/message-history.js'
 import { resolveRunSettings } from '../core/agent/run-settings.js'
 import { listChatEvents, messageContentJson, messageToTranscriptItem, publishChatEvent } from '../core/chat/transcript.js'
 import { persistAssistantTurn } from '../core/chat/persist-assistant.js'
@@ -269,13 +271,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         ? request.stagedFileArtifacts
         : [...preprocessedAttachments, ...reusedAttachments, ...(unstagedFiles.length ? await materializeFileAttachments(unstagedFiles, conversationId) : [])]
       acquiredAttachments.push(...storedFileAttachments)
+      assignAttachmentSessionRefs(db, conversationId, storedFileAttachments)
       abortController.signal.throwIfAborted()
-      if (!request.stagedFileArtifacts) {
-        for (const attachment of storedFileAttachments.slice(preprocessedAttachments.length + reusedAttachments.length)) {
-          attachment.chunkCount = await indexConversationAttachment(conversationId, attachment)
-          abortController.signal.throwIfAborted()
-        }
-      }
 
       // Build content (text + optional images + optional audio + optional files)
       let userContent: string | ContentPart[]
@@ -283,22 +280,8 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
         const parts: ContentPart[] = [{ type: 'text', text: normalizedContent }]
         if (storedFileAttachments.length) {
           for (const file of storedFileAttachments) {
-            if (file.textBytes > inlineAttachmentTextLimit) {
-              const status = file.chunkCount && file.chunkCount > 0
-                ? `This attachment is indexed for retrieval (${file.chunkCount} chunks, attachmentId: ${file.id}).`
-                : `This attachment is larger than the inline context limit and will be indexed for retrieval (attachmentId: ${file.id}).`
-              parts.push({
-                type: 'text',
-                text: `[Attached file: ${file.name}]\n${status} Relevant excerpts will be provided as context; use attachment_search/attachment_read for more detail.`
-              })
-              continue
-            }
-            const fileText = readFileAttachmentText(file)
-            if (fileText === null) continue
-            parts.push({
-              type: 'text',
-              text: `[Attached file: ${file.name} (attachmentId: ${file.id})]\n${fileText}`
-            })
+            const text = formatFileAttachmentForModel(file, inlineAttachmentTextLimit)
+            if (text !== null) parts.push({ type: 'text', text })
           }
         }
         // Stored URLs give each item its attachment_export handle; they line up with the provider data URLs.
@@ -433,7 +416,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
           run: {
             ...settings.plan,
             usedToolNames,
-            inlineAttachmentTextLimit,
           },
         })
       } catch (err) {
@@ -478,16 +460,9 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
 
         const responseSupportsToolCalls = await gateway.modelSupportsToolCalls(responseModel, responseProvider)
         abortController.signal.throwIfAborted()
-        const hasConversationFileAttachments = listConversationFileAttachments(db, conversationId).length > 0
-        if (responseSupportsToolCalls && hasConversationFileAttachments) {
-          tools.push(...makeAttachmentTools(conversationId))
-        }
-        const attachmentContext = await buildAttachmentContextBundle(conversationId, normalizedContent, db)
-        if (attachmentContext?.evidence.length) turnEvidence.push(...attachmentContext.evidence)
-        abortController.signal.throwIfAborted()
-        if (attachmentContext) {
-          messages = appendHiddenSystemContext(messages, ATTACHMENT_SYSTEM_CONTEXT)
-          messages = insertTurnLocalUntrustedContext(messages, attachmentContext.content, 'retrieved-attachment')
+        // Large attachments and saved outputs are read by ref, even by an agent without other tools.
+        if (responseSupportsToolCalls && listSessionContent(conversationId).length) {
+          tools.push(...makeSessionContentTools(conversationId).filter((tool) => !tools.some((existing) => existing.name === tool.name)))
         }
         const recentImagesHint = buildRecentImageArtifactsHint(filteredRows)
         if (recentImagesHint) {
@@ -751,18 +726,13 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
   app.post<{ Params: { id: string }; Body: { name: string; content: string; clientId?: string } }>(
     '/conversations/:id/attachments/stage',
     async (req, reply) => {
-      const staged = await stageChatAttachment(req.params.id, req.body, {
-        onUpdate: (update) => broadcast('attachment:stage-progress', update),
-      })
+      const staged = await stageChatAttachment(req.params.id, req.body)
       return reply.status(202).send({
         id: staged.id,
         conversationId: staged.conversationId,
         clientId: staged.clientId,
         name: staged.name,
         status: staged.status,
-        progressCurrent: staged.progressCurrent,
-        progressTotal: staged.progressTotal,
-        chunkCount: staged.chunkCount,
       })
     },
   )
@@ -774,9 +744,6 @@ export async function registerChatRoutes(app: FastifyInstance, broadcast: Broadc
       clientId: staged.clientId,
       name: staged.name,
       status: staged.status,
-      progressCurrent: staged.progressCurrent,
-      progressTotal: staged.progressTotal,
-      chunkCount: staged.chunkCount,
       error: staged.error,
     }))
   })
