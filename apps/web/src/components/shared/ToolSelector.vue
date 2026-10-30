@@ -259,19 +259,19 @@ onMounted(() => {
     class="flex min-w-0 flex-col rounded-xl border border-theme-700 bg-theme-800"
     :class="scrollable ? 'h-full' : ''"
   >
-    <div class="flex items-center justify-between px-4 py-2.5 border-b border-theme-700 shrink-0">
-      <span class="text-[10px] text-ink-muted">
+    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-theme-700 shrink-0">
+      <span class="text-sm font-medium text-ink-secondary">
         {{ modelValue.length }}/{{ selectableToolCount }} enabled
       </span>
       <div class="flex items-center gap-3">
         <button
-          class="text-[11px] text-accent-fg hover:text-accent-fg transition-colors"
+          class="rounded py-1 text-xs font-medium text-accent-fg hover:text-accent-fg transition-colors"
           @click="selectAllTools"
         >
           Enable all
         </button>
         <button
-          class="text-[11px] text-ink-secondary hover:text-theme-200 transition-colors"
+          class="rounded py-1 text-xs font-medium text-ink-secondary hover:text-theme-200 transition-colors"
           @click="clearAllTools"
         >
           Disable all
@@ -279,13 +279,20 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="px-4 py-2 border-b border-theme-800 shrink-0">
-      <input
-        v-model="toolFilterText"
-        type="text"
-        placeholder="Search tools..."
-        class="w-full bg-theme-800 border border-theme-700 rounded-lg px-3 py-1.5 text-xs text-theme-200 placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent-500"
-      >
+    <div class="border-b border-theme-700 px-4 py-3 shrink-0">
+      <label class="flex items-center gap-2.5 rounded-lg border border-theme-600 bg-theme-900 px-3 py-2.5 focus-within:border-accent-500 focus-within:ring-1 focus-within:ring-accent-500">
+        <Icon
+          icon="lucide:search"
+          class="h-4 w-4 shrink-0 text-ink-muted"
+        />
+        <input
+          v-model="toolFilterText"
+          type="search"
+          placeholder="Search tools and MCP servers…"
+          aria-label="Search tools and MCP servers"
+          class="min-w-0 w-full bg-transparent text-sm text-theme-200 placeholder:text-ink-muted focus:outline-none"
+        >
+      </label>
     </div>
 
     <div :class="[scrollable ? 'overflow-y-auto min-h-0' : '', 'flex-1']">
@@ -299,13 +306,15 @@ onMounted(() => {
               :model-value="isNamespaceExpanded(group.namespace.id)"
               @update:model-value="setNamespaceExpanded(group.namespace.id, $event)"
             >
-              <template #trigger="{ expanded, toggle }">
+              <template #trigger="{ expanded, toggle, triggerAttrs }">
                 <div
-                  class="flex min-w-0 items-center gap-2 bg-theme-900/95 px-2 py-2 backdrop-blur-sm border-b border-theme-800/50 sm:gap-3 sm:px-3"
+                  class="flex min-w-0 items-center gap-2 bg-theme-900/95 px-3 py-3 backdrop-blur-sm border-b border-theme-800/50 sm:gap-3 sm:px-4"
                   :class="scrollable ? 'sticky top-0 z-10' : ''"
                 >
                   <button
-                    class="p-1 text-ink-muted hover:text-theme-300 transition-colors"
+                    v-bind="triggerAttrs"
+                    :aria-label="`${expanded ? 'Collapse' : 'Expand'} ${group.namespace.label}`"
+                    class="shrink-0 rounded-md p-1.5 text-ink-secondary hover:bg-theme-700 hover:text-theme-200 transition-colors"
                     @click="toggle"
                   >
                     <Icon
@@ -313,61 +322,50 @@ onMounted(() => {
                       class="w-4 h-4"
                     />
                   </button>
-                  <label
-                    class="flex items-center cursor-pointer"
-                    title="Toggle entire group"
+                  <button
+                    type="button"
+                    role="checkbox"
+                    :aria-checked="isNamespacePartiallySelected(group) ? 'mixed' : isNamespaceAllSelected(group)"
+                    :aria-label="`Toggle all ${group.namespace.label} tools`"
+                    :disabled="selectableCount(group) === 0"
+                    class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors disabled:cursor-not-allowed"
+                    :class="isNamespaceAllSelected(group) || isNamespacePartiallySelected(group)
+                      ? 'bg-accent-600 border-accent-600'
+                      : 'border-theme-500 bg-theme-800 hover:border-accent-500 disabled:border-theme-700'"
+                    @click="toggleNamespace(group)"
                   >
-                    <span
-                      class="inline-flex items-center justify-center h-4 w-4 rounded border cursor-pointer"
-                      :class="[
-                        isNamespaceAllSelected(group)
-                          ? 'bg-accent-600 border-accent-600'
-                          : isNamespacePartiallySelected(group)
-                            ? 'bg-accent-600 border-accent-600'
-                            : selectableCount(group)
-                              ? 'border-theme-500 bg-transparent'
-                              : 'border-theme-700 bg-theme-800'
-                      ]"
-                      @click="toggleNamespace(group)"
-                    >
-                      <Icon
-                        v-if="isNamespaceAllSelected(group)"
-                        icon="lucide:check"
-                        class="w-3 h-3 text-white"
-                      />
-                      <Icon
-                        v-else-if="isNamespacePartiallySelected(group)"
-                        icon="lucide:minus"
-                        class="w-3 h-3 text-white"
-                      />
-                    </span>
-                  </label>
+                    <Icon
+                      v-if="isNamespaceAllSelected(group) || isNamespacePartiallySelected(group)"
+                      :icon="isNamespaceAllSelected(group) ? 'lucide:check' : 'lucide:minus'"
+                      class="h-3.5 w-3.5 text-white"
+                    />
+                  </button>
                   <div
-                    class="flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2"
+                    class="flex min-w-0 flex-1 cursor-pointer select-none items-center gap-3"
                     @click="toggle"
                   >
-                    <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-theme-800">
                       <img
                         v-if="namespaceIcon(group.namespace.id)"
                         :src="namespaceIcon(group.namespace.id)!"
                         alt=""
-                        class="h-5 w-5 object-contain"
+                        class="h-7 w-7 object-contain"
                         @error="markIconBroken(group.namespace.id)"
                       >
                       <Icon
                         v-else
                         :icon="getToolNamespaceIcon(group.namespace.id)"
-                        class="h-4 w-4 text-ink-secondary"
+                        class="h-5 w-5 text-ink-secondary"
                       />
                     </span>
                     <div class="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
                       <p
-                        class="min-w-0 truncate text-[11px] uppercase tracking-wider"
-                        :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-fg' : ''"
+                        class="min-w-0 break-words text-sm font-medium [overflow-wrap:anywhere]"
+                        :class="isBuiltInNamespaceId(group.namespace.id) ? 'text-accent-fg' : 'text-theme-200'"
                       >
                         {{ group.namespace.label }}
                       </p>
-                      <p class="shrink-0 text-[10px] text-ink-faint sm:ml-auto">
+                      <p class="shrink-0 text-xs text-ink-secondary sm:ml-auto">
                         {{ selectedCount(group) }}/{{ selectableCount(group) }} selected
                         <span v-if="autoManagedCount(group)"> · {{ autoManagedCount(group) }} automatic</span>
                         <span v-if="unavailableCount(group)"> · {{ unavailableCount(group) }} require agent</span>
@@ -377,17 +375,17 @@ onMounted(() => {
                 </div>
               </template>
 
-              <div class="px-3 pb-3 mt-2 space-y-1 pl-11">
+              <div class="space-y-1 bg-theme-900/40 px-3 py-3 sm:pl-14">
                 <label
                   v-for="tool in group.tools"
                   :key="toolKey(tool)"
-                  class="flex flex-col items-stretch gap-2 rounded-lg px-2 py-2 sm:flex-row sm:items-center"
+                  class="flex flex-col items-stretch gap-3 rounded-lg px-3 py-3 sm:flex-row sm:items-center"
                   :class="isToolDisabled(tool) ? 'cursor-not-allowed opacity-55' : 'hover:bg-theme-800/70 cursor-pointer'"
                 >
-                  <div class="flex min-w-0 flex-1 items-start gap-2">
+                  <div class="flex min-w-0 flex-1 items-start gap-3">
                     <input
                       type="checkbox"
-                      class="mt-0.5 h-4 w-4 accent-accent-600 shrink-0"
+                      class="mt-0.5 h-5 w-5 accent-accent-600 shrink-0"
                       :checked="isSelected(tool)"
                       :disabled="isToolDisabled(tool)"
                       :title="isAutoManagedTool(tool) ? automaticToolBadge(tool) : hasUnmetRequirement(tool) ? requirementBadge(tool) : undefined"
@@ -399,18 +397,18 @@ onMounted(() => {
                       :max-width="260"
                     >
                       <div class="min-w-0 flex-1">
-                        <p class="break-words text-xs font-medium text-theme-200 [overflow-wrap:anywhere]">
+                        <p class="break-words text-sm font-medium text-theme-200 [overflow-wrap:anywhere]">
                           {{ displayToolName(tool) }}
                           <span
                             v-if="isAutoManagedTool(tool)"
-                            class="ml-1 rounded bg-theme-700 px-1 py-0.5 text-[9px] font-normal uppercase tracking-wide text-ink-secondary"
+                            class="ml-1 rounded bg-theme-700 px-1 py-0.5 text-[11px] font-normal text-ink-secondary"
                             :class="automaticToolState(tool).active ? 'bg-emerald-500/10 text-emerald-300' : ''"
                           >
                             {{ automaticToolBadge(tool) }}
                           </span>
                           <span
                             v-else-if="toolRequirement(tool)"
-                            class="ml-1 rounded px-1 py-0.5 text-[9px] font-normal uppercase tracking-wide"
+                            class="ml-1 rounded px-1 py-0.5 text-[11px] font-normal"
                             :class="toolRequirement(tool)?.met ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'"
                           >
                             {{ requirementBadge(tool) }}
@@ -424,14 +422,14 @@ onMounted(() => {
                       <template #content>
                         <div
                           v-if="isAutoManagedTool(tool)"
-                          class="mb-2 rounded border  bg-theme-900/70 px-2 py-1.5 text-[10px] leading-snug pt-1.5 border-t border-theme-800"
+                          class="mb-2 rounded border  bg-theme-900/70 px-2 py-1.5 text-xs leading-relaxed pt-1.5 border-t border-theme-800"
                           :class="automaticToolState(tool).active ? 'text-emerald-300' : 'text-ink-secondary'"
                         >
                           {{ automaticToolState(tool).active ? 'Active' : 'Inactive' }} automatically when {{ automaticToolState(tool).criteria }}.
                         </div>
                         <div
                           v-else-if="toolRequirement(tool)"
-                          class="mb-2 rounded border bg-theme-900/70 px-2 py-1.5 text-[10px] leading-snug"
+                          class="mb-2 rounded border bg-theme-900/70 px-2 py-1.5 text-xs leading-relaxed"
                           :class="toolRequirement(tool)?.met ? 'border-emerald-500/20 text-emerald-300' : 'border-amber-500/20 text-amber-300'"
                         >
                           {{ toolRequirement(tool)?.met ? 'Requirement met' : 'Unavailable' }}: {{ toolRequirement(tool)?.criteria }}.
@@ -448,7 +446,7 @@ onMounted(() => {
 
                   <button
                     v-if="showApprovals"
-                    class="flex shrink-0 items-center gap-1 self-end rounded px-1.5 py-0.5 text-[9px] transition-colors sm:self-auto"
+                    class="flex shrink-0 items-center gap-1.5 self-end rounded-md px-2.5 py-1.5 text-xs transition-colors sm:self-auto"
                     :class="
                       agentStore.isToolAutoApproved(approvalName(tool))
                         ? 'bg-green-500/15 text-status-green hover:bg-green-500/25'
@@ -475,7 +473,7 @@ onMounted(() => {
 
         <div
           v-if="filteredTools.length === 0"
-          class="px-4 py-6 text-center text-xs text-ink-muted"
+          class="px-4 py-8 text-center text-sm text-ink-muted"
         >
           <template v-if="toolFilterText">
             No tools match "{{ toolFilterText }}"

@@ -38,6 +38,22 @@ describe('ToolSelector requirements', () => {
     expect(wrapper.text()).toContain('requires: agent selected')
   })
 
+  test('supports keyboard-accessible group selection with mixed and checked states', async () => {
+    const store = useAgentStore()
+    store.availableTools = [tool('builtin::read_file', 'read_file'), tool('builtin::write_file', 'write_file')]
+    const wrapper = mount(ToolSelector, { props: { modelValue: ['builtin::read_file'] } })
+    const group = wrapper.get('button[role="checkbox"]')
+
+    expect(group.attributes('aria-checked')).toBe('mixed')
+    expect(group.attributes('aria-label')).toBe('Toggle all Built-In tools')
+    await group.trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([['builtin::read_file', 'builtin::write_file']])
+    await wrapper.setProps({ modelValue: ['builtin::read_file', 'builtin::write_file'] })
+    expect(group.attributes('aria-checked')).toBe('true')
+    await group.trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.[1]).toEqual([[]])
+  })
+
   test('allows tools once their requirements are met', async () => {
     const store = useAgentStore()
     store.availableTools = [tool('builtin::schedule_create', 'schedule_create')]
