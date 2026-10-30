@@ -47,7 +47,7 @@ export function defaultCynoProfile(): CynoProfile {
         name: 'Cyno',
         iconUrl: null,
         avatar: { ...DEFAULT_CYNO_AVATAR },
-        avatarSource: 'generated',
+        avatarSource: 'image',
         systemPrompt: DEFAULT_CYNO_SYSTEM_PROMPT,
         providerId: '',
         model: '',

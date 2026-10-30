@@ -29,7 +29,7 @@ describe('Cyno profile', () => {
 
     test('uploading an image selects it, and the generated avatar can be chosen while keeping it', () => {
         const image = 'data:image/png;base64,iVBORw0KGgo='
-        expect(getCynoProfile().avatarSource).toBe('generated')
+        expect(getCynoProfile().avatarSource).toBe('image')
         expect(saveCynoProfile({ iconUrl: image })).toMatchObject({ iconUrl: image, avatarSource: 'image' })
         expect(saveCynoProfile({ avatarSource: 'generated' })).toMatchObject({ iconUrl: image, avatarSource: 'generated' })
         expect(saveCynoProfile({ iconUrl: null })).toMatchObject({ iconUrl: null, avatarSource: 'generated' })

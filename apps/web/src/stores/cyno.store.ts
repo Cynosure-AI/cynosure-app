@@ -20,7 +20,7 @@ export const useCynoStore = defineStore('cyno', () => {
     const name = computed(() => profile.value?.name || 'Cyno')
     /** Cyno's retained image, the default one until something is uploaded. */
     const imageUrl = computed(() => profile.value?.iconUrl || cynosureLogoRed)
-    const avatarSource = computed(() => profile.value?.avatarSource ?? 'generated')
+    const avatarSource = computed(() => profile.value?.avatarSource ?? 'image')
     /** Cyno's image when it is the chosen face; null shows the generated avatar. Same meaning as an agent's iconUrl. */
     const iconUrl = computed(() => displayedIconUrl(avatarSource.value, imageUrl.value))
     /** For branding spots: Cyno's chosen image, or the theme's app logo. */

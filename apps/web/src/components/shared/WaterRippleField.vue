@@ -50,7 +50,7 @@ const DRIFT_CONTRAST = 1.7
 // Dots outside a band fade to this share and dots inside lift by this much,
 // so an idle wall reads a little brighter than a working one.
 const DRIFT_FLOOR = 0.25 // how bright the dark bands are
-const DRIFT_LIFT = 2.2 // how much brighter the light bands are
+const DRIFT_LIFT = 2.5 // how much brighter the light bands are
 // A 4×4 ordered dither turns the smooth band field into dot density.
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16)
 // The breath changes slowly, so a settled field repaints at this rate.
