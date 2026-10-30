@@ -8,17 +8,15 @@ function mockCanvas() {
   const rect = vi.fn()
   vi.stubGlobal('Path2D', class { rect = rect })
   const drawImage = vi.fn()
-  const createRadialGradient = vi.fn((..._args: number[]) => ({ addColorStop: vi.fn() }))
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     setTransform: vi.fn(),
     clearRect: vi.fn(),
     fill: vi.fn(),
     fillRect: vi.fn(),
     drawImage,
-    createRadialGradient,
   } as unknown as CanvasRenderingContext2D)
   vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 200, 100))
-  return { rect, drawImage, createRadialGradient }
+  return { rect, drawImage }
 }
 
 /** Swaps in a real surface whose drop and press can be watched. */
@@ -109,28 +107,25 @@ describe('WaterRippleField', () => {
     expect(remove).toHaveBeenCalledWith('pointerdown', down)
   })
 
-  test('a resting field breathes from its cached lattice at a reduced frame rate', () => {
+  test('a resting field holds its cached lattice and stops animating', () => {
     vi.useFakeTimers()
-    vi.spyOn(Math, 'random').mockReturnValue(0.5)
-    const { rect, drawImage, createRadialGradient } = mockCanvas()
+    const { rect, drawImage } = mockCanvas()
     const frames = mockFrames()
     const wrapper = mount(WaterRippleField)
-    expect(frames.raf).toHaveBeenCalled()
     expect(rect).toHaveBeenCalled()
+    frames.advance(50)
 
     rect.mockClear()
     drawImage.mockClear()
-    for (let t = 0; t < 1000; t += 10) frames.advance(10)
-    // The lattice is never rebuilt; each repaint only redraws the cache under a new breath.
-    expect(rect).not.toHaveBeenCalled()
-    expect(drawImage.mock.calls.length).toBeGreaterThan(20)
-    expect(drawImage.mock.calls.length).toBeLessThan(40)
-
-    const swell = () => createRadialGradient.mock.calls.at(-1)?.[5]
-    const first = swell()
+    frames.raf.mockClear()
     for (let t = 0; t < 3000; t += 50) frames.advance(50)
-    expect(swell()).not.toBeCloseTo(first!)
+    expect(rect).not.toHaveBeenCalled()
+    expect(drawImage).not.toHaveBeenCalled()
+    expect(frames.raf).not.toHaveBeenCalled()
 
+    // Pointer input wakes a field that has settled.
+    window.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: 90, clientY: 60 }))
+    expect(frames.raf).toHaveBeenCalledOnce()
     wrapper.unmount()
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -160,6 +155,9 @@ describe('WaterRippleField', () => {
     frames.advance(50)
     expect(rect).not.toHaveBeenCalled()
     expect(drawImage).toHaveBeenCalledOnce()
+    drawImage.mockClear()
+    frames.advance(50)
+    expect(drawImage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -187,7 +185,7 @@ describe('WaterRippleField', () => {
     expect(quiet - 1.5).toBeLessThan((full - 1.5) / 2)
   })
 
-  test('changing intensity repaints the lattice while it fades, then only breathes', async () => {
+  test('changing intensity repaints the lattice while it fades, then stops', async () => {
     vi.useFakeTimers()
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
     const { rect, drawImage } = mockCanvas()
@@ -205,7 +203,7 @@ describe('WaterRippleField', () => {
     drawImage.mockClear()
     frames.advance(50)
     expect(rect).not.toHaveBeenCalled()
-    expect(drawImage).toHaveBeenCalledOnce()
+    expect(drawImage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -237,7 +235,7 @@ describe('WaterRippleField', () => {
     drawImage.mockClear()
     frames.advance(50)
     expect(fill).not.toHaveBeenCalled()
-    expect(drawImage).toHaveBeenCalledOnce()
+    expect(drawImage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -266,11 +264,11 @@ describe('WaterRippleField', () => {
     wrapper.unmount()
   })
 
-  test('hidden tabs cancel animation and resume breathing when visible', () => {
+  test('hidden tabs cancel animation and resume drift when visible', () => {
     vi.useFakeTimers()
     mockCanvas()
     const frames = mockFrames()
-    const wrapper = mount(WaterRippleField)
+    const wrapper = mount(WaterRippleField, { props: { drift: 1 } })
     expect(frames.raf).toHaveBeenCalledOnce()
 
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)

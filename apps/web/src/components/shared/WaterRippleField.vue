@@ -1,14 +1,11 @@
 <script setup lang="ts">
 /**
  * A reactive dot lattice. Ripples expose horizontal tears, broken data columns
- * and delayed flares. At rest the wall breathes: it slowly brightens and dims
- * on a long, slightly irregular rhythm while a soft swell around a wandering
- * focus grows on the inhale and recedes on the exhale. `intensity` (0–1) scales
- * the reaction so it can sit quietly behind content. `drift` (0–1) rolls broad
- * dithered bands across the lattice, so an idle wall feels alive. A settled
- * field without drift repaints only the breath, from a cached lattice; any
- * settled field repaints at a reduced frame rate. Reduced motion holds one
- * still mid-breath frame and hidden documents stop all animation.
+ * and delayed flares. `intensity` (0–1) scales the reaction so it can sit
+ * quietly behind content. `drift` (0–1) rolls broad dithered bands across the
+ * lattice as its only ambient motion. Without drift, a settled field holds
+ * its cached lattice and stops animating. Drift repaints at a reduced frame
+ * rate. Reduced motion holds one still frame; hidden documents pause animation.
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createRippleSurface, type RippleSurface } from './rippleSurface'
@@ -31,17 +28,6 @@ const ECHO_INTERVAL_MS = 120
 const GLITCH_MS = 110
 // At low intensity the lattice dims less than the reaction, so it stays legible as texture.
 const REST_FLOOR = 0.55
-// One breath takes about this long; a slower wobble stretches and shortens it
-// so the rhythm never feels metronomic.
-const BREATH_MS = 8000
-const BREATH_WOBBLE_MS = 29000
-// The exhale dims the whole wall by this much…
-const BREATH_DIM = 0.25
-// …and the far field, away from the swell's focus, by up to this much more.
-const BREATH_SPREAD = 0.4
-// The lattice is painted this much brighter before the breath dims it, so on
-// average it sits about as bright as a still wall would.
-const BREATH_LIFT = 1.25
 // Drift bands span several hundred pixels and take about a minute to roll past.
 const DRIFT_SCALE = 1 / 160
 const DRIFT_SPEED = 10 / 9000
@@ -53,7 +39,7 @@ const DRIFT_FLOOR = 0.25 // how bright the dark bands are
 const DRIFT_LIFT = 2.5 // how much brighter the light bands are
 // A 4×4 ordered dither turns the smooth band field into dot density.
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16)
-// The breath changes slowly, so a settled field repaints at this rate.
+// Drift changes slowly, so a settled field repaints at this rate.
 const IDLE_FRAME_MS = 1000 / 30
 const STEP_MS = 1000 / 60
 const MAX_STEPS_PER_FRAME = 3
@@ -61,7 +47,7 @@ const MAX_STEPS_PER_FRAME = 3
 const INTERACTIVE = 'a, button, input, textarea, select, label, summary, [contenteditable], [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], [role="switch"], [role="checkbox"]'
 
 let ctx: CanvasRenderingContext2D | null = null
-// The resting lattice, painted once per intensity level and reused by every breath frame.
+// The resting lattice, cached until intensity or size changes.
 let lattice: HTMLCanvasElement | null = null
 let latticeCtx: CanvasRenderingContext2D | null = null
 let latticeLevel = Number.NaN
@@ -90,8 +76,6 @@ let level = props.intensity
 let driftLevel = props.drift
 // Per-dot resting brightness for the current frame, drift included.
 let restFrame = new Float32Array(0)
-// Starts each mount's swell somewhere different.
-const breathSeed = Math.random() * Math.PI * 2
 
 interface Pulse {
   x: number
@@ -190,7 +174,7 @@ function fillBuckets(target: CanvasRenderingContext2D, paths: Path2D[]) {
 }
 
 function restScale(): number {
-  return (REST_FLOOR + (1 - REST_FLOOR) * level) * BREATH_LIFT
+  return REST_FLOOR + (1 - REST_FLOOR) * level
 }
 
 /** Smooth 0–1 band field: a few slow waves at different angles, one warping the others. */
@@ -223,28 +207,6 @@ function paintRest(now: number) {
   }
 }
 
-/** Dims what is already painted by the current breath; only the lattice sits under it. */
-function breathe(now: number) {
-  if (!ctx) return
-  // Reduced motion holds one still frame at mid-breath.
-  const t = reducedMotion ? 0 : now
-  const phase = (2 * Math.PI * t) / BREATH_MS + 0.8 * Math.sin((2 * Math.PI * t) / BREATH_WOBBLE_MS)
-  const inhale = reducedMotion ? 0.5 : 0.5 - 0.5 * Math.cos(phase)
-  // The focus drifts on two unrelated periods, so it wanders instead of circling.
-  const x = width * (0.5 + 0.28 * Math.sin(t / 7300 + breathSeed))
-  const y = height * (0.5 + 0.28 * Math.sin(t / 11900 + breathSeed * 2))
-  const radius = Math.hypot(width, height) * (0.4 + 0.35 * inhale)
-  const swell = ctx.createRadialGradient(x, y, 0, x, y, radius)
-  swell.addColorStop(0, 'rgba(0, 0, 0, 1)')
-  swell.addColorStop(1, `rgba(0, 0, 0, ${1 - BREATH_SPREAD})`)
-  ctx.globalCompositeOperation = 'destination-in'
-  ctx.globalAlpha = 1 - BREATH_DIM * (1 - inhale)
-  ctx.fillStyle = swell
-  ctx.fillRect(0, 0, width, height)
-  ctx.globalCompositeOperation = 'source-over'
-  ctx.globalAlpha = 1
-}
-
 function drawResting(now: number) {
   if (!ctx || !surface) return
   // Drifting bands change every frame, so the lattice is rebuilt instead of cached.
@@ -259,7 +221,6 @@ function drawResting(now: number) {
       }
     }
     fillBuckets(ctx, paths)
-    breathe(now)
     return
   }
   if (latticeLevel !== level && latticeCtx) {
@@ -277,7 +238,6 @@ function drawResting(now: number) {
     latticeLevel = level
   }
   if (lattice) ctx.drawImage(lattice, 0, 0, width, height)
-  breathe(now)
 }
 
 function drawDisturbed(now: number) {
@@ -287,7 +247,7 @@ function drawDisturbed(now: number) {
 
   const { cols, rows, height: water, dragX, dragY } = surface
   const offset = cell / 2
-  // The lattice layer breathes; the reaction is painted over it at full strength.
+  // Paint the reaction over the resting lattice at full strength.
   const dots = emptyBuckets()
   const glows = emptyBuckets()
   const motion = 0.3 + 0.7 * level
@@ -328,7 +288,6 @@ function drawDisturbed(now: number) {
   }
 
   fillBuckets(ctx, dots)
-  breathe(now)
   fillBuckets(ctx, glows)
 }
 
@@ -348,7 +307,7 @@ function tick(now: number) {
   while (backlog >= STEP_MS) {
     if (surfaceMoving) {
       surfaceMoving = surface.step()
-      // Settle exactly to rest so the breath runs over the clean lattice.
+      // Settle exactly to rest so the cached lattice stays clean.
       if (!surfaceMoving) surface.reset()
     }
     level += (props.intensity - level) * 0.08
@@ -357,11 +316,15 @@ function tick(now: number) {
     if (Math.abs(props.drift - driftLevel) < 0.004) driftLevel = props.drift
     backlog -= STEP_MS
   }
-  // Only the breath and drift move a settled field, and they need far fewer frames.
+  // Only drift moves a settled field, and it needs far fewer frames.
   const settled = !surfaceMoving && pulses.length === 0 && level === props.intensity && driftLevel === props.drift
-  if (!settled || now - lastPaint >= IDLE_FRAME_MS) {
+  if (!settled || driftLevel === 0 || now - lastPaint >= IDLE_FRAME_MS) {
     draw(now)
     lastPaint = now
+  }
+  if (settled && driftLevel === 0) {
+    running = false
+    return
   }
   rafId = requestAnimationFrame(tick)
 }

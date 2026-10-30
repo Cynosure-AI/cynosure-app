@@ -38,7 +38,7 @@ const route = useRoute()
 const router = useRouter()
 useHITLNotifications()
 const isOnboardingRoute = computed(() => route.name === 'onboarding')
-// The content panel is a breathing water surface the cursor trails through.
+// The content panel is a drifting water surface the cursor trails through.
 // Every theme shows it on a fresh chat and while the app is still connecting;
 // only Blackwall keeps a fainter version of it behind every other page too.
 const { freshChat } = useFreshChat()
