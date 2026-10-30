@@ -38,7 +38,7 @@ describe('MemoryFolderPicker', () => {
     expect(child.attributes('data-state')).toBe('inherited')
     expect(checkbox.checked).toBe(true)
     expect(checkbox.disabled).toBe(true)
-    expect(child.text()).toContain('Included via projects')
+    expect(child.attributes('title')).toContain('Included via projects')
   })
 
   test('marks a parent with granted subfolders as indeterminate', () => {

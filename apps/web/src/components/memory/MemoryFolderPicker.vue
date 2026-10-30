@@ -142,10 +142,7 @@ function docCount(folder: MemoryFolder): string {
 
 function detail(folder: MemoryFolder): string {
   if (folder.isUncategorized) return allMemoryDescription(props.folders)
-  const info = infoFor(folder)
-  const parts = [query.value ? folder.folderPath : docCount(folder)]
-  if (info.state === 'inherited' && info.via) parts.unshift(`Included via ${displayName(info.via)}`)
-  return parts.join(' · ')
+  return query.value ? folder.folderPath : docCount(folder)
 }
 
 function rowTitle(folder: MemoryFolder): string | undefined {
@@ -260,7 +257,7 @@ function clearAll(): void {
         <li
           v-for="folder in visibleFolders"
           :key="folder.id"
-          class="flex items-center gap-1.5 border-b border-theme-800 px-2 py-1.5 last:border-0 transition-colors"
+          class="flex items-center border-b border-theme-800 px-2 py-1.5 last:border-0 transition-colors"
           :class="infoFor(folder).state === 'selected'
             ? 'bg-accent-600/10'
             : infoFor(folder).state === 'inherited' ? 'bg-accent-600/5' : 'hover:bg-theme-800/60'"
@@ -270,30 +267,30 @@ function clearAll(): void {
         >
           <span
             v-if="!query && depth(folder) > 0"
-            :style="{ width: `${depth(folder) * 16}px` }"
+            :style="{ width: `${depth(folder) * 20}px` }"
             class="relative -my-1.5 flex shrink-0 self-stretch text-theme-500"
             aria-hidden="true"
           >
             <span
               v-for="(guide, level) in treeGuides.get(folder.id)"
               :key="level"
-              class="relative w-4 shrink-0"
+              class="relative w-5 shrink-0"
               :data-tree-guide="guide.branch ? (guide.continues ? 'tee' : 'elbow') : (guide.continues ? 'continuation' : 'empty')"
             >
               <span
                 v-if="guide.branch || guide.continues"
-                class="absolute left-0 top-0 border-l border-current"
+                class="absolute left-1/2 top-0 border-l border-current"
                 :class="guide.continues ? 'h-full' : 'h-1/2'"
               />
               <span
                 v-if="guide.branch"
-                class="absolute left-0 right-0 top-1/2 border-t border-current"
+                class="absolute left-1/2 right-0 top-1/2 border-t border-current"
               />
             </span>
           </span>
           <button
             type="button"
-            class="shrink-0 rounded p-0.5 text-ink-muted transition-colors hover:text-theme-200"
+            class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:text-theme-200"
             :class="{ 'invisible pointer-events-none': query || !hasChildren(folder) }"
             :aria-label="`${collapsed.has(folder.folderPath) ? 'Expand' : 'Collapse'} ${folder.name}`"
             :aria-expanded="hasChildren(folder) ? !collapsed.has(folder.folderPath) : undefined"
@@ -307,7 +304,7 @@ function clearAll(): void {
             />
           </button>
           <label
-            class="flex min-w-0 flex-1 items-center gap-2 py-0.5"
+            class="ml-1 flex min-w-0 flex-1 items-center gap-2 py-0.5"
             :class="infoFor(folder).state === 'inherited' ? 'cursor-default' : 'cursor-pointer'"
           >
             <input
