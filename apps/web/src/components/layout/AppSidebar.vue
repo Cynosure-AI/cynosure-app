@@ -70,6 +70,8 @@ const activeWorkCount = computed(() => instances.value.length + memoryJobsStore.
 const runningConversationIds = computed(() => instances.value
   .filter((instance) => instance.status === "running" && instance.conversationId)
   .map((instance) => instance.conversationId as string));
+const dreamingConversationIds = computed(() => activeDreamRuns.value
+  .flatMap((run) => run.conversationId ? [run.conversationId] : []));
 const awaitingConversationIds = computed(() => instances.value
   .filter((instance) => instance.status === "awaiting-approval" && instance.conversationId)
   .map((instance) => instance.conversationId as string));
@@ -380,6 +382,7 @@ async function openCynoChat(): Promise<void> {
           :collapsed="sidebarCollapsed"
           :active-conversation-ids="runningConversationIds"
           :awaiting-conversation-ids="awaitingConversationIds"
+          :dreaming-conversation-ids="dreamingConversationIds"
         />
       </section>
 
@@ -482,6 +485,7 @@ async function openCynoChat(): Promise<void> {
           v-show="recentChatsOpen || sidebarCollapsed"
           :collapsed="sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
+          :dreaming-conversation-ids="dreamingConversationIds"
           :active-conversation-ids="runningConversationIds"
           :filters="recentChatFilter"
           exclude-project-chats
@@ -489,6 +493,7 @@ async function openCynoChat(): Promise<void> {
         <GlobalRecentChats
           v-if="sidebarChatView === 'global' && recentChatsOpen && !sidebarCollapsed"
           :awaiting-conversation-ids="awaitingConversationIds"
+          :dreaming-conversation-ids="dreamingConversationIds"
           :active-conversation-ids="runningConversationIds"
           :filters="recentChatFilter"
           exclude-project-chats

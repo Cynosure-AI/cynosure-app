@@ -12,6 +12,7 @@ import { useCynoStore } from '../../stores/cyno.store'
 import { useProviderStore } from '../../stores/provider.store'
 import type { AvatarConfig } from '../../utils/avatar'
 import AgentAvatar from '../shared/AgentAvatar.vue'
+import DreamingBadge from '../shared/DreamingBadge.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 
 /** Recent chats scanned to order agents by last use and to place live chats under them. */
@@ -41,6 +42,8 @@ const props = withDefaults(defineProps<{
   collapsed?: boolean
   activeConversationIds?: string[]
   awaitingConversationIds?: string[]
+  /** Chats Dream is reviewing in the background. */
+  dreamingConversationIds?: string[]
   filters?: string[]
   /** Leave out chats that belong to a project; they are listed under their project. */
   excludeProjectChats?: boolean
@@ -48,6 +51,7 @@ const props = withDefaults(defineProps<{
   collapsed: false,
   activeConversationIds: () => [],
   awaitingConversationIds: () => [],
+  dreamingConversationIds: () => [],
   filters: () => ['all'],
 })
 
@@ -132,6 +136,8 @@ const runningIds = computed(() => {
   return ids
 })
 
+const dreamingIds = computed(() => new Set(props.dreamingConversationIds))
+
 const awaitingIds = computed(() => new Set([
   ...props.awaitingConversationIds,
   ...agentStore.awaitingHITLConvIds,
@@ -150,6 +156,7 @@ function agentKeysWith(conversationIds: Set<string>): Set<string> {
 
 const runningAgentKeys = computed(() => agentKeysWith(runningIds.value))
 const awaitingAgentKeys = computed(() => agentKeysWith(awaitingIds.value))
+const dreamingAgentKeys = computed(() => agentKeysWith(dreamingIds.value))
 const waitingAgentKeys = computed(() => {
   const keys = new Set<string>()
   const chats = [...recentChats.value, ...Object.values(chatsByAgent.value).flatMap((group) => group.items)]
@@ -536,6 +543,10 @@ onBeforeUnmount(() => {
                 class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-900 animate-pulse"
                 :title="`A chat with ${entry.name} is waiting for your approval`"
               />
+              <DreamingBadge
+                v-else-if="!expanded.has(entry.key) && dreamingAgentKeys.has(entry.key)"
+                :label="`Dreaming over a chat with ${entry.name}`"
+              />
             </span>
 
             <span
@@ -621,6 +632,10 @@ onBeforeUnmount(() => {
                 role="img"
                 :aria-label="resumeLabel(chat)"
                 :title="resumeLabel(chat)"
+              />
+              <DreamingBadge
+                v-else-if="dreamingIds.has(chat.id)"
+                variant="inline"
               />
               <Icon
                 v-else-if="chat.origin === 'cron'"

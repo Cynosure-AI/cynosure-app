@@ -43,8 +43,8 @@ beforeEach(() => {
   mocks.listConversationsPaginated.mockResolvedValue({ items: [row(resumesAt)], total: 1 })
 })
 
-async function render() {
-  const wrapper = mount(GlobalRecentChats, { global: { stubs: { Icon: true } } })
+async function render(props: { dreamingConversationIds?: string[] } = {}) {
+  const wrapper = mount(GlobalRecentChats, { props, global: { stubs: { Icon: true } } })
   await flushPromises()
   return wrapper
 }
@@ -78,5 +78,16 @@ test('clears the indicator when the server reports the wait ended', async () => 
     vi.useRealTimers()
     await flushPromises()
     expect(wrapper.find(hourglass).exists()).toBe(false)
+  } finally { wrapper.unmount() }
+})
+
+test('marks a chat Dream is reviewing with a moon', async () => {
+  const idle = await render()
+  try {
+    expect(idle.find('[icon="lucide:moon"]').exists()).toBe(false)
+  } finally { idle.unmount() }
+  const wrapper = await render({ dreamingConversationIds: ['chat'] })
+  try {
+    expect(wrapper.find('[aria-label="Dreaming over this chat"] [icon="lucide:moon"]').exists()).toBe(true)
   } finally { wrapper.unmount() }
 })

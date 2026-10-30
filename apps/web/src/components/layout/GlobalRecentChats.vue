@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import AgentAvatar from '../shared/AgentAvatar.vue'
+import DreamingBadge from '../shared/DreamingBadge.vue'
 import { api } from '../../api/client'
 import { wsConnected } from '../../api/http'
 import { useAgentDefinitionsStore } from '../../stores/agent-definitions.store'
@@ -14,6 +15,8 @@ const cyno = useCynoStore()
 
 const props = withDefaults(defineProps<{
   awaitingConversationIds?: string[]
+  /** Chats Dream is reviewing in the background. */
+  dreamingConversationIds?: string[]
   activeConversationIds?: string[]
   agentId?: string | null
   filters?: string[]
@@ -21,6 +24,7 @@ const props = withDefaults(defineProps<{
   excludeProjectChats?: boolean
 }>(), {
   awaitingConversationIds: () => [],
+  dreamingConversationIds: () => [],
   activeConversationIds: () => [],
   agentId: undefined,
   filters: () => ['all'],
@@ -55,6 +59,7 @@ const awaitingIds = computed(() => new Set([
   ...props.awaitingConversationIds,
   ...agentStore.awaitingHITLConvIds,
 ]))
+const dreamingIds = computed(() => new Set(props.dreamingConversationIds))
 const runningIds = computed(() => {
   const ids = new Set([
     ...props.activeConversationIds,
@@ -462,6 +467,7 @@ onBeforeUnmount(() => {
             class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-900 animate-pulse"
             title="Waiting for your approval"
           />
+          <DreamingBadge v-else-if="dreamingIds.has(conversation.id)" />
         </span>
 
         <span class="min-w-0 flex-1">

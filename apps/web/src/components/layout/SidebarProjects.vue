@@ -10,6 +10,7 @@ import { useAgentStore } from '../../stores/agent-runtime.store'
 import { useProjectsStore } from '../../stores/projects.store'
 import { useProjectChat } from '../../composables/useProjectChat'
 import ProjectIcon from '../project/ProjectIcon.vue'
+import DreamingBadge from '../shared/DreamingBadge.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 
 const MAX_PROJECTS = 8
@@ -24,10 +25,13 @@ const props = withDefaults(defineProps<{
   collapsed?: boolean
   activeConversationIds?: string[]
   awaitingConversationIds?: string[]
+  /** Chats Dream is reviewing in the background. */
+  dreamingConversationIds?: string[]
 }>(), {
   collapsed: false,
   activeConversationIds: () => [],
   awaitingConversationIds: () => [],
+  dreamingConversationIds: () => [],
 })
 
 const route = useRoute()
@@ -132,6 +136,8 @@ const runningIds = computed(() => new Set([
   ...agentStore.liveExecutionConversationIds,
 ]))
 
+const dreamingIds = computed(() => new Set(props.dreamingConversationIds))
+
 const awaitingIds = computed(() => new Set([
   ...props.awaitingConversationIds,
   ...agentStore.awaitingHITLConvIds,
@@ -156,6 +162,7 @@ function projectIdsWithActivity(conversationIds: Set<string>): Set<string> {
 
 const runningProjectIds = computed(() => projectIdsWithActivity(runningIds.value))
 const awaitingProjectIds = computed(() => projectIdsWithActivity(awaitingIds.value))
+const dreamingProjectIds = computed(() => projectIdsWithActivity(dreamingIds.value))
 
 const hiddenCount = computed(() =>
   Math.max(0, projectsStore.activeProjects.length - MAX_PROJECTS),
@@ -396,11 +403,19 @@ onBeforeUnmount(() => {
               title="A chat in this project is running"
               aria-label="A chat in this project is running"
             />
-            <ProjectIcon
+            <span
               v-else
-              :project="project"
-              class="h-4 w-4 shrink-0"
-            />
+              class="relative flex h-4 w-4 shrink-0"
+            >
+              <ProjectIcon
+                :project="project"
+                class="h-full w-full"
+              />
+              <DreamingBadge
+                v-if="!expanded.has(project.id) && dreamingProjectIds.has(project.id)"
+                label="Dreaming over a chat in this project"
+              />
+            </span>
 
             <span
               v-if="!collapsed"
@@ -485,6 +500,10 @@ onBeforeUnmount(() => {
                 role="img"
                 :aria-label="resumeLabel(chat)"
                 :title="resumeLabel(chat)"
+              />
+              <DreamingBadge
+                v-else-if="dreamingIds.has(chat.id)"
+                variant="inline"
               />
               <Icon
                 v-else-if="chat.origin === 'cron'"
