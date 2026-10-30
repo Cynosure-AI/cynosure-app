@@ -64,6 +64,32 @@ describe('MemoryFolderPicker', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[['projects']]])
   })
 
+  test('connects sibling branches and ends the final branch at each level', async () => {
+    const nestedFolders = [
+      ...folders,
+      folder('projects-b', 'Projects/B'),
+      folder('work', 'Work'),
+    ]
+    const wrapper = mount(MemoryFolderPicker, { props: { folders: nestedFolders, modelValue: ['projects-a'] } })
+    const guides = (id: string) => row(wrapper, id).findAll('[data-tree-guide]').map(guide => guide.attributes('data-tree-guide'))
+
+    expect(guides('root')).toEqual([])
+    expect(guides('archive')).toEqual(['tee'])
+    expect(guides('projects-a')).toEqual(['continuation', 'tee'])
+    expect(guides('projects-b')).toEqual(['continuation', 'elbow'])
+    expect(guides('work')).toEqual(['elbow'])
+
+    await row(wrapper, 'projects').get('button').trigger('click')
+    expect(wrapper.find('[data-folder-id="projects-a"]').exists()).toBe(false)
+    expect(guides('projects')).toEqual(['tee'])
+    expect(guides('work')).toEqual(['elbow'])
+
+    await wrapper.setProps({ folders, modelValue: ['projects-a'] })
+    expect(guides('projects-a')).toEqual(['empty', 'elbow'])
+    await wrapper.setProps({ search: 'projects/a' })
+    expect(guides('projects-a')).toEqual([])
+  })
+
   test('search shows matches with their path', () => {
     const wrapper = mount(MemoryFolderPicker, { props: { folders, modelValue: [], search: 'projects/a' } })
 

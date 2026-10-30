@@ -99,7 +99,7 @@ describe('AgentMemoryTab', () => {
     const research = wrapper.get('[data-folder-id="research"]')
     expect(research.attributes('data-state')).toBe('inherited')
     expect(research.text()).toContain('Included via All Memory')
-    expect(research.get('[aria-hidden="true"]').attributes('style')).toContain('width: 12px')
+    expect(research.find('[data-tree-guide="elbow"]').exists()).toBe(true)
 
     await clear!.trigger('click')
     expect(wrapper.emitted('update')).toContainEqual(['memoryFolders', []])

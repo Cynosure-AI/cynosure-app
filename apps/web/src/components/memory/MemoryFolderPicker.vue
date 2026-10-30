@@ -102,6 +102,24 @@ const visibleFolders = computed(() => {
   })
 })
 
+/** Track the final visible child at each level, including implicit parent paths. */
+const treeGuides = computed(() => {
+  const lastChild = new Map<string, string>()
+  for (const folder of visibleFolders.value) {
+    const parts = pathParts(folder)
+    for (let level = 0; level < parts.length; level++) {
+      lastChild.set(parts.slice(0, level).join('/'), parts.slice(0, level + 1).join('/'))
+    }
+  }
+  return new Map(visibleFolders.value.map((folder) => {
+    const parts = pathParts(folder)
+    return [folder.id, parts.map((_, level) => ({
+      branch: level === parts.length - 1,
+      continues: lastChild.get(parts.slice(0, level).join('/')) !== parts.slice(0, level + 1).join('/'),
+    }))]
+  }))
+})
+
 const selectionInfo = computed(() => {
   const info = new Map<string, MemoryFolderSelectionInfo>()
   for (const folder of props.folders) info.set(folder.id, memoryFolderSelectionInfo(folder, props.folders, props.modelValue))
@@ -252,10 +270,27 @@ function clearAll(): void {
         >
           <span
             v-if="!query && depth(folder) > 0"
-            :style="{ width: `${depth(folder) * 12}px` }"
-            class="shrink-0 self-stretch border-r border-theme-700/60"
+            :style="{ width: `${depth(folder) * 16}px` }"
+            class="relative -my-1.5 flex shrink-0 self-stretch text-theme-500"
             aria-hidden="true"
-          />
+          >
+            <span
+              v-for="(guide, level) in treeGuides.get(folder.id)"
+              :key="level"
+              class="relative w-4 shrink-0"
+              :data-tree-guide="guide.branch ? (guide.continues ? 'tee' : 'elbow') : (guide.continues ? 'continuation' : 'empty')"
+            >
+              <span
+                v-if="guide.branch || guide.continues"
+                class="absolute left-0 top-0 border-l border-current"
+                :class="guide.continues ? 'h-full' : 'h-1/2'"
+              />
+              <span
+                v-if="guide.branch"
+                class="absolute left-0 right-0 top-1/2 border-t border-current"
+              />
+            </span>
+          </span>
           <button
             type="button"
             class="shrink-0 rounded p-0.5 text-ink-muted transition-colors hover:text-theme-200"
