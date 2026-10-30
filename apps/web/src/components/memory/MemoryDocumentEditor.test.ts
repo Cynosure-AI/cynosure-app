@@ -74,7 +74,7 @@ describe('MemoryDocumentEditor', () => {
     await vi.waitFor(() => expect(mocks.setContent).toHaveBeenCalledOnce())
 
     expect(wrapper.find('[data-testid="rich-editor"]').exists()).toBe(true)
-    expect(wrapper.get('section[aria-label="Memory document editor"]').exists()).toBe(true)
+    expect(wrapper.find('section[aria-label="Memory document editor"]').exists()).toBe(true)
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect((wrapper.get('input[aria-label="Document name"]').element as HTMLInputElement).value).toBe('large')
     expect(wrapper.text()).not.toContain('large.md')
