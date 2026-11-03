@@ -52,7 +52,7 @@ vi.mock('../stores/projects.store', () => ({
 vi.mock('./useMcpServers', () => ({ useMcpServers: () => ({ servers, loadServers: vi.fn(async () => undefined) }) }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
-const actions = { attachFiles: vi.fn(), browseLibrary: vi.fn(), chooseModel: vi.fn(), editSystemPrompt: vi.fn() }
+const actions = { attachFiles: vi.fn(), browseLibrary: vi.fn(), browseMemories: vi.fn(), chooseModel: vi.fn(), editSystemPrompt: vi.fn() }
 
 describe('useSlashCommands', () => {
   beforeEach(() => {

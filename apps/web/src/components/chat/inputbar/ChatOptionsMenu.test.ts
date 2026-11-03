@@ -107,6 +107,15 @@ describe('ChatOptionsMenu', () => {
     await flushPromises()
     expect(wrapper.emitted('attach')).toHaveLength(1)
     expect(document.querySelector('[aria-label="Chat options"]')).toBeNull()
+
+    await wrapper.get('[aria-label="Add and configure chat options"]').trigger('click')
+    await flushPromises()
+    const reopened = document.querySelector('[aria-label="Chat options"]') as HTMLElement
+    ;[...reopened.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Files')!.click()
+    await flushPromises()
+    ;[...reopened.querySelectorAll('button')].find(button => button.textContent?.includes('From memories'))!.click()
+    await flushPromises()
+    expect(wrapper.emitted('browseMemories')).toHaveLength(1)
     wrapper.unmount()
   })
 

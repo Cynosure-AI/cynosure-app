@@ -20,6 +20,8 @@ import {
 } from '../core/memory/memory-file-manager.js'
 import { basename, extname, join, sep } from 'path'
 import { existsSync, renameSync, writeFileSync } from 'fs'
+import { readFile, stat as fsStat } from 'fs/promises'
+import { MAX_PROJECT_FILE_BYTES, ProjectFileError, toAttachableContent } from '../core/projects/project-files.js'
 import { watchMemoryFolder, stopWatchingMemoryFolder } from '../core/memory/memory-folder-watcher.js'
 import {
     archiveMemoryFolderDirectory,
@@ -198,6 +200,23 @@ function listMemoryFiles(row: MemoryFolderRow, candidateNames?: Set<string>): Me
     }).sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
 }
 
+/**
+ * The folders a file listing covers: every folder, or the requested one and its
+ * descendants. The uncategorized folder stands for every folder. Undefined when
+ * the requested folder does not exist.
+ */
+function foldersInScope(folderIdParam?: string): MemoryFolderRow[] | undefined {
+    syncMemoryFoldersFromFolders(getDb())
+    const allRows = getDb().prepare('SELECT * FROM memory_folders ORDER BY sort_order, name').all() as MemoryFolderRow[]
+    const requestedFolderId = folderIdParam ? decodeFolderIdParam(folderIdParam) : ''
+    if (!requestedFolderId) return allRows
+    const requestedRow = allRows.find((row) => row.id === requestedFolderId)
+    if (!requestedRow) return undefined
+    if (requestedRow.is_uncategorized) return allRows
+    const requestedPath = memoryFolderDirectoryData(requestedRow).folderPath
+    return allRows.filter((row) => row.id === requestedRow.id || memoryFolderDirectoryData(row).folderPath.startsWith(`${requestedPath}/`))
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -208,18 +227,8 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const query = (req.query.query || '').normalize('NFKC').trim().toLocaleLowerCase().slice(0, 200)
         if (!query) return []
         const terms = query.split(/\s+/).filter(Boolean)
-        syncMemoryFoldersFromFolders(getDb())
-        const allRows = getDb().prepare('SELECT * FROM memory_folders ORDER BY sort_order, name').all() as MemoryFolderRow[]
-        const requestedFolderId = req.query.folderId ? decodeFolderIdParam(req.query.folderId) : ''
-        const requestedRow = requestedFolderId ? allRows.find((row) => row.id === requestedFolderId) : undefined
-        if (requestedFolderId && !requestedRow) return reply.status(404).send({ error: 'Memory folder not found' })
-        const requestedPath = requestedRow ? memoryFolderDirectoryData(requestedRow).folderPath : ''
-        const rows = !requestedRow || requestedRow.is_uncategorized
-            ? allRows
-            : allRows.filter((row) => {
-                const folderPath = memoryFolderDirectoryData(row).folderPath
-                return row.id === requestedRow.id || folderPath.startsWith(`${requestedPath}/`)
-            })
+        const rows = foldersInScope(req.query.folderId)
+        if (!rows) return reply.status(404).send({ error: 'Memory folder not found' })
         if (req.query.semantic === 'true') {
             const { vector, profileFingerprint } = await getEmbeddingService().embedQuery(query, { instruct: getMemoryRetrievalOptions().queryInstructions })
             const chunks = await getRAGStore().search(
@@ -294,6 +303,23 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         return results
             .sort((a, b) => a.rank - b.rank || b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
             .map(({ rank: _rank, ...result }) => result)
+    })
+
+    // GET /api/memory-folders/recent-files?limit=&folderId= — most recently modified files, newest first
+    app.get<{ Querystring: { limit?: string; folderId?: string } }>('/recent-files', async (req, reply) => {
+        const rows = foldersInScope(req.query.folderId)
+        if (!rows) return reply.status(404).send({ error: 'Memory folder not found' })
+        const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 30))
+        const results: MemoryFileSearchResult[] = []
+        for (const row of rows) {
+            const folderData = memoryFolderDirectoryData(row)
+            for (const file of listMemoryFiles(row)) {
+                results.push({ ...file, folderId: row.id, folderName: row.name, folderPath: folderData.folderPath, matchedFields: [] })
+            }
+        }
+        return results
+            .sort((a, b) => b.modifiedAt - a.modifiedAt || a.fileName.localeCompare(b.fileName))
+            .slice(0, limit)
     })
 
     app.get<{ Params: { documentRef: string } }>('/documents/:documentRef/revisions', async (req, reply) => {
@@ -659,6 +685,24 @@ export async function registerMemoryFoldersRoutes(app: FastifyInstance): Promise
         const mem = getAgentMemory()
         await mem.deleteSourceFile(req.params.fileName, row.id)
         return { success: true }
+    })
+
+    // GET /api/memory-folders/:id/files/:fileName/attachment — a memory file, ready to attach to a chat
+    app.get<{ Params: { id: string; fileName: string } }>('/:id/files/:fileName/attachment', async (req, reply) => {
+        const row = loadCategoryRow(req.params.id)
+        if (!row?.directory_path) return reply.status(404).send({ error: 'Memory folder not found' })
+        const fileName = basename(req.params.fileName || '')
+        if (!fileName || fileName !== req.params.fileName) return reply.status(400).send({ error: 'Invalid file name' })
+        const filePath = join(row.directory_path, fileName)
+        try {
+            const stat = await fsStat(filePath)
+            if (!stat.isFile()) return reply.status(404).send({ error: 'File not found' })
+            if (stat.size > MAX_PROJECT_FILE_BYTES) return reply.status(413).send({ error: 'Files larger than 20 MB cannot be attached.' })
+            return toAttachableContent(await readFile(filePath), fileName)
+        } catch (error) {
+            if (error instanceof ProjectFileError) return reply.status(error.statusCode).send({ error: error.message })
+            return reply.status(404).send({ error: 'File not found' })
+        }
     })
 
     // GET /api/memory-folders/:id/files/:fileName/content — read editable file content

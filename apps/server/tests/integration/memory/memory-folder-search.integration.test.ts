@@ -136,6 +136,45 @@ describe('global memory file search', () => {
     await app.close()
   })
 
+  test('lists recent files across folders and serves them as chat attachments', async () => {
+    const { getDb } = await import('../../../src/db/database.js')
+    const { registerMemoryFoldersRoutes } = await import('../../../src/routes/memory-folders.js')
+    const { utimes } = await import('node:fs/promises')
+    await writeFile(join(firstFolder, 'older.md'), '# Older')
+    await writeFile(join(childFolder, 'newest.md'), '# Newest\nDetails.')
+    await writeFile(join(secondFolder, 'middle.txt'), 'Middle')
+    await writeFile(join(secondFolder, 'blob.bin'), Buffer.from([0, 1, 2, 3]))
+    await utimes(join(firstFolder, 'older.md'), 1_000, 1_000)
+    await utimes(join(secondFolder, 'middle.txt'), 2_000, 2_000)
+    await utimes(join(secondFolder, 'blob.bin'), 1_500, 1_500)
+    await utimes(join(childFolder, 'newest.md'), 3_000, 3_000)
+    const db = getDb()
+    const now = Date.now()
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
+      .run('folder-a', 'Archive', firstFolder, 1, now)
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
+      .run('folder-b', 'Projects', secondFolder, 2, now)
+    db.prepare(`INSERT INTO memory_folders (id, name, description, directory_path, sort_order, created_at) VALUES (?, ?, '', ?, ?, ?)`)
+      .run('folder-c', 'Child', childFolder, 3, now)
+
+    const app = Fastify()
+    await app.register(registerMemoryFoldersRoutes, { prefix: '/api/memory-folders' })
+    const recent = (await app.inject('/api/memory-folders/recent-files?limit=3')).json() as Array<{ fileName: string; folderId: string }>
+    expect(recent.map(file => file.fileName)).toEqual(['newest.md', 'middle.txt', 'blob.bin'])
+    expect(recent[0]).toMatchObject({ folderId: 'folder-c', folderName: 'Child' })
+    const scoped = (await app.inject('/api/memory-folders/recent-files?folderId=folder-a')).json() as Array<{ fileName: string }>
+    expect(scoped.map(file => file.fileName)).toEqual(['newest.md', 'older.md'])
+    expect((await app.inject('/api/memory-folders/recent-files?folderId=missing')).statusCode).toBe(404)
+
+    const attachment = await app.inject('/api/memory-folders/folder-c/files/newest.md/attachment')
+    expect(attachment.statusCode).toBe(200)
+    expect(attachment.json()).toEqual({ kind: 'file', name: 'newest.md', content: '# Newest\nDetails.' })
+    expect((await app.inject('/api/memory-folders/folder-b/files/blob.bin/attachment')).statusCode).toBe(415)
+    expect((await app.inject('/api/memory-folders/folder-b/files/nope.md/attachment')).statusCode).toBe(404)
+    expect((await app.inject(`/api/memory-folders/folder-b/files/${encodeURIComponent('../memory-a/older.md')}/attachment`)).statusCode).toBe(400)
+    await app.close()
+  })
+
   test('persists automatic-memory exclusion for a folder tree', async () => {
     const { getDb } = await import('../../../src/db/database.js')
     const { registerMemoryFoldersRoutes } = await import('../../../src/routes/memory-folders.js')

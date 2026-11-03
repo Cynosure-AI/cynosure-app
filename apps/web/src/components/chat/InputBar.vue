@@ -12,6 +12,7 @@ import ContextRing from './inputbar/ContextRing.vue'
 import HoverTooltip from '../shared/HoverTooltip.vue'
 import FileLibraryModal from './modals/FileLibraryModal.vue'
 import ProjectFilePickerModal from './modals/ProjectFilePickerModal.vue'
+import MemoryFilePickerModal from './modals/MemoryFilePickerModal.vue'
 import ModelSelectorModal from './modals/ModelSelectorModal.vue'
 import SystemPromptModal from './modals/SystemPromptModal.vue'
 import SlashCommandMenu from './inputbar/SlashCommandMenu.vue'
@@ -71,6 +72,7 @@ const mediaSettings = computed<MediaGenerationSettings | null>({
 const editingQueueId = ref<string | null>(null)
 const showFileLibrary = ref(false)
 const showProjectFiles = ref(false)
+const showMemoryFiles = ref(false)
 const activeProject = computed(() => projectsStore.get(chatStore.activeProjectId))
 const hasBottomBar = computed(() => Boolean(activeProject.value) || props.hasSelectionTabs)
 const projectRemovalError = ref('')
@@ -148,6 +150,7 @@ const showSystemPrompt = ref(false)
 const { commands: slashCommands, prepare: prepareSlashCommands } = useSlashCommands({
   attachFiles: () => openFilePicker(),
   browseLibrary: () => { showFileLibrary.value = true },
+  browseMemories: () => openMemoryFiles(),
   chooseModel: () => { showModelSelector.value = true },
   editSystemPrompt: () => { showSystemPrompt.value = true },
 })
@@ -335,6 +338,18 @@ function addProjectFiles(files: ProjectFileContent[]): void {
   for (const file of files) {
     if (attachedProjectPaths.value.includes(file.name)) continue
     addComposerFile(file, `${projectSourcePrefix.value}${file.name}`)
+  }
+}
+
+function openMemoryFiles(): void {
+  if (!chatStore.memoryFolders.length) void chatStore.loadMemoryFolders()
+  showMemoryFiles.value = true
+}
+
+function addMemoryFiles(files: Array<ProjectFileContent & { sourceId: string }>): void {
+  const existing = new Set([...attachedImages.value, ...attachedFiles.value, ...attachedAudio.value].map((item) => item.sourceId))
+  for (const file of files) {
+    if (!existing.has(file.sourceId)) addComposerFile(file, file.sourceId)
   }
 }
 
@@ -954,6 +969,7 @@ defineExpose({ processFiles, focus, sendSuggestion })
           :media-settings="mediaSettings"
           @attach="openFilePicker"
           @browse-library="showFileLibrary = true"
+          @browse-memories="openMemoryFiles"
           @browse-project="showProjectFiles = true"
           @send="send('next')"
           @steer="send('steer')"
@@ -1013,6 +1029,17 @@ defineExpose({ processFiles, focus, sendSuggestion })
       ]"
       @close="showFileLibrary = false"
       @add="addLibrarySelection"
+    />
+    <MemoryFilePickerModal
+      :show="showMemoryFiles"
+      :folders="chatStore.memoryFolders"
+      :already-selected-ids="[
+        ...attachedImages.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+        ...attachedFiles.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+        ...attachedAudio.flatMap((item) => item.sourceId ? [item.sourceId] : []),
+      ]"
+      @close="showMemoryFiles = false"
+      @add="addMemoryFiles"
     />
     <ProjectFilePickerModal
       :show="showProjectFiles"

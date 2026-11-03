@@ -18,7 +18,7 @@ import { getToolNamespaceIcon } from '../../../utils/tool-namespace-icons'
 import { memoryFolderScopeSummary } from '../../../utils/memory-folder-selection'
 import MemoryFolderPicker from '../../memory/MemoryFolderPicker.vue'
 
-const emit = defineEmits<{ attach: []; browseLibrary: []; browseProject: [] }>()
+const emit = defineEmits<{ attach: []; browseLibrary: []; browseMemories: []; browseProject: [] }>()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const agentDefs = useAgentDefinitionsStore()
@@ -37,7 +37,7 @@ const menuStyle = ref<CSSProperties>({})
 const brokenMcpIcons = ref<Set<string>>(new Set())
 
 const entries = [
-  { id: 'files', label: 'Files', detail: 'Upload or select from library', icon: 'lucide:paperclip' },
+  { id: 'files', label: 'Files', detail: 'Upload or select from library or memories', icon: 'lucide:paperclip' },
   { id: 'tools', label: 'Tools (MCPs)', detail: 'Enable and configure tools', icon: 'lucide:wrench' },
   { id: 'memory', label: 'Memories', detail: 'Select memory folders', icon: 'lucide:database' },
   { id: 'agents', label: 'Subagents', detail: 'Enable and configure subagents', icon: 'lucide:users' },
@@ -177,10 +177,11 @@ async function toggle(): Promise<void> {
   await nextTick()
   updatePosition()
 }
-function pickFile(kind: 'attach' | 'browseLibrary' | 'browseProject'): void {
+function pickFile(kind: 'attach' | 'browseLibrary' | 'browseMemories' | 'browseProject'): void {
   close()
   if (kind === 'attach') emit('attach')
   else if (kind === 'browseLibrary') emit('browseLibrary')
+  else if (kind === 'browseMemories') emit('browseMemories')
   else emit('browseProject')
 }
 onClickOutside(root, close, { ignore: [menu] })
@@ -368,6 +369,16 @@ onBeforeUnmount(() => {
               icon="lucide:library"
               class="h-5 w-5"
             /><span class="flex-1"><span class="block text-sm">Select from library</span><span class="block text-[11px] text-ink-muted">Reuse a previous attachment</span></span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 rounded-xl px-2.5 py-3 text-left hover:bg-theme-800"
+            @click="pickFile('browseMemories')"
+          >
+            <Icon
+              icon="lucide:brain"
+              class="h-5 w-5"
+            /><span class="flex-1"><span class="block text-sm">From memories</span><span class="block text-[11px] text-ink-muted">Attach a whole memory document</span></span>
           </button>
           <button
             v-if="activeProject?.rootPath"

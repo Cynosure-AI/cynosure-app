@@ -35,6 +35,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   attach: [];
   browseLibrary: [];
+  browseMemories: [];
   browseProject: [];
   send: [];
   steer: [];
@@ -201,6 +202,7 @@ async function toggleMic(): Promise<void> {
     <ChatOptionsMenu
       @attach="emit('attach')"
       @browse-library="emit('browseLibrary')"
+      @browse-memories="emit('browseMemories')"
       @browse-project="emit('browseProject')"
     >
       <PermissionModeSelect />

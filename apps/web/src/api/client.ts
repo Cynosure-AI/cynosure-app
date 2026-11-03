@@ -375,6 +375,18 @@ export const api = {
       if (opts?.semantic) params.set('semantic', 'true')
       return get<MemoryFileSearchResult[]>(`/api/memory-folders/file-search?${params.toString()}`)
     },
+    /** Most recently modified files across every folder, or one folder and its descendants. */
+    listRecentFiles: (opts?: { folderId?: string; limit?: number }) => {
+      const params = new URLSearchParams()
+      if (opts?.folderId) params.set('folderId', opts.folderId)
+      if (opts?.limit) params.set('limit', String(opts.limit))
+      return get<MemoryFileSearchResult[]>(`/api/memory-folders/recent-files?${params.toString()}`)
+    },
+    /** A memory file in the form the chat composer attaches. */
+    readAttachment: (folderId: string, fileName: string) =>
+      get<ProjectFileContent>(
+        `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/attachment`
+      ),
     getDocumentChunks: (folderId: string, fileName: string) =>
       get<MemoryDocumentChunks>(
         `/api/memory-folders/${memoryFolderPathId(folderId)}/files/${encodeURIComponent(fileName)}/chunks`

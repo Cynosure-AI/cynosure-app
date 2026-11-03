@@ -23,6 +23,7 @@ import {
 export interface SlashCommandActions {
   attachFiles: () => void
   browseLibrary: () => void
+  browseMemories: () => void
   chooseModel: () => void
   editSystemPrompt: () => void
 }
@@ -239,6 +240,14 @@ export function useSlashCommands(actions: SlashCommandActions) {
       icon: 'lucide:library',
       group: 'Chat',
       run: () => actions.browseLibrary(),
+    })
+    list.push({
+      name: 'memory-file',
+      aliases: ['recall'],
+      description: 'Attach a document from your memories',
+      icon: 'lucide:brain',
+      group: 'Chat',
+      run: () => actions.browseMemories(),
     })
 
     // ── Session settings ──
