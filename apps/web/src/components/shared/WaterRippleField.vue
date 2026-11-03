@@ -28,17 +28,16 @@ const ECHO_INTERVAL_MS = 120
 const GLITCH_MS = 110
 // At low intensity the lattice dims less than the reaction, so it stays legible as texture.
 const REST_FLOOR = 0.55
-// Drift bands span several hundred pixels and take about a minute to roll past.
-const DRIFT_SCALE = 1 / 160
-const DRIFT_SPEED = 10 / 9000
-// Steepens the band edges so the dither reads as shapes, not a flat checkerboard.
-const DRIFT_CONTRAST = 1.7
+// Drift patches span a couple hundred pixels and slowly morph as they wander.
+const DRIFT_SCALE = 1 / 180
+// Noise units per millisecond.
+const DRIFT_SPEED = 1 / 2500
+// Steepens the patch edges so the dither reads as shapes, not a flat wash.
+const DRIFT_CONTRAST = 2.6
 // Dots outside a band fade to this share and dots inside lift by this much,
 // so an idle wall reads a little brighter than a working one.
 const DRIFT_FLOOR = 0.25 // how bright the dark bands are
-const DRIFT_LIFT = 2.5 // how much brighter the light bands are
-// A 4×4 ordered dither turns the smooth band field into dot density.
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16)
+const DRIFT_LIFT = 2.2 // how much brighter the light bands are
 // Drift changes slowly, so a settled field repaints at this rate.
 const IDLE_FRAME_MS = 1000 / 30
 const STEP_MS = 1000 / 60
@@ -76,6 +75,8 @@ let level = props.intensity
 let driftLevel = props.drift
 // Per-dot resting brightness for the current frame, drift included.
 let restFrame = new Float32Array(0)
+// Per-dot dither threshold. Random rather than an ordered matrix so no tile repeats.
+let ditherAt = new Float32Array(0)
 
 interface Pulse {
   x: number
@@ -104,6 +105,8 @@ function noise(a: number, b = 0, c = 0): number {
 
 function seedLattice(cols: number, rows: number) {
   restAlpha = new Float32Array(cols * rows)
+  ditherAt = new Float32Array(cols * rows)
+  for (let i = 0; i < ditherAt.length; i++) ditherAt[i] = Math.random()
   for (let c = 0; c < cols; c++) {
     const column = noise(c) < 0.1 ? 0.08 : 0
     for (let r = 0; r < rows; r++) {
@@ -177,12 +180,32 @@ function restScale(): number {
   return REST_FLOOR + (1 - REST_FLOOR) * level
 }
 
-/** Smooth 0–1 band field: a few slow waves at different angles, one warping the others. */
-function bandAt(a: number, b: number, s: number, warp: number): number {
-  const v = Math.sin(a * 0.8 + b * 0.45 + s + warp * 1.6)
-    + 0.7 * Math.sin(b * 0.9 - a * 0.35 - s * 0.7 + 2.1)
-    + 0.35 * Math.sin((a + b) * 1.6 + s * 1.3 + warp)
-  return Math.min(1, Math.max(0, (v / 2.05) * DRIFT_CONTRAST * 0.5 + 0.5))
+function hash2(x: number, y: number): number {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/** Smoothly interpolated 0–1 value noise; unlike sines it never repeats. */
+function valueNoise(x: number, y: number): number {
+  const xi = Math.floor(x)
+  const yi = Math.floor(y)
+  const fx = x - xi
+  const fy = y - yi
+  const u = fx * fx * (3 - 2 * fx)
+  const v = fy * fy * (3 - 2 * fy)
+  const top = hash2(xi, yi) + (hash2(xi + 1, yi) - hash2(xi, yi)) * u
+  const bottom = hash2(xi, yi + 1) + (hash2(xi + 1, yi + 1) - hash2(xi, yi + 1)) * u
+  return top + (bottom - top) * v
+}
+
+/** Smooth 0–1 patch field: layered noise drifting in different directions, warped by a slower layer. */
+function bandAt(a: number, b: number, s: number): number {
+  const warp = valueNoise(a * 0.45 + s * 0.3, b * 0.45 - s * 0.2 + 11) - 0.5
+  const n = 0.55 * valueNoise(a + warp * 2.2 + s, b - warp * 1.4 - s * 0.35)
+    + 0.3 * valueNoise(a * 2.1 - s * 0.8 + 17, b * 2.1 + s * 0.55 + 31)
+    + 0.15 * valueNoise(a * 4.3 + s * 1.3 + 53, b * 4.3 - s * 0.4 - 71)
+  return Math.min(1, Math.max(0, (n - 0.5) * DRIFT_CONTRAST + 0.5))
 }
 
 /** Fills restFrame with each dot's resting brightness, dithered by the drift bands. */
@@ -197,10 +220,9 @@ function paintRest(now: number) {
   const s = (reducedMotion ? 0 : now) * DRIFT_SPEED
   for (let r = 0; r < rows; r++) {
     const b = r * cell * DRIFT_SCALE
-    const warp = Math.sin(b * 0.7 - s * 0.6)
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c
-      const on = bandAt(c * cell * DRIFT_SCALE, b, s, warp) > BAYER[(r & 3) * 4 + (c & 3)]
+      const on = bandAt(c * cell * DRIFT_SCALE, b, s) > ditherAt[i]
       const dither = on ? DRIFT_LIFT : DRIFT_FLOOR
       restFrame[i] = restAlpha[i] * scale * (1 + driftLevel * (dither - 1))
     }
