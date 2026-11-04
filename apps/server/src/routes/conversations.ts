@@ -32,6 +32,7 @@ import { pauseChatQueue } from '../core/chat/message-queue.js'
 import { latestMessageEventSequence } from '../core/chat/transcript.js'
 import { cancelPostActions } from '../core/agent/post-execution.js'
 import { getEventBus } from '../core/telemetry/event-bus.js'
+import { searchMessages } from '../core/chat/message-search.js'
 
 /** Add `wait_until`: when a conversation waiting on schedule_wait resumes, or null. */
 function withWaitResumeTimes<T extends { id: string }>(rows: T[]): Array<T & { wait_until: number | null }> {
@@ -592,6 +593,15 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         }
 
         return withWaitResumeTimes(db.prepare(`SELECT *, ${excerpt} FROM conversations ${where} ${orderBy}`).all(...params) as { id: string }[])
+    })
+
+    // GET /api/chat/message-search?q=…&limit=N — full-text search over message text,
+    // best matching message per conversation.
+    app.get<{ Querystring: { q?: string; limit?: string } }>('/message-search', async (req) => {
+        const q = req.query.q?.trim() ?? ''
+        if (q.length < 2) return { items: [] }
+        const limit = Math.max(1, Math.min(50, parseInt(req.query.limit ?? '', 10) || 20))
+        return { items: searchMessages(getDb(), q, limit) }
     })
 
     // GET /api/chat/conversations/:id/messages — get messages

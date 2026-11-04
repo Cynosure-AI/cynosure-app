@@ -38,8 +38,11 @@ import { trackThinking } from '../../utils/thinking-clock'
 
 const props = withDefaults(defineProps<{
   searchOpen?: boolean
+  /** Prefill the search and jump to this message, e.g. from a global search hit. */
+  searchRequest?: { id: number; messageId: string; query: string } | null
 }>(), {
   searchOpen: false,
+  searchRequest: null,
 })
 
 const emit = defineEmits<{ closeSearch: []; selectQuickResponse: [suggestion: string] }>()
@@ -90,13 +93,16 @@ const searchResults = computed(() => {
     .map(message => message.id)
 })
 
+/** A requested message that the in-chat query does not match, e.g. words that are not adjacent. */
+const requestedSearchMessageId = ref<string | null>(null)
 const activeSearchMessageId = computed(
-  () => searchResults.value[currentSearchResultIndex.value] ?? null
+  () => searchResults.value[currentSearchResultIndex.value] ?? requestedSearchMessageId.value
 )
 
 const searchResultLabel = computed(() => {
   if (!searchQuery.value.trim()) return 'Type to search'
   if (!searchResults.value.length) return 'No results'
+  if (currentSearchResultIndex.value < 0) return `${searchResults.value.length} found`
   return `${currentSearchResultIndex.value + 1} of ${searchResults.value.length}`
 })
 
@@ -133,6 +139,11 @@ function scrollToSearchResult(messageId: string): void {
 function moveSearchResult(direction: 1 | -1): void {
   const count = searchResults.value.length
   if (!count) return
+  requestedSearchMessageId.value = null
+  if (currentSearchResultIndex.value < 0) {
+    currentSearchResultIndex.value = direction === 1 ? 0 : count - 1
+    return
+  }
   currentSearchResultIndex.value = (
     currentSearchResultIndex.value + direction + count
   ) % count
@@ -142,17 +153,49 @@ function closeSearch(): void {
   emit('closeSearch')
 }
 
+let appliedSearchRequestId: number | null = null
+function applySearchRequest(request: NonNullable<typeof props.searchRequest>): void {
+  // Opening the search and changing the request in one update must apply it once.
+  if (request.id === appliedSearchRequestId) return
+  appliedSearchRequestId = request.id
+  requestedSearchMessageId.value = null
+  searchQuery.value = request.query.replace(/"/g, ' ').replace(/\s+/g, ' ').trim()
+  nextTick(() => {
+    const index = searchResults.value.indexOf(request.messageId)
+    if (index < 0) {
+      currentSearchResultIndex.value = -1
+      requestedSearchMessageId.value = request.messageId
+    } else if (index === currentSearchResultIndex.value) {
+      scrollToSearchResult(request.messageId)
+    } else {
+      currentSearchResultIndex.value = index
+    }
+  })
+}
+
 watch(() => props.searchOpen, (open) => {
   if (!open) {
     searchQuery.value = ''
     currentSearchResultIndex.value = -1
+    requestedSearchMessageId.value = null
+    appliedSearchRequestId = null
     return
   }
+  if (props.searchRequest) applySearchRequest(props.searchRequest)
   nextTick(() => {
     searchInput.value?.focus()
     searchInput.value?.select()
   })
 }, { immediate: true })
+
+watch(() => props.searchRequest?.id, () => {
+  if (props.searchOpen && props.searchRequest) applySearchRequest(props.searchRequest)
+})
+
+watch(searchQuery, () => {
+  // Typing a new query replaces the requested message with the query's own matches.
+  if (requestedSearchMessageId.value && searchResults.value.length) requestedSearchMessageId.value = null
+})
 
 watch(searchResults, (results, previousResults) => {
   const previousMessageId = previousResults[currentSearchResultIndex.value]

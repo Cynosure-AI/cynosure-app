@@ -16,7 +16,7 @@ import type {
   UserProfile,
 } from './types'
 import type { WsHandler } from './http'
-import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, PermissionMode, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskAttachmentDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
+import type { ChatEvent, ChatQueueRequest, ChatQueueStateDto, ChatResendAttachments, ChatRunSettings, ChatSendRequest, ConversationDto, ConversationExecutionConfig, ConversationMessagesResponse, MessageSearchHit, PermissionMode, CynoProfile, CynoProfileView, ProjectBriefRevisionDto, ProjectDiffSegment, ProjectDto, ProjectTaskAttachmentDto, ProjectTaskDto, ProjectTimelineEntry, ProjectTaskStatus, QueuedChatMessageDto } from '@shared/types'
 
 export interface ConversationRow {
   id: string
@@ -170,6 +170,11 @@ export const api = {
       return get<{ items: ConversationRow[]; total: number }>(
         `/api/chat/conversations?${params}`
       )
+    },
+    /** Full-text search over message text; one best match per conversation. */
+    searchMessages: (query: string, limit: number) => {
+      const params = new URLSearchParams({ q: query, limit: String(limit) })
+      return get<{ items: MessageSearchHit[] }>(`/api/chat/message-search?${params}`)
     },
     listUploads: (limit: number, offset: number, search?: string) => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })

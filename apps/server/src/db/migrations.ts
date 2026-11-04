@@ -847,6 +847,57 @@ const MIGRATIONS: SchemaMigration[] = [
         description: 'Drop in-app notifications; notify_user now delivers through messaging channels only',
         up: (db) => db.exec('DROP TABLE IF EXISTS notifications'),
     },
+    {
+        version: 45,
+        description: 'Full-text index over user and assistant message text',
+        up: (db) => {
+            // messages has a TEXT primary key, so its implicit rowid may change on
+            // VACUUM. The index keys its rows through message_search_rowids, whose
+            // INTEGER PRIMARY KEY is stable, instead of messages.rowid.
+            // Rebuilt from scratch so re-applied histories end in the same state.
+            db.exec(`
+                DROP TRIGGER IF EXISTS message_search_insert;
+                DROP TRIGGER IF EXISTS message_search_delete;
+                DROP TRIGGER IF EXISTS message_search_update;
+                DROP TABLE IF EXISTS message_search;
+                DROP TABLE IF EXISTS message_search_rowids;
+
+                CREATE TABLE IF NOT EXISTS message_search_rowids (
+                    rowid INTEGER PRIMARY KEY,
+                    message_id TEXT NOT NULL UNIQUE
+                );
+                CREATE VIRTUAL TABLE IF NOT EXISTS message_search
+                    USING fts5(content, tokenize = 'unicode61 remove_diacritics 2');
+
+                INSERT INTO message_search_rowids (message_id)
+                    SELECT id FROM messages WHERE role IN ('user', 'assistant') AND content <> '';
+                INSERT INTO message_search (rowid, content)
+                    SELECT r.rowid, m.content FROM message_search_rowids r JOIN messages m ON m.id = r.message_id;
+
+                CREATE TRIGGER IF NOT EXISTS message_search_insert AFTER INSERT ON messages
+                WHEN NEW.role IN ('user', 'assistant') AND NEW.content <> ''
+                BEGIN
+                    INSERT INTO message_search_rowids (message_id) VALUES (NEW.id);
+                    INSERT INTO message_search (rowid, content)
+                        SELECT rowid, NEW.content FROM message_search_rowids WHERE message_id = NEW.id;
+                END;
+                CREATE TRIGGER IF NOT EXISTS message_search_delete AFTER DELETE ON messages BEGIN
+                    DELETE FROM message_search
+                        WHERE rowid = (SELECT rowid FROM message_search_rowids WHERE message_id = OLD.id);
+                    DELETE FROM message_search_rowids WHERE message_id = OLD.id;
+                END;
+                CREATE TRIGGER IF NOT EXISTS message_search_update AFTER UPDATE OF id, role, content ON messages BEGIN
+                    DELETE FROM message_search
+                        WHERE rowid = (SELECT rowid FROM message_search_rowids WHERE message_id = OLD.id);
+                    DELETE FROM message_search_rowids WHERE message_id = OLD.id;
+                    INSERT INTO message_search_rowids (message_id)
+                        SELECT NEW.id WHERE NEW.role IN ('user', 'assistant') AND NEW.content <> '';
+                    INSERT INTO message_search (rowid, content)
+                        SELECT rowid, NEW.content FROM message_search_rowids WHERE message_id = NEW.id;
+                END;
+            `)
+        },
+    },
 ]
 
 /** The schema version this build produces and expects. */

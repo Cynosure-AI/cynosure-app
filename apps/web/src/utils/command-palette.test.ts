@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { rankItems, scoreMatch } from './command-palette'
+import { parseSnippet, rankItems, scoreMatch } from './command-palette'
 
 describe('scoreMatch', () => {
   test('matches everything for an empty query', () => {
@@ -42,5 +42,21 @@ describe('rankItems', () => {
   test('keeps the original order when the query is empty', () => {
     const ranked = rankItems(items, '', (item) => [item.name], 10)
     expect(ranked).toEqual(items)
+  })
+})
+
+describe('parseSnippet', () => {
+  test('splits matched terms from plain text and collapses whitespace', () => {
+    expect(parseSnippet('…use \u0002Docker\u0003\n\n and \u0002dock\u0003ers…')).toEqual([
+      { text: '…use ', match: false },
+      { text: 'Docker', match: true },
+      { text: ' and ', match: false },
+      { text: 'dock', match: true },
+      { text: 'ers…', match: false },
+    ])
+  })
+
+  test('returns plain text when nothing is marked', () => {
+    expect(parseSnippet('plain text')).toEqual([{ text: 'plain text', match: false }])
   })
 })

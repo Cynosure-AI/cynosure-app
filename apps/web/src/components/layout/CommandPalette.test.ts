@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import CommandPalette from './CommandPalette.vue'
 import { useCommandPalette } from '../../composables/useCommandPalette'
+import { useChatSearchRequest } from '../../composables/useChatSearchRequest'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   selectConversation: vi.fn(),
   listConversationsPaginated: vi.fn(),
+  searchMessages: vi.fn(),
   listCronJobs: vi.fn(),
   loadServers: vi.fn(),
   startProjectChat: vi.fn(),
@@ -21,7 +23,7 @@ const mcpServers = ref([
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock('../../api/client', () => ({
   api: {
-    chat: { listConversationsPaginated: mocks.listConversationsPaginated },
+    chat: { listConversationsPaginated: mocks.listConversationsPaginated, searchMessages: mocks.searchMessages },
     cronJobs: { list: mocks.listCronJobs },
   },
 }))
@@ -89,6 +91,8 @@ describe('CommandPalette', () => {
       { id: 'cron-1', name: 'Morning digest', agentId: 'agent-1', agentName: 'Research Assistant', schedule: '0 9 * * *', prompt: 'Summarize', enabled: true, isRunning: false },
     ])
     mocks.loadServers.mockResolvedValue(undefined)
+    mocks.searchMessages.mockResolvedValue({ items: [] })
+    useChatSearchRequest().clearChatSearchRequest()
   })
 
   it('lists chats, agents, MCP servers and schedules when opened', async () => {
@@ -143,10 +147,7 @@ describe('CommandPalette', () => {
     const { wrapper, input, text } = await openPalette()
     await vi.waitFor(() => expect(text()).toContain('GitHub'))
 
-    keydown(input(), 'Tab')
-    keydown(input(), 'Tab')
-    keydown(input(), 'Tab')
-    keydown(input(), 'Tab')
+    for (let press = 0; press < 5; press++) keydown(input(), 'Tab')
     await vi.waitFor(() => expect(text()).not.toContain('Morning digest'))
     expect(text()).not.toContain('Research Assistant')
 
@@ -169,6 +170,46 @@ describe('CommandPalette', () => {
     keydown(input(), 'ArrowDown')
     keydown(input(), 'Enter')
     await vi.waitFor(() => expect(mocks.startProjectChat).toHaveBeenCalledWith(expect.objectContaining({ id: 'project-1' })))
+    wrapper.unmount()
+  })
+
+  it('searches message text and opens the chat at the matching message', async () => {
+    const { wrapper, input, text } = await openPalette()
+    await vi.waitFor(() => expect(text()).toContain('Morning digest'))
+    expect(mocks.searchMessages).not.toHaveBeenCalled()
+    mocks.listConversationsPaginated.mockResolvedValue({ items: [], total: 0 })
+    mocks.searchMessages.mockResolvedValue({
+      items: [{
+        conversationId: 'c-9', title: 'Server setup', agentId: null, projectId: null, origin: 'chat', updatedAt: Date.now(),
+        messageId: 'm-3', role: 'assistant', createdAt: Date.now(), matchCount: 2,
+        snippet: 'Run \u0002docker\u0003 compose\nup -d',
+      }],
+    })
+
+    input().value = 'docker'
+    input().dispatchEvent(new Event('input'))
+    await vi.waitFor(() => expect(mocks.searchMessages).toHaveBeenLastCalledWith('docker', 5))
+    await vi.waitFor(() => expect(text()).toContain('Server setup'))
+    expect(text()).toContain('2 matches')
+    const mark = document.body.querySelector('.palette-snippet mark')
+    expect(mark?.textContent).toBe('docker')
+    expect(document.body.querySelector('.palette-snippet')?.textContent).toBe('Run docker compose up -d')
+
+    keydown(input(), 'Enter')
+    await vi.waitFor(() => expect(mocks.push).toHaveBeenCalledWith({ name: 'conversation', params: { conversationId: 'c-9' } }))
+    expect(mocks.selectConversation).toHaveBeenCalledWith('c-9', null)
+    expect(useChatSearchRequest().pendingChatSearch.value).toMatchObject({ conversationId: 'c-9', messageId: 'm-3', query: 'docker' })
+    wrapper.unmount()
+  })
+
+  it('does not search message text for single characters', async () => {
+    const { wrapper, input, text } = await openPalette()
+    await vi.waitFor(() => expect(text()).toContain('Morning digest'))
+
+    input().value = 'd'
+    input().dispatchEvent(new Event('input'))
+    await vi.waitFor(() => expect(mocks.listConversationsPaginated).toHaveBeenLastCalledWith(5, 0, 'updated', 'd'))
+    expect(mocks.searchMessages).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

@@ -50,3 +50,35 @@ export function rankItems<T>(
         .slice(0, limit)
         .map((entry) => entry.item)
 }
+
+export interface SnippetSegment {
+    text: string
+    match: boolean
+}
+
+const SNIPPET_MATCH_START = '\u0002'
+const SNIPPET_MATCH_END = '\u0003'
+
+/**
+ * Split a server search snippet into plain and matched segments. Matches are
+ * wrapped in U+0002 … U+0003; whitespace is collapsed to keep it on one line.
+ */
+export function parseSnippet(snippet: string): SnippetSegment[] {
+    const segments: SnippetSegment[] = []
+    let match = false
+    let text = ''
+    const flush = () => {
+        if (text) segments.push({ text, match })
+        text = ''
+    }
+    for (const char of snippet.replace(/\s+/g, ' ').trim()) {
+        if (char === SNIPPET_MATCH_START || char === SNIPPET_MATCH_END) {
+            flush()
+            match = char === SNIPPET_MATCH_START
+        } else {
+            text += char
+        }
+    }
+    flush()
+    return segments
+}

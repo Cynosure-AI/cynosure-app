@@ -15,6 +15,7 @@ import AgentAvatar from '../../components/shared/AgentAvatar.vue'
 import { useCynoStore } from '../../stores/cyno.store'
 import { useMcpServers } from '../../composables/useMcpServers'
 import { useFreshChat } from '../../composables/useFreshChat'
+import { useChatSearchRequest, type ChatSearchRequest } from '../../composables/useChatSearchRequest'
 import { INTRO_PILLS_MS, INTRO_PILL_STAGGER_MS } from '../../components/chat/chatIntro'
 import { getToolNamespaceIcon } from '../../utils/tool-namespace-icons'
 
@@ -29,6 +30,8 @@ const inputBarRef = ref<InstanceType<typeof InputBar> | null>(null)
 const isDragOver = ref(false)
 const taskListOpen = ref(false)
 const chatSearchOpen = ref(false)
+const chatSearchRequest = ref<ChatSearchRequest | null>(null)
+const { pendingChatSearch, clearChatSearchRequest } = useChatSearchRequest()
 const needsAgent = ref(false)
 const needsMemory = ref(false)
 const needsTools = ref(false)
@@ -260,6 +263,22 @@ watch(
   }
 )
 
+watch(chatSearchOpen, (open) => {
+  if (!open) chatSearchRequest.value = null
+})
+
+// A global search hit opens this chat's search at the matching message once it has loaded.
+watch(
+  [pendingChatSearch, () => chatStore.activeConversationId, () => chatStore.loadingMessages],
+  ([request, conversationId, loading]) => {
+    if (!request || loading || request.conversationId !== conversationId) return
+    clearChatSearchRequest()
+    chatSearchRequest.value = request
+    chatSearchOpen.value = true
+  },
+  { immediate: true }
+)
+
 watch(
   [() => chatStore.activeConversationId, () => route.name],
   ([conversationId]) => {
@@ -357,6 +376,7 @@ watch(
           <div class="flex flex-col flex-1 min-h-0 relative">
             <ChatPanel
               :search-open="chatSearchOpen"
+              :search-request="chatSearchRequest"
               @close-search="chatSearchOpen = false"
               @select-quick-response="sendQuickResponse"
             />

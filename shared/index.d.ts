@@ -345,6 +345,23 @@ export interface ConversationDto {
   updatedAt: number
 }
 
+/** The best matching message of one conversation in a full-text message search. */
+export interface MessageSearchHit {
+  conversationId: string
+  title: string | null
+  agentId: string | null
+  projectId: string | null
+  origin: string
+  updatedAt: number
+  messageId: string
+  role: 'user' | 'assistant'
+  createdAt: number
+  /** Excerpt around the best match; matched terms are wrapped in U+0002 … U+0003. */
+  snippet: string
+  /** Messages in this conversation that match the query. */
+  matchCount: number
+}
+
 export interface ConversationMessagesResponse {
   /** A summary is currently being generated for this conversation. */
   compactionInProgress?: boolean

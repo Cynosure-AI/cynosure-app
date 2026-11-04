@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import InputBar from '../../components/chat/InputBar.vue'
 import ChatPanel from '../../components/chat/ChatPanel.vue'
 import ChatView from './ChatView.vue'
+import { useChatSearchRequest } from '../../composables/useChatSearchRequest'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -150,6 +151,34 @@ describe('ChatView provider availability', () => {
 
     expect(event.defaultPrevented).toBe(true)
     expect(wrapper.findComponent(ChatPanel).props('searchOpen')).toBe(true)
+  })
+
+  test('opens chat search at a requested message once that conversation has loaded', async () => {
+    mocks.providerStore.providers = [{ id: 'provider-1' }]
+    mocks.chatStore.activeConversationId = 'c-9'
+    mocks.chatStore.messages = [{ role: 'assistant', content: 'Run docker compose' }]
+    const { requestChatSearch, pendingChatSearch } = useChatSearchRequest()
+    requestChatSearch('c-9', 'm-3', 'docker')
+    const wrapper = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    await nextTick()
+
+    const panel = wrapper.findComponent(ChatPanel)
+    expect(panel.props('searchOpen')).toBe(true)
+    expect(panel.props('searchRequest')).toMatchObject({ messageId: 'm-3', query: 'docker' })
+    expect(pendingChatSearch.value).toBeNull()
+  })
+
+  test('keeps a search request for another conversation pending', async () => {
+    mocks.providerStore.providers = [{ id: 'provider-1' }]
+    mocks.chatStore.activeConversationId = 'c-1'
+    const { requestChatSearch, pendingChatSearch, clearChatSearchRequest } = useChatSearchRequest()
+    requestChatSearch('c-9', 'm-3', 'docker')
+    const wrapper = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    await nextTick()
+
+    expect(wrapper.findComponent(ChatPanel).props('searchOpen')).toBe(false)
+    expect(pendingChatSearch.value).not.toBeNull()
+    clearChatSearchRequest()
   })
 
   test('leaves Ctrl+F to the browser when the conversation has no searchable content', async () => {

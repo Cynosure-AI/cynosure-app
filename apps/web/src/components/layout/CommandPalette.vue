@@ -8,17 +8,18 @@ import { useAgentDefinitionsStore, type AgentDefinition } from '../../stores/age
 import { useChatStore } from '../../stores/chat.store'
 import { useProjectsStore } from '../../stores/projects.store'
 import { useProjectChat } from '../../composables/useProjectChat'
-import type { ProjectDto } from '@shared/types'
+import type { MessageSearchHit, ProjectDto } from '@shared/types'
 import { useCommandPalette } from '../../composables/useCommandPalette'
 import { useMcpServers } from '../../composables/useMcpServers'
-import { rankItems } from '../../utils/command-palette'
+import { parseSnippet, rankItems, type SnippetSegment } from '../../utils/command-palette'
+import { useChatSearchRequest } from '../../composables/useChatSearchRequest'
 import { cronToHuman } from '../../utils/cron-helpers'
 import { useCynoStore } from '../../stores/cyno.store'
 import { agentAvatarSrc } from '../../utils/avatar'
 
 const cyno = useCynoStore()
 
-type Scope = 'all' | 'conversations' | 'projects' | 'agents' | 'mcp' | 'cron'
+type Scope = 'all' | 'conversations' | 'messages' | 'projects' | 'agents' | 'mcp' | 'cron'
 type GroupId = Exclude<Scope, 'all'>
 
 interface ConversationHit {
@@ -34,6 +35,8 @@ interface PaletteItem {
   key: string
   title: string
   subtitle: string
+  /** Replaces the subtitle with a highlighted excerpt. */
+  snippet?: SnippetSegment[]
   icon: string
   imageUrl?: string | null
   badge?: { label: string; tone: 'ok' | 'warn' | 'muted' }
@@ -50,6 +53,7 @@ interface PaletteGroup {
 const SCOPES: Array<{ id: Scope; label: string; icon: string }> = [
   { id: 'all', label: 'All', icon: 'lucide:search' },
   { id: 'conversations', label: 'Chats', icon: 'lucide:messages-square' },
+  { id: 'messages', label: 'Messages', icon: 'lucide:text-search' },
   { id: 'projects', label: 'Projects', icon: 'lucide:folder-kanban' },
   { id: 'agents', label: 'Agents', icon: 'lucide:bot' },
   { id: 'mcp', label: 'MCP Servers', icon: 'lucide:plug' },
@@ -59,6 +63,7 @@ const SCOPES: Array<{ id: Scope; label: string; icon: string }> = [
 const GROUP_LIMIT = 5
 const SCOPED_LIMIT = 50
 const SEARCH_DEBOUNCE_MS = 150
+const MESSAGE_SEARCH_MIN_LENGTH = 2
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -67,6 +72,7 @@ const projectsStore = useProjectsStore()
 const { startProjectChat } = useProjectChat()
 const { servers: mcpServers, loadServers: loadMcpServers } = useMcpServers()
 const { commandPaletteOpen, close } = useCommandPalette()
+const { requestChatSearch } = useChatSearchRequest()
 
 const query = ref('')
 const scope = ref<Scope>('all')
@@ -75,8 +81,12 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
 const conversations = ref<ConversationHit[]>([])
 const conversationsLoading = ref(false)
+const messageHits = ref<MessageSearchHit[]>([])
+const messagesLoading = ref(false)
+const loading = computed(() => conversationsLoading.value || messagesLoading.value)
 const cronJobs = ref<CronJob[]>([])
 let conversationRequest = 0
+let messageRequest = 0
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let previouslyFocused: HTMLElement | null = null
 
@@ -115,6 +125,30 @@ function conversationItem(conversation: ConversationHit): PaletteItem {
     icon: conversationIcon(conversation.origin),
     meta: formatTimeAgo(conversation.updatedAt),
     run: () => openConversation(conversation),
+  }
+}
+
+function messageItem(hit: MessageSearchHit): PaletteItem {
+  const searchedFor = trimmedQuery.value
+  const matches = hit.matchCount === 1 ? '1 match' : `${hit.matchCount} matches`
+  return {
+    key: `message:${hit.conversationId}`,
+    title: hit.title || 'Untitled chat',
+    subtitle: hit.snippet,
+    snippet: parseSnippet(hit.snippet),
+    icon: hit.role === 'user' ? 'lucide:user' : 'lucide:sparkles',
+    meta: `${matches} · ${formatTimeAgo(hit.createdAt)}`,
+    run: async () => {
+      requestChatSearch(hit.conversationId, hit.messageId, searchedFor)
+      await openConversation({
+        id: hit.conversationId,
+        title: hit.title ?? '',
+        agentId: hit.agentId,
+        projectId: hit.projectId,
+        origin: hit.origin,
+        updatedAt: hit.updatedAt,
+      })
+    },
   }
 }
 
@@ -194,6 +228,11 @@ const groups = computed<PaletteGroup[]>(() => {
       items: conversations.value.slice(0, limit).map(conversationItem),
     },
     {
+      id: 'messages',
+      label: 'In messages',
+      items: messageHits.value.slice(0, limit).map(messageItem),
+    },
+    {
       id: 'projects',
       label: 'Projects',
       items: (() => {
@@ -223,6 +262,12 @@ const groups = computed<PaletteGroup[]>(() => {
     },
   ]
   return all.filter((group) => (scope.value === 'all' || group.id === scope.value) && group.items.length > 0)
+})
+
+const emptyMessage = computed(() => {
+  const q = trimmedQuery.value
+  if (scope.value === 'messages' && q.length < MESSAGE_SEARCH_MIN_LENGTH) return 'Type at least 2 characters to search message text'
+  return q ? `No results for “${q}”` : 'Nothing here yet'
 })
 
 const flatItems = computed(() => groups.value.flatMap((group) => group.items))
@@ -258,11 +303,37 @@ async function searchConversations(): Promise<void> {
   }
 }
 
+async function searchMessageText(): Promise<void> {
+  const request = ++messageRequest
+  const q = trimmedQuery.value
+  const wanted = scope.value === 'all' || scope.value === 'messages'
+  if (!wanted || q.length < MESSAGE_SEARCH_MIN_LENGTH) {
+    messageHits.value = []
+    messagesLoading.value = false
+    return
+  }
+  messagesLoading.value = true
+  try {
+    const limit = scope.value === 'messages' ? SCOPED_LIMIT : GROUP_LIMIT
+    const response = await api.chat.searchMessages(q, limit)
+    if (request === messageRequest) messageHits.value = response.items
+  } catch {
+    if (request === messageRequest) messageHits.value = []
+  } finally {
+    if (request === messageRequest) messagesLoading.value = false
+  }
+}
+
+function runSearches(): void {
+  void searchConversations()
+  void searchMessageText()
+}
+
 function scheduleConversationSearch(): void {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     searchTimer = null
-    void searchConversations()
+    runSearches()
   }, SEARCH_DEBOUNCE_MS)
 }
 
@@ -285,7 +356,7 @@ watch(query, () => {
 watch(scope, () => {
   if (!commandPaletteOpen.value) return
   activeIndex.value = 0
-  void searchConversations()
+  runSearches()
 })
 
 watch(flatItems, (items) => {
@@ -302,6 +373,9 @@ watch(commandPaletteOpen, async (open) => {
     if (searchTimer) clearTimeout(searchTimer)
     conversationRequest++
     conversationsLoading.value = false
+    messageRequest++
+    messagesLoading.value = false
+    messageHits.value = []
     // Reset while closed so the next open starts fresh without extra requests.
     query.value = ''
     scope.value = 'all'
@@ -407,14 +481,14 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
               aria-expanded="true"
               aria-controls="command-palette-list"
               :aria-activedescendant="activeItem ? optionId(activeItem) : undefined"
-              placeholder="Search chats, agents, MCP servers, schedules..."
+              placeholder="Search chats, messages, agents, MCP servers, schedules..."
               class="min-w-0 flex-1 bg-transparent py-4 text-sm text-theme-100 outline-none placeholder:text-ink-faint"
               spellcheck="false"
               autocomplete="off"
               @keydown="onKeydown"
             >
             <Icon
-              v-if="conversationsLoading"
+              v-if="loading"
               icon="lucide:loader-circle"
               class="h-4 w-4 shrink-0 animate-spin text-ink-faint"
             />
@@ -493,7 +567,29 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
                   <div class="truncate text-sm font-medium">
                     {{ item.title }}
                   </div>
-                  <div class="truncate text-xs text-ink-muted">
+                  <div
+                    v-if="item.snippet"
+                    class="palette-snippet truncate text-xs text-ink-muted"
+                  >
+                    <template
+                      v-for="(segment, index) in item.snippet"
+                      :key="index"
+                    >
+                      <mark
+                        v-if="segment.match"
+                        class="rounded-sm bg-accent-500/20 text-accent-fg"
+                        v-text="segment.text"
+                      />
+                      <span
+                        v-else
+                        v-text="segment.text"
+                      />
+                    </template>
+                  </div>
+                  <div
+                    v-else
+                    class="truncate text-xs text-ink-muted"
+                  >
                     {{ item.subtitle }}
                   </div>
                 </div>
@@ -519,7 +615,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
             </div>
 
             <div
-              v-if="!flatItems.length && !conversationsLoading"
+              v-if="!flatItems.length && !loading"
               class="flex flex-col items-center gap-2 px-4 py-10 text-center"
             >
               <Icon
@@ -527,7 +623,7 @@ const badgeClass: Record<NonNullable<PaletteItem['badge']>['tone'], string> = {
                 class="h-6 w-6 text-ink-faint"
               />
               <p class="text-sm text-theme-300">
-                {{ trimmedQuery ? `No results for “${trimmedQuery}”` : 'Nothing here yet' }}
+                {{ emptyMessage }}
               </p>
             </div>
           </div>
