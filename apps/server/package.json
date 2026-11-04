@@ -18,8 +18,7 @@
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck:test": "tsc --project tsconfig.test.json",
-    "memory:eval": "tsx src/scripts/memory-eval/cli.ts"
+    "typecheck:test": "tsc --project tsconfig.test.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

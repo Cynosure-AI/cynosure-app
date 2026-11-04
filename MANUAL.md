@@ -1246,7 +1246,6 @@ This checkout reports 1.0.1 and schema 34. The older changelog is historical, no
 - **Cyno has a profile.** The architecture's generic Free Chat description omits persistent profile/effective defaults and agentless channel/job behavior. Direct conversation creation still has generic fallback config; web supplies profile-derived choices.
 - **Planning may select toolsets.** Current preparation can skip the architecture's separate selector when task-context planning supplies IDs.
 - **A routing model is not necessarily small.** Architecture calls the selector a small LLM; by default current routing uses the selected agent/chat model unless configured otherwise.
-- **Not every retrieval threshold was measured.** Architecture says every default is evaluation-backed; `retrieval-options.ts` explicitly says minimum reranker score 0.1 is not measured yet.
 - **Title timing clarification.** Web title generation starts before response; channel/cron requests it afterward. This corrects a universal post-response description, rather than contradicting the architecture's channel-specific account.
 - **Project deletion removes more than two row types.** Conversations/jobs are unassigned and memory preserved, but project history and task attachments have cascade/file cleanup too.
 - **Desktop package commands have scope.** README's `pnpm package`/`pnpm package:skip-deps` are desktop-package scripts. Root has `pnpm package:electron`; use a filter for skip-deps.
@@ -1257,8 +1256,6 @@ Root README requirements, development URLs, broad features, and three platform p
 ### 25.2 Limits of verification
 
 No install, application run, build, test, model call, bot connection, download, or update installation was performed. Live model availability/prices, external permissions, local hardware requirements, media quality, platform signing, and current release-feed contents were not verified.
-
-Architecture's reported evaluation outcome for removing the graph was not reproduced. Source comments about measured retrieval defaults are not a substitute for running evaluation.
 
 ### 25.3 Source inventory
 

@@ -24,7 +24,7 @@ flowchart TD
 
 Memory routing runs during pre-execution when auto memory is enabled and there is a text query. An explicit empty memory-folder selection suppresses retrieval; otherwise the selected/assigned folder scope and the agent identity constrain memory search. Free Chat has no agent-specific memory identity.
 
-The router combines the current request with a short recent-conversation context and any planned query expansions. It retrieves memory chunks by hybrid search (dense embeddings plus BM25, fused by reciprocal rank), fuses the results of all queries, filters weak or duplicate matches, then selects context. Queries to instruction-tuned embedding models (Qwen3-Embedding, GTE-Qwen, BGE v1.5) carry the model's retrieval instruction; documents are embedded without one. LLM curation sees up to 20 candidates, each with its document title, section and last change, so a chunk from the middle of a note is still attributed to the note's subject. These knobs live in `retrieval-options.ts`, with each default backed by a `memory:eval` run. Depending on configuration, selection uses the memory reranker or a small LLM curation call. The curation step can reject weakly related evidence and request one bounded corrective retrieval. If curation is unavailable, ranked results are used as fallback. Selected evidence is inserted into the main model context as marked, untrusted retrieved context, with provenance attached for the UI. If the router fails, the turn continues without injected memory.
+The router combines the current request with a short recent-conversation context and any planned query expansions. It retrieves memory chunks by hybrid search (dense embeddings plus BM25, fused by reciprocal rank), fuses the results of all queries, filters weak or duplicate matches, then selects context. Queries to instruction-tuned embedding models (Qwen3-Embedding, GTE-Qwen, BGE v1.5) carry the model's retrieval instruction; documents are embedded without one. LLM curation sees up to 20 candidates, each with its document title, section and last change, so a chunk from the middle of a note is still attributed to the note's subject. These defaults live in `retrieval-options.ts`. Depending on configuration, selection uses the memory reranker or a small LLM curation call. The curation step can reject weakly related evidence and request one bounded corrective retrieval. If curation is unavailable, ranked results are used as fallback. Selected evidence is inserted into the main model context as marked, untrusted retrieved context, with provenance attached for the UI. If the router fails, the turn continues without injected memory.
 
 ```mermaid
 flowchart TD
@@ -103,15 +103,7 @@ flowchart TD
   F --> H[BM25 lexical index]
 ```
 
-A knowledge graph with LLM-extracted entities, facts and per-chunk summaries existed until schema v18. `memory:eval` showed no measurable gain from it over hybrid retrieval with reranking or LLM curation, so it was removed; v18 drops its tables, and a one-time startup cleanup restores plain chunk search text in older indexes.
-
-## Evaluating memory
-
-`pnpm --filter cynosure-server memory:eval` measures the auto-memory pipeline on a frozen dataset kept in `<data dir>/evals/memory/` (it contains personal memory text, so it stays out of the repository). Cases are synthetic questions generated from real chunks (direct, paraphrased, other-language, two-chunk, and verified no-answer questions) plus labelled real turns. Gold evidence is stored as a verbatim quote and file, so cases stay valid after re-chunking.
-
-`run` copies the data dir into a temporary snapshot per condition and runs the real `applyAutoMemoryRoutingWithEvidence` there, with folder watchers disabled. Conditions select reranker or LLM-curation selection, optionally run the task-context planner as production does (its output is cached per case), and override retrieval options. Snapshots of older installs get the same one-time analysis cleanup the server runs on startup. Reranker conditions are billed per rerank request, so the report counts and prices them separately. Each run records retrieval metrics from the curator's candidate pool, an LLM judge's verdict on whether the injected context supports the reference answer, the no-answer injection rate, fallbacks, latency, and model cost. The report includes paired sign tests against the first condition and a diff against the previous run; differences of a few cases are within curator/judge noise.
-
-`--dataset fixture` runs the same pipeline against a committed fictional corpus (`apps/server/tests/memory-eval/`). The corpus is indexed into a cached install under the eval directory with the local embedding model. It covers relation chains, aggregation, superseded values and near-identical names, so it can be shared and runs without anyone's personal memory.
+A knowledge graph with LLM-extracted entities, facts and per-chunk summaries existed until schema v18. Migration v18 drops its tables, and a one-time startup cleanup restores plain chunk search text in older indexes.
 
 ## Messaging channels
 
@@ -136,7 +128,6 @@ Dream reviews of project conversations put the project's memory folder first and
 - Per-turn snapshot/planning: `apps/server/src/core/agent/execution-preset.ts`, `apps/server/src/core/agent/pre-execution/execution-planner.ts`
 - Memory/tool routing: `apps/server/src/core/agent/pre-execution/auto-memory-routing.ts`, `apps/server/src/core/agent/pre-execution/auto-tool-routing.ts`, `apps/server/src/core/agent/tool-router.ts`
 - Memory documents and retrieval: `apps/server/src/core/memory/parser.ts`, `apps/server/src/core/memory/rag.ts`, `apps/server/src/core/memory/memory-aggregator.ts`, `apps/server/src/db/schema.ts`
-- Memory evaluation: `apps/server/src/scripts/memory-eval/cli.ts`, `apps/server/src/scripts/memory-eval/worker.ts`, `apps/server/src/core/memory/retrieval-evaluation.ts`
 - Subagent spawn/continue: `apps/server/src/core/agent/sub-agent-tools.ts`
 - Projects: `apps/server/src/core/projects/` (store, run context, tools), `apps/server/src/routes/projects.ts`, `apps/web/src/views/ProjectDetailView.vue`
 - Media dispatch and execution: `apps/server/src/routes/chat.ts`, `apps/server/src/core/chat/media-execution.ts`, `apps/web/src/composables/useWhisper.ts`
