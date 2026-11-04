@@ -11,9 +11,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  /** A folder was created, renamed, or changed; the id is the folder to show. */
+  /** A folder was created; the id is the folder to show. */
   saved: [folderId: string];
-  /** A folder setting changed without anything to navigate to. */
+  /** A folder was edited or a setting changed; the current view stays where it is. */
   changed: [];
   removed: [folder: MemoryFolder];
   error: [message: string];
@@ -68,12 +68,12 @@ async function saveFolder(): Promise<void> {
   saveError.value = "";
   try {
     if (editingFolder.value) {
-      const updated = await api.memoryFolders.update(editingFolder.value.id, {
+      await api.memoryFolders.update(editingFolder.value.id, {
         name,
         description: folderDescription.value,
         folderPath: relativePathForName(editingFolder.value, name),
       });
-      emit("saved", updated.id);
+      emit("changed");
     } else {
       const created = await api.memoryFolders.create(name, folderDescription.value, parentForCreate.value?.folderPath || "");
       emit("saved", created.id);
