@@ -85,6 +85,8 @@ export const useChatStore = defineStore('chat', () => {
   /** Project of the active conversation, or the project a new chat will be created in. */
   const activeProjectId = ref<string | null>(null)
   const draftDiscardRevision = ref(0)
+  /** Last conversation created from this composer, e.g. so attachments can be staged before the first send. */
+  const createdConversationId = ref<string | null>(null)
   /** Files to add to the composer's draft once it picks them up, e.g. a task's attachments. */
   const pendingComposerFiles = ref<PendingComposerFile[]>([])
   /** The empty new chat will be created as an incognito chat. */
@@ -308,6 +310,7 @@ export const useChatStore = defineStore('chat', () => {
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt
     })
+    createdConversationId.value = conv.id
     activeConversationId.value = conv.id
     messages.value = []
     queuedMessages.value = []
@@ -883,6 +886,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations,
     sortedConversations,
     activeConversationId,
+    createdConversationId,
     activeProjectId,
     draftDiscardRevision,
     pendingComposerFiles,

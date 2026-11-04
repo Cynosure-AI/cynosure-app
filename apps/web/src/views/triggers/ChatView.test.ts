@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   providerStore: { providers: [] as Array<{ id: string }>, providersLoaded: true },
   chatStore: {
     activeConversationId: null as string | null,
+    createdConversationId: null as string | null,
     loadingMessages: false,
     messages: [] as Array<{ role: string; content: string }>,
     activeAgentId: null,
@@ -53,6 +54,8 @@ describe('ChatView provider availability', () => {
     mocks.wsConnected.value = true
     mocks.chatStore.messages = []
     mocks.chatStore.activeConversationId = null
+    mocks.chatStore.createdConversationId = null
+    mocks.route.params = {}
     mocks.chatStore.activeAgentId = null
     mocks.chatStore.conversations = []
     mocks.agentsList.mockReset().mockResolvedValue([{ id: 'agent-1' }])
@@ -103,6 +106,28 @@ describe('ChatView provider availability', () => {
     const completed = shallowMount(ChatView, { global: { stubs: { Icon: true, RouterLink: { template: '<a><slot /></a>' } } } })
     await vi.waitFor(() => expect(completed.findAll('.recent-agent-chat-pill')).toHaveLength(1))
     expect(completed.find('.recent-agent-chats').text()).toBe('Previous chat')
+  })
+
+  test('keeps the composer centered for an attachment draft until a message exists', async () => {
+    mocks.providerStore.providers = [{ id: 'provider-1' }]
+    // Staging an attachment created this conversation before anything was sent.
+    mocks.chatStore.activeConversationId = 'draft-1'
+    mocks.chatStore.createdConversationId = 'draft-1'
+    mocks.route.params = { conversationId: 'draft-1' }
+    const wrapper = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    expect(wrapper.find('.chat-column--empty').exists()).toBe(true)
+    wrapper.unmount()
+
+    mocks.chatStore.messages = [{ role: 'user', content: 'Here is the file' }]
+    const sent = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    expect(sent.find('.chat-column--empty').exists()).toBe(false)
+    sent.unmount()
+
+    // An opened existing conversation is not a draft, even while empty.
+    mocks.chatStore.messages = []
+    mocks.chatStore.createdConversationId = null
+    const existing = shallowMount(ChatView, { global: { stubs: { Icon: true } } })
+    expect(existing.find('.chat-column--empty').exists()).toBe(false)
   })
 
   test('shows initialising until the server connects, even when providers appear empty', () => {

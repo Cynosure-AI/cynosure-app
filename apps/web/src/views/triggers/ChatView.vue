@@ -72,9 +72,13 @@ const showCenteredComposer = computed(() => {
     ? route.params.conversationId[0]
     : route.params.conversationId
 
+  // Staging an attachment creates the conversation before the first send.
+  // That draft still counts as a new chat until a message exists.
+  const activeId = chatStore.activeConversationId
+  const isDraft = Boolean(activeId) && activeId === chatStore.createdConversationId
   return canUseChat.value &&
-    !routeConversationId &&
-    !chatStore.activeConversationId &&
+    (!routeConversationId || (isDraft && routeConversationId === activeId)) &&
+    (!activeId || isDraft) &&
     !chatStore.loadingMessages &&
     chatStore.messages.length === 0
 })
