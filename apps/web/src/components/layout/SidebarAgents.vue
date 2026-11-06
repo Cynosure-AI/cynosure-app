@@ -502,51 +502,66 @@ onBeforeUnmount(() => {
             @click="selectAgent(entry)"
             @keydown.shift.f10.prevent.stop="openAgentMenu(entry, $event)"
           >
-            <span class="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-800">
-              <span
-                class="h-full w-full"
-                :class="{ 'opacity-15': !expanded.has(entry.key) && (runningAgentKeys.has(entry.key) || waitingAgentKeys.has(entry.key)) }"
-              >
-                <AgentAvatar
-                  :name="entry.name"
-                  :icon-url="entry.iconUrl"
-                  :avatar="entry.avatar"
-                  :pending="entry.pending"
+            <span class="relative h-5 w-5 shrink-0">
+              <span class="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-lg bg-theme-800">
+                <span
+                  class="h-full w-full"
+                  :class="{ 'opacity-15': !expanded.has(entry.key) && (runningAgentKeys.has(entry.key) || waitingAgentKeys.has(entry.key)) }"
+                >
+                  <AgentAvatar
+                    :name="entry.name"
+                    :icon-url="entry.iconUrl"
+                    :avatar="entry.avatar"
+                    :pending="entry.pending"
+                  />
+                </span>
+                <!-- A folded agent shows its chats' status over its face. -->
+                <span
+                  v-if="!expanded.has(entry.key) && runningAgentKeys.has(entry.key) && !awaitingAgentKeys.has(entry.key)"
+                  class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
+                  role="img"
+                  :aria-label="`A chat with ${entry.name} is running`"
+                >
+                  <Icon
+                    icon="lucide:loader-circle"
+                    class="h-3.5 w-3.5 animate-spin text-accent-fg drop-shadow-sm"
+                  />
+                </span>
+                <span
+                  v-else-if="!expanded.has(entry.key) && waitingAgentKeys.has(entry.key) && !awaitingAgentKeys.has(entry.key)"
+                  class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
+                  role="img"
+                  :aria-label="`A chat with ${entry.name} is waiting to resume`"
+                  :title="`A chat with ${entry.name} is waiting to resume`"
+                >
+                  <Icon
+                    icon="lucide:hourglass"
+                    class="h-3.5 w-3.5 text-status-info drop-shadow-sm"
+                  />
+                </span>
+                <span
+                  v-if="!expanded.has(entry.key) && awaitingAgentKeys.has(entry.key)"
+                  class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-900 animate-pulse"
+                  :title="`A chat with ${entry.name} is waiting for your approval`"
+                />
+                <DreamingBadge
+                  v-else-if="!expanded.has(entry.key) && dreamingAgentKeys.has(entry.key)"
+                  :label="`Dreaming over a chat with ${entry.name}`"
                 />
               </span>
-              <!-- A folded agent shows its chats' status over its face. -->
+              <!-- Favorites sort to the top; the star says why. -->
               <span
-                v-if="!expanded.has(entry.key) && runningAgentKeys.has(entry.key) && !awaitingAgentKeys.has(entry.key)"
-                class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
+                v-if="entry.favorite && (expanded.has(entry.key) || (!awaitingAgentKeys.has(entry.key) && !dreamingAgentKeys.has(entry.key)))"
+                class="pointer-events-none absolute -bottom-1 -right-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-theme-900"
                 role="img"
-                :aria-label="`A chat with ${entry.name} is running`"
+                aria-label="Favorite"
+                title="Favorite"
               >
                 <Icon
-                  icon="lucide:loader-circle"
-                  class="h-3.5 w-3.5 animate-spin text-accent-fg drop-shadow-sm"
+                  icon="lucide:star"
+                  class="h-2 w-2 fill-current text-status-warning"
                 />
               </span>
-              <span
-                v-else-if="!expanded.has(entry.key) && waitingAgentKeys.has(entry.key) && !awaitingAgentKeys.has(entry.key)"
-                class="absolute inset-0 flex items-center justify-center bg-theme-950/30"
-                role="img"
-                :aria-label="`A chat with ${entry.name} is waiting to resume`"
-                :title="`A chat with ${entry.name} is waiting to resume`"
-              >
-                <Icon
-                  icon="lucide:hourglass"
-                  class="h-3.5 w-3.5 text-status-info drop-shadow-sm"
-                />
-              </span>
-              <span
-                v-if="!expanded.has(entry.key) && awaitingAgentKeys.has(entry.key)"
-                class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-theme-900 animate-pulse"
-                :title="`A chat with ${entry.name} is waiting for your approval`"
-              />
-              <DreamingBadge
-                v-else-if="!expanded.has(entry.key) && dreamingAgentKeys.has(entry.key)"
-                :label="`Dreaming over a chat with ${entry.name}`"
-              />
             </span>
 
             <span
