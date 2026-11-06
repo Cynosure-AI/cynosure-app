@@ -3,6 +3,7 @@ const INTERNAL_TOOL_PREFIXES = [
   'attachment_',
   'session_content_',
   'memory_',
+  'conversation_',
 ]
 
 export const AUTO_MEMORY_TOOL_NAMES = [
@@ -24,6 +25,7 @@ const AUTO_MANAGED_BUILT_IN_TOOL_PREFIXES = [
   'todo_',
   'attachment_',
   'session_content_',
+  'conversation_',
 ]
 
 const AUTO_MANAGED_BUILT_IN_TOOL_NAMES = new Set<string>([

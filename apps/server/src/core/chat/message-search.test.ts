@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDb, getDb } from '../../db/database.js'
 import { registerConversationRoutes } from '../../routes/conversations.js'
-import { buildMessageSearchQuery, searchMessages, SNIPPET_MATCH_END, SNIPPET_MATCH_START } from './message-search.js'
+import { buildMessageSearchQuery, listRecentConversations, searchMessages, SNIPPET_MATCH_END, SNIPPET_MATCH_START } from './message-search.js'
 
 describe('buildMessageSearchQuery', () => {
     test('quotes each word as a prefix term so operators are plain text', () => {
@@ -14,6 +14,10 @@ describe('buildMessageSearchQuery', () => {
 
     test('keeps double-quoted parts as exact phrases', () => {
         expect(buildMessageSearchQuery('"compose up" docker')).toBe('"compose up" "docker"*')
+    })
+
+    test('joins terms with OR when any term may match', () => {
+        expect(buildMessageSearchQuery('docker "compose up"', 'any')).toBe('"docker"* OR "compose up"')
     })
 
     test('drops input without letters or digits', () => {
@@ -87,6 +91,30 @@ describe('message search', () => {
         expect(searchMessages(db, 'docker')).toEqual([])
         const counts = db.prepare('SELECT (SELECT COUNT(*) FROM message_search) AS indexed, (SELECT COUNT(*) FROM message_search_rowids) AS keys').get()
         expect(counts).toEqual({ indexed: 1, keys: 1 })
+    })
+
+    test('filters by time, agent and excluded conversation', () => {
+        const db = seed()
+        db.prepare("UPDATE conversations SET agent_id = 'agent-1' WHERE id = 'c2'").run()
+        expect(searchMessages(db, 'docker', 20, { since: 3 }).map((hit) => hit.messageId)).toEqual(['m4'])
+        expect(searchMessages(db, 'docker', 20, { until: 3 }).map((hit) => hit.conversationId)).toEqual(['c1'])
+        expect(searchMessages(db, 'docker', 20, { agentId: 'agent-1' }).map((hit) => hit.conversationId)).toEqual(['c2'])
+        expect(searchMessages(db, 'docker', 20, { excludeConversationId: 'c1' }).map((hit) => hit.conversationId)).toEqual(['c2'])
+    })
+
+    test('matches any term on request', () => {
+        const db = seed()
+        expect(searchMessages(db, 'podman datenbank')).toEqual([])
+        expect(searchMessages(db, 'podman datenbank', 20, { match: 'any' }).map((hit) => hit.messageId)).toEqual(['m1'])
+    })
+
+    test('lists recent conversations with their first user message, without incognito chats', () => {
+        const db = seed()
+        const hits = listRecentConversations(db)
+        expect(hits.map((hit) => [hit.conversationId, hit.messageId, hit.matchCount])).toEqual([['c2', 'm4', 1], ['c1', 'm1', 2]])
+        expect(hits[1].snippet).toBe('How do I deploy the Datenbank server with Docker?')
+        expect(listRecentConversations(db, 20, { since: 2 }).map((hit) => [hit.conversationId, hit.messageId])).toEqual([['c2', 'm4'], ['c1', 'm2']])
+        expect(listRecentConversations(db, 20, { excludeConversationId: 'c2' }).map((hit) => hit.conversationId)).toEqual(['c1'])
     })
 
     test('serves results over the API and ignores queries shorter than two characters', async () => {

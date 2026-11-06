@@ -654,6 +654,8 @@ export interface DreamConfig {
     startSequence: number
 }
 
+export type { ConversationSearchConfig } from '@shared/types'
+
 /** Reported by /api/health when the server is up but could not start normally. */
 export interface ServerStartupError {
     code: 'database_version_mismatch' | 'database_open_failed'

@@ -1,4 +1,5 @@
 import { getDreamConfig, saveDreamConfig } from '../core/memory/dream-store.js'
+import { getConversationSearchConfig, saveConversationSearchConfig } from '../core/chat/conversation-search-settings.js'
 import { cancelAllDreamRuns, cancelDreamRun, settleDreamWork, settleDreamRun } from '../core/memory/dream-worker.js'
 import type { FastifyInstance } from 'fastify'
 import { getAgentMemory } from '../core/memory/agent-memory.js'
@@ -259,6 +260,13 @@ export async function registerMemoryRoutes(app: FastifyInstance, broadcast: Broa
     const config = saveDreamConfig({ providerId, model })
     if (!providerId) await settleDreamWork()
     return config
+  })
+  app.get('/conversation-search/config', async () => getConversationSearchConfig())
+  app.post<{ Body: { enabled?: unknown } }>('/conversation-search/configure', async (req, reply) => {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return reply.status(400).send({ error: 'Past conversation search requires an enabled setting' })
+    }
+    return saveConversationSearchConfig({ enabled: req.body.enabled })
   })
   app.post<{ Params: { id: string } }>('/dream/runs/:id/cancel', async (req, reply) => {
     if (!cancelDreamRun(req.params.id)) return reply.status(409).send({ error: 'Dream review is no longer cancellable' })

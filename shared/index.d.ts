@@ -345,6 +345,11 @@ export interface ConversationDto {
   updatedAt: number
 }
 
+/** Memory setting: whether models get tools to search and read past conversations. */
+export interface ConversationSearchConfig {
+  enabled: boolean
+}
+
 /** The best matching message of one conversation in a full-text message search. */
 export interface MessageSearchHit {
   conversationId: string

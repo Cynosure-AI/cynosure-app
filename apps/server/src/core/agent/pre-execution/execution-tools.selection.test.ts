@@ -2,8 +2,23 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { RegistryAwareToolDefinition } from '../../gateway/providers/base.provider.js'
 import type { ExecutionPreset } from '../execution-preset.js'
 
-const { applyAutoToolRouting } = vi.hoisted(() => ({
+const { applyAutoToolRouting, conversationHistory } = vi.hoisted(() => ({
     applyAutoToolRouting: vi.fn(async (input: { tools: RegistryAwareToolDefinition[] }) => input.tools),
+    conversationHistory: {
+        available: false,
+        make: vi.fn((options: { conversationId: string; agentId?: string }) => ['conversation_search', 'conversation_read'].map((name) => ({
+            name,
+            description: name,
+            parameters: {},
+            timeout: 1_000,
+            execute: async () => ({ success: true, output: JSON.stringify(options) }),
+        }))),
+    },
+}))
+
+vi.mock('../../tools/builtin/conversation-history-tools.js', () => ({
+    isConversationHistoryAvailable: () => conversationHistory.available,
+    makeConversationHistoryTools: conversationHistory.make,
 }))
 
 vi.mock('./auto-tool-routing.js', () => ({
@@ -104,7 +119,25 @@ function input(overrides: Record<string, unknown> = {}) {
 describe('resolveExecutionTools selection', () => {
     beforeEach(() => {
         applyAutoToolRouting.mockClear()
+        conversationHistory.make.mockClear()
+        conversationHistory.available = false
         resetStickyToolsets()
+    })
+
+    test('adds past conversation tools only when enabled and memory runs, scoped to the agent', async () => {
+        const names = async (overrides: Record<string, unknown>) =>
+            (await resolveExecutionTools(input({ toolRegistry: registry(true), ...overrides }))).tools.map(({ name }) => name)
+
+        expect(await names({ autoMemory: true })).not.toContain('conversation_search')
+        conversationHistory.available = true
+        expect(await names({ autoMemory: false })).not.toContain('conversation_search')
+        expect(await names({ autoMemory: true })).toEqual(expect.arrayContaining(['conversation_search', 'conversation_read']))
+        expect(conversationHistory.make).toHaveBeenLastCalledWith({ conversationId: 'conversation-1', agentId: undefined })
+
+        await names({ preset: preset({ id: 'agent-7', autoMemory: true }) })
+        expect(conversationHistory.make).toHaveBeenLastCalledWith({ conversationId: 'conversation-1', agentId: 'agent-7' })
+        await names({ preset: preset({ id: 'agent-7' }), memoryFolderOverrides: [], autoMemory: true })
+        expect(conversationHistory.make).toHaveBeenCalledTimes(2)
     })
 
     test('keeps manage_mcp out of automatic routing until it is explicitly selected', async () => {

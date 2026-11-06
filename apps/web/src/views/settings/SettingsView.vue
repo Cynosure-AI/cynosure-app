@@ -210,6 +210,13 @@ const sections: SettingsSection[] = [
     terms: ['dream', 'dreaming', 'background', 'learn', 'remember', 'conversations']
   },
   {
+    id: 'conversation-search',
+    categoryId: 'memory',
+    label: 'Past Conversations',
+    description: 'Let models search and read your earlier conversations.',
+    terms: ['past conversations', 'chat history', 'history', 'search chats', 'previous chats', 'reference', 'recall']
+  },
+  {
     id: 'context-strategy',
     categoryId: 'chat',
     label: 'Context Strategy',

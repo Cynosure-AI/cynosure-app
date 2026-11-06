@@ -153,10 +153,38 @@ onUnmounted(() => {
   unsubReembed?.()
 })
 
+// Past conversation search saves as soon as it is toggled.
+const conversationSearchEnabled = ref(false)
+const conversationSearchLoaded = ref(false)
+const conversationSearchStatus = ref<SettingsPersistenceState>('idle')
+
+async function loadConversationSearchConfig() {
+  try {
+    conversationSearchEnabled.value = (await api.memory.getConversationSearchConfig()).enabled
+    conversationSearchLoaded.value = true
+  } catch {
+    conversationSearchStatus.value = 'error'
+  }
+}
+
+async function saveConversationSearch(enabled: boolean) {
+  const previous = conversationSearchEnabled.value
+  conversationSearchEnabled.value = enabled
+  conversationSearchStatus.value = 'saving'
+  try {
+    conversationSearchEnabled.value = (await api.memory.configureConversationSearch({ enabled })).enabled
+    conversationSearchStatus.value = 'saved'
+  } catch {
+    conversationSearchEnabled.value = previous
+    conversationSearchStatus.value = 'error'
+  }
+}
+
 onMounted(async () => {
   // Embedding and reranker defaults fall back to the provider list; Dream does not.
   await Promise.all([
     loadDreamConfig(),
+    loadConversationSearchConfig(),
     providerStore.loadProviders().then(() => Promise.all([loadEmbeddingConfig(), loadRerankerConfig()])),
   ])
 })
@@ -536,9 +564,43 @@ function cancelDrop() {
     </BaseCard>
 
     <SettingsSubheading
-      v-if="showSection('dream-mode')"
+      v-if="showAnySection(['dream-mode', 'conversation-search'])"
       label="Building Knowledge"
     />
+
+    <!-- Past conversation search -->
+    <BaseCard
+      v-if="showSection('conversation-search')"
+      class="p-6 space-y-4"
+    >
+      <div class="flex items-start justify-between">
+        <div>
+          <h3 class="text-sm font-medium text-theme-200 flex items-center gap-2">
+            <Icon
+              icon="lucide:messages-square"
+              class="w-5 h-5"
+            />
+            Past Conversations
+          </h3>
+          <p class="text-xs text-ink-muted mt-1">
+            Gives models two read-only tools to search your earlier conversations and read the messages around a match,
+            so they can pick up what was discussed before. Cyno can search all conversations; an agent only its own.
+            Only offered in chats with memory enabled. Incognito chats are never searched and never get these tools.
+          </p>
+        </div>
+        <ToggleSwitch
+          :model-value="conversationSearchEnabled"
+          label="Let models search past conversations"
+          :disabled="!conversationSearchLoaded || conversationSearchStatus === 'saving'"
+          class="shrink-0 ml-4"
+          @update:model-value="saveConversationSearch"
+        />
+      </div>
+      <SettingsPersistenceStatus
+        mode="auto"
+        :state="conversationSearchStatus"
+      />
+    </BaseCard>
 
     <!-- Dream Mode -->
     <BaseCard

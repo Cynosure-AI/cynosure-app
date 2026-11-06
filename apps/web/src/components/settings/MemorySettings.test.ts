@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   configureDream: vi.fn(),
   probeEmbedding: vi.fn(),
   configureEmbeddings: vi.fn(),
+  getConversationSearchConfig: vi.fn(),
+  configureConversationSearch: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -50,6 +52,8 @@ vi.mock('../../api/client', () => ({
       }),
       getDreamConfig: mocks.getDreamConfig,
       configureDream: mocks.configureDream,
+      getConversationSearchConfig: mocks.getConversationSearchConfig,
+      configureConversationSearch: mocks.configureConversationSearch,
       getEmbeddingConfig: mocks.getEmbeddingConfig,
       probeEmbedding: mocks.probeEmbedding,
       configureEmbeddings: mocks.configureEmbeddings,
@@ -158,6 +162,45 @@ describe('Dream settings', () => {
     expect(wrapper.get('[role="alert"]').text()).toBe('Settings unavailable')
     expect(wrapper.findAll('button').find(button => button.text() === 'Save Dream Config')!.attributes('disabled')).toBeDefined()
     expect(mocks.configureDream).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+describe('Past conversation settings', () => {
+  const createSettings = () => mount(MemorySettings, {
+    props: { visibleSections: ['conversation-search'] },
+    global: { plugins: [createPinia()], stubs: { ProviderModelSelect: true, Icon: true } },
+  })
+
+  beforeEach(() => {
+    mocks.getDreamConfig.mockReset().mockResolvedValue({ providerId: '', model: '' })
+    mocks.getConversationSearchConfig.mockReset().mockResolvedValue({ enabled: false })
+    mocks.configureConversationSearch.mockReset().mockImplementation(async (config) => config)
+  })
+
+  test('loads the saved state and saves as soon as it is toggled', async () => {
+    const wrapper = createSettings()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Past Conversations')
+    expect(wrapper.text()).not.toContain('Dream Mode')
+    const toggle = wrapper.get('[role="switch"]')
+    expect(toggle.attributes('aria-checked')).toBe('false')
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(mocks.configureConversationSearch).toHaveBeenCalledWith({ enabled: true })
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+    wrapper.unmount()
+  })
+
+  test('reverts the switch when saving fails', async () => {
+    mocks.getConversationSearchConfig.mockResolvedValue({ enabled: true })
+    mocks.configureConversationSearch.mockRejectedValue(new Error('offline'))
+    const wrapper = createSettings()
+    await flushPromises()
+    await wrapper.get('[role="switch"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.text()).toContain('Could not save')
     wrapper.unmount()
   })
 })

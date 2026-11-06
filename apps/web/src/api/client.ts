@@ -1,6 +1,6 @@
 import { BASE_URL, get, post, put, patch, del, onWsEvent, sendWsMessage, subscribeWsConversations } from './http'
 import type {
-  DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse, MemoryRerankerConfig,
+  ConversationSearchConfig, DreamConfig, LLMProviderConfig, McpServerInfo, McpRegistryResponse, MemoryRerankerConfig,
   AgentDefinition, MemoryFolder, MemoryFileStatus, MemoryFileSearchResult, MemoryIndexJob, MemoryDocumentChunks, RuntimeLimits,
   AgentInstance, ActivityItem, ActivityKind, ActivityTotalsByKind, StopAllActivityResult, ConversationUpload, CronJob, ChannelDefinition, ChannelType,
   MetricsSummary, PlanningState,
@@ -322,6 +322,8 @@ export const api = {
     getLimits: () => get<RuntimeLimits>('/api/memory/limits'),
     getDreamConfig: () => get<DreamConfig>('/api/memory/dream/config'),
     configureDream: (config: Pick<DreamConfig, 'providerId' | 'model'>) => post<DreamConfig>('/api/memory/dream/configure', config),
+    getConversationSearchConfig: () => get<ConversationSearchConfig>('/api/memory/conversation-search/config'),
+    configureConversationSearch: (config: ConversationSearchConfig) => post<ConversationSearchConfig>('/api/memory/conversation-search/configure', config),
     cancelDreamRun: (id: string) => post<{ success: boolean }>(`/api/memory/dream/runs/${encodeURIComponent(id)}/cancel`, {}),
     onDreamUpdated: (cb: (data: { id: string; status: string }) => void) => onWsEvent('memory:dream-updated', cb as WsHandler),
     search: (query: string, topK?: number, folderId?: string) =>

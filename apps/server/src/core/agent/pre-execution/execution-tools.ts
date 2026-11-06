@@ -2,7 +2,7 @@ import { getBuiltInMemoryToolKeys, getBuiltInToolKey, hydrateBuiltInTools, makeS
 import { applyAutoToolRouting } from './auto-tool-routing.js'
 import { recordLoadedTools, stabilizeRoutedTools } from './conversation-toolset.js'
 import { isRuntimeMemoryEnabled } from './execution-memory.js'
-import type { ExecutionPreset } from '../execution-preset.js'
+import { isCyno, type ExecutionPreset } from '../execution-preset.js'
 import type { PrepareExecutionInput } from '../prepare-execution.js'
 import type { SubAgentAssignment } from '../../agents/agent-store.js'
 import type { LLMGateway } from '../../gateway/gateway.js'
@@ -13,6 +13,7 @@ import { MANAGE_MCP_TOOL_NAME } from '../../tools/builtin/manage-mcp.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/builtin/expand-available-toolset.js'
 import { isReadOnlyModeTool } from '../../tools/tool-policy.js'
 import { filterSchedulingTools } from '../../tools/builtin/schedule-tools.js'
+import { isConversationHistoryAvailable, makeConversationHistoryTools } from '../../tools/builtin/conversation-history-tools.js'
 
 export type ResolveExecutionToolsInput = Pick<PrepareExecutionInput,
     | 'preset' | 'conversationId' | 'broadcast' | 'userQuery' | 'recentMessages' | 'usedToolNames'
@@ -120,6 +121,14 @@ export async function resolveExecutionTools(input: ResolveExecutionToolsInput): 
     if (isRuntimeMemoryEnabled(preset, autoMemory, memoryFolderOverrides)) {
         const memoryTools = permitted(toolRegistry.resolveForExecution(getBuiltInMemoryToolKeys()))
         tools = dedupeToolsByName([...memoryTools, ...tools])
+        if (isConversationHistoryAvailable(conversationId)) {
+            // Cyno sees every conversation; a custom agent only its own.
+            const agentId = hydrationAgentId !== undefined ? hydrationAgentId : preset.id
+            tools = dedupeToolsByName([...tools, ...makeConversationHistoryTools({
+                conversationId,
+                agentId: isCyno(agentId) ? undefined : agentId,
+            })])
+        }
     }
 
     const effectiveSubAgents = includeSubAgents

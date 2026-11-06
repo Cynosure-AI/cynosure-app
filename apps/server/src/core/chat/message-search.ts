@@ -14,7 +14,7 @@ const SNIPPET_TOKENS = 16
  * "double-quoted" parts are matched as exact phrases. All terms must match.
  * Returns null when nothing searchable remains.
  */
-export function buildMessageSearchQuery(input: string): string | null {
+export function buildMessageSearchQuery(input: string, match: 'all' | 'any' = 'all'): string | null {
     const terms: string[] = []
     for (const match of input.matchAll(/"([^"]*)"|(\S+)/g)) {
         const phrase = match[1]
@@ -24,16 +24,40 @@ export function buildMessageSearchQuery(input: string): string | null {
         terms.push(phrase !== undefined ? `"${text}"` : `"${text}"*`)
         if (terms.length >= MAX_TERMS) break
     }
-    return terms.length ? terms.join(' ') : null
+    return terms.length ? terms.join(match === 'any' ? ' OR ' : ' ') : null
+}
+
+export interface MessageSearchOptions {
+    /** Only messages created at or after this time (ms). */
+    since?: number
+    /** Only messages created before this time (ms). */
+    until?: number
+    /** Only conversations of this agent. */
+    agentId?: string
+    /** Leave this conversation out, e.g. the one doing the search. */
+    excludeConversationId?: string
+    /** Match messages containing any term instead of all terms. */
+    match?: 'all' | 'any'
+}
+
+function scopeConditions(options: MessageSearchOptions, alias: { message: string; conversation: string }): { sql: string; params: unknown[] } {
+    const clauses: string[] = []
+    const params: unknown[] = []
+    if (options.since !== undefined) { clauses.push(`${alias.message}.created_at >= ?`); params.push(options.since) }
+    if (options.until !== undefined) { clauses.push(`${alias.message}.created_at < ?`); params.push(options.until) }
+    if (options.agentId !== undefined) { clauses.push(`${alias.conversation}.agent_id = ?`); params.push(options.agentId) }
+    if (options.excludeConversationId) { clauses.push(`${alias.conversation}.id <> ?`); params.push(options.excludeConversationId) }
+    return { sql: clauses.map((clause) => ` AND ${clause}`).join(''), params }
 }
 
 /**
  * Search user and assistant message text with BM25 ranking, returning the best
  * matching message per conversation. Incognito conversations are excluded.
  */
-export function searchMessages(db: Database.Database, input: string, limit = 20): MessageSearchHit[] {
-    const query = buildMessageSearchQuery(input)
+export function searchMessages(db: Database.Database, input: string, limit = 20, options: MessageSearchOptions = {}): MessageSearchHit[] {
+    const query = buildMessageSearchQuery(input, options.match)
     if (!query) return []
+    const scope = scopeConditions(options, { message: 'm', conversation: 'c' })
     const rows = db.prepare(`
         WITH matches AS (
             SELECT
@@ -53,7 +77,7 @@ export function searchMessages(db: Database.Database, input: string, limit = 20)
             FROM matches
             JOIN messages m ON m.id = matches.message_id
             JOIN conversations c ON c.id = m.conversation_id
-            WHERE c.temporary = 0
+            WHERE c.temporary = 0${scope.sql}
         )
         SELECT
             ranked.conversation_id, ranked.message_id, ranked.role, ranked.created_at,
@@ -64,7 +88,7 @@ export function searchMessages(db: Database.Database, input: string, limit = 20)
         WHERE ranked.position = 1
         ORDER BY ranked.score, c.updated_at DESC
         LIMIT ?
-    `).all(SNIPPET_MATCH_START, SNIPPET_MATCH_END, query, limit) as Array<{
+    `).all(SNIPPET_MATCH_START, SNIPPET_MATCH_END, query, ...scope.params, limit) as Array<{
         conversation_id: string
         message_id: string
         role: 'user' | 'assistant'
@@ -90,4 +114,62 @@ export function searchMessages(db: Database.Database, input: string, limit = 20)
         snippet: row.snippet,
         matchCount: row.match_count,
     }))
+}
+
+const RECENT_SNIPPET_CHARS = 200
+
+/**
+ * Conversations with messages in a time range, most recently active first.
+ * The snippet is the first user message in the range. Incognito conversations are excluded.
+ */
+export function listRecentConversations(db: Database.Database, limit = 20, options: Omit<MessageSearchOptions, 'match'> = {}): MessageSearchHit[] {
+    const scope = scopeConditions(options, { message: 'm', conversation: 'c' })
+    const rows = db.prepare(`
+        WITH in_range AS (
+            SELECT
+                m.conversation_id, m.id AS message_id, m.role, m.created_at, m.content,
+                ROW_NUMBER() OVER (PARTITION BY m.conversation_id ORDER BY (m.role = 'user') DESC, m.created_at, m.id) AS position,
+                COUNT(*) OVER (PARTITION BY m.conversation_id) AS message_count,
+                MAX(m.created_at) OVER (PARTITION BY m.conversation_id) AS last_at
+            FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+            WHERE c.temporary = 0 AND m.role IN ('user', 'assistant') AND m.content <> ''${scope.sql}
+        )
+        SELECT
+            r.conversation_id, r.message_id, r.role, r.created_at, r.content, r.message_count,
+            c.title, c.agent_id, c.project_id, c.origin, c.updated_at
+        FROM in_range r
+        JOIN conversations c ON c.id = r.conversation_id
+        WHERE r.position = 1
+        ORDER BY r.last_at DESC
+        LIMIT ?
+    `).all(...scope.params, limit) as Array<{
+        conversation_id: string
+        message_id: string
+        role: 'user' | 'assistant'
+        created_at: number
+        content: string
+        message_count: number
+        title: string | null
+        agent_id: string | null
+        project_id: string | null
+        origin: string
+        updated_at: number
+    }>
+    return rows.map((row) => {
+        const text = row.content.replace(/\s+/g, ' ').trim()
+        return {
+            conversationId: row.conversation_id,
+            title: row.title,
+            agentId: row.agent_id,
+            projectId: row.project_id,
+            origin: row.origin,
+            updatedAt: row.updated_at,
+            messageId: row.message_id,
+            role: row.role,
+            createdAt: row.created_at,
+            snippet: text.length > RECENT_SNIPPET_CHARS ? `${text.slice(0, RECENT_SNIPPET_CHARS)}…` : text,
+            matchCount: row.message_count,
+        }
+    })
 }

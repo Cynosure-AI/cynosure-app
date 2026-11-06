@@ -23,6 +23,8 @@ import { getUserSettings } from '../user-settings.js'
 import { buildUserContextPrompt, userMemoryFilingHint } from './pre-execution/user-context.js'
 import type { ContextEvidence, ConversationExecutionConfig, ReasoningEffort } from '@shared/types'
 import { MEMORY_WRITE_TOOL_NAMES } from '../tools/builtin/memory-tools.js'
+import { CONVERSATION_HISTORY_PROMPT } from '../tools/builtin/conversation-history-tools.js'
+import { isConversationHistoryToolName } from '../tools/builtin/conversation-history-tool-names.js'
 import { mergeProjectMemoryScope, resolveProjectExecutionContext } from '../projects/project-context.js'
 import { getPermissionMode } from '../chat/permission-mode.js'
 import { isReadOnlyModeTool } from '../tools/tool-policy.js'
@@ -258,9 +260,13 @@ export async function prepareAgentExecution(rawInput: PrepareExecutionInput): Pr
     const promptMessages = await resolveSystemPromptMessages({
         basePrompt: preset.systemPrompt,
         overridePrompt: systemPromptOverride,
-        suffix: toolLayer.tools.some(tool => MEMORY_WRITE_TOOL_NAMES.includes((tool.originalName ?? tool.name) as never))
-            ? [systemPromptSuffix, MEMORY_STEWARDSHIP_PROMPT, userMemoryFilingHint(userSettings.name)].filter(Boolean).join('\n')
-            : systemPromptSuffix,
+        suffix: [
+            systemPromptSuffix,
+            ...(toolLayer.tools.some(tool => MEMORY_WRITE_TOOL_NAMES.includes((tool.originalName ?? tool.name) as never))
+                ? [MEMORY_STEWARDSHIP_PROMPT, userMemoryFilingHint(userSettings.name)]
+                : []),
+            toolLayer.tools.some(tool => isConversationHistoryToolName(tool.name)) ? CONVERSATION_HISTORY_PROMPT : '',
+        ].filter(Boolean).join('\n') || systemPromptSuffix,
         subAgents: toolLayer.effectiveSubAgents,
         smartTagContext: {
             userName: userSettings.name,
