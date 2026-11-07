@@ -20,6 +20,7 @@ import { BUILTIN_NAMESPACES } from '../core/tools/built-in-tools.js'
 import { makePlanningTools } from '../core/tools/builtin/planning-tools.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../core/tools/builtin/expand-available-toolset.js'
 import { makeSessionContentTools } from '../core/tools/builtin/session-content-tools.js'
+import { makeConversationHistoryTools } from '../core/tools/builtin/conversation-history-tools.js'
 import { getDefaultMemoryFolder } from '../core/memory/memory-folder-scope.js'
 import type { ToolBehaviorAnnotations } from '../core/gateway/providers/base.provider.js'
 
@@ -227,6 +228,16 @@ export async function registerAgentDefinitionRoutes(app: FastifyInstance): Promi
                 description: tool.description,
                 parameters: tool.parameters,
                 namespace: BUILTIN_NAMESPACES.utility,
+                ambiguous: false,
+            })),
+            ...makeConversationHistoryTools({ conversationId: '' }).map((tool) => ({
+                key: `${BUILTIN_NAMESPACES.memory.id}::${tool.name}`,
+                name: tool.name,
+                executionName: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+                annotations: tool.annotations,
+                namespace: BUILTIN_NAMESPACES.memory,
                 ambiguous: false,
             })),
             // These tools are dynamically created at execution time but should

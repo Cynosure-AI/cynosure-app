@@ -4,6 +4,7 @@ import { isBuiltInNamespaceId } from './internal-tools'
 export function toolInjectionCondition(toolName: string, namespaceId: string): string {
     if (!isBuiltInNamespaceId(namespaceId)) return 'MCP'
     if (toolName.startsWith('memory_')) return 'Memory enabled + folder available'
+    if (toolName.startsWith('conversation_')) return 'Memory + conversation search enabled, not incognito'
     if (toolName.startsWith('todo_')) return 'Thinking + execution tools'
     if (toolName.startsWith('attachment_')) return 'Tool-capable chat + files'
     if (toolName.startsWith('session_content_')) return 'Large tool output or files'
