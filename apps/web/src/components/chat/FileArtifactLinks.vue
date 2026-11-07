@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { ActivityArtifact } from '../../api/types'
-import { documentTypeStyle } from '../../utils/document-types'
+import { artifactKindForExtension, documentTypeStyle } from '../../utils/document-types'
 import LibraryPreviewModal from '../shared/LibraryPreviewModal.vue'
 import { fileArtifactKey, fileArtifactLinks, type FileArtifactLink } from '../../utils/file-artifacts'
 
@@ -30,7 +30,7 @@ function handleClick(event: MouseEvent, artifact: FileArtifactLink): void {
   // Modified clicks keep the browser's open-in-new-tab behavior.
   if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
   event.preventDefault()
-  previewArtifact.value = { href: artifact.href, label: artifact.label, ext: artifact.ext, kind: 'file' }
+  previewArtifact.value = { href: artifact.href, label: artifact.label, ext: artifact.ext, kind: artifactKindForExtension(artifact.ext) }
 }
 </script>
 

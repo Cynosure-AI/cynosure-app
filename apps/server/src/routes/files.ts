@@ -2,13 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import { existsSync, createReadStream, statSync, type Stats } from 'fs'
 import { basename, resolve, extname, isAbsolute } from 'path'
 import { canRenderDocumentThumbnail, getDocumentThumbnail } from '../core/artifacts/document-thumbnails.js'
-
-const ALLOWED_EXTENSIONS = new Set([
-    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.avif',
-    '.mp4', '.webm', '.mov', '.ogg', '.mp3', '.wav', '.flac', '.m4a', '.aac',
-    '.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.md', '.csv', '.tsv',
-    '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.json'
-])
+import { SERVABLE_FILE_EXTENSIONS as ALLOWED_EXTENSIONS } from '../core/artifacts/servable-files.js'
 
 const MIME_TYPES: Record<string, string> = {
     '.png': 'image/png',
@@ -42,7 +36,12 @@ const MIME_TYPES: Record<string, string> = {
     '.xls': 'application/vnd.ms-excel',
     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     '.ppt': 'application/vnd.ms-powerpoint',
-    '.zip': 'application/zip'
+    '.zip': 'application/zip',
+    '.tar': 'application/x-tar',
+    '.gz': 'application/gzip',
+    '.tgz': 'application/gzip',
+    '.7z': 'application/x-7z-compressed',
+    '.rar': 'application/vnd.rar'
 }
 
 type ResolvedFile = { resolved: string; ext: string; stat: Stats }

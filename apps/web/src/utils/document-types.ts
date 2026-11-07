@@ -96,6 +96,33 @@ const ARCHIVE: DocumentTypeStyle = {
   fill: 'bg-yellow-500',
 }
 
+const VIDEO: DocumentTypeStyle = {
+  name: 'Video',
+  icon: 'lucide:film',
+  shape: 'lines',
+  text: 'text-fuchsia-600 dark:text-fuchsia-300',
+  tint: 'bg-fuchsia-500/10',
+  fill: 'bg-fuchsia-500',
+}
+
+const AUDIO: DocumentTypeStyle = {
+  name: 'Audio',
+  icon: 'lucide:audio-lines',
+  shape: 'lines',
+  text: 'text-cyan-600 dark:text-cyan-300',
+  tint: 'bg-cyan-500/10',
+  fill: 'bg-cyan-500',
+}
+
+const IMAGE: DocumentTypeStyle = {
+  name: 'Image',
+  icon: 'lucide:image',
+  shape: 'lines',
+  text: 'text-sky-600 dark:text-sky-300',
+  tint: 'bg-sky-500/10',
+  fill: 'bg-sky-500',
+}
+
 const GENERIC: DocumentTypeStyle = {
   name: 'Document',
   icon: 'lucide:file-text',
@@ -123,6 +150,38 @@ const STYLES_BY_EXTENSION: Record<string, DocumentTypeStyle> = {
   txt: PLAIN_TEXT,
   json: JSON_DATA,
   zip: ARCHIVE,
+  tar: ARCHIVE,
+  gz: ARCHIVE,
+  tgz: ARCHIVE,
+  '7z': ARCHIVE,
+  rar: ARCHIVE,
+  mp4: VIDEO,
+  webm: VIDEO,
+  mov: VIDEO,
+  mp3: AUDIO,
+  wav: AUDIO,
+  ogg: AUDIO,
+  flac: AUDIO,
+  m4a: AUDIO,
+  aac: AUDIO,
+  png: IMAGE,
+  jpg: IMAGE,
+  jpeg: IMAGE,
+  gif: IMAGE,
+  webp: IMAGE,
+  bmp: IMAGE,
+  avif: IMAGE,
+}
+
+const MEDIA_KIND_BY_STYLE = new Map<DocumentTypeStyle, 'image' | 'video' | 'audio'>([
+  [IMAGE, 'image'],
+  [VIDEO, 'video'],
+  [AUDIO, 'audio'],
+])
+
+/** Whether a file is media the preview plays or shows, or a document. */
+export function artifactKindForExtension(ext: string | null | undefined): 'file' | 'image' | 'video' | 'audio' {
+  return MEDIA_KIND_BY_STYLE.get(documentTypeStyle(ext)) ?? 'file'
 }
 
 export function normalizeExtension(ext: string | null | undefined): string {

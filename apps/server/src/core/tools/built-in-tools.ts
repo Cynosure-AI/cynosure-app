@@ -106,7 +106,7 @@ const BUILTIN_TOOL_HYDRATORS = {
     shell_execute: (ctx: BuiltInHydrationContext) => makeShellTool({
         defaultCwd: ctx.conversationId ? getProjectForConversation(ctx.conversationId)?.rootPath : undefined,
     }),
-    web_fetch: () => makeWebFetchTool(),
+    web_fetch: (ctx: BuiltInHydrationContext) => makeWebFetchTool({ conversationId: ctx.conversationId }),
     manage_mcp: () => makeManageMcpTool(),
     notify_user: (ctx: BuiltInHydrationContext) => makeNotificationTool({ conversationId: ctx.conversationId }),
     schedule_create: (ctx: BuiltInHydrationContext) => makeScheduleTools(scheduleOptions(ctx))[0],
