@@ -171,6 +171,7 @@ describe('automatic memory routing visibility', () => {
     })
 
     test('uses reranker match scores for merging, filtering, and descending output order', async () => {
+        rerankerConfigMock.enabled = true
         const candidate = (id: string, rerankerScore: number, denseScore: number) => ({
             id,
             text: `${id} content`,
@@ -350,6 +351,58 @@ describe('automatic memory routing visibility', () => {
         expect(memoryMocks.format).not.toHaveBeenCalled()
         const final = (events.at(-1)!.toolCalls as Array<{ arguments: string }>)[0]
         expect(JSON.parse(final.arguments)).toMatchObject({ emptyReason: 'none-relevant' })
+    })
+
+    test('injects nothing and reports the error when reranking fails', async () => {
+        rerankerConfigMock.enabled = true
+        rerankerConfigMock.curationModel = 'curation-model'
+        const unranked = (id: string, denseScore: number) => ({
+            id, text: id, source: 'memory', sourceFile: `${id}.md`, score: denseScore, denseScore, scoreType: 'dense' as const,
+        })
+        memoryMocks.aggregate.mockImplementation(async (_query: string, opts: { onStatus?: (stage: string, details?: Record<string, unknown>) => void }) => {
+            opts.onStatus?.('rag', { candidateCount: 2 })
+            opts.onStatus?.('reranking', { candidateCount: 2, resultCount: 2, rerankError: 'OpenRouter rerank failed: 502 Bad Gateway' })
+            return { permanent: [unranked('a', 0.42), unranked('b', 0.4)] }
+        })
+        const gateway = { complete: vi.fn() } as unknown as LLMGateway
+        const events: Array<Record<string, unknown>> = []
+        captureRoutingEvents(events)
+
+        await expect(applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-rerank-failed',
+            userQuery: 'Ich suche ein Rezept für Kürbissuppe',
+            gateway,
+        })).resolves.toBeNull()
+
+        // Fails closed without switching to LLM curation.
+        expect(gateway.complete).not.toHaveBeenCalled()
+        expect(memoryMocks.format).not.toHaveBeenCalled()
+        const final = JSON.parse((events.at(-1)!.toolCalls as Array<{ arguments: string }>)[0].arguments)
+        expect(final).toMatchObject({
+            emptyReason: 'reranker-failed',
+            selectionMethod: 'reranker',
+            error: 'OpenRouter rerank failed: 502 Bad Gateway',
+            pipelineStats: { rerankerError: 'OpenRouter rerank failed: 502 Bad Gateway' },
+        })
+    })
+
+    test('never injects unscored matches in reranker mode', async () => {
+        rerankerConfigMock.enabled = true
+        memoryMocks.aggregate.mockResolvedValue({
+            permanent: [
+                { id: 'scored', text: 'scored', source: 'memory', sourceFile: 'scored.md', score: 0.9, rerankerScore: 0.9, scoreType: 'reranker' as const },
+                { id: 'unscored', text: 'unscored', source: 'memory', sourceFile: 'unscored.md', score: 0.4, denseScore: 0.4, scoreType: 'dense' as const },
+            ],
+        })
+        memoryMocks.format.mockImplementation((memory: { permanent: Array<{ id: string }> }) => memory.permanent.map(({ id }) => id).join(','))
+
+        await expect(applyAutoMemoryRouting({
+            enabled: true,
+            conversationId: 'conversation-mixed-scores',
+            userQuery: 'find it',
+            gateway: { complete: vi.fn() } as unknown as LLMGateway,
+        })).resolves.toBe('scored')
     })
 
     test('runs one corrective retrieval when candidates do not directly answer the request', async () => {

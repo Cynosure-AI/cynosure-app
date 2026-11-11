@@ -25,6 +25,8 @@ type PipelineItem = {
   details: Detail[]
   final: boolean
   pending: boolean
+  /** A failed stage; the pipeline continued without its result. */
+  error?: boolean
 }
 type MemoryPipelineStats = {
   queryCount: number
@@ -38,6 +40,7 @@ type MemoryPipelineStats = {
   weakCount: number
   relativeScoreThreshold: number
   absoluteScoreThreshold?: number
+  rerankerError?: string
   searchMatches?: Array<{
     name: string
     content: string
@@ -106,8 +109,21 @@ function memoryStats(value: unknown): MemoryPipelineStats | undefined {
   return keys.every((key) => typeof candidate[key] === 'number') ? candidate as MemoryPipelineStats : undefined
 }
 
-function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label: string; summary: string } | undefined {
+const MEMORY_FAILURE_REASONS = new Set(['reranker-failed', 'routing-failed'])
+
+/** The empty selection a failure produced, named as the failure with its cause. */
+function memoryFailure(calls: ToolCall[]): { label: string; summary?: string } | undefined {
+  const failed = calls.find((call) => MEMORY_FAILURE_REASONS.has(stringValue(args(call).emptyReason) ?? ''))
+  if (!failed) return undefined
+  const parsed = args(failed)
+  return { label: failed.name, summary: stringValue(parsed.error) ?? stringValue(parsed.content) }
+}
+
+function memoryStatusCopy(status: string, stats?: MemoryPipelineStats): { label: string; summary: string; error?: boolean } | undefined {
   if (!stats) return undefined
+  if (status === 'reranking-memory' && stats.rerankerError) {
+    return { label: 'Reranking failed', summary: stats.rerankerError, error: true }
+  }
   if (status === 'searching-memory') {
     return {
       label: `Hybrid search found ${plural(stats.searchCandidateCount, 'candidate')}`,
@@ -239,19 +255,26 @@ const cards = computed<ContextCard[]>(() => {
       const firstChannelStep = pipelines[status.channel].length === 0
       const method = memoryOutcomeAttached ? stringValue(args(memoryCalls[0]).selectionMethod) : undefined
       const searchedMatches = step.status === 'searching-memory' ? searchMatchDetails(latestMemoryStats) : []
+      const failure = finalMemoryOutcome ? memoryFailure(memoryCalls) : undefined
+      const failed = Boolean(failure || statusCopy?.error)
       pipelines[status.channel].push({
         key: `${status.channel}-${stepIndex}-${step.status}`,
-        label: finalMemoryOutcome
+        label: failure
+          ? failure.label
+          : finalMemoryOutcome
           ? selectionLabel('memory', memoryCalls, true)
           : statusCopy?.label || (memoryOutcomeAttached
             ? step.status === 'filtering-memory'
               ? `Kept ${plural(memoryCalls.filter((call) => !stringValue(args(call).emptyReason)).length, 'memory match', 'memory matches')} after filtering`
               : selectionLabel('memory', memoryCalls, false)
             : step.message || status.label),
-        summary: finalMemoryOutcome
+        summary: failure
+          ? failure.summary
+          : finalMemoryOutcome
           ? method === 'reranker' ? 'Final memories chosen by reranker score' : method === 'llm' ? 'Final memories chosen by AI relevance review' : 'Final highest-ranked memories'
           : statusCopy?.summary || status.summary,
-        icon: finalMemoryOutcome ? 'lucide:check' : status.icon,
+        icon: failed ? 'lucide:triangle-alert' : finalMemoryOutcome ? 'lucide:check' : status.icon,
+        error: failed,
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
         details: finalMemoryOutcome
@@ -275,11 +298,13 @@ const cards = computed<ContextCard[]>(() => {
         ? args(channelCalls[0]).contextPhase === 'gathered-context'
         : args(channelCalls[0]).type === 'tool-router' && args(channelCalls[0]).contextPhase === 'gathered-context'
       const method = stringValue(args(channelCalls[0]).selectionMethod)
+      const failure = channel === 'memory' && final ? memoryFailure(channelCalls) : undefined
       pipelines[channel].push({
         key: `${channel}-${stepIndex}-${String(args(channelCalls[0]).contextPhase || args(channelCalls[0]).type)}`,
-        label: selectionLabel(channel, channelCalls, final),
-        summary: method === 'reranker' ? 'Reranker selection' : method === 'llm' ? 'AI selection' : method === 'automatic' ? 'Included complete small toolset' : method === 'semantic' ? 'Embedding similarity' : method === 'lexical' ? 'Lexical matching' : 'Retrieval results',
-        icon: final ? 'lucide:check' : channel === 'memory' ? 'lucide:database' : args(channelCalls[0]).type === 'toolset-router' ? 'lucide:boxes' : 'lucide:wrench',
+        label: failure?.label ?? selectionLabel(channel, channelCalls, final),
+        summary: failure ? failure.summary : method === 'reranker' ? 'Reranker selection' : method === 'llm' ? 'AI selection' : method === 'automatic' ? 'Included complete small toolset' : method === 'semantic' ? 'Embedding similarity' : method === 'lexical' ? 'Lexical matching' : 'Retrieval results',
+        icon: failure ? 'lucide:triangle-alert' : final ? 'lucide:check' : channel === 'memory' ? 'lucide:database' : args(channelCalls[0]).type === 'toolset-router' ? 'lucide:boxes' : 'lucide:wrench',
+        error: Boolean(failure),
         timestamp: step.timestamp,
         updatedAt: step.updatedAt ?? step.timestamp,
         // Keep the effective final tool list on the completion item so users can
@@ -376,8 +401,8 @@ function formatTimestamp(timestamp: number): string {
           <span class="min-w-0 flex-1">
             <span class="block truncate text-[12px] font-semibold text-theme-200">{{ card.title }}</span>
             <span
-              class="block truncate text-[11px] text-ink-secondary"
-              :class="{ 'text-shimmer': card.latest.pending }"
+              class="block truncate text-[11px]"
+              :class="[card.latest.error ? 'text-red-300' : 'text-ink-secondary', { 'text-shimmer': card.latest.pending }]"
               role="status"
               aria-live="polite"
             >{{
@@ -432,8 +457,12 @@ function formatTimestamp(timestamp: number): string {
                 <Icon
                   :icon="item.pending ? 'svg-spinners:ring-resize' : item.icon"
                   class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  :class="{ 'text-red-300': item.error }"
                 />
-                <span class="min-w-0 flex-1"><span class="block text-[11px] font-medium text-theme-300">{{ item.label
+                <span class="min-w-0 flex-1"><span
+                  class="block text-[11px] font-medium"
+                  :class="item.error ? 'text-red-300' : 'text-theme-300'"
+                >{{ item.label
                 }}</span><span
                   v-if="item.summary"
                   class="block text-[10px] text-ink-muted"

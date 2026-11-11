@@ -307,4 +307,40 @@ describe('PreTurnContextTimeline', () => {
     await wrapper.get('.pre-turn-card > button').trigger('click')
     expect(wrapper.findAll('.memory-card')).toHaveLength(0)
   })
+
+  test('names a reranker failure and its cause instead of an empty selection', async () => {
+    const pipelineStats = {
+      queryCount: 1, searchCandidateCount: 2, rerankerInputCount: 2, rerankerOutputCount: 2, returnedCount: 2,
+      uniqueCount: 2, filteredCount: 0, duplicateCount: 0, weakCount: 2, relativeScoreThreshold: 0.65,
+      absoluteScoreThreshold: 0.1, rerankerError: 'OpenRouter rerank failed: 502 Bad Gateway',
+    }
+    const wrapper = mount(PreTurnContextTimeline, {
+      props: {
+        steps: [
+          { iteration: 0, taskId: 'memory', status: 'reranking-memory', timestamp: 100 },
+          {
+            iteration: 0, taskId: 'memory', status: 'filtering-memory', timestamp: 101,
+            toolCalls: [{
+              name: 'Memory reranking failed',
+              arguments: JSON.stringify({
+                type: 'memory', contextPhase: 'gathered-context', selectionMethod: 'reranker', emptyReason: 'reranker-failed',
+                content: 'The reranker could not score the memory matches, so none were injected.',
+                error: 'OpenRouter rerank failed: 502 Bad Gateway', pipelineStats,
+              }),
+            }],
+          },
+        ],
+        isActive: false,
+      },
+      global,
+    })
+    const status = wrapper.get('[role="status"]')
+    expect(status.text()).toBe('Memory reranking failed')
+    expect(status.classes()).toContain('text-red-300')
+    await wrapper.get('.pre-turn-card > button').trigger('click')
+    const text = wrapper.text()
+    expect(text).toContain('Reranking failed')
+    expect(text).toContain('OpenRouter rerank failed: 502 Bad Gateway')
+    expect(text).not.toContain('Final memories chosen by reranker score')
+  })
 })

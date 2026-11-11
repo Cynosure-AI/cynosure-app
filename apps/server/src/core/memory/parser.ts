@@ -47,6 +47,9 @@ export interface MemoryRetrievalStatusDetails {
   candidateCount?: number
   resultCount?: number
   candidates?: RetrievedChunk[]
+  /** Set when reranking was enabled but produced no relevance scores; the
+   * results are then in hybrid order and carry no comparable score. */
+  rerankError?: string
 }
 
 export interface PreparedMemoryChunk {
@@ -284,11 +287,17 @@ export class MemoryParser {
     onStatus?.('rag', { candidateCount: results.length, candidates: results })
     const reranking = reranker.getConfig().enabled && results.length > 1
     if (reranking) onStatus?.('reranking', { candidateCount: results.length })
+    let rerankError: string | undefined
     const ranked = await reranker.rerank(query, results, topK).catch((err) => {
       console.warn('[memory-reranker] Rerank failed, using hybrid ranking:', err)
+      rerankError = err instanceof Error ? err.message : String(err)
       return results.slice(0, topK)
     })
-    if (reranking) onStatus?.('reranking', { candidateCount: results.length, resultCount: ranked.length })
+    // A missing model or provider also falls back to hybrid order, just without throwing.
+    if (reranking && !rerankError && !ranked.some((result) => Number.isFinite(result.rerankerScore))) {
+      rerankError = 'Reranker returned no relevance scores; check the reranker model and provider'
+    }
+    if (reranking) onStatus?.('reranking', { candidateCount: results.length, resultCount: ranked.length, ...(rerankError ? { rerankError } : {}) })
     return ranked.map((r) => ({
       id: r.id,
       text: r.text,

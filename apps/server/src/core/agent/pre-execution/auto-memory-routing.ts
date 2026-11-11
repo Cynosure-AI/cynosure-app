@@ -61,6 +61,8 @@ interface MemoryPipelineStats {
     weakCount: number
     relativeScoreThreshold: number
     absoluteScoreThreshold: number
+    /** Why reranking produced no scores, when it was enabled. */
+    rerankerError?: string
     searchMatches: Array<{
         name: string
         content: string
@@ -145,6 +147,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                         if (details?.candidateCount !== undefined) stats.candidateCount = details.candidateCount
                         if (details?.resultCount !== undefined) stats.resultCount = details.resultCount
                         if (details?.candidates) stats.candidates = details.candidates
+                        if (details?.rerankError) stats.rerankError = details.rerankError
                     },
                 })
             }
@@ -152,9 +155,17 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             let retrievalResults = [await retrieve(rankingQuery, searchQueries.slice(1))]
             emitMemoryPipelineStatus(conversationId, taskId, 'filtering-memory', eventMeta)
             let fusedCandidates = fuseAutoMemoryResults(retrievalResults)
-            let candidates = filterAutoMemoryCandidates(fusedCandidates, options)
+            let candidates = filterAutoMemoryCandidates(fusedCandidates, options, rerankerEnabled)
             let pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled, queryCount, options)
             signal?.throwIfAborted()
+
+            // Reranker mode has no other relevance gate, so unranked matches
+            // would be injected unchecked. Inject nothing and say why.
+            const rerankerError = pipelineStats.rerankerError
+            if (rerankerError) {
+                emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'reranker-failed', 'reranker', pipelineStats, rerankerError)
+                return null
+            }
 
             if (!candidates.permanent.length) {
                 // Matches that all scored below the floor were found but are not relevant.
@@ -193,7 +204,7 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
                 retrievalResults = [...retrievalResults, await retrieve(correctiveQuery)]
                 queryCount += 1
                 fusedCandidates = fuseAutoMemoryResults(retrievalResults)
-                candidates = filterAutoMemoryCandidates(fusedCandidates, options)
+                candidates = filterAutoMemoryCandidates(fusedCandidates, options, rerankerEnabled)
                 pipelineStats = buildMemoryPipelineStats(retrievalResults, retrievalStats, fusedCandidates, candidates, rerankerEnabled, queryCount, options)
                 emitMemoryRoutingSelection(
                     conversationId,
@@ -254,8 +265,9 @@ export async function applyAutoMemoryRoutingWithEvidence(input: ApplyAutoMemoryR
             ]
             return { content: formatted, evidence }
         },
-        fallback: () => {
-            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed', 'routing-failed')
+        fallback: (error) => {
+            const message = error instanceof Error ? error.message : String(error)
+            emitMemoryRoutingSelection(conversationId, taskId, [], 'gathered-context', eventMeta, 'routing-failed', 'routing-failed', undefined, message)
             return null
         },
     })
@@ -296,6 +308,9 @@ function buildMemoryPipelineStats(
         // Zero means the tail was cut by rank, not by a relative score.
         relativeScoreThreshold: rerankerEnabled ? MIN_RELATIVE_RERANKER_SCORE : 0,
         absoluteScoreThreshold: rerankerEnabled ? options.minRerankerScore : 0,
+        ...(rerankerEnabled && retrievalStats.some((stats) => stats.rerankError)
+            ? { rerankerError: retrievalStats.find((stats) => stats.rerankError)!.rerankError }
+            : {}),
         searchMatches: preRerankerMatches.map((memory) => {
             const visibleMatch = memoryMatch(memory)
             return {
@@ -546,10 +561,16 @@ function formatMemoryCandidate(candidate: RetrievedChunk, id: string, documentCo
     ].join('\n')
 }
 
-/** Fused rank order is the only signal shared by dense and lexical hits; keep the top of it for curation. */
-function filterAutoMemoryCandidates(memory: AggregatedMemory, options: Pick<MemoryRetrievalOptions, 'curationPool' | 'minRerankerScore'>): AggregatedMemory {
-    const permanent = hasRerankerScores(memory.permanent)
-        ? filterWeakRerankerMatches(memory.permanent, options.minRerankerScore)
+/** With the reranker on, only reranker-scored matches can pass, since the score
+ * is the only relevance gate. Otherwise fused rank order is the only signal
+ * shared by dense and lexical hits; keep the top of it for curation. */
+function filterAutoMemoryCandidates(
+    memory: AggregatedMemory,
+    options: Pick<MemoryRetrievalOptions, 'curationPool' | 'minRerankerScore'>,
+    rerankerEnabled: boolean,
+): AggregatedMemory {
+    const permanent = rerankerEnabled
+        ? filterWeakRerankerMatches(memory.permanent.filter((candidate) => Number.isFinite(candidate.rerankerScore)), options.minRerankerScore)
         : memory.permanent.slice(0, options.curationPool)
     return { permanent }
 }
@@ -657,9 +678,11 @@ function emitMemoryRoutingSelection(
     memories: RetrievedChunk[],
     contextPhase: 'gathered-results' | 'gathered-context' = 'gathered-context',
     eventMeta?: Record<string, unknown>,
-    emptyReason?: 'none-found' | 'none-relevant' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
+    emptyReason?: 'none-found' | 'none-relevant' | 'reranker-failed' | 'routing-failed' | 'disabled' | 'empty-scope' | 'no-query',
     selectionMethod: 'retrieval' | 'reranker' | 'llm' | 'ranked-fallback' | 'routing-failed' = contextPhase === 'gathered-results' ? 'retrieval' : 'llm',
     pipelineStats?: MemoryPipelineStats,
+    /** The failure behind an empty selection, shown in the timeline. */
+    error?: string,
 ): void {
     const visiblePipelineStats = contextPhase === 'gathered-results' || !memories.length
         ? pipelineStats
@@ -699,6 +722,7 @@ function emitMemoryRoutingSelection(
                 selectionMethod,
                 emptyReason: emptyReason || 'none-selected',
                 content: memoryEmptyContent(emptyReason),
+                ...(error ? { error: error.slice(0, 500) } : {}),
                 pipelineStats: visiblePipelineStats,
             },
         },
@@ -730,6 +754,7 @@ function memoryEmptyLabel(reason?: string): string {
     switch (reason) {
         case 'none-found': return 'No memories found'
         case 'none-relevant': return 'No relevant memories'
+        case 'reranker-failed': return 'Memory reranking failed'
         case 'routing-failed': return 'Memory routing skipped'
         case 'disabled': return 'Auto memory disabled'
         case 'empty-scope': return 'No memory folders selected'
@@ -744,6 +769,8 @@ function memoryEmptyContent(reason?: string): string {
             return 'Automatic memory retrieval ran, but no document snippets matched this turn.'
         case 'none-relevant':
             return 'Auto memory found candidates, but the curation step selected none as useful for this turn.'
+        case 'reranker-failed':
+            return 'The reranker could not score the memory matches, so none were injected; unranked matches are not used in their place.'
         case 'routing-failed':
             return 'Auto memory routing failed; the turn continued without injected memory.'
         case 'disabled':
