@@ -200,7 +200,7 @@ export class McpManager {
             })
         }, McpOAuthProvider.serverStorageKey(config.id, remote.url))
 
-        const client = new Client({ name: 'cynosure', version: '1.0.1' })
+        const client = new Client({ name: 'cynosure', version: '1.0.2-beta.1' })
         const transport = this.createRemoteTransport(remote, provider)
 
         try {
@@ -321,7 +321,7 @@ export class McpManager {
 
         const client = new Client({
             name: 'cynosure',
-            version: '1.0.1'
+            version: '1.0.2-beta.1'
         })
 
         // Race between: successful connect, auth detection (instant), or 60s timeout.

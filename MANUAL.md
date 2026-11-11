@@ -2,7 +2,7 @@
 
 Cynosure is the application and repository name. **Cyno** is its default assistant and the name used here for the everyday assistant experience.
 
-This manual describes the checked-out implementation, whose root, server, web, and desktop packages all report **1.0.1**. It was checked against source on **25 October 2026**. Package version alone does not identify an exact feature set: this checkout includes changes beyond the older changelog entry. Provider capability statements describe implemented paths, not a guarantee that every external model supports them.
+This manual describes the checked-out implementation, whose root, server, web, and desktop packages all report **1.0.2-beta.1**. It was checked against source on **25 October 2026**. Package version alone does not identify an exact feature set: this checkout includes changes beyond the older changelog entry. Provider capability statements describe implemented paths, not a guarantee that every external model supports them.
 
 ## Table of contents
 
@@ -1196,7 +1196,7 @@ Provider storage currently uses plaintext despite its historical column name; ex
 It only changes reachability. The inspected startup/routes establish no built-in account/authentication boundary; broader deployment needs external controls.
 
 **Which version does this describe?**  
-This checkout reports 1.0.1 and schema 34. The older changelog is historical, not a complete current feature list.
+This checkout reports 1.0.2-beta.1 and schema 34. The older changelog is historical, not a complete current feature list.
 
 ## 24. Glossary
 
@@ -1251,7 +1251,7 @@ This checkout reports 1.0.1 and schema 34. The older changelog is historical, no
 - **Desktop package commands have scope.** README's `pnpm package`/`pnpm package:skip-deps` are desktop-package scripts. Root has `pnpm package:electron`; use a filter for skip-deps.
 - **HTTPS is not locally enforced for update overrides.** Desktop README requires it; wrapper passes the configured URL through without scheme validation.
 
-Root README requirements, development URLs, broad features, and three platform packaging commands agree with source. All four inspected package versions are 1.0.1.
+Root README requirements, development URLs, broad features, and three platform packaging commands agree with source. All four inspected package versions are 1.0.2-beta.1.
 
 ### 25.2 Limits of verification
 
