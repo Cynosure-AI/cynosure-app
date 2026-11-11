@@ -30,6 +30,8 @@ const draggingId = ref<string | null>(null)
 const dropStatus = ref<ProjectTaskStatus | null>(null)
 const dropBeforeId = ref<string | null>(null)
 const showAllDone = ref(false)
+/** Last task toggled by hand; shift+click selects the range from here. */
+const selectionAnchorId = ref<string | null>(null)
 const editing = ref<(ProjectTaskDto & { assignee: string }) | null>(null)
 const contextMenu = ref<TaskContextMenu | null>(null)
 let progressRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -186,10 +188,41 @@ function openEditor(task: ProjectTaskDto): void {
 }
 
 function onCardClick(task: ProjectTaskDto, event: MouseEvent): void {
-  if (!bulkSelectMode.value || (event.target as HTMLElement).matches('input[type="checkbox"]')) return
+  if (!(bulkSelectMode.value || event.shiftKey) || (event.target as HTMLElement).matches('input[type="checkbox"]')) return
   event.preventDefault()
   event.stopPropagation()
-  projectsStore.toggleTaskSelection(props.project.id, task.id)
+  selectTask(task, event.shiftKey)
+}
+
+// `change` carries no modifier keys, so remember them from the click that caused it.
+let checkboxShiftKey = false
+function onCheckboxClick(event: MouseEvent): void {
+  event.stopPropagation()
+  checkboxShiftKey = event.shiftKey
+}
+
+function onCheckboxChange(task: ProjectTaskDto): void {
+  selectTask(task, checkboxShiftKey)
+  checkboxShiftKey = false
+}
+
+/** Toggle one task, or with `range` select every visible task between the anchor and it. */
+function selectTask(task: ProjectTaskDto, range: boolean): void {
+  const ids = visibleIds.value
+  const from = selectionAnchorId.value ? ids.indexOf(selectionAnchorId.value) : -1
+  const to = ids.indexOf(task.id)
+  if (range && from !== -1 && to !== -1) {
+    const [start, end] = from < to ? [from, to] : [to, from]
+    projectsStore.setSelectedTasks(props.project.id, [...selectedIds.value, ...ids.slice(start, end + 1)])
+  } else {
+    projectsStore.toggleTaskSelection(props.project.id, task.id)
+  }
+  selectionAnchorId.value = task.id
+}
+
+function onCardMouseDown(event: MouseEvent): void {
+  // Shift+click would otherwise extend the browser's text selection.
+  if (event.shiftKey) event.preventDefault()
 }
 
 function saveEditor(): void {
@@ -464,6 +497,7 @@ onBeforeUnmount(() => {
               'before:absolute before:inset-x-0 before:-top-1.25 before:h-0.5 before:rounded-full before:bg-accent-500': showsDropMarker(column.status, task.id),
             }"
             @click.capture="onCardClick(task, $event)"
+            @mousedown="onCardMouseDown"
             @contextmenu.prevent="openContextMenu(task, $event)"
             @dragstart="onDragStart(task, $event)"
             @dragend="clearDrag"
@@ -476,8 +510,8 @@ onBeforeUnmount(() => {
               :class="{ 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100': !bulkSelectMode }"
               :aria-label="`Select ${task.title}`"
               :checked="selectedIds.includes(task.id)"
-              @click.stop
-              @change="projectsStore.toggleTaskSelection(project.id, task.id)"
+              @click="onCheckboxClick"
+              @change="onCheckboxChange(task)"
             >
             <!-- Main task content -->
             <div class="min-w-0 flex-1 p-2.5">
@@ -624,6 +658,21 @@ onBeforeUnmount(() => {
             </div>
           </li>
 
+          <li v-if="column.status === 'done' && column.total > DONE_PREVIEW_COUNT">
+            <button
+              type="button"
+              class="flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-ink-muted hover:bg-theme-800 hover:text-theme-200"
+              :aria-expanded="showAllDone"
+              @click="showAllDone = !showAllDone"
+            >
+              <Icon
+                :icon="showAllDone ? 'lucide:chevron-up' : 'lucide:chevron-down'"
+                class="h-3.5 w-3.5"
+              />
+              {{ showAllDone ? 'Show fewer' : `+${column.hidden} more` }}
+            </button>
+          </li>
+
           <!-- Dropping below the last card puts the task at the end. -->
           <li
             aria-hidden="true"
@@ -637,20 +686,6 @@ onBeforeUnmount(() => {
             />
           </li>
         </ul>
-
-        <button
-          v-if="column.status === 'done' && column.total > DONE_PREVIEW_COUNT"
-          type="button"
-          class="mt-1 inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-ink-muted hover:bg-theme-800 hover:text-theme-200"
-          :aria-expanded="showAllDone"
-          @click="showAllDone = !showAllDone"
-        >
-          <Icon
-            :icon="showAllDone ? 'lucide:chevron-up' : 'lucide:chevron-down'"
-            class="h-3.5 w-3.5"
-          />
-          {{ showAllDone ? 'Show fewer' : `+${column.hidden} more` }}
-        </button>
       </section>
     </div>
 

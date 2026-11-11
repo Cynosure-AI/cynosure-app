@@ -256,6 +256,31 @@ test('the agent list survives scrolling itself and a short trip across other ite
 })
 
 
+test('shift+click selects the range between the last toggled task and the clicked one', async () => {
+  mocks.tasksByProject.p1 = reactive([
+    task({ id: 'a', title: 'First', sortOrder: 1 }),
+    task({ id: 'b', title: 'Second', sortOrder: 2 }),
+    task({ id: 'c', title: 'Third', sortOrder: 3 }),
+    task({ id: 'd', title: 'Fourth', sortOrder: 4 }),
+  ])
+  const wrapper = render()
+  await flushPromises()
+  const cards = wrapper.findAll('li[draggable="true"]')
+  const editor = wrapper.getComponent({ name: 'ModalDialog' })
+
+  ;(cards[0]!.get('input[type="checkbox"]').element as HTMLInputElement).click()
+  await flushPromises()
+  await cards[2]!.get('button').trigger('click', { shiftKey: true })
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a', 'b', 'c'])
+
+  // Checkbox shift+click works too, extending from the new anchor.
+  cards[3]!.get('input[type="checkbox"]').element.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+  await flushPromises()
+  expect(mocks.selectedTaskIdsByProject.p1).toEqual(['a', 'b', 'c', 'd'])
+  expect(editor.props('show')).toBe(false)
+  wrapper.unmount()
+})
+
 test('bulk selection reveals checkboxes and makes the whole card toggle selection until the last task is deselected', async () => {
   mocks.tasksByProject.p1 = reactive([
     task({ id: 'a', title: 'First' }),
